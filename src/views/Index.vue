@@ -16,7 +16,7 @@
                     </div>
 
                     <!-- 右侧操作区 -->
-                    <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-8">
                         <!-- Login 链接 -->
                         <a href="#" class="text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors">
                             Log in
