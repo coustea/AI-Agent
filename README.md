@@ -100,13 +100,9 @@ front/
 
 ### 修改 GitHub 链接
 
-在 `src/views/Index.vue` 中找到导航栏的 GitHub 链接：
+导航栏的 GitHub 链接已配置为：`https://github.com/coustea/AI-Agent`
 
-```vue
-<a href="https://github.com/yourusername/yourrepo" target="_blank">
-```
-
-将 URL 替换为你的实际 GitHub 仓库地址。
+如需修改，在 `src/views/Index.vue` 中找到导航栏的 GitHub 链接部分进行更新。
 
 ### 修改路由
 
