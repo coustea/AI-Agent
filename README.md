@@ -2,9 +2,9 @@
 
 <div align="center">
 
-**基于 LangGraph 的 ReAct 模式智能体框架**
+**基于 LangGraph 的 ReAct 模式智能体框架 + FastAPI 用户认证系统**
 
-[5-Node Workflow](#architecture) • [快速开始](#quick-start) • [文档](docs/ARCHITECTURE.md) • [示例](src/agent/main.py)
+[5-Node Workflow](#architecture) • [快速开始](#quick-start) • [API 文档](#api) • [示例](src/agent/main.py)
 
 </div>
 
@@ -12,7 +12,7 @@
 
 ## 📖 简介
 
-ReAct Agent Framework 是一个模块化、可扩展的智能体框架，实现了经典的 **ReAct（Reasoning + Acting）模式**，通过 **5 节点工作流** 让 AI 智能体能够像人类一样思考和行动。
+ReAct Agent Framework 是一个模块化、可扩展的智能体框架，实现了经典的 **ReAct（Reasoning + Acting）模式**，并集成了 **FastAPI 用户认证系统**。
 
 ```
 📚 Retrieve → 🤔 Think → 🛠️ Plan → ⚡ Act → 👀 Reflect → (循环)
@@ -25,8 +25,8 @@ ReAct Agent Framework 是一个模块化、可扩展的智能体框架，实现�
 | 🔄 **5 节点工作流** | Retrieve → Think → Plan → Act → Reflect 完整闭环 |
 | 🧩 **模块化设计** | 工具、技能、提示词完全解耦 |
 | 📝 **SOP 驱动** | 业务知识通过 Markdown 管理，无需修改代码 |
-| 🛡️ **安全执行** | 内置命令黑名单、超时控制、权限限制 |
-| 🌐 **多模型支持** | 兼容所有 OpenAI API 协议的模型 |
+| 🔐 **用户认证系统** | JWT + Redis Token 管理，MySQL 用户存储 |
+| 🌐 **RESTful API** | FastAPI 构建的标准 REST 接口 |
 | 📊 **流式输出** | 实时查看智能体的思考过程和决策 |
 
 ---
@@ -43,14 +43,6 @@ ReAct Agent Framework 是一个模块化、可扩展的智能体框架，实现�
 │  │  Retrieve → Think → Plan → Act → Reflect → Think ...     │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-        ▼                     ▼                     ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  LLM Layer   │    │  Tool System │    │ Skill System │
-│  LangChain   │    │  BaseTool    │    │  SKILL.md    │
-└──────────────┘    └──────────────┘    └──────────────┘
 ```
 
 ### 5 节点说明
@@ -63,18 +55,6 @@ ReAct Agent Framework 是一个模块化、可扩展的智能体框架，实现�
 | **⚡ Act** | 执行工具（通过 ToolNode） | 无（LangChain） |
 | **👀 Reflect** | 评估结果并决定继续/结束 | `04_reflect.md` |
 
-### 提示词缝合策略
-
-```
-System Prompt (人设)
-    ↓
-+ Current SOP (动态业务知识)
-    ↓
-+ Internal Prompt (框架逻辑)
-    ↓
-= 完整的系统提示词
-```
-
 ---
 
 ## 🚀 快速开始
@@ -82,12 +62,14 @@ System Prompt (人设)
 ### 环境要求
 
 - **Python**: 3.10 或更高版本
+- **MySQL**: 5.7 或更高版本
+- **Redis**: 6.0 或更高版本
 - **包管理器**: [uv](https://github.com/astral-sh/uv)（推荐）或 pip
 
 ### 1. 安装依赖
 
 ```bash
-# 使用 uv（推荐，速度更快）
+# 使用 uv（推荐）
 uv sync
 
 # 或使用 pip
@@ -99,174 +81,113 @@ pip install -r requirements.txt
 在项目根目录创建 `.env` 文件：
 
 ```env
-OPENAI_API_KEY=your_api_key_here
+# OpenAI / LLM
+OPENAI_API_KEY=your_api_key
 OPENAI_BASE_URL=https://api.deepseek.com/v1
+
+# MySQL
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=agent
+DB_USER=root
+DB_PASSWORD=your_password
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+
+# JWT
+SECRET_KEY=your_secret_key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_HOURS=168
 ```
 
-> 💡 **支持的模型**: OpenAI GPT-4/3.5、DeepSeek、Azure OpenAI、Ollama 本地模型等所有兼容 OpenAI API 的模型
+### 3. 初始化数据库
 
-### 3. 运行示例
+在 MySQL 中运行初始化脚本：
 
 ```bash
-# 运行演示程序
+mysql -u root -p < src/api/scripts/init_db.sql
+```
+
+### 4. 启动服务
+
+```bash
+# 启动 API 服务
+uvicorn src.api.main:app --reload --port 9999
+
+# 或运行 Agent 演示
 python src/agent/main.py
 ```
 
-### 4. 代码示例
+访问 `http://localhost:9999/docs` 查看 Swagger API 文档。
 
-```python
-import asyncio
-import os
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
-from agent.core import Agent
-from agent.tools import get_tools
-from dotenv import load_dotenv
+---
 
-load_dotenv()
+## 🔐 用户认证 API
 
-async def main():
-    # 1️⃣ 初始化 LLM
-    llm = ChatOpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL"),
-        model="deepseek-chat",
-        temperature=0.7,
-    )
+### RESTful 接口
 
-    # 2️⃣ 初始化 Agent
-    agent = Agent(
-        llm=llm,
-        tools=get_tools(),
-        prompts_dir="agent/prompts",
-        skills_dir="agent/skills",
-        system_prompt="你是一个温柔、善良、贴心的智能助手。"
-    )
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/users` | 注册用户 |
+| GET | `/api/users/me` | 获取当前用户信息 |
+| PATCH | `/api/users/me/password` | 修改密码 |
+| POST | `/api/auth/login` | 登录 |
+| DELETE | `/api/auth/logout` | 登出 |
 
-    # 3️⃣ 查看当前配置
-    print(agent.print_agent_config())
-    # 📦 [系统配置] 当前 Agent 已挂载能力：
-    #    - 🧠 大语言模型 (LLM)  : deepseek-chat
-    #    - 🛠️ 物理工具 (Tools) : shell_exec, web_fetch
-    #    - 📚 业务技能 (Skills): weather-1.0.0
+### 统一响应格式
 
-    # 4️⃣ 执行任务（流式）
-    task = "去网上搜索什么是 ReAct 框架"
-    
-    async for output in agent.graph.astream({
-        "task": task,
-        "messages": [HumanMessage(content=task)],
-        "current_sop": ""
-    }):
-        for node_name, state_update in output.items():
-            print(f"[{node_name}]")
+```json
+{
+    "code": 200,
+    "message": "success",
+    "data": {
+        "access_token": "eyJ...",
+        "token_type": "bearer",
+        "expires_in": 604800,
+        "user": {
+            "username": "testuser",
+            "created_at": "2024-01-01T00:00:00"
+        }
+    }
+}
+```
 
-    # 5️⃣ 获取最终结果
-    final_state = await agent.graph.ainvoke({
-        "task": task,
-        "messages": [HumanMessage(content=task)],
-        "current_sop": ""
-    })
-    
-    print(final_state["messages"][-1].content)
+### 认证流程
 
-asyncio.run(main())
+```
+登录 → 创建 JWT → 存 Redis (7天) → 返回 Token
+验证 → 解码 JWT → 检查 Redis 是否存在
+退出 → 从 Redis 删除 Token
 ```
 
 ---
 
 ## 📦 核心组件
 
-### 1. 核心智能体 (`src/agent/core/agent.py`)
+### Agent 模块 (`src/agent/`)
 
-5 节点 LangGraph 工作流的实现核心。
+| 组件 | 描述 |
+|------|------|
+| `core/agent.py` | 5 节点 LangGraph 工作流 |
+| `core/llm.py` | LLM 封装层 |
+| `tools/` | 工具集（shell_exec, web_fetch, file_append） |
+| `skills/` | 业务知识（SKILL.md） |
+| `prompts/` | 工作流提示词 |
 
-**关键特性**:
-- ✅ 三层提示词缝合（人设 + SOP + 框架逻辑）
-- ✅ 自动技能发现和加载
-- ✅ 可配置的工具绑定
-- ✅ 流式执行支持
+### API 模块 (`src/api/`)
 
-### 2. LLM 层 (`src/agent/core/llm.py`)
-
-统一的 LLM 接口，兼容 OpenAI 协议。
-
-```python
-from agent.core.llm import LLM
-
-llm = LLM.create(
-    model="deepseek-chat",
-    temperature=0.7,
-    api_key="your_key",
-    base_url="https://api.deepseek.com/v1"
-)
-```
-
-### 3. 工具系统 (`src/agent/tools/`)
-
-使用 LangChain `@tool` 装饰器构建的工具集。
-
-| 工具 | 描述 | 特性 |
-|------|------|------|
-| `shell_exec` | 安全的 Shell 命令执行 | 危险命令拦截、异步执行、超时控制 |
-| `web_fetch` | 异步 HTTP 抓取 | HTTP/HTTPS 支持、自动重定向、内容截断保护 |
-| `file_append` | 安全的文件追加 | 自动创建目录、路径限制 |
-
-**添加自定义工具**:
-
-```python
-# src/agent/tools/builtin/my_tool.py
-from langchain_core.tools import tool
-from typing import Optional
-
-@tool
-async def my_tool(query: str, timeout: int = 30) -> str:
-    """工具的简短描述，让 LLM 知道何时使用此工具。"""
-    # 实现代码
-    return f"Result: {query}"
-
-# src/agent/tools/builtin/__init__.py
-from .my_tool import my_tool
-AGENT_TOOLS = [shell_exec, web_fetch, file_append, my_tool]
-```
-
-### 4. 技能系统 (`src/agent/skills/`)
-
-业务知识以 Markdown 文件（SKILL.md）形式管理。
-
-**目录结构**:
-```
-skills/
-└── weather-1.0.0/
-    └── SKILL.md
-```
-
-**技能格式**:
-```markdown
----
-name: weather
-description: 获取当前天气和预报
-homepage: https://wttr.in/:help
----
-
-# Weather Skill
-
-## Usage
-curl -s "wttr.in/London?format=3"
-```
-
-技能会在 `retrieve` 阶段自动加载并注入到智能体的上下文中。
-
-### 5. 提示词模板 (`src/agent/prompts/`)
-
-框架工作流逻辑的提示词文件。
-
-| 文件 | 阶段 | 作用 |
-|------|------|------|
-| `01_think.md` | Think | 意图理解、人设指南 |
-| `02_plan.md` | Plan | 决策制定、SOP 遵循 |
-| `03_act.md` | Act | 工具约束、安全规则 |
-| `04_reflect.md` | Reflect | 结果评估、答案生成 |
+| 组件 | 描述 |
+|------|------|
+| `db/engine.py` | MySQL + Redis 连接管理 |
+| `db/models.py` | SQLAlchemy 数据模型 |
+| `router/` | FastAPI 路由（users, auth） |
+| `services/` | 业务逻辑层 |
+| `schemas/` | Pydantic 请求/响应模型 |
+| `utils/` | 工具函数（JWT, 密码加密） |
 
 ---
 
@@ -275,33 +196,40 @@ curl -s "wttr.in/London?format=3"
 ```
 agent/
 ├── src/
-│   ├── agent/
+│   ├── agent/                    # ReAct Agent 模块
 │   │   ├── core/
-│   │   │   ├── agent.py       # 主 Agent 类（5 节点工作流）
-│   │   │   ├── llm.py         # LLM 封装
-│   │   │   └── logger.py      # 全局异步日志系统
-│   │   ├── prompts/           # 框架工作流提示词
-│   │   │   ├── 01_think.md
-│   │   │   ├── 02_plan.md
-│   │   │   ├── 03_act.md
-│   │   │   └── 04_reflect.md
-│   │   ├── tools/             # 工具实现
-│   │   │   ├── __init__.py
-│   │   │   └── builtin/
-│   │   │       ├── shell_execute.py
-│   │   │       ├── web_fetch.py
-│   │   │       └── file_write.py
-│   │   ├── skills/            # 业务知识库 (SKILL.md)
-│   │   │   ├── weather-1.0.0/
-│   │   │   └── self-improving-agent-3.0.5/
-│   │   └── logs/              # 自动生成的日志文件
-│   └── main.py                # 演示入口
-├── docs/
-│   └── ARCHITECTURE.md        # 详细架构文档
-├── .env                       # 环境变量配置
-├── pyproject.toml             # 项目配置
-├── AGENTS.md                  # AI 编码助手指南
-└── README.md                  # 本文件
+│   │   │   ├── agent.py          # 5 节点工作流
+│   │   │   ├── llm.py            # LLM 封装
+│   │   │   └── logger.py         # 日志系统
+│   │   ├── prompts/              # 工作流提示词
+│   │   ├── tools/                # 工具实现
+│   │   └── skills/               # 业务知识库
+│   │
+│   └── api/                      # FastAPI 模块
+│       ├── db/
+│       │   ├── engine.py         # 数据库连接
+│       │   ├── models.py         # 数据模型
+│       │   └── base.py           # Base 类
+│       ├── router/
+│       │   ├── users.py          # 用户路由
+│       │   └── auth.py           # 认证路由
+│       ├── services/
+│       │   ├── auth.py           # 认证服务
+│       │   └── redis_service.py  # Redis 封装
+│       ├── schemas/
+│       │   ├── auth.py           # 认证 Schema
+│       │   └── response.py       # 统一响应
+│       ├── utils/
+│       │   ├── jwt.py            # JWT 工具
+│       │   └── security.py       # 密码加密
+│       ├── scripts/
+│       │   └── init_db.sql       # 数据库初始化
+│       └── main.py               # FastAPI 入口
+│
+├── .env                          # 环境变量
+├── pyproject.toml                # 项目配置
+├── AGENTS.md                     # AI 编码指南
+└── README.md                     # 本文件
 ```
 
 ---
@@ -311,114 +239,43 @@ agent/
 ### 代码格式化
 
 ```bash
-# 格式化代码
 ruff format .
-
-# 检查 lint
 ruff check .
-
-# 自动修复 lint 问题
 ruff check . --fix
 ```
 
 ### 测试
 
 ```bash
-# 运行所有测试
 pytest
-
-# 运行单个测试文件
 pytest tests/test_agent.py
-
-# 运行单个测试函数
-pytest tests/test_agent.py::test_retrieve_node
-
-# 带覆盖率报告
 pytest --cov=src --cov-report=term-missing
-```
-
-### 配置 Agent
-
-```python
-agent = Agent(
-    llm=llm,
-    tools=get_tools(),
-    system_prompt="你的自定义人设",
-    prompts_dir="agent/prompts",
-    skills_dir="agent/skills"
-)
-```
-
-### 查看配置
-
-```python
-config = agent.get_agent_config()
-print(agent.print_agent_config())
-```
-
-输出示例:
-```
-📦 [系统配置] 当前 Agent 已挂载能力：
-   - 🧠 大语言模型 (LLM)  : deepseek-chat
-   - 🛠️ 物理工具 (Tools) : shell_exec, web_fetch, file_append
-   - 📚 业务技能 (Skills): weather-1.0.0, self-improving-agent-3.0.5
 ```
 
 ---
 
 ## 🔒 安全性
 
+### 认证安全
+- ✅ JWT Token 签名验证
+- ✅ Token 存储在 Redis（支持主动失效）
+- ✅ 密码使用 bcrypt 加密
+- ✅ Token 7 天过期
+
 ### Shell 命令安全
-- ✅ 危险命令黑名单（`rm -rf`, `sudo`, `chmod -R`, `dd`, `mkfs` 等）
-- ✅ 最小权限原则
-- ✅ 输出截断防止 Token 溢出
-
-### 工具执行
-- ✅ 可配置的超时控制
-- ✅ 参数验证（类型、格式、范围）
-- ✅ 文件操作路径限制
-
-### 最佳实践
-- ❌ 不要硬编码密钥（使用 `.env` 文件）
-- ❌ 不要添加未经验证的外部依赖
-- ✅ 所有工具使用 `async` 异步实现
-- ✅ 完整的错误处理和日志记录
+- ✅ 危险命令黑名单
+- ✅ 超时控制
+- ✅ 输出截断
 
 ---
 
 ## 🌐 支持的 LLM 模型
 
-框架支持所有兼容 OpenAI API 协议的模型：
-
 | 提供商 | 模型 | 配置示例 |
 |--------|------|----------|
 | **OpenAI** | GPT-4, GPT-3.5 | `base_url="https://api.openai.com/v1"` |
-| **DeepSeek** | deepseek-chat, deepseek-coder | `base_url="https://api.deepseek.com/v1"` |
-| **Azure** | Azure OpenAI | `base_url="https://your-resource.openai.azure.com/"` |
+| **DeepSeek** | deepseek-chat | `base_url="https://api.deepseek.com/v1"` |
 | **Ollama** | 本地模型 | `base_url="http://localhost:11434/v1"` |
-| **其他** | 任何 OpenAI 兼容 API | 自定义 `base_url` |
-
----
-
-## 📚 文档
-
-| 文档 | 描述 |
-|------|------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 详细架构设计文档 |
-| [AGENTS.md](AGENTS.md) | AI 编码助手开发指南 |
-| [src/agent/main.py](src/agent/main.py) | 完整示例代码 |
-
----
-
-## 🤝 贡献
-
-欢迎贡献代码、报告问题或提出建议！
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
 
 ---
 
@@ -430,16 +287,15 @@ MIT License
 
 ## 🙏 致谢
 
-- [LangChain](https://github.com/langchain-ai/langchain) - 强大的 LLM 应用框架
-- [LangGraph](https://github.com/langchain-ai/langgraph) - 状态图工作流引擎
-- [ReAct Paper](https://arxiv.org/abs/2210.03629) - Reasoning + Acting 模式研究
+- [LangChain](https://github.com/langchain-ai/langchain)
+- [LangGraph](https://github.com/langchain-ai/langgraph)
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [ReAct Paper](https://arxiv.org/abs/2210.03629)
 
 ---
 
 <div align="center">
 
 **Made with ❤️ by the ReAct Agent Team**
-
-[⭐ Star this repo](javascript:void(0)) • [📖 Read Docs](docs/ARCHITECTURE.md) • [🚀 Get Started](#quick-start)
 
 </div>
