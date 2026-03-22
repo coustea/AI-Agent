@@ -35,7 +35,7 @@ async def main():
     llm = ChatOpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),
         base_url=os.getenv("OPENAI_BASE_URL"),
-        model="deepseek-chat",
+        model="qwen2.5:14b",
         temperature=0.7,
     )
 
@@ -56,7 +56,7 @@ async def main():
     print("-" * 60)
 
     # 4. 定义任务
-    task = "去网上搜索什么是openclaw"
+    task = "告诉我长春市今天的天气，并且帮我制定一份长春市半日游的旅游计划！"
     print(f"\n👤 用户问题: {task}\n")
 
     # 5. 运行 Agent

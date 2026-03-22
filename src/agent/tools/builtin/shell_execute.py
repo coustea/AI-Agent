@@ -1,12 +1,9 @@
 import asyncio
 import shutil
-import logging
 import re
 import sys
 from typing import Optional
 from langchain_core.tools import tool
-
-logger = logging.getLogger(__name__)
 
 @tool
 async def shell_exec(command: str, timeout: int = 30, cwd: Optional[str] = None) -> str:
@@ -25,7 +22,6 @@ async def shell_exec(command: str, timeout: int = 30, cwd: Optional[str] = None)
     command_lower = command.lower()
     for pattern in dangerous_patterns:
         if re.search(pattern, command_lower):
-            logger.warning(f"Blocked dangerous command: {command}")
             return f"Error: Command blocked for safety. Dangerous pattern detected: {pattern}"
 
     try:

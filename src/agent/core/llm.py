@@ -1,12 +1,10 @@
 import os
-import logging
 from typing import Optional
 
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
 from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
 load_dotenv()
 
 
@@ -27,8 +25,6 @@ class LLM:
         创建模型实例。
         对于非 OpenAI 模型，只需在调用时传入该厂商的 base_url 和 api_key 即可。
         """
-        logger.info(f"🔧 初始化 LLM: model={model}")
-
         return ChatOpenAI(
             model=model,
             temperature=temperature,

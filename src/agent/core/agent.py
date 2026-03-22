@@ -29,7 +29,7 @@ class Agent:
             skills_dir: Optional[str] = "agent/skills"  # 外部注入：业务知识库
     ):
         """
-        初始化四节点 ReAct 智能体
+        初始化无状态四节点 ReAct 智能体
         """
         self.llm = llm
         self.tools = tools or []
@@ -46,18 +46,88 @@ class Agent:
         else:
             self.llm_with_tools = self.llm
 
-        # 编译流转图
+        # 编译流转图 (纯无状态，不挂载 MemorySaver)
         self.graph = self._build_graph()
 
     # ==========================================
-    # 🌟 新增：配置与能力审查机制
+    # 🌟 对外暴露的核心接口 (无状态，直接接收消息列表)
+    # ==========================================
+
+    async def chat(self, messages: List[BaseMessage], user_id: int) -> str:
+        """
+        【非流式接口】传入完整的历史消息列表，阻塞执行并直接返回最终回答
+        """
+        # 取最后一条消息作为当前的任务意图，用于后续环节参考
+        current_task = messages[-1].content if messages else ""
+
+        initial_state = {
+            "task": current_task,
+            "messages": messages,
+            "current_sop": ""
+        }
+
+        # 传入配置：user_id 用于长期记忆画像加载
+        config = {"configurable": {"user_id": user_id}}
+
+        try:
+            final_state = await self.graph.ainvoke(initial_state, config=config)
+            last_msg = final_state["messages"][-1].content
+
+            if last_msg.startswith("✅ [最终答复]:\n"):
+                last_msg = last_msg.replace("✅ [最终答复]:\n", "", 1)
+            return last_msg.strip()
+        except Exception as e:
+            logger.error(f"非流式调用失败: {e}", exc_info=True)
+            return f"❌ Agent 执行异常: {str(e)}"
+
+    async def stream(self, messages: List[BaseMessage], user_id: int):
+        """
+        【流式接口】传入完整的历史消息列表，实时吐出规范化的进度和消息事件 (适合 SSE 推送)
+        """
+        current_task = messages[-1].content if messages else ""
+
+        initial_state = {
+            "task": current_task,
+            "messages": messages,
+            "current_sop": ""
+        }
+
+        config = {"configurable": {"user_id": user_id}}
+
+        try:
+            async for output in self.graph.astream(initial_state, config=config):
+                for node_name, state_update in output.items():
+                    if node_name == "retrieve":
+                        yield {"event": "status", "data": "📚 正在提取您的专属记忆与业务库..."}
+                    elif node_name == "think":
+                        yield {"event": "status", "data": "🤔 正在深度思考..."}
+                    elif node_name == "plan":
+                        state_messages = state_update.get("messages", [])
+                        if state_messages:
+                            last_msg = state_messages[-1]
+                            # 如果有 tool_calls，说明大模型想调工具
+                            if getattr(last_msg, "tool_calls", None):
+                                tool_names = ", ".join([tc["name"] for tc in last_msg.tool_calls])
+                                yield {"event": "status", "data": f"🛠️ 正在调用系统能力 ({tool_names})..."}
+                            else:
+                                # 否则说明得出结论，准备结束
+                                final_ans = last_msg.content
+                                if final_ans.startswith("✅ [最终答复]:\n"):
+                                    final_ans = final_ans.replace("✅ [最终答复]:\n", "", 1)
+                                yield {"event": "message", "data": final_ans.strip()}
+                    elif node_name == "act":
+                        yield {"event": "status", "data": "📥 能力调用成功，正在反思..."}
+
+        except Exception as e:
+            logger.error(f"流式调用失败: {e}", exc_info=True)
+            yield {"event": "error", "data": f"❌ 执行异常: {str(e)}"}
+
+    # ==========================================
+    # 获取配置机制
     # ==========================================
     def get_agent_config(self) -> dict:
-        """获取 Agent 当前挂载的能力配置 (返回字典格式，方便代码调用)"""
-        # 获取工具名称
+        """获取 Agent 当前挂载的能力配置"""
         loaded_tools = [t.name for t in self.tools] if self.tools else []
-
-        # 获取技能名称
         loaded_skills = []
         if self.skills_dir:
             skills_path = Path(self.skills_dir)
@@ -66,55 +136,37 @@ class Agent:
                     if folder.is_dir() and (folder / "SKILL.md").exists():
                         loaded_skills.append(folder.name)
 
-        # 尝试安全地获取 LLM 的模型名称
         llm_model_name = getattr(self.llm, "model_name", getattr(self.llm, "model", "Unknown Model"))
-
-        return {
-            "llm_model": llm_model_name,
-            "tools": loaded_tools,
-            "skills": loaded_skills
-        }
+        return {"llm_model": llm_model_name, "tools": loaded_tools, "skills": loaded_skills}
 
     def print_agent_config(self) -> str:
-        """格式化输出 Agent 的配置信息，方便日志打印"""
+        """格式化输出配置信息"""
         config = self.get_agent_config()
         tools_str = ", ".join(config["tools"]) if config["tools"] else "无"
         skills_str = ", ".join(config["skills"]) if config["skills"] else "无"
 
-        output = (
+        return (
             "📦 [系统配置] 当前 Agent 已挂载能力：\n"
             f"   - 🧠 大语言模型 (LLM)  : {config['llm_model']}\n"
             f"   - 🛠️ 物理工具 (Tools) : {tools_str}\n"
             f"   - 📚 业务技能 (Skills): {skills_str}\n"
         )
-        return output
 
     # ==========================================
     # 内部加载与文件读取
     # ==========================================
-    def _load_internal_prompts(self, prompts_dir: str) -> Dict[str, str]:
-        """按阶段加载框架内置的底层逻辑 Prompt"""
-        p_dir = Path(prompts_dir)
-        prompts = {"think": "", "plan": "", "act": "", "reflect": ""}
+    def _read_long_term_memory(self, user_id: int) -> str:
+        """长期记忆读取器：从本地读取该 user_id 的画像/偏好"""
+        if not user_id:
+            return ""
 
-        if not p_dir.exists():
-            logger.warning(f"⚠️ 内置 Prompts 目录未找到: {prompts_dir}。框架将降级运行。")
-            return prompts
-
-        files_map = {
-            "think": "01_think.md",
-            "plan": "02_plan.md",
-            "act": "03_act.md",
-            "reflect": "04_reflect.md"
-        }
-
-        for key, filename in files_map.items():
-            file_path = p_dir / filename
-            if file_path.exists():
-                with open(file_path, "r", encoding="utf-8") as f:
-                    prompts[key] = f.read()
-
-        return prompts
+        memory_path = Path(f".memory/{user_id}.md")
+        if memory_path.exists():
+            with open(memory_path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    return f"【关于用户的长期记忆 (请根据以下偏好调整回答)】\n{content}\n\n"
+        return ""
 
     def _read_skills_from_dir(self, task: str) -> str:
         """自动扫描并加载技能 SOP"""
@@ -134,16 +186,43 @@ class Agent:
             return ""
         return "【当前可用的业务 SOP 指南】\n\n" + "\n\n".join(sops)
 
+    def _load_internal_prompts(self, prompts_dir: str) -> Dict[str, str]:
+        """加载框架底层逻辑 Prompt"""
+        p_dir = Path(prompts_dir)
+        prompts = {"think": "", "plan": "", "act": "", "reflect": ""}
+
+        if not p_dir.exists():
+            return prompts
+
+        files_map = {
+            "think": "01_think.md",
+            "plan": "02_plan.md",
+            "act": "03_act.md",
+            "reflect": "04_reflect.md"
+        }
+
+        for key, filename in files_map.items():
+            file_path = p_dir / filename
+            if file_path.exists():
+                with open(file_path, "r", encoding="utf-8") as f:
+                    prompts[key] = f.read()
+
+        return prompts
+
     # ==========================================
     # 节点定义 (Nodes)
     # ==========================================
-    def retrieve_node(self, state: AgentState):
-        """节点 0：获取 SOP"""
-        return {"current_sop": self._read_skills_from_dir(state["task"])}
+    def retrieve_node(self, state: AgentState, config: dict):
+        """节点 0：获取 SOP 与用户长期记忆"""
+        user_id = config.get("configurable", {}).get("user_id")
+
+        sop_content = self._read_skills_from_dir(state["task"])
+        memory_content = self._read_long_term_memory(user_id)
+
+        combined_context = f"{memory_content}{sop_content}".strip()
+        return {"current_sop": combined_context}
 
     async def think_node(self, state: AgentState):
-        """节点 1：意图理解与状态分析 (Think)"""
-        # 缝合逻辑：用户人设 + 业务SOP + 框架思考规范
         sys_content = (
             f"{self.system_prompt}\n\n"
             f"{state.get('current_sop', '')}\n\n"
@@ -152,13 +231,9 @@ class Agent:
         messages = [SystemMessage(content=sys_content)] + state["messages"]
 
         response = await self.llm.ainvoke(messages)
-
-        thought_msg = AIMessage(content=f"🤔 [思考分析]:\n{response.content}")
-        return {"messages": [thought_msg]}
+        return {"messages": [AIMessage(content=f"🤔 [思考分析]:\n{response.content}")]}
 
     async def plan_node(self, state: AgentState):
-        """节点 2：制定动作或生成最终答案 (Plan)"""
-        # 缝合逻辑：用户人设 + 业务SOP + 框架规划规范 + 框架执行红线约束
         sys_content = (
             f"{self.system_prompt}\n\n"
             f"{state.get('current_sop', '')}\n\n"
@@ -178,8 +253,6 @@ class Agent:
         return {"messages": [response]}
 
     async def reflect_node(self, state: AgentState):
-        """节点 4：评估工具返回结果 (Reflect)"""
-        # 缝合逻辑：用户人设 + 框架反思规范
         sys_content = (
             f"{self.system_prompt}\n\n"
             f"{self.internal_prompts['reflect']}"
@@ -187,23 +260,18 @@ class Agent:
         messages = [SystemMessage(content=sys_content)] + state["messages"]
 
         response = await self.llm.ainvoke(messages)
-
-        reflect_msg = AIMessage(content=f"👀 [结果反思]:\n{response.content}")
-        return {"messages": [reflect_msg]}
+        return {"messages": [AIMessage(content=f"👀 [结果反思]:\n{response.content}")]}
 
     # ==========================================
     # 路由与流转构建
     # ==========================================
-
     def should_act(self, state: AgentState) -> Literal["act", "__end__"]:
-        """路由：根据 Plan 节点的决策流转"""
         last_message = state["messages"][-1]
         if getattr(last_message, "tool_calls", None):
             return "act"
         return "__end__"
 
     def _build_graph(self):
-        """构建严格的 Think -> Plan -> Act -> Reflect 闭环"""
         workflow = StateGraph(AgentState)
 
         workflow.add_node("retrieve", self.retrieve_node)
@@ -225,4 +293,5 @@ class Agent:
         else:
             workflow.add_edge("plan", END)
 
+        # 🌟 彻底转为无状态 (不挂载 checkpointer)
         return workflow.compile()

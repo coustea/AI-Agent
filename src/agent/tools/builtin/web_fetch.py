@@ -1,9 +1,6 @@
 import httpx
-import logging
 from typing import Optional
 from langchain_core.tools import tool
-
-logger = logging.getLogger(__name__)
 
 @tool
 async def web_fetch(url: str, method: str = "GET", headers: Optional[dict] = None, timeout: int = 30, max_chars: int = 20000) -> str:
