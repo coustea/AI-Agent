@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.schemas.response import Response
 from api.schemas.auth import UserLogin, UserData, TokenData
 from api.services.auth import AuthService
-from api.db.database import get_db
+from api.db.engine import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")

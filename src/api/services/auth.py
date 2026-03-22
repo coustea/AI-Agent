@@ -7,8 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.db.models import User
-from api.core.security import get_password_hash, verify_password
-from api.core.redis import get_redis
+from api.utils.security import get_password_hash, verify_password
+from api.db.engine import get_redis
 from api.utils.jwt import create_access_token, verify_token
 
 

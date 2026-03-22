@@ -3,7 +3,7 @@
 from datetime import datetime
 from sqlalchemy import String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
-from api.db.database import Base
+from api.db.base import Base
 
 
 class User(Base):

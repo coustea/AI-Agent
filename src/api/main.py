@@ -7,14 +7,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.router import auth, users
-from api.db.database import init_db
-from api.core.redis import init_redis
+from api.db.engine import init_engines
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_redis()
-    await init_db()
+    await init_engines()
     yield
 
 
