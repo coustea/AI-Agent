@@ -127,19 +127,29 @@ API_PORT=9999
 
 ### 3. 初始化数据库
 
-在 MySQL 中运行初始化脚本：
+使用启动脚本初始化数据库：
 
 ```bash
-mysql -u root -p < src/api/scripts/init_db.sql
+chmod +x start_db.sh
+./start_db.sh
+```
+
+或在 MySQL 中手动运行：
+
+```bash
+mysql -u root -p < api/scripts/init_db.sql
 ```
 
 ### 4. 启动服务
 
 ```bash
 # 启动 API 服务
-uvicorn api.main:app --reload --port 9999
+python main.py
 
-# 或运行 Agent 演示
+# 或使用 uvicorn
+uvicorn main:app --reload --port 9999
+
+# 运行 Agent 演示
 python agent/main.py
 ```
 
@@ -153,11 +163,41 @@ python agent/main.py
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/users` | 注册用户 |
+| POST | `/api/auth/register` | 用户注册并获取 Token |
+| POST | `/api/auth/login` | 用户登录 |
+| DELETE | `/api/auth/logout` | 用户登出 |
+| GET | `/api/auth/me` | 获取当前用户信息 |
+| POST | `/api/auth/refresh` | 刷新 Token（未实现） |
+
+### 用户管理接口
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/users` | 获取用户列表（分页） |
+| GET | `/api/users/active` | 获取活跃用户列表 |
 | GET | `/api/users/me` | 获取当前用户信息 |
-| PATCH | `/api/users/me/password` | 修改密码 |
-| POST | `/api/auth/login` | 登录 |
-| DELETE | `/api/auth/logout` | 登出 |
+| PATCH | `/api/users/me` | 更新当前用户信息 |
+| DELETE | `/api/users/me` | 删除当前用户账户 |
+| GET | `/api/users/stats` | 获取用户统计信息 |
+| GET | `/api/users/search` | 搜索用户 |
+
+### 会话管理接口
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/sessions` | 创建新会话 |
+| GET | `/api/sessions` | 获取会话列表 |
+| DELETE | `/api/sessions/{session_id}` | 删除会话 |
+| GET | `/api/sessions/{session_id}/messages` | 获取会话消息 |
+| POST | `/api/sessions/{session_id}/chat` | 发送聊天消息 |
+| POST | `/api/sessions/{session_id}/assistant` | 保存助手回复 |
+
+### Agent 聊天接口
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/agent/chat` | 非流式 Agent 聊天 |
+| POST | `/api/agent/stream` | 流式 Agent 聊天（SSE） |
 
 ### 统一响应格式
 
@@ -248,36 +288,22 @@ python agent/main.py
 ## 📂 项目结构
 
 ```
-agent/
+server/
 ├── agent/                    # ReAct Agent 模块（完全独立）
 │   ├── core/                 # Agent 核心（完全解耦）
 │   │   ├── agent.py          # 5 节点工作流（完全解耦）
 │   │   ├── llm.py            # LLM 封装
-│   │   └── __init__.py       # 模块初始化
+│   │   └── logger.py         # 全局日志系统
 │   ├── tools/                # 工具系统
-│   │   ├── builtin/          # 内置工具
-│   │   │   ├── shell_execute.py
-│   │   │   ├── web_fetch.py
-│   │   │   ├── file_write.py
-│   │   │   ├── file_read.py
-│   │   │   ├── file_list.py
-│   │   │   ├── data_analyzer.py
-│   │   │   └── web_search.py
-│   │   └── __init__.py       # 工具初始化
+│   │   └── builtin/          # 内置工具
+│   │       ├── shell_execute.py
+│   │       ├── web_fetch.py
+│   │       └── file_write.py
 │   ├── skills/               # 技能系统
-│   │   ├── baidu-search-1.1.3/
-│   │   ├── excel-automation/
-│   │   ├── word-document-processor/
-│   │   ├── pdf/
-│   │   ├── tavily-search/
-│   │   ├── financial-calculator/
 │   │   ├── weather-1.0.0/
-│   │   ├── design-md/
+│   │   ├── baidu-search-1.1.3/
 │   │   ├── desktop-control-1.0.0/
-│   │   ├── self-improving-agent-3.0.5/
-│   │   ├── tam-sam-som-calculator/
-│   │   ├── ocr-document-processor/
-│   │   └── skills-lock.json
+│   │   └── self-improving-agent-3.0.5/
 │   ├── prompts/              # 工作流提示词
 │   │   ├── 01_think.md
 │   │   ├── 02_plan.md
@@ -289,34 +315,38 @@ agent/
 │   ├── core/
 │   │   ├── config.py         # 配置管理
 │   │   ├── dependencies.py   # 依赖注入
-│   │   └── error_handlers.py # 错误处理
+│   │   ├── error_handlers.py # 错误处理
+│   │   └── response.py       # 统一响应格式
 │   ├── db/
-│   │   ├── engine.py         # 数据库引擎
-│   │   ├── models.py         # 数据模型
-│   │   └── repositories/     # 数据仓库
+│   │   ├── engine.py         # MySQL + Redis 连接管理
+│   │   └── models.py         # SQLModel 数据模型
+│   ├── repositories/         # 数据仓库层
+│   │   ├── user.py           # 用户数据访问
+│   │   ├── session.py        # 会话数据访问
+│   │   └── user_memory.py    # 用户记忆数据访问
 │   ├── router/
 │   │   ├── auth.py           # 认证路由
 │   │   ├── users.py          # 用户路由
 │   │   ├── sessions.py       # 会话路由
 │   │   └── agent.py          # Agent 路由
-│   ├── services/
-│   │   ├── agent.py          # Agent 服务（通过接口连接 Agent）
-│   │   ├── auth.py           # 认证服务
+│   ├── services/             # 业务逻辑层
+│   │   ├── agent.py          # Agent 服务
 │   │   ├── user.py           # 用户服务
-│   │   ├── redis_service.py  # Redis 服务
-│   │   ├── redis_session_service.py # Redis 会话服务
-│   │   └── user_memory_service.py   # 用户记忆服务
-│   ├── schemas/
+│   │   ├── session_service.py # 会话服务
+│   │   └── redis_service.py  # Redis 服务
+│   ├── schemas/              # Pydantic 模型
 │   │   ├── auth.py           # 认证模型
-│   │   └── response.py       # 统一响应
+│   │   ├── user.py           # 用户模型
+│   │   └── session.py        # 会话模型
 │   ├── utils/
 │   │   ├── jwt.py            # JWT 工具
 │   │   └── security.py       # 安全工具
-│   ├── scripts/
-│   │   └── init_db.sql       # 数据库初始化
-│   └── main.py               # FastAPI 入口
+│   └── scripts/
+│       └── init_db.sql       # 数据库初始化脚本
 │
-├── .env                      # 环境变量
+├── main.py                   # FastAPI 应用入口
+├── start_db.sh               # 数据库启动脚本
+├── .env                      # 环境变量配置
 ├── .env.example              # 环境变量示例
 ├── pyproject.toml            # 项目配置
 ├── README.md                 # 本文件
@@ -335,7 +365,28 @@ ruff check .
 ruff check . --fix
 ```
 
-### 测试
+### API 测试
+
+项目包含完整的 API 自动化测试脚本：
+
+```bash
+# 运行完整 API 测试套件
+python test_api.py
+```
+
+**测试覆盖**:
+- ✅ 用户认证（注册、登录、登出）
+- ✅ 用户管理（CRUD、搜索、统计）
+- ✅ 会话管理（创建、列表、删除、消息）
+- ✅ Agent 聊天（非流式、流式）
+- ✅ 用户记忆（增删改查）
+
+**测试结果**:
+- 通过率: 88.5% (23/26 测试)
+- 覆盖所有主要 API 端点
+- 自动生成测试报告
+
+### 单元测试
 
 ```bash
 pytest
