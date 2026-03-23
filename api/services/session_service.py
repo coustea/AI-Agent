@@ -2,22 +2,17 @@
 
 from typing import List, Optional
 
-from api.db.repositories.redis_session import RedisSessionRepository
-from api.db.models import (
-    SessionCreate,
-    SessionRead,
-    MessageRead,
-    ChatRequest,
-)
+from api.repositories.session import SessionRepository
+from api.schemas.session import SessionCreate, SessionRead, MessageRead, ChatRequest
 from api.services.redis_service import RedisService
 
 
-class RedisSessionService:
+class SessionService:
     """基于 Redis 的会话服务。"""
 
     def __init__(self, redis_client: RedisService):
         self.redis = redis_client
-        self.session_repo = RedisSessionRepository(redis_client)
+        self.session_repo = SessionRepository(redis_client)
 
     # ================= 会话管理 =================
 
@@ -64,12 +59,15 @@ class RedisSessionService:
     def delete_session(self, user_id: int, session_id: str) -> bool:
         """删除会话（验证用户权限）。"""
         session = self.session_repo.get_session(user_id, session_id)
-        if not session or session["user_id"] != user_id:
+        if not session:
             return False
 
+        # session 已经通过 user_id 获取，所以 user_id 一定是匹配的
         return self.session_repo.delete_session(user_id, session_id)
 
-    def update_session_title(self, user_id: int, session_id: str, title: str) -> Optional[SessionRead]:
+    def update_session_title(
+        self, user_id: int, session_id: str, title: str
+    ) -> Optional[SessionRead]:
         """更新会话标题。"""
         session = self.session_repo.get_session(user_id, session_id)
         if not session or session["user_id"] != user_id:
@@ -107,7 +105,9 @@ class RedisSessionService:
             for m in messages
         ]
 
-    def add_user_message(self, user_id: int, session_id: str, content: str) -> MessageRead:
+    def add_user_message(
+        self, user_id: int, session_id: str, content: str
+    ) -> MessageRead:
         """添加用户消息。"""
         session = self.session_repo.get_session(user_id, session_id)
         if not session or session["user_id"] != user_id:
@@ -122,13 +122,17 @@ class RedisSessionService:
             created_at=message["timestamp"],
         )
 
-    def add_assistant_message(self, user_id: int, session_id: str, content: str) -> MessageRead:
+    def add_assistant_message(
+        self, user_id: int, session_id: str, content: str
+    ) -> MessageRead:
         """添加助手消息。"""
         session = self.session_repo.get_session(user_id, session_id)
         if not session or session["user_id"] != user_id:
             raise ValueError("Session not found or access denied")
 
-        message = self.session_repo.add_message(user_id, session_id, "assistant", content)
+        message = self.session_repo.add_message(
+            user_id, session_id, "assistant", content
+        )
 
         return MessageRead(
             id=message["id"],

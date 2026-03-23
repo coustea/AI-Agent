@@ -9,20 +9,24 @@ from api.core.dependencies import (
     get_current_user,
     get_current_active_user,
     get_db_session,
+    get_redis_client,
     PaginationParams,
 )
 from api.core.response import Response, PaginationResponse, PaginationMeta
-from api.db.models import User, UserCreate, UserUpdate, UserRead
-from api.db.repositories.user import UserRepository
+from api.db.models import User
+from api.schemas.user import UserCreate, UserUpdate, UserRead
+from api.repositories.user import UserRepository
 from api.services.user import UserService
 
 # Use Python's built-in PermissionError or create custom exception
 try:
     from api.core.exceptions import PermissionError
 except ImportError:
+
     class PermissionError(HTTPException):
         def __init__(self, detail="Permission denied"):
             super().__init__(status_code=403, detail=detail)
+
 
 router = APIRouter(tags=["users"])
 
@@ -35,6 +39,7 @@ class MessageResponse(BaseModel):
 
 # ================= LIST USERS =================
 
+
 @router.get(
     "",
     response_model=PaginationResponse[UserRead],
@@ -43,28 +48,27 @@ class MessageResponse(BaseModel):
 )
 async def list_all_users(
     pagination: PaginationParams = Depends(PaginationParams),
-    db = Depends(get_db_session),
+    db=Depends(get_db_session),
 ):
     """
     List all users with pagination.
-    
+
     Args:
         pagination: Pagination parameters (page, page_size)
         db: Database session
-        
+
     Returns:
         PaginationResponse: Paginated list of users
-        
+
     Example:
         >>> GET /api/users?page=1&page_size=10
     """
     user_service = UserService(db, redis_client=None)  # No Redis needed for list
-    
+
     users = await user_service.list_users(
-        skip=pagination.skip,
-        limit=pagination.page_size
+        skip=pagination.skip, limit=pagination.page_size
     )
-    
+
     total = await user_service.count_users()
     pages = (total + pagination.page_size - 1) // pagination.page_size
 
@@ -89,28 +93,27 @@ async def list_all_users(
 )
 async def list_active_users(
     pagination: PaginationParams = Depends(PaginationParams),
-    db = Depends(get_db_session),
+    db=Depends(get_db_session),
 ):
     """
     List all active users with pagination.
-    
+
     Args:
         pagination: Pagination parameters (page, page_size)
         db: Database session
-        
+
     Returns:
         PaginationResponse: Paginated list of active users
-        
+
     Example:
         >>> GET /api/users/active?page=1&page_size=10
     """
     user_service = UserService(db, redis_client=None)
-    
+
     users = await user_service.list_active_users(
-        skip=pagination.skip,
-        limit=pagination.page_size
+        skip=pagination.skip, limit=pagination.page_size
     )
-    
+
     total = await user_service.count_active_users()
     pages = (total + pagination.page_size - 1) // pagination.page_size
 
@@ -129,6 +132,7 @@ async def list_active_users(
 
 # ================= CREATE USER =================
 
+
 @router.post(
     "",
     response_model=Response[UserRead],
@@ -138,21 +142,21 @@ async def list_active_users(
 )
 async def create_user(
     user_data: UserCreate,
-    db = Depends(get_db_session),
+    db=Depends(get_db_session),
 ):
     """
     Register a new user.
-    
+
     Args:
         user_data: User data (username, email, password, full_name)
         db: Database session
-        
+
     Returns:
         Response: Created user info
-        
+
     Raises:
         400: If username or email already exists
-        
+
     Example:
         >>> POST /api/users
         >>> {
@@ -165,14 +169,15 @@ async def create_user(
     from api.core.dependencies import get_redis_client
 
     user_service = UserService(db, redis_client=get_redis_client())
-    
+
     user = await user_service.register_user(user_data)
     user_read = UserRead.model_validate(user)
-    
+
     return Response(data=user_read, message="User created successfully")
 
 
 # ================= GET CURRENT USER =================
+
 
 @router.get(
     "/me",
@@ -181,17 +186,17 @@ async def create_user(
     description="Get information about the currently authenticated user",
 )
 async def get_current_user_info(
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """
     Get current authenticated user info.
-    
+
     Args:
         current_user: Current authenticated user (from JWT token)
-        
+
     Returns:
         Response: Current user info
-        
+
     Example:
         >>> GET /api/users/me
         >>> Headers: Authorization: Bearer <token>
@@ -202,6 +207,7 @@ async def get_current_user_info(
 
 # ================= UPDATE USER =================
 
+
 @router.patch(
     "/me",
     response_model=Response[UserRead],
@@ -210,24 +216,24 @@ async def get_current_user_info(
 )
 async def update_current_user(
     user_data: UserUpdate,
-    current_user = Depends(get_current_user),
-    db = Depends(get_db_session),
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
 ):
     """
     Update current user info.
-    
+
     Args:
         user_data: User data to update (email, full_name, password, is_active)
         current_user: Current authenticated user
         db: Database session
-        
+
     Returns:
         Response: Updated user info
-        
+
     Raises:
         403: If user is inactive
         409: If email already exists for another user
-        
+
     Example:
         >>> PATCH /api/users/me
         >>> Headers: Authorization: Bearer <token>
@@ -239,16 +245,17 @@ async def update_current_user(
     from api.core.dependencies import get_redis_client
 
     user_service = UserService(db, redis_client=get_redis_client())
-    
+
     updated_user = await user_service.update_user(
         current_user.id, user_data, current_user.username
     )
     user_read = UserRead.model_validate(updated_user)
-    
+
     return Response(data=user_read, message="User updated successfully")
 
 
 # ================= CHANGE PASSWORD =================
+
 
 @router.patch(
     "/me/password",
@@ -258,23 +265,23 @@ async def update_current_user(
 )
 async def change_password(
     password_data: UserUpdate,
-    current_user = Depends(get_current_user),
-    db = Depends(get_db_session),
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
 ):
     """
     Change user password.
-    
+
     Args:
         password_data: Password data (old_password, new_password)
         current_user: Current authenticated user
         db: Database session
-        
+
     Returns:
         Response: Success message
-        
+
     Raises:
         401: If old password is incorrect
-        
+
     Example:
         >>> PATCH /api/users/me/password
         >>> Headers: Authorization: Bearer <token>
@@ -283,17 +290,18 @@ async def change_password(
         >>> }
     """
     user_service = UserService(db, redis_client=None)
-    
+
     await user_service.change_password(
         current_user.username,
         password_data.password,
-        password_data.password  # Same field for simplicity
+        password_data.password,  # Same field for simplicity
     )
-    
+
     return Response(message="Password changed successfully")
 
 
 # ================= DELETE USER =================
+
 
 @router.delete(
     "/me",
@@ -302,103 +310,32 @@ async def change_password(
     description="Delete the currently authenticated user account",
 )
 async def delete_current_user(
-    current_user = Depends(get_current_active_user),
-    db = Depends(get_db_session),
+    current_user=Depends(get_current_active_user),
+    db=Depends(get_db_session),
 ):
     """
     Delete current user account.
-    
+
     Args:
         current_user: Current authenticated active user
         db: Database session
-        
+
     Returns:
         Response: Success message
-        
+
     Example:
         >>> DELETE /api/users/me
         >>> Headers: Authorization: Bearer <token>
     """
     user_repo = UserRepository(db)
-    
+
     await user_repo.delete_user(current_user.id)
-    
+
     return Response(message="User account deleted successfully")
 
 
-# ================= GET USER BY ID =================
+# ================= STATIC ROUTES FIRST =================
 
-@router.get(
-    "/{user_id}",
-    response_model=Response[UserRead],
-    summary="Get user by ID",
-    description="Get information about a specific user by ID",
-)
-async def get_user_by_id(
-    user_id: int,
-    db = Depends(get_db_session),
-):
-    """
-    Get user by ID.
-    
-    Args:
-        user_id: User ID
-        db: Database session
-        
-    Returns:
-        Response: User info
-        
-    Raises:
-        404: If user not found
-        
-    Example:
-        >>> GET /api/users/1
-    """
-    user_service = UserService(db, redis_client=None)
-    
-    user = await user_service.get_user_by_id(user_id)
-    
-    return Response(data=UserRead.model_validate(user))
-
-
-# ================= SEARCH USERS =================
-
-@router.get(
-    "/search",
-    response_model=Response[List[UserRead]],
-    summary="Search users",
-    description="Search users by username or email",
-)
-async def search_users(
-    query: str = Query(..., min_length=2, description="Search query"),
-    skip: int = Query(0, ge=0, description="Number of items to skip"),
-    limit: int = Query(20, ge=1, le=100, description="Number of items to return"),
-    db = Depends(get_db_session),
-):
-    """
-    Search users by username or email.
-    
-    Args:
-        query: Search query string
-        skip: Number of items to skip
-        limit: Number of items to return
-        db: Database session
-        
-    Returns:
-        Response: List of matching users
-        
-    Example:
-        >>> GET /api/users/search?query=test&limit=10
-    """
-    user_service = UserService(db, redis_client=None)
-    
-    users = await user_service.search_users(query, skip=skip, limit=limit)
-    users_read = [UserRead.model_validate(user) for user in users]
-    
-    return Response(data=users_read, message=f"Found {len(users_read)} matching users")
-
-
-# ================= COUNT USERS =================
 
 @router.get(
     "/stats",
@@ -407,22 +344,10 @@ async def search_users(
     description="Get user statistics (total, active, etc.)",
 )
 async def get_user_stats(
-    db = Depends(get_db_session),
+    db=Depends(get_db_session),
 ):
-    """
-    Get user statistics.
-    
-    Args:
-        db: Database session
-        
-    Returns:
-        Response: User statistics
-        
-    Example:
-        >>> GET /api/users/stats
-    """
     user_service = UserService(db, redis_client=None)
-    
+
     total_users = await user_service.count_users()
     active_users = await user_service.count_active_users()
     inactive_users = total_users - active_users
@@ -437,6 +362,46 @@ async def get_user_stats(
     )
 
 
+@router.get(
+    "/search",
+    response_model=Response[List[UserRead]],
+    summary="Search users",
+    description="Search users by username or email",
+)
+async def search_users(
+    query: str = Query(..., min_length=2, description="Search query"),
+    skip: int = Query(0, ge=0, description="Number of items to skip"),
+    limit: int = Query(20, ge=1, le=100, description="Number of items to return"),
+    db=Depends(get_db_session),
+):
+    user_service = UserService(db, redis_client=None)
+
+    users = await user_service.search_users(query, skip=skip, limit=limit)
+    users_read = [UserRead.model_validate(user) for user in users]
+
+    return Response(data=users_read, message=f"Found {len(users_read)} matching users")
+
+
+# ================= DYNAMIC ROUTE =================
+
+
+@router.get(
+    "/{user_id}",
+    response_model=Response[UserRead],
+    summary="Get user by ID",
+    description="Get information about a specific user by ID",
+)
+async def get_user_by_id(
+    user_id: int,
+    db=Depends(get_db_session),
+):
+    user_service = UserService(db, redis_client=None)
+
+    user = await user_service.get_user_by_id(user_id)
+
+    return Response(data=UserRead.model_validate(user))
+
+
 # ================= USER MEMORY MANAGEMENT =================
 
 
@@ -447,22 +412,13 @@ async def get_user_stats(
     description="获取当前用户的长期记忆",
 )
 async def get_my_memory(
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
-    """
-    获取当前用户的长期记忆。
+    from api.services.agent import AgentService
 
-    Returns:
-        Response: 用户长期记忆内容
-
-    Raises:
-        401: 未认证
-    """
-    from api.services.user_memory_service import UserMemoryService
-
-    memory_service = UserMemoryService()
-    memory = memory_service.get_memory(current_user.id)
+    agent_service = AgentService(redis)
+    memory = agent_service.get_memory(current_user.id)
 
     return Response(
         data={"user_id": current_user.id, "memory_summary": memory or ""},
@@ -478,23 +434,10 @@ async def get_my_memory(
 )
 async def set_my_memory(
     memory_data: dict,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
-    """
-    设置当前用户的长期记忆。
-
-    Args:
-        memory_data: {"memory_summary": "记忆内容"}
-
-    Returns:
-        Response: 设置结果
-
-    Raises:
-        401: 未认证
-        400: 记忆内容为空
-    """
-    from api.services.user_memory_service import UserMemoryService
+    from api.services.agent import AgentService
 
     memory_summary = memory_data.get("memory_summary", "").strip()
 
@@ -504,8 +447,8 @@ async def set_my_memory(
             detail="Memory summary cannot be empty",
         )
 
-    memory_service = UserMemoryService()
-    success = memory_service.set_memory(current_user.id, memory_summary)
+    agent_service = AgentService(redis)
+    success = agent_service.set_memory(current_user.id, memory_summary)
 
     if not success:
         raise HTTPException(
@@ -527,23 +470,10 @@ async def set_my_memory(
 )
 async def update_my_memory(
     memory_data: dict,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
-    """
-    更新当前用户的长期记忆。
-
-    Args:
-        memory_data: {"memory_summary": "新的记忆内容"}
-
-    Returns:
-        Response: 更新结果
-
-    Raises:
-        401: 未认证
-        404: 用户记忆不存在
-    """
-    from api.services.user_memory_service import UserMemoryService
+    from api.services.agent import AgentService
 
     memory_summary = memory_data.get("memory_summary", "").strip()
 
@@ -553,16 +483,15 @@ async def update_my_memory(
             detail="Memory summary cannot be empty",
         )
 
-    memory_service = UserMemoryService()
+    agent_service = AgentService(redis)
 
-    # 检查记忆是否存在
-    if not memory_service.has_memory(current_user.id):
+    if not agent_service.has_memory(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User memory not found. Use POST to create first.",
         )
 
-    success = memory_service.update_memory(current_user.id, memory_summary)
+    success = agent_service.update_memory(current_user.id, memory_summary)
 
     if not success:
         raise HTTPException(
@@ -583,22 +512,13 @@ async def update_my_memory(
     description="删除当前用户的长期记忆",
 )
 async def delete_my_memory(
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
-    """
-    删除当前用户的长期记忆。
+    from api.services.agent import AgentService
 
-    Returns:
-        Response: 删除结果
-
-    Raises:
-        401: 未认证
-    """
-    from api.services.user_memory_service import UserMemoryService
-
-    memory_service = UserMemoryService()
-    success = memory_service.delete_memory(current_user.id)
+    agent_service = AgentService(redis)
+    success = agent_service.delete_memory(current_user.id)
 
     if not success:
         raise HTTPException(
@@ -620,23 +540,10 @@ async def delete_my_memory(
 )
 async def append_to_memory(
     content: dict,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
-    """
-    追加内容到用户的长期记忆。
-
-    Args:
-        content: {"content": "要追加的内容"}
-
-    Returns:
-        Response: 追加结果
-
-    Raises:
-        401: 未认证
-        400: 内容为空
-    """
-    from api.services.user_memory_service import UserMemoryService
+    from api.services.agent import AgentService
 
     new_content = content.get("content", "").strip()
 
@@ -646,8 +553,8 @@ async def append_to_memory(
             detail="Content cannot be empty",
         )
 
-    memory_service = UserMemoryService()
-    success = memory_service.append_memory(current_user.id, new_content)
+    agent_service = AgentService(redis)
+    success = agent_service.append_memory(current_user.id, new_content)
 
     if not success:
         raise HTTPException(
@@ -669,23 +576,10 @@ async def append_to_memory(
 )
 async def append_summary_to_memory(
     summary_data: dict,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
-    """
-    追加对话总结到用户的长期记忆。
-
-    Args:
-        summary_data: {"summary": "对话总结内容"}
-
-    Returns:
-        Response: 追加结果
-
-    Raises:
-        401: 未认证
-        400: 总结为空
-    """
-    from api.services.user_memory_service import UserMemoryService
+    from api.services.agent import AgentService
 
     summary = summary_data.get("summary", "").strip()
 
@@ -695,8 +589,8 @@ async def append_summary_to_memory(
             detail="Summary cannot be empty",
         )
 
-    memory_service = UserMemoryService()
-    success = memory_service.append_summary(current_user.id, summary)
+    agent_service = AgentService(redis)
+    success = agent_service.append_summary(current_user.id, summary)
 
     if not success:
         raise HTTPException(

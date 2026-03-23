@@ -8,9 +8,10 @@ from pydantic import BaseModel
 from api.core.dependencies import (
     get_db_session,
     get_redis_client,
+    get_current_user,
 )
 from api.core.response import Response
-from api.db.models import UserLogin, Token
+from api.schemas.auth import UserLogin, Token
 from api.services.redis_service import RedisService
 from api.services.user import UserService
 
@@ -25,6 +26,7 @@ class MessageResponse(BaseModel):
 
 # ================= LOGIN =================
 
+
 @router.post(
     "/login",
     response_model=Response[Token],
@@ -33,24 +35,24 @@ class MessageResponse(BaseModel):
 )
 async def login(
     user_data: UserLogin,
-    db = Depends(get_db_session),
-    redis = Depends(get_redis_client),
+    db=Depends(get_db_session),
+    redis=Depends(get_redis_client),
 ):
     """
     User login and return JWT token.
-    
+
     Args:
         user_data: Login credentials (username, password)
         db: Database session
         redis: Redis client
-        
+
     Returns:
         Response: JWT token with user info
-        
+
     Raises:
         401: If username or password is invalid
         403: If user account is inactive
-        
+
     Example:
         >>> POST /api/auth/login
         >>> {
@@ -72,6 +74,7 @@ async def login(
 
 # ================= REGISTER =================
 
+
 @router.post(
     "/register",
     response_model=Response[Token],
@@ -81,24 +84,24 @@ async def login(
 )
 async def register(
     user_data: UserLogin,  # Reuse UserLogin for simplicity (username + password)
-    db = Depends(get_db_session),
-    redis = Depends(get_redis_client),
+    db=Depends(get_db_session),
+    redis=Depends(get_redis_client),
 ):
     """
     User registration.
-    
+
     Args:
         user_data: User registration data (username, password)
         db: Database session
         redis: Redis client
-        
+
     Returns:
         Response: JWT token with new user info
-        
+
     Raises:
         400: If username already exists
         422: If validation fails
-        
+
     Example:
         >>> POST /api/auth/register
         >>> {
@@ -106,7 +109,7 @@ async def register(
         >>>   "password": "Pass123"
         >>> }
     """
-    from api.db.models import UserCreate
+    from api.schemas.user import UserCreate
 
     # Convert UserLogin to UserCreate (add email field)
     # For simplicity, use username as email
@@ -120,10 +123,12 @@ async def register(
     try:
         user_service = UserService(db, redis)
         user = await user_service.register_user(user_create)
-        
+
         # Auto-login after registration
         token_data = await user_service.login_user(user_data)
-        return Response(data=token_data, message="User created and logged in successfully")
+        return Response(
+            data=token_data, message="User created and logged in successfully"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -133,6 +138,7 @@ async def register(
 
 # ================= LOGOUT =================
 
+
 @router.delete(
     "/logout",
     response_model=Response[MessageResponse],
@@ -140,21 +146,21 @@ async def register(
     description="Revoke JWT token and logout user",
 )
 async def logout(
-    db = Depends(get_db_session),
-    redis = Depends(get_redis_client),
+    db=Depends(get_db_session),
+    redis=Depends(get_redis_client),
     token: Optional[str] = Depends(lambda: None),
 ):
     """
     User logout (revoke token).
-    
+
     Args:
         token: JWT token (extracted from Authorization header)
         db: Database session
         redis: Redis client
-        
+
     Returns:
         Response: Success message
-        
+
     Example:
         >>> DELETE /api/auth/logout
         >>> Headers: Authorization: Bearer <token>
@@ -182,6 +188,7 @@ async def logout(
 
 # ================= GET CURRENT USER =================
 
+
 @router.get(
     "/me",
     response_model=Response,
@@ -189,42 +196,32 @@ async def logout(
     description="Get information about currently authenticated user",
 )
 async def get_current_user_info(
-    db = Depends(get_db_session),
-    redis = Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     Get current authenticated user info.
-    
+
     Args:
-        db: Database session
-        redis: Redis client
-        
+        current_user: Current authenticated user (from JWT token)
+
     Returns:
         Response: Current user info
-        
+
     Raises:
         401: If token is invalid or expired
-        
+
     Example:
         >>> GET /api/auth/me
         >>> Headers: Authorization: Bearer <token>
     """
-    from api.core.dependencies import get_current_user
-    from api.db.models import UserRead
+    from api.schemas.user import UserRead
 
-    try:
-        current_user = await get_current_user(None, db, redis)
-        user_read = UserRead.model_validate(current_user)
-        return Response(data=user_read, message="User info retrieved successfully")
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    user_read = UserRead.model_validate(current_user)
+    return Response(data=user_read, message="User info retrieved successfully")
 
 
 # ================= REFRESH TOKEN =================
+
 
 @router.post(
     "/refresh",
@@ -233,21 +230,21 @@ async def get_current_user_info(
     description="Refresh JWT token (not implemented yet)",
 )
 async def refresh_token(
-    db = Depends(get_db_session),
-    redis = Depends(get_redis_client),
+    db=Depends(get_db_session),
+    redis=Depends(get_redis_client),
     refresh_token: str = ...,
 ):
     """
     Refresh JWT token (future implementation).
-    
+
     Args:
         refresh_token: Refresh token
         db: Database session
         redis: Redis client
-        
+
     Returns:
         Response: New JWT token
-        
+
     Example:
         >>> POST /api/auth/refresh
         >>> {

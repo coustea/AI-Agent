@@ -12,16 +12,10 @@ from api.core.exceptions import (
     InvalidCredentialsError,
     WrongPasswordError,
 )
-from api.db.models import (
-    User,
-    UserCreate,
-    UserUpdate,
-    UserRead,
-    Token,
-    UserLogin,
-    PasswordChange,
-)
-from api.db.repositories.user import UserRepository
+from api.db.models import User
+from api.schemas.user import UserCreate, UserUpdate, UserRead, UserLogin, PasswordChange
+from api.schemas.auth import Token
+from api.repositories.user import UserRepository
 from api.utils.security import verify_password, get_password_hash
 from api.utils.jwt import create_access_token, get_token_jti
 
@@ -35,7 +29,7 @@ class UserService:
     def __init__(self, session: Session, redis_client):
         """
         Initialize user service.
-        
+
         Args:
             session: Database session
             redis_client: Redis client for token management
@@ -46,18 +40,16 @@ class UserService:
 
     # ================= REGISTER =================
 
-    async def register_user(
-        self, user_data: UserCreate
-    ) -> UserRead:
+    async def register_user(self, user_data: UserCreate) -> UserRead:
         """
         Register a new user.
-        
+
         Args:
             user_data: User data with password
-            
+
         Returns:
             UserRead: Created user info
-            
+
         Raises:
             DuplicateUsernameError: If username already exists
             DuplicateEmailError: If email already exists
@@ -76,18 +68,16 @@ class UserService:
 
     # ================= LOGIN =================
 
-    async def login_user(
-        self, user_data: UserLogin
-    ) -> Token:
+    async def login_user(self, user_data: UserLogin) -> Token:
         """
         Login user and return JWT token.
-        
+
         Args:
             user_data: Login credentials (username, password)
-            
+
         Returns:
             Token: JWT token with user info
-            
+
         Raises:
             InvalidCredentialsError: If username or password is wrong
             UserInactiveError: If user account is inactive
@@ -129,11 +119,11 @@ class UserService:
     async def logout_user(self, username: str, token: str) -> bool:
         """
         Logout user by revoking token.
-        
+
         Args:
             username: Username
             token: JWT token to revoke
-            
+
         Returns:
             bool: True if logout successful
         """
@@ -147,13 +137,13 @@ class UserService:
     async def get_user_by_id(self, user_id: int) -> UserRead:
         """
         Get user by ID.
-        
+
         Args:
             user_id: User ID
-            
+
         Returns:
             UserRead: User info
-            
+
         Raises:
             UserNotFoundError: If user not found
         """
@@ -166,13 +156,13 @@ class UserService:
     async def get_user_by_username(self, username: str) -> UserRead:
         """
         Get user by username.
-        
+
         Args:
             username: Username
-            
+
         Returns:
             UserRead: User info
-            
+
         Raises:
             UserNotFoundError: If user not found
         """
@@ -182,18 +172,16 @@ class UserService:
 
         return UserRead.model_validate(user)
 
-    async def get_current_user_info(
-        self, username: str
-    ) -> UserRead:
+    async def get_current_user_info(self, username: str) -> UserRead:
         """
         Get current authenticated user info.
-        
+
         Args:
             username: Username
-            
+
         Returns:
             UserRead: User info
-            
+
         Raises:
             UserNotFoundError: If user not found
         """
@@ -201,16 +189,14 @@ class UserService:
 
     # ================= LIST USERS =================
 
-    async def list_users(
-        self, skip: int = 0, limit: int = 100
-    ) -> List[UserRead]:
+    async def list_users(self, skip: int = 0, limit: int = 100) -> List[UserRead]:
         """
         List all users with pagination.
-        
+
         Args:
             skip: Number of items to skip
             limit: Number of items to return
-            
+
         Returns:
             List[UserRead]: List of users
         """
@@ -222,11 +208,11 @@ class UserService:
     ) -> List[UserRead]:
         """
         List all active users with pagination.
-        
+
         Args:
             skip: Number of items to skip
             limit: Number of items to return
-            
+
         Returns:
             List[UserRead]: List of active users
         """
@@ -240,15 +226,15 @@ class UserService:
     ) -> UserRead:
         """
         Update user by ID.
-        
+
         Args:
             user_id: User ID
             user_data: User data to update
             current_username: Current authenticated username (for permission check)
-            
+
         Returns:
             UserRead: Updated user info
-            
+
         Raises:
             UserNotFoundError: If user not found
             DuplicateEmailError: If email already exists for another user
@@ -273,14 +259,14 @@ class UserService:
     ) -> bool:
         """
         Change user password.
-        
+
         Args:
             username: Username
             password_data: Password change data (old_password, new_password)
-            
+
         Returns:
             bool: True if password changed successfully
-            
+
         Raises:
             WrongPasswordError: If old password is incorrect
             UserNotFoundError: If user not found
@@ -306,13 +292,13 @@ class UserService:
     async def deactivate_user(self, user_id: int) -> UserRead:
         """
         Deactivate user by ID.
-        
+
         Args:
             user_id: User ID
-            
+
         Returns:
             UserRead: Deactivated user info
-            
+
         Raises:
             UserNotFoundError: If user not found
         """
@@ -325,13 +311,13 @@ class UserService:
     async def activate_user(self, user_id: int) -> UserRead:
         """
         Activate user by ID.
-        
+
         Args:
             user_id: User ID
-            
+
         Returns:
             UserRead: Activated user info
-            
+
         Raises:
             UserNotFoundError: If user not found
         """
@@ -344,13 +330,13 @@ class UserService:
     async def delete_user(self, user_id: int) -> bool:
         """
         Delete user by ID.
-        
+
         Args:
             user_id: User ID
-            
+
         Returns:
             bool: True if user was deleted successfully
-            
+
         Raises:
             UserNotFoundError: If user not found
         """
@@ -367,12 +353,12 @@ class UserService:
     ) -> List[UserRead]:
         """
         Search users by username or email.
-        
+
         Args:
             query: Search query string
             skip: Number of items to skip
             limit: Number of items to return
-            
+
         Returns:
             List[UserRead]: List of matching users
         """
@@ -384,7 +370,7 @@ class UserService:
     async def count_users(self) -> int:
         """
         Count total number of users.
-        
+
         Returns:
             int: Total number of users
         """
@@ -393,7 +379,7 @@ class UserService:
     async def count_active_users(self) -> int:
         """
         Count number of active users.
-        
+
         Returns:
             int: Number of active users
         """

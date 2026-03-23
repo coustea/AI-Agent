@@ -6,7 +6,8 @@ from fastapi.responses import StreamingResponse
 
 from api.core.dependencies import get_current_user, get_redis_client
 from api.core.response import Response
-from api.db.models import User, ChatRequest
+from api.db.models import User
+from api.schemas.session import ChatRequest
 from api.services.agent import AgentService
 
 router = APIRouter(tags=["agent"])
@@ -21,8 +22,8 @@ router = APIRouter(tags=["agent"])
 async def chat(
     request: ChatRequest,
     session_id: str,
-    redis = Depends(get_redis_client),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     非流式聊天接口。
@@ -42,7 +43,7 @@ async def chat(
         500: 聊天失败
     """
     agent_service = AgentService(redis)
-    
+
     # 验证会话
     session = agent_service.session_service.get_session(current_user.id, session_id)
     if not session:
@@ -50,19 +51,16 @@ async def chat(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found",
         )
-    
+
     # 保存用户消息
     agent_service.session_service.add_user_message(
         current_user.id, session_id, request.message
     )
-    
+
     # 调用 Agent 获取响应
     result = await agent_service.chat_sync(current_user.id, session_id, request.message)
-    
-    return Response(
-        data=result,
-        message="Chat completed successfully"
-    )
+
+    return Response(data=result, message="Chat completed successfully")
 
 
 @router.post(
@@ -73,8 +71,8 @@ async def chat(
 async def stream_chat(
     request: ChatRequest,
     session_id: str,
-    redis = Depends(get_redis_client),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ) -> StreamingResponse:
     """
     流式聊天接口，使用 Server-Sent Events (SSE)。
@@ -93,7 +91,7 @@ async def stream_chat(
         404: 会话不存在
     """
     agent_service = AgentService(redis)
-    
+
     # 验证会话
     session = agent_service.session_service.get_session(current_user.id, session_id)
     if not session:
@@ -101,22 +99,25 @@ async def stream_chat(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found",
         )
-    
+
     # 保存用户消息
     agent_service.session_service.add_user_message(
         current_user.id, session_id, request.message
     )
-    
+
     async def event_generator():
         """生成 SSE 事件."""
         try:
-            async for output in agent_service.chat_stream(current_user.id, session_id, request.message):
+            async for output in agent_service.chat_stream(
+                current_user.id, session_id, request.message
+            ):
                 # 将输出转换为 JSON 格式的 SSE 数据
                 import json
+
                 yield f"data: {json.dumps(output)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n"
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -124,5 +125,5 @@ async def stream_chat(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
-        }
+        },
     )

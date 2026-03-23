@@ -11,7 +11,7 @@ from api.services.redis_service import RedisService
 SESSION_TTL = 604800
 
 
-class RedisSessionRepository:
+class SessionRepository:
     """基于 Redis 的会话和消息 Repository。"""
 
     def __init__(self, redis_client: RedisService):
@@ -67,7 +67,9 @@ class RedisSessionRepository:
         sessions.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
         return sessions
 
-    def update_session(self, user_id: int, session_id: str, title: Optional[str] = None) -> bool:
+    def update_session(
+        self, user_id: int, session_id: str, title: Optional[str] = None
+    ) -> bool:
         """更新会话。"""
         session = self.get_session(user_id, session_id)
         if not session:
@@ -104,7 +106,9 @@ class RedisSessionRepository:
 
     # ================= 消息管理 =================
 
-    def add_message(self, user_id: int, session_id: str, role: str, content: str) -> dict:
+    def add_message(
+        self, user_id: int, session_id: str, role: str, content: str
+    ) -> dict:
         """添加消息。"""
         now = datetime.utcnow().isoformat()
 

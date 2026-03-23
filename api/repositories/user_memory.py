@@ -1,18 +1,12 @@
-"""用户长期记忆的 Repository 层。"""
-
 from datetime import datetime
 from typing import Optional
-
-from sqlmodel import select, Session
 
 from api.db.models import User
 
 
 class UserMemoryRepository:
-    """用户长期记忆数据访问层。"""
-
-    def __init__(self, session: Session):
-        self.session = session
+    def __init__(self):
+        pass
 
     # ================= CRUD 操作 =================
 
@@ -22,6 +16,7 @@ class UserMemoryRepository:
 
         # 连接到 agent 数据库
         import pymysql
+
         conn = pymysql.connect(
             host=settings.db_host,
             user=settings.db_user,
@@ -32,8 +27,7 @@ class UserMemoryRepository:
 
         try:
             cursor.execute(
-                "SELECT memory_summary FROM user_memory WHERE user_id = %s",
-                (user_id,)
+                "SELECT memory_summary FROM user_memory WHERE user_id = %s", (user_id,)
             )
             result = cursor.fetchone()
 
@@ -49,6 +43,7 @@ class UserMemoryRepository:
         from api.db.models import settings
 
         import pymysql
+
         conn = pymysql.connect(
             host=settings.db_host,
             user=settings.db_user,
@@ -59,23 +54,20 @@ class UserMemoryRepository:
 
         try:
             # 检查是否已存在
-            cursor.execute(
-                "SELECT id FROM user_memory WHERE user_id = %s",
-                (user_id,)
-            )
+            cursor.execute("SELECT id FROM user_memory WHERE user_id = %s", (user_id,))
             existing = cursor.fetchone()
 
             if existing:
                 # 更新
                 cursor.execute(
                     "UPDATE user_memory SET memory_summary = %s, updated_at = NOW() WHERE user_id = %s",
-                    (memory_summary, user_id)
+                    (memory_summary, user_id),
                 )
             else:
                 # 插入
                 cursor.execute(
                     "INSERT INTO user_memory (user_id, memory_summary) VALUES (%s, %s)",
-                    (user_id, memory_summary)
+                    (user_id, memory_summary),
                 )
 
             conn.commit()
@@ -92,6 +84,7 @@ class UserMemoryRepository:
         from api.db.models import settings
 
         import pymysql
+
         conn = pymysql.connect(
             host=settings.db_host,
             user=settings.db_user,
@@ -103,7 +96,7 @@ class UserMemoryRepository:
         try:
             cursor.execute(
                 "UPDATE user_memory SET memory_summary = %s, updated_at = NOW() WHERE user_id = %s",
-                (memory_summary, user_id)
+                (memory_summary, user_id),
             )
             affected_rows = cursor.rowcount
             conn.commit()
@@ -120,6 +113,7 @@ class UserMemoryRepository:
         from api.db.models import settings
 
         import pymysql
+
         conn = pymysql.connect(
             host=settings.db_host,
             user=settings.db_user,

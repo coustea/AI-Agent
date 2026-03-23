@@ -6,7 +6,8 @@ from typing import Optional, List, Dict, Any
 from pydantic import EmailStr
 from sqlmodel import select, Session
 
-from api.db.models import User, UserCreate, UserUpdate, UserRead
+from api.db.models import User
+from api.schemas.user import UserCreate, UserUpdate, UserRead
 
 
 class UserRepository:
@@ -17,18 +18,16 @@ class UserRepository:
 
     # ================= CREATE =================
 
-    async def create_user(
-        self, user_data: UserCreate
-    ) -> User:
+    async def create_user(self, user_data: UserCreate) -> User:
         """
         Create a new user.
-        
+
         Args:
             user_data: User data with password
-            
+
         Returns:
             Created user object
-            
+
         Raises:
             ValueError: If username or email already exists
         """
@@ -44,6 +43,7 @@ class UserRepository:
 
         # Hash password
         from api.utils.security import get_password_hash
+
         password_hash = get_password_hash(user_data.password)
 
         # Create user object
@@ -75,35 +75,29 @@ class UserRepository:
         statement = select(User).where(User.email == email)
         return self.session.exec(statement).first()
 
-    async def get_all_users(
-        self, skip: int = 0, limit: int = 100
-    ) -> List[User]:
+    async def get_all_users(self, skip: int = 0, limit: int = 100) -> List[User]:
         """Get all users with pagination."""
         statement = select(User).offset(skip).limit(limit)
         return self.session.exec(statement).all()
 
-    async def get_active_users(
-        self, skip: int = 0, limit: int = 100
-    ) -> List[User]:
+    async def get_active_users(self, skip: int = 0, limit: int = 100) -> List[User]:
         """Get all active users with pagination."""
         statement = select(User).where(User.is_active == True).offset(skip).limit(limit)
         return self.session.exec(statement).all()
 
     # ================= UPDATE =================
 
-    async def update_user(
-        self, user_id: int, user_data: UserUpdate
-    ) -> Optional[User]:
+    async def update_user(self, user_id: int, user_data: UserUpdate) -> Optional[User]:
         """
         Update user by ID.
-        
+
         Args:
             user_id: User ID
             user_data: User data to update
-            
+
         Returns:
             Updated user object, or None if user not found
-            
+
         Raises:
             ValueError: If email already exists for another user
         """
@@ -113,7 +107,7 @@ class UserRepository:
 
         # Get existing user data
         update_data = user_data.dict(exclude_unset=True)
-        
+
         # Check if email is being updated and already exists
         if "email" in update_data and update_data["email"] != user.email:
             existing_email = await self.get_by_email(update_data["email"])
@@ -123,13 +117,14 @@ class UserRepository:
         # If password is being updated, hash it
         if "password" in update_data:
             from api.utils.security import get_password_hash
+
             update_data["password_hash"] = get_password_hash(update_data["password"])
             del update_data["password"]
 
         # Update user
         for field, value in update_data.items():
             setattr(user, field, value)
-        
+
         user.updated_at = datetime.utcnow()
         self.session.add(user)
         self.session.commit()
@@ -142,15 +137,15 @@ class UserRepository:
     ) -> bool:
         """
         Change user password.
-        
+
         Args:
             user_id: User ID
             old_password: Old password to verify
             new_password: New password
-            
+
         Returns:
             True if password changed successfully
-            
+
         Raises:
             ValueError: If old password is incorrect or user not found
         """
@@ -160,11 +155,13 @@ class UserRepository:
 
         # Verify old password
         from api.utils.security import verify_password
+
         if not verify_password(old_password, user.password_hash):
             raise ValueError("Invalid old password")
 
         # Hash new password
         from api.utils.security import get_password_hash
+
         user.password_hash = get_password_hash(new_password)
         user.updated_at = datetime.utcnow()
 
@@ -208,10 +205,10 @@ class UserRepository:
     async def delete_user(self, user_id: int) -> bool:
         """
         Delete user by ID.
-        
+
         Args:
             user_id: User ID
-            
+
         Returns:
             True if user was deleted, False if user not found
         """
@@ -231,20 +228,17 @@ class UserRepository:
     ) -> List[User]:
         """
         Search users by username or email.
-        
+
         Args:
             query: Search query string
             skip: Pagination offset
             limit: Pagination limit
-            
+
         Returns:
             List of matching users
         """
         statement = (
-            select(User)
-            .where(User.username.contains(query))
-            .offset(skip)
-            .limit(limit)
+            select(User).where(User.username.contains(query)).offset(skip).limit(limit)
         )
         return self.session.exec(statement).all()
 

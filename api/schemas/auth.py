@@ -1,9 +1,9 @@
-"""Request and response schemas for authentication."""
-
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, field_validator, Field
+from pydantic import BaseModel, Field, field_validator
+
+from api.schemas.user import UserRead
 
 
 class UserLogin(BaseModel):
@@ -25,16 +25,18 @@ class UserLogin(BaseModel):
         return v
 
 
-class UserData(BaseModel):
-    username: str
-    created_at: datetime
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserRead
 
 
 class TokenData(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
-    user: Optional[UserData] = None
+    user: Optional[dict] = None
 
 
 class PasswordChange(BaseModel):

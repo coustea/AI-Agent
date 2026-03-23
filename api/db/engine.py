@@ -17,6 +17,7 @@ engine = create_engine(
     max_overflow=10,
 )
 
+
 # Session factory
 def get_session() -> AsyncGenerator[Session, None]:
     """
@@ -47,7 +48,7 @@ def get_db() -> Session:
 def init_db():
     """Initialize database tables."""
     from sqlmodel import SQLModel
-    from api.db.models import User, UserBase
+    from api.db.models import User
 
     print("🗄️ Creating database tables...")
     try:

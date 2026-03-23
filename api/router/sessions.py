@@ -1,14 +1,15 @@
-"""会话管理路由。"""
+"""基于 Redis 的会话管理路由。"""
 
 from typing import List
 
 from fastapi import APIRouter, Depends, status, HTTPException
 from langchain_core.messages import HumanMessage, AIMessage
 
-from api.core.dependencies import get_current_user, get_db_session
+from api.core.dependencies import get_current_user, get_redis_client
 from api.core.response import Response
-from api.db.models import User, SessionCreate, ChatRequest, ChatResponse
-from api.services.session import SessionService
+from api.db.models import User
+from api.schemas.session import SessionCreate, ChatRequest
+from api.services.session_service import SessionService
 
 router = APIRouter(tags=["sessions"])
 
@@ -21,19 +22,19 @@ router = APIRouter(tags=["sessions"])
     response_model=Response[dict],
     status_code=status.HTTP_201_CREATED,
     summary="创建新会话",
-    description="为当前用户创建一个新的聊天会话",
+    description="为当前用户创建一个新的聊天会话（数据存储在 Redis）",
 )
 async def create_session(
     session_data: SessionCreate = SessionCreate(title="新会话"),
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     创建新会话。
 
     Args:
         session_data: 会话数据（标题）
-        db: 数据库会话
+        redis: Redis 客户端
         current_user: 当前认证用户
 
     Returns:
@@ -42,14 +43,15 @@ async def create_session(
     Raises:
         401: 未认证
     """
-    session_service = SessionService(db)
+    session_service = SessionService(redis)
     session = session_service.create_session(current_user.id, session_data)
 
     return Response(
         data={
             "session_id": session.session_id,
             "title": session.title,
-            "created_at": session.created_at.isoformat(),
+            "created_at": session.created_at,
+            "ttl_days": 7,
         },
         message="Session created successfully",
     )
@@ -62,33 +64,28 @@ async def create_session(
     description="获取当前用户的所有会话列表",
 )
 async def list_sessions(
-    skip: int = 0,
-    limit: int = 100,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     获取用户的会话列表。
 
     Args:
-        skip: 跳过的数量（分页）
-        limit: 返回的数量（分页）
-        db: 数据库会话
+        redis: Redis 客户端
         current_user: 当前认证用户
 
     Returns:
         Response: 会话列表
     """
-    session_service = SessionService(db)
-    sessions = session_service.list_sessions(current_user.id, skip, limit)
+    session_service = SessionService(redis)
+    sessions = session_service.list_sessions(current_user.id)
 
     result = [
         {
-            "id": s.id,
             "session_id": s.session_id,
             "title": s.title,
-            "created_at": s.created_at.isoformat(),
-            "updated_at": s.updated_at.isoformat(),
+            "created_at": s.created_at,
+            "updated_at": s.updated_at,
         }
         for s in sessions
     ]
@@ -104,15 +101,15 @@ async def list_sessions(
 )
 async def delete_session(
     session_id: str,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     删除会话。
 
     Args:
         session_id: 会话 ID
-        db: 数据库会话
+        redis: Redis 客户端
         current_user: 当前认证用户
 
     Returns:
@@ -122,7 +119,7 @@ async def delete_session(
         404: 会话不存在
         403: 无权限
     """
-    session_service = SessionService(db)
+    session_service = SessionService(redis)
     success = session_service.delete_session(session_id, current_user.id)
 
     if not success:
@@ -131,7 +128,9 @@ async def delete_session(
             detail="Session not found or access denied",
         )
 
-    return Response(data={"session_id": session_id}, message="Session deleted successfully")
+    return Response(
+        data={"session_id": session_id}, message="Session deleted successfully"
+    )
 
 
 # ================= 消息管理 =================
@@ -145,19 +144,15 @@ async def delete_session(
 )
 async def get_messages(
     session_id: str,
-    skip: int = 0,
-    limit: int = 1000,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     获取会话消息。
 
     Args:
         session_id: 会话 ID
-        skip: 跳过的数量
-        limit: 返回的数量
-        db: 数据库会话
+        redis: Redis 客户端
         current_user: 当前认证用户
 
     Returns:
@@ -166,15 +161,15 @@ async def get_messages(
     Raises:
         404: 会话不存在
     """
-    session_service = SessionService(db)
-    messages = session_service.get_messages(session_id, current_user.id, skip, limit)
+    session_service = SessionService(redis)
+    messages = session_service.get_messages(session_id, current_user.id)
 
     result = [
         {
             "id": m.id,
             "role": m.role,
             "content": m.content,
-            "created_at": m.created_at.isoformat(),
+            "created_at": m.created_at,
         }
         for m in messages
     ]
@@ -189,13 +184,13 @@ async def get_messages(
     "/sessions/{session_id}/chat",
     response_model=Response[dict],
     summary="发送消息",
-    description="向会话发送消息并调用 Agent",
+    description="向会话发送消息并返回聊天历史（Agent 调用由前端或独立服务处理）",
 )
 async def chat(
     session_id: str,
     request: ChatRequest,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     发送消息。
@@ -203,38 +198,39 @@ async def chat(
     Args:
         session_id: 会话 ID
         request: 聊天请求（消息内容）
-        db: 数据库会话
+        redis: Redis 客户端
         current_user: 当前认证用户
 
     Returns:
-        Response: Agent 的回复
+        Response: 用户消息 ID + 完整聊天历史（用于 Agent 调用）
 
     Raises:
         404: 会话不存在
         400: 聊天失败
 
-    注意：
-        - 此接口仅保存用户消息和助手回复
-        - Agent 调用需要在外部实现（或通过事件系统）
-        - 返回的 assistant_message_id 可用于后续更新消息
+    工作流程：
+        1. 保存用户消息到 Redis
+        2. 获取完整聊天历史
+        3. 转换为 LangChain 消息格式
+        4. 返回给调用方（调用 Agent 并保存助手回复）
     """
-    session_service = SessionService(db)
+    session_service = SessionService(redis)
 
     # 验证会话
-    session = session_service.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    session = session_service.get_session(current_user.id, session_id)
+    if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found or access denied",
+            detail="Session not found",
         )
 
     # 1. 保存用户消息
     user_message = session_service.add_user_message(
-        session_id, current_user.id, request.message
+        current_user.id, session_id, request.message
     )
 
     # 2. 获取历史消息（用于 Agent）
-    chat_messages = session_service.get_chat_messages(session_id, current_user.id)
+    chat_messages = session_service.get_chat_messages(current_user.id, session_id)
 
     # 3. 转换为 LangChain 消息格式
     langchain_messages = []
@@ -244,21 +240,77 @@ async def chat(
         else:
             langchain_messages.append(AIMessage(content=msg["content"]))
 
-    # 4. 返回消息列表和上下文（Agent 调用由外部处理）
+    # 4. 返回消息列表和 LangChain 格式
     return Response(
         data={
             "user_message_id": user_message.id,
             "session_id": session_id,
-            "chat_history": [
-                {"role": m.role, "content": m.content}
-                for m in chat_messages
-            ],
+            "chat_history": chat_messages,
             "langchain_messages": [
                 {"type": m.__class__.__name__, "content": m.content}
                 for m in langchain_messages
             ],
         },
         message="Message saved, ready for Agent processing",
+    )
+
+
+# ================= 保存助手回复 =================
+
+
+@router.post(
+    "/sessions/{session_id}/assistant",
+    response_model=Response[dict],
+    summary="保存助手回复",
+    description="保存 Agent 的助手回复到会话",
+)
+async def save_assistant_message(
+    session_id: str,
+    content: str,
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
+):
+    """
+    保存助手回复。
+
+    Args:
+        session_id: 会话 ID
+        content: 助手回复内容
+        redis: Redis 客户端
+        current_user: 当前认证用户
+
+    Returns:
+        Response: 保存的消息信息
+
+    Raises:
+        404: 会话不存在
+
+    用途：
+        前端调用 Agent 后，调用此接口保存助手回复。
+    """
+    session_service = SessionService(redis)
+
+    # 验证会话
+    session = session_service.get_session(current_user.id, session_id)
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    # 保存助手消息
+    message = session_service.add_assistant_message(
+        current_user.id, session_id, content
+    )
+
+    return Response(
+        data={
+            "message_id": message.id,
+            "role": message.role,
+            "content": message.content,
+            "created_at": message.created_at,
+        },
+        message="Assistant message saved successfully",
     )
 
 
@@ -273,8 +325,8 @@ async def chat(
 async def chat_stream(
     session_id: str,
     request: ChatRequest,
-    db = Depends(get_db_session),
-    current_user = Depends(get_current_user),
+    redis=Depends(get_redis_client),
+    current_user=Depends(get_current_user),
 ):
     """
     流式发送消息。
@@ -290,9 +342,7 @@ async def chat_stream(
         """生成 SSE 事件。"""
         # 这里可以调用 Agent.stream() 方法
         # 逐个 yield events
-        yield "data: {\"event\": \"status\", \"data\": \"Thinking...\"}\n\n"
-        yield "data: {\"event\": \"message\", \"data\": \"Hello!\"}\n\n"
+        yield 'data: {"event": "status", "data": "Thinking..."}\n\n'
+        yield 'data: {"event": "message", "data": "Hello!"}\n\n'
 
-    return StreamingResponse(
-        event_generator(), media_type="text/event-stream"
-    )
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

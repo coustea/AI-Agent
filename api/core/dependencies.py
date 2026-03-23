@@ -6,9 +6,14 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from api.db.engine import get_db, get_redis
-from api.db.repositories.user import UserRepository
-from api.db.models import User, UserRead
-from api.core.exceptions import InvalidCredentialsError, UserNotFoundError, UserInactiveError
+from api.repositories.user import UserRepository
+from api.db.models import User
+from api.schemas.user import UserRead
+from api.core.exceptions import (
+    InvalidCredentialsError,
+    UserNotFoundError,
+    UserInactiveError,
+)
 from api.services.redis_service import RedisService
 
 security = HTTPBearer()
@@ -17,7 +22,7 @@ security = HTTPBearer()
 async def get_db_session():
     """
     Get database session.
-    
+
     Yields:
         Session: SQLAlchemy session
     """
@@ -35,7 +40,7 @@ async def get_db_session():
 async def get_redis_client() -> RedisService:
     """
     Get Redis client.
-    
+
     Returns:
         RedisService: Redis client instance
     """
@@ -44,20 +49,20 @@ async def get_redis_client() -> RedisService:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db = Depends(get_db_session),
-    redis = Depends(get_redis_client),
+    db=Depends(get_db_session),
+    redis=Depends(get_redis_client),
 ) -> User:
     """
     Get current authenticated user.
-    
+
     Args:
         credentials: HTTP Bearer credentials
         db: Database session
         redis: Redis client
-        
+
     Returns:
         User: Current authenticated user
-        
+
     Raises:
         HTTPException: If token is invalid or user not found
     """
@@ -115,18 +120,20 @@ async def get_current_active_user(
 ) -> User:
     """
     Get current active user (same as get_current_user, can be extended).
-    
+
     Args:
         current_user: Current authenticated user
-        
+
     Returns:
         User: Current active user
-        
+
     Raises:
         HTTPException: If user is inactive
     """
     if not current_user.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+        )
     return current_user
 
 
