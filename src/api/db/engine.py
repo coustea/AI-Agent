@@ -1,67 +1,89 @@
-"""Database engine configuration for MySQL and Redis."""
+"""Database engine configuration for MySQL using SQLModel."""
 
-import os
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlmodel import Session, create_engine
 
+from api.db.models import settings
 from api.services.redis_service import RedisService
 
-# MySQL configuration
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "3306")
-DB_NAME = os.getenv("DB_NAME", "agent")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-
-DATABASE_URL = f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-mysql_engine = create_async_engine(DATABASE_URL, echo=True, pool_pre_ping=True)
-
-async_session_maker = async_sessionmaker(
-    mysql_engine, class_=AsyncSession, expire_on_commit=False
+# Create SQLModel engine (sync for simplicity, can be async later)
+engine = create_engine(
+    f"mysql+pymysql://{settings.db_user}:{settings.db_password}@"
+    f"{settings.db_host}:{settings.db_port}/{settings.db_name}",
+    echo=settings.api_host == "0.0.0.0",  # Only echo in development
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
 )
 
-# Redis configuration
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_DB = int(os.getenv("REDIS_DB", "0"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD") or None
+# Session factory
+def get_session() -> AsyncGenerator[Session, None]:
+    """
+    Get database session.
 
+    Yields:
+        Session: SQLAlchemy session
+    """
+    with Session(engine) as session:
+        try:
+            yield session
+        finally:
+            session.close()
+
+
+# Alias for backward compatibility
+def get_db() -> Session:
+    """
+    Get database session (alias for get_session).
+
+    Returns:
+        Session: SQLAlchemy session
+    """
+    return Session(engine)
+
+
+# Initialize tables
+def init_db():
+    """Initialize database tables."""
+    from sqlmodel import SQLModel
+    from api.db.models import User, UserBase
+
+    print("🗄️ Creating database tables...")
+    try:
+        SQLModel.metadata.create_all(engine)
+        print("✅ Database tables created successfully")
+    except Exception as e:
+        print(f"❌ Failed to create tables: {e}")
+        raise
+
+
+# Redis configuration
 _redis_client: Optional[RedisService] = None
 
 
 def get_redis() -> RedisService:
+    """Get or create Redis client instance."""
     global _redis_client
     if _redis_client is None:
         _redis_client = RedisService(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            db=REDIS_DB,
-            password=REDIS_PASSWORD,
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            password=settings.redis_password,
         )
     return _redis_client
 
 
-async def get_db():
-    async with async_session_maker() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
-
-
-async def init_engines():
+def init_redis():
+    """Initialize Redis connection."""
     global _redis_client
 
-    _redis_client = RedisService(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        password=REDIS_PASSWORD,
-    )
-
-    async with mysql_engine.begin() as conn:
-        from api.db.models import Base
-
-        await conn.run_sync(Base.metadata.create_all)
+    print("🔗 Testing Redis connection...")
+    try:
+        _redis_client = get_redis()
+        _redis_client.client.ping()
+        print("✅ Redis connection successful")
+    except Exception as e:
+        print(f"❌ Redis connection failed: {e}")
+        raise

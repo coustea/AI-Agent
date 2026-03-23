@@ -1,8 +1,7 @@
 """Business logic services layer."""
 
-from .redis_service import RedisService, get_redis_service
+from .redis_service import RedisService
 
 __all__ = [
     "RedisService",
-    "get_redis_service",
 ]

@@ -1,8 +1,9 @@
+import asyncio
 from pathlib import Path
 from langchain_core.tools import tool
 
 @tool
-def file_append(file_path: str, content: str) -> str:
+async def file_append(file_path: str, content: str) -> str:
     """
     将文本追加写入到指定文件中。如果文件或目录不存在会自动创建。
     极其适合用来写日志、保存笔记或记录 Learnings。
@@ -15,9 +16,12 @@ def file_append(file_path: str, content: str) -> str:
         # 确保父目录存在
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 追加写入内容
-        with path.open("a", encoding="utf-8") as f:
-            f.write(content + "\n")  # 追加换行符分隔不同内容
+        # 使用异步 I/O 追加写入内容
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: path.open("a", encoding="utf-8").write(content + "\n")
+        )
 
         return f"成功将内容追加写入到 {file_path}"
     except Exception as e:

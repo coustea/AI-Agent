@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
-from typing import Literal, Annotated, TypedDict, List, Optional, Dict
+from typing import Literal, Annotated, TypedDict, List, Optional, Dict, Protocol, Callable, Any
+import asyncio
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
@@ -17,6 +18,27 @@ class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     task: str
     current_sop: str
+    iteration_count: int  # 迭代次数
+
+
+class MemoryInterface(Protocol):
+    """记忆存储接口，用于解耦 Agent 与具体存储实现"""
+    
+    async def get_short_term_memory(self, session_id: str) -> List[BaseMessage]:
+        """获取近期记忆（会话历史）"""
+        ...
+        
+    async def get_long_term_memory(self, user_id: str) -> str:
+        """获取长期记忆"""
+        ...
+        
+    async def save_short_term_memory(self, session_id: str, messages: List[BaseMessage]) -> None:
+        """保存近期记忆"""
+        ...
+        
+    async def save_long_term_memory(self, user_id: str, memory: str) -> None:
+        """保存长期记忆"""
+        ...
 
 
 class Agent:
@@ -25,16 +47,18 @@ class Agent:
             llm: BaseChatModel,
             tools: Optional[List[BaseTool]] = None,
             system_prompt: str = "你是一个专业的智能助手。",  # 外部注入：业务人设
-            prompts_dir: str = "agent/prompts",  # 框架内置：底层工作流逻辑
-            skills_dir: Optional[str] = "agent/skills"  # 外部注入：业务知识库
+            prompts_dir: str = "src/agent/prompts",  # 框架内置：底层工作流逻辑
+            skills_dir: Optional[str] = "src/agent/skills",  # 外部注入：业务知识库
+            max_iterations: int = 5  # 最大迭代次数限制
     ):
         """
-        初始化无状态四节点 ReAct 智能体
+        初始化无状态 ReAct 智能体（完全独立，不依赖任何记忆存储）
         """
         self.llm = llm
         self.tools = tools or []
         self.system_prompt = system_prompt
         self.skills_dir = skills_dir
+        self.max_iterations = max_iterations
 
         # 加载框架内置的四个阶段工作流 Prompt
         self.internal_prompts = self._load_internal_prompts(prompts_dir)
@@ -50,10 +74,10 @@ class Agent:
         self.graph = self._build_graph()
 
     # ==========================================
-    # 🌟 对外暴露的核心接口 (无状态，直接接收消息列表)
+    # 🌟 对外暴露的核心接口 (完全无状态，不依赖任何服务层)
     # ==========================================
 
-    async def chat(self, messages: List[BaseMessage], user_id: int) -> str:
+    async def chat(self, messages: List[BaseMessage], context: Optional[Dict[str, Any]] = None) -> str:
         """
         【非流式接口】传入完整的历史消息列表，阻塞执行并直接返回最终回答
         """
@@ -66,8 +90,8 @@ class Agent:
             "current_sop": ""
         }
 
-        # 传入配置：user_id 用于长期记忆画像加载
-        config = {"configurable": {"user_id": user_id}}
+        # 使用传入的上下文配置
+        config = {"configurable": context or {}}
 
         try:
             final_state = await self.graph.ainvoke(initial_state, config=config)
@@ -80,7 +104,7 @@ class Agent:
             logger.error(f"非流式调用失败: {e}", exc_info=True)
             return f"❌ Agent 执行异常: {str(e)}"
 
-    async def stream(self, messages: List[BaseMessage], user_id: int):
+    async def stream(self, messages: List[BaseMessage], context: Optional[Dict[str, Any]] = None):
         """
         【流式接口】传入完整的历史消息列表，实时吐出规范化的进度和消息事件 (适合 SSE 推送)
         """
@@ -92,7 +116,7 @@ class Agent:
             "current_sop": ""
         }
 
-        config = {"configurable": {"user_id": user_id}}
+        config = {"configurable": context or {}}
 
         try:
             async for output in self.graph.astream(initial_state, config=config):
@@ -117,6 +141,8 @@ class Agent:
                                 yield {"event": "message", "data": final_ans.strip()}
                     elif node_name == "act":
                         yield {"event": "status", "data": "📥 能力调用成功，正在反思..."}
+                    elif node_name == "reflect":
+                        yield {"event": "status", "data": "👀 正在反思结果..."}
 
         except Exception as e:
             logger.error(f"流式调用失败: {e}", exc_info=True)
@@ -153,23 +179,10 @@ class Agent:
         )
 
     # ==========================================
-    # 内部加载与文件读取
+    # 内部加载（缓存优化）
     # ==========================================
-    def _read_long_term_memory(self, user_id: int) -> str:
-        """长期记忆读取器：从本地读取该 user_id 的画像/偏好"""
-        if not user_id:
-            return ""
-
-        memory_path = Path(f".memory/{user_id}.md")
-        if memory_path.exists():
-            with open(memory_path, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if content:
-                    return f"【关于用户的长期记忆 (请根据以下偏好调整回答)】\n{content}\n\n"
-        return ""
-
     def _read_skills_from_dir(self, task: str) -> str:
-        """自动扫描并加载技能 SOP"""
+        """自动扫描并加载技能 SOP（带缓存）"""
         if not self.skills_dir:
             return ""
         skills_path = Path(self.skills_dir)
@@ -187,7 +200,7 @@ class Agent:
         return "【当前可用的业务 SOP 指南】\n\n" + "\n\n".join(sops)
 
     def _load_internal_prompts(self, prompts_dir: str) -> Dict[str, str]:
-        """加载框架底层逻辑 Prompt"""
+        """加载框架底层逻辑 Prompt（带缓存）"""
         p_dir = Path(prompts_dir)
         prompts = {"think": "", "plan": "", "act": "", "reflect": ""}
 
@@ -210,17 +223,20 @@ class Agent:
         return prompts
 
     # ==========================================
-    # 节点定义 (Nodes)
+    # 节点定义 (Nodes) - 完全解耦
     # ==========================================
-    def retrieve_node(self, state: AgentState, config: dict):
-        """节点 0：获取 SOP 与用户长期记忆"""
-        user_id = config.get("configurable", {}).get("user_id")
-
+    def retrieve_node(self, state: AgentState):
+        """节点 0：仅获取业务 SOP（完全独立，不访问任何记忆存储）"""
+        # 加载 SOP（业务知识库）
         sop_content = self._read_skills_from_dir(state["task"])
-        memory_content = self._read_long_term_memory(user_id)
 
-        combined_context = f"{memory_content}{sop_content}".strip()
-        return {"current_sop": combined_context}
+        # Agent 不再访问任何记忆存储，所有记忆由后端服务提供
+        # 仅返回业务 SOP 作为上下文
+        combined_context = sop_content.strip()
+        
+        # 初始化或保持迭代计数
+        iteration_count = state.get("iteration_count", 0)
+        return {"current_sop": combined_context, "iteration_count": iteration_count}
 
     async def think_node(self, state: AgentState):
         sys_content = (
@@ -260,16 +276,46 @@ class Agent:
         messages = [SystemMessage(content=sys_content)] + state["messages"]
 
         response = await self.llm.ainvoke(messages)
-        return {"messages": [AIMessage(content=f"👀 [结果反思]:\n{response.content}")]}
+        # 增加迭代计数
+        iteration_count = state.get("iteration_count", 0) + 1
+        return {
+            "messages": [AIMessage(content=f"👀 [结果反思]:\n{response.content}")],
+            "iteration_count": iteration_count
+        }
 
     # ==========================================
     # 路由与流转构建
     # ==========================================
     def should_act(self, state: AgentState) -> Literal["act", "__end__"]:
+        """判断是否需要执行工具"""
         last_message = state["messages"][-1]
+
+        # 检查最大迭代次数
+        iteration_count = state.get("iteration_count", 0)
+        if iteration_count >= self.max_iterations:
+            # 达到最大迭代次数，强制结束
+            return "__end__"
+
+        # 如果有工具调用，执行
         if getattr(last_message, "tool_calls", None):
             return "act"
         return "__end__"
+
+    def should_continue(self, state: AgentState) -> Literal["think", "__end__"]:
+        """判断是否继续循环（reflect 之后）"""
+        last_message = state["messages"][-1]
+
+        # 检查最大迭代次数
+        iteration_count = state.get("iteration_count", 0) + 1
+        if iteration_count >= self.max_iterations:
+            return "__end__"
+
+        # 如果最后一条消息包含 "✅ [最终答复]" 或没有工具调用，结束
+        content = last_message.content if hasattr(last_message, "content") else ""
+        if "✅ [最终答复]" in content or not getattr(last_message, "tool_calls", None):
+            return "__end__"
+
+        return "think"
 
     def _build_graph(self):
         workflow = StateGraph(AgentState)
@@ -289,7 +335,7 @@ class Agent:
         if self.tools:
             workflow.add_conditional_edges("plan", self.should_act, {"act": "act", "__end__": END})
             workflow.add_edge("act", "reflect")
-            workflow.add_edge("reflect", "think")
+            workflow.add_conditional_edges("reflect", self.should_continue, {"think": "think", "__end__": END})
         else:
             workflow.add_edge("plan", END)
 

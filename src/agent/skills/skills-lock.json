@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "skills": {
+    "design-md": {
+      "source": "google-labs-code/stitch-skills",
+      "sourceType": "github",
+      "computedHash": "d3a4c7d2f2715a33662c8b06ffc16035d01965a8b4ed81c2958fb22ae94760f8"
+    },
+    "excel-automation": {
+      "source": "claude-office-skills/skills",
+      "sourceType": "github",
+      "computedHash": "0580e0c2f19d4854e42f5ea2b484727816f4756188bbc70df68be69307ef515a"
+    },
+    "financial-calculator": {
+      "source": "dkyazzentwatwa/chatgpt-skills",
+      "sourceType": "github",
+      "computedHash": "cac31865b6fad9cce2b66cc104407a926d59a5247dd1412677448b12f1d7a306"
+    },
+    "ocr-document-processor": {
+      "source": "dkyazzentwatwa/chatgpt-skills",
+      "sourceType": "github",
+      "computedHash": "f3ccafc47c4896e493153acd456d84dbea44692bd09f858aaab67745f973af50"
+    },
+    "pdf": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "cfbc539377088ca7e44a813b30c306327385bbd973cd7a721e1743f60837dd62"
+    },
+    "tam-sam-som-calculator": {
+      "source": "deanpeters/product-manager-skills",
+      "sourceType": "github",
+      "computedHash": "32a66e38fea07e0e246749b8f7d2e68251af31a9dff37abf092ba4d0293a3585"
+    },
+    "tavily-search": {
+      "source": "tavily-ai/skills",
+      "sourceType": "github",
+      "computedHash": "bda6e90a41addbe0f8750a38aebdf59c5bdc8514d23aaf2015ffe45de6958b74"
+    },
+    "word-document-processor": {
+      "source": "qodex-ai/ai-agent-skills",
+      "sourceType": "github",
+      "computedHash": "d5607bb9978e40d65f3d2bab59d94a7e8d1a7c08156d7ec7587f88d8221eea95"
+    }
+  }
+}
