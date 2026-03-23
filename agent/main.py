@@ -39,16 +39,17 @@ async def main():
         temperature=0.7,
     )
 
-    prompts_path = str(src_dir / "agent" / "prompts")
-    skills_path = str(src_dir / "agent" / "skills")
+    prompts_path = str(Path(__file__).parent.parent / "agent" / "prompts")
+    skills_path = str(Path(__file__).parent.parent / "agent" / "skills")
 
     # 2. 初始化 Agent
     agent = Agent(
         llm=llm,
         tools=get_tools(),
-        prompts_dir=prompts_path,
-        skills_dir=skills_path,
-        system_prompt="你是一个温柔、善良、贴心的智能助手，用清新的语气帮助用户解决问题。"
+        system_prompt="你是一个温柔、善良、贴心的智能助手，用清新的语气帮助用户解决问题。",
+        prompts_dir=str(Path(__file__).parent / "prompts"),
+        skills_dir=str(Path(__file__).parent / "skills"),
+        max_iterations=5
     )
 
     # 3. 打印配置
@@ -92,7 +93,7 @@ async def main():
                     print("👀 [反思] 评估结果...")
 
         # 获取最终状态
-        final_state = await agent.graph.ainvoke({
+        final_state = await agent.agraph.ainvoke({
             "task": task,
             "messages": [HumanMessage(content=task)],
             "current_sop": ""

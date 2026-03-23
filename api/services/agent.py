@@ -31,8 +31,8 @@ class AgentService:
             llm=self.llm,
             tools=get_tools(),
             system_prompt="你是一个温柔、善良、贴心的智能助手，用清新的语气帮助用户解决问题。",
-            prompts_dir="src/agent/prompts",
-            skills_dir="src/agent/skills",
+            prompts_dir="agent/prompts",
+            skills_dir="agent/skills",
             max_iterations=5
         )
         

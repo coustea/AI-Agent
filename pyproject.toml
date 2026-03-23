@@ -1,7 +1,7 @@
 [project]
-name = "agent"
-version = "0.1.0"
-description = "ReAct Agent Framework - A modular Agent framework implementing ReAct pattern"
+name = "react-agent-framework"
+version = "1.0.0"
+description = "ReAct Agent Framework - A modular Agent framework implementing ReAct pattern with complete decoupling architecture"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
