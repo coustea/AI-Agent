@@ -13,4 +13,10 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "pyjwt>=2.10.0",
     "passlib[bcrypt]>=1.7.4",
+    "redis>=7.4.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
 ]

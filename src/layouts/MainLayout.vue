@@ -11,6 +11,7 @@ import {
   LocationInformation,
   SwitchButton
 } from '@element-plus/icons-vue'
+import { logout } from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,7 +40,12 @@ onMounted(() => {
   }, 2000)
 })
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    await logout()
+  } catch {
+    // 即使后端登出失败也继续清除本地状态
+  }
   localStorage.removeItem('token')
   router.push('/login')
 }

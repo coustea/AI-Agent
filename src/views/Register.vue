@@ -3,6 +3,8 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Message, Lock, ArrowRight, Check } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { register } from '@/api/auth'
+import type { FormInstance } from 'element-plus'
 
 const router = useRouter()
 const isDeploying = ref(false)
@@ -16,17 +18,53 @@ const form = reactive({
   confirmPassword: ''
 })
 
-const handleRegister = async (formEl: any) => {
+const validateConfirmPassword = (_rule: any, value: string, callback: Function) => {
+  if (value !== form.password) {
+    callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
+}
+
+const rules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 50, message: '用户名长度为 3-50 个字符', trigger: 'blur' },
+  ],
+  email: [
+    { type: 'email' as const, message: '请输入有效的邮箱地址', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, max: 50, message: '密码长度为 6-50 个字符', trigger: 'blur' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: 'blur' },
+  ],
+}
+
+const handleRegister = async (formEl: FormInstance | undefined) => {
   if (!formEl) return
   await formEl.validate(async (valid: boolean) => {
     if (valid) {
       isDeploying.value = true
       showLog.value = true
-      
-      setTimeout(() => {
-        ElMessage.success('神经轨道创建成功')
+      try {
+        await register({
+          username: form.username,
+          password: form.password,
+          email: form.email || undefined,
+        })
+        ElMessage.success('注册成功，请登录')
         router.push('/login')
-      }, 1500)
+      } catch (err: any) {
+        const msg = err.response?.data?.message || '注册失败，请稍后重试'
+        ElMessage.error(msg)
+        showLog.value = false
+      } finally {
+        isDeploying.value = false
+      }
     }
   })
 }
@@ -76,6 +114,7 @@ const handleRegister = async (formEl: any) => {
           <el-form
             ref="registerFormRef"
             :model="form"
+            :rules="rules"
             label-position="top"
             class="neural-form"
           >
@@ -92,6 +131,11 @@ const handleRegister = async (formEl: any) => {
             <el-form-item prop="password">
               <template #label><span class="n-label">原始密钥 <small>ROOT_KEY</small></span></template>
               <el-input v-model="form.password" type="password" placeholder="设置访问密钥" :prefix-icon="Lock" show-password />
+            </el-form-item>
+
+            <el-form-item prop="confirmPassword">
+              <template #label><span class="n-label">确认密钥 <small>CONFIRM_KEY</small></span></template>
+              <el-input v-model="form.confirmPassword" type="password" placeholder="再次输入访问密钥" :prefix-icon="Lock" show-password />
             </el-form-item>
 
             <div class="action-zone">

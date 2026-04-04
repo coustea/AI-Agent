@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock, ArrowRight, Connection, Cpu } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { login } from '@/api/auth'
 
 const router = useRouter()
 const isLoading = ref(false)
@@ -23,12 +24,20 @@ const handleLogin = async (formEl: any) => {
   await formEl.validate(async (valid: boolean) => {
     if (valid) {
       isLoading.value = true
-      setTimeout(() => {
-        localStorage.setItem('token', 'demo-token')
-        ElMessage.success('神经网络连接成功')
-        router.push('/dashboard')
+      try {
+        const res = await login({ username: form.username, password: form.password })
+        const { data } = res.data
+        if (data.token) {
+          localStorage.setItem('token', data.token)
+          ElMessage.success('登录成功')
+          router.push('/dashboard')
+        }
+      } catch (err: any) {
+        const msg = err.response?.data?.message || '登录失败，请检查用户名和密码'
+        ElMessage.error(msg)
+      } finally {
         isLoading.value = false
-      }, 1000)
+      }
     }
   })
 }

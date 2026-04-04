@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
 
@@ -12,17 +12,19 @@ router = APIRouter()
 bearer_scheme = HTTPBearer()
 
 
-@router.post("/register")
-def register(data: schemas.UserRegister, session: Session = Depends(get_session)):
+@router.post("")
+def create_user(data: schemas.UserRegister, session: Session = Depends(get_session)):
+    """注册新用户"""
     svc = service.UserService(session)
-    if svc.repo.get_by_username(data.username):
+    result = svc.register(data)
+    if not result:
         return HttpResponse.error(code=400, message="用户名已存在")
-    user = svc.register(data)
-    return HttpResponse.success(data=user)
+    return HttpResponse.success(data=result)
 
 
-@router.post("/login")
+@router.post("/auth")
 def login(data: schemas.UserLogin, session: Session = Depends(get_session)):
+    """登录（创建认证会话）"""
     svc = service.UserService(session)
     result = svc.authenticate(data.username, data.password)
     if not result:
@@ -30,18 +32,19 @@ def login(data: schemas.UserLogin, session: Session = Depends(get_session)):
     return HttpResponse.success(data=result)
 
 
-@router.post("/logout")
+@router.delete("/auth")
 def logout(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
-    blacklist_token(credentials.credentials, session)
+    """登出（删除认证会话）"""
+    blacklist_token(credentials.credentials)
     return HttpResponse.success(message="退出登录成功")
 
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
+    """获取当前用户信息"""
     return HttpResponse.success(data=current_user)
 
 
@@ -51,6 +54,7 @@ def update_me(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    """更新当前用户信息"""
     svc = service.UserService(session)
     user = svc.update(current_user.id, data)
     if not user:

@@ -1,30 +1,31 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # 请求
 class UserRegister(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6, max_length=50)
+    email: str | None = Field(default=None, max_length=100)
 
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6, max_length=50)
 
 
 class UserUpdate(BaseModel):
-    email: str | None = None
-    avatar: str | None = None
-    major: str | None = None
-    grade: str | None = None
-    school: str | None = None
+    email: str | None = Field(default=None, max_length=100)
+    avatar: str | None = Field(default=None, max_length=500)
+    major: str | None = Field(default=None, max_length=100)
+    grade: str | None = Field(default=None, max_length=20)
+    school: str | None = Field(default=None, max_length=100)
 
 
 # 响应
 class UserRead(BaseModel):
-    id: str
+    id: int
     username: str
     email: str | None
     avatar: str | None

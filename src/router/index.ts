@@ -36,9 +36,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && to.path !== '/register' && !token) {
-    // In actual dev, uncomment this. For demo, we allow access.
-    // next('/login')
-    next()
+    next('/login')
   } else {
     next()
   }
