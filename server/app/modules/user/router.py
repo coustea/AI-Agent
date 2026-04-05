@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
 
 from app.core.dependencies import get_session
 from app.core.response import HttpResponse
-from app.core.security import blacklist_token, get_current_user
+from app.core.security import get_current_user, revoke_token
 from app.models.user import User
 from app.modules.user import schemas, service
+from app.modules.profile_builder.profile_agent import profile_agent
 
 router = APIRouter()
 bearer_scheme = HTTPBearer()
@@ -34,11 +35,18 @@ def login(data: schemas.UserLogin, session: Session = Depends(get_session)):
 
 @router.delete("/auth")
 def logout(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    current_user: User = Depends(get_current_user),
+        background_tasks: BackgroundTasks,  # ⭐ 新增：注入后台任务管理器
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+        current_user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
 ):
-    """登出（删除认证会话）"""
-    blacklist_token(credentials.credentials)
+    """登出（删除认证会话），并触发后台画像整理"""
+    # 1. 正常执行退出登录逻辑
+    revoke_token(credentials.credentials, session)
+
+    # 2. ⭐ 生命周期兜底触发：启动后台画像更新
+    background_tasks.add_task(profile_agent.build_profile, user_id=current_user.id)
+
     return HttpResponse.success(message="退出登录成功")
 
 
@@ -50,9 +58,9 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.patch("/me")
 def update_me(
-    data: schemas.UserUpdate,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
+        data: schemas.UserUpdate,
+        current_user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
 ):
     """更新当前用户信息"""
     svc = service.UserService(session)

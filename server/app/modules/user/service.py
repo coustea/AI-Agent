@@ -54,4 +54,4 @@ class UserService:
             logger.warning("Login failed for username: '%s'", username)
             return None
         logger.info("User logged in: id=%s, username='%s'", user.id, user.username)
-        return {"token": create_token(user.id), "user": user}
+        return {"token": create_token(user.id, self.session), "user": user}

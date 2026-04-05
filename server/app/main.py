@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from app.core.engine import init_db
 from app.core.logging import get_logger, setup_logging
 from app.modules.user.router import router as user_router
-
+from app.modules.profile_builder.router import router as profile_router
 logger = get_logger(__name__)
 
 
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Learning Platform", lifespan=lifespan)
 app.include_router(user_router, prefix="/api/v1/users", tags=["users"])
+app.include_router(profile_router,prefix="/api/v1/ai",tags=["profile_builder"])
 
 
 @app.exception_handler(Exception)
