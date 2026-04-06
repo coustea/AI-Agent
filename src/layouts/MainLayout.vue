@@ -1,56 +1,3 @@
-<script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import {
-  Menu,
-  Odometer,
-  Connection,
-  Cpu,
-  DataLine,
-  ChatDotRound,
-  LocationInformation,
-  SwitchButton
-} from '@element-plus/icons-vue'
-import { logout } from '@/api/auth'
-
-const route = useRoute()
-const router = useRouter()
-
-const navItems = [
-  { path: '/dashboard', label: '全景中枢', icon: Menu, id: 'NODE_01' },
-  { path: '/profile-assistant', label: '动态画像', icon: Odometer, id: 'NODE_02' },
-  { path: '/path-planner', label: '路径规划', icon: Connection, id: 'NODE_03' },
-  { path: '/resource-generator', label: '资源引擎', icon: Cpu, id: 'NODE_04' },
-  { path: '/evaluation', label: '多维评估', icon: DataLine, id: 'NODE_05' },
-]
-
-const activePath = computed(() => route.path)
-const currentTime = ref('')
-const networkLatency = ref(12)
-
-// 模拟系统时钟和动态延迟
-onMounted(() => {
-  setInterval(() => {
-    const now = new Date()
-    currentTime.value = now.toLocaleTimeString('en-US', { hour12: false }) + '.' + now.getMilliseconds().toString().padStart(3, '0').slice(0, 2)
-  }, 50)
-
-  setInterval(() => {
-    networkLatency.value = Math.floor(Math.random() * 8) + 10 // 10-18ms
-  }, 2000)
-})
-
-const handleLogout = async () => {
-  try {
-    await logout()
-  } catch {
-    // 即使后端登出失败也继续清除本地状态
-  }
-  localStorage.removeItem('token')
-  router.push('/login')
-}
-</script>
-
 <template>
   <div class="neural-hub-layout">
     <!-- 动态网格背景层 -->
@@ -146,6 +93,59 @@ const handleLogout = async () => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { computed, ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  Menu,
+  Odometer,
+  Connection,
+  Cpu,
+  DataLine,
+  ChatDotRound,
+  LocationInformation,
+  SwitchButton
+} from '@element-plus/icons-vue'
+import { logout } from '@/api/auth'
+
+const route = useRoute()
+const router = useRouter()
+
+const navItems = [
+  { path: '/dashboard', label: '全景中枢', icon: Menu, id: 'NODE_01' },
+  { path: '/profile-assistant', label: '动态画像', icon: Odometer, id: 'NODE_02' },
+  { path: '/path-planner', label: '路径规划', icon: Connection, id: 'NODE_03' },
+  { path: '/resource-generator', label: '资源引擎', icon: Cpu, id: 'NODE_04' },
+  { path: '/evaluation', label: '多维评估', icon: DataLine, id: 'NODE_05' },
+]
+
+const activePath = computed(() => route.path)
+const currentTime = ref('')
+const networkLatency = ref(12)
+
+// 模拟系统时钟和动态延迟
+onMounted(() => {
+  setInterval(() => {
+    const now = new Date()
+    currentTime.value = now.toLocaleTimeString('en-US', { hour12: false }) + '.' + now.getMilliseconds().toString().padStart(3, '0').slice(0, 2)
+  }, 50)
+
+  setInterval(() => {
+    networkLatency.value = Math.floor(Math.random() * 8) + 10 // 10-18ms
+  }, 2000)
+})
+
+const handleLogout = async () => {
+  try {
+    await logout()
+  } catch {
+    // 即使后端登出失败也继续清除本地状态
+  }
+  localStorage.removeItem('token')
+  router.push('/login')
+}
+</script>
 
 <style scoped>
 /* 根布局 */

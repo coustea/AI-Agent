@@ -1,91 +1,3 @@
-<script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { 
-  Connection, Lightning, Opportunity, TrendCharts,
-  VideoPlay, Monitor, Document, Cpu, EditPen,
-  ArrowRight, Warning, Aim
-} from '@element-plus/icons-vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { RadarChart, LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
-
-use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
-
-const router = useRouter()
-
-// --- 1. HUD 核心洞察 ---
-const aiInsight = ref("基于最新评估：感知到您在「反向传播」耗时较长，已自动提升今日实操代码资源权重。")
-
-// --- 2. 学习路径数据 ---
-const pathSteps = ref([
-  { id: 1, title: '前置理论', desc: '线性代数与导数', status: 'success' },
-  { id: 2, title: '核心架构', desc: '卷积神经网络 (CNN)', status: 'process' },
-  { id: 3, title: '进阶优化', desc: '残差网络与注意力机制', status: 'wait' }
-])
-
-// --- 3. 5类多模态专属资源 (赛题要求：不同角色协同生成至少5种类型) ---
-const multimodalResources = ref([
-  { id: 1, type: '多模态视频', title: 'CNN 3D 卷积核可视化', icon: VideoPlay, color: '#EF4444', format: 'MP4' },
-  { id: 2, type: '代码实操', title: '手写反向传播算法', icon: Cpu, color: '#F59E0B', format: 'Python' },
-  { id: 3, type: '思维导图', title: '计算机视觉发展拓扑图', icon: Monitor, color: '#8B5CF6', format: 'PNG' },
-  { id: 4, type: '专业文档', title: '斯坦福 CS231n 核心笔记', icon: Document, color: '#4F46E5', format: 'PDF' },
-  { id: 5, type: '个性题库', title: '针对易错点：池化层专项拔高', icon: EditPen, color: '#10B981', format: '交互式' }
-])
-
-// --- 4. 画像与评估数据 (6维度雷达 + 趋势线) ---
-const profileOption = computed(() => ({
-  radar: {
-    indicator: [
-      { name: '知识基础', max: 100 },
-      { name: '认知风格', max: 100 },
-      { name: '易错偏好', max: 100 },
-      { name: '学习兴趣', max: 100 },
-      { name: '学习效率', max: 100 },
-      { name: '实践能力', max: 100 }
-    ],
-    shape: 'circle',
-    splitNumber: 4,
-    axisName: { color: '#64748B', fontSize: 10, fontFamily: 'JetBrains Mono' },
-    splitLine: { lineStyle: { color: '#E2E8F0' } },
-    splitArea: { show: false }
-  },
-  series: [{
-    type: 'radar',
-    data: [{
-      value: [85, 60, 40, 92, 75, 88],
-      areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
-      lineStyle: { color: '#4F46E5', width: 2 },
-      symbol: 'circle',
-      symbolSize: 4,
-      itemStyle: { color: '#4F46E5' }
-    }]
-  }]
-}))
-
-const trendOption = computed(() => ({
-  grid: { top: 10, bottom: 20, left: 0, right: 0 },
-  tooltip: { trigger: 'axis' },
-  xAxis: { type: 'category', data: ['周一', '周二', '周三', '周四', '周五', '周六', '今日'], show: false },
-  yAxis: { type: 'value', show: false, min: 60 },
-  series: [{
-    data: [72, 75, 74, 78, 85, 82, 89],
-    type: 'line',
-    smooth: true,
-    showSymbol: false,
-    lineStyle: { color: '#10B981', width: 3 },
-    areaStyle: {
-      color: {
-        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-        colorStops: [{ offset: 0, color: 'rgba(16,185,129,0.3)' }, { offset: 1, color: 'rgba(16,185,129,0)' }]
-      }
-    }
-  }]
-}))
-</script>
-
 <template>
   <div class="command-center">
     <!-- 1. 全景状态抬头 (Global HUD) -->
@@ -204,6 +116,94 @@ const trendOption = computed(() => ({
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { 
+  Connection, Lightning, Opportunity, TrendCharts,
+  VideoPlay, Monitor, Document, Cpu, EditPen,
+  ArrowRight, Warning, Aim
+} from '@element-plus/icons-vue'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { RadarChart, LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+
+use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
+
+const router = useRouter()
+
+// --- 1. HUD 核心洞察 ---
+const aiInsight = ref("基于最新评估：感知到您在「反向传播」耗时较长，已自动提升今日实操代码资源权重。")
+
+// --- 2. 学习路径数据 ---
+const pathSteps = ref([
+  { id: 1, title: '前置理论', desc: '线性代数与导数', status: 'success' },
+  { id: 2, title: '核心架构', desc: '卷积神经网络 (CNN)', status: 'process' },
+  { id: 3, title: '进阶优化', desc: '残差网络与注意力机制', status: 'wait' }
+])
+
+// --- 3. 5类多模态专属资源 (赛题要求：不同角色协同生成至少5种类型) ---
+const multimodalResources = ref([
+  { id: 1, type: '多模态视频', title: 'CNN 3D 卷积核可视化', icon: VideoPlay, color: '#EF4444', format: 'MP4' },
+  { id: 2, type: '代码实操', title: '手写反向传播算法', icon: Cpu, color: '#F59E0B', format: 'Python' },
+  { id: 3, type: '思维导图', title: '计算机视觉发展拓扑图', icon: Monitor, color: '#8B5CF6', format: 'PNG' },
+  { id: 4, type: '专业文档', title: '斯坦福 CS231n 核心笔记', icon: Document, color: '#4F46E5', format: 'PDF' },
+  { id: 5, type: '个性题库', title: '针对易错点：池化层专项拔高', icon: EditPen, color: '#10B981', format: '交互式' }
+])
+
+// --- 4. 画像与评估数据 (6维度雷达 + 趋势线) ---
+const profileOption = computed(() => ({
+  radar: {
+    indicator: [
+      { name: '知识基础', max: 100 },
+      { name: '认知风格', max: 100 },
+      { name: '易错偏好', max: 100 },
+      { name: '学习兴趣', max: 100 },
+      { name: '学习效率', max: 100 },
+      { name: '实践能力', max: 100 }
+    ],
+    shape: 'circle',
+    splitNumber: 4,
+    axisName: { color: '#64748B', fontSize: 10, fontFamily: 'JetBrains Mono' },
+    splitLine: { lineStyle: { color: '#E2E8F0' } },
+    splitArea: { show: false }
+  },
+  series: [{
+    type: 'radar',
+    data: [{
+      value: [85, 60, 40, 92, 75, 88],
+      areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
+      lineStyle: { color: '#4F46E5', width: 2 },
+      symbol: 'circle',
+      symbolSize: 4,
+      itemStyle: { color: '#4F46E5' }
+    }]
+  }]
+}))
+
+const trendOption = computed(() => ({
+  grid: { top: 10, bottom: 20, left: 0, right: 0 },
+  tooltip: { trigger: 'axis' },
+  xAxis: { type: 'category', data: ['周一', '周二', '周三', '周四', '周五', '周六', '今日'], show: false },
+  yAxis: { type: 'value', show: false, min: 60 },
+  series: [{
+    data: [72, 75, 74, 78, 85, 82, 89],
+    type: 'line',
+    smooth: true,
+    showSymbol: false,
+    lineStyle: { color: '#10B981', width: 3 },
+    areaStyle: {
+      color: {
+        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [{ offset: 0, color: 'rgba(16,185,129,0.3)' }, { offset: 1, color: 'rgba(16,185,129,0)' }]
+      }
+    }
+  }]
+}))
+</script>
 
 <style scoped>
 .command-center {

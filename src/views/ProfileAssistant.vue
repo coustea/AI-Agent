@@ -1,272 +1,115 @@
-<script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
-import {
-  Promotion, Loading, Aim, DataLine,
-  Cpu, UserFilled, Opportunity, CollectionTag, Filter
-} from '@element-plus/icons-vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { RadarChart, LineChart } from 'echarts/charts'
-import { TooltipComponent, LegendComponent } from 'echarts/components'
-
-use([CanvasRenderer, RadarChart, LineChart, TooltipComponent, LegendComponent])
-
-// ================= 状态管理 =================
-const userInput = ref('')
-const isThinking = ref(false)
-const chatScroll = ref<HTMLElement | null>(null)
-const extractingText = ref('')
-
-// 6个维度基础得分
-const profileScores = ref([65, 50, 40, 70, 55, 60])
-const overallLevel = computed(() => {
-  const avg = profileScores.value.reduce((a, b) => a + b, 0) / 6
-  if (avg > 80) return '专家 (Lv.5)'
-  if (avg > 65) return '熟练 (Lv.4)'
-  if (avg > 50) return '进阶 (Lv.3)'
-  return '入门 (Lv.2)'
-})
-
-// 分类特征矩阵 (展示抽取到的标签)
-const featureMatrix = ref({
-  knowledge: ['高等数学(弱)', '基础编程(中)'],
-  cognitive: ['视觉敏感', '跳跃性思维'],
-  preference: ['偏好实战', '厌恶长文本'],
-})
-
-// 演进日志
-const updateLogs = ref<{time: string, changes: string[], context: string}[]>([
-  { time: '10:00:12', changes: ['学习兴趣 +5%'], context: '初始探测' }
-])
-
-// 对话流
-const messages = ref([
-  {
-    role: 'ai',
-    content: '你好！我是你的专属 **AI 学习规划师**。系统正在初始化你的心智模型...\n\n为了更精准地为你推荐资源，请告诉我：**你目前对哪些技术栈最感兴趣？在学习理论时通常会遇到什么困难？**',
-    extracted: [] as string[]
-  }
-])
-
-// ================= 图表配置 =================
-const radarOption = computed(() => ({
-  radar: {
-    indicator: [
-      { name: '知识基础', max: 100 },
-      { name: '认知风格', max: 100 },
-      { name: '易错偏好', max: 100 },
-      { name: '学习兴趣', max: 100 },
-      { name: '学习效率', max: 100 },
-      { name: '实践能力', max: 100 }
-    ],
-    shape: 'polygon',
-    splitNumber: 4,
-    axisName: { color: '#94A3B8', fontSize: 12, fontWeight: 700, fontFamily: 'JetBrains Mono' },
-    splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
-    splitArea: { show: false }
-  },
-  series: [{
-    type: 'radar',
-    data: [{
-      value: profileScores.value,
-      areaStyle: { color: 'rgba(99, 102, 241, 0.3)' },
-      lineStyle: { color: '#818CF8', width: 2 },
-      symbol: 'circle',
-      symbolSize: 6,
-      itemStyle: { color: '#818CF8', borderColor: '#fff', borderWidth: 2 }
-    }]
-  }]
-}))
-
-// ================= 核心逻辑 =================
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (chatScroll.value) {
-      chatScroll.value.scrollTop = chatScroll.value.scrollHeight
-    }
-  })
-}
-
-const handleSubmit = () => {
-  if (!userInput.value.trim() || isThinking.value) return
-
-  const text = userInput.value
-  messages.value.push({ role: 'user', content: text, extracted: [] })
-  userInput.value = ''
-  isThinking.value = true
-  scrollToBottom()
-
-  // 模拟 AI 处理与特征抽取管线
-  extractingText.value = '正在进行语义拆解...'
-
-  setTimeout(() => {
-    extractingText.value = '正在匹配特征维度...'
-
-    setTimeout(() => {
-      // 1. 模拟特征抽取完成
-      const newTag = text.length > 6 ? text.substring(0, 6) : text
-      const mockDimIndex = Math.floor(Math.random() * 3) // 随机分配到矩阵
-      if(mockDimIndex === 0) featureMatrix.value.knowledge.unshift(newTag)
-      else if(mockDimIndex === 1) featureMatrix.value.cognitive.unshift(newTag)
-      else featureMatrix.value.preference.unshift(newTag)
-
-      // 2. 计算雷达图数值增长
-      const changedIndices = [Math.floor(Math.random() * 6)]
-      const newScores = [...profileScores.value]
-      const changes: string[] = []
-
-      changedIndices.forEach(idx => {
-        const delta = Math.floor(Math.random() * 10) + 5 // 提升 5%~15%
-        newScores[idx] = Math.min(100, newScores[idx] + delta)
-        const dimName = radarOption.value.radar.indicator[idx].name
-        changes.push(`${dimName} +${delta}%`)
-      })
-
-      // 3. 应用更新
-      profileScores.value = newScores
-      updateLogs.value.unshift({
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        changes: changes,
-        context: `捕获特征: ${newTag}`
-      })
-
-      // 4. AI 响应
-      messages.value.push({
-        role: 'ai',
-        content: `我已经捕获了你的反馈！根据你的描述，系统已为你打上 **[${newTag}]** 的标签，并自动上调了你的 **${changes[0].split(' ')[0]}** 预期值。\n\n接下来，面对长篇的代码文档，你更倾向于看文字解析，还是直接跑一遍源码？`,
-        extracted: [newTag, ...changes]
-      })
-
-      isThinking.value = false
-      scrollToBottom()
-    }, 1200)
-  }, 800)
-}
-</script>
-
 <template>
   <div class="profile-dashboard">
-    <!-- 头部：全局状态 -->
-    <header class="dashboard-header">
-      <div class="brand">
-        <el-icon class="pulse-icon"><Aim /></el-icon>
-        <h2>多维学习画像中枢</h2>
-        <span class="mono-badge">AUTO_SYNC_ENABLED</span>
-      </div>
-      <div class="global-stats">
-        <div class="stat"><span>评估模型:</span> <strong>LLM-Profile-v2</strong></div>
-        <div class="stat"><span>综合评级:</span> <strong class="highlight">{{ overallLevel }}</strong></div>
-      </div>
-    </header>
-
     <div class="dashboard-grid">
-      <!-- ================= 左侧：动态雷达图 ================= -->
-      <section class="panel left-panel">
-        <div class="panel-header">
-          <el-icon><DataLine /></el-icon> 实时心智拓扑图
-        </div>
-        <div class="radar-container">
-          <div class="radar-bg-glow"></div>
-          <v-chart class="radar-chart" :option="radarOption" autoresize />
-        </div>
-        <div class="radar-footer">
-          <p class="desc">雷达图正根据你的对话实时进行多维参数重塑。</p>
-        </div>
-      </section>
-
-      <!-- ================= 中柱：神经对话流 ================= -->
-      <section class="panel center-panel">
-        <div class="panel-header border-b">
-          <el-icon><Cpu /></el-icon> 对话式特征捕获引擎
-        </div>
-
-        <div class="chat-flow" ref="chatScroll">
-          <div v-for="(msg, idx) in messages" :key="idx" :class="['chat-bubble-wrap', msg.role]">
-            <div class="avatar"><el-icon><component :is="msg.role === 'ai' ? Cpu : UserFilled" /></el-icon></div>
-            <div class="message-content">
-              <!-- 内容区 -->
-              <div class="bubble">
-                {{ msg.content }}
-              </div>
-              <!-- AI 特征提取结果标签 -->
-              <div class="extracted-tags" v-if="msg.extracted && msg.extracted.length > 0">
-                <el-icon><Opportunity /></el-icon> 提取到参数:
-                <span v-for="tag in msg.extracted" :key="tag" class="e-tag">{{ tag }}</span>
-              </div>
+      
+      <section class="panel chat-panel">
+        <div class="panel-header glass-header">
+          <div class="header-title">
+            <div class="icon-box indigo"><el-icon><Connection /></el-icon></div>
+            <div>
+              <h3>AI 画像建构引擎</h3>
+              <p class="subtitle">自然交流中，AI 将自动捕捉您的学习特征</p>
             </div>
           </div>
-
-          <!-- 思考与抽取动画 -->
-          <div class="chat-bubble-wrap ai" v-if="isThinking">
-            <div class="avatar"><el-icon class="is-loading"><Loading /></el-icon></div>
-            <div class="message-content">
-              <div class="extracting-indicator">
-                <span class="loader-bar"></span>
-                {{ extractingText }}
-              </div>
-            </div>
+          <div class="status-indicator">
+            <span class="pulse-dot" :class="{ active: isThinking || isUpdatingProfile }"></span>
+            <span class="status-text">{{ isUpdatingProfile ? '正在提取特征...' : (isThinking ? '模型思考中' : '监听就绪') }}</span>
           </div>
         </div>
 
-        <div class="input-area">
-          <div class="input-box">
+        <div class="chat-viewport" ref="chatScroll">
+          <div v-if="messages.length === 0" class="chat-empty">
+            <div class="bot-illustration">
+              <el-icon><ChatLineRound /></el-icon>
+            </div>
+            <h4>嗨！我是你的智能学习诊断师</h4>
+            <p>你可以告诉我：你的专业是什么？最近在学什么？哪些知识点让你觉得吃力？</p>
+            <div class="suggestion-chips">
+              <span class="chip" @click="fillSuggest('我是计算机专业的学生，最近在学数据结构，总是搞不懂图的遍历。')">
+                "我是计算机专业，最近在学数据结构..."
+              </span>
+              <span class="chip" @click="fillSuggest('我准备考研，但是英语阅读理解错很多，不知道是不是词汇量不够。')">
+                "我准备考研，英语阅读错很多..."
+              </span>
+            </div>
+          </div>
+          
+          <div v-for="(msg, idx) in messages" :key="idx" :class="['message-row', msg.role]">
+            <div class="msg-avatar" v-if="msg.role === 'assistant'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/></svg>
+            </div>
+            
+            <div class="msg-bubble">
+              <div v-if="msg.role === 'assistant' && msg.content === '' && isThinking" class="ai-thinking-state">
+                <el-icon class="is-loading spin-icon"><Loading /></el-icon>
+                <span>系统正在思考与重构知识结构...</span>
+              </div>
+              
+              <div v-else-if="msg.role === 'assistant'" class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              
+              <div v-else class="user-message-text">{{ msg.content }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <div class="input-container" :class="{ 'is-disabled': isThinking }">
             <textarea
               v-model="userInput"
-              placeholder="自然表达你的学习状态，AI 会自动拆解并更新画像..."
-              @keyup.enter.exact.prevent="handleSubmit"
+              placeholder="发送消息给 AI，或者描述你目前的学习困惑..."
+              :disabled="isThinking"
+              @keydown.enter.exact.prevent="handleSubmit"
             ></textarea>
-            <el-button type="primary" class="send-btn" @click="handleSubmit">
-              <el-icon><Promotion /></el-icon> 发送
-            </el-button>
+            
+            <div class="input-actions">
+              <button class="send-btn" :disabled="isThinking || !userInput.trim()" @click="handleSubmit()">
+                <el-icon><Promotion /></el-icon>
+              </button>
+            </div>
           </div>
+          <div class="input-footer">按 <strong>Enter</strong> 发送，<strong>Shift + Enter</strong> 换行</div>
         </div>
       </section>
 
-      <!-- ================= 右侧：特征矩阵与演进日志 ================= -->
-      <section class="panel right-panel">
-        <div class="panel-header">
-          <el-icon><Filter /></el-icon> 解析矩阵 & 演进链路
+      <section class="panel profile-data-panel">
+        <div class="global-status-card" :class="{ 'is-updating': isUpdatingProfile }">
+          <div class="bg-pattern"></div>
+          <div class="status-content">
+            <div class="status-header">
+              <h2>全息学习画像 <span class="badge">LIVE</span></h2>
+              <el-icon class="refresh-icon" :class="{'is-spinning': isUpdatingProfile}" @click="refreshProfile" style="cursor:pointer"><RefreshRight /></el-icon>
+            </div>
+            <p class="summary-text">{{ profileSummary }}</p>
+          </div>
         </div>
 
-        <div class="right-content-scroll">
-          <!-- 特征矩阵 -->
-          <div class="feature-matrix">
-            <div class="matrix-group">
-              <h5><el-icon><CollectionTag /></el-icon> 知识基础 (Knowledge)</h5>
-              <div class="tags-container">
-                <span v-for="tag in featureMatrix.knowledge" :key="tag" class="matrix-tag knowledge">{{ tag }}</span>
+        <div class="data-split">
+          <div class="radar-container">
+            <div class="section-title"><el-icon><Compass /></el-icon> 维度光谱分析</div>
+            <div class="chart-wrapper">
+              <div v-if="!hasProfileData" class="chart-placeholder">
+                <el-icon class="icon-large"><Cpu /></el-icon>
+                <span>数据采集中</span>
               </div>
-            </div>
-            <div class="matrix-group">
-              <h5><el-icon><CollectionTag /></el-icon> 认知风格 (Cognitive)</h5>
-              <div class="tags-container">
-                <span v-for="tag in featureMatrix.cognitive" :key="tag" class="matrix-tag cognitive">{{ tag }}</span>
-              </div>
-            </div>
-            <div class="matrix-group">
-              <h5><el-icon><CollectionTag /></el-icon> 学习偏好 (Preference)</h5>
-              <div class="tags-container">
-                <span v-for="tag in featureMatrix.preference" :key="tag" class="matrix-tag preference">{{ tag }}</span>
-              </div>
+              <v-chart v-else class="radar-chart" :option="radarOption" autoresize />
             </div>
           </div>
 
-          <!-- 动态演进日志 -->
-          <div class="evolution-timeline">
-            <h5>随学随新记录 (Evolution Log)</h5>
-            <transition-group name="list" tag="div" class="timeline">
-              <div v-for="(log, idx) in updateLogs" :key="idx" class="timeline-item">
-                <div class="tl-dot"></div>
-                <div class="tl-content">
-                  <span class="tl-time">{{ log.time }}</span>
-                  <span class="tl-context">{{ log.context }}</span>
-                  <div class="tl-changes">
-                    <span v-for="c in log.changes" :key="c" class="tl-change-tag">{{ c }}</span>
-                  </div>
-                </div>
+          <div class="features-container">
+            <div class="section-title">特征切片矩阵</div>
+            <div class="features-grid">
+              <div v-if="extractedFeatures.length === 0" class="empty-features">
+                <el-icon style="font-size: 2rem; margin-bottom: 0.5rem; color: #CBD5E1;"><Connection /></el-icon><br/>
+                暂无足够数据，开始聊天以建立画像...
               </div>
-            </transition-group>
+              <div v-for="(feat, index) in extractedFeatures" :key="index" class="feature-card" :style="{ animationDelay: `${index * 0.1}s` }">
+                <div class="fc-header">
+                  <svg class="fc-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" :d="feat.icon" /></svg>
+                  <span>{{ feat.label }}</span>
+                </div>
+                <div class="fc-body">{{ feat.value }}</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -274,127 +117,354 @@ const handleSubmit = () => {
   </div>
 </template>
 
+<script setup lang="ts">
+import { ref, onMounted, computed, nextTick } from 'vue'
+import { Promotion, RefreshRight, Cpu, Compass, Connection, Loading, ChatLineRound } from '@element-plus/icons-vue'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { RadarChart } from 'echarts/charts'
+import { TooltipComponent, LegendComponent } from 'echarts/components'
+import { getProfile, getChatHistory, getProfileHistory } from '@/api/ai'
+import type { ProfileHistoryItem, ProfileData, ChatMessageItem } from '@/api/ai'
+import { ElMessage } from 'element-plus'
+import { marked } from 'marked' 
+
+use([CanvasRenderer, RadarChart, TooltipComponent, LegendComponent])
+
+// ================= 状态管理 =================
+const userInput = ref('')
+const isThinking = ref(false)
+const isUpdatingProfile = ref(false)
+const chatScroll = ref<HTMLElement | null>(null)
+
+const messages = ref<ChatMessageItem[]>([])
+const currentProfile = ref<ProfileData | null>(null)
+const profileHistory = ref<ProfileHistoryItem[]>([])
+
+const dimensions = [
+  { key: 'knowledge_level', label: '知识基础', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332-4.5 1.253' },
+  { key: 'cognitive_style', label: '认知风格', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
+  { key: 'error_pattern', label: '易错偏好', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
+  { key: 'learning_goal', label: '学习目标', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+  { key: 'learning_history', label: '学习历史', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { key: 'interest_preference', label: '兴趣偏好', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
+  { key: 'learning_pace', label: '学习节奏', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+  { key: 'cognitive_level', label: '认知水平', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' }
+]
+
+onMounted(async () => {
+  await fetchInitialData()
+  scrollToBottom()
+})
+
+const fetchInitialData = async () => {
+  try {
+    const [profileRes, chatRes, historyRes] = await Promise.all([
+      getProfile(), getChatHistory(50), getProfileHistory(10)
+    ])
+    if (profileRes.data.code === 200) currentProfile.value = profileRes.data.data
+    if (chatRes.data.code === 200) messages.value = chatRes.data.data || []
+    if (historyRes.data.code === 200) profileHistory.value = historyRes.data.data || []
+  } catch (error) {
+    ElMessage.error('无法拉取数据，请检查网络')
+  }
+}
+
+const refreshProfile = async () => {
+  isUpdatingProfile.value = true
+  try {
+    const [profileRes, historyRes] = await Promise.all([getProfile(), getProfileHistory(10)])
+    if (profileRes.data.code === 200 && profileRes.data.data) currentProfile.value = profileRes.data.data
+    if (historyRes.data.code === 200) profileHistory.value = historyRes.data.data || []
+  } finally {
+    isUpdatingProfile.value = false
+  }
+}
+
+const hasProfileData = computed(() => !!currentProfile.value && dimensions.some(d => currentProfile.value![d.key as keyof ProfileData]))
+const profileSummary = computed(() => currentProfile.value?.profile_summary || '系统正在等待足够的对话数据，以构建您的个性化全息学习画像...')
+
+const radarOption = computed(() => {
+  const p = (currentProfile.value || {}) as Partial<ProfileData>
+  const getScore = (textVal: string | null | undefined, scoreVal: number | null | undefined) => {
+    if (scoreVal != null) return scoreVal
+    return textVal ? 40 : 10
+  }
+  return {
+    tooltip: { trigger: 'item' },
+    radar: {
+      indicator: [
+        { name: '知识基础', max: 100 }, { name: '认知风格', max: 100 }, { name: '易错偏好', max: 100 },
+        { name: '学习目标', max: 100 }, { name: '兴趣偏好', max: 100 }, { name: '学习节奏', max: 100 }, { name: '认知水平', max: 100 }
+      ],
+      shape: 'circle', splitNumber: 5,
+      axisName: { color: '#312E81', fontSize: 12, fontWeight: 600, fontFamily: 'monospace' },
+      splitLine: { lineStyle: { color: ['#EEF2FF', '#E0E7FF', '#C7D2FE', '#A5B4FC', '#818CF8'].reverse() } },
+      splitArea: { show: true, areaStyle: { color: ['rgba(255,255,255,0.8)', 'rgba(238,242,255,0.5)'] } },
+      axisLine: { lineStyle: { color: '#E0E7FF' } }
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: [
+          getScore(p.knowledge_level, p.knowledge_level_score),
+          getScore(p.cognitive_style, p.cognitive_style_score),
+          getScore(p.error_pattern, p.error_pattern_score),
+          getScore(p.learning_goal, p.learning_goal_score),
+          getScore(p.interest_preference, p.interest_preference_score),
+          getScore(p.learning_pace, p.learning_pace_score),
+          getScore(p.cognitive_level, p.cognitive_level_score)
+        ],
+        name: '能力光谱', areaStyle: { color: 'rgba(79, 70, 229, 0.2)' }, lineStyle: { color: '#4F46E5', width: 2 },
+        symbol: 'circle', symbolSize: 6, itemStyle: { color: '#4F46E5', borderColor: '#fff', borderWidth: 2 }
+      }]
+    }]
+  }
+})
+
+const extractedFeatures = computed(() => {
+  if (!currentProfile.value) return []
+  return dimensions.map(d => ({ ...d, value: currentProfile.value![d.key as keyof ProfileData] })).filter(d => d.value)
+})
+
+// ================= 核心逻辑：流式对话 =================
+const scrollToBottom = () => {
+  nextTick(() => { if (chatScroll.value) chatScroll.value.scrollTop = chatScroll.value.scrollHeight })
+}
+
+const renderMarkdown = (text: string) => {
+  if (!text) return ''
+  return marked.parse(text)
+}
+
+// 增加对 KeyboardEvent 的支持，防范中文输入法回车触发
+const handleSubmit = async (e?: KeyboardEvent) => {
+  // 如果是按键事件，且正在使用输入法拼写中文，则不触发发送
+  if (e && e.isComposing) return
+
+  if (!userInput.value.trim() || isThinking.value) return
+
+  const text = userInput.value.trim()
+  userInput.value = ''
+  
+  // 第一时间锁定状态，防止重复连击
+  isThinking.value = true
+
+  // 加入用户消息
+  messages.value.push({ role: 'user', content: text, created_at: new Date().toISOString() })
+  scrollToBottom()
+
+  // 立即加入空的 AI 消息，用于触发“思考中”动画和承接流式响应
+  const aiMessageIndex = messages.value.length
+  messages.value.push({ role: 'assistant', content: '', created_at: new Date().toISOString() })
+  scrollToBottom()
+
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch('/api/v1/ai/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ message: text })
+    })
+
+    if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`)
+    if (!response.body) throw new Error("ReadableStream not supported.")
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let done = false
+
+    while (!done) {
+      const { value, done: readerDone } = await reader.read()
+      done = readerDone
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true })
+        messages.value[aiMessageIndex].content += chunk
+        scrollToBottom()
+      }
+    }
+
+    isUpdatingProfile.value = true
+    setTimeout(async () => { await refreshProfile() }, 1500)
+
+  } catch (error) {
+    ElMessage.error('对话发生网络异常')
+    messages.value[aiMessageIndex].content = '⚠️ 网络异常，未能连接到智能核心，请稍后再试。'
+  } finally {
+    isThinking.value = false
+    scrollToBottom()
+  }
+}
+
+const fillSuggest = (text: string) => {
+  userInput.value = text
+  document.querySelector('textarea')?.focus()
+}
+</script>
+
 <style scoped>
+/* 全局与布局 */
 .profile-dashboard {
-  height: calc(100vh - 100px);
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding-top: 1rem;
+  background-color: #F8FAFC;
+  min-height: calc(100vh - 60px);
+  padding: 1.5rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
-
-/* 头部样式 */
-.dashboard-header {
-  display: flex; justify-content: space-between; align-items: center;
-  background: #0F172A; color: white; padding: 1.25rem 2rem; border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(15,23,42,0.1);
-}
-.brand { display: flex; align-items: center; gap: 1rem; }
-.pulse-icon { color: #818CF8; font-size: 1.5rem; animation: pulse 2s infinite; }
-.brand h2 { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: 0.05em; }
-.mono-badge { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; background: rgba(129,140,248,0.2); color: #818CF8; padding: 4px 8px; border-radius: 6px; }
-
-.global-stats { display: flex; gap: 2rem; }
-.stat { font-size: 0.85rem; color: #94A3B8; display: flex; gap: 8px; align-items: center; }
-.stat strong { color: white; font-family: 'JetBrains Mono'; font-size: 0.95rem; }
-.stat .highlight { color: #10B981; }
-
-/* 核心三栏 Grid */
 .dashboard-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1.6fr 1.2fr;
-  gap: 1.5rem;
-  overflow: hidden;
+  display: grid; grid-template-columns: 4fr 5fr; gap: 1.5rem;
+  max-width: 1600px; margin: 0 auto; height: calc(100vh - 100px);
 }
-
-/* 通用面板样式 */
 .panel {
-  background: white; border-radius: 24px; border: 1px solid rgba(0,0,0,0.04);
-  box-shadow: 0 15px 35px rgba(0,0,0,0.03); display: flex; flex-direction: column;
-  overflow: hidden;
+  background: #FFFFFF; border-radius: 24px; border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.02); display: flex; flex-direction: column; overflow: hidden;
 }
+
+/* 聊天面板头部 */
+.chat-panel { position: relative; }
 .panel-header {
-  padding: 1.25rem 1.5rem; font-weight: 800; font-size: 0.95rem; color: #1E293B;
-  display: flex; align-items: center; gap: 0.5rem; background: #F8FAFC;
+  padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid #F1F5F9; background: rgba(255, 255, 255, 0.9); z-index: 10;
 }
-.panel-header.border-b { border-bottom: 1px solid #F1F5F9; }
+.header-title { display: flex; align-items: center; gap: 1rem; }
+.icon-box { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.icon-box.indigo { background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); color: #4F46E5; }
+.header-title h3 { margin: 0 0 0.2rem 0; font-size: 1.15rem; color: #0F172A; font-weight: 800; letter-spacing: -0.02em; }
+.header-title .subtitle { margin: 0; font-size: 0.85rem; color: #64748B; }
 
-/* 左侧：雷达图 */
-.left-panel { background: #0F172A; border-color: #1E293B; }
-.left-panel .panel-header { background: transparent; color: white; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.radar-container { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.radar-bg-glow { position: absolute; width: 300px; height: 300px; background: radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 60%); top: 50%; left: 50%; transform: translate(-50%, -50%); }
-.radar-chart { width: 100%; height: 100%; min-height: 350px; z-index: 10; }
-.radar-footer { padding: 1.5rem; text-align: center; }
-.radar-footer .desc { font-size: 0.75rem; color: #64748B; margin: 0; }
+.status-indicator { display: flex; align-items: center; gap: 8px; background: #F8FAFC; padding: 6px 14px; border-radius: 20px; border: 1px solid #F1F5F9; }
+.pulse-dot { width: 8px; height: 8px; background: #94A3B8; border-radius: 50%; transition: all 0.3s; }
+.pulse-dot.active { background: #10B981; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2); animation: pulse 1.5s infinite; }
+.status-text { font-size: 0.75rem; color: #475569; font-weight: 600; font-family: monospace;}
 
-/* 中间：对话流 */
-.center-panel { display: flex; flex-direction: column; }
-.chat-flow { flex: 1; padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; background: #FCFDFE; }
+/* 聊天流区域 */
+.chat-viewport { flex: 1; padding: 2rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2rem; background: #F8FAFC; scroll-behavior: smooth; }
 
-.chat-bubble-wrap { display: flex; gap: 1rem; max-width: 90%; }
-.chat-bubble-wrap.user { align-self: flex-end; flex-direction: row-reverse; }
+/* 聊天气泡体系优化 */
+.message-row { display: flex; gap: 1rem; align-items: flex-start; width: 100%; }
+.message-row.user { flex-direction: row-reverse; }
 
-.avatar { width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.2rem; }
-.ai .avatar { background: #EEF2FF; color: #4F46E5; }
-.user .avatar { background: #F1F5F9; color: #64748B; }
+.msg-avatar {
+  width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; background: linear-gradient(to bottom, #ffffff, #F1F5F9); color: #4F46E5; 
+  border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-top: 2px;
+}
 
-.message-content { display: flex; flex-direction: column; gap: 8px; }
-.user .message-content { align-items: flex-end; }
+.msg-bubble {
+  max-width: 80%; padding: 1.1rem 1.4rem; border-radius: 20px; font-size: 1rem; line-height: 1.6;
+}
 
-.bubble { padding: 1rem 1.25rem; border-radius: 16px; font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; }
-.ai .bubble { background: white; border: 1px solid #F1F5F9; color: #334155; border-top-left-radius: 4px; box-shadow: 0 4px 15px rgba(0,0,0,0.02); }
-.user .bubble { background: #4F46E5; color: white; border-top-right-radius: 4px; }
+.assistant .msg-bubble {
+  background: white; color: #1E293B; border-top-left-radius: 4px; 
+  border: 1px solid #E2E8F0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+}
 
-/* 抽取标签展示 */
-.extracted-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.75rem; color: #10B981; font-weight: 700; background: rgba(16,185,129,0.05); padding: 8px 12px; border-radius: 12px; border: 1px dashed rgba(16,185,129,0.3); }
-.e-tag { background: #10B981; color: white; padding: 2px 8px; border-radius: 6px; }
+.user .msg-bubble {
+  background: #4F46E5; color: white; border-bottom-right-radius: 4px; 
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.2);
+}
 
-/* 提取动画指示器 */
-.extracting-indicator { display: flex; align-items: center; gap: 1rem; background: #F8FAFC; padding: 12px 16px; border-radius: 16px; font-size: 0.85rem; color: #64748B; border: 1px dashed #E2E8F0; }
-.loader-bar { width: 60px; height: 4px; background: #E2E8F0; border-radius: 4px; overflow: hidden; position: relative; }
-.loader-bar::after { content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 50%; background: #4F46E5; animation: slide 1s infinite alternate ease-in-out; }
-@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }
+/* 彻底解决用户文本排版问题 */
+.user-message-text {
+  white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.95rem;
+}
 
-/* 输入区 */
-.input-area { padding: 1.5rem; background: white; border-top: 1px solid #F1F5F9; }
-.input-box { display: flex; gap: 1rem; background: #F8FAFC; padding: 8px 8px 8px 16px; border-radius: 20px; border: 1px solid #E2E8F0; transition: border-color 0.3s; }
-.input-box:focus-within { border-color: #4F46E5; background: white; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
-.input-box textarea { flex: 1; border: none; background: transparent; outline: none; resize: none; font-size: 0.95rem; font-family: inherit; line-height: 1.5; padding-top: 8px; }
-.send-btn { border-radius: 14px !important; font-weight: 700; height: auto; }
+/* AI 思考动画 */
+.ai-thinking-state { display: flex; align-items: center; gap: 10px; color: #64748B; font-size: 0.9rem; font-style: italic; }
+.spin-icon { font-size: 1.2rem; color: #4F46E5; }
+.is-loading { animation: spin 1s linear infinite; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
 
-/* 右侧：矩阵与日志 */
-.right-content-scroll { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; }
+/* AI Markdown 样式 */
+:deep(.markdown-body p) { margin-top: 0; margin-bottom: 0.8rem; }
+:deep(.markdown-body p:last-child) { margin-bottom: 0; }
+:deep(.markdown-body code) { background: #F1F5F9; padding: 3px 6px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.85em; color: #EF4444; }
+:deep(.markdown-body pre) { background: #0F172A; color: #F8FAFC; padding: 1.2rem; border-radius: 12px; overflow-x: auto; margin: 1rem 0; font-size: 0.9em;}
+:deep(.markdown-body pre code) { background: transparent; color: inherit; padding: 0; }
+:deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 1.5rem; margin: 0.5rem 0; }
+:deep(.markdown-body li) { margin-bottom: 0.3rem; }
 
-.feature-matrix { display: flex; flex-direction: column; gap: 1.5rem; }
-.matrix-group h5 { margin: 0 0 0.75rem 0; font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 4px; }
-.tags-container { display: flex; flex-wrap: wrap; gap: 8px; }
-.matrix-tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 8px; font-weight: 700; }
-.matrix-tag.knowledge { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
-.matrix-tag.cognitive { background: #FAF5FF; color: #9333EA; border: 1px solid #E9D5FF; }
-.matrix-tag.preference { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
+/* ================= 现代化悬浮输入框 ================= */
+.chat-input-area {
+  padding: 1.5rem 2.5rem 2rem; background: #F8FAFC; 
+  display: flex; flex-direction: column; gap: 10px;
+}
 
-/* 演进时间轴 */
-.evolution-timeline { border-top: 1px dashed #E2E8F0; padding-top: 1.5rem; }
-.evolution-timeline h5 { margin: 0 0 1rem 0; font-size: 0.85rem; color: #0F172A; font-weight: 800; }
+.input-container {
+  position: relative; display: flex; flex-direction: column;
+  background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 20px;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); transition: all 0.3s ease;
+  padding: 14px 18px 50px 18px; /* 底部留白给按钮 */
+}
+.input-container:focus-within {
+  border-color: #4F46E5; box-shadow: 0 10px 30px rgba(79, 70, 229, 0.1);
+}
+.input-container.is-disabled { background: #F1F5F9; opacity: 0.8; }
 
-.timeline { display: flex; flex-direction: column; }
-.timeline-item { display: flex; gap: 1rem; position: relative; padding-bottom: 1.5rem; }
-.timeline-item::before { content: ''; position: absolute; left: 5px; top: 12px; bottom: 0; width: 2px; background: #F1F5F9; }
-.timeline-item:last-child::before { display: none; }
-.tl-dot { width: 12px; height: 12px; background: white; border: 3px solid #10B981; border-radius: 50%; position: relative; z-index: 2; margin-top: 2px; }
+.input-container textarea {
+  width: 100%; border: none; background: transparent; outline: none; resize: none;
+  font-size: 1rem; color: #0F172A; font-family: inherit; line-height: 1.6;
+  min-height: 48px; max-height: 200px;
+}
+.input-container textarea::placeholder { color: #94A3B8; }
 
-.tl-content { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.tl-time { font-family: 'JetBrains Mono'; font-size: 0.65rem; color: #94A3B8; }
-.tl-context { font-size: 0.85rem; color: #334155; font-weight: 600; }
-.tl-changes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.tl-change-tag { font-family: 'JetBrains Mono'; font-size: 0.7rem; background: #ECFDF5; color: #059669; padding: 2px 8px; border-radius: 6px; font-weight: 700; border: 1px solid #A7F3D0; }
+/* 按钮绝对定位在输入框右下角 */
+.input-actions {
+  position: absolute; right: 12px; bottom: 12px;
+}
 
-/* 列表动画 */
-.list-enter-active, .list-leave-active { transition: all 0.5s ease; }
-.list-enter-from { opacity: 0; transform: translateX(-20px); }
-.list-leave-to { opacity: 0; transform: translateX(20px); }
+.send-btn {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: #4F46E5; color: white; border: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.send-btn:hover:not(:disabled) { background: #4338CA; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(79, 70, 229, 0.3); }
+.send-btn:disabled { background: #CBD5E1; cursor: not-allowed; transform: none; box-shadow: none;}
 
-@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
+.input-footer { text-align: center; font-size: 0.75rem; color: #94A3B8; font-family: sans-serif; }
+.input-footer strong { color: #64748B; font-weight: 600; }
+
+/* 引导态空视图 */
+.chat-empty { margin: auto; text-align: center; max-width: 80%; padding-bottom: 2rem;}
+.bot-illustration { width: 80px; height: 80px; margin: 0 auto 1.5rem; background: white; border: 1px solid #E2E8F0; box-shadow: 0 10px 20px rgba(0,0,0,0.03); border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: #4F46E5;}
+.chat-empty h4 { margin: 0 0 0.5rem; color: #0F172A; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em;}
+.chat-empty p { color: #64748B; font-size: 0.95rem; line-height: 1.6; margin-bottom: 2rem; }
+.suggestion-chips { display: flex; flex-direction: column; gap: 0.75rem; }
+.chip { background: white; border: 1px solid #E2E8F0; padding: 1.1rem 1.5rem; border-radius: 16px; font-size: 0.95rem; color: #475569; cursor: pointer; transition: all 0.2s ease; text-align: left; }
+.chip:hover { border-color: #4F46E5; color: #4F46E5; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(79,70,229,0.08); }
+
+/* 右侧看板样式调整 */
+.global-status-card { background: #0F172A; color: white; border-radius: 24px; padding: 2rem; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15); transition: all 0.5s ease; }
+.global-status-card.is-updating { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3); }
+.bg-pattern { position: absolute; inset: 0; opacity: 0.1; background-image: radial-gradient(#4F46E5 1px, transparent 1px); background-size: 20px 20px; }
+.status-content { position: relative; z-index: 2; }
+.status-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+.status-header h2 { margin: 0; font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; gap: 0.75rem; }
+.badge { background: rgba(16, 185, 129, 0.2); color: #34D399; font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3); }
+.refresh-icon { font-size: 1.5rem; color: #64748B; transition: all 0.3s; }
+.refresh-icon.is-spinning { color: #34D399; animation: spin 1s linear infinite; }
+.summary-text { margin: 0; font-size: 1.05rem; line-height: 1.6; color: #94A3B8; max-width: 90%; }
+
+.data-split { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-height: 0; }
+.section-title { font-size: 0.95rem; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.radar-container { background: white; border-radius: 24px; padding: 1.5rem; border: 1px solid #E2E8F0; display: flex; flex-direction: column; }
+.chart-wrapper { height: 280px; width: 100%; position: relative; }
+.radar-chart { width: 100%; height: 100%; }
+.chart-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; color: #94A3B8; font-size: 0.9rem; }
+.icon-large { font-size: 2rem; color: #CBD5E1; }
+
+.features-container { background: white; border-radius: 24px; padding: 1.5rem; border: 1px solid #E2E8F0; flex: 1; overflow-y: auto; }
+.features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+.empty-features { grid-column: 1 / -1; padding: 3rem 0; text-align: center; color: #94A3B8; font-size: 0.95rem; border: 1px dashed #E2E8F0; border-radius: 16px; background: #F8FAFC;}
+.feature-card { background: #F8FAFC; border: 1px solid #F1F5F9; border-radius: 16px; padding: 1.25rem; transition: all 0.3s ease; animation: slideUp 0.4s ease forwards; opacity: 0; transform: translateY(10px); cursor: pointer; }
+.feature-card:hover { background: white; border-color: #C7D2FE; box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.1); transform: translateY(-2px); }
+.fc-header { display: flex; align-items: center; gap: 6px; color: #64748B; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.75rem; }
+.fc-icon { color: #818CF8; }
+.fc-body { font-size: 0.95rem; color: #1E293B; line-height: 1.5; font-weight: 500; }
+
+@keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+@keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 1024px) { .dashboard-grid { grid-template-columns: 1fr; height: auto; } .chat-panel { height: 600px; } }
 </style>

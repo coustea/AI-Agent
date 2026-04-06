@@ -1,7 +1,10 @@
+import os
 import traceback
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -9,6 +12,7 @@ from app.core.engine import init_db
 from app.core.logging import get_logger, setup_logging
 from app.modules.user.router import router as user_router
 from app.modules.profile_builder.router import router as profile_router
+from app.utils.mcp_manager import mcp_manager
 logger = get_logger(__name__)
 
 
@@ -18,6 +22,8 @@ async def lifespan(app: FastAPI):
     logger.info("Application starting up")
     init_db()
     logger.info("Database initialized")
+    mcp_manager.load_from_settings()
+    logger.info("MCP plugins registered")
     yield
     logger.info("Application shutting down")
 
@@ -48,4 +54,7 @@ async def root():
 
 
 if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=9999)
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    host = os.getenv("SERVER_HOST", "0.0.0.0")
+    port = int(os.getenv("SERVER_PORT", "9999"))
+    uvicorn.run(app, host=host, port=port)

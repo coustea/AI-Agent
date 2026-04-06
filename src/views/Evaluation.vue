@@ -1,29 +1,3 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-import { 
-  Check, 
-  Close, 
-  TrendCharts, 
-  DataAnalysis, 
-  Medal,
-  Calendar
-} from '@element-plus/icons-vue'
-
-const score = ref(85)
-const metrics = [
-  { label: '知识掌握度', value: 92, status: 'success' },
-  { label: '思维活跃度', value: 78, status: 'primary' },
-  { label: '实践完成率', value: 85, status: 'warning' },
-  { label: '问题解决速度', value: 64, status: 'primary' }
-]
-
-const recentTests = [
-  { name: 'CNN 架构基础', score: 95, date: '2026-04-01', result: '优秀' },
-  { name: '反向传播算法', score: 72, date: '2026-03-28', result: '良好' },
-  { name: 'Python 环境搭建', score: 100, date: '2026-03-25', result: '满分' }
-]
-</script>
-
 <template>
   <div class="page-container">
     <div class="eval-content">
@@ -60,7 +34,7 @@ const recentTests = [
               <el-tag type="success" effect="dark" round>学习状态：极佳</el-tag>
             </div>
           </div>
-        </el-col>
+        </col>
 
         <el-col :span="16">
           <div class="metrics-grid">
@@ -109,6 +83,32 @@ const recentTests = [
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { 
+  Check, 
+  Close, 
+  TrendCharts, 
+  DataAnalysis, 
+  Medal,
+  Calendar
+} from '@element-plus/icons-vue'
+
+const score = ref(85)
+const metrics = [
+  { label: '知识掌握度', value: 92, status: 'success' },
+  { label: '思维活跃度', value: 78, status: 'primary' },
+  { label: '实践完成率', value: 85, status: 'warning' },
+  { label: '问题解决速度', value: 64, status: 'primary' }
+]
+
+const recentTests = [
+  { name: 'CNN 架构基础', score: 95, date: '2026-04-01', result: '优秀' },
+  { name: '反向传播算法', score: 72, date: '2026-03-28', result: '良好' },
+  { name: 'Python 环境搭建', score: 100, date: '2026-03-25', result: '满分' }
+]
+</script>
 
 <style scoped>
 .page-container { min-height: 100vh; background: #F8FAFC; padding: 3rem; }

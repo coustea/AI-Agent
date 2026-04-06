@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
 
@@ -19,7 +20,8 @@ def create_user(data: schemas.UserRegister, session: Session = Depends(get_sessi
     svc = service.UserService(session)
     result = svc.register(data)
     if not result:
-        return HttpResponse.error(code=400, message="用户名已存在")
+        body = HttpResponse.error(code=400, message="用户名已存在")
+        return JSONResponse(status_code=400, content=body.model_dump())
     return HttpResponse.success(data=result)
 
 
@@ -29,7 +31,8 @@ def login(data: schemas.UserLogin, session: Session = Depends(get_session)):
     svc = service.UserService(session)
     result = svc.authenticate(data.username, data.password)
     if not result:
-        return HttpResponse.error(code=401, message="用户名或密码错误")
+        body = HttpResponse.error(code=401, message="用户名或密码错误")
+        return JSONResponse(status_code=401, content=body.model_dump())
     return HttpResponse.success(data=result)
 
 

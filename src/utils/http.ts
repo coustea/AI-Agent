@@ -19,7 +19,11 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+    const url = error.config?.url || ''
+    // 登录/注册接口的 401/400 不跳转，只由页面 catch 处理
+    const isAuthRequest = url.includes('/users/auth') || url === '/users'
+    if (status === 401 && !isAuthRequest) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }

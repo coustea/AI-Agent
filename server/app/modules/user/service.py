@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from app.core.logging import get_logger
 from app.core.security import create_token, hash_password, verify_password
 from app.models.user import User
-from app.modules.user.schemas import UserRegister, UserUpdate
+from app.modules.user.schemas import UserRead, UserRegister, UserUpdate
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,16 @@ class UserService:
         self.session.commit()
         self.session.refresh(user)
         logger.info("User registered: id=%s, username='%s'", user.id, user.username)
-        return {"user": user}
+        return {"user": UserRead.model_validate({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "avatar": user.avatar,
+            "major": user.major,
+            "grade": user.grade,
+            "school": user.school,
+            "created_at": user.created_at,
+        })}
 
     def get_by_id(self, user_id: int) -> User | None:
         return self.session.get(User, user_id)
@@ -54,4 +63,13 @@ class UserService:
             logger.warning("Login failed for username: '%s'", username)
             return None
         logger.info("User logged in: id=%s, username='%s'", user.id, user.username)
-        return {"token": create_token(user.id, self.session), "user": user}
+        return {"token": create_token(user.id, self.session), "user": UserRead.model_validate({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "avatar": user.avatar,
+            "major": user.major,
+            "grade": user.grade,
+            "school": user.school,
+            "created_at": user.created_at,
+        })}

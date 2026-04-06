@@ -25,6 +25,8 @@ class UserUpdate(BaseModel):
 
 # 响应
 class UserRead(BaseModel):
+    model_config = {"from_attributes": True}
+
     id: int
     username: str
     email: str | None

@@ -1,81 +1,3 @@
-<script setup lang="ts">
-import { ref, reactive, nextTick } from 'vue'
-import { 
-  Service, UserFilled, Loading, Picture, Microphone, 
-  VideoPlay, Reading, Download, Opportunity, ChatDotSquare
-} from '@element-plus/icons-vue'
-import { marked } from 'marked'
-import 'github-markdown-css/github-markdown-light.css'
-
-const userInput = ref('')
-const isAIThinking = ref(false)
-const chatBody = ref<HTMLElement | null>(null)
-
-const messages = ref([
-  { 
-    id: 1, 
-    role: 'ai', 
-    type: 'text', 
-    content: '你好！我是你的 **AI 私人导师**。 👋\n\n你可以随时向我提问，我会结合你的个人画像提供：\n- **文字解析**：深度原理剖析\n- **多模态图解**：直观的逻辑演示\n- **针对性练习**：即时巩固薄弱点', 
-    time: '14:20' 
-  }
-])
-
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight
-  })
-}
-
-const simulateStreaming = async (text: string, multimodal?: any) => {
-  let currentContent = ''
-  const newMessage = reactive({ id: Date.now(), role: 'ai', type: 'text', content: '', time: '现在' })
-  messages.value.push(newMessage)
-  
-  const words = text.split('')
-  for (let i = 0; i < words.length; i++) {
-    currentContent += words[i]
-    newMessage.content = currentContent
-    scrollToBottom()
-    await new Promise(resolve => setTimeout(resolve, 20))
-  }
-
-  if (multimodal) {
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'ai',
-      type: 'card',
-      content: multimodal,
-      time: '现在'
-    })
-    scrollToBottom()
-  }
-}
-
-const handleSend = async () => {
-  if (!userInput.value.trim() || isAIThinking.value) return
-  const text = userInput.value
-  messages.value.push({ id: Date.now(), role: 'user', type: 'text', content: text, time: '刚刚' })
-  userInput.value = ''
-  isAIThinking.value = true
-  scrollToBottom()
-
-  setTimeout(async () => {
-    isAIThinking.value = false
-    const replyText = `针对你提出的关于 **${text}** 的疑问，我通过检索课程知识库并结合你的画像（视觉偏好型）为你生成了以下解答：\n\n1. **核心原理**：这是由于神经网络在反向传播过程中，梯度随着层数增加呈指数级衰减造成的。\n2. **解决建议**：尝试使用 ReLU 激活函数或引入残差连接 (Residual Connection)。`
-    
-    const multimodalCard = {
-      title: '梯度消失现象动态演示',
-      desc: '基于你的画像生成的 3D 梯度流动模型预览',
-      type: 'video',
-      preview: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400'
-    }
-    
-    await simulateStreaming(replyText, multimodalCard)
-  }, 1200)
-}
-</script>
-
 <template>
   <div class="tutor-canvas">
     <div class="chat-interface">
@@ -160,6 +82,84 @@ const handleSend = async () => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, reactive, nextTick } from 'vue'
+import { 
+  Service, UserFilled, Loading, Picture, Microphone, 
+  VideoPlay, Reading, Download, Opportunity, ChatDotSquare
+} from '@element-plus/icons-vue'
+import { marked } from 'marked'
+import 'github-markdown-css/github-markdown-light.css'
+
+const userInput = ref('')
+const isAIThinking = ref(false)
+const chatBody = ref<HTMLElement | null>(null)
+
+const messages = ref([
+  { 
+    id: 1, 
+    role: 'ai', 
+    type: 'text', 
+    content: '你好！我是你的 **AI 私人导师**。 👋\n\n你可以随时向我提问，我会结合你的个人画像提供：\n- **文字解析**：深度原理剖析\n- **多模态图解**：直观的逻辑演示\n- **针对性练习**：即时巩固薄弱点', 
+    time: '14:20' 
+  }
+])
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight
+  })
+}
+
+const simulateStreaming = async (text: string, multimodal?: any) => {
+  let currentContent = ''
+  const newMessage = reactive({ id: Date.now(), role: 'ai', type: 'text', content: '', time: '现在' })
+  messages.value.push(newMessage)
+  
+  const words = text.split('')
+  for (let i = 0; i < words.length; i++) {
+    currentContent += words[i]
+    newMessage.content = currentContent
+    scrollToBottom()
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+
+  if (multimodal) {
+    messages.value.push({
+      id: Date.now() + 1,
+      role: 'ai',
+      type: 'card',
+      content: multimodal,
+      time: '现在'
+    })
+    scrollToBottom()
+  }
+}
+
+const handleSend = async () => {
+  if (!userInput.value.trim() || isAIThinking.value) return
+  const text = userInput.value
+  messages.value.push({ id: Date.now(), role: 'user', type: 'text', content: text, time: '刚刚' })
+  userInput.value = ''
+  isAIThinking.value = true
+  scrollToBottom()
+
+  setTimeout(async () => {
+    isAIThinking.value = false
+    const replyText = `针对你提出的关于 **${text}** 的疑问，我通过检索课程知识库并结合你的画像（视觉偏好型）为你生成了以下解答：\n\n1. **核心原理**：这是由于神经网络在反向传播过程中，梯度随着层数增加呈指数级衰减造成的。\n2. **解决建议**：尝试使用 ReLU 激活函数或引入残差连接 (Residual Connection)。`
+    
+    const multimodalCard = {
+      title: '梯度消失现象动态演示',
+      desc: '基于你的画像生成的 3D 梯度流动模型预览',
+      type: 'video',
+      preview: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400'
+    }
+    
+    await simulateStreaming(replyText, multimodalCard)
+  }, 1200)
+}
+</script>
 
 <style scoped>
 .tutor-canvas { display: flex; height: calc(100vh - 160px); gap: 2rem; }

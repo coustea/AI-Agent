@@ -10,13 +10,21 @@ class UserProfile(SQLModel, table=True):
 
     # ===== 画像维度 =====
     knowledge_level: str | None = None  # 知识水平
+    knowledge_level_score: int | None = Field(default=None)  # 知识水平评分 (0-100)
     learning_goal: str | None = None  # 学习目标
+    learning_goal_score: int | None = Field(default=None)  # 学习目标评分
     learning_history: str | None = None  # 学习历史
+    learning_history_score: int | None = Field(default=None)  # 学习历史评分
     cognitive_style: str | None = None  # 认知风格
+    cognitive_style_score: int | None = Field(default=None)  # 认知风格评分
     error_pattern: str | None = None  # 错误模式
+    error_pattern_score: int | None = Field(default=None)  # 错误模式评分
     learning_pace: str | None = None  # 学习节奏
+    learning_pace_score: int | None = Field(default=None)  # 学习节奏评分
     interest_preference: str | None = None  # 兴趣偏好
+    interest_preference_score: int | None = Field(default=None)  # 兴趣偏好评分
     cognitive_level: str | None = None  # 认知水平
+    cognitive_level_score: int | None = Field(default=None)  # 认知水平评分
 
     profile_summary: str | None = None  # 画像总结
 
@@ -34,13 +42,21 @@ class UserProfileHistory(SQLModel, table=True):
 
     # ===== 画像维度快照 =====
     knowledge_level: str | None = None  # 知识水平
+    knowledge_level_score: int | None = Field(default=None)  # 知识水平评分
     learning_goal: str | None = None  # 学习目标
+    learning_goal_score: int | None = Field(default=None)  # 学习目标评分
     learning_history: str | None = None  # 学习历史
+    learning_history_score: int | None = Field(default=None)  # 学习历史评分
     cognitive_style: str | None = None  # 认知风格
+    cognitive_style_score: int | None = Field(default=None)  # 认知风格评分
     error_pattern: str | None = None  # 错误模式
+    error_pattern_score: int | None = Field(default=None)  # 错误模式评分
     learning_pace: str | None = None  # 学习节奏
+    learning_pace_score: int | None = Field(default=None)  # 学习节奏评分
     interest_preference: str | None = None  # 兴趣偏好
+    interest_preference_score: int | None = Field(default=None)  # 兴趣偏好评分
     cognitive_level: str | None = None  # 认知水平
+    cognitive_level_score: int | None = Field(default=None)  # 认知水平评分
 
     profile_summary: str | None = None  # 画像总结
 

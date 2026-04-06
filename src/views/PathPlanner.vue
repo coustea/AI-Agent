@@ -1,21 +1,3 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-import { 
-  DataLine, 
-  TrendCharts, 
-  CircleCheckFilled, 
-  Flag,
-  Aim
-} from '@element-plus/icons-vue'
-
-const steps = ref([
-  { id: 1, title: '基础概念', status: 'success', desc: '线性代数与微积分回顾' },
-  { id: 2, title: '卷积神经网络', status: 'processing', desc: '池化、卷积与全连接层' },
-  { id: 3, title: '循环神经网络', status: 'wait', desc: 'LSTM 与 GRU 序列模型' },
-  { id: 4, title: '综合实战', status: 'wait', desc: '端到端图像识别项目' }
-])
-</script>
-
 <template>
   <div class="path-planner">
     <div class="header-section">
@@ -85,6 +67,24 @@ const steps = ref([
     </el-row>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { 
+  DataLine, 
+  TrendCharts, 
+  CircleCheckFilled, 
+  Flag,
+  Aim
+} from '@element-plus/icons-vue'
+
+const steps = ref([
+  { id: 1, title: '基础概念', status: 'success', desc: '线性代数与微积分回顾' },
+  { id: 2, title: '卷积神经网络', status: 'processing', desc: '池化、卷积与全连接层' },
+  { id: 3, title: '循环神经网络', status: 'wait', desc: 'LSTM 与 GRU 序列模型' },
+  { id: 4, title: '综合实战', status: 'wait', desc: '端到端图像识别项目' }
+])
+</script>
 
 <style scoped>
 .header-section {

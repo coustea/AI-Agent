@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
+
 from app.modules.memory.service import memory_service
 from app.core.logging import get_logger
 
@@ -18,13 +19,21 @@ logger = get_logger(__name__)
 class ProfileExtraction(BaseModel):
     """大模型需要输出的 8 个维度特征（合并后的最新完整版）"""
     knowledge_level: Optional[str] = Field(default=None, description="知识基础")
+    knowledge_level_score: Optional[int] = Field(default=None, description="知识基础评分(0-100), 根据描述内容评估该维度的掌握程度, 越高越好")
     cognitive_style: Optional[str] = Field(default=None, description="认知风格")
+    cognitive_style_score: Optional[int] = Field(default=None, description="认知风格评分(0-100), 评估学生对自己学习方式的认知清晰度")
     error_pattern: Optional[str] = Field(default=None, description="易错点偏好")
+    error_pattern_score: Optional[int] = Field(default=None, description="易错模式评分(0-100), 评估学生识别和改进错误的能力")
     learning_goal: Optional[str] = Field(default=None, description="学习目标")
+    learning_goal_score: Optional[int] = Field(default=None, description="学习目标评分(0-100), 评估目标的清晰度与合理性")
     learning_history: Optional[str] = Field(default=None, description="学习历史与专业")
+    learning_history_score: Optional[int] = Field(default=None, description="学习历史评分(0-100), 评估知识积累的深度和广度")
     interest_preference: Optional[str] = Field(default=None, description="兴趣偏好")
+    interest_preference_score: Optional[int] = Field(default=None, description="兴趣偏好评分(0-100), 评估兴趣的明确性和与学习目标的契合度")
     learning_pace: Optional[str] = Field(default=None, description="学习节奏")
+    learning_pace_score: Optional[int] = Field(default=None, description="学习节奏评分(0-100), 评估学习节奏的合理性和自律程度")
     cognitive_level: Optional[str] = Field(default=None, description="认知水平")
+    cognitive_level_score: Optional[int] = Field(default=None, description="认知水平评分(0-100), 评估综合认知能力, 包括分析、推理和应用能力")
     profile_summary: Optional[str] = Field(default=None, description="画像总结: 用一句话概括整体学习状态")
 
 
@@ -47,6 +56,15 @@ PROFILE_BUILDER_PROMPT = """
 3. **状态更替**：如果最新对话中显示学生已经克服了之前的错误，或者改变了目标，请根据最新情况**修改**原有描述。
 4. **空值处理**：如果某维度原来是空(null)，且最新对话也没体现，继续输出 null。
 5. **全局总结**：请基于你合并后的所有维度，重新撰写 `profile_summary`，用一句话凝练该学生当前的学习状态。
+
+# 评分规则
+6. **维度评分**：对每个非空的维度字段，请同时输出一个 0-100 的整数评分。评分标准：
+   - 0-30: 初级（了解概念，但缺乏实践或经常出错）
+   - 31-60: 中级（有一定基础，能应用但不够熟练或深度不足）
+   - 61-80: 良好（掌握较好，能灵活运用，有自省能力）
+   - 81-100: 优秀（深入掌握，能举一反三，有系统性思考）
+7. **评分依据**：评分应基于对话中展现的实际水平，而非主观臆测。如果某维度信息不足，请输出 null 而非猜测分数。
+8. **合并评分**：如果原有评分存在且对话中没有新的相关证据，保留原有评分。如有新证据，合理调整。
 """
 
 

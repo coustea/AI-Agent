@@ -35,7 +35,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_token(user_id: int, session: Session) -> str:
     """签发 JWT 并写入 ActiveToken 白名单"""
     expire = datetime.now(timezone.utc) + timedelta(days=EXPIRE_DAYS)
-    payload = {"sub": user_id, "exp": expire}
+    payload = {"sub": str(user_id), "exp": expire}
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
     active_token = ActiveToken(
@@ -68,7 +68,7 @@ def is_token_valid(token: str, session: Session) -> bool:
     if not active_token:
         return False
     # 双重检查：JWT 本身的过期 + 白名单记录的过期时间
-    if active_token.expires_at < datetime.now(timezone.utc):
+    if active_token.expires_at < datetime.utcnow():
         session.delete(active_token)
         session.commit()
         return False
