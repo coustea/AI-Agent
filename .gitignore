@@ -38,3 +38,13 @@ Thumbs.db
 
 # Dev/plan files
 IMPLEMENTATION_PLAN.md
+
+# Server excludes
+server/.langgraph_api/
+server/data/
+server/doc/
+server/scripts/
+server/tests/
+server/GEMINI.md
+server/mindmap.zip
+server/test_pdf_md.py
