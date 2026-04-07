@@ -29,9 +29,6 @@ Thumbs.db
 
 # Local env files
 *.local
-.env
-.env.*
-!.env.example
 
 # Dev/plan files
 IMPLEMENTATION_PLAN.md

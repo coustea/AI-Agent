@@ -76,6 +76,11 @@ def _custom_tools_condition(state: MindmapState) -> str:
 class MindmapGenerator:
     """思维导图生成器 (LangGraph StateGraph 模式)"""
 
+    # 配置当前 Agent 所需的最小权限工具与技能
+    REQUIRED_TOOLS = ["read_file_safe", "safe_shell"]
+    REQUIRED_MCP = ["markmap"]
+    REQUIRED_SKILLS = []
+
     def __init__(self):
         self.llm = ChatOpenAI(
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
@@ -91,8 +96,11 @@ class MindmapGenerator:
         if self.graph is not None:
             return
 
-        # 获取当前 Agent 所需的最小工具集（包含 safe_shell 和 markmap）
-        self._tools = await tools_manager.get_agent_tools(needs_shell=True, needs_mcp=["markmap"])
+        # 根据所需的权限配置获取对应的工具列表
+        self._tools = await tools_manager.get_agent_tools(
+            tool_names=self.REQUIRED_TOOLS, 
+            mcp_services=self.REQUIRED_MCP
+        )
         
         graph = StateGraph(MindmapState)
 
