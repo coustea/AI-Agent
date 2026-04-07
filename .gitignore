@@ -27,6 +27,12 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 
+# AI assistant config directories
+.claude/
+.agent/
+.agents/
+.gemini/
+
 # Local env files
 *.local
 
