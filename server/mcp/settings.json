@@ -14,6 +14,19 @@
       },
       "ensureDirs": ["${SERVER_DIR}/workplace/mindmap"],
       "mergeOsEnviron": true
+    },
+    "word-document-server": {
+      "description": "创建、读取和操作 Microsoft Word 文档",
+      "command": "python",
+      "args": [
+        "${MCP_DIR}/Office-Word-MCP-Server/word_mcp_server.py"
+      ],
+      "transport": "stdio",
+      "env": {
+        "PYTHONPATH": "${MCP_DIR}/Office-Word-MCP-Server",
+        "MCP_TRANSPORT": "stdio"
+      },
+      "mergeOsEnviron": true
     }
   }
 }

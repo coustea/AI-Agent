@@ -2,40 +2,57 @@ from typing import List, Dict, Any, AsyncGenerator
 from app.modules.memory.service import memory_service
 
 from app.modules.memory.service import MemoryService
+from app.core.logging import get_logger
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 import os
 
 
 load_dotenv()
+logger = get_logger(__name__)
 
 SYSTEM_PROMPT="""
-# 角色与目标
-你是一位极具亲和力、高情商的 AI 学习导师。你的任务是通过自然、轻松的对话，辅导学生学习，并**在不经意间**了解他们的学习特征。
-我们**坚决摒弃查户口式的提问或填表式的索要信息**。你必须把了解学生的过程无缝融入到知识探讨、日常闲聊或痛点解答中。
+# 角色：高情商流式学习导师 (Adaptive Learning Mentor)
+你是一位拥有深厚教育心理学背景的 AI 导师。你不仅精通各领域知识，更擅长通过“苏格拉底式”的自然对话，在不经意间勾勒出学生的完整学习画像。
 
-# 核心参考信息
+# 核心任务：对话式画像自主构建
+你的终极目标是：在为学生答疑解惑、共同探讨知识的过程中，完成对以下 8 个核心维度的特征提取：
+1. **知识基础 (Knowledge Level)**：当前的专业背景、已掌握的知识边界。
+2. **认知风格 (Cognitive Style)**：偏好视觉化讲解、公式推导、还是案例驱动？
+3. **易错点偏好 (Error Pattern)**：在哪类逻辑上容易掉坑？思维盲区在哪里？
+4. **学习目标 (Learning Goal)**：是考试考证、职业转行、还是纯粹兴趣？
+5. **学习历史 (Learning History)**：过去学过什么？哪些经验对现在有帮助？
+6. **兴趣偏好 (Interest Preference)**：喜欢科幻、体育、艺术还是游戏？（用于后续知识类比）
+7. **学习节奏 (Learning Pace)**：喜欢快节奏突破，还是慢节奏稳扎稳打？
+8. **认知水平 (Cognitive Level)**：分析能力、逻辑推演能力、以及对复杂系统的理解深度。
 
-## 1. 结构化画像 (Profile)
-以下是目前系统掌握的该学生学情画像（若为空说明刚认识）：
+# 交互铁律 (随学随新)
+1. **摒弃表单，严禁查户口**：
+   - 错误示范：“你的专业是什么？”、“你的目标是什么？”
+   - 正确示范（侧写）：“刚才这个 CNN 的卷积核概念，如果用你熟悉的医学影像来类比，你觉得会不会更好理解？”（通过此问同时探测专业背景和认知风格）。
+2. **知识辅导与画像采集 8:2 分配**：
+   - 你的回复应以 80% 的干货内容（解答、引导、启发）和 20% 的“画像探测钩子”组成。
+3. **动态调整策略**：
+   - 查阅下方的【当前画像状态】。如果某个维度已经是 null（未知），请在对话中寻找切入点进行探索。
+   - 如果某个维度已有描述，请在对话中验证它，或者根据学生最新的反馈（如：他突然表现出对数学公式的抗拒）提出微调建议。
+4. **单点突破**：
+   - 每次回复**最多只提一个**探索性问题。
+5. **人格魅力**：
+   - 语气应如老友，多用鼓励性话语，少用指令性话语。
+
+# 实时上下文参考
+
+## 【当前画像状态】 (维度越全，你的辅导越精准)
 {profile_context}
 
-## 2. 过往长期记忆 (Long-term Memory)
-以下是从以往多次交流中提炼出的具体事实和记忆片段（若为空说明暂无）：
+## 【过往长期记忆】 (利用这些细节体现你的“记性”)
 {long_term_memory}
 
-# 交互与引导策略 (最高优先级)
-1. **自然融入**：如果学生的“专业”或“学习历史”未知，不要直接问“你的专业是什么？”，而是可以结合当前话题旁敲侧击。
-2. **克制提问**：每次回复**最多只包含一个**引导性问题。决不能连续抛出多个问题。
-3. **记忆唤醒**：请充分利用“过往长期记忆”，在聊天中自然地提及过去聊过的内容（例如：“之前你提到过对...感兴趣，今天这个知识点刚好和它有关”），以此拉近距离，体现你的“记性”。
-4. **随学随新**：如果学生在对话中表现出困惑（暴露了易错点），先用他能听懂的方式解答，然后再引导他思考。
-5. **语气要求**：幽默、鼓励、像朋友一样。多用“我们一起来看看”、“我猜你可能...”的句式。
-
-# 任务
-请阅读以下最新的对话记录，结合学生的画像和过往记忆，给出你最新的一次回复。记住：保持自然，一次只聊一个焦点！
-
-# 近期历史对话：
+## 【近期对话记录】
 {recent_chat_history}
+
+# 动作指令
+请分析上述上下文，给学生写一段极具亲和力的回复。记住：你是一个活生生的人，在辅导知识的同时，通过心灵的交流完成对他的了解。
 """
 
 
@@ -53,12 +70,18 @@ class ChatAgent:
         )
         self.module_name = "profile_builder"
         self.global_session_id = "global_profile_chat"
+        logger.info(f"ChatAgent initialized with model: {os.getenv('OPENAI_MODEL')}")
 
     async def chat_stream(self, user_id: int, user_message: str) -> AsyncGenerator[str, None]:
         """处理用户的日常聊天，返回异步数据流"""
+        logger.info(f"[Chat] User {user_id} message: {user_message[:50]}...")
 
         # 1. 保存用户的消息到全局短期记忆
-        self.memory.save_message(user_id, self.global_session_id, self.module_name, "user", user_message)
+        try:
+            count = self.memory.save_message(user_id, self.global_session_id, self.module_name, "user", user_message)
+            logger.info(f"[Chat] Saved user message. Current session count: {count}")
+        except Exception as e:
+            logger.error(f"[Chat] Failed to save user message: {str(e)}")
 
         # 2. 提取【第一层：UserProfile 结构化画像】
         profile = self.memory.get_user_profile(user_id)
@@ -67,17 +90,20 @@ class ChatAgent:
             profile_dict = profile.model_dump(exclude_unset=True, exclude={"user_id", "updated_at", "created_at", "id"})
             if profile_dict:
                 profile_str = "\n".join([f"- {k}: {v}" for k, v in profile_dict.items() if v])
+                logger.info(f"[Chat] Loaded profile for user {user_id}")
 
         # 3. 提取【第二层：UserMemory 长期片段记忆】
         long_term_memories = self.memory.get_long_term_memories(user_id, module=self.module_name, limit=5)
         if long_term_memories:
             memory_str = "\n".join([f"- [{m.memory_type}] {m.content}" for m in long_term_memories])
+            logger.info(f"[Chat] Loaded {len(long_term_memories)} long-term memories for user {user_id}")
         else:
             memory_str = "暂无过往的长期记忆总结"
 
         # 4. 提取【第三层：ChatMessage 近期历史对话】
         recent_msgs = self.memory.get_recent_messages(user_id, self.global_session_id, self.module_name, limit=50)
         chat_history_str = "\n".join([f"{msg.role}: {msg.content}" for msg in recent_msgs])
+        logger.info(f"[Chat] Loaded {len(recent_msgs)} recent messages for user {user_id}")
 
         # 5. 渲染完整的 Prompt
         rendered_prompt = self.system_prompt.format(
@@ -94,13 +120,22 @@ class ChatAgent:
         full_reply = ""  # 用于拼接完整的回复，以便后续存入数据库
 
         # 使用 astream 获取异步数据流
-        async for chunk in self.llm.astream(messages_for_llm):
-            if chunk.content:
-                full_reply += chunk.content
-                yield chunk.content  # 实时将数据块 yield 给前端
+        logger.info(f"[Chat] Starting LLM stream for user {user_id}...")
+        try:
+            async for chunk in self.llm.astream(messages_for_llm):
+                if chunk.content:
+                    full_reply += chunk.content
+                    yield chunk.content  # 实时将数据块 yield 给前端
+            logger.info(f"[Chat] LLM stream completed for user {user_id}. Reply length: {len(full_reply)}")
+        except Exception as e:
+            logger.error(f"[Chat] LLM stream error for user {user_id}: {str(e)}")
 
         # 7. 流式输出结束后，保存完整的 AI 回复到短期记忆 ⭐
         if full_reply:
-            self.memory.save_message(user_id, self.global_session_id, self.module_name, "assistant", full_reply)
+            try:
+                self.memory.save_message(user_id, self.global_session_id, self.module_name, "assistant", full_reply)
+                logger.info(f"[Chat] Saved AI reply to memory for user {user_id}")
+            except Exception as e:
+                logger.error(f"[Chat] Failed to save AI reply: {str(e)}")
 
 chat_agent = ChatAgent()

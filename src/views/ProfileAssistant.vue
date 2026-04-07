@@ -1,7 +1,7 @@
 <template>
   <div class="profile-dashboard">
     <div class="dashboard-grid">
-      
+
       <section class="panel chat-panel">
         <div class="panel-header glass-header">
           <div class="header-title">
@@ -33,20 +33,20 @@
               </span>
             </div>
           </div>
-          
+
           <div v-for="(msg, idx) in messages" :key="idx" :class="['message-row', msg.role]">
             <div class="msg-avatar" v-if="msg.role === 'assistant'">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/></svg>
             </div>
-            
+
             <div class="msg-bubble">
               <div v-if="msg.role === 'assistant' && msg.content === '' && isThinking" class="ai-thinking-state">
                 <el-icon class="is-loading spin-icon"><Loading /></el-icon>
                 <span>系统正在思考与重构知识结构...</span>
               </div>
-              
+
               <div v-else-if="msg.role === 'assistant'" class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              
+
               <div v-else class="user-message-text">{{ msg.content }}</div>
             </div>
           </div>
@@ -55,12 +55,12 @@
         <div class="chat-input-area">
           <div class="input-container" :class="{ 'is-disabled': isThinking }">
             <textarea
-              v-model="userInput"
-              placeholder="发送消息给 AI，或者描述你目前的学习困惑..."
-              :disabled="isThinking"
-              @keydown.enter.exact.prevent="handleSubmit"
+                v-model="userInput"
+                placeholder="发送消息给 AI，或者描述你目前的学习困惑..."
+                :disabled="isThinking"
+                @keydown.enter.exact.prevent="handleSubmit"
             ></textarea>
-            
+
             <div class="input-actions">
               <button class="send-btn" :disabled="isThinking || !userInput.trim()" @click="handleSubmit()">
                 <el-icon><Promotion /></el-icon>
@@ -102,12 +102,13 @@
                 <el-icon style="font-size: 2rem; margin-bottom: 0.5rem; color: #CBD5E1;"><Connection /></el-icon><br/>
                 暂无足够数据，开始聊天以建立画像...
               </div>
+
               <div v-for="(feat, index) in extractedFeatures" :key="index" class="feature-card" :style="{ animationDelay: `${index * 0.1}s` }">
                 <div class="fc-header">
                   <svg class="fc-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" :d="feat.icon" /></svg>
                   <span>{{ feat.label }}</span>
                 </div>
-                <div class="fc-body">{{ feat.value }}</div>
+                <div class="fc-body" :class="{ 'is-empty': !feat.value }">{{ feat.displayValue }}</div>
               </div>
             </div>
           </div>
@@ -128,7 +129,7 @@ import { TooltipComponent, LegendComponent } from 'echarts/components'
 import { getProfile, getChatHistory, getProfileHistory } from '@/api/ai'
 import type { ProfileHistoryItem, ProfileData, ChatMessageItem } from '@/api/ai'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked' 
+import { marked } from 'marked'
 
 use([CanvasRenderer, RadarChart, TooltipComponent, LegendComponent])
 
@@ -196,7 +197,8 @@ const radarOption = computed(() => {
     radar: {
       indicator: [
         { name: '知识基础', max: 100 }, { name: '认知风格', max: 100 }, { name: '易错偏好', max: 100 },
-        { name: '学习目标', max: 100 }, { name: '兴趣偏好', max: 100 }, { name: '学习节奏', max: 100 }, { name: '认知水平', max: 100 }
+        { name: '学习目标', max: 100 }, { name: '学习历史', max: 100 }, { name: '兴趣偏好', max: 100 },
+        { name: '学习节奏', max: 100 }, { name: '认知水平', max: 100 }
       ],
       shape: 'circle', splitNumber: 5,
       axisName: { color: '#312E81', fontSize: 12, fontWeight: 600, fontFamily: 'monospace' },
@@ -212,6 +214,7 @@ const radarOption = computed(() => {
           getScore(p.cognitive_style, p.cognitive_style_score),
           getScore(p.error_pattern, p.error_pattern_score),
           getScore(p.learning_goal, p.learning_goal_score),
+          getScore(p.learning_history, p.learning_history_score),
           getScore(p.interest_preference, p.interest_preference_score),
           getScore(p.learning_pace, p.learning_pace_score),
           getScore(p.cognitive_level, p.cognitive_level_score)
@@ -223,9 +226,23 @@ const radarOption = computed(() => {
   }
 })
 
+// === 修改核心：始终保留 8 个维度并设置占位符 ===
 const extractedFeatures = computed(() => {
   if (!currentProfile.value) return []
-  return dimensions.map(d => ({ ...d, value: currentProfile.value![d.key as keyof ProfileData] })).filter(d => d.value)
+
+  // 保留原有逻辑：如果所有维度都为空，则返回空数组以触发“暂无足够数据”的占位大卡片
+  const hasAnyData = dimensions.some(d => currentProfile.value![d.key as keyof ProfileData])
+  if (!hasAnyData) return []
+
+  // 映射所有 8 个维度，不存在的维度赋予一个 displayValue
+  return dimensions.map(d => {
+    const val = currentProfile.value![d.key as keyof ProfileData]
+    return {
+      ...d,
+      value: val,
+      displayValue: val || '数据采集中...'
+    }
+  })
 })
 
 // ================= 核心逻辑：流式对话 =================
@@ -238,24 +255,18 @@ const renderMarkdown = (text: string) => {
   return marked.parse(text)
 }
 
-// 增加对 KeyboardEvent 的支持，防范中文输入法回车触发
 const handleSubmit = async (e?: KeyboardEvent) => {
-  // 如果是按键事件，且正在使用输入法拼写中文，则不触发发送
   if (e && e.isComposing) return
-
   if (!userInput.value.trim() || isThinking.value) return
 
   const text = userInput.value.trim()
   userInput.value = ''
-  
-  // 第一时间锁定状态，防止重复连击
+
   isThinking.value = true
 
-  // 加入用户消息
   messages.value.push({ role: 'user', content: text, created_at: new Date().toISOString() })
   scrollToBottom()
 
-  // 立即加入空的 AI 消息，用于触发“思考中”动画和承接流式响应
   const aiMessageIndex = messages.value.length
   messages.value.push({ role: 'assistant', content: '', created_at: new Date().toISOString() })
   scrollToBottom()
@@ -306,25 +317,28 @@ const fillSuggest = (text: string) => {
 <style scoped>
 /* 全局与布局 */
 .profile-dashboard {
-  background-color: #F8FAFC;
+  /* 使用浅灰蓝底层画布，配合 Layout */
+  background-color: transparent;
   min-height: calc(100vh - 60px);
-  padding: 1.5rem;
+  padding: 1.5rem 2.5rem;
+  max-width: 1800px;
+  margin: 0 auto;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 .dashboard-grid {
   display: grid; grid-template-columns: 4fr 5fr; gap: 1.5rem;
-  max-width: 1600px; margin: 0 auto; height: calc(100vh - 100px);
+  height: calc(100vh - 120px);
 }
 .panel {
-  background: #FFFFFF; border-radius: 24px; border: 1px solid #E2E8F0;
-  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.02); display: flex; flex-direction: column; overflow: hidden;
+  background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.03); display: flex; flex-direction: column; overflow: hidden;
 }
 
 /* 聊天面板头部 */
 .chat-panel { position: relative; }
 .panel-header {
   padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 1px solid #F1F5F9; background: rgba(255, 255, 255, 0.9); z-index: 10;
+  border-bottom: 1px solid #F1F5F9; background: #FFFFFF; z-index: 10;
 }
 .header-title { display: flex; align-items: center; gap: 1rem; }
 .icon-box { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
@@ -346,7 +360,7 @@ const fillSuggest = (text: string) => {
 
 .msg-avatar {
   width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; background: linear-gradient(to bottom, #ffffff, #F1F5F9); color: #4F46E5; 
+  flex-shrink: 0; background: linear-gradient(to bottom, #ffffff, #F1F5F9); color: #4F46E5;
   border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-top: 2px;
 }
 
@@ -355,16 +369,15 @@ const fillSuggest = (text: string) => {
 }
 
 .assistant .msg-bubble {
-  background: white; color: #1E293B; border-top-left-radius: 4px; 
+  background: white; color: #1E293B; border-top-left-radius: 4px;
   border: 1px solid #E2E8F0; box-shadow: 0 4px 15px rgba(0,0,0,0.03);
 }
 
 .user .msg-bubble {
-  background: #4F46E5; color: white; border-bottom-right-radius: 4px; 
+  background: #4F46E5; color: white; border-bottom-right-radius: 4px;
   box-shadow: 0 4px 15px rgba(79, 70, 229, 0.2);
 }
 
-/* 彻底解决用户文本排版问题 */
 .user-message-text {
   white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.95rem;
 }
@@ -384,9 +397,9 @@ const fillSuggest = (text: string) => {
 :deep(.markdown-body ul), :deep(.markdown-body ol) { padding-left: 1.5rem; margin: 0.5rem 0; }
 :deep(.markdown-body li) { margin-bottom: 0.3rem; }
 
-/* ================= 现代化悬浮输入框 ================= */
+/* 现代化悬浮输入框 */
 .chat-input-area {
-  padding: 1.5rem 2.5rem 2rem; background: #F8FAFC; 
+  padding: 1.5rem 2.5rem 2rem; background: #F8FAFC;
   display: flex; flex-direction: column; gap: 10px;
 }
 
@@ -394,7 +407,7 @@ const fillSuggest = (text: string) => {
   position: relative; display: flex; flex-direction: column;
   background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 20px;
   box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); transition: all 0.3s ease;
-  padding: 14px 18px 50px 18px; /* 底部留白给按钮 */
+  padding: 14px 18px 50px 18px;
 }
 .input-container:focus-within {
   border-color: #4F46E5; box-shadow: 0 10px 30px rgba(79, 70, 229, 0.1);
@@ -408,10 +421,7 @@ const fillSuggest = (text: string) => {
 }
 .input-container textarea::placeholder { color: #94A3B8; }
 
-/* 按钮绝对定位在输入框右下角 */
-.input-actions {
-  position: absolute; right: 12px; bottom: 12px;
-}
+.input-actions { position: absolute; right: 12px; bottom: 12px; }
 
 .send-btn {
   width: 42px; height: 42px; border-radius: 12px;
@@ -435,7 +445,7 @@ const fillSuggest = (text: string) => {
 .chip:hover { border-color: #4F46E5; color: #4F46E5; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(79,70,229,0.08); }
 
 /* 右侧看板样式调整 */
-.global-status-card { background: #0F172A; color: white; border-radius: 24px; padding: 2rem; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15); transition: all 0.5s ease; }
+.global-status-card { background: #0F172A; color: white; border-radius: 20px; padding: 2rem; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15); transition: all 0.5s ease; flex-shrink: 0;}
 .global-status-card.is-updating { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3); }
 .bg-pattern { position: absolute; inset: 0; opacity: 0.1; background-image: radial-gradient(#4F46E5 1px, transparent 1px); background-size: 20px 20px; }
 .status-content { position: relative; z-index: 2; }
@@ -446,15 +456,15 @@ const fillSuggest = (text: string) => {
 .refresh-icon.is-spinning { color: #34D399; animation: spin 1s linear infinite; }
 .summary-text { margin: 0; font-size: 1.05rem; line-height: 1.6; color: #94A3B8; max-width: 90%; }
 
-.data-split { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-height: 0; }
+.data-split { display: flex; flex-direction: column; gap: 1.5rem; flex: 1; min-height: 0; padding: 1.5rem; }
 .section-title { font-size: 0.95rem; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
-.radar-container { background: white; border-radius: 24px; padding: 1.5rem; border: 1px solid #E2E8F0; display: flex; flex-direction: column; }
+.radar-container { background: white; border-radius: 16px; padding: 1.5rem; border: 1px solid #E2E8F0; display: flex; flex-direction: column; }
 .chart-wrapper { height: 280px; width: 100%; position: relative; }
 .radar-chart { width: 100%; height: 100%; }
 .chart-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; color: #94A3B8; font-size: 0.9rem; }
 .icon-large { font-size: 2rem; color: #CBD5E1; }
 
-.features-container { background: white; border-radius: 24px; padding: 1.5rem; border: 1px solid #E2E8F0; flex: 1; overflow-y: auto; }
+.features-container { background: white; border-radius: 16px; padding: 1.5rem; border: 1px solid #E2E8F0; flex: 1; overflow-y: auto; }
 .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
 .empty-features { grid-column: 1 / -1; padding: 3rem 0; text-align: center; color: #94A3B8; font-size: 0.95rem; border: 1px dashed #E2E8F0; border-radius: 16px; background: #F8FAFC;}
 .feature-card { background: #F8FAFC; border: 1px solid #F1F5F9; border-radius: 16px; padding: 1.25rem; transition: all 0.3s ease; animation: slideUp 0.4s ease forwards; opacity: 0; transform: translateY(10px); cursor: pointer; }
@@ -462,6 +472,13 @@ const fillSuggest = (text: string) => {
 .fc-header { display: flex; align-items: center; gap: 6px; color: #64748B; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.75rem; }
 .fc-icon { color: #818CF8; }
 .fc-body { font-size: 0.95rem; color: #1E293B; line-height: 1.5; font-weight: 500; }
+
+/* 缺省态的占位文本样式 */
+.fc-body.is-empty {
+  color: #94A3B8;
+  font-style: italic;
+  font-size: 0.85rem;
+}
 
 @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }

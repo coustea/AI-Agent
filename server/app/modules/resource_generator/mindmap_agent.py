@@ -1,24 +1,28 @@
 """
-数据结构思维导图生成 Agent
-基于 LangChain + MCP 插件化架构（markmap 服务）
+思维导图生成 Agent
+基于 LangGraph 的扁平化 ReAct 工作流，使得 Agent 可以自主调用 MCP 工具和本地检查工具。
 """
 
 import os
+import re
+import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import TypedDict, Optional, Dict, Any, Annotated
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage, AnyMessage
+from langgraph.graph.message import add_messages
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode
+
 from app.core.logging import get_logger
-from app.utils.mcp_manager import mcp_manager
+from app.utils.tools_manager import tools_manager
 
 load_dotenv()
 logger = get_logger(__name__)
 
-# ==========================================
-# 1. 加载 Prompt 模板
-# ==========================================
+
 PROMPT_DIR = Path(__file__).parent / "prompt"
 MINDMAP_PROMPT_PATH = PROMPT_DIR / "mindmap.md"
 
@@ -27,116 +31,223 @@ with open(MINDMAP_PROMPT_PATH, "r", encoding="utf-8") as f:
 
 
 # ==========================================
-# 2. 思维导图生成 Agent
+# State 定义
+# ==========================================
+class MindmapState(TypedDict, total=False):
+    """思维导图工作流状态。"""
+
+    # 输入
+    major: str
+    course: str
+    gap: str
+    need: str
+    extra: str
+
+    # 统一的消息历史
+    messages: Annotated[list[AnyMessage], add_messages]
+
+    # 输出
+    file_path: Optional[str]
+    html_content: Optional[str]
+    agent_output: Optional[str]
+    error: Optional[str]
+
+
+# 学习需求映射
+NEED_MAP = {
+    "exam": "考前突击 (侧重考点与易错题)",
+    "review": "课后复习 (侧重知识梳理与图解)",
+    "deep": "深度探究 (侧重底层原理与拓展)",
+    "practice": "实践应用 (侧重代码或实操案例)",
+}
+
+
+def _custom_tools_condition(state: MindmapState) -> str:
+    """判断是否调用了工具，决定下一步流向"""
+    messages = state.get("messages", [])
+    if messages and isinstance(messages[-1], AIMessage) and messages[-1].tool_calls:
+        return "tools"
+    return "finalize"
+
+
+# ==========================================
+# MindmapGenerator 类
 # ==========================================
 class MindmapGenerator:
-    """思维导图生成器
-
-    通过 mcp_manager 调用 "markmap" MCP 服务。
-    """
+    """思维导图生成器 (LangGraph StateGraph 模式)"""
 
     def __init__(self):
-        # 初始化 LLM
         self.llm = ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL"),
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_API_BASE"),
-            temperature=0.3,
+            temperature=0.1,
         )
+        self.graph = None
+        self._tools = None
 
-        self.prompt_template = ChatPromptTemplate.from_messages([
-            ("system", MINDMAP_GENERATOR_PROMPT)
-        ])
+    async def _ensure_graph(self):
+        """延迟构建图，以便可以异步加载 MCP 工具"""
+        if self.graph is not None:
+            return
 
-    async def generate_mindmap(
-        self,
-        topic: str,
-        major: str = "",
-        course: str = "",
-    ) -> Dict[str, Any]:
-        """
-        根据学生的专业和课程生成知识体系思维导图。
+        # 获取当前 Agent 所需的最小工具集（包含 safe_shell 和 markmap）
+        self._tools = await tools_manager.get_agent_tools(needs_shell=True, needs_mcp=["markmap"])
+        
+        graph = StateGraph(MindmapState)
 
-        Args:
-            topic: 知识点主题，如 "二叉树"、"神经网络"
-            major: 专业，"计算机" 或 "人工智能"
-            course: 课程/科目，如 "数据结构"、"深度学习"
+        # 添加节点
+        graph.add_node("agent", self._agent_node)
+        graph.add_node("tools", ToolNode(self._tools))
+        graph.add_node("finalize", self._finalize_node)
 
-        Returns:
-            dict: 包含 HTML 思维导图内容及文件路径
-        """
-        logger.info(
-            f"[MindmapGenerator] 开始生成思维导图: "
-            f"topic={topic}, major={major}, course={course}"
-        )
+        # 构建扁平化流转
+        graph.add_edge(START, "agent")
+        graph.add_conditional_edges("agent", _custom_tools_condition)
+        graph.add_edge("tools", "agent")  # 工具调用完毕后返回 agent 继续思考
+        graph.add_edge("finalize", END)
 
-        # 1. 调用 LLM 生成 Markdown 思维导图
-        try:
-            prompt = self.prompt_template.invoke({
-                "topic": topic,
-                "major": major,
-                "course": course,
-            })
-            response = await self.llm.ainvoke(prompt)
-            markdown_content = response.content.strip()
+        self.graph = graph.compile()
+        logger.info("[MindmapAgent] 扁平化 StateGraph 构建完成")
 
-            # 清理包裹的 markdown 标签
-            if markdown_content.startswith("```markdown"):
-                markdown_content = markdown_content[11:]
-            if markdown_content.startswith("```"):
-                markdown_content = markdown_content[3:]
-            if markdown_content.endswith("```"):
-                markdown_content = markdown_content[:-3]
+    async def _agent_node(self, state: MindmapState) -> dict:
+        """主控 LLM 节点"""
+        messages = state.get("messages", [])
+        
+        # 第一次执行，注入 System Prompt
+        if not messages:
+            major = state.get("major", "通用")
+            course = state.get("course", "待定")
+            gap = state.get("gap", "")
+            need_key = state.get("need", "review")
+            need_text = NEED_MAP.get(need_key, need_key)
+            extra = state.get("extra", "无")
 
-            markdown_content = markdown_content.strip()
-            logger.info(f"[MindmapGenerator] Markdown 内容已生成")
-
-        except Exception as e:
-            logger.error(f"[MindmapGenerator] LLM 生成失败: {e}")
-            return {
-                "success": False,
-                "error": f"LLM 生成失败: {str(e)}"
-            }
-
-        # 2. 通过 mcp_manager 调用 markmap 服务
-        file_path = None
-        html_content = None
-
-        try:
-            result_data = await mcp_manager.call_tool_json(
-                "markmap",
-                "markdown_to_mindmap",
-                markdown=markdown_content,
-                open=False,
+            system_msg = MINDMAP_GENERATOR_PROMPT.format(
+                major=major,
+                course=course,
+                gap=gap,
+                need=need_text,
+                extra=extra,
+            )
+            
+            instruction = (
+                "\n\n【重要指令】\n"
+                "1. 请首先思考并直接调用 `markdown_to_mindmap` 工具，将你构思好的 Markdown 思维导图内容作为参数传入并生成 HTML。\n"
+                "2. 工具会返回一个包含 `filePath` 的 JSON，或者返回文件路径文本。\n"
+                "3. 根据该路径，使用 `read_file_safe` 或 `safe_shell` 工具（如 ls）检查文件是否成功生成。\n"
+                "4. 确认无误后，向用户总结文件生成的路径即可结束对话。\n"
+                "注意：不要在回答中直接输出长篇大论的 Markdown 源码，请直接传给工具！"
             )
 
-            if "error" in result_data:
-                logger.warning(f"MCP 工具生成出错: {result_data.get('message')}")
-                return {
-                    "success": False,
-                    "error": f"MCP 工具生成出错: {result_data.get('message')}"
-                }
+            messages = [
+                SystemMessage(content=system_msg + instruction),
+                HumanMessage(content=f"请为知识短板 '{gap}' 生成思维导图。")
+            ]
 
-            file_path = result_data.get("filePath")
-            logger.info(f"[MindmapGenerator] 思维导图已生成: {file_path}")
+        # 绑定工具并调用 LLM
+        llm_with_tools = self.llm.bind_tools(self._tools)
+        response = await llm_with_tools.ainvoke(messages)
+        
+        logger.info(f"[MindmapAgent] LLM 返回 (包含 tool_calls={bool(response.tool_calls)})")
+        return {"messages": [response]}
 
-            # 读取生成的 HTML 内容以便直接返回给前端
-            if file_path and os.path.exists(file_path):
+    async def _finalize_node(self, state: MindmapState) -> dict:
+        """从历史消息中提取最终成果"""
+        messages = state.get("messages", [])
+        file_path = None
+        html_content = None
+        agent_output = ""
+
+        if messages and isinstance(messages[-1], AIMessage):
+            agent_output = messages[-1].content
+
+        # 遍历历史寻找 markdown_to_mindmap 工具的返回结果
+        for msg in messages:
+            if isinstance(msg, ToolMessage) and msg.name == "markdown_to_mindmap":
+                content = str(msg.content)
+                # 尝试解析 JSON
+                try:
+                    res = json.loads(content)
+                    if isinstance(res, dict) and "filePath" in res:
+                        file_path = res["filePath"]
+                    elif isinstance(res, list) and len(res) > 0 and "text" in res[0]:
+                        # 有些 MCP Adapter 会返回带 text 的列表
+                        inner_text = res[0]["text"]
+                        inner_res = json.loads(inner_text)
+                        if "filePath" in inner_res:
+                            file_path = inner_res["filePath"]
+                except Exception:
+                    pass
+                
+                # 正则保底匹配路径
+                if not file_path:
+                    match = re.search(r"(/.*\.html)", content)
+                    if match:
+                        file_path = match.group(1)
+
+        if file_path and os.path.exists(file_path):
+            try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     html_content = f.read()
+            except Exception as e:
+                logger.warning(f"[MindmapAgent] 无法读取生成的 HTML 文件 {file_path}: {e}")
 
+        return {
+            "file_path": file_path,
+            "html_content": html_content,
+            "agent_output": agent_output
+        }
+
+    # ------------------------------------------
+    # 公共 API
+    # ------------------------------------------
+    async def generate_mindmap(
+        self,
+        gap: str,
+        course: str = "",
+        major: str = "通用",
+        need: str = "review",
+        extra: str = "",
+    ) -> Dict[str, Any]:
+        """生成思维导图。"""
+        logger.info(f"[MindmapAgent] 收到生成请求: gap={gap}")
+
+        await self._ensure_graph()
+
+        initial_state: MindmapState = {
+            "major": major,
+            "course": course,
+            "gap": gap,
+            "need": need,
+            "extra": extra,
+            "messages": [],
+            "file_path": None,
+            "html_content": None,
+            "agent_output": None,
+            "error": None,
+        }
+
+        try:
+            # 增加 recursion_limit 防止工具陷入死循环
+            result = await self.graph.ainvoke(initial_state, {"recursion_limit": 10})
         except Exception as e:
-            logger.error(f"[MindmapGenerator] MCP 调用失败: {e}")
+            logger.error(f"[MindmapAgent] 工作流执行失败: {e}")
             return {
                 "success": False,
-                "error": f"MCP 调用失败: {str(e)}"
+                "file_path": None,
+                "html_content": None,
+                "agent_output": "",
+                "error": str(e),
             }
 
-        # 3. 返回结果
+        success = bool(result.get("file_path"))
         return {
-            "success": True,
-            "file_path": file_path,
-            "html_content": html_content
+            "success": success,
+            "file_path": result.get("file_path"),
+            "html_content": result.get("html_content"),
+            "agent_output": result.get("agent_output", ""),
+            "error": result.get("error") if not success else None,
         }
 
 
@@ -144,15 +255,34 @@ class MindmapGenerator:
 mindmap_generator = MindmapGenerator()
 
 
+# ==========================================
+# 测试入口
+# ==========================================
+async def main():
+    """本地测试：生成一个思维导图并打印结果。"""
+    import asyncio
+
+    gap = "TCP三次握手为什么不是两次？"
+    major = "计算机科学"
+    course = "计算机网络"
+    need = "review"
+    extra = "尽量用通俗的比喻，多一些图解"
+
+    print(f"正在生成思维导图: gap={gap}, major={major}, course={course}")
+    print("-" * 50)
+
+    result = await mindmap_generator.generate_mindmap(
+        gap=gap, major=major, course=course, need=need, extra=extra
+    )
+
+    print(f"成功: {result['success']}")
+    print(f"文件路径: {result.get('file_path')}")
+    print(f"HTML 长度: {len(result.get('html_content') or '')} 字符")
+    print(f"Agent 输出: {result.get('agent_output')}")
+    if result.get("error"):
+        print(f"错误: {result['error']}")
+
+
 if __name__ == "__main__":
     import asyncio
-    from app.utils.mcp_manager import mcp_manager as _mgr
-
-    _mgr.load_from_settings()
-
-    result = asyncio.run(mindmap_generator.generate_mindmap("操作系统进程之间的调度","计算机科学与技术","操作系统"))
-    if result["success"]:
-        print(f"Success! File: {result['file_path']}")
-        print(f"HTML length: {len(result['html_content'])} chars")
-    else:
-        print(f"Failed: {result['error']}")
+    asyncio.run(main())

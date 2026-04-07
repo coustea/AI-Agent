@@ -7,12 +7,15 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.engine import init_db
 from app.core.logging import get_logger, setup_logging
 from app.modules.user.router import router as user_router
 from app.modules.profile_builder.router import router as profile_router
+from app.modules.resource_generator.router import router as resource_router
 from app.utils.mcp_manager import mcp_manager
+from app.utils.skills_manager import skills_manager
 logger = get_logger(__name__)
 
 
@@ -22,15 +25,31 @@ async def lifespan(app: FastAPI):
     logger.info("Application starting up")
     init_db()
     logger.info("Database initialized")
+    
     mcp_manager.load_from_settings()
     logger.info("MCP plugins registered")
+    
+    skills_manager.load_all_skills()
+    logger.info("Agent skills loaded")
+    
     yield
     logger.info("Application shutting down")
 
 
 app = FastAPI(title="AI Learning Platform", lifespan=lifespan)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(user_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(profile_router,prefix="/api/v1/ai",tags=["profile_builder"])
+app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource_generator"])
 
 
 @app.exception_handler(Exception)

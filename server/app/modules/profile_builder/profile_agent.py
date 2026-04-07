@@ -17,23 +17,23 @@ logger = get_logger(__name__)
 # 1. 定义大模型严格输出的 JSON 结构 (Pydantic)
 # ==========================================
 class ProfileExtraction(BaseModel):
-    """大模型需要输出的 8 个维度特征（合并后的最新完整版）"""
-    knowledge_level: Optional[str] = Field(default=None, description="知识基础")
-    knowledge_level_score: Optional[int] = Field(default=None, description="知识基础评分(0-100), 根据描述内容评估该维度的掌握程度, 越高越好")
-    cognitive_style: Optional[str] = Field(default=None, description="认知风格")
-    cognitive_style_score: Optional[int] = Field(default=None, description="认知风格评分(0-100), 评估学生对自己学习方式的认知清晰度")
-    error_pattern: Optional[str] = Field(default=None, description="易错点偏好")
-    error_pattern_score: Optional[int] = Field(default=None, description="易错模式评分(0-100), 评估学生识别和改进错误的能力")
-    learning_goal: Optional[str] = Field(default=None, description="学习目标")
-    learning_goal_score: Optional[int] = Field(default=None, description="学习目标评分(0-100), 评估目标的清晰度与合理性")
-    learning_history: Optional[str] = Field(default=None, description="学习历史与专业")
-    learning_history_score: Optional[int] = Field(default=None, description="学习历史评分(0-100), 评估知识积累的深度和广度")
-    interest_preference: Optional[str] = Field(default=None, description="兴趣偏好")
-    interest_preference_score: Optional[int] = Field(default=None, description="兴趣偏好评分(0-100), 评估兴趣的明确性和与学习目标的契合度")
-    learning_pace: Optional[str] = Field(default=None, description="学习节奏")
-    learning_pace_score: Optional[int] = Field(default=None, description="学习节奏评分(0-100), 评估学习节奏的合理性和自律程度")
-    cognitive_level: Optional[str] = Field(default=None, description="认知水平")
-    cognitive_level_score: Optional[int] = Field(default=None, description="认知水平评分(0-100), 评估综合认知能力, 包括分析、推理和应用能力")
+    """大模型需要输出的 8 个核心维度特征（全息画像矩阵）"""
+    knowledge_level: Optional[str] = Field(default=None, description="知识基础: 当前专业、学情边界")
+    knowledge_level_score: Optional[int] = Field(default=None, description="知识基础评分(0-100)")
+    cognitive_style: Optional[str] = Field(default=None, description="认知风格: 偏好视觉/案例/推导等")
+    cognitive_style_score: Optional[int] = Field(default=None, description="认知风格评分(0-100)")
+    error_pattern: Optional[str] = Field(default=None, description="易错点偏好: 逻辑盲区、常犯错误")
+    error_pattern_score: Optional[int] = Field(default=None, description="易错模式评分(0-100)")
+    learning_goal: Optional[str] = Field(default=None, description="学习目标: 考试/兴趣/职业等")
+    learning_goal_score: Optional[int] = Field(default=None, description="学习目标评分(0-100)")
+    learning_history: Optional[str] = Field(default=None, description="学习历史: 过去经验、相关背景")
+    learning_history_score: Optional[int] = Field(default=None, description="学习历史评分(0-100)")
+    interest_preference: Optional[str] = Field(default=None, description="兴趣偏好: 个人喜好、关注点")
+    interest_preference_score: Optional[int] = Field(default=None, description="兴趣偏好评分(0-100)")
+    learning_pace: Optional[str] = Field(default=None, description="学习节奏: 频率、时长、突击/平稳")
+    learning_pace_score: Optional[int] = Field(default=None, description="学习节奏评分(0-100)")
+    cognitive_level: Optional[str] = Field(default=None, description="认知水平: 深度思考、逻辑推演能力")
+    cognitive_level_score: Optional[int] = Field(default=None, description="认知水平评分(0-100)")
     profile_summary: Optional[str] = Field(default=None, description="画像总结: 用一句话概括整体学习状态")
 
 
@@ -42,7 +42,17 @@ class ProfileExtraction(BaseModel):
 # ==========================================
 PROFILE_BUILDER_PROMPT = """
 # 角色与目标
-你是一个顶尖的 AI 教育心理学家和数据分析引擎。你的任务是根据学生【原有的学习画像】和【最新的一段对话记录】，推断并提取新的特征，合并生成【最新的学习画像】。
+你是一个顶尖的 AI 教育心理学家和数据分析引擎。你的任务是根据学生【原有的学习画像】和【最新的一段对话记录】，推断并提取新的特征，合并生成包含 **8 个核心维度** 的【最新的全息学习画像】。
+
+# 8 个核心维度矩阵：
+1. 知识基础 (Knowledge Level)
+2. 认知风格 (Cognitive Style)
+3. 易错点偏好 (Error Pattern)
+4. 学习目标 (Learning Goal)
+5. 学习历史 (Learning History)
+6. 兴趣偏好 (Interest Preference)
+7. 学习节奏 (Learning Pace)
+8. 认知水平 (Cognitive Level)
 
 # 原有学习画像：
 {current_profile}
@@ -108,6 +118,7 @@ class ProfileBuilderAgent:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无新对话，无需更新。")
             return
 
+        logger.info(f"[ProfileBuilder] 找到用户 {user_id} 的 {len(recent_msgs)} 条近期对话，准备提取特征。")
         chat_history_str = "\n".join(
             [f"[{msg.created_at.strftime('%m-%d %H:%M')}] {msg.role}: {msg.content}" for msg in recent_msgs])
 
@@ -121,8 +132,10 @@ class ProfileBuilderAgent:
                                                       exclude={"user_id", "updated_at", "created_at", "id"})
             if profile_dict:
                 current_profile_str = "\n".join([f"- {k}: {v}" for k, v in profile_dict.items() if v])
+                logger.info(f"[ProfileBuilder] 已加载用户 {user_id} 的现有画像。")
 
         # 3. 调用大模型，执行【合并+提取】
+        logger.info(f"[ProfileBuilder] 正在请求 LLM 进行画像合并提取 (user_id={user_id})...")
         try:
             prompt = self.prompt_template.invoke({
                 "current_profile": current_profile_str,
@@ -130,6 +143,7 @@ class ProfileBuilderAgent:
             })
             # 大模型会返回合并后的完整 Pydantic 对象
             updated_data: ProfileExtraction = await self.structured_llm.ainvoke(prompt)
+            logger.info(f"[ProfileBuilder] LLM 提取成功 (user_id={user_id})")
         except Exception as e:
             logger.error(f"[ProfileBuilder] 画像提取与合并失败: {str(e)}")
             return
@@ -139,16 +153,18 @@ class ProfileBuilderAgent:
         final_features = updated_data.model_dump(exclude_none=True)
 
         if not final_features:
-            logger.info(f"[ProfileBuilder] 画像无实质性更新。")
+            logger.info(f"[ProfileBuilder] 用户 {user_id} 画像无实质性更新。")
             return
 
         # 5. 调用 MemoryService 更新数据库 (你的 update_user_profile 会自动处理追加和版本快照)
-        self.memory.update_user_profile(
-            user_id=user_id,
-            features=final_features,
-            change_reason="基于近期对话增量合并"
-        )
-
-        logger.info(f"[ProfileBuilder] 用户 {user_id} 画像合并更新完毕！更新字段: {list(final_features.keys())}")
+        try:
+            self.memory.update_user_profile(
+                user_id=user_id,
+                features=final_features,
+                change_reason="基于近期对话增量合并"
+            )
+            logger.info(f"[ProfileBuilder] 用户 {user_id} 画像合并更新完毕！更新字段: {list(final_features.keys())}")
+        except Exception as e:
+            logger.error(f"[ProfileBuilder] 保存更新后的画像失败 (user_id={user_id}): {str(e)}")
 
 profile_agent = ProfileBuilderAgent()

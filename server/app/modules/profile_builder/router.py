@@ -8,7 +8,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.modules.memory.service import memory_service
 from app.modules.profile_builder.chat_agent import chat_agent
-from app.modules.profile_builder.profile_agent import ProfileBuilderAgent
+from app.modules.profile_builder.profile_agent import profile_agent
 from app.modules.profile_builder.schema import (
     ChatMessageItem,
     ChatRequest,
@@ -18,10 +18,10 @@ from app.modules.profile_builder.schema import (
 
 router = APIRouter()
 
-# 触发画像更新的消息阈值
-PROFILE_THRESHOLD = 20
-# 新用户首次触发的消息数（较低阈值，尽早建立初始画像）
-EARLY_TRIGGER = 3
+# 触发画像更新的消息阈值 (每 2 条消息，即一轮对话后)
+PROFILE_THRESHOLD = 2
+# 新用户首次触发的消息数
+EARLY_TRIGGER = 2
 
 @router.post("/chat/stream")
 async def chat_stream_endpoint(
@@ -43,7 +43,6 @@ async def chat_stream_endpoint(
     )
 
     if should_trigger:
-        profile_agent = ProfileBuilderAgent()
         asyncio.create_task(profile_agent.build_profile(user_id=current_user.id))
 
     return StreamingResponse(generator, media_type="text/event-stream")

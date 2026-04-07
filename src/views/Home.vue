@@ -1,6 +1,5 @@
 <template>
   <div class="command-center">
-    <!-- 1. 全景状态抬头 (Global HUD) -->
     <header class="global-hud">
       <div class="hud-left">
         <div class="sys-status">
@@ -20,10 +19,8 @@
     </header>
 
     <div class="dashboard-grid">
-      <!-- 2. 左侧核心主舞台：路径与资源 -->
       <div class="main-stage">
-        <!-- 动态路径规划流 -->
-        <div class="glass-panel path-section">
+        <div class="clean-card path-section">
           <div class="panel-header">
             <h3 class="mono">LIVE_PATH // 当前学习路径</h3>
             <el-button link type="primary" @click="router.push('/path-planner')">查看全局规划 <el-icon><ArrowRight /></el-icon></el-button>
@@ -35,17 +32,16 @@
           </div>
         </div>
 
-        <!-- 精准资源推送区 (5种模态) -->
-        <div class="glass-panel resource-section">
+        <div class="clean-card resource-section">
           <div class="panel-header">
             <h3 class="mono">MULTI_AGENT_RESOURCES // 定制资源库</h3>
             <span class="badge">已为您生成 5 份资源</span>
           </div>
           <div class="resource-grid">
             <div
-              v-for="(res, index) in multimodalResources"
-              :key="res.id"
-              :class="['res-card', { 'hero-card': index === 0 }]"
+                v-for="(res, index) in multimodalResources"
+                :key="res.id"
+                :class="['res-card', { 'hero-card': index === 0 }]"
             >
               <div class="res-icon-wrapper" :style="{ background: `${res.color}15`, color: res.color }">
                 <el-icon><component :is="res.icon" /></el-icon>
@@ -67,10 +63,8 @@
         </div>
       </div>
 
-      <!-- 3. 右侧数据看板：画像与评估 -->
       <div class="side-panel">
-        <!-- 微型数字画像 -->
-        <div class="glass-panel profile-card">
+        <div class="clean-card profile-card">
           <div class="panel-header">
             <h3 class="mono">DYNAMIC_PROFILE // 画像快照</h3>
           </div>
@@ -85,8 +79,7 @@
           </el-button>
         </div>
 
-        <!-- 学习效果评估趋势 -->
-        <div class="glass-panel eval-card">
+        <div class="clean-card eval-card">
           <div class="panel-header">
             <h3 class="mono">EVALUATION // 综合评估</h3>
           </div>
@@ -102,8 +95,7 @@
           <el-button plain class="w-full mt-4" @click="router.push('/evaluation')">查看深度评估报告</el-button>
         </div>
 
-        <!-- 待办短板任务 -->
-        <div class="glass-panel task-card">
+        <div class="clean-card task-card">
           <div class="task-alert">
             <el-icon class="warn-icon"><Warning /></el-icon>
             <div class="task-info">
@@ -120,7 +112,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { 
+import {
   Connection, Lightning, Opportunity, TrendCharts,
   VideoPlay, Monitor, Document, Cpu, EditPen,
   ArrowRight, Warning, Aim
@@ -145,7 +137,7 @@ const pathSteps = ref([
   { id: 3, title: '进阶优化', desc: '残差网络与注意力机制', status: 'wait' }
 ])
 
-// --- 3. 5类多模态专属资源 (赛题要求：不同角色协同生成至少5种类型) ---
+// --- 3. 5类多模态专属资源 ---
 const multimodalResources = ref([
   { id: 1, type: '多模态视频', title: 'CNN 3D 卷积核可视化', icon: VideoPlay, color: '#EF4444', format: 'MP4' },
   { id: 2, type: '代码实操', title: '手写反向传播算法', icon: Cpu, color: '#F59E0B', format: 'Python' },
@@ -154,7 +146,7 @@ const multimodalResources = ref([
   { id: 5, type: '个性题库', title: '针对易错点：池化层专项拔高', icon: EditPen, color: '#10B981', format: '交互式' }
 ])
 
-// --- 4. 画像与评估数据 (6维度雷达 + 趋势线) ---
+// --- 4. 画像与评估数据 ---
 const profileOption = computed(() => ({
   radar: {
     indicator: [
@@ -210,23 +202,25 @@ const trendOption = computed(() => ({
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding-top: 1rem;
+  /* 取消原来的强制边距，依靠父容器的填充 */
+  padding: 1.5rem 2.5rem;
+  max-width: 1800px;
+  margin: 0 auto;
   animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* 玻璃拟态基础面板 */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: 24px;
-  padding: 1.5rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+/* 扁平化统一卡片风格，取代玻璃拟态 */
+.clean-card {
+  background: #FFFFFF;
+  border-radius: 20px;
+  border: 1px solid #E2E8F0;
+  padding: 1.75rem;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.03); /* 极弱阴影 */
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-.glass-panel:hover {
+.clean-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
 
 .mono {
@@ -238,14 +232,14 @@ const trendOption = computed(() => ({
 }
 
 .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-.panel-header h3 { margin: 0; }
+.panel-header h3 { margin: 0; color: #1E293B; }
 .badge { background: #EEF2FF; color: #4F46E5; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
 
-/* 1. 全景 HUD */
+/* 1. 全景 HUD - 保持深色作为视觉焦点 */
 .global-hud {
   display: flex; justify-content: space-between; align-items: center;
-  background: #0F172A; color: white; border-radius: 20px; padding: 1rem 1.5rem;
-  box-shadow: 0 15px 30px rgba(15, 23, 42, 0.15);
+  background: #0F172A; color: white; border-radius: 20px; padding: 1.25rem 2rem;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.1);
 }
 .hud-left { display: flex; align-items: center; gap: 2rem; }
 .sys-status { display: flex; align-items: center; gap: 0.5rem; color: #10B981; }
@@ -264,7 +258,7 @@ const trendOption = computed(() => ({
 .main-stage { display: flex; flex-direction: column; gap: 1.5rem; }
 
 .path-section .path-timeline { padding: 1rem 0; }
-:deep(.el-step__title) { font-size: 0.9rem; font-weight: 700; }
+:deep(.el-step__title) { font-size: 0.9rem; font-weight: 700; color: #1E293B; }
 :deep(.el-step__description) { font-size: 0.75rem; }
 
 .resource-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }

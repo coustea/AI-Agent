@@ -34,7 +34,7 @@
               <el-tag type="success" effect="dark" round>学习状态：极佳</el-tag>
             </div>
           </div>
-        </col>
+        </el-col>
 
         <el-col :span="16">
           <div class="metrics-grid">
