@@ -7,8 +7,8 @@ from app.core.dependencies import get_session
 from app.core.response import HttpResponse
 from app.core.security import get_current_user, revoke_token
 from app.models.user import User
-from app.modules.user import schemas, service
-from app.modules.profile_builder.profile_agent import profile_agent
+from app.modules.auth import schemas, service
+from app.modules.profile.profile_agent import profile_agent
 
 router = APIRouter()
 bearer_scheme = HTTPBearer()

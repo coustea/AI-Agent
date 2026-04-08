@@ -11,9 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.engine import init_db
 from app.core.logging import get_logger, setup_logging
-from app.modules.user.router import router as user_router
-from app.modules.profile_builder.router import router as profile_router
-from app.modules.resource_generator.router import router as resource_router
+from app.modules.auth.router import router as auth_router
+from app.modules.chat.router import router as chat_router
+from app.modules.profile.router import router as profile_router
+from app.modules.resource.router import router as resource_router
 from app.modules.knowledge_base.router import router as knowledge_router
 from app.utils.mcp_manager import mcp_manager
 from app.utils.skills_manager import skills_manager
@@ -24,15 +25,21 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("Application starting up")
-    init_db()
+    await init_db()
     logger.info("Database initialized")
-    
+
     mcp_manager.load_from_settings()
+    # 加载外部配置
+    external_mcp_config = Path("/home/couseta/.gemini/antigravity/mcp_config.json")
+    if external_mcp_config.exists():
+        mcp_manager.load_from_settings(external_mcp_config)
+        logger.info(f"External MCP plugins registered from {external_mcp_config}")
+
     logger.info("MCP plugins registered")
-    
+
     skills_manager.load_all_skills()
     logger.info("Agent skills loaded")
-    
+
     yield
     logger.info("Application shutting down")
 
@@ -48,9 +55,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(user_router, prefix="/api/v1/users", tags=["users"])
-app.include_router(profile_router,prefix="/api/v1/ai",tags=["profile_builder"])
-app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource_generator"])
+app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
+app.include_router(chat_router, prefix="/api/v1/ai", tags=["chat"])
+app.include_router(profile_router, prefix="/api/v1/ai", tags=["profile"])
+app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 app.include_router(knowledge_router, prefix="/api/v1/knowledge", tags=["knowledge_base"])
 
 

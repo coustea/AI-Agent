@@ -52,7 +52,7 @@ class SkillsManager:
 
         Args:
             base_dirs: 技能根目录列表。若不传，则尝试从环境变量 SKILLS_DIR 读取（相对于 SERVER_DIR），
-                       如果环境变量也没有，则默认回退到 [server/.agents/skills, server/app/modules/resource_generator/skills]。
+                       如果环境变量也没有，则默认回退到 [server/.agents/skills, server/app/modules/resource/skills]。
         """
         if base_dirs:
             self.base_dirs = base_dirs
@@ -65,7 +65,7 @@ class SkillsManager:
             # 默认包含的路径
             default_paths = [
                 SERVER_DIR / ".agents" / "skills",
-                SERVER_DIR / "app" / "modules" / "resource_generator" / "skills"
+                SERVER_DIR / "app" / "modules" / "resource" / "skills"
             ]
             for p in default_paths:
                 if p.exists() and p not in self.base_dirs:

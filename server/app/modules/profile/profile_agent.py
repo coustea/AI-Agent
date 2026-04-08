@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
 
-from app.modules.memory.service import memory_service
+from app.services.memory import memory_service
 from app.core.logging import get_logger
 
 load_dotenv()
@@ -84,10 +84,11 @@ PROFILE_BUILDER_PROMPT = """
 class ProfileBuilderAgent:
     def __init__(self):
         self.memory = memory_service
-        self.module_name = "profile_builder"
+        # 读取 mentor 模块的聊天记录（TutorAgent 保存消息时用的 module_name）
+        self.module_name = "mentor"
         self.global_session_id = "global_profile_chat"
 
-        # 实例化大模型 (后台提取任务建议使用低温度，保证合并逻辑严谨不发散)
+
         llm = ChatOpenAI(
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -95,22 +96,33 @@ class ProfileBuilderAgent:
             temperature=0.1,
         )
 
-        # 强制大模型以 ProfileExtraction 的 JSON 格式输出
+
         self.structured_llm = llm.with_structured_output(ProfileExtraction)
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", PROFILE_BUILDER_PROMPT)
         ])
 
-    async def build_profile(self, user_id: int):
+    async def build_profile(self, user_id: int, session_id: str | None = None):
         """
-        后台异步执行的核心任务：提取并合并最新画像
+        后台异步执行的核心任务：提取并合并最新画像。
+        session_id 为 None 时，自动查找该用户最近的 mentor 会话。
         """
-        logger.info(f"[ProfileBuilder] 开始为用户 {user_id} 执行画像合并更新...")
+        effective_session = session_id
+        if effective_session is None:
+            sessions = await self.memory.get_user_chat_sessions(
+                user_id=user_id, module=self.module_name, limit=1
+            )
+            if sessions:
+                effective_session = sessions[0].id
+            else:
+                effective_session = self.global_session_id
+
+        logger.info(f"[ProfileBuilder] 开始为用户 {user_id} 执行画像合并更新 (session={effective_session})...")
 
         # 1. 获取【近期对话记录】
-        recent_msgs = self.memory.get_recent_messages(
+        recent_msgs = await self.memory.get_recent_messages(
             user_id=user_id,
-            session_id=self.global_session_id,
+            session_id=effective_session,
             module=self.module_name,
             limit=20  # 获取最近 10 轮(20条)对话作为增量信息
         )
@@ -123,7 +135,7 @@ class ProfileBuilderAgent:
             [f"[{msg.created_at.strftime('%m-%d %H:%M')}] {msg.role}: {msg.content}" for msg in recent_msgs])
 
         # 2. 获取【原有学习画像】
-        current_profile = self.memory.get_user_profile(user_id)
+        current_profile = await self.memory.get_user_profile(user_id)
         current_profile_str = "暂无原有画像（新用户）"
 
         if current_profile:
@@ -158,7 +170,7 @@ class ProfileBuilderAgent:
 
         # 5. 调用 MemoryService 更新数据库 (你的 update_user_profile 会自动处理追加和版本快照)
         try:
-            self.memory.update_user_profile(
+            await self.memory.update_user_profile(
                 user_id=user_id,
                 features=final_features,
                 change_reason="基于近期对话增量合并"

@@ -20,6 +20,7 @@ from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
 from app.utils.tools_manager import tools_manager
+from app.utils.skills_manager import skills_manager
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -60,6 +61,9 @@ class ReadingState(TypedDict, total=False):
     topic: str
     interest_preference: str
     cognitive_style: str
+
+    # 上游 Agent 传递的上下文（DAG 编排）
+    upstream_context: str
 
     # 统一消息历史
     messages: Annotated[list[AnyMessage], add_messages]
@@ -173,6 +177,19 @@ class ReadingAgent:
                 interest_preference=state.get("interest_preference", ""),
                 cognitive_style=state.get("cognitive_style", ""),
             )
+
+            skills_prompt = skills_manager.get_skill_instructions(self.REQUIRED_SKILLS)
+            if skills_prompt:
+                system_prompt += "\n\n" + skills_prompt
+
+            # 注入上游 Agent 上下文（DAG 编排）
+            upstream_ctx = state.get("upstream_context", "")
+            if upstream_ctx:
+                system_prompt += (
+                    "\n\n## [上游智能体协作上下文]\n"
+                    "以下是同一任务中其他智能体已生成的输出，供你参考以推荐与内容配套的阅读材料。\n"
+                    + upstream_ctx
+                )
 
             messages = [
                 SystemMessage(content=system_prompt),
@@ -300,6 +317,7 @@ class ReadingAgent:
         major: str = "通用",
         interest_preference: str = "",
         cognitive_style: str = "",
+        upstream_context: str = "",
     ) -> dict[str, Any]:
         """生成拓展阅读推荐。"""
         logger.info(f"[ReadingAgent] 收到生成请求: topic={topic}")
@@ -312,6 +330,7 @@ class ReadingAgent:
             "topic": topic,
             "interest_preference": interest_preference,
             "cognitive_style": cognitive_style,
+            "upstream_context": upstream_context,
             "messages": [],
             "recommendations_json": "",
             "critique_passed": False,
@@ -338,7 +357,7 @@ class ReadingAgent:
 
         file_path = None
         if parsed:
-            from app.modules.resource_generator.tools.file_saver import save_to_workplace
+            from app.modules.resource.tools.file_saver import save_to_workplace
             import json
             file_path = save_to_workplace("reading", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
 

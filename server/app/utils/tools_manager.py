@@ -20,8 +20,8 @@ from typing import List, Optional
 from langchain_core.tools import BaseTool
 
 from app.core.logging import get_logger
-from app.modules.resource_generator.tools.read_file import read_file_safe
-from app.modules.resource_generator.tools.shell_excute import safe_shell
+from app.modules.resource.tools.read_file import read_file_safe
+from app.modules.resource.tools.shell_excute import safe_shell
 from app.utils.mcp_manager import mcp_manager
 
 logger = get_logger(__name__)

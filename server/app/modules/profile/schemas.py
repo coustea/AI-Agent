@@ -1,11 +1,9 @@
+"""Profile module schemas."""
+
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
-
-
-class ChatRequest(BaseModel):
-    message: str
 
 
 class ProfileResponse(BaseModel):
@@ -51,11 +49,4 @@ class ProfileHistoryItem(BaseModel):
     cognitive_level_score: Optional[int] = None
     profile_summary: Optional[str] = None
     change_reason: Optional[str] = None
-    created_at: Optional[datetime] = None
-
-
-class ChatMessageItem(BaseModel):
-    """单条聊天消息"""
-    role: str
-    content: str
     created_at: Optional[datetime] = None

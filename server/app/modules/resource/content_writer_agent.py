@@ -19,6 +19,7 @@ from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
 from app.utils.tools_manager import tools_manager
+from app.utils.skills_manager import skills_manager
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -40,6 +41,9 @@ class ContentState(TypedDict, total=False):
     course: str
     topic: str
     user_profile: str
+
+    # 上游 Agent 传递的上下文（DAG 编排）
+    upstream_context: str
 
     # 统一消息历史
     messages: Annotated[list[AnyMessage], add_messages]
@@ -204,6 +208,20 @@ class ContentWriter:
                 topic=state.get("topic", ""),
                 user_profile=state.get("user_profile", "{}"),
             )
+            
+            skills_prompt = skills_manager.get_skill_instructions(self.REQUIRED_SKILLS)
+            if skills_prompt:
+                system_msg += "\n\n" + skills_prompt
+
+            # 注入上游 Agent 上下文（DAG 编排）
+            upstream_ctx = state.get("upstream_context", "")
+            if upstream_ctx:
+                system_msg += (
+                    "\n\n## [上游智能体协作上下文]\n"
+                    "以下是同一任务中其他智能体已生成的输出，供你参考以保持内容一致性和互补性。\n"
+                    + upstream_ctx
+                )
+
             messages = [
                 SystemMessage(content=system_msg),
                 HumanMessage(content="请先为这份讲解文档生成一份详细的大纲（列出各章节标题及每节要点的简短描述）。")
@@ -317,6 +335,7 @@ class ContentWriter:
         course: str = "",
         major: str = "通用",
         user_profile: str = "{}",
+        upstream_context: str = "",
     ) -> dict[str, Any]:
         """生成个性化课程讲解文档。"""
         logger.info(f"[ContentAgent] 收到生成请求: topic={topic}")
@@ -328,6 +347,7 @@ class ContentWriter:
             "course": course,
             "topic": topic,
             "user_profile": user_profile,
+            "upstream_context": upstream_context,
             "messages": [],
             "current_step": "outline",
             "outline": "",
@@ -356,7 +376,7 @@ class ContentWriter:
 
         file_path = None
         if success:
-            from app.modules.resource_generator.tools.file_saver import save_to_workplace
+            from app.modules.resource.tools.file_saver import save_to_workplace
             file_path = save_to_workplace("content", topic, content, "md")
 
         return {

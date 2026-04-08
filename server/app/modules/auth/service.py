@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from app.core.logging import get_logger
 from app.core.security import create_token, hash_password, verify_password
 from app.models.user import User
-from app.modules.user.schemas import UserRead, UserRegister, UserUpdate
+from app.modules.auth.schemas import UserRead, UserRegister, UserUpdate
 
 logger = get_logger(__name__)
 

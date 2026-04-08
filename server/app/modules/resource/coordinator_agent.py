@@ -1,12 +1,13 @@
 """
-Coordinator Agent：任务规划 + 并发调度子智能体 + SSE 实时推送。
+Coordinator Agent：DAG 任务规划 + 分阶段编排 + SSE 实时推送。
 
 工作流：
 1. 从数据库读取用户画像
 2. Planner 分析需求 → 拆解为子任务
-3. asyncio.gather 并发执行各子 Agent
-4. 每个 Agent 完成后通过 emitter 推送 SSE 事件
-5. 汇总结果，推送 done
+3. 按 DAG 阶段顺序执行各子 Agent（阶段内并行，阶段间串行）
+4. 后续阶段的 Agent 可获取前置阶段的输出作为上下文
+5. 每个 Agent 完成后通过 emitter 推送 SSE 事件
+6. 汇总结果，推送 done
 """
 
 import os
@@ -20,14 +21,14 @@ from sqlmodel import Session
 
 from app.core.engine import engine
 from app.core.logging import get_logger
-from app.models.profile_builder import UserProfile
-from app.modules.resource_generator.sse import AgentEventEmitter
-from app.modules.resource_generator.mindmap_agent import mindmap_generator
-from app.modules.resource_generator.content_writer_agent import content_writer
-from app.modules.resource_generator.quiz_agent import quiz_agent
-from app.modules.resource_generator.reading_agent import reading_agent
-from app.modules.resource_generator.code_agent import code_agent
-from app.modules.resource_generator.media_agent import media_agent
+from app.models.profile import UserProfile
+from app.modules.resource.sse import AgentEventEmitter
+from app.modules.resource.mindmap_agent import mindmap_generator
+from app.modules.resource.content_writer_agent import content_writer
+from app.modules.resource.quiz_agent import quiz_agent
+from app.modules.resource.reading_agent import reading_agent
+from app.modules.resource.code_agent import code_agent
+from app.modules.resource.media_agent import media_agent
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -93,12 +94,31 @@ AGENT_REGISTRY = {
     },
 }
 
+# ==========================================
+# DAG 阶段配置
+# ==========================================
+DAG_PHASES = [
+    {"name": "foundation", "label": "知识框架构建", "agents": ["mindmap"]},
+    {"name": "core", "label": "核心资源生成", "agents": ["content", "code"]},
+    {"name": "enrichment", "label": "拓展资源丰富", "agents": ["quiz", "reading", "media"]},
+]
+
+# 每个 Agent 依赖哪些上游 Agent 的输出
+AGENT_CONTEXT_DEPS: dict[str, list[str]] = {
+    "mindmap": [],
+    "content": ["mindmap"],
+    "code": ["mindmap"],
+    "quiz": ["content"],
+    "reading": ["content"],
+    "media": ["content", "mindmap"],
+}
+
 
 # ==========================================
 # Coordinator Agent
 # ==========================================
 class CoordinatorAgent:
-    """调度中心：规划任务 → 并发执行 → 实时推送。"""
+    """调度中心：规划任务 → DAG 分阶段执行 → 实时推送。"""
 
     def __init__(self, emitter: AgentEventEmitter):
         self.emitter = emitter
@@ -148,7 +168,7 @@ class CoordinatorAgent:
     @staticmethod
     def _default_tasks(task: dict) -> list[dict]:
         """规划失败时的降级默认任务。"""
-        agents = ["content", "mindmap", "quiz", "reading", "media", "code"]
+        agents = ["mindmap", "content", "code", "quiz", "reading", "media"]
         return [
             {
                 "agent": a,
@@ -166,9 +186,40 @@ class CoordinatorAgent:
         ]
 
     # ------------------------------------------
-    # 2. 执行单个子智能体（调度到 Agent 单例）
+    # 2. 构建上游上下文
     # ------------------------------------------
-    async def _run_agent(self, agent_name: str, params: dict, profile: dict) -> dict:
+    @staticmethod
+    def _build_upstream_context(agent_name: str, context_bag: dict) -> str:
+        """从已完成的 Agent 结果中提取上下文，供下游 Agent 参考。"""
+        deps = AGENT_CONTEXT_DEPS.get(agent_name, [])
+        if not deps:
+            return ""
+
+        parts: list[str] = []
+        for dep in deps:
+            dep_result = context_bag.get(dep)
+            if not dep_result:
+                continue
+
+            dep_label = AGENT_REGISTRY.get(dep, {}).get("desc", dep)
+            # 截取关键内容，避免 token 过长
+            summary = json.dumps(dep_result, ensure_ascii=False, indent=2)
+            if len(summary) > 3000:
+                summary = summary[:3000] + "\n... (内容已截断)"
+            parts.append(f"## [{dep_label} 输出]\n{summary}")
+
+        return "\n\n".join(parts) if parts else ""
+
+    # ------------------------------------------
+    # 3. 执行单个子智能体
+    # ------------------------------------------
+    async def _run_agent(
+        self,
+        agent_name: str,
+        params: dict,
+        profile: dict,
+        upstream_context: str = "",
+    ) -> dict:
         """执行一个子智能体，推送 SSE 事件。"""
         agent_id = AGENT_REGISTRY.get(agent_name, {}).get("type", agent_name)
 
@@ -181,6 +232,7 @@ class CoordinatorAgent:
                     topic=params.get("topic", ""),
                     major=params.get("major", ""),
                     course=params.get("course", ""),
+                    upstream_context=upstream_context,
                 )
 
             elif agent_name == "content":
@@ -189,6 +241,7 @@ class CoordinatorAgent:
                     major=params.get("major", ""),
                     course=params.get("course", ""),
                     user_profile=json.dumps(profile, ensure_ascii=False),
+                    upstream_context=upstream_context,
                 )
 
             elif agent_name == "quiz":
@@ -199,6 +252,7 @@ class CoordinatorAgent:
                     gap=params.get("gap", ""),
                     knowledge_level=profile.get("knowledge_level", "中等") or "中等",
                     error_pattern=profile.get("error_pattern", "") or "",
+                    upstream_context=upstream_context,
                 )
 
             elif agent_name == "reading":
@@ -208,6 +262,7 @@ class CoordinatorAgent:
                     course=params.get("course", ""),
                     interest_preference=profile.get("interest_preference", "") or "",
                     cognitive_style=profile.get("cognitive_style", "") or "",
+                    upstream_context=upstream_context,
                 )
 
             elif agent_name == "code":
@@ -218,6 +273,7 @@ class CoordinatorAgent:
                     gap=params.get("gap", ""),
                     knowledge_level=profile.get("knowledge_level", "中等") or "中等",
                     learning_pace=profile.get("learning_pace", "中等") or "中等",
+                    upstream_context=upstream_context,
                 )
 
             elif agent_name == "media":
@@ -227,6 +283,7 @@ class CoordinatorAgent:
                     course=params.get("course", ""),
                     gap=params.get("gap", ""),
                     cognitive_style=profile.get("cognitive_style", "通用") or "通用",
+                    upstream_context=upstream_context,
                 )
 
             else:
@@ -242,7 +299,7 @@ class CoordinatorAgent:
             return {}
 
     # ------------------------------------------
-    # 3. 主入口：规划 → 并发执行 → 汇总
+    # 4. 主入口：规划 → DAG 分阶段执行 → 汇总
     # ------------------------------------------
     async def run(self, user_id: int, task: dict) -> dict:
         """
@@ -260,26 +317,91 @@ class CoordinatorAgent:
         # 2. 规划
         tasks = await self._plan(task, profile)
         await self.emitter.emit_coordinator(
-            "dispatching", f"任务拆解完成，共 {len(tasks)} 个子任务，开始并发调度..."
+            "dispatching", f"任务拆解完成，共 {len(tasks)} 个子任务，开始 DAG 分阶段调度..."
         )
 
-        # 3. 并发执行所有子智能体
-        coroutines = [
-            self._run_agent(t["agent"], t.get("parameters", {}), profile)
-            for t in tasks
-        ]
-        results = await asyncio.gather(*coroutines, return_exceptions=True)
+        # 3. 构建按 agent 名索引的任务查找表
+        task_by_agent: dict[str, dict] = {t["agent"]: t for t in tasks}
 
-        # 4. 汇总
+        # 4. 按 DAG 阶段顺序执行
+        context_bag: dict[str, dict] = {}
+        final: dict[str, dict] = {}
+
+        for phase in DAG_PHASES:
+            phase_agents = phase["agents"]
+            # 只执行规划器选中的 Agent
+            active_in_phase = [a for a in phase_agents if a in task_by_agent]
+
+            if not active_in_phase:
+                continue
+
+            await self.emitter.emit_coordinator(
+                f"phase_{phase['name']}",
+                f"阶段 [{phase['label']}]：正在执行 {', '.join(active_in_phase)}...",
+            )
+
+            coroutines = []
+            for agent_name in active_in_phase:
+                upstream_ctx = self._build_upstream_context(agent_name, context_bag)
+                coroutines.append(
+                    self._run_agent(
+                        agent_name,
+                        task_by_agent[agent_name].get("parameters", {}),
+                        profile,
+                        upstream_context=upstream_ctx,
+                    )
+                )
+
+            phase_results = await asyncio.gather(*coroutines, return_exceptions=True)
+
+            # 收集结果到 context_bag 和 final
+            for agent_name, result in zip(active_in_phase, phase_results):
+                if isinstance(result, Exception):
+                    final[agent_name] = {"error": str(result)}
+                else:
+                    final[agent_name] = result
+                    # 只有成功的非空结果才放入 context_bag 供下游参考
+                    if result:
+                        context_bag[agent_name] = result
+
+        # 5. 汇总
         await self.emitter.emit_coordinator("integrating", "正在组装学习资源包...")
 
-        final = {}
-        for t, r in zip(tasks, results):
-            agent_name = t["agent"]
-            if isinstance(r, Exception):
-                final[agent_name] = {"error": str(r)}
-            else:
-                final[agent_name] = r
+        # 6. 持久化到数据库
+        try:
+            await self._save_resource(user_id, task, final)
+        except Exception as e:
+            logger.error(f"[Coordinator] 保存资源记录失败: {e}")
 
         await self.emitter.emit_done("资源包构建完成")
         return final
+
+    @staticmethod
+    async def _save_resource(user_id: int, task: dict, results: dict) -> None:
+        """将生成结果保存到 generated_resources 表"""
+        import json
+        from sqlmodel.ext.asyncio.session import AsyncSession
+        from app.models.resource import GeneratedResource
+
+        async with AsyncSession(engine) as session:
+            def _serialize(data: dict | None) -> str | None:
+                if not data:
+                    return None
+                return json.dumps(data, ensure_ascii=False)
+
+            resource = GeneratedResource(
+                user_id=user_id,
+                course=task.get("course", ""),
+                gap=task.get("gap", ""),
+                need=task.get("need", "review"),
+                extra=task.get("extra", ""),
+                mindmap_result=_serialize(results.get("mindmap")),
+                content_result=_serialize(results.get("content")),
+                code_result=_serialize(results.get("code")),
+                quiz_result=_serialize(results.get("quiz")),
+                reading_result=_serialize(results.get("reading")),
+                media_result=_serialize(results.get("media")),
+            )
+            session.add(resource)
+            await session.commit()
+            logger.info(f"[Coordinator] 资源记录已保存: user={user_id}, id={resource.id}")

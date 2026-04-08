@@ -1,59 +1,22 @@
-import asyncio
+"""Profile 路由：画像查询 + 画像历史。"""
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
 
 from app.core.response import HttpResponse
 from app.core.security import get_current_user
 from app.models.user import User
-from app.modules.memory.service import memory_service
-from app.modules.profile_builder.chat_agent import chat_agent
-from app.modules.profile_builder.profile_agent import profile_agent
-from app.modules.profile_builder.schema import (
-    ChatMessageItem,
-    ChatRequest,
-    ProfileHistoryItem,
-    ProfileResponse,
-)
+from app.services.memory import memory_service
+from app.modules.profile.schemas import ProfileHistoryItem, ProfileResponse
 
 router = APIRouter()
-
-# 触发画像更新的消息阈值 (每 2 条消息，即一轮对话后)
-PROFILE_THRESHOLD = 2
-# 新用户首次触发的消息数
-EARLY_TRIGGER = 2
-
-@router.post("/chat/stream")
-async def chat_stream_endpoint(
-    req: ChatRequest,
-    current_user: User = Depends(get_current_user),
-):
-    generator = chat_agent.chat_stream(user_id=current_user.id, user_message=req.message)
-
-    # 获取消息计数，决定是否触发后台任务
-    msg_count = memory_service.get_message_count(
-        user_id=current_user.id,
-        session_id=chat_agent.global_session_id,
-        module=chat_agent.module_name,
-    )
-
-    should_trigger = (
-        msg_count == EARLY_TRIGGER  # 新用户首次触发（第 3 条消息）
-        or (msg_count > 0 and msg_count % PROFILE_THRESHOLD == 0)  # 常规周期触发
-    )
-
-    if should_trigger:
-        asyncio.create_task(profile_agent.build_profile(user_id=current_user.id))
-
-    return StreamingResponse(generator, media_type="text/event-stream")
-
 
 
 @router.get("/profile")
 async def get_profile(
     current_user: User = Depends(get_current_user),
 ):
-    profile = memory_service.get_user_profile(current_user.id)
+    """获取当前用户画像。"""
+    profile = await memory_service.get_user_profile(current_user.id)
     if not profile:
         return HttpResponse.success(data=None, message="暂无画像数据")
 
@@ -80,13 +43,13 @@ async def get_profile(
     return HttpResponse.success(data=data)
 
 
-
 @router.get("/profile/history")
 async def get_profile_history(
     limit: int = Query(default=20, ge=1, le=100, description="返回的历史条数"),
     current_user: User = Depends(get_current_user),
 ):
-    history = memory_service.get_profile_history(current_user.id, limit=limit)
+    """获取画像变更历史。"""
+    history = await memory_service.get_profile_history(current_user.id, limit=limit)
     if not history:
         return HttpResponse.success(data=[], message="暂无变更历史")
 
@@ -114,29 +77,5 @@ async def get_profile_history(
             created_at=h.created_at,
         )
         for h in history
-    ]
-    return HttpResponse.success(data=items)
-
-
-
-@router.get("/chat/history")
-async def get_chat_history(
-    limit: int = Query(default=50, ge=1, le=200, description="返回的消息条数"),
-    current_user: User = Depends(get_current_user),
-):
-    messages = memory_service.get_recent_messages(
-        user_id=current_user.id,
-        session_id=chat_agent.global_session_id,
-        module=chat_agent.module_name,
-        limit=limit,
-    )
-
-    items = [
-        ChatMessageItem(
-            role=msg.role,
-            content=msg.content,
-            created_at=msg.created_at,
-        )
-        for msg in messages
     ]
     return HttpResponse.success(data=items)

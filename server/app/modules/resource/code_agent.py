@@ -20,6 +20,7 @@ from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
 from app.utils.tools_manager import tools_manager
+from app.utils.skills_manager import skills_manager
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -43,6 +44,9 @@ class CodeState(TypedDict, total=False):
     gap: str
     knowledge_level: str
     learning_pace: str
+
+    # 上游 Agent 传递的上下文（DAG 编排）
+    upstream_context: str
 
     # 统一的消息历史
     messages: Annotated[list[AnyMessage], add_messages]
@@ -165,6 +169,19 @@ class CodeAgent:
                 learning_pace=state.get("learning_pace", "中等"),
             )
 
+            skills_prompt = skills_manager.get_skill_instructions(self.REQUIRED_SKILLS)
+            if skills_prompt:
+                system_prompt += "\n\n" + skills_prompt
+
+            # 注入上游 Agent 上下文（DAG 编排）
+            upstream_ctx = state.get("upstream_context", "")
+            if upstream_ctx:
+                system_prompt += (
+                    "\n\n## [上游智能体协作上下文]\n"
+                    "以下是同一任务中其他智能体已生成的输出，供你参考以保持代码案例与知识框架的一致性。\n"
+                    + upstream_ctx
+                )
+
             instruction = (
                 "\n\n【重要指令】\n"
                 "1. 请首先思考并生成对应的实操代码。\n"
@@ -239,6 +256,7 @@ class CodeAgent:
         gap: str = "",
         knowledge_level: str = "中等",
         learning_pace: str = "中等",
+        upstream_context: str = "",
     ) -> dict[str, Any]:
         """生成可运行的代码实操案例。"""
         logger.info(f"[CodeAgent] 收到生成请求: topic={topic}")
@@ -252,6 +270,7 @@ class CodeAgent:
             "gap": gap,
             "knowledge_level": knowledge_level,
             "learning_pace": learning_pace,
+            "upstream_context": upstream_context,
             "messages": [],
             "code_content": "",
             "detected_language": "unknown",
@@ -277,7 +296,7 @@ class CodeAgent:
 
         file_path = None
         if explained:
-            from app.modules.resource_generator.tools.file_saver import save_to_workplace
+            from app.modules.resource.tools.file_saver import save_to_workplace
             file_path = save_to_workplace("code", topic, explained, "md")
 
         return {

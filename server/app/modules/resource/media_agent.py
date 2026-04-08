@@ -18,6 +18,7 @@ from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
 from app.utils.tools_manager import tools_manager
+from app.utils.skills_manager import skills_manager
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -40,6 +41,9 @@ class MediaState(TypedDict, total=False):
     topic: str
     gap: str
     cognitive_style: str
+
+    # 上游 Agent 传递的上下文（DAG 编排）
+    upstream_context: str
 
     # 统一消息历史
     messages: Annotated[list[AnyMessage], add_messages]
@@ -179,6 +183,19 @@ class MediaAgent:
                 cognitive_style=state.get("cognitive_style", "通用"),
             )
 
+            skills_prompt = skills_manager.get_skill_instructions(self.REQUIRED_SKILLS)
+            if skills_prompt:
+                system_prompt += "\n\n" + skills_prompt
+
+            # 注入上游 Agent 上下文（DAG 编排）
+            upstream_ctx = state.get("upstream_context", "")
+            if upstream_ctx:
+                system_prompt += (
+                    "\n\n## [上游智能体协作上下文]\n"
+                    "以下是同一任务中其他智能体已生成的输出，供你参考以设计与内容配套的教学脚本。\n"
+                    + upstream_ctx
+                )
+
             messages = [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=f"请为主题 '{state.get('topic')}' 生成一份多模态教学脚本。")
@@ -277,6 +294,7 @@ class MediaAgent:
         major: str = "通用",
         gap: str = "",
         cognitive_style: str = "通用",
+        upstream_context: str = "",
     ) -> dict[str, Any]:
         """生成多模态教学脚本。"""
         logger.info(f"[MediaAgent] 收到生成请求: topic={topic}")
@@ -289,6 +307,7 @@ class MediaAgent:
             "topic": topic,
             "gap": gap,
             "cognitive_style": cognitive_style,
+            "upstream_context": upstream_context,
             "messages": [],
             "script_content": "",
             "validation_passed": False,
@@ -312,7 +331,7 @@ class MediaAgent:
         
         file_path = None
         if content:
-            from app.modules.resource_generator.tools.file_saver import save_to_workplace
+            from app.modules.resource.tools.file_saver import save_to_workplace
             file_path = save_to_workplace("media", topic, content, "md")
 
         return {

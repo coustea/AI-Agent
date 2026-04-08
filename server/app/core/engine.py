@@ -1,9 +1,11 @@
 import os
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # .env 在 server 目录下
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -16,9 +18,9 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "Aa123456")
 DB_NAME = os.getenv("DB_NAME", "agent")
 DB_ECHO = os.getenv("DB_ECHO", "false").lower() == "true"
 
-mysql_url = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+mysql_url = f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-engine = create_engine(
+engine = create_async_engine(
     mysql_url,
     echo=DB_ECHO,
     pool_pre_ping=True,
@@ -27,15 +29,17 @@ engine = create_engine(
 APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() == "true"
 
 
-def init_db() -> None:
+async def init_db() -> None:
     """导入所有模型并创建表"""
     import app.models  # noqa: F401
 
     if APP_DEBUG:
-        SQLModel.metadata.drop_all(engine)
-    SQLModel.metadata.create_all(engine)
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.drop_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
 
 
-def get_session() -> Generator[Session, None, None]:
-    with Session(engine) as session:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSession(engine) as session:
         yield session

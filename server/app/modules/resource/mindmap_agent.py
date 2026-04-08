@@ -17,6 +17,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
+from app.utils.skills_manager import skills_manager
 from app.utils.tools_manager import tools_manager
 
 load_dotenv()
@@ -42,6 +43,9 @@ class MindmapState(TypedDict, total=False):
     gap: str
     need: str
     extra: str
+
+    # 上游 Agent 传递的上下文（DAG 编排）
+    upstream_context: str
 
     # 统一的消息历史
     messages: Annotated[list[AnyMessage], add_messages]
@@ -139,6 +143,19 @@ class MindmapGenerator:
                 extra=extra,
             )
             
+            skills_prompt = skills_manager.get_skill_instructions(self.REQUIRED_SKILLS)
+            if skills_prompt:
+                system_msg += "\n\n" + skills_prompt
+
+            # 注入上游 Agent 上下文（DAG 编排）
+            upstream_ctx = state.get("upstream_context", "")
+            if upstream_ctx:
+                system_msg += (
+                    "\n\n## [上游智能体协作上下文]\n"
+                    "以下是同一任务中其他智能体已生成的输出，供你参考以保持内容一致性。\n"
+                    + upstream_ctx
+                )
+            
             instruction = (
                 "\n\n【重要指令】\n"
                 "1. 请首先思考并直接调用 `markdown_to_mindmap` 工具，将你构思好的 Markdown 思维导图内容作为参数传入并生成 HTML。\n"
@@ -217,6 +234,7 @@ class MindmapGenerator:
         major: str = "通用",
         need: str = "review",
         extra: str = "",
+        upstream_context: str = "",
     ) -> Dict[str, Any]:
         """生成思维导图。"""
         logger.info(f"[MindmapAgent] 收到生成请求: gap={gap}")
@@ -229,6 +247,7 @@ class MindmapGenerator:
             "gap": gap,
             "need": need,
             "extra": extra,
+            "upstream_context": upstream_context,
             "messages": [],
             "file_path": None,
             "html_content": None,

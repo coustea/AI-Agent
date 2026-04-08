@@ -20,6 +20,7 @@ from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
 from app.utils.tools_manager import tools_manager
+from app.utils.skills_manager import skills_manager
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -62,6 +63,9 @@ class QuizState(TypedDict, total=False):
     gap: str
     knowledge_level: str
     error_pattern: str
+
+    # 上游 Agent 传递的上下文（DAG 编排）
+    upstream_context: str
 
     # 统一消息历史
     messages: Annotated[list[AnyMessage], add_messages]
@@ -176,6 +180,15 @@ class QuizAgent:
                 knowledge_level=state.get("knowledge_level", "中等"),
                 error_pattern=state.get("error_pattern", ""),
             )
+
+            # 注入上游 Agent 上下文（DAG 编排）
+            upstream_ctx = state.get("upstream_context", "")
+            if upstream_ctx:
+                system_prompt += (
+                    "\n\n## [上游智能体协作上下文]\n"
+                    "以下是同一任务中其他智能体已生成的输出，供你参考以保持题目与讲解内容的一致性。\n"
+                    + upstream_ctx
+                )
 
             messages = [
                 SystemMessage(content=system_prompt),
@@ -294,6 +307,7 @@ class QuizAgent:
         gap: str = "",
         knowledge_level: str = "中等",
         error_pattern: str = "",
+        upstream_context: str = "",
     ) -> dict[str, Any]:
         """生成分层练习题。"""
         logger.info(f"[QuizAgent] 收到生成请求: topic={topic}")
@@ -307,6 +321,7 @@ class QuizAgent:
             "gap": gap,
             "knowledge_level": knowledge_level,
             "error_pattern": error_pattern,
+            "upstream_context": upstream_context,
             "messages": [],
             "questions_json": "",
             "validation_passed": False,
@@ -333,7 +348,7 @@ class QuizAgent:
 
         file_path = None
         if parsed:
-            from app.modules.resource_generator.tools.file_saver import save_to_workplace
+            from app.modules.resource.tools.file_saver import save_to_workplace
             import json
             file_path = save_to_workplace("quiz", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
 

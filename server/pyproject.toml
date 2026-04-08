@@ -27,6 +27,7 @@ dependencies = [
     "markdown>=3.10.2",
     "chromadb>=0.6.3",
     "langchain-chroma>=0.2.2",
+    "aiomysql",
 ]
 
 [dependency-groups]
