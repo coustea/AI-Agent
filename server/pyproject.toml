@@ -25,6 +25,8 @@ dependencies = [
     "langchain-unstructured>=1.0.1",
     "unstructured>=0.22.16",
     "markdown>=3.10.2",
+    "chromadb>=0.6.3",
+    "langchain-chroma>=0.2.2",
 ]
 
 [dependency-groups]

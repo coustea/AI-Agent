@@ -14,6 +14,7 @@ from app.core.logging import get_logger, setup_logging
 from app.modules.user.router import router as user_router
 from app.modules.profile_builder.router import router as profile_router
 from app.modules.resource_generator.router import router as resource_router
+from app.modules.knowledge_base.router import router as knowledge_router
 from app.utils.mcp_manager import mcp_manager
 from app.utils.skills_manager import skills_manager
 logger = get_logger(__name__)
@@ -50,6 +51,7 @@ app.add_middleware(
 app.include_router(user_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(profile_router,prefix="/api/v1/ai",tags=["profile_builder"])
 app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource_generator"])
+app.include_router(knowledge_router, prefix="/api/v1/knowledge", tags=["knowledge_base"])
 
 
 @app.exception_handler(Exception)
