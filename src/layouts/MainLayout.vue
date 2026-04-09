@@ -114,7 +114,7 @@ const router = useRouter()
 
 const navItems = [
   { path: '/dashboard', label: '全景中枢', icon: Menu, id: 'NODE_01' },
-  { path: '/profile-assistant', label: '动态画像', icon: Odometer, id: 'NODE_02' },
+  { path: '/tutor', label: '智能辅导', icon: Odometer, id: 'NODE_02' },
   { path: '/path-planner', label: '路径规划', icon: Connection, id: 'NODE_03' },
   { path: '/resource-generator', label: '资源引擎', icon: Cpu, id: 'NODE_04' },
   { path: '/evaluation', label: '多维评估', icon: DataLine, id: 'NODE_05' },

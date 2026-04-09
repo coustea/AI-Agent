@@ -113,7 +113,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Connection, Lightning, Opportunity, TrendCharts,
+  Lightning, Opportunity, TrendCharts,
   VideoPlay, Monitor, Document, Cpu, EditPen,
   ArrowRight, Warning, Aim
 } from '@element-plus/icons-vue'

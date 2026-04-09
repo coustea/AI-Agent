@@ -12,10 +12,10 @@ from langchain_community.document_loaders import (
     Docx2txtLoader,
     UnstructuredMarkdownLoader,
 )
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from app.core.logging import get_logger
 

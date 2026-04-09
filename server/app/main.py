@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.engine import init_db
 from app.core.logging import get_logger, setup_logging
@@ -40,6 +41,10 @@ async def lifespan(app: FastAPI):
     skills_manager.load_all_skills()
     logger.info("Agent skills loaded")
 
+    # 确保上传目录存在并挂载静态文件
+    upload_dir = Path("workplace/chat-uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
     yield
     logger.info("Application shutting down")
 
@@ -60,6 +65,11 @@ app.include_router(chat_router, prefix="/api/v1/ai", tags=["chat"])
 app.include_router(profile_router, prefix="/api/v1/ai", tags=["profile"])
 app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 app.include_router(knowledge_router, prefix="/api/v1/knowledge", tags=["knowledge_base"])
+
+# 静态文件：上传的文件（确保目录存在再挂载）
+_chat_upload_dir = Path("workplace/chat-uploads")
+_chat_upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_chat_upload_dir)), name="uploads")
 
 
 @app.exception_handler(Exception)

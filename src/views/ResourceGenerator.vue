@@ -204,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive } from 'vue'
 import {
   DataBoard, Edit, Document, Cpu, Operation, CircleCheckFilled,
   Loading, PictureRounded, Connection, Guide, Collection, Clock,

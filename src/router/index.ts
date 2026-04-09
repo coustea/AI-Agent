@@ -3,7 +3,6 @@ import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import MainLayout from '../layouts/MainLayout.vue'
 import Home from '../views/Home.vue'
-import ProfileAssistant from '../views/ProfileAssistant.vue'
 import ResourceGenerator from '../views/ResourceGenerator.vue'
 import PathPlanner from '../views/PathPlanner.vue'
 import Tutor from '../views/Tutor.vue'
@@ -18,7 +17,6 @@ const routes = [
     component: MainLayout,
     children: [
       { path: 'dashboard', name: 'Dashboard', component: Home },
-      { path: 'profile-assistant', name: 'ProfileAssistant', component: ProfileAssistant },
       { path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator },
       { path: 'path-planner', name: 'PathPlanner', component: PathPlanner },
       { path: 'tutor', name: 'Tutor', component: Tutor },
@@ -32,14 +30,14 @@ const router = createRouter({
   routes
 })
 
-// 简单的路由守卫（网络通信拦截，无token会跳转到登录）
-// router.beforeEach((to, from, next) => {
-//   const token = localStorage.getItem('token')
-//   if (to.path !== '/login' && to.path !== '/register' && !token) {
-//     next('/login')
-//   } else {
-//     next()
-//   }
-// })
+// 路由守卫（无 token 跳转到登录页）
+router.beforeEach((to, _from, next) => {
+  const token = localStorage.getItem('token')
+  if (to.path !== '/login' && to.path !== '/register' && !token) {
+    next('/login')
+  } else {
+    next()
+  }
+})
 
 export default router

@@ -5,7 +5,8 @@ import bcrypt
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import get_session
 from app.core.logging import get_logger
@@ -32,7 +33,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
-def create_token(user_id: int, session: Session) -> str:
+async def create_token(user_id: int, session: AsyncSession) -> str:
     """签发 JWT 并写入 ActiveToken 白名单"""
     expire = datetime.now(timezone.utc) + timedelta(days=EXPIRE_DAYS)
     payload = {"sub": str(user_id), "exp": expire}
@@ -44,7 +45,7 @@ def create_token(user_id: int, session: Session) -> str:
         expires_at=expire,
     )
     session.add(active_token)
-    session.commit()
+    await session.commit()
 
     logger.info("Token created for user_id=%s", user_id)
     return token
@@ -60,57 +61,57 @@ def decode_token(token: str) -> int:
         raise HTTPException(status_code=401, detail="无效 Token")
 
 
-def is_token_valid(token: str, session: Session) -> bool:
+async def is_token_valid(token: str, session: AsyncSession) -> bool:
     """检查 token 是否在白名单中且未过期"""
-    active_token = session.exec(
+    active_token = (await session.exec(
         select(ActiveToken).where(ActiveToken.token == token)
-    ).first()
+    )).first()
     if not active_token:
         return False
-    # 双重检查：JWT 本身的过期 + 白名单记录的过期时间
-    if active_token.expires_at < datetime.utcnow():
-        session.delete(active_token)
-        session.commit()
+    if active_token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        await session.delete(active_token)
+        await session.commit()
         return False
     return True
 
 
-def revoke_token(token: str, session: Session) -> None:
+async def revoke_token(token: str, session: AsyncSession) -> None:
     """从白名单中移除 token（登出）"""
-    active_token = session.exec(
+    active_token = (await session.exec(
         select(ActiveToken).where(ActiveToken.token == token)
-    ).first()
+    )).first()
     if active_token:
-        session.delete(active_token)
-        session.commit()
+        await session.delete(active_token)
+        await session.commit()
         logger.info("Token revoked for user_id=%s", active_token.user_id)
 
 
-def cleanup_expired_tokens(session: Session) -> int:
+async def cleanup_expired_tokens(session: AsyncSession) -> int:
     """清理所有已过期的 token 记录，返回清理数量"""
-    now = datetime.now(timezone.utc)
-    expired = session.exec(
+    now = datetime.now()
+    expired = (await session.exec(
         select(ActiveToken).where(ActiveToken.expires_at < now)
-    ).all()
+    )).all()
     for t in expired:
-        session.delete(t)
-    session.commit()
+        await session.delete(t)
+    await session.commit()
     if expired:
         logger.info("Cleaned up %d expired tokens", len(expired))
     return len(expired)
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
 ) -> User:
     token = credentials.credentials
 
-    if not is_token_valid(token, session):
+    if not await is_token_valid(token, session):
         raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
 
     user_id = decode_token(token)
-    user = session.get(User, user_id)
+    user = await session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
+    await session.refresh(user)
     return user

@@ -19,6 +19,8 @@ class ChatSession(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.now)
 
 
+
+
 class ChatMessage(SQLModel, table=True):
     """短期记忆表：存储用户的原始聊天记录，达到阈值后总结为长期记忆并清理"""
     __tablename__ = "chat_messages"
@@ -27,6 +29,9 @@ class ChatMessage(SQLModel, table=True):
     user_id: int = Field(index=True)  # 关联用户 ID
     session_id: str = Field(index=True)  # 对话会话 ID，强关联到 ChatSession.id
     module: str = Field(default="profile_builder", index=True)  # 所属模块：profile_builder / tutor / ...
-    role: str  # 消息角色：user / assistant / system
+    role: str  # 消息角色：user / assistant / tool
     content: str = Field(sa_column=Column(Text))  # 消息内容
+    attachments: str | None = Field(default=None, sa_column=Column(Text))  # JSON: [{"url": "/uploads/1/abc.pdf", "type": "document", "name": "report.pdf"}]
+    tool_calls: str | None = Field(default=None, sa_column=Column(Text))  # JSON: 记录该消息触发的工具调用链
+    # 格式: [{"tool": "read_uploaded_file", "args": {"file_url": "/uploads/1/a.pdf"}, "result": "文件内容...", "status": "success"}]
     created_at: datetime = Field(default_factory=datetime.now, index=True)  # 创建时间

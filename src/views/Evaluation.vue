@@ -87,9 +87,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { 
-  Check, 
-  Close, 
-  TrendCharts, 
   DataAnalysis, 
   Medal,
   Calendar
