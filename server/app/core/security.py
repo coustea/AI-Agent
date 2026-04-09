@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 
 from app.core.dependencies import get_session
 from app.core.logging import get_logger
-from app.models.common import ActiveToken
+from app.models.auth import ActiveToken
 from app.models.user import User
 
 logger = get_logger(__name__)

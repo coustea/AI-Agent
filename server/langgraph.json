@@ -1,7 +1,0 @@
-{
-  "python_version": "3.13",
-  "dependencies": ["."],
-  "graphs": {
-    "profile_builder": "./app/modules/profile_builder/graph.py:graph"
-  }
-}

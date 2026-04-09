@@ -1,0 +1,32 @@
+from datetime import datetime
+import uuid
+
+from sqlalchemy import Text, Column
+from sqlmodel import SQLModel, Field
+
+
+class ChatSession(SQLModel, table=True):
+    """会话表：管理多会话隔离"""
+    __tablename__ = "chat_sessions"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)  # UUID 形式的会话 ID
+    user_id: int = Field(index=True)   # 所属用户
+    module: str = Field(index=True)    # 所属模块 (如 "mentor", "profile_builder")
+    title: str = Field(default="新对话", max_length=100) # 会话标题（可以用 LLM 根据第一句话自动生成）
+    is_archived: bool = Field(default=False) # 是否已归档/删除
+
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+
+class ChatMessage(SQLModel, table=True):
+    """短期记忆表：存储用户的原始聊天记录，达到阈值后总结为长期记忆并清理"""
+    __tablename__ = "chat_messages"
+
+    id: int | None = Field(default=None, primary_key=True)  # 自增主键
+    user_id: int = Field(index=True)  # 关联用户 ID
+    session_id: str = Field(index=True)  # 对话会话 ID，强关联到 ChatSession.id
+    module: str = Field(default="profile_builder", index=True)  # 所属模块：profile_builder / tutor / ...
+    role: str  # 消息角色：user / assistant / system
+    content: str = Field(sa_column=Column(Text))  # 消息内容
+    created_at: datetime = Field(default_factory=datetime.now, index=True)  # 创建时间
