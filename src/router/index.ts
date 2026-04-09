@@ -32,14 +32,14 @@ const router = createRouter({
   routes
 })
 
-// Simple Route Guard
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
-  if (to.path !== '/login' && to.path !== '/register' && !token) {
-    next('/login')
-  } else {
-    next()
-  }
-})
+// 简单的路由守卫（网络通信拦截，无token会跳转到登录）
+// router.beforeEach((to, from, next) => {
+//   const token = localStorage.getItem('token')
+//   if (to.path !== '/login' && to.path !== '/register' && !token) {
+//     next('/login')
+//   } else {
+//     next()
+//   }
+// })
 
 export default router
