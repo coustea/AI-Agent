@@ -1,40 +1,87 @@
 """
 基础资源 Agent 类。
-提供统一的 LangGraph 工作流、工具加载、重试机制和强大的三层记忆结构（情景、长效、黑板）。
+提供统一的 LangGraph 工作流、工具加载、重试机制和三层记忆结构（情景、长效、黑板）。
+
+每个 Agent 拥有独立目录，自动从目录中加载：
+  - prompt.md       → 系统提示词模板
+  - mcp/settings.json → MCP 服务配置
+  - skills/         → 技能文件（SKILL.md）
+  - tools/          → 本地工具（@tool 装饰器函数）
 """
 
+import asyncio
+import importlib
+import json
 import os
+import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, TypedDict, Optional, Annotated
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, AnyMessage
+from langchain_core.tools import BaseTool
 from langgraph.graph.message import add_messages
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
-from app.utils.tools_manager import tools_manager
-from app.utils.skills_manager import skills_manager
+from app.utils.paths import SKILLS_DIR, WORKPLACE_DIR
+from app.utils.plugin_manager import PluginManager
 
 load_dotenv()
 logger = get_logger(__name__)
 
+# ──────────────────────────────────────────────────────────────
+# 常量定义
+# ──────────────────────────────────────────────────────────────
+
+
+class BlackboardKeys:
+    """黑板共享内存的标准键名常量"""
+    CONTENT = "content"
+    MINDMAP = "mindmap"
+    CODE = "code"
+    QUIZ = "quiz"
+    READING = "reading"
+    MEDIA = "media"
+    PPT = "ppt"
+
+    @classmethod
+    def all_keys(cls) -> list[str]:
+        """获取所有标准键名"""
+        return [cls.CONTENT, cls.MINDMAP, cls.CODE, cls.QUIZ, cls.READING, cls.MEDIA, cls.PPT]
+
+
+# ──────────────────────────────────────────────────────────────
+# State 定义
+# ──────────────────────────────────────────────────────────────
+
+
 class BaseAgentState(TypedDict, total=False):
-    """基础 Agent 状态字典，包含三层记忆架构。子类可继承此字典扩展内部字段。"""
+    """基础 Agent 状态字典，包含三层记忆架构。子类可继承此字典扩展内部字段。
+
+    字段语义说明：
+      - major:    学生所属专业（上下文，可为空）
+      - course:   当前锾课程名称
+      - topic:    请求详细知识点（如“二叉树遍历算法”），应比 gap 更具体
+      - gap:      学生的知识短板描述（如“不理解递归”）
+      - user_profile: 用户画像字典，来自长效记忆
+      - shared_memory: 前置 Agent 输出的黑板共享上下文
+    """
     # 1. 任务级情景记忆 (Episodic Memory)
     major: str
     course: str
-    topic: str
-    gap: str
-    
-    # 2. 全局长效记忆 (Long-Term Memory - 来源于 tutor_agent 收集的用户画像)
+    topic: str   # 知识点（具体请求对象）
+    gap: str     # 学生知识短板
+
+    # 2. 全局长效记忆 (Long-Term Memory)
     user_profile: dict[str, Any]
-    
-    # 3. 智能体间共享黑板 (Shared Blackboard - DAG 前置节点的输出)
+
+    # 3. 智能体间共享黑板 (Shared Blackboard)
     shared_memory: dict[str, Any]
-    
+
     # 4. 执行与控制状态
     messages: Annotated[list[AnyMessage], add_messages]
     is_valid: bool
@@ -44,26 +91,37 @@ class BaseAgentState(TypedDict, total=False):
     error: Optional[str]
 
 
+# ──────────────────────────────────────────────────────────────
+# BaseResourceAgent
+# ──────────────────────────────────────────────────────────────
+
+
 class BaseResourceAgent(ABC):
-    """资源生成 Agent 基类。"""
-    
+    """资源生成 Agent 基类。
+
+    从 agent_dir 自动发现并加载所有资源：
+      - agent_dir/prompt.md   → 系统提示词模板
+      - agent_dir/mcp/settings.json → MCP 服务配置（可选）
+      - agent_dir/skills/     → 技能文件目录（可选）
+      - agent_dir/tools/      → 本地 @tool 工具（可选）
+
+    子类只需实现：
+      - _build_system_message(state) -> str
+      - _build_initial_human_message(state) -> str
+      - _validate_node(state) -> dict
+    """
+
     def __init__(
         self,
         name: str,
-        prompt_template: str,
-        required_tools: list[str],
-        required_mcp: list[str],
-        required_skills: list[str],
+        agent_dir: Path,
         state_schema: type = BaseAgentState,
         temperature: float = 0.3,
     ):
         self.name = name
-        self.prompt_template = prompt_template
-        self.required_tools = required_tools
-        self.required_mcp = required_mcp
-        self.required_skills = required_skills
+        self.agent_dir = agent_dir
         self.state_schema = state_schema
-        
+
         self.llm = ChatOpenAI(
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -71,36 +129,118 @@ class BaseResourceAgent(ABC):
             temperature=temperature,
         )
         self.graph = None
-        self._tools = None
-
-    async def _ensure_graph(self):
-        """默认的图构建逻辑（生成 -> 工具 -> 校验 -> 重试）。如果子类图结构不同，可重写此方法。"""
-        if self.graph is not None:
-            return
-
-        self._tools = await tools_manager.get_agent_tools(
-            tool_names=self.required_tools, 
-            mcp_services=self.required_mcp
+        self._tools: list[BaseTool] | None = None
+        
+        agent_type = name.lower().replace("agent", "")
+        self.plugin_manager = PluginManager(
+            mcp_settings_path=self.agent_dir / "mcp" / "settings.json",
+            skills_path=self.agent_dir / "skills",
+            workspace=WORKPLACE_DIR / agent_type,
         )
 
-        graph = StateGraph(self.state_schema)
+        # P5：应对并发初始化竞态（多个并发請求同时触发）
+        self._init_lock = asyncio.Lock()
 
+        # 加载 prompt 模板
+        self.prompt_template = self._load_prompt()
+
+
+
+    def _load_prompt(self) -> str:
+        """从 agent_dir/prompt.md 加载提示词模板。"""
+        prompt_path = self.agent_dir / "prompt.md"
+        if not prompt_path.exists():
+            raise FileNotFoundError(f"[{self.name}] prompt 文件不存在: {prompt_path}")
+        content = prompt_path.read_text(encoding="utf-8")
+        logger.info(f"[{self.name}] 加载 prompt: {prompt_path}")
+        return content
+
+    def _load_local_tools(self) -> list[BaseTool]:
+        """从 agent_dir/tools/ 自动发现本地工具。"""
+        tools_dir = self.agent_dir / "tools"
+        if not tools_dir.exists() or not tools_dir.is_dir():
+            return []
+
+        local_tools: list[BaseTool] = []
+        for py_file in sorted(tools_dir.glob("*.py")):
+            # 跳过 __pycache__ 等，但允许 __init__.py（shared_tools 重导出）
+            if py_file.name != "__init__.py" and py_file.name.startswith("_"):
+                continue
+            found = self._discover_tools_in_module(py_file)
+            local_tools.extend(found)
+
+        if local_tools:
+            logger.info(f"[{self.name}] 本地工具: {[t.name for t in local_tools]}")
+        return local_tools
+
+    def _discover_tools_in_module(self, py_file: Path) -> list[BaseTool]:
+        """动态导入 Python 模块并提取 BaseTool 实例。"""
+        tools_found: list[BaseTool] = []
+        module_name = f"_agent_tools_{self.name}_{py_file.stem}"
+
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, py_file)
+            if spec is None or spec.loader is None:
+                return []
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        except Exception as e:
+            logger.error(f"[{self.name}] 导入工具模块失败 ({py_file}): {e}")
+            return []
+
+        for attr_name in dir(mod):
+            obj = getattr(mod, attr_name, None)
+            if isinstance(obj, BaseTool):
+                tools_found.append(obj)
+
+        return tools_found
+
+    # ══════════════════════════════════════════════════════════
+    # 图构建（LangGraph StateGraph）
+    # ══════════════════════════════════════════════════════════
+
+    async def _ensure_graph(self):
+        """P5：协程安全的图构建入口（double-check + asyncio.Lock）。"""
+        if self.graph is not None:
+            return
+        async with self._init_lock:
+            if self.graph is not None:  # double-check
+                return
+            await self._load_tools()
+            self.graph = await self._build_graph()
+            logger.info(f"[{self.name}] LangGraph 工作流构建完成")
+
+    async def _load_tools(self) -> None:
+        """P1：工具加载阶段（子类可 super() 调用后再注册额外工具）。"""
+        local_tools = self._load_local_tools()
+        if local_tools:
+            self.plugin_manager.register(local_tools)
+        await self.plugin_manager.load_all()
+        self._tools = await self.plugin_manager.get_tools()
+        logger.info(
+            f"[{self.name}] 共加载 {len(self._tools)} 个工具: "
+            f"{[t.name for t in self._tools]}"
+        )
+
+    async def _build_graph(self):
+        """P1：构建默认图拓扑（生成 → 工具 → 校验 → 重试）。
+
+        子类可 override 此方法替换为自定义图拓扑，
+        不再需要重复调用 super()._ensure_graph()。
+        """
+        graph = StateGraph(self.state_schema)
         graph.add_node("agent", self._agent_node)
         graph.add_node("tools", ToolNode(self._tools))
         graph.add_node("validate", self._validate_node)
-
         graph.add_edge(START, "agent")
         graph.add_conditional_edges("agent", self._custom_tools_condition)
         graph.add_edge("tools", "agent")
-        
         graph.add_conditional_edges(
             "validate",
             self._should_retry,
             path_map={"end": END, "retry": "agent"},
         )
-
-        self.graph = graph.compile()
-        logger.info(f"[{self.name}] 扁平化 StateGraph 构建完成")
+        return graph.compile()
 
     def _custom_tools_condition(self, state: Any) -> str:
         messages = state.get("messages", [])
@@ -115,89 +255,205 @@ class BaseResourceAgent(ABC):
             return "retry"
         return "end"
 
-    @abstractmethod
-    def _build_system_message(self, state: Any) -> SystemMessage:
-        """子类必须实现：构建 System Prompt。"""
-        pass
+    # ══════════════════════════════════════════════════════════
+    # 抽象方法（子类必须实现）
+    # ══════════════════════════════════════════════════════════
 
     @abstractmethod
-    def _build_initial_human_message(self, state: Any) -> HumanMessage:
-        """子类必须实现：构建初次请求的 Human Message。"""
-        pass
+    def _build_system_message(self, state: Any) -> str:
+        """子类必须实现：构建 System Prompt 字符串。"""
+        ...
 
-    async def _agent_node(self, state: Any) -> dict:
-        """标准的 LLM 调用节点，包含重试 Prompt 的注入。"""
-        messages = state.get("messages", [])
-        retry_count = state.get("retry_count", 0)
-        feedback = state.get("validation_feedback", "")
-
-        logger.info(f"[{self.name}] _agent_node: retry={retry_count}")
-
-        if not messages:
-            sys_msg = self._build_system_message(state)
-            human_msg = self._build_initial_human_message(state)
-            messages = [sys_msg, human_msg]
-        elif retry_count > 0 and feedback and len(messages) < 3:
-            messages.append(HumanMessage(
-                content=f"上一次生成未通过校验，原因：{feedback}\n请根据上述反馈修正后重新生成。"
-            ))
-
-        llm_with_tools = self.llm.bind_tools(self._tools) if self._tools else self.llm
-        response = await llm_with_tools.ainvoke(messages)
-        
-        return {"messages": [response]}
+    @abstractmethod
+    def _build_initial_human_message(self, state: Any) -> str:
+        """子类必须实现：构建初次请求的 Human Message 字符串。"""
+        ...
 
     @abstractmethod
     async def _validate_node(self, state: Any) -> dict:
-        """
-        子类必须实现：结构或质量校验。
-        注意：失败时应返回 {"retry_count": state.get("retry_count", 0) + 1, "is_valid": False, "validation_feedback": "..."}
-        """
-        pass
+        """子类必须实现：校验节点。"""
+        ...
 
-    # ==========================================
-    # 记忆层 (Memory Layer) 核心方法
-    # ==========================================
+    # ══════════════════════════════════════════════════════════
+    # 公共节点实现
+    # ══════════════════════════════════════════════════════════
+
+    async def _agent_node(self, state: Any) -> dict:
+        """标准的 LLM 调用节点，包含重试 Prompt 的注入。"""
+        # 1. 获取现有消息
+        existing_messages = state.get("messages", [])
+        retry_count = state.get("retry_count", 0)
+        feedback = state.get("validation_feedback", "")
+
+        logger.info(f"[{self.name}] _agent_node: existing_msgs={len(existing_messages)}, retry={retry_count}")
+
+        new_messages = []
+        
+        # 2. 如果是初次执行，构建 System 和 Human 消息
+        if not existing_messages:
+            sys_content = self._build_system_message(state)
+            human_content = self._build_initial_human_message(state)
+            
+            # 强制转换为字符串，防止意外的非字符串对象进入 messages
+            if not isinstance(sys_content, str):
+                sys_content = str(sys_content)
+            if not isinstance(human_content, str):
+                human_content = str(human_content)
+
+            new_messages = [
+                SystemMessage(content=sys_content),
+                HumanMessage(content=human_content),
+            ]
+            llm_messages = new_messages
+        else:
+            # 如果是重试，且有校验反馈，追加一条 HumanMessage
+            if retry_count > 0 and feedback:
+                # 简单防重：如果最后一条已经是重试消息，则不再重复添加
+                last_msg_content = existing_messages[-1].content if existing_messages else ""
+                if not isinstance(last_msg_content, str) or "上一次生成未通过校验" not in last_msg_content:
+                    new_messages.append(HumanMessage(
+                        content=f"上一次生成未通过校验，原因：{feedback}\n请根据上述反馈修正后重新生成。"
+                    ))
+            
+            llm_messages = list(existing_messages) + new_messages
+
+        # 3. 调用 LLM（绑定工具）
+        try:
+            # 调试：记录发送给 LLM 的消息类型和内容类型
+            for i, m in enumerate(llm_messages):
+                content_type = type(m.content).__name__
+                logger.debug(f"[{self.name}] Message[{i}] type={type(m).__name__}, content_type={content_type}")
+
+                # 针对某些 OpenAI 兼容 API 的特殊防御：确保 content 是纯字符串
+                if not isinstance(m.content, str):
+                    logger.warning(
+                        f"[{self.name}] Message[{i}] content 为 {content_type}，"
+                        f"强制转换为字符串"
+                    )
+                    m.content = (
+                        json.dumps(m.content, ensure_ascii=False)
+                        if isinstance(m.content, (list, dict))
+                        else str(m.content)
+                    )
+
+            if self._tools:
+                logger.info(f"[{self.name}] 绑定工具: {[t.name for t in self._tools]}")
+                # 记录第一个工具的详细定义（可选）
+                if self._tools:
+                    logger.debug(f"[{self.name}] 工具定义示例: {self._tools[0]}")
+            
+            llm_with_tools = self.llm.bind_tools(self._tools) if self._tools else self.llm
+            response = await llm_with_tools.ainvoke(llm_messages)
+            
+            # P6: 针对某些模型（如 Qwen-Coder）可能以文本 JSON 形式返回工具调用的防御性处理
+            if isinstance(response, AIMessage) and not response.tool_calls and self._tools:
+                content = response.content.strip()
+                # 尝试匹配 ```json { ... } ``` 或直接的 { ... }
+                json_str = ""
+                if content.startswith("```json") and content.endswith("```"):
+                    json_str = content[7:-3].strip()
+                elif content.startswith("{") and content.endswith("}"):
+                    json_str = content
+                
+                if json_str:
+                    try:
+                        data = json.loads(json_str)
+                        if isinstance(data, dict) and "name" in data and ("arguments" in data or "args" in data):
+                            tool_name = data["name"]
+                            tool_args = data.get("arguments", data.get("args", {}))
+                            
+                            # 验证工具是否存在
+                            if any(t.name == tool_name for t in self._tools):
+                                logger.info(f"[{self.name}] 检测到文本形式的工具调用，正在转换为 native tool_calls: {tool_name}")
+                                response.tool_calls = [{
+                                    "name": tool_name,
+                                    "args": tool_args,
+                                    "id": f"call_{int(time.time())}",
+                                    "type": "tool_call"
+                                }]
+                    except Exception as e:
+                        logger.debug(f"[{self.name}] 尝试解析文本工具调用失败: {e}")
+
+            # 4. 返回新消息，add_messages 会自动将其合并到 state.messages
+            # 注意：如果原本是空的，我们需要返回 [System, Human, AI] 确保它们都被存入 state
+            return {"messages": new_messages + [response]}
+            
+        except Exception as e:
+            logger.error(f"[{self.name}] LLM 接口调用异常: {e}", exc_info=True)
+            # 在状态中记录错误，以便后续节点或重试逻辑处理
+            return {"error": str(e), "is_valid": False}
+
+    # ══════════════════════════════════════════════════════════
+    # 记忆层辅助方法
+    # ══════════════════════════════════════════════════════════
+
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
-        """
-        【黑板记忆】子类可按需重写此方法，从前置 Agent 的输出（shared_memory）中精准提取关键上下文。
-        默认不提取，防止冗余 Token 干扰。
-        """
+        """黑板记忆：子类可重写，从前置 Agent 输出中提取关键上下文。"""
         return ""
 
     def _format_user_profile(self, profile: dict[str, Any]) -> str:
-        """
-        【长效记忆】子类可重写此方法，从全局用户画像中提取自身关心的特征（如 QuizAgent 只提取 error_pattern）。
-        默认提取所有有值的画像字段。
-        """
+        """长效记忆：子类可重写，提取自身关心的用户画像特征。"""
         if not profile:
             return ""
         parts = [f"- {k}: {v}" for k, v in profile.items() if v]
         return "\n".join(parts) if parts else ""
 
-    def _append_memory_and_skills(self, system_prompt: str, state: Any) -> str:
-        """辅助方法：将技能库、长效用户画像记忆、动态黑板记忆注入到 System Prompt 中。"""
-        # 1. 注入 Skills
-        skills_prompt = skills_manager.get_skill_instructions(self.required_skills)
-        if skills_prompt:
-            system_prompt += f"\n\n## [操作规范 (Skills)]\n{skills_prompt}"
-
-        # 2. 注入 Long-term Memory (基于 tutor_agent 收集的 User Profile)
+    def _append_context_to_prompt(self, system_prompt: str, state: Any) -> str:
+        """将用户画像、黑板记忆、知识库、skills 说明注入到 System Prompt。"""
+        # 1. 用户画像
         profile = state.get("user_profile", {})
         profile_str = self._format_user_profile(profile)
         if profile_str:
             system_prompt += (
                 f"\n\n## [学习者画像 (Long-Term Memory)]\n"
-                f"请根据以下提取自历史聊天的学习者个性化特征，针对性地调整你的生成策略（如难度、语气、偏好）：\n{profile_str}"
+                f"请根据以下学习者特征调整生成策略：\n{profile_str}"
             )
 
-        # 3. 注入 Shared Blackboard (前置 Agent 生成的成果)
+        # 2. 黑板记忆
         shared_memory = state.get("shared_memory", {})
         memory_ctx = self._extract_memory(shared_memory)
         if memory_ctx:
             system_prompt += (
-                f"\n\n## [智能体协作黑板 (Shared Memory)]\n"
-                f"以下是同一任务流水线中，前置智能体生成的核心资源片段。请参考以保持知识的连贯性和一致性：\n{memory_ctx}"
+                f"\n\n## [协作上下文 (Shared Memory)]\n"
+                f"前置智能体生成的核心资源：\n{memory_ctx}"
             )
-            
+
+        # 3. 知识库上下文（如果有的话）
+        kb_context = state.get("knowledge_base_context", "")
+        if kb_context:
+            system_prompt += (
+                f"\n\n## [知识库参考]\n"
+                f"以下是相关知识库的参考内容：\n{kb_context}"
+            )
+
+        # 4. Skills 工具说明（如果有）
+        skills = self.plugin_manager.list_skills()
+        if skills:
+            skills_desc = "\n".join(f"- {s['name']}: {s['description']}" for s in skills)
+            system_prompt += (
+                f"\n\n## [可用技能]\n"
+                f"你可以通过调用 load_skill_<name> 工具加载专家技能指令：\n{skills_desc}"
+            )
+
         return system_prompt
+
+    @staticmethod
+    def format_blackboard_summary(shared_memory: dict[str, Any]) -> str:
+        """格式化黑板共享内存为可读摘要"""
+        if not shared_memory:
+            return "（暂无前置资源）"
+
+        summary_parts = []
+        for key, value in shared_memory.items():
+            if isinstance(value, dict) and value.get("success"):
+                resource_type = value.get("type", key)
+                file_path = value.get("file_path", "")
+                if file_path:
+                    summary_parts.append(f"- {resource_type}: {file_path}")
+                else:
+                    content_len = len(str(value.get("content", "")))
+                    summary_parts.append(f"- {resource_type}: {content_len} 字")
+            elif isinstance(value, dict):
+                summary_parts.append(f"- {key}: (生成失败)")
+
+        return "\n".join(summary_parts) if summary_parts else "（暂无可用资源）"

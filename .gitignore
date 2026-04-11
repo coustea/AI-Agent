@@ -35,6 +35,10 @@ Thumbs.db
 
 # Local env files
 *.local
+.env
+
+# OMC state
+.omc/
 
 # Dev/plan files
 IMPLEMENTATION_PLAN.md

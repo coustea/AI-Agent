@@ -1,41 +1,40 @@
 <template>
   <div class="tutor-dashboard">
-    <header class="dashboard-header glass-effect">
-      <div class="header-brand">
-        <div class="logo-box">
-          <el-icon><Cpu /></el-icon>
-        </div>
-        <div>
-          <h2 class="title">全息智能辅导与动态画像中枢</h2>
-          <p class="subtitle">多智能体协同 · 随学随新 · 多模态生成</p>
+
+    <!-- 顶部控制栏 (极简模式切换) -->
+    <header class="tutor-header">
+      <div class="header-left">
+        <h2 class="title">全息智能辅导</h2>
+      </div>
+      <div class="header-center">
+        <div class="mode-toggle-group">
+          <button 
+            :class="['mode-btn', { active: chatMode === 'standard' }]" 
+            @click="chatMode = 'standard'"
+          >
+            <el-icon><ChatLineRound /></el-icon> 图文交互
+          </button>
+          <button 
+            :class="['mode-btn', { active: chatMode === 'digital_human' }]" 
+            @click="chatMode = 'digital_human'"
+          >
+            <el-icon><Avatar /></el-icon> 数字人互动
+          </button>
         </div>
       </div>
-      <div class="mode-toggle">
-        <el-radio-group v-model="chatMode" size="large">
-          <el-radio-button label="standard">
-            <div class="toggle-content">
-              <el-icon><ChatLineRound /></el-icon>
-              <span>图文交互模式</span>
-            </div>
-          </el-radio-button>
-          <el-radio-button label="digital_human">
-            <div class="toggle-content">
-              <el-icon><Avatar /></el-icon>
-              <span>数字人互动模式</span>
-            </div>
-          </el-radio-button>
-        </el-radio-group>
+      <div class="header-right">
+        <el-button plain size="small" @click="newSession" :icon="Plus" class="new-chat-btn">新对话</el-button>
       </div>
     </header>
 
     <main class="dashboard-main">
       <!-- 左侧：会话列表 -->
-      <aside class="session-sidebar glass-effect" :class="{ collapsed: sessionSidebarCollapsed }">
+      <aside class="session-sidebar" :class="{ collapsed: sessionSidebarCollapsed }">
         <div class="session-sidebar-header">
-          <el-button link @click="sessionSidebarCollapsed = !sessionSidebarCollapsed">
-            <el-icon><Fold /></el-icon>
+          <span v-if="!sessionSidebarCollapsed" class="sidebar-title">历史记录</span>
+          <el-button link @click="sessionSidebarCollapsed = !sessionSidebarCollapsed" class="collapse-btn">
+            <el-icon><Fold v-if="!sessionSidebarCollapsed" /><Expand v-else /></el-icon>
           </el-button>
-          <el-button v-if="!sessionSidebarCollapsed" type="primary" size="small" @click="newSession" :icon="Plus">新对话</el-button>
         </div>
         <div v-if="!sessionSidebarCollapsed" class="session-list">
           <div
@@ -44,23 +43,23 @@
             :class="['session-item', { active: s.id === currentSessionId }]"
             @click="switchSession(s.id)"
           >
+            <el-icon class="session-icon"><ChatDotRound /></el-icon>
             <span class="session-title">{{ s.title }}</span>
-            <el-button link size="small" @click.stop="archiveSession(s.id)">
+            <el-button link class="del-btn" @click.stop="archiveSession(s.id)">
               <el-icon><Delete /></el-icon>
             </el-button>
           </div>
-          <div v-if="sessions.length === 0" class="session-empty">暂无对话</div>
+          <div v-if="sessions.length === 0" class="session-empty">暂无对话记录</div>
         </div>
       </aside>
 
       <!-- 中央：聊天主界面 -->
-      <section class="chat-container glass-effect" :class="{ 'has-digital-human': chatMode === 'digital_human' }">
+      <section class="chat-container">
 
         <!-- 数字人展示舞台 -->
         <div v-if="chatMode === 'digital_human'" class="digital-human-stage">
-          <div class="hologram-effect"></div>
           <div class="avatar-ring" :class="{ 'is-speaking': isAIThinking || isSpeaking }">
-            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=AIAssistant&backgroundColor=6366F1&textureChance=50" alt="Digital Human Avatar" class="bot-avatar-img"/>
+            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=AIAssistant&backgroundColor=0891B2&textureChance=50" alt="Digital Human Avatar" class="bot-avatar-img"/>
           </div>
           <div class="speech-wave" v-if="isAIThinking || isSpeaking">
             <span></span><span></span><span></span><span></span><span></span>
@@ -70,22 +69,24 @@
 
         <div class="chat-viewport" ref="chatScroll">
           <div class="welcome-banner" v-if="messages.length === 0">
-            <h3>您好！我是您的多模态私人导师。</h3>
-            <p>我们不仅可以通过<strong>文字、图片、文档</strong>进行探讨，我还会通过我们的对话<strong>自动提取并更新您的学习画像</strong>，为您提供量身定制的解答。</p>
+            <div class="welcome-icon"><el-icon><Cpu /></el-icon></div>
+            <h3>我是您的 AI 私人导师</h3>
+            <p>支持文字、图片、文档等多模态交流，<br>我将在对话中自动更新您的学习画像并提供量身定制的解答。</p>
           </div>
 
           <div v-for="msg in messages" :key="msg.id" :class="['message-row', msg.role]">
             <div class="msg-avatar">
-              <el-avatar v-if="msg.role === 'ai'" :icon="Service" class="ai-av" :size="38" />
-              <el-avatar v-else :icon="UserFilled" class="user-av" :size="38" />
+              <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
+              <div v-else class="avatar-circle user-av"><el-icon><UserFilled /></el-icon></div>
             </div>
 
             <div class="bubble-wrapper">
               <div class="msg-meta">
-                <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : '您' }}</span>
+                <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : 'You' }}</span>
                 <span class="time">{{ msg.time }}</span>
               </div>
               <div class="bubble markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              
               <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
                 <a v-for="att in msg.attachments" :key="att.url" :href="att.url" target="_blank" class="attachment-link">
                   <el-icon v-if="att.type === 'image'"><Picture /></el-icon>
@@ -93,24 +94,24 @@
                   <span>{{ att.name }}</span>
                 </a>
               </div>
+              
               <div v-if="msg.toolCalls && msg.toolCalls.length > 0" class="msg-tool-calls">
                 <div class="tool-call-header">
                   <el-icon><Cpu /></el-icon>
-                  <span>工具调用 ({{ msg.toolCalls.length }})</span>
+                  <span>Tools Used ({{ msg.toolCalls.length }})</span>
                 </div>
                 <div v-for="(tc, idx) in msg.toolCalls" :key="idx" class="tool-call-item">
                   <span class="tool-name">{{ tc.tool }}</span>
-                  <span class="tool-status" :class="tc.status">{{ tc.status === 'success' ? '成功' : '失败' }}</span>
+                  <span class="tool-status" :class="tc.status">{{ tc.status === 'success' ? 'Success' : 'Failed' }}</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div v-if="isAIThinking" class="message-row ai thinking-row">
-            <div class="msg-avatar"><el-avatar :icon="Service" class="ai-av" :size="38" /></div>
+            <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
             <div class="thinking-bubble">
-              <el-icon class="is-loading"><Loading /></el-icon>
-              <span>正在分析知识图谱、拟合您的学习画像并生成解答...</span>
+              <span class="dot-typing"></span>
             </div>
           </div>
         </div>
@@ -122,31 +123,34 @@
               <el-icon v-if="f.fileType === 'image'"><Picture /></el-icon>
               <el-icon v-else><Document /></el-icon>
               <span class="attachment-name">{{ f.name }}</span>
-              <el-button link size="small" @click="removeAttachment(idx)"><el-icon><Close /></el-icon></el-button>
+              <el-icon class="close-icon" @click="removeAttachment(idx)"><Close /></el-icon>
             </div>
           </div>
-          <div class="toolbar">
-            <el-tooltip content="上传文档解析" placement="top">
-              <el-button link :icon="Document" @click="triggerDocUpload" :loading="uploadingFile">文档</el-button>
-            </el-tooltip>
-            <el-tooltip content="上传截图提问" placement="top">
-              <el-button link :icon="Picture" @click="triggerImgUpload" :loading="uploadingFile">截图</el-button>
-            </el-tooltip>
-            <el-tooltip content="语音输入" placement="top">
-              <el-button link :icon="Microphone" :class="{ 'mic-active': isRecording }" @click="toggleRecord">语音</el-button>
-            </el-tooltip>
-            <span class="shortcut-hint">按 Enter 发送，Shift + Enter 换行</span>
-          </div>
+          
           <div class="input-wrapper">
+            <div class="toolbar-left">
+              <el-tooltip content="上传文档" placement="top" :show-after="500">
+                <button class="tool-btn" @click="triggerDocUpload" :disabled="uploadingFile"><el-icon><Document /></el-icon></button>
+              </el-tooltip>
+              <el-tooltip content="上传截图" placement="top" :show-after="500">
+                <button class="tool-btn" @click="triggerImgUpload" :disabled="uploadingFile"><el-icon><Picture /></el-icon></button>
+              </el-tooltip>
+              <el-tooltip content="语音提问" placement="top" :show-after="500">
+                <button class="tool-btn" :class="{ 'mic-active': isRecording }" @click="toggleRecord"><el-icon><Microphone /></el-icon></button>
+              </el-tooltip>
+            </div>
+
             <textarea
               v-model="userInput"
-              placeholder="您可以直接问我：'这段代码为什么报错？' 或 '我准备考研，最近看树的遍历很吃力'..."
+              placeholder="向 AI 导师提问 (Shift + Enter 换行)..."
               @keydown.enter.exact.prevent="handleSend"
             ></textarea>
-            <button class="send-btn" :disabled="(!userInput.trim() && pendingFiles.length === 0) || isAIThinking" @click="handleSend">
-              <el-icon><Promotion /></el-icon>
+
+            <button class="send-btn" :class="{ 'is-active': userInput.trim() || pendingFiles.length > 0 }" :disabled="(!userInput.trim() && pendingFiles.length === 0) || isAIThinking" @click="handleSend">
+              <el-icon><Top /></el-icon>
             </button>
           </div>
+          <div class="input-footer">AI 可能会产生误导性信息，请注意甄别。</div>
         </div>
 
         <!-- 隐藏文件输入 -->
@@ -155,46 +159,40 @@
       </section>
 
       <!-- 右侧：动态画像面板 -->
-      <aside class="profile-sidebar glass-effect">
+      <aside class="profile-sidebar">
         <div class="sidebar-header">
-          <h3><el-icon><DataAnalysis /></el-icon> 动态学习画像</h3>
-          <el-tag size="small" type="success" effect="dark" class="sync-tag" v-if="profileUpdated">已更新</el-tag>
+          <h3>动态学习画像</h3>
+          <span class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
+            <span class="dot"></span> {{ profileUpdated ? 'Synced' : 'Live' }}
+          </span>
         </div>
-        <p class="sidebar-desc">通过多智能体在自然对话中隐式抽取的特征，实现随学随新。</p>
+        <p class="sidebar-desc">隐式特征抽取，随对话实时更新</p>
 
         <div class="dimensions-grid">
-          <div class="dim-card" v-for="dim in profileDimensions" :key="dim.key">
+          <div class="dim-item" v-for="dim in profileDimensions" :key="dim.key">
             <div class="dim-top">
               <span class="dim-name">{{ dim.name }}</span>
               <span class="dim-score" :style="{ color: dim.color }">{{ dim.score ?? '--' }}</span>
             </div>
-            <el-progress :percentage="dim.score ?? 0" :color="dim.color" :show-text="false" :stroke-width="8" />
-            <div class="dim-desc">{{ dim.desc }}</div>
+            <div class="progress-track">
+              <div class="progress-fill" :style="{ width: `${dim.score ?? 0}%`, backgroundColor: dim.color }"></div>
+            </div>
+            <div class="dim-desc" :title="dim.desc">{{ dim.desc }}</div>
           </div>
         </div>
 
-        <div class="tags-section">
-          <h4>智能提取标签</h4>
+        <div class="tags-section" v-if="extractedTags.length > 0">
+          <h4>特征标签</h4>
           <div class="tags-container">
-            <el-tag
-              v-for="tag in extractedTags"
-              :key="tag"
-              class="extracted-tag"
-              effect="light"
-              type="primary"
-              round
-            >
-              {{ tag }}
-            </el-tag>
+            <span v-for="tag in extractedTags" :key="tag" class="feature-tag">{{ tag }}</span>
           </div>
         </div>
 
         <div class="ai-insight">
-          <div class="insight-icon"><el-icon><MagicStick /></el-icon></div>
-          <div class="insight-content">
-            <h4>辅导策略自动调整</h4>
-            <p>{{ tutorStrategy }}</p>
+          <div class="insight-header">
+            <el-icon><MagicStick /></el-icon> 辅导策略
           </div>
+          <div class="insight-content">{{ tutorStrategy }}</div>
         </div>
       </aside>
     </main>
@@ -204,9 +202,9 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import {
-  ChatLineRound, Avatar, Cpu, Service, UserFilled, Loading,
-  Promotion, Picture, Microphone, Document,
-  DataAnalysis, MagicStick, Fold, Plus, Delete, Close
+  ChatLineRound, Avatar, Cpu, Service, UserFilled,
+  Picture, Microphone, Document, ChatDotRound,
+  MagicStick, Fold, Expand, Plus, Delete, Close, Top
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
@@ -220,14 +218,14 @@ import {
 // 维度定义（8 维匹配后端 ProfileExtraction）
 // ==========================================
 const DIMENSION_MAP = [
-  { key: 'knowledge_level', name: '知识基础', color: '#6366F1', defaultDesc: '等待对话中自动分析...' },
-  { key: 'cognitive_style', name: '认知风格', color: '#10B981', defaultDesc: '等待对话中自动分析...' },
-  { key: 'error_pattern', name: '易错倾向', color: '#F59E0B', defaultDesc: '等待对话中自动分析...' },
-  { key: 'learning_goal', name: '学习目标', color: '#8B5CF6', defaultDesc: '等待对话中自动分析...' },
-  { key: 'learning_history', name: '学习历史', color: '#EC4899', defaultDesc: '等待对话中自动分析...' },
-  { key: 'interest_preference', name: '兴趣偏好', color: '#3B82F6', defaultDesc: '等待对话中自动分析...' },
-  { key: 'learning_pace', name: '学习节奏', color: '#14B8A6', defaultDesc: '等待对话中自动分析...' },
-  { key: 'cognitive_level', name: '认知水平', color: '#F97316', defaultDesc: '等待对话中自动分析...' },
+  { key: 'knowledge_level', name: '知识基础', color: '#0891B2', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_style', name: '认知风格', color: '#10B981', defaultDesc: '自动分析中...' },
+  { key: 'error_pattern', name: '易错倾向', color: '#F59E0B', defaultDesc: '自动分析中...' },
+  { key: 'learning_goal', name: '学习目标', color: '#8B5CF6', defaultDesc: '自动分析中...' },
+  { key: 'learning_history', name: '学习历史', color: '#EC4899', defaultDesc: '自动分析中...' },
+  { key: 'interest_preference', name: '兴趣偏好', color: '#3B82F6', defaultDesc: '自动分析中...' },
+  { key: 'learning_pace', name: '学习节奏', color: '#14B8A6', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_level', name: '认知水平', color: '#F97316', defaultDesc: '自动分析中...' },
 ] as const
 
 // ==========================================
@@ -273,7 +271,7 @@ const profileDimensions = ref<ProfileDimension[]>(
   DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
 )
 const extractedTags = ref<string[]>([])
-const tutorStrategy = ref('开始对话后，系统将自动分析您的学习特征并调整辅导策略。')
+const tutorStrategy = ref('开始对话后，系统将自动提取特征。')
 
 // 流式控制器
 let abortController: AbortController | null = null
@@ -459,12 +457,12 @@ const handleSend = async () => {
       currentSessionId.value = session.id
       sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
     } catch {
-      // 如果创建失败，使用 undefined（后端会用 global session）
+      // 如果创建失败，使用 undefined
     }
   }
 
   // 用户消息
-  const displayText = text || (hasFiles ? `[附件提问] ${pendingFiles.value.map(f => f.name).join(', ')}` : '')
+  const displayText = text || (hasFiles ? `[附件分析] ${pendingFiles.value.map(f => f.name).join(', ')}` : '')
   if (displayText) {
     messages.value.push({ id: Date.now(), role: 'user', content: displayText, time: now() })
   }
@@ -486,7 +484,7 @@ const handleSend = async () => {
   // 发起 SSE 流式请求
   abortController = streamChat(
     {
-      message: text || '请分析我上传的文件内容',
+      message: text || '请分析附件',
       session_id: currentSessionId.value,
       image_url: imageUrl,
       file_urls: fileUrls.length > 0 ? fileUrls : undefined,
@@ -506,7 +504,6 @@ const handleSend = async () => {
       if (isSpeaking.value) {
         setTimeout(() => { isSpeaking.value = false }, 3000)
       }
-      // 触发画像轮询
       scheduleProfilePoll()
       abortController = null
     },
@@ -514,7 +511,7 @@ const handleSend = async () => {
     (err) => {
       const aiMsg = messages.value.find(m => m.id === aiMsgId)
       if (aiMsg && !aiMsg.content) {
-        aiMsg.content = `抱歉，回复生成失败: ${err.message}`
+        aiMsg.content = `Generate failed: ${err.message}`
       }
       isAIThinking.value = false
       abortController = null
@@ -522,9 +519,6 @@ const handleSend = async () => {
   )
 }
 
-// ==========================================
-// 语音输入（保留占位逻辑）
-// ==========================================
 const toggleRecord = () => {
   isRecording.value = !isRecording.value
   if (!isRecording.value && userInput.value === '') {
@@ -532,184 +526,210 @@ const toggleRecord = () => {
   }
 }
 
-// ==========================================
-// 生命周期
-// ==========================================
 onMounted(async () => {
   await loadSessions()
-  // 如果有会话，自动选择最近的
   if (sessions.value.length > 0) {
     await switchSession(sessions.value[0]!.id)
   }
-  // 加载画像
   await fetchProfile()
 })
 
 onBeforeUnmount(() => {
-  // 清理流式请求
   abortController?.abort()
-  // 清理轮询计时器
   profilePollTimers.forEach(t => clearTimeout(t))
 })
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Fira+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
+/* ================= 全局设定 ================= */
 .tutor-dashboard {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px);
-  padding: 1.5rem 2rem;
-  background: #F3F4F6;
-  font-family: 'Fira Sans', sans-serif;
-  gap: 1.5rem;
+  height: 100%;
+  background-color: #FFFFFF;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #0F172A;
+  box-sizing: border-box;
 }
 
-.glass-effect {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.05);
-  border-radius: 24px;
-}
-
-/* Header */
-.dashboard-header {
+/* ================= 顶部控制栏 ================= */
+.tutor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 2rem;
+  padding: 0 1.5rem;
+  height: 60px;
+  border-bottom: 1px solid #E2E8F0;
+  background-color: #FFFFFF;
   flex-shrink: 0;
+  z-index: 10;
 }
 
-.header-brand {
+.header-left .title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.mode-toggle-group {
+  display: flex;
+  background: #F1F5F9;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.mode-btn {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 6px;
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.logo-box {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, #6366F1, #818CF8);
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 1.5rem;
+.mode-btn.active {
+  background: #FFFFFF;
+  color: #0F172A;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
-.title { margin: 0 0 0.25rem 0; font-size: 1.25rem; color: #312E81; }
-.subtitle { margin: 0; font-size: 0.85rem; color: #6B7280; }
-.toggle-content { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; }
+.new-chat-btn {
+  font-size: 0.85rem;
+}
 
-/* Main Layout */
+/* ================= 主体排版 ================= */
 .dashboard-main {
   display: flex;
   flex: 1;
-  gap: 1.5rem;
   overflow: hidden;
 }
 
-/* Session Sidebar */
+/* --- 左侧：会话列表 --- */
 .session-sidebar {
-  width: 220px;
-  padding: 1rem;
+  width: 240px;
+  background: #FAFAFA;
+  border-right: 1px solid #E2E8F0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  transition: all 0.3s ease;
+  transition: width 0.3s ease;
   flex-shrink: 0;
 }
+
 .session-sidebar.collapsed {
-  width: 48px;
-  padding: 0.5rem;
-  align-items: center;
+  width: 60px;
 }
 
 .session-sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 1rem;
+}
+
+.sidebar-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.collapse-btn {
+  color: #94A3B8;
+  font-size: 1rem;
 }
 
 .session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0.75rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  overflow-y: auto;
-  flex: 1;
+  gap: 4px;
 }
 
 .session-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.6rem 0.75rem;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
   cursor: pointer;
+  color: #475569;
   transition: background 0.2s;
   font-size: 0.85rem;
 }
-.session-item:hover { background: #F3F4F6; }
-.session-item.active { background: #EEF2FF; color: #4F46E5; font-weight: 600; }
-.session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.session-empty { font-size: 0.8rem; color: #9CA3AF; text-align: center; padding: 1rem 0; }
 
-/* Chat Container */
+.session-item:hover {
+  background: #F1F5F9;
+}
+
+.session-item.active {
+  background: #ECFEFF;
+  color: #0891B2;
+  font-weight: 500;
+}
+
+.session-icon { font-size: 1rem; opacity: 0.7; }
+.session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.del-btn {
+  opacity: 0;
+  color: #EF4444;
+  padding: 4px;
+}
+.session-item:hover .del-btn { opacity: 1; }
+
+.session-empty {
+  font-size: 0.8rem;
+  color: #94A3B8;
+  text-align: center;
+  margin-top: 2rem;
+}
+
+/* --- 中央：聊天容器 --- */
 .chat-container {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  transition: all 0.3s ease;
+  background: #FFFFFF;
   position: relative;
 }
 
-.chat-viewport {
-  flex: 1;
-  overflow-y: auto;
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  scroll-behavior: smooth;
-}
-
 .has-digital-human .chat-viewport {
-  flex: 0.5;
-  background: rgba(249, 250, 251, 0.8);
-  border-top: 1px solid #E5E7EB;
+  flex: 0.6;
+  border-top: 1px solid #E2E8F0;
+  background: #FAFAFA;
 }
 
-/* Digital Human Stage */
+/* 数字人舞台 */
 .digital-human-stage {
-  flex: 0.5;
+  flex: 0.4;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at center, #EEF2FF 0%, transparent 70%);
-  position: relative;
-  min-height: 250px;
+  background: #FFFFFF;
 }
 
 .avatar-ring {
-  width: 140px;
-  height: 140px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
-  background: #fff;
-  padding: 8px;
-  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
-  position: relative;
-  z-index: 2;
+  padding: 6px;
+  border: 1px solid #E2E8F0;
   transition: all 0.3s ease;
 }
 
 .avatar-ring.is-speaking {
-  box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.1), 0 0 0 16px rgba(99, 102, 241, 0.05);
+  border-color: #0891B2;
+  box-shadow: 0 0 0 6px rgba(8, 145, 178, 0.1);
   animation: pulse-ring 2s infinite;
 }
 
@@ -718,344 +738,335 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  background: #EEF2FF;
+  background: #F8FAFC;
 }
 
 @keyframes pulse-ring {
-  0% { transform: scale(0.95); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(0.95); }
+  0% { transform: scale(0.98); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(0.98); }
 }
 
 .speech-wave {
   display: flex;
-  gap: 4px;
-  margin-top: 1.5rem;
-  height: 20px;
+  gap: 3px;
+  margin-top: 1rem;
+  height: 16px;
   align-items: center;
 }
 
 .speech-wave span {
-  width: 4px;
-  height: 10px;
-  background: #6366F1;
+  width: 3px;
+  height: 8px;
+  background: #0891B2;
   border-radius: 2px;
   animation: wave-anim 1s infinite ease-in-out;
 }
 .speech-wave span:nth-child(2) { animation-delay: 0.1s; }
 .speech-wave span:nth-child(3) { animation-delay: 0.2s; }
-.speech-wave span:nth-child(4) { animation-delay: 0.3s; }
-.speech-wave span:nth-child(5) { animation-delay: 0.4s; }
 
 @keyframes wave-anim {
-  0%, 100% { height: 10px; }
-  50% { height: 24px; }
+  0%, 100% { height: 8px; }
+  50% { height: 16px; }
 }
 
 .status-badge {
-  margin-top: 1rem;
-  font-size: 0.8rem;
-  color: #4F46E5;
-  background: #EEF2FF;
-  padding: 0.25rem 1rem;
-  border-radius: 20px;
-  font-weight: 600;
-  letter-spacing: 1px;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #64748B;
+  font-family: 'Space Grotesk', monospace;
 }
 
-/* Chat Messages */
+/* 聊天滚动区 */
+.chat-viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  scroll-behavior: smooth;
+}
+
 .welcome-banner {
   text-align: center;
-  color: #4B5563;
-  background: #EEF2FF;
-  padding: 2rem;
-  border-radius: 16px;
-  border: 1px dashed #C7D2FE;
+  margin: auto 0;
+  color: #475569;
 }
-.welcome-banner h3 { color: #312E81; margin-top: 0; }
-.welcome-banner p { margin-bottom: 0; line-height: 1.6; }
+.welcome-icon { font-size: 2.5rem; color: #E2E8F0; margin-bottom: 1rem; }
+.welcome-banner h3 { font-size: 1.2rem; color: #0F172A; margin: 0 0 0.5rem; }
+.welcome-banner p { font-size: 0.9rem; line-height: 1.6; margin: 0; }
 
 .message-row {
   display: flex;
   gap: 1rem;
   max-width: 85%;
 }
+
 .message-row.user {
   align-self: flex-end;
   flex-direction: row-reverse;
 }
 
-.ai-av { background: #6366F1 !important; color: white !important; }
-.user-av { background: #10B981 !important; color: white !important; }
+.msg-avatar { flex-shrink: 0; }
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+.ai-av { background: #0F172A; color: #FFF; }
+.user-av { background: #0891B2; color: #FFF; }
 
 .bubble-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-width: 100%;
+  gap: 4px;
 }
 
 .message-row.user .bubble-wrapper { align-items: flex-end; }
 
 .msg-meta {
   font-size: 0.75rem;
-  color: #9CA3AF;
+  color: #94A3B8;
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
 }
 .message-row.user .msg-meta { flex-direction: row-reverse; }
+.sender { font-weight: 600; color: #475569; }
 
 .bubble {
-  padding: 1rem 1.25rem;
-  border-radius: 16px;
+  padding: 0.75rem 1.25rem;
+  border-radius: 12px;
   font-size: 0.95rem;
   line-height: 1.6;
-  color: #1F2937;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
 }
 
 .message-row.ai .bubble {
-  background: #fff;
-  border: 1px solid #F3F4F6;
+  background: #FAFAFA;
+  border: 1px solid #E2E8F0;
   border-top-left-radius: 4px;
+  color: #0F172A;
 }
 
 .message-row.user .bubble {
-  background: #6366F1;
-  color: #fff;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
   border-top-right-radius: 4px;
+  color: #0F172A;
 }
 
-.msg-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
-}
+/* 附件与工具展示 */
+.msg-attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .attachment-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.6rem;
-  background: #EEF2FF;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  color: #4F46E5;
-  text-decoration: none;
-  transition: background 0.2s;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px; background: #FFFFFF; border: 1px solid #E2E8F0;
+  border-radius: 6px; font-size: 0.8rem; color: #0891B2;
+  text-decoration: none; transition: border-color 0.2s;
 }
-.attachment-link:hover {
-  background: #DDD6FE;
-}
-.message-row.user .attachment-link {
-  background: rgba(255,255,255,0.2);
-  color: #fff;
-}
+.attachment-link:hover { border-color: #0891B2; }
 
 .msg-tool-calls {
-  margin-top: 0.5rem;
-  border: 1px solid #E5E7EB;
+  margin-top: 8px;
+  border: 1px solid #E2E8F0;
   border-radius: 8px;
-  overflow: hidden;
+  background: #FAFAFA;
+  font-family: 'Space Grotesk', monospace;
 }
 .tool-call-header {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.6rem;
-  background: #F9FAFB;
+  padding: 6px 10px;
   font-size: 0.75rem;
-  color: #6B7280;
-  font-weight: 600;
+  color: #64748B;
+  border-bottom: 1px solid #E2E8F0;
+  display: flex; align-items: center; gap: 6px;
 }
 .tool-call-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.3rem 0.6rem;
+  padding: 6px 10px;
   font-size: 0.75rem;
-  border-top: 1px solid #F3F4F6;
+  display: flex; justify-content: space-between;
 }
-.tool-name {
-  font-family: 'Fira Code', monospace;
-  color: #4F46E5;
-}
+.tool-name { color: #0F172A; }
 .tool-status.success { color: #10B981; }
-.tool-status.error { color: #EF4444; }
 
-.thinking-row { opacity: 0.8; }
+/* Typing indicator */
 .thinking-bubble {
-  background: #EEF2FF;
-  padding: 0.75rem 1rem;
-  border-radius: 16px;
+  background: #FAFAFA;
+  border: 1px solid #E2E8F0;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
   border-top-left-radius: 4px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  color: #4F46E5;
-  font-size: 0.9rem;
+}
+.dot-typing {
+  position: relative;
+  width: 6px; height: 6px; border-radius: 50%;
+  background-color: #94A3B8; color: #94A3B8;
+  animation: dotTyping 1.5s infinite linear;
+  box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
+  margin-right: 24px;
+}
+@keyframes dotTyping {
+  0% { box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
+  33% { background-color: #0F172A; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
+  66% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #0F172A, 24px 0 0 0 #94A3B8; }
+  100% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #0F172A; }
 }
 
-/* Input Panel */
+/* 输入面板 */
 .input-panel {
-  padding: 1.5rem 2rem;
-  background: #fff;
-  border-top: 1px solid #E5E7EB;
-  border-radius: 0 0 24px 24px;
+  padding: 1rem 2rem 1.5rem;
+  background: #FFFFFF;
 }
 
 .attachments-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  display: flex; gap: 8px; margin-bottom: 8px;
 }
-
 .attachment-chip {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: #EEF2FF;
-  padding: 0.3rem 0.6rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  color: #4F46E5;
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 8px; background: #F1F5F9;
+  border: 1px solid #E2E8F0; border-radius: 6px;
+  font-size: 0.75rem; color: #475569;
 }
-.attachment-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.toolbar {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  align-items: center;
-}
-
-.shortcut-hint {
-  margin-left: auto;
-  font-size: 0.75rem;
-  color: #9CA3AF;
-}
+.close-icon { cursor: pointer; color: #94A3B8; }
+.close-icon:hover { color: #EF4444; }
 
 .input-wrapper {
   display: flex;
-  gap: 1rem;
   align-items: flex-end;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 16px;
-  padding: 0.75rem;
+  background: #FAFAFA;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 8px;
   transition: border-color 0.2s;
 }
-.input-wrapper:focus-within { border-color: #6366F1; }
+.input-wrapper:focus-within { border-color: #0891B2; background: #FFFFFF; }
+
+.toolbar-left {
+  display: flex;
+  gap: 4px;
+  margin-right: 8px;
+  padding-bottom: 4px;
+}
+
+.tool-btn {
+  background: transparent;
+  border: none;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  color: #64748B;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 1.1rem;
+}
+.tool-btn:hover { background: #E2E8F0; color: #0F172A; }
+.mic-active { color: #EF4444; }
 
 .input-wrapper textarea {
   flex: 1;
   border: none;
   background: transparent;
   resize: none;
-  height: 48px;
-  max-height: 120px;
+  height: 36px;
+  max-height: 160px;
   outline: none;
   font-family: inherit;
   font-size: 0.95rem;
-  color: #1F2937;
+  color: #0F172A;
   line-height: 1.5;
+  padding: 6px 0;
 }
+.input-wrapper textarea::placeholder { color: #94A3B8; }
 
 .send-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: #6366F1;
-  color: white;
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: #E2E8F0;
+  color: #94A3B8;
   border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; cursor: not-allowed;
+  margin-left: 8px; margin-bottom: 4px;
   transition: all 0.2s;
-  flex-shrink: 0;
 }
-.send-btn:hover:not(:disabled) { background: #4F46E5; transform: translateY(-2px); }
-.send-btn:disabled { background: #D1D5DB; cursor: not-allowed; }
+.send-btn.is-active { background: #0F172A; color: #FFFFFF; cursor: pointer; }
+.send-btn.is-active:hover { background: #1E293B; transform: translateY(-1px); }
 
-.mic-active { color: #EF4444 !important; animation: pulse-ring 1s infinite; }
+.input-footer {
+  text-align: center;
+  font-size: 0.7rem;
+  color: #94A3B8;
+  margin-top: 8px;
+}
 
-/* Right Profile Sidebar */
+/* --- 右侧：画像面板 --- */
 .profile-sidebar {
-  width: 340px;
+  width: 300px;
   padding: 1.5rem;
+  background: #FAFAFA;
+  border-left: 1px solid #E2E8F0;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   overflow-y: auto;
+  flex-shrink: 0;
 }
 
-.sidebar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.sidebar-header h3 {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1.1rem;
-  color: #312E81;
-}
+.sidebar-header { display: flex; justify-content: space-between; align-items: center; }
+.sidebar-header h3 { margin: 0; font-size: 1.1rem; color: #0F172A; font-weight: 600; }
 
-.sidebar-desc { margin: 0; font-size: 0.85rem; color: #6B7280; line-height: 1.5; }
-
-.dimensions-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+.sync-badge {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 0.7rem; font-family: 'Space Grotesk', monospace;
+  color: #64748B; background: #E2E8F0; padding: 2px 8px; border-radius: 12px;
+  transition: all 0.3s ease;
 }
+.sync-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: #94A3B8; }
+.sync-badge.is-syncing { background: #ECFEFF; color: #0891B2; }
+.sync-badge.is-syncing .dot { background: #0891B2; box-shadow: 0 0 6px rgba(8,145,178,0.5); }
 
-.dim-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 1rem;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.01);
-  transition: transform 0.2s;
+.sidebar-desc { margin: 0; font-size: 0.8rem; color: #64748B; }
+
+.dimensions-grid { display: flex; flex-direction: column; gap: 1rem; }
+.dim-item { display: flex; flex-direction: column; gap: 6px; }
+.dim-top { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; }
+.dim-name { color: #334155; }
+.dim-score { font-family: 'Space Grotesk', monospace; }
+
+.progress-track {
+  width: 100%; height: 6px; background: #E2E8F0; border-radius: 3px; overflow: hidden;
 }
-.dim-card:hover { transform: translateY(-2px); }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease-out; }
+.dim-desc { font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.dim-top {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  font-size: 0.9rem;
+.tags-section h4 { margin: 0 0 0.75rem 0; font-size: 0.9rem; color: #0F172A; font-weight: 600; }
+.tags-container { display: flex; flex-wrap: wrap; gap: 6px; }
+.feature-tag {
+  background: #FFFFFF; border: 1px solid #E2E8F0;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: 0.75rem; color: #475569;
 }
-.dim-name { color: #374151; }
-.dim-desc { margin-top: 0.5rem; font-size: 0.75rem; color: #9CA3AF; }
-
-.tags-section h4 { margin: 0 0 1rem 0; font-size: 1rem; color: #312E81; }
-.tags-container { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 .ai-insight {
   margin-top: auto;
-  background: linear-gradient(135deg, #312E81, #4F46E5);
-  border-radius: 16px;
-  padding: 1.25rem;
-  color: white;
-  display: flex;
-  gap: 1rem;
-  box-shadow: 0 10px 20px rgba(79, 70, 229, 0.2);
+  background: #0F172A;
+  border-radius: 12px;
+  padding: 1rem;
+  color: #F8FAFC;
 }
-.insight-icon { font-size: 1.5rem; color: #FCD34D; }
-.insight-content h4 { margin: 0 0 0.5rem 0; font-size: 0.95rem; }
-.insight-content p { margin: 0; font-size: 0.8rem; line-height: 1.5; opacity: 0.9; }
+.insight-header { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; color: #38BDF8; }
+.insight-content { font-size: 0.8rem; line-height: 1.6; color: #CBD5E1; }
 
-:deep(.markdown-body) {
-  font-family: 'Fira Sans', sans-serif;
-  font-size: 0.95rem !important;
-  background: transparent !important;
-}
+/* Markdown 内容样式补丁 */
+:deep(.markdown-body) { font-family: 'Inter', sans-serif; font-size: 0.95rem !important; background: transparent !important; }
 :deep(.markdown-body p) { margin-bottom: 0.5rem; }
 :deep(.markdown-body p:last-child) { margin-bottom: 0; }
+:deep(.markdown-body pre) { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
 </style>

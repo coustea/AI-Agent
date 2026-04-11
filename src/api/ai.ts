@@ -1,4 +1,5 @@
 import http from '@/utils/http'
+import type { ApiResponse } from '@/api/auth'
 
 // ==========================================
 // 类型定义
@@ -181,6 +182,129 @@ export function streamChat(
         if (done) break
         const chunk = decoder.decode(value, { stream: true })
         onChunk(chunk)
+      }
+      onDone()
+    })
+    .catch((err) => {
+      if (err.name === 'AbortError') return
+      onError(err)
+    })
+
+  return controller
+}
+
+// ==========================================
+// 资源生成 API
+// ==========================================
+
+export interface AgentInfo {
+  id: string
+  role: string
+  desc: string
+  type: string
+}
+
+export interface ResourceHistoryItem {
+  id: number
+  course: string
+  gap: string
+  need: string
+  has_mindmap: boolean
+  has_content: boolean
+  has_code: boolean
+  has_quiz: boolean
+  has_reading: boolean
+  has_media: boolean
+  created_at: string
+}
+
+export interface ResourceDetail {
+  id: number
+  course: string
+  gap: string
+  need: string
+  extra: string
+  results: Record<string, unknown>
+  created_at: string
+}
+
+export interface ResourceGenerateEvent {
+  type: 'coordinator' | 'agent_start' | 'agent_log' | 'agent_done' | 'agent_error' | 'done'
+  [key: string]: unknown
+}
+
+export interface GenerateParams {
+  user_id: number
+  learning_task: {
+    course: string
+    gap: string
+    need: string
+    extra: string
+  }
+}
+
+export function getAgents() {
+  return http.get<ApiResponse<AgentInfo[]>>('/ai/agents')
+}
+
+export function getResourceHistory(limit = 20) {
+  return http.get<ApiResponse<ResourceHistoryItem[]>>('/ai/resources', {
+    params: { limit },
+  })
+}
+
+export function getResourceDetail(resourceId: number) {
+  return http.get<ApiResponse<ResourceDetail>>(`/ai/resources/${resourceId}`)
+}
+
+export function generateResources(
+  params: GenerateParams,
+  onEvent: (event: ResourceGenerateEvent) => void,
+  onDone: () => void,
+  onError: (err: Error) => void,
+): AbortController {
+  const controller = new AbortController()
+  const token = localStorage.getItem('token')
+
+  fetch('/api/v1/ai/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(params),
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `HTTP ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('ReadableStream not supported')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6)) as ResourceGenerateEvent
+              onEvent(event)
+            } catch {
+              // skip malformed SSE lines
+            }
+          }
+        }
       }
       onDone()
     })

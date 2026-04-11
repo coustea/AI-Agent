@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "markmap": {
+      "description": "将 Markdown 转换为交互式思维导图 HTML 文件",
+      "command": "${NODE_PATH}",
+      "args": [
+        "${CURRENT_MCP_DIR}/../../resource/agents/mindmap/mcp/markmap-mcp-server/build/index.js",
+        "--output",
+        "${SERVER_DIR}/workplace/chat"
+      ],
+      "transport": "stdio",
+      "env": {
+        "MARKMAP_DIR": "${SERVER_DIR}/workplace/chat"
+      },
+      "ensureDirs": ["${SERVER_DIR}/workplace/chat"],
+      "mergeOsEnviron": true
+    }
+  }
+}

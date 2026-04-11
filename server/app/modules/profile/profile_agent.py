@@ -96,7 +96,6 @@ class ProfileBuilderAgent:
             temperature=0.1,
         )
 
-
         self.structured_llm = llm.with_structured_output(ProfileExtraction)
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", PROFILE_BUILDER_PROMPT)
@@ -153,7 +152,6 @@ class ProfileBuilderAgent:
                 "current_profile": current_profile_str,
                 "chat_history": chat_history_str
             })
-            # 大模型会返回合并后的完整 Pydantic 对象
             updated_data: ProfileExtraction = await self.structured_llm.ainvoke(prompt)
             logger.info(f"[ProfileBuilder] LLM 提取成功 (user_id={user_id})")
         except Exception as e:

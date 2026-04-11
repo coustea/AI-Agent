@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "ppt": {
+      "description": "创建 PowerPoint 演示文稿（.pptx），支持生成幻灯片、添加内容、图表、表格、模板等",
+      "command": "${SERVER_DIR}/.venv/bin/python3",
+      "args": [
+        "${MCP_DIR}/Office-PowerPoint-MCP-Server/ppt_mcp_server.py"
+      ],
+      "transport": "stdio",
+      "env": {
+        "PYTHONPATH": "${MCP_DIR}/Office-PowerPoint-MCP-Server",
+        "PPT_TEMPLATE_PATH": "${MCP_DIR}/Office-PowerPoint-MCP-Server/templates",
+        "PPT_OUTPUT_DIR": "${SERVER_DIR}/workplace/ppt"
+      },
+      "ensureDirs": ["${SERVER_DIR}/workplace/ppt"],
+      "mergeOsEnviron": true
+    }
+  }
+}

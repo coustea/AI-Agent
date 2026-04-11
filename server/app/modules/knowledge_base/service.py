@@ -1,19 +1,17 @@
 """
 知识库管理服务 - RAG 向量数据库导入
 """
+import asyncio
 import os
 from pathlib import Path
 from typing import List, Optional
 
 from langchain_community.document_loaders import (
     DirectoryLoader,
-    TextLoader,
-    PyMuPDFLoader,
-    Docx2txtLoader,
     UnstructuredMarkdownLoader,
 )
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import MarkdownHeaderTextSplitter
+from langchain_community.embeddings import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
@@ -27,15 +25,18 @@ class KnowledgeBaseService:
 
     def __init__(
         self,
-        persist_directory: str = "./data/chroma_db",
-        embedding_model: str = "text-embedding-3-small",
+        persist_directory: str = "./data",
+        embedding_model: str = "bge-m3:latest",
     ):
         self.persist_directory = persist_directory
-        self.embeddings = OpenAIEmbeddings(model=embedding_model)
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
+        self.embeddings = OllamaEmbeddings(model=embedding_model)
+        headers_to_split_on = [
+            ("#", "Header 1"),
+            ("##", "Header 2"),
+            ("###", "Header 3"),
+        ]
+        self.text_splitter = MarkdownHeaderTextSplitter(
+            headers_to_split_on=headers_to_split_on,
         )
 
     def load_documents_from_directory(self, directory_path: str) -> List[Document]:
@@ -51,10 +52,7 @@ class KnowledgeBaseService:
 
         # 支持的文件类型及对应的加载器
         loaders_config = [
-            ("**/*.txt", TextLoader, {"encoding": "utf-8"}),
             ("**/*.md", UnstructuredMarkdownLoader, {}),
-            ("**/*.pdf", PyMuPDFLoader, {}),
-            ("**/*.docx", Docx2txtLoader, {}),
         ]
 
         for pattern, loader_cls, loader_kwargs in loaders_config:
@@ -79,7 +77,12 @@ class KnowledgeBaseService:
     def split_documents(self, documents: List[Document]) -> List[Document]:
         """将文档切分为小块"""
         logger.info(f"开始切分 {len(documents)} 个文档")
-        chunks = self.text_splitter.split_documents(documents)
+        chunks = []
+        for doc in documents:
+            splits = self.text_splitter.split_text(doc.page_content)
+            for split in splits:
+                merged_metadata = {**doc.metadata, **split.metadata}
+                chunks.append(Document(page_content=split.page_content, metadata=merged_metadata))
         logger.info(f"切分后得到 {len(chunks)} 个文本块")
         return chunks
 
@@ -112,7 +115,7 @@ class KnowledgeBaseService:
         return vectorstore
 
     def import_knowledge_base(
-        self, directory_path: str, collection_name: str = "knowledge_base"
+        self, directory_path: str = "doc", collection_name: str = "knowledge_base"
     ) -> dict:
         """完整的知识库导入流程"""
         try:
@@ -172,3 +175,31 @@ class KnowledgeBaseService:
         vectorstore = self.load_vector_store(collection_name)
         results = vectorstore.similarity_search_with_score(query, k=k)
         return results
+
+    async def search_similar_async(
+        self,
+        query: str,
+        collection_name: str = "knowledge_base",
+        k: int = 5,
+    ) -> List[Document]:
+        """异步相似度搜索"""
+        return await asyncio.to_thread(
+            self.search_similar,
+            query,
+            collection_name,
+            k,
+        )
+
+    async def search_with_score_async(
+        self,
+        query: str,
+        collection_name: str = "knowledge_base",
+        k: int = 5,
+    ) -> List[tuple[Document, float]]:
+        """异步带相似度分数的搜索"""
+        return await asyncio.to_thread(
+            self.search_with_score,
+            query,
+            collection_name,
+            k,
+        )

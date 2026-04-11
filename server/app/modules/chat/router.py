@@ -18,7 +18,7 @@ from app.core.response import HttpResponse
 from app.core.security import get_current_user
 from app.models.user import User
 from app.services.memory import memory_service
-from app.modules.chat.tutor_agent import tutor_agent
+from app.modules.chat.agent import tutor_agent
 from app.modules.chat.schemas import MentorChatRequest, ChatMessageItem, UploadResponse, AttachmentInfo, ToolCallRecord
 from app.modules.profile.profile_agent import profile_agent
 from app.modules.profile.fact_agent import fact_agent

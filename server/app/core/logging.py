@@ -8,9 +8,8 @@
 
 import logging
 from logging.handlers import TimedRotatingFileHandler, RotatingFileHandler
-from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+from app.utils.paths import LOGS_DIR as LOG_DIR
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -23,7 +22,7 @@ def get_logger(name: str) -> logging.Logger:
 
 def setup_logging() -> None:
     """
-    配置 root logger，仅输出到文件。
+    配置 root logger，同时输出到文件和控制台。
     在应用启动时调用一次。
     """
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -57,5 +56,11 @@ def setup_logging() -> None:
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(formatter)
 
+    # 控制台输出
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
     root_logger.addHandler(timed_handler)
     root_logger.addHandler(error_handler)
+    root_logger.addHandler(console_handler)

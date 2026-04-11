@@ -3,6 +3,10 @@ import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# 清除代理设置，避免 ChatOpenAI 初始化时因 socks 代理报错
+for _proxy_key in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
+    os.environ.pop(_proxy_key, None)
+
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -17,8 +21,6 @@ from app.modules.chat.router import router as chat_router
 from app.modules.profile.router import router as profile_router
 from app.modules.resource.router import router as resource_router
 from app.modules.knowledge_base.router import router as knowledge_router
-from app.utils.mcp_manager import mcp_manager
-from app.utils.skills_manager import skills_manager
 logger = get_logger(__name__)
 
 
@@ -28,18 +30,6 @@ async def lifespan(app: FastAPI):
     logger.info("Application starting up")
     await init_db()
     logger.info("Database initialized")
-
-    mcp_manager.load_from_settings()
-    # 加载外部配置
-    external_mcp_config = Path("/home/couseta/.gemini/antigravity/mcp_config.json")
-    if external_mcp_config.exists():
-        mcp_manager.load_from_settings(external_mcp_config)
-        logger.info(f"External MCP plugins registered from {external_mcp_config}")
-
-    logger.info("MCP plugins registered")
-
-    skills_manager.load_all_skills()
-    logger.info("Agent skills loaded")
 
     # 确保上传目录存在并挂载静态文件
     upload_dir = Path("workplace/chat-uploads")
