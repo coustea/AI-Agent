@@ -86,7 +86,6 @@ class ProfileBuilderAgent:
         self.memory = memory_service
         # 读取 mentor 模块的聊天记录（TutorAgent 保存消息时用的 module_name）
         self.module_name = "mentor"
-        self.global_session_id = "global_profile_chat"
 
 
         llm = ChatOpenAI(
@@ -114,7 +113,7 @@ class ProfileBuilderAgent:
             if sessions:
                 effective_session = sessions[0].id
             else:
-                effective_session = self.global_session_id
+                effective_session = f"user-{user_id}-default-mentor"
 
         logger.info(f"[ProfileBuilder] 开始为用户 {user_id} 执行画像合并更新 (session={effective_session})...")
 

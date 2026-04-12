@@ -1,24 +1,44 @@
-import json
 from pathlib import Path
 from typing import Optional
 
 from langchain.tools import tool
 
+from app.modules.chat.runtime_context import get_current_user_id
 from app.utils.paths import WORKPLACE_DIR
 
 UPLOAD_DIR = WORKPLACE_DIR / "chat-uploads"
 MAX_FILE_CONTENT_CHARS = 15000
 
 
-def _resolve_upload_path(file_url: str) -> Optional[str]:
-    """将前端 URL 转换为服务器绝对路径。"""
-    if not file_url.startswith("/uploads/"):
+def _resolve_upload_path(file_url: str) -> Optional[tuple[int, str]]:
+    """将前端 URL 转换为 (owner_id, 服务器绝对路径)。"""
+    relative: str
+    if file_url.startswith("/api/v1/ai/chat/uploads/"):
+        relative = file_url.removeprefix("/api/v1/ai/chat/uploads/")
+    elif file_url.startswith("/uploads/"):
+        # 兼容历史 URL
+        relative = file_url.removeprefix("/uploads/")
+    else:
         return None
-    relative = file_url.removeprefix("/uploads/")
-    path = (UPLOAD_DIR / relative).resolve()
-    if not str(path).startswith(str(UPLOAD_DIR.resolve())):
+
+    parts = [p for p in relative.split("/") if p]
+    if len(parts) != 2:
         return None
-    return str(path) if path.exists() else None
+
+    owner_part, filename = parts
+    if not owner_part.isdigit():
+        return None
+    if Path(filename).name != filename:
+        return None
+
+    user_dir = (UPLOAD_DIR / owner_part).resolve()
+    path = (user_dir / filename).resolve()
+    if not str(path).startswith(str(user_dir)):
+        return None
+    if not path.exists():
+        return None
+
+    return int(owner_part), str(path)
 
 
 def _read_file_impl(absolute_path: str) -> str:
@@ -49,7 +69,7 @@ def _read_file_impl(absolute_path: str) -> str:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
     else:
-        return f"不支持的文件类型: {suffix}（支持: .pdf, .docx, .txt, .md）"
+        return f"不支持的文件类型: {suffix}（支持: .pdf, .docx, .txt, .md, .log）"
 
     if not content or not content.strip():
         return "文件内容为空"
@@ -60,21 +80,34 @@ def _read_file_impl(absolute_path: str) -> str:
 
 @tool("read_uploaded_file")
 def read_uploaded_file(file_url: str) -> str:
-    """读取用户上传的文档内容（PDF、Word、TXT 等）。
+    """读取当前用户上传的文档内容（PDF、DOCX、TXT、MD、LOG）。
 
     Args:
-        file_url: 前端上传后返回的文件 URL，格式如 /uploads/{user_id}/{filename}
+        file_url: 上传文件 URL，格式如 /api/v1/ai/chat/uploads/{user_id}/{filename}
     """
-    absolute_path = _resolve_upload_path(file_url)
-    if absolute_path is None:
+    current_user_id = get_current_user_id()
+    if current_user_id is None:
+        return "读取失败：缺少用户上下文。"
+
+    resolved = _resolve_upload_path(file_url)
+    if resolved is None:
         return f"无法解析文件路径: {file_url}。请确认文件 URL 格式正确且文件存在。"
+
+    owner_id, absolute_path = resolved
+    if owner_id != current_user_id:
+        return "无权限读取该文件。"
+
     return _read_file_impl(absolute_path)
 
 
 @tool("list_uploaded_files")
-def list_uploaded_files(user_id: int) -> str:
-    """列出用户上传的所有文件。"""
-    user_dir = UPLOAD_DIR / str(user_id)
+def list_uploaded_files() -> str:
+    """列出当前用户上传的所有文件。"""
+    current_user_id = get_current_user_id()
+    if current_user_id is None:
+        return "读取失败：缺少用户上下文。"
+
+    user_dir = UPLOAD_DIR / str(current_user_id)
     if not user_dir.exists():
         return "用户暂无上传文件。"
     files = [f for f in user_dir.iterdir() if f.is_file()]

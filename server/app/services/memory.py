@@ -138,10 +138,12 @@ class MemoryService:
             session_stmt = select(ChatSession).where(ChatSession.id == session_id)
             result = await session.exec(session_stmt)
             chat_session = result.first()
-            if not chat_session:
-                chat_session = ChatSession(id=session_id, user_id=user_id, module=module, title=content[:20])
-            else:
+            if chat_session:
+                if chat_session.user_id != user_id or chat_session.module != module:
+                    raise PermissionError("会话不属于当前用户或模块，禁止写入")
                 chat_session.updated_at = datetime.now()
+            else:
+                chat_session = ChatSession(id=session_id, user_id=user_id, module=module, title=content[:20])
             session.add(chat_session)
 
             msg = ChatMessage(
@@ -215,7 +217,25 @@ class MemoryService:
     # ==========================================
     async def save_user_fact(self, user_id: int, content: str, memory_type: str, session_id: Optional[str] = None, expires_at=None) -> UserMemory:
         """保存单条用户事实/偏好到 UserMemory 表"""
+        from datetime import datetime as dt
         async with AsyncSession(self.engine) as session:
+            now = dt.now()
+            duplicate_stmt = (
+                select(UserMemory)
+                .where(
+                    UserMemory.user_id == user_id,
+                    UserMemory.source == "fact_agent",
+                    UserMemory.memory_type == memory_type,
+                    UserMemory.content == content,
+                    or_(UserMemory.expires_at == None, UserMemory.expires_at > now),  # noqa: E711
+                )
+                .order_by(UserMemory.created_at.desc())
+                .limit(1)
+            )
+            duplicate = (await session.exec(duplicate_stmt)).first()
+            if duplicate:
+                return duplicate
+
             memory = UserMemory(
                 user_id=user_id,
                 session_id=session_id or "",

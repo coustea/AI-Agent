@@ -33,6 +33,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
+from app.modules.chat.runtime_context import chat_runtime_context
 from app.services.memory import memory_service
 from app.utils.paths import WORKPLACE_DIR
 from app.utils.plugin_manager import PluginManager
@@ -283,8 +284,29 @@ class TutorAgent:
             tool_prompt = state.get("tool_system_prompt", "")
             messages = [SystemMessage(content=tool_prompt)] + list(messages)
 
+        # 修复 MCP 工具返回 list 内容导致部分模型 API 报 400 Invalid Data 的问题
+        from langchain_core.messages import ToolMessage
+        safe_messages = []
+        for msg in messages:
+            if getattr(msg, "type", "") == "tool" and isinstance(msg.content, list):
+                texts = []
+                for block in msg.content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        texts.append(block.get("text", ""))
+                    else:
+                        texts.append(str(block))
+                safe_msg = ToolMessage(
+                    content="\n".join(texts),
+                    tool_call_id=msg.tool_call_id,
+                    name=msg.name,
+                    status=getattr(msg, "status", "success")
+                )
+                safe_messages.append(safe_msg)
+            else:
+                safe_messages.append(msg)
+        
         llm_with_tools = self.llm.bind_tools(self._tools)
-        response = await llm_with_tools.ainvoke(messages)
+        response = await llm_with_tools.ainvoke(safe_messages)
         logger.info(
             f"[TutorAgent] agent response, tool_calls={bool(response.tool_calls)}"
         )
@@ -310,7 +332,7 @@ class TutorAgent:
         file_urls: Optional[List[str]] = None,
     ):
         """处理用户消息，流式返回回复文本。"""
-        effective_session = session_id or self.global_session_id
+        effective_session = session_id or f"user-{user_id}-default-mentor"
         logger.info(f"[Tutor] User {user_id} message: {user_message[:50]}...")
 
         await self._ensure_graph()
@@ -427,31 +449,32 @@ class TutorAgent:
         }
 
         try:
-            async for event in self.graph.astream_events(
-                initial_state,
-                version="v2",
-                config={"recursion_limit": 15},
-            ):
-                kind = event.get("event", "")
+            with chat_runtime_context(user_id):
+                async for event in self.graph.astream_events(
+                    initial_state,
+                    version="v2",
+                    config={"recursion_limit": 15},
+                ):
+                    kind = event.get("event", "")
 
-                if kind == "on_chat_model_stream":
-                    chunk = event.get("data", {}).get("chunk")
-                    if chunk and chunk.content:
-                        text = chunk.content if isinstance(chunk.content, str) else ""
-                        if text:
-                            full_reply += text
-                            yield text
+                    if kind == "on_chat_model_stream":
+                        chunk = event.get("data", {}).get("chunk")
+                        if chunk and chunk.content:
+                            text = chunk.content if isinstance(chunk.content, str) else ""
+                            if text:
+                                full_reply += text
+                                yield text
 
-                if kind == "on_tool_end":
-                    tool_input = event.get("data", {}).get("input", {})
-                    tool_output = event.get("data", {}).get("output", "")
-                    tool_name = event.get("name", "unknown")
-                    tool_call_records.append({
-                        "tool": tool_name,
-                        "args": tool_input if isinstance(tool_input, dict) else str(tool_input),
-                        "result": str(tool_output)[:2000],
-                        "status": "success",
-                    })
+                    if kind == "on_tool_end":
+                        tool_input = event.get("data", {}).get("input", {})
+                        tool_output = event.get("data", {}).get("output", "")
+                        tool_name = event.get("name", "unknown")
+                        tool_call_records.append({
+                            "tool": tool_name,
+                            "args": tool_input if isinstance(tool_input, dict) else str(tool_input),
+                            "result": str(tool_output)[:2000],
+                            "status": "success",
+                        })
 
         except Exception as e:
             logger.error(f"[Tutor] Graph execution error: {e}")
