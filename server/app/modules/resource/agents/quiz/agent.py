@@ -4,15 +4,18 @@
 """
 
 import json
-import re
 from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
-from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
 from app.modules.resource.base_agent import BaseResourceAgent, BaseAgentState
+from app.modules.resource.validation_utils import (
+    extract_last_ai_content,
+    validate_json_response,
+    make_validation_result,
+)
 
 logger = get_logger(__name__)
 
@@ -33,21 +36,6 @@ class QuizOutput(BaseModel):
 class QuizState(BaseAgentState):
     questions_json: str
     parsed_questions: list
-
-
-_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
-
-
-def _extract_json_text(text: str) -> str:
-    text = text.strip()
-    match = _FENCE_RE.search(text)
-    if match:
-        return match.group(1).strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start != -1 and end > start:
-        return text[start:end]
-    return text
 
 
 class QuizAgent(BaseResourceAgent):
@@ -110,68 +98,39 @@ class QuizAgent(BaseResourceAgent):
 
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
-        raw = ""
-        if messages and isinstance(messages[-1], AIMessage):
-            raw = messages[-1].content.strip()
+        retry_count = state.get("retry_count", 0)
+        raw = extract_last_ai_content(messages)
 
         error = state.get("error")
         if error or not raw:
-            return {
-                "questions_json": raw,
-                "is_valid": False,
-                "validation_feedback": error or "未生成题目内容",
-                "parsed_questions": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+            return make_validation_result(
+                False, retry_count, error or "未生成题目内容",
+                questions_json=raw, parsed_questions=[],
+            )
 
         logger.info("[QuizAgent] _validate_node: 校验题目结构")
-        json_text = _extract_json_text(raw)
 
-        try:
-            data = json.loads(json_text)
-        except json.JSONDecodeError as e:
-            feedback = f"JSON 解析失败: {e}。请确保输出合法 JSON。"
-            logger.warning(f"[QuizAgent] {feedback}")
-            return {
-                "questions_json": raw,
-                "is_valid": False,
-                "validation_feedback": feedback,
-                "parsed_questions": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+        is_valid, feedback, validated, extra = validate_json_response(
+            raw, QuizOutput, retry_count, "题目结构"
+        )
+        if not is_valid:
+            return {**extra, "questions_json": raw, "parsed_questions": []}
 
-        try:
-            quiz_output = QuizOutput.model_validate(data)
-        except Exception as e:
-            feedback = f"题目结构不合法: {e}"
-            logger.warning(f"[QuizAgent] {feedback}")
-            return {
-                "questions_json": raw,
-                "is_valid": False,
-                "validation_feedback": feedback,
-                "parsed_questions": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
-
-        questions = quiz_output.questions
+        questions = validated.questions
         if len(questions) < 3:
-            return {
-                "questions_json": raw,
-                "is_valid": False,
-                "validation_feedback": f"题目数量不足（{len(questions)} 道），至少需要 6 道题。",
-                "parsed_questions": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+            return make_validation_result(
+                False, retry_count,
+                f"题目数量不足（{len(questions)} 道），至少需要 6 道题。",
+                questions_json=raw, parsed_questions=[],
+            )
 
         difficulties = {q.difficulty for q in questions}
         if len(difficulties) < 2:
-            return {
-                "questions_json": raw,
-                "is_valid": False,
-                "validation_feedback": f"难度分布单一（仅 {difficulties}），需要至少覆盖 2 个难度层级。",
-                "parsed_questions": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+            return make_validation_result(
+                False, retry_count,
+                f"难度分布单一（仅 {difficulties}），需要至少覆盖 2 个难度层级。",
+                questions_json=raw, parsed_questions=[],
+            )
 
         logger.info(f"[QuizAgent] 校验通过: {len(questions)} 道题, 难度分布={difficulties}")
         return {
@@ -220,7 +179,7 @@ class QuizAgent(BaseResourceAgent):
         raw_json = result.get("questions_json", "")
         file_path = None
         if parsed:
-            from .tools.file_saver import save_to_workplace
+            from .tools import save_to_workplace
             file_path = save_to_workplace("quiz", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
 
         return {

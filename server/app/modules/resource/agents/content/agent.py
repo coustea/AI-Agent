@@ -172,7 +172,29 @@ class ContentWriter(BaseResourceAgent):
             ))
 
         llm_with_tools = self.llm.bind_tools(self._tools) if self._tools else self.llm
-        response = await llm_with_tools.ainvoke(messages)
+
+        # 规范化结构化 ToolMessage 内容，避免部分模型接口拒绝 list 类型 content
+        from langchain_core.messages import ToolMessage
+        safe_messages = []
+        for msg in messages:
+            if getattr(msg, "type", "") == "tool" and isinstance(msg.content, list):
+                texts = []
+                for block in msg.content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        texts.append(block.get("text", ""))
+                    else:
+                        texts.append(str(block))
+                safe_msg = ToolMessage(
+                    content="\n".join(texts),
+                    tool_call_id=msg.tool_call_id,
+                    name=msg.name,
+                    status=getattr(msg, "status", "success")
+                )
+                safe_messages.append(safe_msg)
+            else:
+                safe_messages.append(msg)
+        
+        response = await llm_with_tools.ainvoke(safe_messages)
 
         return {"messages": [response]}
 
@@ -279,7 +301,7 @@ class ContentWriter(BaseResourceAgent):
         success = bool(content)
         file_path = None
         if success:
-            from .tools.file_saver import save_to_workplace
+            from .tools import save_to_workplace
             file_path = save_to_workplace("content", topic, content, "md")
 
         return {

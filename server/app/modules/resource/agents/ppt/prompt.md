@@ -33,27 +33,22 @@
 </content_structure>
 
 <execution_protocol>
-你可以选择以下两种方式之一生成 PPT：
+你必须按以下流程执行：
 
-**方式一（推荐）：快速生成**
-调用 **auto_generate_presentation**，参数：
-- topic: 完整主题描述（结合 {topic}、{course}、{gap} 生成详细描述）
-- slide_count: 8-12
-- presentation_type: "education"
-- color_scheme: "modern_blue"
-- include_charts: false
-- include_images: false
+1. 先生成一份 Markdown 形式的 PPT 大纲。
+2. 格式必须满足：
+   - 第一行使用 `# {topic}` 作为整份演示文稿标题。
+   - 每一页使用 `## 页面标题`。
+   - 每页正文使用 `- 要点` 列表，单页不超过 5 个 bullet。
+3. 大纲完成后，调用本地工具 **save_ppt_file**：
+   - `topic`: 当前主题
+   - `outline_markdown`: 你刚生成的完整 Markdown 大纲
+4. 工具保存成功后，再输出最终摘要。
 
-**方式二：精细控制每页内容**
-按以下原子化步骤调用 MCP 工具（不要跳步）：
-1. **create_presentation**: 创建空演示文稿（无需参数）。
-2. 对每一页幻灯片：
-   - **add_slide**: 添加幻灯片（layout_index: 1=标题页, 6=空白页）。
-   - **manage_text**: 添加文本框（operation: "add"，设置 left/top/width/height/text/font_size/bold）。
-   - **add_bullet_points**: 添加要点列表（slide_index, placeholder_idx, bullet_points: ["要点1", ...]）。
-3. **save_presentation**: 保存文件（file_path 设为 workplace/ppt 目录下的 .pptx 路径）。
-
-注意：bullet 点必须精炼（< 20字）。
+注意：
+- 不要要求额外的外部工具。
+- 不要输出“我无法生成 PPT 文件”这类表述，必须调用 `save_ppt_file`。
+- bullet 点必须精炼（< 20字）。
 </execution_protocol>
 
 <constraints>

@@ -27,4 +27,3 @@ SKILLS_DIR = _env_path("SKILLS_DIR", "skills")
 WORKPLACE_DIR = _env_path("WORKPLACE_DIR", "workplace")
 LOGS_DIR = _env_path("LOGS_DIR", "logs")
 KNOWLEDGE_BASE_DIR = _env_path("KNOWLEDGE_BASE_DIR", "data")
-MCP_DIR = SERVER_DIR / "mcp"  # MCP 服务源码目录（非配置）

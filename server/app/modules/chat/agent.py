@@ -5,7 +5,6 @@
   chat/
     agent.py              ← 本文件
     prompt.md             ← 系统提示词模板
-    mcp/settings.json     ← MCP 配置
     skills/               ← 技能目录
     tools/                ← 本地工具
 
@@ -129,7 +128,6 @@ class TutorAgent:
 
         self.plugin_manager = PluginManager(
             workspace=WORKPLACE_DIR / "chat",
-            mcp_settings_path=AGENT_DIR / "mcp" / "settings.json",
             skills_path=AGENT_DIR / "skills",
         )
 
@@ -192,7 +190,7 @@ class TutorAgent:
             if local_tools:
                 self.plugin_manager.register(*local_tools)
 
-            # 2. 加载 MCP + Skills
+            # 2. 加载 Skills
             await self.plugin_manager.load_all()
 
             # 3. 获取所有工具
@@ -284,7 +282,7 @@ class TutorAgent:
             tool_prompt = state.get("tool_system_prompt", "")
             messages = [SystemMessage(content=tool_prompt)] + list(messages)
 
-        # 修复 MCP 工具返回 list 内容导致部分模型 API 报 400 Invalid Data 的问题
+        # 修复工具返回 list 内容导致部分模型 API 报 400 Invalid Data 的问题
         from langchain_core.messages import ToolMessage
         safe_messages = []
         for msg in messages:

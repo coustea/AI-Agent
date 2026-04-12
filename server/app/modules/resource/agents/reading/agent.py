@@ -4,15 +4,18 @@
 """
 
 import json
-import re
 from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
-from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
 from app.modules.resource.base_agent import BaseResourceAgent, BaseAgentState
+from app.modules.resource.validation_utils import (
+    extract_last_ai_content,
+    validate_json_response,
+    make_validation_result,
+)
 
 logger = get_logger(__name__)
 
@@ -32,21 +35,6 @@ class ReadingOutput(BaseModel):
 class ReadingState(BaseAgentState):
     recommendations_json: str
     parsed_recommendations: list
-
-
-_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
-
-
-def _extract_json_text(text: str) -> str:
-    text = text.strip()
-    match = _FENCE_RE.search(text)
-    if match:
-        return match.group(1).strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start != -1 and end > start:
-        return text[start:end]
-    return text
 
 
 class ReadingAgent(BaseResourceAgent):
@@ -108,78 +96,47 @@ class ReadingAgent(BaseResourceAgent):
 
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
-        raw = ""
-        if messages and isinstance(messages[-1], AIMessage):
-            raw = messages[-1].content.strip()
+        retry_count = state.get("retry_count", 0)
+        raw = extract_last_ai_content(messages)
 
         error = state.get("error")
         if error or not raw:
-            return {
-                "recommendations_json": raw,
-                "is_valid": False,
-                "validation_feedback": error or "未生成推荐内容",
-                "parsed_recommendations": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+            return make_validation_result(
+                False, retry_count, error or "未生成推荐内容",
+                recommendations_json=raw, parsed_recommendations=[],
+            )
 
         logger.info("[ReadingAgent] _validate_node: 评审推荐质量")
-        json_text = _extract_json_text(raw)
 
-        try:
-            data = json.loads(json_text)
-        except json.JSONDecodeError as e:
-            feedback = f"JSON 解析失败: {e}"
-            logger.warning(f"[ReadingAgent] {feedback}")
-            return {
-                "recommendations_json": raw,
-                "is_valid": False,
-                "validation_feedback": feedback,
-                "parsed_recommendations": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+        is_valid, feedback, validated, extra = validate_json_response(
+            raw, ReadingOutput, retry_count, "推荐结构"
+        )
+        if not is_valid:
+            return {**extra, "recommendations_json": raw, "parsed_recommendations": []}
 
-        try:
-            reading_output = ReadingOutput.model_validate(data)
-        except Exception as e:
-            feedback = f"推荐结构不合法: {e}"
-            logger.warning(f"[ReadingAgent] {feedback}")
-            return {
-                "recommendations_json": raw,
-                "is_valid": False,
-                "validation_feedback": feedback,
-                "parsed_recommendations": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
-
-        items = reading_output.recommendations
+        items = validated.recommendations
         if len(items) < 3:
-            return {
-                "recommendations_json": raw,
-                "is_valid": False,
-                "validation_feedback": f"推荐数量不足（{len(items)} 条），至少需要 5 条。",
-                "parsed_recommendations": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+            return make_validation_result(
+                False, retry_count,
+                f"推荐数量不足（{len(items)} 条），至少需要 5 条。",
+                recommendations_json=raw, parsed_recommendations=[],
+            )
 
         for i, item in enumerate(items):
             if len(item.abstract) < 20:
-                return {
-                    "recommendations_json": raw,
-                    "is_valid": False,
-                    "validation_feedback": f"第 {i + 1} 条推荐摘要过短（'{item.title}'），请补充实质性内容。",
-                    "parsed_recommendations": [],
-                    "retry_count": state.get("retry_count", 0) + 1,
-                }
+                return make_validation_result(
+                    False, retry_count,
+                    f"第 {i + 1} 条推荐摘要过短（'{item.title}'），请补充实质性内容。",
+                    recommendations_json=raw, parsed_recommendations=[],
+                )
 
         types = {item.type for item in items}
         if len(types) < 2:
-            return {
-                "recommendations_json": raw,
-                "is_valid": False,
-                "validation_feedback": f"推荐类型单一（仅 {types}），请混合不同类型的资源。",
-                "parsed_recommendations": [],
-                "retry_count": state.get("retry_count", 0) + 1,
-            }
+            return make_validation_result(
+                False, retry_count,
+                f"推荐类型单一（仅 {types}），请混合不同类型的资源。",
+                recommendations_json=raw, parsed_recommendations=[],
+            )
 
         logger.info(f"[ReadingAgent] 评审通过: {len(items)} 条推荐, 类型={types}")
         return {
@@ -228,7 +185,7 @@ class ReadingAgent(BaseResourceAgent):
         raw_json = result.get("recommendations_json", "")
         file_path = None
         if parsed:
-            from .tools.file_saver import save_to_workplace
+            from .tools import save_to_workplace
             file_path = save_to_workplace("reading", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
 
         return {

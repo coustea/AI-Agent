@@ -19,8 +19,10 @@ from app.modules.resource.shared_tools import (
     find_files,
     get_file_info,
 )
+from .save_ppt_file import save_ppt_file
 
 __all__ = [
+    "save_ppt_file",
     "save_to_workplace",
     "read_file_safe",
     "write_file",

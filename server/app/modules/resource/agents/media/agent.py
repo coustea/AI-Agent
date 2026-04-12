@@ -190,7 +190,7 @@ class MediaAgent(BaseResourceAgent):
         content = result.get("script_content", "")
         file_path = None
         if content:
-            from .tools.file_saver import save_to_workplace
+            from .tools import save_to_workplace
             file_path = save_to_workplace("media", topic, content, "md")
 
         return {

@@ -208,7 +208,7 @@ class CodeAgent(BaseResourceAgent):
         language = result.get("detected_language", "unknown")
         file_path = None
         if explained:
-            from .tools.file_saver import save_to_workplace
+            from .tools import save_to_workplace
             file_path = save_to_workplace("code", topic, explained, "md")
 
         return {

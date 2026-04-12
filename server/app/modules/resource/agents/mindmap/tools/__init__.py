@@ -19,8 +19,10 @@ from app.modules.resource.shared_tools import (
     find_files,
     get_file_info,
 )
+from .markdown_to_mindmap import markdown_to_mindmap
 
 __all__ = [
+    "markdown_to_mindmap",
     "save_to_workplace",
     "read_file_safe",
     "write_file",

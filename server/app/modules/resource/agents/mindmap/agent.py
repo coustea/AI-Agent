@@ -1,6 +1,6 @@
 """
 思维导图生成 Agent。
-使用 markmap MCP 工具，生成 HTML 思维导图文件。
+使用本地工具生成 HTML 思维导图文件。
 """
 
 import os
@@ -36,11 +36,11 @@ NEED_MAP = {
 class MindmapGenerator(BaseResourceAgent):
     """思维导图生成 Agent。
 
-    使用 markmap MCP 工具将 Markdown 转换为交互式 HTML 思维导图。
+    使用本地工具将 Markdown 转换为交互式 HTML 思维导图。
 
     Attributes:
         name:           "MindmapAgent"
-        agent_dir:      agents/mindmap/，包含 prompt.md、mcp/settings.json
+        agent_dir:      agents/mindmap/，包含 prompt.md、tools/、skills/
         state_schema:   MindmapState，包含 need/extra/file_path/html_content/agent_output
         method:         generate_mindmap() — 对外入口
         output:         {success, file_path, html_content, agent_output, error}
@@ -60,28 +60,20 @@ class MindmapGenerator(BaseResourceAgent):
     # ── BaseResourceAgent 必须实现的三个方法 ─────────────────────
 
     async def _load_tools(self) -> None:
-        """加载本地工具、MCP 服务和 Skills，并记录详细日志。"""
+        """加载本地工具和 Skills，并记录详细日志。"""
         await super()._load_tools()
 
-        # 记录已加载的本地工具
         local_tools = self.plugin_manager.list_local_tools()
         logger.info(f"[MindmapAgent] 已加载本地工具: {local_tools}")
 
-        # 记录已加载的 MCP 服务
-        mcp_services = self.plugin_manager.list_mcp_services()
-        logger.info(f"[MindmapAgent] 已加载 MCP 服务: {mcp_services}")
-
-        # 记录已加载的 Skills
         skills = self.plugin_manager.list_skills()
         skill_names = [s["name"] for s in skills]
         logger.info(f"[MindmapAgent] 已加载 Skills: {skill_names}")
 
-        # 记录工具总数
         summary = self.plugin_manager.summary()
         logger.info(
             f"[MindmapAgent] 工具加载完成 — "
             f"本地: {len(summary['local_tools'])}, "
-            f"MCP: {len(summary['mcp_services'])}, "
             f"Skills: {len(summary['skills'])}"
         )
 
@@ -134,35 +126,34 @@ class MindmapGenerator(BaseResourceAgent):
 
                 # 统一转为可解析的对象
                 if isinstance(content, list):
-                    # MCP 工具返回 list 类型的 content blocks
                     for item in content:
                         if isinstance(item, dict) and "text" in item:
                             try:
                                 inner = json.loads(item["text"]) if isinstance(item["text"], str) else item["text"]
-                                if isinstance(inner, dict) and "filePath" in inner:
-                                    file_path = inner["filePath"]
+                                if isinstance(inner, dict):
+                                    file_path = inner.get("file_path") or inner.get("filePath")
                                     break
                             except (json.JSONDecodeError, TypeError):
                                 continue
                         elif isinstance(item, str):
                             try:
                                 inner = json.loads(item)
-                                if isinstance(inner, dict) and "filePath" in inner:
-                                    file_path = inner["filePath"]
+                                if isinstance(inner, dict):
+                                    file_path = inner.get("file_path") or inner.get("filePath")
                                     break
                             except (json.JSONDecodeError, TypeError):
                                 continue
                 elif isinstance(content, dict):
-                    file_path = content.get("filePath")
+                    file_path = content.get("file_path") or content.get("filePath")
                 elif isinstance(content, str):
                     try:
                         res = json.loads(content)
-                        if isinstance(res, dict) and "filePath" in res:
-                            file_path = res["filePath"]
+                        if isinstance(res, dict):
+                            file_path = res.get("file_path") or res.get("filePath")
                         elif isinstance(res, list) and res and isinstance(res[0], dict) and "text" in res[0]:
                             inner = json.loads(res[0]["text"]) if isinstance(res[0]["text"], str) else res[0]["text"]
                             if isinstance(inner, dict):
-                                file_path = inner.get("filePath")
+                                file_path = inner.get("file_path") or inner.get("filePath")
                     except json.JSONDecodeError:
                         pass
 

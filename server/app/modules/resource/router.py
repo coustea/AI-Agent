@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.dependencies import get_session
 from app.core.response import HttpResponse
 from app.core.security import get_current_user
+from app.core.logging import get_logger
 from app.models.resource import GeneratedResource
 from app.models.user import User
 from app.modules.resource.schemas import ResourceGenerateRequest
@@ -17,6 +18,7 @@ from app.modules.resource.sse import AgentEventEmitter
 from app.modules.resource.coordinator_agent import CoordinatorAgent
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.post("/generate")
@@ -44,6 +46,18 @@ async def generate_resources(
             except Exception as e:
                 await emitter.emit_agent_error("system", str(e))
                 await emitter.emit_done("资源生成异常终止")
+            finally:
+                # 清理所有 Agent 的插件资源
+                try:
+                    from app.modules.resource.coordinator_agent import AGENT_REGISTRY
+                    close_tasks = []
+                    for _name, entry in AGENT_REGISTRY.items():
+                        if hasattr(entry.agent, "plugin_manager"):
+                            close_tasks.append(entry.agent.plugin_manager.aclose())
+                    if close_tasks:
+                        await asyncio.gather(*close_tasks, return_exceptions=True)
+                except Exception as cleanup_err:
+                    logger.warning(f"插件资源清理异常: {cleanup_err}")
 
         runner = asyncio.create_task(run_and_cleanup())
 
