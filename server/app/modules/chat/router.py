@@ -1,11 +1,10 @@
 """Chat 路由：辅导对话 + 会话管理 + 聊天历史 + 文件上传。
 
-- /chat/stream: TutorAgent 前台辅导答疑，后台异步触发画像构建
+- /chat/stream: TutorAgent 前台辅导答疑（后处理链路由 TutorAgent 内部触发）
 - /chat/upload: 文件上传（图片/文档）
 - /chat/sessions, /chat/history: 会话与历史查询
 """
 
-import asyncio
 import json
 import uuid
 from pathlib import Path
@@ -20,8 +19,6 @@ from app.models.user import User
 from app.services.memory import memory_service
 from app.modules.chat.agent import tutor_agent
 from app.modules.chat.schemas import MentorChatRequest, ChatMessageItem, UploadResponse, AttachmentInfo, ToolCallRecord
-from app.modules.profile.profile_agent import profile_agent
-from app.modules.profile.fact_agent import fact_agent
 from app.utils.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
@@ -33,59 +30,9 @@ ALLOWED_DOC_EXT = {".pdf", ".docx", ".txt", ".md", ".log"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024   # 5MB
 MAX_DOC_SIZE = 10 * 1024 * 1024     # 10MB
 
-# 画像更新触发阈值
-PROFILE_THRESHOLD = 2
-EARLY_TRIGGER = 2
-
-
 def _default_session_id(user_id: int) -> str:
     """按用户隔离默认会话，避免共享固定全局会话。"""
     return f"user-{user_id}-default-mentor"
-
-
-def _spawn_background(coro, task_name: str) -> None:
-    """统一创建后台任务并记录异常，避免静默失败。"""
-    task = asyncio.create_task(coro)
-
-    def _on_done(done: asyncio.Task):
-        try:
-            done.result()
-        except Exception as exc:
-            logger.error(f"[ChatRouter] 后台任务失败 ({task_name}): {exc}")
-
-    task.add_done_callback(_on_done)
-
-
-async def _run_post_chat_jobs(user_id: int, session_id: str) -> None:
-    """在本轮对话结束后触发画像、事实提炼和记忆压缩。"""
-    msg_count = await memory_service.get_message_count(
-        user_id=user_id,
-        session_id=session_id,
-        module=tutor_agent.module_name,
-    )
-
-    should_trigger = (
-        msg_count == EARLY_TRIGGER
-        or (msg_count > 0 and msg_count % PROFILE_THRESHOLD == 0)
-    )
-    if should_trigger:
-        _spawn_background(
-            profile_agent.build_profile(user_id=user_id, session_id=session_id),
-            task_name="profile_builder",
-        )
-
-    _spawn_background(
-        fact_agent.extract_and_save_fact(user_id=user_id, session_id=session_id),
-        task_name="fact_extractor",
-    )
-    _spawn_background(
-        memory_service.summarize_and_compress(
-            user_id=user_id,
-            session_id=session_id,
-            module=tutor_agent.module_name,
-        ),
-        task_name="memory_compress",
-    )
 
 
 @router.post("/chat/stream")
@@ -93,7 +40,7 @@ async def mentor_chat_stream(
     req: MentorChatRequest,
     current_user: User = Depends(get_current_user),
 ):
-    """TutorAgent 辅导答疑（主功能），后台异步触发画像构建。"""
+    """TutorAgent 辅导答疑（主功能）。"""
     effective_session = req.session_id or _default_session_id(current_user.id)
 
     generator = tutor_agent.chat_stream(
@@ -105,14 +52,8 @@ async def mentor_chat_stream(
     )
 
     async def stream_with_post_jobs():
-        try:
-            async for chunk in generator:
-                yield chunk
-        finally:
-            try:
-                await _run_post_chat_jobs(current_user.id, effective_session)
-            except Exception as exc:
-                logger.error(f"[ChatRouter] 对话后处理失败: {exc}")
+        async for chunk in generator:
+            yield chunk
 
     return StreamingResponse(stream_with_post_jobs(), media_type="text/event-stream")
 

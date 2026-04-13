@@ -48,6 +48,9 @@
 ## 【已知关于该用户的特定事实偏好 (Long-term Fact Memory)】
 {fact_context}
 
+## 【最近 7 天会话上下文】
+{recent_chat_context}
+
 ---
 
 ## tool_system
@@ -80,6 +83,9 @@
 
 ## 【已知关于该用户的特定事实偏好 (Long-term Fact Memory)】
 {fact_context}
+
+## 【最近 7 天会话上下文】
+{recent_chat_context}
 
 ## 【用户上传的文件信息】
 {file_info_context}

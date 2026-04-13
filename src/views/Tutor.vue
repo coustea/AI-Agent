@@ -95,16 +95,6 @@
                 </a>
               </div>
               
-              <div v-if="msg.toolCalls && msg.toolCalls.length > 0" class="msg-tool-calls">
-                <div class="tool-call-header">
-                  <el-icon><Cpu /></el-icon>
-                  <span>Tools Used ({{ msg.toolCalls.length }})</span>
-                </div>
-                <div v-for="(tc, idx) in msg.toolCalls" :key="idx" class="tool-call-item">
-                  <span class="tool-name">{{ tc.tool }}</span>
-                  <span class="tool-status" :class="tc.status">{{ tc.status === 'success' ? 'Success' : 'Failed' }}</span>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -253,8 +243,7 @@ const pendingFiles = ref<PendingFile[]>([])
 
 // 聊天消息
 interface Attachment { url: string; type: string; name: string }
-interface ToolCall { tool: string; args: Record<string, unknown> | string; result: string; status: string }
-interface ChatMsg { id: number; role: 'user' | 'ai'; content: string; time: string; attachments?: Attachment[] | null; toolCalls?: ToolCall[] | null }
+interface ChatMsg { id: number; role: 'user' | 'ai'; content: string; time: string; attachments?: Attachment[] | null }
 const messages = ref<ChatMsg[]>([])
 
 // 画像
@@ -385,7 +374,6 @@ const switchSession = async (sessionId: string) => {
       content: msg.content,
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
-      toolCalls: msg.tool_calls || null,
     }))
   } catch {
     // 加载历史失败时保持空消息
@@ -463,8 +451,17 @@ const handleSend = async () => {
 
   // 用户消息
   const displayText = text || (hasFiles ? `[附件分析] ${pendingFiles.value.map(f => f.name).join(', ')}` : '')
+  const currentAttachments: Attachment[] | null = hasFiles
+    ? pendingFiles.value.map(f => ({ url: f.url, type: f.fileType, name: f.name }))
+    : null
   if (displayText) {
-    messages.value.push({ id: Date.now(), role: 'user', content: displayText, time: now() })
+    messages.value.push({
+      id: Date.now(),
+      role: 'user',
+      content: displayText,
+      time: now(),
+      attachments: currentAttachments,
+    })
   }
 
   userInput.value = ''

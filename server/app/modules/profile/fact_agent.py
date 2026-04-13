@@ -49,20 +49,20 @@ class MemoryExtractionAgent:
             ("system", FACT_BUILDER_PROMPT)
         ])
 
-    async def extract_and_save_fact(self, user_id: int, session_id: str):
-        """后台异步任务：提炼长期事实"""
+    async def extract_and_save_fact(self, user_id: int, session_id: str) -> bool:
+        """后台异步任务：提炼长期事实。成功执行返回 True，异常返回 False。"""
         logger.info(f"[FactAgent] 开始为用户 {user_id} 提炼长期事实记忆...")
 
-        # 获取增量对话 (获取最近2条，即当前的一问一答)
+        # 获取近期有效对话片段（已由 MemoryService 默认过滤 7 天过期消息）
         recent_msgs = await self.memory.get_recent_messages(
             user_id=user_id,
             session_id=session_id,
             module=self.module_name,
-            limit=2
+            limit=8
         )
 
         if not recent_msgs or len(recent_msgs) < 1:
-            return
+            return True
 
         chat_history_str = "\n".join(
             [f"[{msg.created_at.strftime('%m-%d %H:%M')}] {msg.role}: {msg.content}" for msg in recent_msgs])
@@ -90,7 +90,9 @@ class MemoryExtractionAgent:
                 )
             else:
                 logger.info(f"[FactAgent] 本次对话无新增事实。")
+            return True
         except Exception as e:
             logger.error(f"[FactAgent] 事实提炼失败: {str(e)}")
+            return False
 
 fact_agent = MemoryExtractionAgent()

@@ -12,6 +12,16 @@ from app.core.logging import get_logger
 load_dotenv()
 logger = get_logger(__name__)
 
+PROFILE_UPDATE_TOKEN_THRESHOLD = 120
+PROFILE_SIGNIFICANT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "learning_goal": ("目标", "计划", "考试", "考研", "冲刺", "通过", "下周", "期末", "证书"),
+    "preference": ("偏好", "喜欢", "不喜欢", "习惯", "更想", "更愿意", "风格", "案例", "图解"),
+    "weakness": ("不会", "薄弱", "总是错", "卡住", "困难", "看不懂", "做错", "没思路"),
+    "learning_pace": ("每天", "每周", "节奏", "进度", "突击", "复习", "时间不够", "拖延"),
+    "background": ("我是", "专业", "年级", "基础", "工作", "转行", "之前学过"),
+}
+PROFILE_NON_SIGNIFICANT_TEXTS = {"谢谢", "好的", "收到", "明白了", "再来一道题", "继续", "ok", "OK"}
+
 
 # ==========================================
 # 1. 定义大模型严格输出的 JSON 结构 (Pydantic)
@@ -100,7 +110,42 @@ class ProfileBuilderAgent:
             ("system", PROFILE_BUILDER_PROMPT)
         ])
 
-    async def build_profile(self, user_id: int, session_id: str | None = None):
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        return " ".join((text or "").strip().lower().split())
+
+    def should_trigger_profile_update(self, messages: list) -> bool:
+        """轻量显著性判断：优先规则，不依赖大模型。"""
+        if not messages:
+            return False
+
+        non_significant = {self._normalize_text(t) for t in PROFILE_NON_SIGNIFICANT_TEXTS}
+        candidate_texts: list[str] = []
+        for msg in messages[-8:]:
+            if msg.role != "user":
+                continue
+            cleaned = self._normalize_text(msg.content)
+            if not cleaned:
+                continue
+            if cleaned in non_significant:
+                continue
+            candidate_texts.append(cleaned)
+
+        if not candidate_texts:
+            return False
+
+        joined = "\n".join(candidate_texts)
+        for _, keywords in PROFILE_SIGNIFICANT_KEYWORDS.items():
+            if any(k.lower() in joined for k in keywords):
+                return True
+
+        # 回退启发式：较长且包含明显自我描述的陈述
+        return any(
+            ("我" in text and len(text) >= 20 and ("想" in text or "需要" in text or "不会" in text))
+            for text in candidate_texts
+        )
+
+    async def build_profile(self, user_id: int, session_id: str | None = None) -> bool:
         """
         后台异步执行的核心任务：提取并合并最新画像。
         session_id 为 None 时，自动查找该用户最近的 mentor 会话。
@@ -126,7 +171,11 @@ class ProfileBuilderAgent:
         )
         if not recent_msgs:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无新对话，无需更新。")
-            return
+            return True
+
+        if not self.should_trigger_profile_update(recent_msgs):
+            logger.info(f"[ProfileBuilder] 用户 {user_id} 最近对话缺少画像显著信息，跳过更新。")
+            return True
 
         logger.info(f"[ProfileBuilder] 找到用户 {user_id} 的 {len(recent_msgs)} 条近期对话，准备提取特征。")
         chat_history_str = "\n".join(
@@ -155,7 +204,7 @@ class ProfileBuilderAgent:
             logger.info(f"[ProfileBuilder] LLM 提取成功 (user_id={user_id})")
         except Exception as e:
             logger.error(f"[ProfileBuilder] 画像提取与合并失败: {str(e)}")
-            return
+            return False
 
         # 4. 过滤空值并写入数据库
         # exclude_unset=True 可以过滤掉大模型输出的 null，防止污染数据库
@@ -163,17 +212,19 @@ class ProfileBuilderAgent:
 
         if not final_features:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 画像无实质性更新。")
-            return
+            return True
 
         # 5. 调用 MemoryService 更新数据库 (你的 update_user_profile 会自动处理追加和版本快照)
         try:
             await self.memory.update_user_profile(
                 user_id=user_id,
                 features=final_features,
-                change_reason="基于近期对话增量合并"
+                change_reason=f"基于最近{len(recent_msgs)}条有效对话的显著特征增量合并"
             )
             logger.info(f"[ProfileBuilder] 用户 {user_id} 画像合并更新完毕！更新字段: {list(final_features.keys())}")
+            return True
         except Exception as e:
             logger.error(f"[ProfileBuilder] 保存更新后的画像失败 (user_id={user_id}): {str(e)}")
+            return False
 
 profile_agent = ProfileBuilderAgent()

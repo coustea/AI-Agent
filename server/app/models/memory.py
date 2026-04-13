@@ -27,5 +27,7 @@ class UserMemory(SQLModel, table=True):
     source: str = Field(default="conversation", index=True)  # 来源模块
     source_message_count: int = Field(default=0)  # 本次总结覆盖的短期消息条数
     expires_at: datetime | None = Field(default=None)  # 时效性，过期自动忽略
+    evidence_count: int = Field(default=1)  # 该记忆被重复证实的次数
+    last_seen_at: datetime = Field(default_factory=datetime.now)  # 最近一次确认时间
     attachments: str | None = Field(default=None, sa_column=Column(Text))  # JSON 关联资源
     created_at: datetime = Field(default_factory=datetime.now)

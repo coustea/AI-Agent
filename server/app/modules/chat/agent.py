@@ -33,7 +33,10 @@ from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
 from app.modules.chat.runtime_context import chat_runtime_context
+from app.modules.profile.fact_agent import fact_agent
+from app.modules.profile.profile_agent import profile_agent, PROFILE_UPDATE_TOKEN_THRESHOLD
 from app.services.memory import memory_service
+from app.services.memory import MEMORY_EXTRACTION_TOKEN_THRESHOLD
 from app.utils.paths import WORKPLACE_DIR
 from app.utils.plugin_manager import PluginManager
 
@@ -88,7 +91,7 @@ class TutorState(TypedDict, total=False):
     session_id: str
     image_url: Optional[str]
     file_urls: Optional[List[str]]
-    route: str  # "direct" | "tool_needed"
+    route: str  # "direct" | "tool_needed" | "vision_needed"
     system_prompt: str
     tool_system_prompt: str
     messages: Annotated[list[AnyMessage], add_messages]
@@ -203,12 +206,22 @@ class TutorAgent:
             graph = StateGraph(TutorState)
             graph.add_node("classify", self._classify_node)
             graph.add_node("direct_answer", self._direct_answer_node)
+            graph.add_node("vision_answer", self._vision_answer_node)
             graph.add_node("agent", self._agent_node)
             graph.add_node("tools", ToolNode(self._tools))
 
             graph.add_edge(START, "classify")
-            graph.add_conditional_edges("classify", self._route_after_classify)
+            graph.add_conditional_edges(
+                "classify",
+                self._route_after_classify,
+                {
+                    "direct": "direct_answer",
+                    "vision_needed": "vision_answer",
+                    "tool_needed": "agent",
+                },
+            )
             graph.add_edge("direct_answer", END)
+            graph.add_edge("vision_answer", END)
             graph.add_conditional_edges("agent", self._should_use_tools)
             graph.add_edge("tools", "agent")
 
@@ -223,6 +236,7 @@ class TutorAgent:
         """分类节点：判断走快速路径还是工具路径。"""
         messages = state.get("messages", [])
         file_urls = state.get("file_urls") or []
+        image_url = state.get("image_url")
 
         # 提取用户最新消息
         user_msg = ""
@@ -231,13 +245,18 @@ class TutorAgent:
                 user_msg = msg.content
                 break
 
-        # 有附件直接走工具路径
+        # 文档附件优先走工具路径（需要 read_uploaded_file 等工具）
         if file_urls:
             logger.info("[TutorAgent] classify: tool_needed (有文件附件)")
             return {"route": "tool_needed"}
 
+        # 图片走多模态理解节点（不绑定工具，直接多模态回答）
+        if image_url:
+            logger.info("[TutorAgent] classify: vision_needed (有图片附件)")
+            return {"route": "vision_needed"}
+
         # 调用轻量 LLM 分类
-        has_attachments = "无附件"
+        has_attachments = "有附件" if image_url or file_urls else "无附件"
         classify_prompt = PROMPTS["classifier"].format(
             user_message=user_msg[:500],
             has_attachments=has_attachments,
@@ -273,14 +292,56 @@ class TutorAgent:
         response = await self.llm.ainvoke(full_messages)
         return {"messages": [response]}
 
+    async def _vision_answer_node(self, state: TutorState) -> dict:
+        """图片理解路径：走多模态输入，不绑定工具。"""
+        system_prompt = state.get("system_prompt", "")
+        messages = list(state.get("messages", []))
+        image_url = state.get("image_url")
+
+        if image_url:
+            for idx in range(len(messages) - 1, -1, -1):
+                msg = messages[idx]
+                if isinstance(msg, HumanMessage):
+                    user_text = msg.content if isinstance(msg.content, str) else str(msg.content)
+                    messages[idx] = HumanMessage(
+                        content=[
+                            {"type": "text", "text": user_text},
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ]
+                    )
+                    break
+
+        full_messages: list[AnyMessage] = [SystemMessage(content=system_prompt)]
+        for msg in messages:
+            if not isinstance(msg, SystemMessage):
+                full_messages.append(msg)
+
+        response = await self.llm.ainvoke(full_messages)
+        return {"messages": [response]}
+
     async def _agent_node(self, state: TutorState) -> dict:
         """工具路径：绑定工具的 Agent 节点。"""
-        messages = state.get("messages", [])
+        messages = list(state.get("messages", []))
+        image_url = state.get("image_url")
 
         has_system = any(isinstance(m, SystemMessage) for m in messages)
         if not has_system:
             tool_prompt = state.get("tool_system_prompt", "")
             messages = [SystemMessage(content=tool_prompt)] + list(messages)
+
+        # 工具路径也支持图片理解：将最新用户消息升级为多模态输入
+        if image_url:
+            for idx in range(len(messages) - 1, -1, -1):
+                msg = messages[idx]
+                if isinstance(msg, HumanMessage):
+                    user_text = msg.content if isinstance(msg.content, str) else str(msg.content)
+                    messages[idx] = HumanMessage(
+                        content=[
+                            {"type": "text", "text": user_text},
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ]
+                    )
+                    break
 
         # 修复工具返回 list 内容导致部分模型 API 报 400 Invalid Data 的问题
         from langchain_core.messages import ToolMessage
@@ -317,6 +378,162 @@ class TutorAgent:
             return "tools"
         return END
 
+    @staticmethod
+    def _spawn_background(coro, task_name: str) -> None:
+        """统一后台任务入口：不阻塞主响应，异常写日志。"""
+        task = asyncio.create_task(coro)
+
+        def _on_done(done: asyncio.Task):
+            try:
+                done.result()
+            except Exception as exc:
+                logger.error(f"[TutorAgent] 后台任务失败 ({task_name}): {exc}")
+
+        task.add_done_callback(_on_done)
+
+    async def _build_profile_context(self, user_id: int) -> str:
+        profile_str = "暂无画像信息（新用户），请直接开始对话。"
+        profile = await memory_service.get_user_profile(user_id)
+        if not profile:
+            return profile_str
+
+        profile_dict = profile.model_dump(
+            exclude_unset=True, exclude={"updated_at", "created_at"},
+        )
+        if profile_dict:
+            profile_str = "\n".join([f"- {k}: {v}" for k, v in profile_dict.items() if v])
+        return profile_str
+
+    async def _build_memory_context(self, user_id: int) -> str:
+        memories_by_type = await memory_service.get_user_context_memories(user_id=user_id)
+        section_titles = {
+            "preference": "偏好",
+            "goal": "目标",
+            "weakness": "薄弱点",
+            "fact": "稳定事实",
+            "background": "背景信息",
+        }
+        chunks: list[str] = []
+        for memory_type, title in section_titles.items():
+            items = memories_by_type.get(memory_type, [])
+            if not items:
+                continue
+            lines = "\n".join([f"- {m.content}" for m in items])
+            chunks.append(f"### {title}\n{lines}")
+        return "\n\n".join(chunks) if chunks else "暂无特定事实记忆。"
+
+    async def _build_recent_chat_context(
+        self,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        image_url: Optional[str],
+        file_urls: Optional[List[str]],
+    ) -> tuple[list[AnyMessage], str]:
+        initial_messages: list[AnyMessage] = []
+        recent_context_lines: list[str] = []
+        recent_msgs = await memory_service.get_recent_messages(
+            user_id, session_id, self.module_name, limit=10
+        )
+        for msg in recent_msgs[:-1]:
+            if msg.role == "user":
+                initial_messages.append(HumanMessage(content=msg.content))
+                recent_context_lines.append(f"- 用户: {msg.content}")
+            elif msg.role == "assistant":
+                initial_messages.append(AIMessage(content=msg.content))
+                recent_context_lines.append(f"- 助手: {msg.content}")
+
+        full_msg = user_message
+        if image_url:
+            full_msg += f"\n[Attached Image: {image_url}]"
+        if file_urls:
+            full_msg += f"\n[Attached Files: {', '.join(file_urls)}]"
+        initial_messages.append(HumanMessage(content=full_msg))
+        recent_context = "\n".join(recent_context_lines) if recent_context_lines else "最近 7 天暂无历史对话。"
+        return initial_messages, recent_context
+
+    @staticmethod
+    def _build_file_context(image_url: Optional[str], file_urls: Optional[List[str]]) -> str:
+        lines: list[str] = []
+        if image_url:
+            lines.append(f"- 图片: {image_url} (可直接进行图片理解)")
+        if file_urls:
+            lines.extend([
+            f"- 文件名: {url.split('/')[-1]}, URL: {url} (使用 read_uploaded_file 工具读取)"
+            for url in file_urls
+            ])
+        if not lines:
+            return "用户未上传文件。"
+        return "用户上传了以下附件:\n" + "\n".join(lines)
+
+    async def _maybe_trigger_memory_extraction(self, user_id: int, session_id: str) -> None:
+        should_trigger = await memory_service.should_trigger_memory_extraction(
+            user_id=user_id,
+            session_id=session_id,
+            module=self.module_name,
+            threshold=MEMORY_EXTRACTION_TOKEN_THRESHOLD,
+        )
+        if not should_trigger:
+            return
+
+        success = await fact_agent.extract_and_save_fact(user_id=user_id, session_id=session_id)
+        if success:
+            await memory_service.reset_memory_extraction_counter(
+                user_id=user_id,
+                session_id=session_id,
+                module=self.module_name,
+            )
+            logger.info(f"[TutorAgent] 长期记忆提取完成并重置计数 (user={user_id}, session={session_id})")
+
+    async def _maybe_trigger_profile_update(self, user_id: int, session_id: str) -> None:
+        token_ready = await memory_service.should_trigger_profile_update_by_tokens(
+            user_id=user_id,
+            session_id=session_id,
+            module=self.module_name,
+            threshold=PROFILE_UPDATE_TOKEN_THRESHOLD,
+        )
+        if not token_ready:
+            return
+
+        recent_msgs = await memory_service.get_recent_messages(
+            user_id=user_id,
+            session_id=session_id,
+            module=self.module_name,
+            limit=20,
+        )
+        if not profile_agent.should_trigger_profile_update(recent_msgs):
+            logger.info(f"[TutorAgent] 画像更新未通过显著性判断 (user={user_id}, session={session_id})")
+            return
+
+        success = await profile_agent.build_profile(user_id=user_id, session_id=session_id)
+        if success:
+            await memory_service.reset_profile_update_counter(
+                user_id=user_id,
+                session_id=session_id,
+                module=self.module_name,
+            )
+            logger.info(f"[TutorAgent] 画像更新完成并重置计数 (user={user_id}, session={session_id})")
+
+    async def _run_post_chat_pipeline(
+        self,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        assistant_reply: str,
+    ) -> None:
+        """对话完成后异步执行的后处理链路。"""
+        try:
+            await memory_service.accumulate_session_tokens(
+                user_id=user_id,
+                session_id=session_id,
+                module=self.module_name,
+                content=f"{user_message}\n{assistant_reply}",
+            )
+            await self._maybe_trigger_memory_extraction(user_id, session_id)
+            await self._maybe_trigger_profile_update(user_id, session_id)
+        except Exception as exc:
+            logger.error(f"[TutorAgent] post chat pipeline failed: {exc}")
+
     # ══════════════════════════════════════════════════════════
     # 公共 API
     # ══════════════════════════════════════════════════════════
@@ -338,8 +555,17 @@ class TutorAgent:
         # 1. 保存用户消息
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
         attachments_json = None
+        attachment_items: list[dict] = []
+        if image_url:
+            attachment_items.append(
+                {
+                    "url": image_url,
+                    "type": "image",
+                    "name": image_url.split("/")[-1],
+                }
+            )
         if file_urls:
-            attachments_json = json.dumps([
+            attachment_items.extend([
                 {
                     "url": url,
                     "type": "image" if Path(url).suffix.lower() in IMAGE_EXTS else "document",
@@ -347,6 +573,8 @@ class TutorAgent:
                 }
                 for url in file_urls
             ])
+        if attachment_items:
+            attachments_json = json.dumps(attachment_items)
 
         try:
             msg_content = user_message
@@ -363,39 +591,10 @@ class TutorAgent:
             yield f"抱歉，系统暂时无法保存您的消息，请稍后重试 ({e})"
             return
 
-        # 2. 加载画像
-        profile_str = "暂无画像信息（新用户），请直接开始对话。"
-        profile = await memory_service.get_user_profile(user_id)
-        if profile:
-            profile_dict = profile.model_dump(
-                exclude_unset=True, exclude={"updated_at", "created_at"},
-            )
-            if profile_dict:
-                profile_str = "\n".join(
-                    [f"- {k}: {v}" for k, v in profile_dict.items() if v]
-                )
-
-        # 3. 加载长期事实记忆
-        facts = await memory_service.get_user_facts(user_id, limit=20)
-        fact_str = "暂无特定事实记忆。"
-        if facts:
-            fact_str = "\n".join(
-                [f"- {f.content} (属性: {f.memory_type})" for f in facts]
-            )
-
-        # 4. 构建文件信息上下文
-        file_info_str = "用户未上传文件。"
-        if file_urls:
-            file_info_str = "用户上传了以下文件:\n" + "\n".join(
-                f"- 文件名: {url.split('/')[-1]}, URL: {url} (使用 read_uploaded_file 工具读取)"
-                for url in file_urls
-            )
-
-        # 5. 渲染两套 prompt
-        direct_prompt = PROMPTS["direct_system"].format(
-            profile_context=profile_str,
-            fact_context=fact_str,
-        )
+        # 2. 分块构建上下文
+        profile_str = await self._build_profile_context(user_id)
+        fact_str = await self._build_memory_context(user_id)
+        file_info_str = self._build_file_context(image_url, file_urls)
 
         skills_ctx = ""
         skills = self.plugin_manager.list_skills()
@@ -408,28 +607,27 @@ class TutorAgent:
                 f"你可以通过调用 load_skill_<name> 工具加载专家技能指令：\n{skills_desc}"
             )
 
+        # 6. 构建最近 7 天会话上下文（默认过期过滤）
+        initial_messages, recent_chat_context = await self._build_recent_chat_context(
+            user_id=user_id,
+            session_id=effective_session,
+            user_message=user_message,
+            image_url=image_url,
+            file_urls=file_urls,
+        )
+
+        direct_prompt = PROMPTS["direct_system"].format(
+            profile_context=profile_str,
+            fact_context=fact_str,
+            recent_chat_context=recent_chat_context,
+        )
         tool_prompt = PROMPTS["tool_system"].format(
             profile_context=profile_str,
             fact_context=fact_str,
+            recent_chat_context=recent_chat_context,
             file_info_context=file_info_str,
             skills_context=skills_ctx,
         )
-
-        # 6. 构建消息列表
-        initial_messages: list[AnyMessage] = []
-        recent_msgs = await memory_service.get_recent_messages(
-            user_id, effective_session, self.module_name, limit=10
-        )
-        for msg in recent_msgs[:-1]:
-            if msg.role == "user":
-                initial_messages.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                initial_messages.append(AIMessage(content=msg.content))
-
-        full_msg = user_message
-        if file_urls:
-            full_msg += f"\n[Attached Files: {', '.join(file_urls)}]"
-        initial_messages.append(HumanMessage(content=full_msg))
 
         # 7. 执行 LangGraph 并流式输出
         full_reply = ""
@@ -488,6 +686,15 @@ class TutorAgent:
                 )
                 if tool_call_records:
                     logger.info(f"[Tutor] Saved reply with {len(tool_call_records)} tool call(s)")
+                self._spawn_background(
+                    self._run_post_chat_pipeline(
+                        user_id=user_id,
+                        session_id=effective_session,
+                        user_message=user_message,
+                        assistant_reply=full_reply,
+                    ),
+                    task_name="post_chat_pipeline",
+                )
             except Exception as e:
                 logger.error(f"[Tutor] Failed to save reply: {e}")
 

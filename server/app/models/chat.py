@@ -17,6 +17,10 @@ class ChatSession(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    # 自上次长期记忆提取后的累计 token（近似值）
+    memory_token_count: int = Field(default=0)
+    # 自上次画像更新后的累计 token（近似值）
+    profile_token_count: int = Field(default=0)
 
 
 
