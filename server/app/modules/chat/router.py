@@ -9,7 +9,7 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, Form, Query, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 
 from app.core.logging import get_logger
@@ -47,7 +47,7 @@ async def mentor_chat_stream(
         user_id=current_user.id,
         user_message=req.message,
         session_id=effective_session,
-        image_url=req.image_url,
+        image_urls=req.image_urls,
         file_urls=req.file_urls,
     )
 
@@ -61,9 +61,10 @@ async def mentor_chat_stream(
 @router.post("/chat/upload")
 async def upload_file(
     file: UploadFile = File(...),
+    session_id: str = Form(...),
     current_user: User = Depends(get_current_user),
 ):
-    """上传图片或文档，返回可访问的 URL。"""
+    """上传图片或文档，按 userId/sessionId 存储并返回可访问的 URL。"""
     if not file.filename:
         return HttpResponse.error(code=400, message="文件名不能为空")
 
@@ -85,17 +86,17 @@ async def upload_file(
         max_mb = max_size // (1024 * 1024)
         return HttpResponse.error(code=400, message=f"文件大小超过限制（{max_mb}MB）")
 
-    user_dir = UPLOAD_DIR / str(current_user.id)
-    user_dir.mkdir(parents=True, exist_ok=True)
+    session_dir = UPLOAD_DIR / str(current_user.id) / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
 
     file_id = uuid.uuid4().hex
     safe_name = f"{file_id}{suffix}"
-    file_path = user_dir / safe_name
+    file_path = session_dir / safe_name
 
     file_path.write_bytes(content)
-    url = f"/api/v1/ai/chat/uploads/{current_user.id}/{safe_name}"
+    url = f"/api/v1/ai/chat/uploads/{current_user.id}/{session_id}/{safe_name}"
 
-    logger.info(f"[Upload] User {current_user.id} uploaded {file.filename} -> {url}")
+    logger.info(f"[Upload] User {current_user.id} session {session_id} uploaded {file.filename} -> {url}")
     return HttpResponse.success(data=UploadResponse(
         url=url,
         file_type=file_type,
@@ -104,9 +105,10 @@ async def upload_file(
     ).model_dump())
 
 
-@router.get("/chat/uploads/{owner_id}/{filename}")
+@router.get("/chat/uploads/{owner_id}/{session_id}/{filename}")
 async def get_uploaded_file(
     owner_id: int,
+    session_id: str,
     filename: str,
     current_user: User = Depends(get_current_user),
 ):
@@ -117,9 +119,9 @@ async def get_uploaded_file(
     if Path(filename).name != filename:
         raise HTTPException(status_code=400, detail="非法文件名")
 
-    user_dir = (UPLOAD_DIR / str(owner_id)).resolve()
-    file_path = (user_dir / filename).resolve()
-    if not str(file_path).startswith(str(user_dir)):
+    session_dir = (UPLOAD_DIR / str(owner_id) / session_id).resolve()
+    file_path = (session_dir / filename).resolve()
+    if not str(file_path).startswith(str(session_dir)):
         raise HTTPException(status_code=400, detail="非法文件路径")
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="文件不存在")

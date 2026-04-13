@@ -15,7 +15,7 @@ from app.models.profile import UserProfile, UserProfileHistory
 
 logger = get_logger(__name__)
 
-SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7
+SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7  # 7天过期时间
 MEMORY_EXTRACTION_TOKEN_THRESHOLD = 80
 PROFILE_UPDATE_TOKEN_THRESHOLD = 120
 DEFAULT_MEMORY_TYPE_LIMITS: dict[str, int] = {

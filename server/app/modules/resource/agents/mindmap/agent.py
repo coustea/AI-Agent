@@ -56,6 +56,9 @@ class MindmapGenerator(BaseResourceAgent):
             state_schema=MindmapState,
             temperature=0.1,
         )
+        self._mindmap_skill_tool_name: str | None = None
+        self._mindmap_skill_description: str = ""
+        self._mindmap_skill_instructions: str = ""
 
     # ── BaseResourceAgent 必须实现的三个方法 ─────────────────────
 
@@ -76,6 +79,35 @@ class MindmapGenerator(BaseResourceAgent):
             f"本地: {len(summary['local_tools'])}, "
             f"Skills: {len(summary['skills'])}"
         )
+        self._cache_mindmap_skill()
+
+    def _cache_mindmap_skill(self) -> None:
+        """缓存 create-mindmap 技能的元数据与正文，确保生成前可直接使用。"""
+        self._mindmap_skill_tool_name = None
+        self._mindmap_skill_description = ""
+        self._mindmap_skill_instructions = ""
+
+        for skill in self.plugin_manager.list_skills():
+            if skill.get("name") != "create-mindmap":
+                continue
+
+            self._mindmap_skill_tool_name = skill.get("tool_name")
+            self._mindmap_skill_description = skill.get("description", "")
+
+            reader = getattr(self.plugin_manager, "_read_skill_instructions", None)
+            if callable(reader):
+                try:
+                    self._mindmap_skill_instructions = str(reader("create-mindmap")).strip()
+                except Exception as exc:
+                    logger.warning(f"[MindmapAgent] 读取 create-mindmap 技能正文失败: {exc}")
+
+            logger.info(
+                "[MindmapAgent] 已缓存 create-mindmap 技能: "
+                f"tool={self._mindmap_skill_tool_name or 'N/A'}"
+            )
+            return
+
+        logger.warning("[MindmapAgent] 未找到 create-mindmap 技能，导图生成将退回 prompt 驱动模式")
 
     def _build_system_message(self, state: Any) -> str:
         need_key = state.get("need", "review")
@@ -92,18 +124,45 @@ class MindmapGenerator(BaseResourceAgent):
 
         prompt += (
             "\n\n【执行指南】\n"
-            "1. 使用 `markdown_to_mindmap` 工具生成 HTML 思维导图。\n"
-            "2. 生成成功后，向用户反馈生成的 HTML 文件路径即可。\n"
+            "1. 先按 create-mindmap 技能的规则组织 Markdown 思维导图。\n"
+            "2. 再使用 `markdown_to_mindmap` 工具生成 HTML 思维导图。\n"
+            "3. 生成成功后，向用户反馈生成的 HTML 文件路径即可。\n"
             "注意：不要直接输出 Markdown 源码，必须调用工具生成 HTML。"
         )
+
+        if self._mindmap_skill_description:
+            prompt += (
+                "\n\n【可用技能】\n"
+                f"- create-mindmap: {self._mindmap_skill_description}\n"
+            )
+            if self._mindmap_skill_tool_name:
+                prompt += (
+                    f"如需查看技能原文，可调用 `{self._mindmap_skill_tool_name}`；"
+                    "但即使不显式调用，也必须遵循下方已加载的技能规则。\n"
+                )
+
+        if self._mindmap_skill_instructions:
+            prompt += (
+                "\n\n## [create-mindmap 技能指令]\n"
+                f"{self._mindmap_skill_instructions}"
+            )
+
         return self._append_context_to_prompt(prompt, state)
 
     def _build_initial_human_message(self, state: Any) -> str:
         topic = state.get('topic')
         gap = state.get('gap')
-        msg = f"请为知识点 '{topic}' 生成思维导图。"
+        need = state.get("need", "review")
+        extra = state.get("extra", "")
+
+        msg = f"请为知识点 '{topic}' 生成思维导图，并严格遵循 create-mindmap 技能的结构与格式要求。"
         if gap and gap != "无":
             msg += f" 特别注意学生在 '{gap}' 方面存在薄弱环节，请在图中重点体现。"
+        if need:
+            msg += f" 本次导图目标为：{need}。"
+        if extra:
+            msg += f" 额外要求：{extra}。"
+        msg += " 请完成 Markdown 结构设计后立即调用 markdown_to_mindmap 生成 HTML。"
         return msg
 
     async def _validate_node(self, state: Any) -> dict:

@@ -11,7 +11,7 @@ class MentorChatRequest(BaseModel):
 
     message: str
     session_id: Optional[str] = None
-    image_url: Optional[str] = None
+    image_urls: Optional[list[str]] = None
     file_urls: Optional[list[str]] = None
 
 

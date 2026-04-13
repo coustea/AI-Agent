@@ -23,7 +23,6 @@ def _env_path(key: str, default: str) -> Path:
 
 
 # 导出路径常量
-SKILLS_DIR = _env_path("SKILLS_DIR", "skills")
 WORKPLACE_DIR = _env_path("WORKPLACE_DIR", "workplace")
 LOGS_DIR = _env_path("LOGS_DIR", "logs")
 KNOWLEDGE_BASE_DIR = _env_path("KNOWLEDGE_BASE_DIR", "data")

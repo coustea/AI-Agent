@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from app.modules.chat.agent import tutor_agent
 from app.modules.resource.agents.content import content_writer
 from app.modules.resource.agents.code import code_agent
 from app.modules.resource.agents.mindmap import mindmap_generator
@@ -28,6 +29,7 @@ def get_graph_sync(agent):
     finally:
         loop.close()
 
+tutor_graph = get_graph_sync(tutor_agent)
 content_graph = get_graph_sync(content_writer)
 code_graph = get_graph_sync(code_agent)
 mindmap_graph = get_graph_sync(mindmap_generator)

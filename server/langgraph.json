@@ -1,6 +1,7 @@
 {
   "dependencies": ["."],
   "graphs": {
+    "tutor_graph": "./app/langgraph_dev.py:tutor_graph",
     "content_graph": "./app/langgraph_dev.py:content_graph",
     "code_graph": "./app/langgraph_dev.py:code_graph",
     "mindmap_graph": "./app/langgraph_dev.py:mindmap_graph",

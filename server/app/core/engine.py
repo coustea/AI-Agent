@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text, inspect
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-
+import app.modules
 # .env 在 server 目录下
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -32,7 +32,6 @@ APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() == "true"
 
 async def init_db() -> None:
     """导入所有模型并创建表"""
-    import app.models  # noqa: F401
 
     if APP_DEBUG:
         async with engine.begin() as conn:

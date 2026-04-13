@@ -1,27 +1,30 @@
 import os
+import sys
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-# 清除代理设置，避免 ChatOpenAI 初始化时因 socks 代理报错
-for _proxy_key in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
-    os.environ.pop(_proxy_key, None)
+# Allow `python main.py` from `server/app/` as well as `uv run python app/main.py` from `server/`.
+# When executed as a script, `sys.path[0]` becomes `server/app`, so `import app.*` would fail.
+SERVER_DIR = Path(__file__).resolve().parents[1]
+if str(SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVER_DIR))
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.engine import init_db
 from app.core.logging import get_logger, setup_logging
 from app.modules.auth.router import router as auth_router
 from app.modules.chat.router import router as chat_router
+from app.modules.knowledge_base.router import router as knowledge_router
 from app.modules.profile.router import router as profile_router
 from app.modules.resource.router import router as resource_router
-from app.modules.knowledge_base.router import router as knowledge_router
-logger = get_logger(__name__)
 
+logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

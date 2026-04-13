@@ -26,7 +26,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
 from app.core.logging import get_logger
-from app.utils.paths import SKILLS_DIR, WORKPLACE_DIR
+from app.utils.paths import WORKPLACE_DIR
 from app.utils.plugin_manager import PluginManager
 
 load_dotenv()
