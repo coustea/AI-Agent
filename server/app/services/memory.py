@@ -268,12 +268,14 @@ class MemoryService:
             chat_session = await self._get_owned_session(session, user_id, session_id, module)
             if not chat_session:
                 chat_session = ChatSession(id=session_id, user_id=user_id, module=module, title="新对话")
-            chat_session.memory_token_count = max(0, chat_session.memory_token_count + token_delta)
-            chat_session.profile_token_count = max(0, chat_session.profile_token_count + token_delta)
+            memory_token_count = max(0, chat_session.memory_token_count + token_delta)
+            profile_token_count = max(0, chat_session.profile_token_count + token_delta)
+            chat_session.memory_token_count = memory_token_count
+            chat_session.profile_token_count = profile_token_count
             chat_session.updated_at = self._now()
             session.add(chat_session)
             await session.commit()
-            return chat_session.memory_token_count, chat_session.profile_token_count
+            return memory_token_count, profile_token_count
 
     async def get_session_token_counters(self, user_id: int, session_id: str, module: str) -> tuple[int, int]:
         async with AsyncSession(self.engine) as session:

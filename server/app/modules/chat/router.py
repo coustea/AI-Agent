@@ -35,20 +35,58 @@ def _default_session_id(user_id: int) -> str:
     return f"user-{user_id}-default-mentor"
 
 
+async def _save_upload(file: UploadFile, user_id: int, session_id: str) -> tuple[str, str]:
+    """保存上传文件并返回 (url, file_type)。"""
+    suffix = Path(file.filename).suffix.lower() if file.filename else ""
+    if suffix in ALLOWED_IMAGE_EXT:
+        file_type = "image"
+        max_size = MAX_IMAGE_SIZE
+    elif suffix in ALLOWED_DOC_EXT:
+        file_type = "document"
+        max_size = MAX_DOC_SIZE
+    else:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {suffix}")
+
+    content = await file.read()
+    if len(content) > max_size:
+        raise HTTPException(status_code=400, detail=f"文件大小超过限制（{max_size // (1024 * 1024)}MB）")
+
+    session_dir = UPLOAD_DIR / str(user_id) / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    file_id = uuid.uuid4().hex
+    safe_name = f"{file_id}{suffix}"
+    (session_dir / safe_name).write_bytes(content)
+
+    url = f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/{safe_name}"
+    return url, file_type
+
+
 @router.post("/chat/stream")
 async def mentor_chat_stream(
-    req: MentorChatRequest,
+    message: str = Form(...),
+    session_id: str = Form(default=None),
+    files: list[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
 ):
-    """TutorAgent 辅导答疑（主功能）。"""
-    effective_session = req.session_id or _default_session_id(current_user.id)
+    """TutorAgent 辅导答疑（主功能），支持表单上传文件。"""
+    effective_session = session_id or _default_session_id(current_user.id)
+
+    image_urls: list[str] = []
+    file_urls: list[str] = []
+    for f in files:
+        url, file_type = await _save_upload(f, current_user.id, effective_session)
+        if file_type == "image":
+            image_urls.append(url)
+        else:
+            file_urls.append(url)
 
     generator = tutor_agent.chat_stream(
         user_id=current_user.id,
-        user_message=req.message,
+        user_message=message,
         session_id=effective_session,
-        image_urls=req.image_urls,
-        file_urls=req.file_urls,
+        image_urls=image_urls or None,
+        file_urls=file_urls or None,
     )
 
     async def stream_with_post_jobs():

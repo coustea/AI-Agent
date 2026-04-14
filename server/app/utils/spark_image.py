@@ -104,7 +104,8 @@ class SparkImageService:
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
         answer = ""
-        async with websockets.connect(url, ssl=ssl_ctx) as ws:
+        # 显式禁用代理，避免在存在 socks 代理环境时要求额外安装 python-socks。
+        async with websockets.connect(url, ssl=ssl_ctx, proxy=None) as ws:
             await ws.send(json.dumps(request_body))
 
             async for raw in ws:

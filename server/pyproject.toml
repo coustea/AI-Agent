@@ -33,6 +33,7 @@ dependencies = [
     "python-pptx>=1.0.2",
     "fonttools>=4.62.1",
     "greenlet>=3.3.2",
+    "zhipuai>=1.0.7",
 ]
 
 [dependency-groups]

@@ -94,10 +94,18 @@ class TutorAgent:
             temperature=0.0,
             max_tokens=100,
         )
+        # GLM 图片理解模型
+        self.glm_vision_llm = ChatOpenAI(
+            model=os.getenv("GLM_VISION_MODEL", "glm-4v-flash"),
+            api_key=os.getenv("GLM_API_KEY"),
+            base_url="https://open.bigmodel.cn/api/paas/v4/",
+            temperature=0.7,
+        )
         self.module_name = MODULE_NAME
         self.graph = None
         self._tools: list[BaseTool] = []
         self._init_lock = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task] = set()
 
         self.plugin_manager = PluginManager(
             workspace=WORKPLACE_DIR / "chat",
@@ -303,12 +311,13 @@ class TutorAgent:
         return "请描述这些图片"
 
     async def _vision_answer_node(self, state: TutorState) -> dict:
-        """图片理解路径：优先星火 API（逐张处理），失败回退 GLM 多模态。"""
+        """图片理解路径：优先星火 API 识别，再由主 LLM 生成统一风格的回复；失败回退 GLM 多模态。"""
         image_urls = state.get("image_urls") or []
         messages = list(state.get("messages", []))
         question = self._extract_question(messages)
+        system_prompt = state.get("system_prompt", "")
 
-        # 尝试星火图片理解（逐张处理，合并结果）
+        # 尝试星火图片理解（逐张处理）
         if spark_image_service.configured and image_urls:
             spark_results: list[str] = []
             spark_ok = True
@@ -333,14 +342,23 @@ class TutorAgent:
             if spark_ok and spark_results:
                 combined = "\n\n".join(spark_results) if len(spark_results) > 1 else spark_results[0]
                 logger.info(f"[TutorAgent] vision: 星火图片理解成功 ({len(spark_results)}张)")
-                return {"messages": [AIMessage(content=combined)]}
+                # 星火结果交由主 LLM 统一风格回复
+                vision_prompt = (
+                    f"图片识别结果如下：\n{combined}\n\n"
+                    f"请根据以上图片识别结果，回答用户的问题。如果用户没有具体问题，请对图片内容进行描述。"
+                )
+                vision_messages = [
+                    msg for msg in messages if not isinstance(msg, SystemMessage)
+                ]
+                full_messages = [SystemMessage(content=system_prompt)] + vision_messages[:-1] + [HumanMessage(content=vision_prompt)]
+                response = await self.llm.ainvoke(full_messages)
+                return {"messages": [response]}
 
         # 回退：GLM 多模态（支持多图）
         logger.info("[TutorAgent] vision: 使用 GLM 多模态")
-        system_prompt = state.get("system_prompt", "")
         injected_messages = self._inject_images(messages, image_urls)
         full_messages = self._build_messages(system_prompt, injected_messages)
-        response = await self.llm.ainvoke(full_messages)
+        response = await self.glm_vision_llm.ainvoke(full_messages)
         return {"messages": [response]}
 
     async def _agent_node(self, state: TutorState) -> dict:
@@ -386,18 +404,27 @@ class TutorAgent:
             return "tools"
         return END
 
-    @staticmethod
-    def _spawn_background(coro, task_name: str) -> None:
-        """创建后台任务，不阻塞流式响应。"""
+    def _spawn_background(self, coro, task_name: str) -> None:
+        """创建后台任务，不阻塞流式响应，并在结束时安全回收。"""
         task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
 
         def _on_done(done: asyncio.Task):
+            self._background_tasks.discard(done)
             try:
                 done.result()
+            except asyncio.CancelledError:
+                logger.info(f"[TutorAgent] 后台任务已取消 ({task_name})")
             except Exception as exc:
                 logger.error(f"[TutorAgent] 后台任务失败 ({task_name}): {exc}")
 
         task.add_done_callback(_on_done)
+
+    async def wait_for_background_tasks(self) -> None:
+        """等待当前已注册的后台任务结束，适合脚本模式退出前调用。"""
+        while self._background_tasks:
+            pending = tuple(self._background_tasks)
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def _build_profile_ctx(self, user_id: int) -> str:
         """构建用户画像上下文：将画像字段渲染为紧凑的 prompt 文本。"""
@@ -671,6 +698,15 @@ class TutorAgent:
                                 full_reply += text
                                 yield text
 
+                    # 非流式节点输出（如星火图片理解直接返回完整结果）
+                    if kind == "on_chain_end" and event.get("name") in ("vision_answer", "direct_answer"):
+                        output = event.get("data", {}).get("output", {})
+                        output_msgs = output.get("messages", []) if isinstance(output, dict) else []
+                        for msg in output_msgs:
+                            if isinstance(msg, AIMessage) and msg.content and msg.content not in full_reply:
+                                full_reply += msg.content
+                                yield msg.content
+
                     # 记录工具调用结果，用于后续持久化
                     if kind == "on_tool_end":
                         tool_input = event.get("data", {}).get("input", {})
@@ -712,3 +748,4 @@ class TutorAgent:
 
 # 全局单例
 tutor_agent = TutorAgent()
+
