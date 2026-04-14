@@ -214,7 +214,8 @@ export interface ResourceHistoryItem {
   has_code: boolean
   has_quiz: boolean
   has_reading: boolean
-  has_media: boolean
+  has_image: boolean
+  has_video: boolean
   created_at: string
 }
 
@@ -241,6 +242,7 @@ export interface GenerateParams {
     need: string
     extra: string
   }
+  selected_resources?: string[]
 }
 
 export function getAgents() {

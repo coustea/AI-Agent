@@ -183,9 +183,39 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane name="media" v-if="results.media?.success">
-                <template #label><el-icon><VideoPlay /></el-icon> 多模态分镜</template>
-                <div class="res-card markdown-body" v-html="parseMarkdown(results.media.content)"></div>
+              <el-tab-pane name="image" v-if="results.image?.success">
+                <template #label><el-icon><Monitor /></el-icon> 教学配图</template>
+                <div class="res-card">
+                  <div v-if="results.image.images?.length" class="image-grid">
+                    <img
+                      v-for="(url, i) in results.image.images"
+                      :key="i"
+                      :src="url"
+                      alt="教学配图"
+                      class="generated-image"
+                    />
+                  </div>
+                  <div class="markdown-body" v-html="parseMarkdown(results.image.content)"></div>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane name="video" v-if="results.video?.success">
+                <template #label><el-icon><VideoPlay /></el-icon> 教学视频</template>
+                <div class="res-card">
+                  <div v-if="results.video.videos?.length" class="video-links">
+                    <a
+                      v-for="(url, i) in results.video.videos"
+                      :key="i"
+                      :href="url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="video-link"
+                    >
+                      视频资源 {{ Number(i) + 1 }}
+                    </a>
+                  </div>
+                  <div class="markdown-body" v-html="parseMarkdown(results.video.content)"></div>
+                </div>
               </el-tab-pane>
             </el-tabs>
           </div>
@@ -276,9 +306,39 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane name="media" v-if="results.media?.success">
-                <template #label><el-icon><VideoPlay /></el-icon> 多模态分镜</template>
-                <div class="res-card markdown-body" v-html="parseMarkdown(results.media.content)"></div>
+              <el-tab-pane name="image" v-if="results.image?.success">
+                <template #label><el-icon><Monitor /></el-icon> 教学配图</template>
+                <div class="res-card">
+                  <div v-if="results.image.images?.length" class="image-grid">
+                    <img
+                      v-for="(url, i) in results.image.images"
+                      :key="i"
+                      :src="url"
+                      alt="教学配图"
+                      class="generated-image"
+                    />
+                  </div>
+                  <div class="markdown-body" v-html="parseMarkdown(results.image.content)"></div>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane name="video" v-if="results.video?.success">
+                <template #label><el-icon><VideoPlay /></el-icon> 教学视频</template>
+                <div class="res-card">
+                  <div v-if="results.video.videos?.length" class="video-links">
+                    <a
+                      v-for="(url, i) in results.video.videos"
+                      :key="i"
+                      :href="url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="video-link"
+                    >
+                      视频资源 {{ Number(i) + 1 }}
+                    </a>
+                  </div>
+                  <div class="markdown-body" v-html="parseMarkdown(results.video.content)"></div>
+                </div>
               </el-tab-pane>
             </el-tabs>
           </div>
@@ -315,7 +375,7 @@ const needOptions = [
 const dagPhases = [
   { name: 'foundation', label: '知识框架构建', agents: ['mindmap'] },
   { name: 'core', label: '核心资源生成', agents: ['content', 'code'] },
-  { name: 'enrichment', label: '拓展资源丰富', agents: ['quiz', 'reading', 'media'] },
+  { name: 'enrichment', label: '拓展资源丰富', agents: ['quiz', 'reading', 'image', 'video'] },
 ]
 
 const agentMeta: Record<string, any> = {
@@ -324,7 +384,8 @@ const agentMeta: Record<string, any> = {
   'code':    { id: 'code', role: 'Code Agent', icon: Cpu, desc: '编写可运行实操案例' },
   'quiz':    { id: 'quiz', role: 'Quiz Agent', icon: Edit, desc: '生成分层练习题库' },
   'reading': { id: 'reading', role: 'Reading Agent', icon: Collection, desc: '检索拓展阅读与论文' },
-  'media':   { id: 'media', role: 'Media Agent', icon: VideoPlay, desc: '生成多媒体教学脚本' }
+  'image':   { id: 'image', role: 'Image Agent', icon: Monitor, desc: '生成教学配图与图解资源' },
+  'video':   { id: 'video', role: 'Video Agent', icon: VideoPlay, desc: '生成教学动画视频资源' }
 }
 
 // 代理实时状态
@@ -478,7 +539,7 @@ const parseMarkdown = (raw: string) => {
 }
 
 const determineInitialTab = () => {
-  const priority = ['content', 'mindmap', 'code', 'quiz', 'reading', 'media']
+  const priority = ['content', 'mindmap', 'code', 'quiz', 'reading', 'image', 'video']
   for (const p of priority) {
     if (results.value[p] && results.value[p].success) {
       activeTab.value = p
@@ -529,6 +590,39 @@ const determineInitialTab = () => {
 }
 .header-titles h2 { margin: 0 0 4px 0; font-size: 1.2rem; font-weight: 700; color: #0F172A; }
 .header-titles p { margin: 0; font-size: 0.75rem; color: #64748B; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.generated-image {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  object-fit: cover;
+}
+
+.video-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.video-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.65rem 0.95rem;
+  border-radius: 999px;
+  background: #EEF2FF;
+  color: #3730A3;
+  font-weight: 600;
+  text-decoration: none;
+}
 
 .form-scroll-area {
   flex: 1;
