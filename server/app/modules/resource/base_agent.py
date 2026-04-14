@@ -49,13 +49,14 @@ class BlackboardKeys:
     CODE = "code"
     QUIZ = "quiz"
     READING = "reading"
-    MEDIA = "media"
+    IMAGE = "image"
+    VIDEO = "video"
     PPT = "ppt"
 
     @classmethod
     def all_keys(cls) -> list[str]:
         """获取所有标准键名"""
-        return [cls.CONTENT, cls.MINDMAP, cls.CODE, cls.QUIZ, cls.READING, cls.MEDIA, cls.PPT]
+        return [cls.CONTENT, cls.MINDMAP, cls.CODE, cls.QUIZ, cls.READING, cls.IMAGE, cls.VIDEO, cls.PPT]
 
 
 # ──────────────────────────────────────────────────────────────

@@ -162,7 +162,7 @@ class FileHandler:
 
 @tool("save_to_workplace")
 def save_to_workplace(
-    sub_dir: Literal["mindmap", "content", "code", "quiz", "reading", "media", "ppt"],
+    sub_dir: Literal["mindmap", "content", "code", "quiz", "reading", "image", "video", "ppt"],
     topic: str,
     content: str,
     ext: str = "md"

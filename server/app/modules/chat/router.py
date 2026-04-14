@@ -18,7 +18,8 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.services.memory import memory_service
 from app.modules.chat.agent import tutor_agent
-from app.modules.chat.schemas import MentorChatRequest, ChatMessageItem, UploadResponse, AttachmentInfo, ToolCallRecord
+from app.modules.chat.resource_cards import build_resource_cards_from_tool_calls
+from app.modules.chat.schemas import MentorChatRequest, ChatMessageItem, UploadResponse, AttachmentInfo, ToolCallRecord, ResourceCard
 from app.utils.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
@@ -238,20 +239,35 @@ async def get_chat_history(
             except (json.JSONDecodeError, TypeError):
                 attachments = None
 
-        # 解析 tool_calls JSON
+        # 解析 tool_calls JSON（仅供后端调试与兼容回退）
         tool_calls = None
+        raw_tc = None
         if msg.tool_calls:
             try:
                 raw_tc = json.loads(msg.tool_calls)
                 tool_calls = [ToolCallRecord(**tc) for tc in raw_tc]
             except (json.JSONDecodeError, TypeError):
                 tool_calls = None
+                raw_tc = None
+
+        resource_cards = None
+        if msg.resource_cards:
+            try:
+                raw_cards = json.loads(msg.resource_cards)
+                resource_cards = [ResourceCard(**card) for card in raw_cards]
+            except (json.JSONDecodeError, TypeError):
+                resource_cards = None
+        elif raw_tc:
+            derived_cards = build_resource_cards_from_tool_calls(raw_tc)
+            if derived_cards:
+                resource_cards = [ResourceCard(**card) for card in derived_cards]
 
         items.append(ChatMessageItem(
             role=msg.role,
             content=msg.content,
             attachments=attachments,
-            tool_calls=tool_calls,
+            tool_calls=None,
+            resource_cards=resource_cards,
             created_at=msg.created_at,
         ))
     return HttpResponse.success(data=items)

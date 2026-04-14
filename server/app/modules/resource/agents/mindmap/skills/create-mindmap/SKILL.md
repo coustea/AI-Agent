@@ -1,163 +1,152 @@
 ---
 name: create-mindmap
-description: Create concise Markdown mindmaps for course topics, weak-point diagnosis, review planning, exam prep, deep understanding, or practice-oriented learning. Use when Codex needs to turn a topic plus learner context (`topic`, `gap`, `need`, `extra`, profile hints) into a clean hierarchical Markdown tree, then hand that Markdown to a renderer such as `markdown_to_mindmap`.
+description: Generate detailed, complete Markdown mindmaps for course topics. Builds rich hierarchical trees with deep knowledge coverage, weak-point diagnosis, practical examples, and cross-topic extensions. Output goes to `markdown_to_mindmap` for rendering.
 ---
 
 # Create Mindmap
 
-Build the mindmap as Markdown first. Then call the rendering tool with the final Markdown. Do not stop at an outline if a renderer is available.
+## Core Principle
 
-## Follow this workflow
+Generate **complete, detailed, learning-ready** mindmaps — not outlines, not summaries. Every node should teach something. The goal is a student can study from the mindmap alone.
 
-1. Extract the task anchors:
-   - `topic`: the real root node
-   - `gap`: the weak point that must be made visible in the tree
-   - `need`: the learning mode that changes branch weight
-   - `extra`: explicit branch requests, examples, or constraints
-   - learner/profile hints: whether to add prerequisite review or advanced extension
-2. Choose one main organizing spine. Do not mix multiple unrelated structures in the same level.
-3. Draft a balanced tree in Markdown:
-   - usually 3-5 first-level branches
-   - usually 2-4 children per branch
-   - usually 3-5 total levels including the root
-4. Make the weak point explicit:
-   - add a dedicated branch when the weakness is central
-   - or inject contrast, pitfalls, bottom-layer explanation, or examples into the relevant branch
-5. Merge `extra` naturally into the tree. Do not append a random catch-all branch just to satisfy it.
-6. Run a final scan:
-   - all nodes are short
-   - sibling branches are parallel
-   - no duplicate branches
-   - the Markdown can be passed directly to `markdown_to_mindmap`
+## Workflow
 
-## Output contract
+1. Extract anchors: `topic`, `gap`, `need`, `extra`, profile hints
+2. Map out ALL important sub-topics under the given topic — be exhaustive
+3. Expand each sub-topic to at least 3 levels of depth with concrete details
+4. Add dedicated gap-breaking branch with multi-angle analysis
+5. Add practical examples, applications, and cross-domain connections
+6. Final quality check: 40+ nodes total, no empty branches
 
-Produce Markdown that satisfies all of the following:
+## Structure Requirements
+
+1. **First-level branches**: minimum 5, recommended 6-8
+2. **Depth**: at least 4 levels (root → L1 → L2 → L3 → L4), key topics up to 5
+3. **Density**: each non-leaf node has 3+ children, core branches have 4-6
+4. **Node text**: informative (15-30 chars OK), use parenthetical annotations for clarity
+5. **Total nodes**: aim for 40+ for a single topic mindmap
+
+## Output Contract
 
 1. Use exactly one root heading: `# Topic`
 2. Use unordered lists only: `- `
-3. Use two spaces per indentation level
-4. Do not use tabs for indentation
-5. Do not use numbered lists, tables, blockquotes, or code fences
-6. Do not add any explanation before or after the Markdown
-7. Do not output prose plus Markdown in the same answer
+3. Two spaces per indentation level
+4. No tabs, no numbered lists, no tables, no blockquotes, no code fences
+5. No prose before or after the Markdown
+6. Node text can include parenthetical notes for clarity
 
-The current renderer parses only:
+## Map `need` to Structure
 
-- one `# ` root line
-- nested `- ` list items
-- indentation depth derived from leading spaces
+- `review`: complete knowledge framework + concept details + key connections + pitfalls + review highlights
+- `exam`: high-frequency exam points + problem-solving strategies + common traps + comparison tables + mnemonics
+- `deep`: concept essence + principle derivation + mechanism chains + boundary conditions + academic frontiers
+- `practice`: workflow details + key steps + code examples + common bugs & debugging + performance tips
 
-If you add free-form prose lines, mixed bullets, or tabs, the rendered tree may lose nodes or collapse structure.
+**Important**: Regardless of mode, content must be thorough and detailed. "Exam mode" does NOT mean listing only keywords.
 
-## Map `need` to structure
+## Handle `gap`
 
-If `need` is one of the known modes, bias the tree accordingly:
+1. Create a dedicated deep-analysis branch (3+ levels deep)
+2. Break through from multiple angles: definition → principle → comparison → pitfalls → practice advice
+3. If gap involves concept confusion, add comparison/contrast sub-nodes
+4. If gap is empty or "无", evenly deepen all branches instead
 
-- `review`: prioritize 知识框架, 核心概念, 关键联系, 易错点, 快速回顾
-- `exam`: prioritize 高频考点, 易错点, 对比辨析, 题型思路, 快速记忆
-- `deep`: prioritize 概念定义, 底层原理, 机制链路, 边界限制, 延伸拓展
-- `practice`: prioritize 操作流程, 关键步骤, 示例场景, 常见错误, 实战建议
+## Extension Requirements
 
-If `need` is unknown, fall back to a general-learning structure:
+Every mindmap MUST include these extension branches:
 
-- 概念定义
-- 核心结构
-- 关键机制
+- **Prerequisites**: what foundation is needed to understand this topic
+- **Advanced**: what advanced topics this leads to
+- **Cross-domain**: connections to other subjects/fields
+- **Frontier**: latest developments or research directions in this area
+
+Extensions should be naturally integrated, with 2-4 levels of detail each.
+
+## Node Writing Rules
+
+Good nodes (specific, informative):
+- "栈遵循后进先出原则(LIFO)"
+- "数组实现的队列可能产生假溢出"
+- "async/await只能在async函数中使用"
+- "事件循环在多个任务间切换执行"
+
+Bad nodes (vague, empty):
+- "基本概念"
+- "其他补充"
+- "相关内容"
+- "一些特点"
+
+## Quality Bar
+
+Before rendering, verify:
+
+1. All important sub-topics are covered — no significant omissions
+2. Each branch is deep enough — not just listing names but explaining content
+3. Gap branch provides substantive help
+4. Extensions connect naturally to core knowledge
+5. Total node count reaches 40+
+6. Markdown is clean and ready for `markdown_to_mindmap`
+
+## Reference Example
+
+# 异步编程 (Asyncio)
+- 基本概念
+  - 什么是异步编程
+    - 并发 vs 并行的本质区别
+    - 异步适合I/O密集型任务
+    - 同步代码的可读性优势
+  - 为什么需要异步
+    - 阻塞式I/O的性能瓶颈
+    - 高并发场景下的资源浪费
+    - 事件驱动模型的效率优势
+- 核心组件
+  - 事件循环 (Event Loop)
+    - 负责调度和执行所有异步任务
+    - 持续运行直到所有任务完成
+    - 可嵌套使用(子事件循环)
+  - 协程 (Coroutine)
+    - 用async def定义的函数
+    - 必须通过await调用才能执行
+    - 挂起时释放控制权给事件循环
+  - Task 与 Future
+    - Task是协程的包装器，用于并发调度
+    - Future代表一个未来的运算结果
+    - asyncio.create_task()立即调度执行
+  - 常用API
+    - asyncio.gather()并发运行多个协程
+    - asyncio.wait()支持更灵活的等待策略
+    - asyncio.run()运行顶层入口协程
+- 关键语法
+  - async/await 关键字
+    - async声明协程函数
+    - await挂起当前协程等待结果
+    - await只能在async函数中使用
+  - 异步上下文管理器 (async with)
+    - 用于管理异步资源的获取与释放
+    - 如aiohttp.ClientSession()
+  - 异步迭代器 (async for)
+    - 用于遍历异步数据流
+    - 如数据库游标的逐行读取
+- 难点突破：并发模型理解
+  - 单线程为何能并发
+    - 协程在I/O等待时主动让出CPU
+    - 事件循环在多个任务间切换执行
+    - 本质是协作式多任务而非抢占式
+  - 异步与多线程的选择
+    - CPU密集型用多进程(ProcessPool)
+    - I/O密集型用异步(asyncio)
+    - 混合型可组合使用
+  - 常见陷阱
+    - 忘记await导致协程未执行
+    - 在异步代码中调用同步阻塞函数
+    - 异步函数中捕获异常需要特别处理
 - 应用场景
-- 易错点或拓展
-
-For reusable branch patterns and example skeletons, read [references/branch-patterns.md](references/branch-patterns.md).
-
-## Handle `gap` correctly
-
-Treat `gap` as a mandatory design constraint, not optional decoration.
-
-- If `gap` is a misunderstood concept, add a branch such as `难点突破`, `对比辨析`, or `原理拆解`
-- If `gap` is a process problem, add `步骤详解`, `常见卡点`, or `调试思路`
-- If `gap` is an exam weakness, add `易错点`, `陷阱识别`, or `题型策略`
-- If `gap` is empty or `无`, do not fabricate a fake weak-point branch
-
-Prefer making the weak point teachable through:
-
-- contrast: what it is vs what it is not
-- causal chain: why it works
-- prerequisite recall: what must be understood first
-- error pattern: where learners usually fail
-
-## Personalize by learner level
-
-Use user/profile hints only when they materially improve the tree.
-
-- If the learner is weak on foundations, add a compact `前置知识` branch
-- If the learner is advanced, add a compact `进阶拓展` branch
-- If the learner prefers examples, place more `示例场景` or `应用案例`
-- If the learner prefers reasoning, place more `原理链路` or `因果关系`
-
-Keep personalization secondary. The main tree should still center on the topic.
-
-## Node-writing rules
-
-1. Keep each node short and scan-friendly
-2. Prefer noun phrases or short action phrases over full sentences
-3. Keep sibling labels in the same style and granularity
-4. Avoid vague labels such as `其他`, `补充`, `说明`, `相关内容`
-5. Avoid repeating the same idea across branches unless the repetition is intentionally comparative
-
-Good labels:
-
-- 概念定义
-- 核心机制
-- 关键步骤
-- 应用场景
-- 对比辨析
-- 易错点
-- 题型策略
-- 工程实践
-
-Weak labels:
-
-- 介绍一下
-- 一些内容
-- 更多知识
-- 其他补充
-
-## Quality bar
-
-Before calling the renderer, verify:
-
-1. The root topic matches the request exactly
-2. The branch structure matches the learning goal implied by `need`
-3. The weak point from `gap` is visible when one exists
-4. The tree is balanced enough to render cleanly
-5. Every branch adds learning value: understanding, recall, comparison, or application
-6. The final answer is Markdown only and ready for `markdown_to_mindmap`
-
-## Recover from common failures
-
-If a previous attempt failed validation or rendered poorly, fix the structure before calling the renderer again.
-
-- If the tree is too flat, convert long sibling lists into grouped branches
-- If one branch is too deep, compress details into parallel summary nodes
-- If labels are verbose, shorten them before retrying
-- If `gap` is not visible, add one focused weak-point branch instead of scattering tiny fixes
-- If `extra` caused clutter, merge it into the nearest relevant branch
-
-## Minimal example
-
-# 递归
-- 概念定义
-  - 函数自调用
-  - 终止条件
-- 核心结构
-  - 递推关系
-  - 返回过程
-- 难点突破
-  - 递归与循环
-  - 调用栈理解
-- 常见题型
-  - 树遍历
-  - 分治问题
-- 易错点
-  - 缺少出口
-  - 状态混乱
+  - Web框架：FastAPI原生支持异步
+  - 网络请求：aiohttp异步HTTP客户端
+  - 数据库：asyncpg/sqlalchemy异步引擎
+  - 爬虫：异步抓取大幅提升效率
+- 知识拓展
+  - 前置：迭代器、生成器、yield关键字
+  - 进阶：消息队列、分布式异步任务(Celery)
+  - 关联：Node.js事件循环、Go协程(goroutine)
+  - 前沿：结构化并发(Structured Concurrency)

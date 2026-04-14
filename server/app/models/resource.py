@@ -20,7 +20,6 @@ class GeneratedResource(SQLModel, table=True):
     code_result: str | None = Field(default=None, sa_column=Column(Text))
     quiz_result: str | None = Field(default=None, sa_column=Column(Text))
     reading_result: str | None = Field(default=None, sa_column=Column(Text))
-    media_result: str | None = Field(default=None, sa_column=Column(Text))
     ppt_result: str | None = Field(default=None, sa_column=Column(Text))
 
     created_at: datetime = Field(default_factory=datetime.now)

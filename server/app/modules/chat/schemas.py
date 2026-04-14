@@ -30,12 +30,23 @@ class ToolCallRecord(BaseModel):
     status: str  # "success" | "error"
 
 
+class ResourceCard(BaseModel):
+    """面向前端展示的资源卡片。"""
+    type: str  # "image" | "video" | "document" | "ppt"
+    title: str
+    summary: str
+    asset_urls: list[str]
+    file_path: Optional[str] = None
+    preview_text: str = ""
+
+
 class ChatMessageItem(BaseModel):
     """单条聊天消息"""
     role: str
     content: str
     attachments: Optional[list[AttachmentInfo]] = None
     tool_calls: Optional[list[ToolCallRecord]] = None
+    resource_cards: Optional[list[ResourceCard]] = None
     created_at: Optional[datetime] = None
 
 

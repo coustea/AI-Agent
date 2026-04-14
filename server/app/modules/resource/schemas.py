@@ -2,6 +2,8 @@
 资源生成模块的请求/响应数据模型。
 """
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -19,3 +21,7 @@ class ResourceGenerateRequest(BaseModel):
 
     user_id: int = Field(..., description="当前登录用户 ID")
     learning_task: LearningTask
+    selected_resources: Optional[list[str]] = Field(
+        default=None,
+        description="可选：指定要生成的资源类型；未传或为空时默认全量生成",
+    )

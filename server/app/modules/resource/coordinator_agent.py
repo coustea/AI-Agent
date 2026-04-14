@@ -28,11 +28,9 @@ from app.modules.resource.agents.content import content_writer
 from app.modules.resource.agents.quiz import quiz_agent
 from app.modules.resource.agents.reading import reading_agent
 from app.modules.resource.agents.code import code_agent
-from app.modules.resource.agents.media import media_agent
 from app.modules.resource.agents.ppt import ppt_agent
 from app.modules.resource.exceptions import (
     PlanningError,
-    KnowledgeBaseError,
     AgentExecutionError,
     ValidationError,
 )
@@ -130,14 +128,6 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         method="generate_code",
         result_summary=lambda r: f"，语言: {r.get('detected_language', 'unknown')}",
     ),
-    "media": AgentEntry(
-        role="Media Agent",
-        desc="生成多媒体教学脚本",
-        type="media",
-        agent=media_agent,
-        method="generate_media",
-        result_summary=lambda r: f"，脚本 {len(r.get('content', ''))} 字",
-    ),
     "ppt": AgentEntry(
         role="PPT Agent",
         desc="生成演示文稿大纲",
@@ -151,8 +141,14 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
 DAG_PHASES = [
     {"name": "foundation", "label": "知识框架构建", "agents": ["mindmap"]},
     {"name": "core",       "label": "核心资源生成", "agents": ["content", "code"]},
-    {"name": "enrichment", "label": "拓展资源丰富", "agents": ["quiz", "reading", "media"]},
+    {"name": "enrichment", "label": "拓展资源丰富", "agents": ["quiz", "reading"]},
     {"name": "presentation", "label": "演示资源生成", "agents": ["ppt"]},
+]
+
+DEFAULT_RESOURCE_ORDER = [
+    agent_name
+    for phase in DAG_PHASES
+    for agent_name in phase["agents"]
 ]
 
 
@@ -166,209 +162,24 @@ class CoordinatorAgent:
             temperature=0,
         )
 
-    async def _plan(self, task: dict, profile: dict) -> list[dict]:
-        await self.emitter.emit_coordinator("parsing", "正在分析学习需求，拆解任务...")
-        await self.emitter.emit_agent_log("coordinator", "调用 LLM Planner 进行 DAG 任务规划...")
-        prompt_text = PLANNER_PROMPT_PATH.read_text(encoding="utf-8")
-        formatted = prompt_text.format(
-            user_input=json.dumps(task, ensure_ascii=False),
-            profile=json.dumps(profile, ensure_ascii=False),
-        )
-        messages = [
-            SystemMessage(content=formatted),
-            HumanMessage(content="请根据以上信息进行任务拆解。"),
-        ]
-        try:
-            response = await self.llm.ainvoke(messages)
-            content = response.content.strip()
-            if content.startswith("```"):
-                lines = content.split("\n")
-                lines = [l for l in lines if not l.startswith("```")]
-                content = "\n".join(lines).strip()
-            plan = json.loads(content)
-            tasks = plan.get("tasks", [])
-            logger.info(f"[Coordinator] 规划完成，共 {len(tasks)} 个子任务")
-            await self.emitter.emit_agent_log(
-                "coordinator", f"Planner 返回 {len(tasks)} 个子任务: {', '.join(t.get('agent', '?') for t in tasks)}"
-            )
-            return tasks
-        except json.JSONDecodeError as e:
-            logger.error(f"[Coordinator] Planner 返回非法 JSON: {e}")
-            await self.emitter.emit_agent_log(
-                "coordinator", f"⚠ Planner 输出解析失败 (JSONDecodeError)，回退到默认任务模板"
-            )
-            return self._default_tasks(task)
-        except Exception as e:
-            logger.error(f"[Coordinator] 规划失败: {e}", exc_info=True)
-            await self.emitter.emit_agent_log(
-                "coordinator", f"⚠ Planner 调用异常 ({type(e).__name__}: {e})，回退到默认任务模板"
-            )
-            return self._default_tasks(task)
-
-    @staticmethod
-    def _default_tasks(task: dict) -> list[dict]:
-        agents = list(AGENT_REGISTRY.keys())
-        return [
-            {
-                "agent": a,
-                "description": f"为 {task.get('course', '')} 生成{AGENT_REGISTRY[a].desc}",
-                "parameters": {
-                    "topic": task.get("course", ""),
-                    "major": "",
-                    "course": task.get("course", ""),
-                    "gap": task.get("gap", ""),
-                    "need": task.get("need", "review"),
-                    "extra": task.get("extra", ""),
-                },
-            }
-            for a in agents
-        ]
-
-    async def _safe_load_profile(self, user_id: int) -> dict:
-        """安全加载用户画像，包含错误处理"""
-        try:
-            profile = await _load_profile(user_id)
-            if profile:
-                await self.emitter.emit_agent_log(
-                    "coordinator",
-                    f"画像加载成功: level={profile.get('knowledge_level', 'N/A')}, "
-                    f"style={profile.get('cognitive_style', 'N/A')}"
-                )
-                logger.info(f"[Coordinator] 用户 {user_id} 画像加载完成")
-            else:
-                await self.emitter.emit_agent_log("coordinator", "未找到用户画像，将以默认配置运行")
-            return profile or {}
-        except Exception as e:
-            logger.error(f"[Coordinator] 画像加载失败: {e}", exc_info=True)
-            await self.emitter.emit_agent_log("coordinator", f"⚠ 画像加载异常: {e}，将跳过个性化")
-            return {}
-
-    async def _safe_plan(self, task: dict, profile: dict) -> list[dict]:
-        """安全执行任务规划，包含错误处理和回退策略"""
-        try:
-            return await self._plan(task, profile)
-        except PlanningError as e:
-            logger.error(f"[Coordinator] 规划失败: {e}")
-            await self.emitter.emit_agent_log(
-                "coordinator", f"⚠ 使用默认任务规划: {str(e)}"
-            )
-            return self._default_tasks(task)
-        except Exception as e:
-            logger.error(f"[Coordinator] 规划异常: {e}", exc_info=True)
-            await self.emitter.emit_agent_log(
-                "coordinator", f"⚠ 规划异常，使用默认任务规划"
-            )
-            return self._default_tasks(task)
-
-    async def _safe_search_knowledge_base(self, task: dict) -> str:
-        """安全的知识库检索，返回上下文字符串"""
-        try:
-            from app.modules.knowledge_base.service import KnowledgeBaseService
-
-            kb_service = KnowledgeBaseService()
-            query = f"{task.get('course', '')} {task.get('gap', '')}"
-            results = await kb_service.search_similar_async(query, k=3)
-
-            if results:
-                context_parts = []
-                for i, doc in enumerate(results, 1):
-                    context_parts.append(f"[参考 {i}] {doc.page_content[:200]}...")
-                return "\n".join(context_parts)
-            return ""
-        except KnowledgeBaseError as e:
-            logger.warning(f"[Coordinator] 知识库检索失败: {e}")
-            return ""
-        except Exception as e:
-            logger.warning(f"[Coordinator] 知识库检索异常: {e}")
-            return ""
-
-    async def _run_agent(
+    async def run(
         self,
-        agent_name: str,
-        params: dict,
-        profile: dict,
-        shared_memory: dict,
+        user_id: int,
+        task: dict,
+        selected_resources: list[str] | None = None,
     ) -> dict:
-        # P2：统一从注册表获取 Agent 信息，不再 if/elif
-        entry = AGENT_REGISTRY.get(agent_name)
-        if entry is None:
-            await self.emitter.emit_agent_error(agent_name, f"未知智能体: {agent_name}")
-            return {}
-
-        agent_id = agent_name
-        await self.emitter.emit_agent_start(agent_id)
-        await self.emitter.emit_agent_log(agent_id, f"[{entry.role}] 已唤醒，任务: {entry.desc}")
-
-        # ── 阶段 1：注入用户画像与黑板记忆 ──
-        profile_summary = ""
-        if profile:
-            level = profile.get("knowledge_level", "")
-            style = profile.get("cognitive_style", "")
-            parts = [p for p in [level, style] if p]
-            profile_summary = f"（{', '.join(parts)}）" if parts else ""
-        await self.emitter.emit_agent_log(
-            agent_id, f"加载学习者画像 {profile_summary}，注入长时记忆上下文..."
-        )
-
-        # ── 阶段 2：构建 Prompt ──
-        blackboard_agents = list(shared_memory.keys()) if shared_memory else []
-        if blackboard_agents:
-            await self.emitter.emit_agent_log(
-                agent_id, f"读取黑板共享记忆: {', '.join(blackboard_agents)}，构建协作 Prompt..."
-            )
-        else:
-            await self.emitter.emit_agent_log(agent_id, "构建 System Prompt，初始化工作流...")
-
-        try:
-            # ── 阶段 3：P2 统一调用——从注册表取 method，动态 getattr 调用 ──
-            kwargs: dict[str, Any] = {
-                "topic":         params.get("topic", ""),
-                "course":        params.get("course", ""),
-                "major":         params.get("major", ""),
-                "gap":           params.get("gap", ""),
-                "user_profile":  profile,
-                "shared_memory": shared_memory,
-                **entry.extra_kwargs,   # AgentEntry 可携带额外固定参数
-            }
-            # mindmap 需要额外的 need / extra 参数
-            if agent_name == "mindmap":
-                kwargs["need"] = params.get("need", "review")
-                kwargs["extra"] = params.get("extra", "")
-
-            await self.emitter.emit_agent_log(agent_id, "初始化 LangGraph 工作流，准备调用 LLM...")
-            fn = getattr(entry.agent, entry.method)
-            result = await fn(**kwargs)
-
-            # ── 阶段 4：结果校验 ──
-            success = result.get("success", False)
-            if success:
-                extra_info = entry.result_summary(result)
-                await self.emitter.emit_agent_log(agent_id, f"校验通过 ✓{extra_info}")
-            else:
-                error_msg = result.get("error", "未知原因")
-                await self.emitter.emit_agent_log(
-                    agent_id, f"校验未通过或生成失败: {error_msg}"
-                )
-
-            logger.info(f"[Coordinator] Agent {agent_name} 完成: success={success}")
-            await self.emitter.emit_agent_done(agent_id, data=result)
-            return result
-
-        except Exception as e:
-            logger.error(f"[Coordinator] Agent {agent_name} 异常: {e}", exc_info=True)
-            await self.emitter.emit_agent_error(agent_id, str(e))
-            return {}
-
-    async def run(self, user_id: int, task: dict) -> dict:
         await self.emitter.emit_coordinator("parsing", "正在读取学习者画像...")
         profile = await self._safe_load_profile(user_id)
+        allowed_agents = self._normalize_selected_resources(selected_resources)
+        if allowed_agents is None:
+            await self.emitter.emit_agent_log("coordinator", "未指定资源范围，按赛题要求执行全量资源生成")
+        else:
+            await self.emitter.emit_agent_log(
+                "coordinator",
+                f"已指定资源范围，仅生成: {', '.join(allowed_agents)}",
+            )
 
-        # 知识库检索（可选，失败不影响主流程）
-        kb_context = await self._safe_search_knowledge_base(task)
-        if kb_context:
-            await self.emitter.emit_agent_log("coordinator", "已加载知识库参考内容")
-
-        tasks = await self._safe_plan(task, profile)
+        tasks = await self._safe_plan(task, profile, allowed_agents)
         await self.emitter.emit_coordinator(
             "dispatching", f"任务拆解完成，共 {len(tasks)} 个子任务，开始 DAG 分阶段调度..."
         )
@@ -427,6 +238,227 @@ class CoordinatorAgent:
         await self.emitter.emit_done("资源包构建完成")
         return final
 
+    async def _safe_load_profile(self, user_id: int) -> dict:
+        """安全加载用户画像，包含错误处理"""
+        try:
+            profile = await _load_profile(user_id)
+            if profile:
+                await self.emitter.emit_agent_log(
+                    "coordinator",
+                    f"画像加载成功: level={profile.get('knowledge_level', 'N/A')}, "
+                    f"style={profile.get('cognitive_style', 'N/A')}"
+                )
+                logger.info(f"[Coordinator] 用户 {user_id} 画像加载完成")
+            else:
+                await self.emitter.emit_agent_log("coordinator", "未找到用户画像，将以默认配置运行")
+            return profile or {}
+        except Exception as e:
+            logger.error(f"[Coordinator] 画像加载失败: {e}", exc_info=True)
+            await self.emitter.emit_agent_log("coordinator", f"⚠ 画像加载异常: {e}，将跳过个性化")
+            return {}
+
+    async def _safe_plan(
+        self,
+        task: dict,
+        profile: dict,
+        allowed_agents: list[str] | None,
+    ) -> list[dict]:
+        """安全执行任务规划，包含错误处理和回退策略"""
+        try:
+            return await self._plan(task, profile, allowed_agents)
+        except PlanningError as e:
+            logger.error(f"[Coordinator] 规划失败: {e}")
+            await self.emitter.emit_agent_log(
+                "coordinator", f"⚠ 使用默认任务规划: {str(e)}"
+            )
+            return self._default_tasks(task, allowed_agents)
+        except Exception as e:
+            logger.error(f"[Coordinator] 规划异常: {e}", exc_info=True)
+            await self.emitter.emit_agent_log(
+                "coordinator", f"⚠ 规划异常，使用默认任务规划"
+            )
+            return self._default_tasks(task, allowed_agents)
+
+    async def _plan(
+        self,
+        task: dict,
+        profile: dict,
+        allowed_agents: list[str] | None,
+    ) -> list[dict]:
+        await self.emitter.emit_coordinator("parsing", "正在分析学习需求，拆解任务...")
+        await self.emitter.emit_agent_log("coordinator", "调用 LLM Planner 进行 DAG 任务规划...")
+        prompt_text = PLANNER_PROMPT_PATH.read_text(encoding="utf-8")
+        resource_scope = (
+            "未指定，默认按赛题要求生成全部资源类型。"
+            if allowed_agents is None
+            else f"仅允许以下资源类型: {', '.join(allowed_agents)}"
+        )
+        formatted = prompt_text.format(
+            user_input=json.dumps(task, ensure_ascii=False),
+            profile=json.dumps(profile, ensure_ascii=False),
+            resource_scope=resource_scope,
+        )
+        messages = [
+            SystemMessage(content=formatted),
+            HumanMessage(content="请根据以上信息进行任务拆解。"),
+        ]
+        try:
+            response = await self.llm.ainvoke(messages)
+            content = response.content.strip()
+            if content.startswith("```"):
+                lines = content.split("\n")
+                lines = [l for l in lines if not l.startswith("```")]
+                content = "\n".join(lines).strip()
+            plan = json.loads(content)
+            tasks = plan.get("tasks", [])
+            tasks = self._filter_tasks_by_selection(tasks, allowed_agents)
+            logger.info(f"[Coordinator] 规划完成，共 {len(tasks)} 个子任务")
+            await self.emitter.emit_agent_log(
+                "coordinator", f"Planner 返回 {len(tasks)} 个子任务: {', '.join(t.get('agent', '?') for t in tasks)}"
+            )
+            return tasks
+        except json.JSONDecodeError as e:
+            logger.error(f"[Coordinator] Planner 返回非法 JSON: {e}")
+            await self.emitter.emit_agent_log(
+                "coordinator", f"⚠ Planner 输出解析失败 (JSONDecodeError)，回退到默认任务模板"
+            )
+            return self._default_tasks(task, allowed_agents)
+        except Exception as e:
+            logger.error(f"[Coordinator] 规划失败: {e}", exc_info=True)
+            await self.emitter.emit_agent_log(
+                "coordinator", f"⚠ Planner 调用异常 ({type(e).__name__}: {e})，回退到默认任务模板"
+            )
+            return self._default_tasks(task, allowed_agents)
+
+    @staticmethod
+    def _default_tasks(task: dict, allowed_agents: list[str] | None = None) -> list[dict]:
+        agents = allowed_agents or DEFAULT_RESOURCE_ORDER
+        return [
+            {
+                "agent": a,
+                "description": f"为 {task.get('course', '')} 生成{AGENT_REGISTRY[a].desc}",
+                "parameters": {
+                    "topic": task.get("course", ""),
+                    "major": "",
+                    "course": task.get("course", ""),
+                    "gap": task.get("gap", ""),
+                    "need": task.get("need", "review"),
+                    "extra": task.get("extra", ""),
+                },
+            }
+            for a in agents
+        ]
+
+    @staticmethod
+    def _normalize_selected_resources(selected_resources: list[str] | None) -> list[str] | None:
+        if not selected_resources:
+            return None
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw_name in selected_resources:
+            name = str(raw_name).strip().lower()
+            if not name:
+                continue
+            if name not in AGENT_REGISTRY or name in seen:
+                continue
+            normalized.append(name)
+            seen.add(name)
+
+        if not normalized:
+            return None
+
+        order_index = {name: idx for idx, name in enumerate(DEFAULT_RESOURCE_ORDER)}
+        normalized.sort(key=lambda name: order_index[name])
+        return normalized
+
+    @staticmethod
+    def _filter_tasks_by_selection(
+        tasks: list[dict],
+        allowed_agents: list[str] | None,
+    ) -> list[dict]:
+        if allowed_agents is None:
+            return tasks
+        allowed_set = set(allowed_agents)
+        return [task for task in tasks if task.get("agent") in allowed_set]
+
+    async def _run_agent(
+        self,
+        agent_name: str,
+        params: dict,
+        profile: dict,
+        shared_memory: dict,
+    ) -> dict:
+        # P2：统一从注册表获取 Agent 信息，不再 if/elif
+        entry = AGENT_REGISTRY.get(agent_name)
+        if entry is None:
+            await self.emitter.emit_agent_error(agent_name, f"未知智能体: {agent_name}")
+            return {}
+
+        agent_id = agent_name
+        await self.emitter.emit_agent_start(agent_id)
+        await self.emitter.emit_agent_log(agent_id, f"[{entry.role}] 已唤醒，任务: {entry.desc}")
+
+        # ── 阶段 1：注入用户画像与黑板记忆 ──
+        profile_summary = ""
+        if profile:
+            level = profile.get("knowledge_level", "")
+            style = profile.get("cognitive_style", "")
+            parts = [p for p in [level, style] if p]
+            profile_summary = f"（{', '.join(parts)}）" if parts else ""
+        await self.emitter.emit_agent_log(
+            agent_id, f"加载学习者画像 {profile_summary}，注入长时记忆上下文..."
+        )
+
+        # ── 阶段 2：构建 Prompt ──
+        blackboard_agents = list(shared_memory.keys()) if shared_memory else []
+        if blackboard_agents:
+            await self.emitter.emit_agent_log(
+                agent_id, f"读取黑板共享记忆: {', '.join(blackboard_agents)}，构建协作 Prompt..."
+            )
+        else:
+            await self.emitter.emit_agent_log(agent_id, "构建 System Prompt，初始化工作流...")
+
+        try:
+            # ── 阶段 3：P2 统一调用——从注册表取 method，动态 getattr 调用 ──
+            kwargs: dict[str, Any] = {
+                "topic": params.get("topic", ""),
+                "course": params.get("course", ""),
+                "major": params.get("major", ""),
+                "gap": params.get("gap", ""),
+                "user_profile": profile,
+                "shared_memory": shared_memory,
+                **entry.extra_kwargs,   # AgentEntry 可携带额外固定参数
+            }
+            # mindmap 需要额外的 need / extra 参数
+            if agent_name == "mindmap":
+                kwargs["need"] = params.get("need", "review")
+                kwargs["extra"] = params.get("extra", "")
+
+            await self.emitter.emit_agent_log(agent_id, "初始化 LangGraph 工作流，准备调用 LLM...")
+            fn = getattr(entry.agent, entry.method)
+            result = await fn(**kwargs)
+
+            # ── 阶段 4：结果校验 ──
+            success = result.get("success", False)
+            if success:
+                extra_info = entry.result_summary(result)
+                await self.emitter.emit_agent_log(agent_id, f"校验通过 ✓{extra_info}")
+            else:
+                error_msg = result.get("error", "未知原因")
+                await self.emitter.emit_agent_log(
+                    agent_id, f"校验未通过或生成失败: {error_msg}"
+                )
+
+            logger.info(f"[Coordinator] Agent {agent_name} 完成: success={success}")
+            await self.emitter.emit_agent_done(agent_id, data=result)
+            return result
+
+        except Exception as e:
+            logger.error(f"[Coordinator] Agent {agent_name} 异常: {e}", exc_info=True)
+            await self.emitter.emit_agent_error(agent_id, str(e))
+            return {}
+
     @staticmethod
     async def _save_resource(user_id: int, task: dict, results: dict) -> None:
         import json
@@ -450,7 +482,6 @@ class CoordinatorAgent:
                 code_result=_serialize(results.get("code")),
                 quiz_result=_serialize(results.get("quiz")),
                 reading_result=_serialize(results.get("reading")),
-                media_result=_serialize(results.get("media")),
                 ppt_result=_serialize(results.get("ppt")),
             )
             session.add(resource)

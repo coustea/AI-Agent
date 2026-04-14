@@ -3,6 +3,7 @@
 基于 BaseResourceAgent 实现，并使用黑板模式与用户画像。
 """
 
+import asyncio
 import ast
 import re
 import json
@@ -116,10 +117,10 @@ class CodeAgent(BaseResourceAgent):
 
         instruction = (
             "\n\n【重要指令】\n"
-            "1. 请首先思考并生成对应的实操代码。\n"
-            "2. 生成代码后，**必须**使用 `safe_shell` 工具来实际运行这段代码（例如通过 `echo \"代码\" > test.py && python3 test.py`）。\n"
-            "3. 根据运行结果，如果出现错误请自我修正并再次运行验证。\n"
-            "4. 只有在代码成功运行并验证无误后，再最终输出包含代码的 Markdown 结果。"
+            "1. 请首先直接生成对应的完整实操代码，并以 Markdown 形式输出。\n"
+            "2. 如果你能够稳定调用 `safe_shell` 工具，可以在生成代码后进行一次本地运行验证。\n"
+            "3. 如果当前轮次没有调用工具能力，也不要停下来，直接给出完整、可运行、带说明的代码案例。\n"
+            "4. 不要只回复计划、说明或向用户追问，必须产出最终代码内容。"
         )
         return system_prompt + instruction
 
@@ -127,14 +128,75 @@ class CodeAgent(BaseResourceAgent):
         """构建初次请求的消息（返回字符串）。"""
         return f"请为主题 '{state.get('topic')}' 生成一个完整的可运行代码案例。"
 
+    def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
+        from .tools import save_to_workplace
+
+        if callable(save_to_workplace):
+            return save_to_workplace(sub_dir, topic, content, ext)
+
+        invoke = getattr(save_to_workplace, "invoke", None)
+        if callable(invoke):
+            return invoke(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        run = getattr(save_to_workplace, "run", None)
+        if callable(run):
+            return run(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        raise TypeError("save_to_workplace 既不是可调用函数，也不是支持 invoke/run 的工具对象")
+
+    def _failure_result(self, state: Any, feedback: str, **fields: Any) -> dict[str, Any]:
+        retry_count = state.get("retry_count", 0) + 1
+        result = {
+            "is_valid": False,
+            "validation_feedback": feedback,
+            "retry_count": retry_count,
+            **fields,
+        }
+        if retry_count >= state.get("max_retries", 2):
+            result["error"] = feedback
+        return result
+
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
         code_content = ""
+        for message in reversed(messages):
+            if isinstance(message, AIMessage) and isinstance(message.content, str) and message.content.strip():
+                code_content = message.content.strip()
+                break
 
-        if messages and isinstance(messages[-1], AIMessage):
-            code_content = messages[-1].content
+        if not code_content:
+            return self._failure_result(
+                state,
+                "未生成任何代码内容，请直接输出完整可运行的 Markdown 代码案例，不要只给解释或空响应。",
+                code_content="",
+                detected_language="unknown",
+                explained_content="",
+            )
 
         language = _detect_language(code_content)
+        if "```" not in code_content:
+            return self._failure_result(
+                state,
+                "缺少带语言标记的代码块，请按 Markdown 结构输出完整代码案例。",
+                code_content=code_content,
+                detected_language=language,
+                explained_content="",
+            )
+
         logger.info(f"[CodeAgent] _validate_node (add_explanation): 为 {language} 代码添加教学注释")
 
         explain_messages = [
@@ -170,6 +232,30 @@ class CodeAgent(BaseResourceAgent):
                 "is_valid": True,
             }
 
+    async def _fallback_generate_code(self, state: CodeState) -> dict[str, Any]:
+        prompt = (
+            "你是一位编程教学专家。请直接生成一个完整、可运行的 Markdown 代码案例，"
+            "不要调用工具，不要输出计划，不要追问用户。\n\n"
+            f"专业：{state.get('major', '通用')}\n"
+            f"课程：{state.get('course', '')}\n"
+            f"主题：{state.get('topic', '')}\n"
+            f"知识短板：{state.get('gap', '')}\n"
+            f"知识水平：{state.get('user_profile', {}).get('knowledge_level', '中等')}\n"
+            "要求：\n"
+            "1. 使用 Python\n"
+            "2. 输出结构必须包含：问题场景、完整代码、运行结果、关键点解析\n"
+            "3. 代码块使用 ```python 标记\n"
+            "4. 示例要适合初学者并可直接运行\n"
+        )
+        response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+        content = response.content.strip() if isinstance(response.content, str) else str(response.content)
+        return {
+            "explained_content": content,
+            "code_content": content,
+            "detected_language": _detect_language(content),
+            "error": None,
+        }
+
     async def generate_code(
         self,
         topic: str,
@@ -194,22 +280,38 @@ class CodeAgent(BaseResourceAgent):
             "detected_language": "unknown",
             "explained_content": "",
             "is_valid": False,
+            "validation_feedback": "",
+            "retry_count": 0,
+            "max_retries": 2,
             "error": None,
         }
 
         try:
-            result = await self.graph.ainvoke(initial_state, {"recursion_limit": 15})
+            result = await asyncio.wait_for(
+                self.graph.ainvoke(initial_state, {"recursion_limit": 15}),
+                timeout=90,
+            )
         except Exception as e:
             logger.error(f"[CodeAgent] 工作流执行失败: {e}")
-            return {"success": False, "content": "", "detected_language": "unknown", "code_only": "", "error": str(e)}
+            try:
+                result = await self._fallback_generate_code(initial_state)
+            except Exception as fallback_error:
+                return {"success": False, "content": "", "detected_language": "unknown", "code_only": "", "error": str(fallback_error)}
 
         explained = result.get("explained_content", "") or result.get("code_content", "")
         code_only = _extract_code_block(result.get("code_content", ""))
         language = result.get("detected_language", "unknown")
+        if not explained:
+            try:
+                fallback = await self._fallback_generate_code(initial_state)
+                explained = fallback.get("explained_content", "")
+                code_only = _extract_code_block(fallback.get("code_content", ""))
+                language = fallback.get("detected_language", language)
+            except Exception as fallback_error:
+                logger.error(f"[CodeAgent] 降级生成失败: {fallback_error}")
         file_path = None
         if explained:
-            from .tools import save_to_workplace
-            file_path = save_to_workplace("code", topic, explained, "md")
+            file_path = self._save_to_workplace("code", topic, explained, "md")
 
         return {
             "success": bool(explained),

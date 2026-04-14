@@ -3,6 +3,7 @@
 基于 BaseResourceAgent 实现，并使用黑板模式与用户画像。
 """
 
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -150,11 +151,42 @@ class ContentWriter(BaseResourceAgent):
         """ContentWriter 使用分步生成，此方法由 _agent_node 动态调用。"""
         return ""
 
+    def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
+        from .tools import save_to_workplace
+
+        if callable(save_to_workplace):
+            return save_to_workplace(sub_dir, topic, content, ext)
+
+        invoke = getattr(save_to_workplace, "invoke", None)
+        if callable(invoke):
+            return invoke(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        run = getattr(save_to_workplace, "run", None)
+        if callable(run):
+            return run(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        raise TypeError("save_to_workplace 既不是可调用函数，也不是支持 invoke/run 的工具对象")
+
     async def _agent_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
         current_step = state.get("current_step", "outline")
         retry_count = state.get("retry_count", 0)
         feedback = state.get("validation_feedback", "")
+        outline = state.get("outline", "")
 
         logger.info(f"[ContentAgent] _agent_node: step={current_step}, retry={retry_count}")
 
@@ -166,9 +198,20 @@ class ContentWriter(BaseResourceAgent):
             messages.append(HumanMessage(
                 content=f"上一次文档未通过审查，原因：{feedback}\n请根据上述反馈修正大纲后重新生成。"
             ))
+        elif current_step == "content" and retry_count > 0 and feedback:
+            messages.append(HumanMessage(
+                content=(
+                    f"上一次正文未通过审查，原因：{feedback}\n"
+                    "请基于现有大纲重新撰写完整的专业讲解文档，不要向用户追问额外信息。\n\n"
+                    f"现有大纲：\n{outline or '请沿用你刚刚生成的大纲结构。'}"
+                )
+            ))
         elif current_step == "content" and not any("撰写完整的专业讲解文档" in str(m.content) for m in messages):
             messages.append(HumanMessage(
-                content="请根据以上大纲撰写完整的专业讲解文档（2000-5000字），严格遵循大纲结构，每个章节都要有充实的内容。"
+                content=(
+                    "请根据以上大纲撰写完整的专业讲解文档（2000-5000字），严格遵循大纲结构，每个章节都要有充实的内容。"
+                    "不要向用户追问补充信息，直接完成正文写作。"
+                )
             ))
 
         llm_with_tools = self.llm.bind_tools(self._tools) if self._tools else self.llm
@@ -221,9 +264,9 @@ class ContentWriter(BaseResourceAgent):
         if error or not content:
             return {
                 "is_valid": False,
-                "validation_feedback": error or "未生成内容",
+                "validation_feedback": error or "未生成正文，请基于现有大纲直接补全完整讲解文档，不要追问用户。",
                 "retry_count": state.get("retry_count", 0) + 1,
-                "current_step": "outline",
+                "current_step": "content" if outline else "outline",
             }
 
         logger.info("[ContentAgent] _validate_node: 开始质量审查")
@@ -234,7 +277,7 @@ class ContentWriter(BaseResourceAgent):
                 "is_valid": False,
                 "validation_feedback": f"文档字数仅 {word_count} 字，远低于 2000 字的最低要求，请大幅扩展。",
                 "retry_count": state.get("retry_count", 0) + 1,
-                "current_step": "outline",
+                "current_step": "content",
             }
 
         prompt = _REVIEW_PROMPT.format(
@@ -254,11 +297,30 @@ class ContentWriter(BaseResourceAgent):
                 "is_valid": passed,
                 "validation_feedback": feedback,
                 "retry_count": state.get("retry_count", 0) + 1 if not passed else state.get("retry_count", 0),
-                "current_step": "outline" if not passed else "content",
+                "current_step": "content",
             }
         except Exception as e:
             logger.error(f"[ContentAgent] 审查失败: {e}")
             return {"is_valid": True, "validation_feedback": ""}
+
+    async def _fallback_generate_content(self, state: ContentState) -> dict[str, Any]:
+        prompt = (
+            "你是一位高校课程讲解文档作者。请直接生成一份完整的 Markdown 课程讲解文档，"
+            "不要追问用户，不要输出额外说明。\n\n"
+            f"专业：{state.get('major', '通用')}\n"
+            f"课程：{state.get('course', '')}\n"
+            f"主题：{state.get('topic', '')}\n"
+            f"知识短板：{state.get('gap', '')}\n"
+            "要求：\n"
+            "1. 必须包含：概述、核心讲解、案例分析、常见误区、总结\n"
+            "2. 字数尽量充实，至少 1200 字\n"
+            "3. 面向初学者，讲解清晰具体\n"
+            "4. 直接输出最终 Markdown 文档\n"
+        )
+        response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+        content = response.content.strip() if isinstance(response.content, str) else str(response.content)
+        outline = "1. 概述\n2. 核心讲解\n3. 案例分析\n4. 常见误区\n5. 总结"
+        return {"content": content, "outline": outline, "error": None}
 
     async def generate_content(
         self,
@@ -291,18 +353,30 @@ class ContentWriter(BaseResourceAgent):
         }
 
         try:
-            result = await self.graph.ainvoke(initial_state, {"recursion_limit": 20})
+            result = await asyncio.wait_for(
+                self.graph.ainvoke(initial_state, {"recursion_limit": 20}),
+                timeout=90,
+            )
         except Exception as e:
             logger.error(f"[ContentAgent] 工作流执行失败: {e}")
-            return {"success": False, "content": "", "outline": "", "error": str(e)}
+            try:
+                result = await self._fallback_generate_content(initial_state)
+            except Exception as fallback_error:
+                return {"success": False, "content": "", "outline": "", "error": str(fallback_error)}
 
         content = result.get("content", "")
         outline = result.get("outline", "")
+        if not content:
+            try:
+                fallback = await self._fallback_generate_content(initial_state)
+                content = fallback.get("content", "")
+                outline = fallback.get("outline", outline)
+            except Exception as fallback_error:
+                logger.error(f"[ContentAgent] 降级生成失败: {fallback_error}")
         success = bool(content)
         file_path = None
         if success:
-            from .tools import save_to_workplace
-            file_path = save_to_workplace("content", topic, content, "md")
+            file_path = self._save_to_workplace("content", topic, content, "md")
 
         return {
             "success": success,

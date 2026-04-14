@@ -42,7 +42,11 @@ async def generate_resources(
 
         async def run_and_cleanup():
             try:
-                await coordinator.run(req.user_id, task_dict)
+                await coordinator.run(
+                    req.user_id,
+                    task_dict,
+                    selected_resources=req.selected_resources,
+                )
             except Exception as e:
                 await emitter.emit_agent_error("system", str(e))
                 await emitter.emit_done("资源生成异常终止")
@@ -122,7 +126,7 @@ async def list_resources(
             "has_code": r.code_result is not None,
             "has_quiz": r.quiz_result is not None,
             "has_reading": r.reading_result is not None,
-            "has_media": r.media_result is not None,
+            "has_ppt": r.ppt_result is not None,
             "created_at": r.created_at,
         }
         for r in resources
@@ -151,7 +155,7 @@ async def get_resource(
         "results": {},
         "created_at": resource.created_at,
     }
-    for key in ("mindmap", "content", "code", "quiz", "reading", "media"):
+    for key in ("mindmap", "content", "code", "quiz", "reading", "ppt"):
         raw = getattr(resource, f"{key}_result")
         if raw:
             try:

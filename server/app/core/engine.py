@@ -4,7 +4,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy import text, inspect
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 import app.modules
@@ -46,34 +45,6 @@ async def init_db() -> None:
             await conn.run_sync(SQLModel.metadata.drop_all)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        await _apply_schema_patches(conn)
-
-
-async def _apply_schema_patches(conn) -> None:
-    """轻量表结构补丁：自动补齐新增字段，避免手动执行 SQL。"""
-    required_columns = {
-        "chat_sessions": {
-            "memory_token_count": "INT NOT NULL DEFAULT 0",
-            "profile_token_count": "INT NOT NULL DEFAULT 0",
-        },
-        "user_memory": {
-            "evidence_count": "INT NOT NULL DEFAULT 1",
-            "last_seen_at": "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
-        },
-    }
-
-    def _get_columns(sync_conn, table_name: str) -> set[str]:
-        inspector = inspect(sync_conn)
-        return {col["name"] for col in inspector.get_columns(table_name)}
-
-    for table_name, columns in required_columns.items():
-        existing_cols = await conn.run_sync(_get_columns, table_name)
-        for col_name, col_def in columns.items():
-            if col_name in existing_cols:
-                continue
-            await conn.execute(
-                text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def}")
-            )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

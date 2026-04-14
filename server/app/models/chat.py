@@ -37,5 +37,6 @@ class ChatMessage(SQLModel, table=True):
     content: str = Field(sa_column=Column(Text))  # 消息内容
     attachments: str | None = Field(default=None, sa_column=Column(Text))  # JSON: [{"url": "/uploads/1/abc.pdf", "type": "document", "name": "report.pdf"}]
     tool_calls: str | None = Field(default=None, sa_column=Column(Text))  # JSON: 记录该消息触发的工具调用链
+    resource_cards: str | None = Field(default=None, sa_column=Column(Text))  # JSON: 面向前端展示的资源卡片
     # 格式: [{"tool": "read_uploaded_file", "args": {"file_url": "/uploads/1/a.pdf"}, "result": "文件内容...", "status": "success"}]
     created_at: datetime = Field(default_factory=datetime.now, index=True)  # 创建时间

@@ -94,6 +94,49 @@ class ReadingAgent(BaseResourceAgent):
     def _build_initial_human_message(self, state: Any) -> str:
         return f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
 
+    def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
+        from .tools import save_to_workplace
+
+        if callable(save_to_workplace):
+            return save_to_workplace(sub_dir, topic, content, ext)
+
+        invoke = getattr(save_to_workplace, "invoke", None)
+        if callable(invoke):
+            return invoke(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        run = getattr(save_to_workplace, "run", None)
+        if callable(run):
+            return run(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        raise TypeError("save_to_workplace 既不是可调用函数，也不是支持 invoke/run 的工具对象")
+
+    def _failure_result(
+        self,
+        state: Any,
+        feedback: str,
+        **fields: Any,
+    ) -> dict[str, Any]:
+        """构建可终止的失败返回，避免校验失败后继续空转。"""
+        retry_count = state.get("retry_count", 0)
+        result = make_validation_result(False, retry_count, feedback, **fields)
+        if result["retry_count"] >= state.get("max_retries", 2):
+            result["error"] = feedback
+        return result
+
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
         retry_count = state.get("retry_count", 0)
@@ -101,9 +144,11 @@ class ReadingAgent(BaseResourceAgent):
 
         error = state.get("error")
         if error or not raw:
-            return make_validation_result(
-                False, retry_count, error or "未生成推荐内容",
-                recommendations_json=raw, parsed_recommendations=[],
+            return self._failure_result(
+                state,
+                error or "未生成推荐内容",
+                recommendations_json=raw,
+                parsed_recommendations=[],
             )
 
         logger.info("[ReadingAgent] _validate_node: 评审推荐质量")
@@ -112,30 +157,35 @@ class ReadingAgent(BaseResourceAgent):
             raw, ReadingOutput, retry_count, "推荐结构"
         )
         if not is_valid:
-            return {**extra, "recommendations_json": raw, "parsed_recommendations": []}
+            failure = {**extra, "recommendations_json": raw, "parsed_recommendations": []}
+            failure["error"] = failure.get("validation_feedback") or feedback
+            return failure
 
         items = validated.recommendations
         if len(items) < 3:
-            return make_validation_result(
-                False, retry_count,
+            return self._failure_result(
+                state,
                 f"推荐数量不足（{len(items)} 条），至少需要 5 条。",
-                recommendations_json=raw, parsed_recommendations=[],
+                recommendations_json=raw,
+                parsed_recommendations=[],
             )
 
         for i, item in enumerate(items):
             if len(item.abstract) < 20:
-                return make_validation_result(
-                    False, retry_count,
+                return self._failure_result(
+                    state,
                     f"第 {i + 1} 条推荐摘要过短（'{item.title}'），请补充实质性内容。",
-                    recommendations_json=raw, parsed_recommendations=[],
+                    recommendations_json=raw,
+                    parsed_recommendations=[],
                 )
 
         types = {item.type for item in items}
         if len(types) < 2:
-            return make_validation_result(
-                False, retry_count,
+            return self._failure_result(
+                state,
                 f"推荐类型单一（仅 {types}），请混合不同类型的资源。",
-                recommendations_json=raw, parsed_recommendations=[],
+                recommendations_json=raw,
+                parsed_recommendations=[],
             )
 
         logger.info(f"[ReadingAgent] 评审通过: {len(items)} 条推荐, 类型={types}")
@@ -144,6 +194,7 @@ class ReadingAgent(BaseResourceAgent):
             "is_valid": True,
             "validation_feedback": "",
             "parsed_recommendations": [item.model_dump() for item in items],
+            "error": None,
         }
 
     async def generate_reading(
@@ -185,8 +236,12 @@ class ReadingAgent(BaseResourceAgent):
         raw_json = result.get("recommendations_json", "")
         file_path = None
         if parsed:
-            from .tools import save_to_workplace
-            file_path = save_to_workplace("reading", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
+            file_path = self._save_to_workplace(
+                "reading",
+                topic,
+                json.dumps(parsed, ensure_ascii=False, indent=2),
+                "json",
+            )
 
         return {
             "success": bool(parsed),

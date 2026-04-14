@@ -175,7 +175,17 @@ class MemoryService:
     # ==========================================
     # 2. 短期记忆管理 (基于 user_id + session_id 共享)
     # ==========================================
-    async def save_message(self, user_id: int, session_id: str, module: str, role: str, content: str, attachments: str | None = None, tool_calls: str | None = None) -> int:
+    async def save_message(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str,
+        role: str,
+        content: str,
+        attachments: str | None = None,
+        tool_calls: str | None = None,
+        resource_cards: str | None = None,
+    ) -> int:
         """存入一条消息，返回当前会话消息总数。
 
         Args:
@@ -183,6 +193,7 @@ class MemoryService:
                 '[{"url": "/uploads/1/abc.pdf", "type": "document", "name": "report.pdf"}]'
             tool_calls: JSON 数组字符串，记录该消息触发的工具调用链，格式如
                 '[{"tool": "read_uploaded_file", "args": {...}, "result": "...", "status": "success"}]'
+            resource_cards: JSON 数组字符串，记录面向前端的资源卡片
         """
         async with AsyncSession(self.engine) as session:
             session_stmt = select(ChatSession).where(ChatSession.id == session_id)
@@ -204,6 +215,7 @@ class MemoryService:
                 content=content,
                 attachments=attachments,
                 tool_calls=tool_calls,
+                resource_cards=resource_cards,
             )
             session.add(msg)
             await session.commit()

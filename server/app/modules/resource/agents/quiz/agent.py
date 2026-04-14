@@ -96,6 +96,36 @@ class QuizAgent(BaseResourceAgent):
     def _build_initial_human_message(self, state: Any) -> str:
         return f"请为主题 '{state.get('topic')}' 生成一套分层练习题。"
 
+    def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
+        from .tools import save_to_workplace
+
+        if callable(save_to_workplace):
+            return save_to_workplace(sub_dir, topic, content, ext)
+
+        invoke = getattr(save_to_workplace, "invoke", None)
+        if callable(invoke):
+            return invoke(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        run = getattr(save_to_workplace, "run", None)
+        if callable(run):
+            return run(
+                {
+                    "sub_dir": sub_dir,
+                    "topic": topic,
+                    "content": content,
+                    "ext": ext,
+                }
+            )
+
+        raise TypeError("save_to_workplace 既不是可调用函数，也不是支持 invoke/run 的工具对象")
+
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
         retry_count = state.get("retry_count", 0)
@@ -179,8 +209,7 @@ class QuizAgent(BaseResourceAgent):
         raw_json = result.get("questions_json", "")
         file_path = None
         if parsed:
-            from .tools import save_to_workplace
-            file_path = save_to_workplace("quiz", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
+            file_path = self._save_to_workplace("quiz", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
 
         return {
             "success": bool(parsed),
