@@ -1,9 +1,10 @@
-"""Application entrypoint wired to the new architecture."""
+"""Application entrypoint."""
 
 from __future__ import annotations
 
 import sys
 import traceback
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
@@ -11,19 +12,30 @@ if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.bootstrap.settings import get_server_host, get_server_port, load_environment
+load_dotenv()
 
-load_environment()
-
-from app.bootstrap.lifespan import app_lifespan
-from app.core.logging import get_logger
-from app.interface.http import api_router
+from app.infra.logging import get_logger, setup_logging
+from app.infra.database import init_db
+from app.shared.storage import local_file_store
 
 logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    setup_logging()
+    logger.info("Application starting up")
+    await init_db()
+    local_file_store.ensure_roots()
+    yield
+    logger.info("Application shutting down")
+
+
 app = FastAPI(title="AI Learning Platform", lifespan=app_lifespan)
 
 app.add_middleware(
@@ -34,7 +46,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router)
+# Mount feature module routers
+from app.auth.api import router as auth_router
+from app.chat.api import router as chat_router
+from app.profile.api import router as profile_router
+from app.resource.api import router as resource_router
+
+app.include_router(auth_router, prefix="/api/v1/users", tags=["auth"])
+app.include_router(chat_router, prefix="/api/v1/ai", tags=["chat"])
+app.include_router(profile_router, prefix="/api/v1/ai", tags=["profile"])
+app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 
 
 @app.exception_handler(Exception)
@@ -58,4 +79,6 @@ async def root():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host=get_server_host(), port=get_server_port())
+    host = __import__("os").getenv("SERVER_HOST", "0.0.0.0")
+    port = int(__import__("os").getenv("SERVER_PORT", "9999"))
+    uvicorn.run(app, host=host, port=port)
