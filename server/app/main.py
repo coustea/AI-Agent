@@ -1,49 +1,31 @@
-import os
+"""Application entrypoint wired to the new architecture."""
+
+from __future__ import annotations
+
 import sys
 import traceback
-from contextlib import asynccontextmanager
 from pathlib import Path
 
-# Allow `python main.py` from `server/app/` as well as `uv run python app/main.py` from `server/`.
-# When executed as a script, `sys.path[0]` becomes `server/app`, so `import app.*` would fail.
 SERVER_DIR = Path(__file__).resolve().parents[1]
 if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.core.engine import init_db
-from app.core.logging import get_logger, setup_logging
-from app.modules.auth.router import router as auth_router
-from app.modules.chat.router import router as chat_router
-from app.modules.knowledge_base.router import router as knowledge_router
-from app.modules.profile.router import router as profile_router
-from app.modules.resource.router import router as resource_router
+from app.bootstrap.settings import get_server_host, get_server_port, load_environment
+
+load_environment()
+
+from app.bootstrap.lifespan import app_lifespan
+from app.core.logging import get_logger
+from app.interface.http import api_router
 
 logger = get_logger(__name__)
+app = FastAPI(title="AI Learning Platform", lifespan=app_lifespan)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    setup_logging()
-    logger.info("Application starting up")
-    await init_db()
-    logger.info("Database initialized")
-
-    # 确保上传目录存在
-    upload_dir = Path("workplace/chat-uploads")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    yield
-    logger.info("Application shutting down")
-
-
-app = FastAPI(title="AI Learning Platform", lifespan=lifespan)
-
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -52,11 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
-app.include_router(chat_router, prefix="/api/v1/ai", tags=["chat"])
-app.include_router(profile_router, prefix="/api/v1/ai", tags=["profile"])
-app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
-app.include_router(knowledge_router, prefix="/api/v1/knowledge", tags=["knowledge_base"])
+app.include_router(api_router)
 
 
 @app.exception_handler(Exception)
@@ -79,8 +57,5 @@ async def root():
     return {"message": "AI Learning Platform is running"}
 
 
-if __name__ == '__main__':
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-    host = os.getenv("SERVER_HOST", "0.0.0.0")
-    port = int(os.getenv("SERVER_PORT", "9999"))
-    uvicorn.run(app, host=host, port=port)
+if __name__ == "__main__":
+    uvicorn.run(app, host=get_server_host(), port=get_server_port())

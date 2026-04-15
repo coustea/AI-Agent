@@ -39,4 +39,11 @@ class ChatMessage(SQLModel, table=True):
     tool_calls: str | None = Field(default=None, sa_column=Column(Text))  # JSON: 记录该消息触发的工具调用链
     resource_cards: str | None = Field(default=None, sa_column=Column(Text))  # JSON: 面向前端展示的资源卡片
     # 格式: [{"tool": "read_uploaded_file", "args": {"file_url": "/uploads/1/a.pdf"}, "result": "文件内容...", "status": "success"}]
+    message_type: str | None = Field(default=None, index=True)  # text / tool_result / attachment_notice
+    tool_name: str | None = Field(default=None, index=True)  # 工具名
+    tool_call_id: str | None = Field(default=None, index=True)  # LangChain tool_call_id
+    tool_args: str | None = Field(default=None, sa_column=Column(Text))  # JSON: 工具入参
+    tool_result: str | None = Field(default=None, sa_column=Column(Text))  # JSON/Text: 工具结果
+    status: str | None = Field(default=None, index=True)  # success / error
+    sequence_no: int | None = Field(default=None, index=True)  # 会话内顺序号，确保历史回放稳定
     created_at: datetime = Field(default_factory=datetime.now, index=True)  # 创建时间
