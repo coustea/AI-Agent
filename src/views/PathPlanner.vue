@@ -3,7 +3,7 @@
     <div class="header-section">
       <div class="info">
         <h2>智能学习路径规划</h2>
-        <p>AI 已基于你的最新测评反馈，动态优化了后续的学习步骤与资源权重。</p>
+        <p>AI 已基于你的最新测评反馈，动态优化了后续的学习步骤与资源权重</p>
       </div>
       <div class="stats">
         <div class="stat-item">

@@ -1,55 +1,62 @@
 <template>
-  <div class="tutor-dashboard">
-
-    <!-- 顶部控制栏 (极简模式切换) -->
-    <header class="tutor-header">
-      <div class="header-left">
-        <h2 class="title">全息智能辅导</h2>
-      </div>
-      <div class="header-center">
-        <div class="mode-toggle-group">
-          <button 
-            :class="['mode-btn', { active: chatMode === 'standard' }]" 
-            @click="chatMode = 'standard'"
-          >
-            <el-icon><ChatLineRound /></el-icon> 图文交互
-          </button>
-          <button 
-            :class="['mode-btn', { active: chatMode === 'digital_human' }]" 
-            @click="chatMode = 'digital_human'"
-          >
-            <el-icon><Avatar /></el-icon> 数字人互动
-          </button>
-        </div>
-      </div>
-      <div class="header-right">
-        <el-button plain size="small" @click="newSession" :icon="Plus" class="new-chat-btn">新对话</el-button>
-      </div>
-    </header>
+  <div :class="['tutor-dashboard', `mode-${chatMode}`]">
 
     <main class="dashboard-main">
       <!-- 左侧：会话列表 -->
       <aside class="session-sidebar" :class="{ collapsed: sessionSidebarCollapsed }">
-        <div class="session-sidebar-header">
-          <span v-if="!sessionSidebarCollapsed" class="sidebar-title">历史记录</span>
-          <el-button link @click="sessionSidebarCollapsed = !sessionSidebarCollapsed" class="collapse-btn">
+
+        <!-- 悬浮折叠按钮 -->
+        <div class="sidebar-toggle-float">
+          <el-button class="float-collapse-btn" @click="sessionSidebarCollapsed = !sessionSidebarCollapsed" circle>
             <el-icon><Fold v-if="!sessionSidebarCollapsed" /><Expand v-else /></el-icon>
           </el-button>
         </div>
-        <div v-if="!sessionSidebarCollapsed" class="session-list">
-          <div
-            v-for="s in sessions"
-            :key="s.id"
-            :class="['session-item', { active: s.id === currentSessionId }]"
-            @click="switchSession(s.id)"
-          >
-            <el-icon class="session-icon"><ChatDotRound /></el-icon>
-            <span class="session-title">{{ s.title }}</span>
-            <el-button link class="del-btn" @click.stop="archiveSession(s.id)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
+
+        <template v-if="!sessionSidebarCollapsed">
+          <!-- 顶部导航 -->
+          <div class="standard-sidebar-nav">
+            <div :class="['nav-item', 'new-chat', { active: !currentSessionId }]" @click="newSession">
+              <el-icon><EditPen /></el-icon> <span>新对话</span>
+            </div>
+            <div class="nav-item">
+              <el-icon><Search /></el-icon> <span>搜索历史</span>
+            </div>
           </div>
-          <div v-if="sessions.length === 0" class="session-empty">暂无对话记录</div>
+
+          <div class="session-list">
+            <div class="standard-list-title">历史记录</div>
+            <div
+              v-for="s in sessions"
+              :key="s.id"
+              :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
+              @click="switchSession(s.id)"
+            >
+              <el-icon class="session-icon"><ChatLineSquare /></el-icon>
+              <span class="session-title">{{ s.title || '新对话' }}</span>
+              <el-button link class="del-btn" @click.stop="archiveSession(s.id)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
+            <div v-if="sessions.length === 0" class="session-empty">暂无对话记录</div>
+          </div>
+        </template>
+
+        <!-- 侧边栏底部：模式切换 -->
+        <div class="sidebar-footer" v-if="!sessionSidebarCollapsed">
+          <div class="mode-toggle-group">
+            <button 
+              :class="['mode-btn', { active: chatMode === 'standard' }]" 
+              @click="chatMode = 'standard'"
+            >
+              <el-icon><ChatLineRound /></el-icon> 图文交互
+            </button>
+            <button 
+              :class="['mode-btn', { active: chatMode === 'digital_human' }]" 
+              @click="chatMode = 'digital_human'"
+            >
+              <el-icon><Avatar /></el-icon> 数字人互动
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -68,10 +75,16 @@
         </div>
 
         <div class="chat-viewport" ref="chatScroll">
-          <div class="welcome-banner" v-if="messages.length === 0">
+          <!-- Standard 模式空状态 -->
+          <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
+            <h2></h2>
+          </div>
+
+          <!-- Digital Human 模式空状态 -->
+          <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
             <div class="welcome-icon"><el-icon><Cpu /></el-icon></div>
             <h3>我是您的 AI 私人导师</h3>
-            <p>支持文字、图片、文档等多模态交流，<br>我将在对话中自动更新您的学习画像并提供量身定制的解答。</p>
+            <p>支持文字、图片、文档等多模态交流，<br>我将在对话中自动更新您的学习画像并提供量身定制的解答</p>
           </div>
 
           <div v-for="msg in messages" :key="msg.id" :class="['message-row', msg.role]">
@@ -106,7 +119,7 @@
           </div>
         </div>
 
-        <div class="input-panel">
+        <div class="input-panel" :class="{ 'standard-input': chatMode === 'standard' }">
           <!-- 附件预览 -->
           <div v-if="pendingFiles.length > 0" class="attachments-preview">
             <div v-for="(f, idx) in pendingFiles" :key="idx" class="attachment-chip">
@@ -117,30 +130,45 @@
             </div>
           </div>
           
-          <div class="input-wrapper">
+          <div class="input-wrapper" :class="{ 'pill-shape': chatMode === 'standard' }">
             <div class="toolbar-left">
-              <el-tooltip content="上传文档" placement="top" :show-after="500">
-                <button class="tool-btn" @click="triggerDocUpload" :disabled="uploadingFile"><el-icon><Document /></el-icon></button>
-              </el-tooltip>
-              <el-tooltip content="上传截图" placement="top" :show-after="500">
-                <button class="tool-btn" @click="triggerImgUpload" :disabled="uploadingFile"><el-icon><Picture /></el-icon></button>
-              </el-tooltip>
-              <el-tooltip content="语音提问" placement="top" :show-after="500">
-                <button class="tool-btn" :class="{ 'mic-active': isRecording }" @click="toggleRecord"><el-icon><Microphone /></el-icon></button>
-              </el-tooltip>
+              <template v-if="chatMode === 'standard'">
+                <el-dropdown trigger="click" placement="top-start">
+                  <button class="standard-plus-btn" :disabled="uploadingFile"><el-icon><Plus /></el-icon></button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item @click="triggerDocUpload">上传文档</el-dropdown-item>
+                      <el-dropdown-item @click="triggerImgUpload">上传图片</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </template>
+              <template v-else>
+                <el-tooltip content="上传文档" placement="top" :show-after="500">
+                  <button class="tool-btn" @click="triggerDocUpload" :disabled="uploadingFile"><el-icon><Document /></el-icon></button>
+                </el-tooltip>
+                <el-tooltip content="上传截图" placement="top" :show-after="500">
+                  <button class="tool-btn" @click="triggerImgUpload" :disabled="uploadingFile"><el-icon><Picture /></el-icon></button>
+                </el-tooltip>
+                <el-tooltip content="语音提问" placement="top" :show-after="500">
+                  <button class="tool-btn"><el-icon><Microphone /></el-icon></button>
+                </el-tooltip>
+              </template>
             </div>
 
             <textarea
               v-model="userInput"
-              placeholder="向 AI 导师提问 (Shift + Enter 换行)..."
+              :placeholder="chatMode === 'standard' ? '有问题，尽管问 (Shift + Enter 换行)' : '向 AI 导师提问 (Shift + Enter 换行)...'"
               @keydown.enter.exact.prevent="handleSend"
             ></textarea>
 
-            <button class="send-btn" :class="{ 'is-active': userInput.trim() || pendingFiles.length > 0 }" :disabled="(!userInput.trim() && pendingFiles.length === 0) || isAIThinking" @click="handleSend">
-              <el-icon><Top /></el-icon>
-            </button>
+            <div class="toolbar-right">
+              <button class="send-btn" :class="{ 'is-active': userInput.trim() || pendingFiles.length > 0 }" :disabled="(!userInput.trim() && pendingFiles.length === 0) || isAIThinking" @click="handleSend">
+                <el-icon><Top /></el-icon>
+              </button>
+            </div>
           </div>
-          <div class="input-footer">AI 可能会产生误导性信息，请注意甄别。</div>
+          <div class="input-footer" v-if="chatMode === 'digital_human'">AI 可能会产生误导性信息，请注意甄别。</div>
         </div>
 
         <!-- 隐藏文件输入 -->
@@ -151,30 +179,24 @@
       <!-- 右侧：动态画像面板 -->
       <aside class="profile-sidebar">
         <div class="sidebar-header">
-          <h3>动态学习画像</h3>
-          <span class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
-            <span class="dot"></span> {{ profileUpdated ? 'Synced' : 'Live' }}
-          </span>
-        </div>
-        <p class="sidebar-desc">隐式特征抽取，随对话实时更新</p>
-
-        <div class="dimensions-grid">
-          <div class="dim-item" v-for="dim in profileDimensions" :key="dim.key">
-            <div class="dim-top">
-              <span class="dim-name">{{ dim.name }}</span>
-              <span class="dim-score" :style="{ color: dim.color }">{{ dim.score ?? '--' }}</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" :style="{ width: `${dim.score ?? 0}%`, backgroundColor: dim.color }"></div>
-            </div>
-            <div class="dim-desc" :title="dim.desc">{{ dim.desc }}</div>
+          <div class="header-title-row">
+            <h3>动态学习画像</h3>
+            <span class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
+              <span class="dot"></span> {{ profileUpdated ? 'Synced' : 'Live' }}
+            </span>
           </div>
         </div>
+        <p class="sidebar-desc">基于您的对话实时提取的关键特征</p>
 
-        <div class="tags-section" v-if="extractedTags.length > 0">
-          <h4>特征标签</h4>
-          <div class="tags-container">
-            <span v-for="tag in extractedTags" :key="tag" class="feature-tag">{{ tag }}</span>
+        <div class="tags-section">
+          <div class="tags-container" v-if="activeProfileTags.length > 0">
+            <span v-for="(tag, idx) in activeProfileTags" :key="idx" class="feature-tag shadow-sm">
+              <el-icon class="tag-icon"><Discount /></el-icon>
+              {{ tag }}
+            </span>
+          </div>
+          <div v-else class="empty-tags">
+            对话太少啦，多聊两句让我更了解你～
           </div>
         </div>
 
@@ -190,11 +212,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
-  Picture, Microphone, Document, ChatDotRound,
-  MagicStick, Fold, Expand, Plus, Delete, Close, Top
+  Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
+  MagicStick, Fold, Expand, Plus, Delete, Close, Top,
+  EditPen, Search, Discount
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
@@ -225,7 +248,6 @@ const chatMode = ref('standard')
 const userInput = ref('')
 const isAIThinking = ref(false)
 const isSpeaking = ref(false)
-const isRecording = ref(false)
 const chatScroll = ref<HTMLElement | null>(null)
 const profileUpdated = ref(false)
 const uploadingFile = ref(false)
@@ -260,7 +282,11 @@ const profileDimensions = ref<ProfileDimension[]>(
   DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
 )
 const extractedTags = ref<string[]>([])
-const tutorStrategy = ref('开始对话后，系统将自动提取特征。')
+const tutorStrategy = ref('开始对话后，系统将自动提取特征,为您生成专属策略，快开始您的对话吧！')
+
+const activeProfileTags = computed(() => {
+  return extractedTags.value
+})
 
 // 流式控制器
 let abortController: AbortController | null = null
@@ -350,15 +376,9 @@ const loadSessions = async () => {
   }
 }
 
-const newSession = async () => {
-  try {
-    const res = await createSession()
-    const session = res.data.data
-    sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
-    await switchSession(session.id)
-  } catch {
-    // 静默处理
-  }
+const newSession = () => {
+  currentSessionId.value = undefined
+  messages.value = []
 }
 
 const switchSession = async (sessionId: string) => {
@@ -516,13 +536,6 @@ const handleSend = async () => {
   )
 }
 
-const toggleRecord = () => {
-  isRecording.value = !isRecording.value
-  if (!isRecording.value && userInput.value === '') {
-    userInput.value = "我其实对动态规划的转移方程一直理解不透，你能用图形化的方式给我讲讲吗？"
-  }
-}
-
 onMounted(async () => {
   await loadSessions()
   if (sessions.value.length > 0) {
@@ -551,55 +564,80 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-/* ================= 顶部控制栏 ================= */
-.tutor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 1.5rem;
-  height: 60px;
-  border-bottom: 1px solid #E2E8F0;
-  background-color: #FFFFFF;
-  flex-shrink: 0;
-  z-index: 10;
-}
-
-.header-left .title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
+/* ================= 模式切换 ================= */
+.sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid #E2E8F0;
+  margin-top: auto;
+  background: #FAFAFA;
 }
 
 .mode-toggle-group {
   display: flex;
+  flex-direction: column;
   background: #F1F5F9;
-  padding: 4px;
-  border-radius: 8px;
+  padding: 5px;
+  border-radius: 12px;
+  gap: 4px;
+  border: 1px solid #E2E8F0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
 }
 
 .mode-btn {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  border: none;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
   background: transparent;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: #64748B;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.mode-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.6);
+  color: #334155;
 }
 
 .mode-btn.active {
   background: #FFFFFF;
-  color: #0F172A;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
-.new-chat-btn {
-  font-size: 0.85rem;
+/* 图文交互激活色 */
+.mode-btn.active:nth-child(1) {
+  color: #0284C7;
+  border-color: #E0F2FE;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+}
+.mode-btn.active:nth-child(1) .el-icon {
+  color: #0EA5E9;
+}
+
+/* 数字人互动激活色 */
+.mode-btn.active:nth-child(2) {
+  color: #6D28D9;
+  border-color: #EDE9FE;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%);
+}
+.mode-btn.active:nth-child(2) .el-icon {
+  color: #8B5CF6;
+}
+
+.mode-btn .el-icon {
+  font-size: 1.15rem;
+  transition: color 0.3s ease, transform 0.3s ease;
+}
+
+.mode-btn.active .el-icon {
+  transform: scale(1.1);
 }
 
 /* ================= 主体排版 ================= */
@@ -611,6 +649,7 @@ onBeforeUnmount(() => {
 
 /* --- 左侧：会话列表 --- */
 .session-sidebar {
+  position: relative;
   width: 240px;
   background: #FAFAFA;
   border-right: 1px solid #E2E8F0;
@@ -621,7 +660,41 @@ onBeforeUnmount(() => {
 }
 
 .session-sidebar.collapsed {
-  width: 60px;
+  width: 0;
+  border-right: none;
+}
+
+.sidebar-toggle-float {
+  position: absolute;
+  top: 1rem;
+  right: -14px;
+  z-index: 50;
+}
+
+.float-collapse-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.float-collapse-btn:hover {
+  color: #0F172A;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transform: scale(1.05);
+}
+
+.float-collapse-btn .el-icon {
+  font-size: 0.9rem;
 }
 
 .session-sidebar-header {
@@ -645,35 +718,47 @@ onBeforeUnmount(() => {
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 0.75rem 1rem;
+  padding: 0 1rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
+.standard-list-title {
+  padding: 0.5rem 0.5rem 0.25rem;
+  font-size: 0.75rem;
+  color: #94A3B8;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-top: 0.5rem;
+}
+
 .session-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
-  color: #475569;
+  color: #333;
+  font-size: 0.95rem;
   transition: background 0.2s;
-  font-size: 0.85rem;
 }
 
 .session-item:hover {
-  background: #F1F5F9;
+  background: #EAEAEA;
 }
 
 .session-item.active {
-  background: #ECFEFF;
-  color: #0891B2;
+  background: #E0F2FE;
+  color: #0284C7;
   font-weight: 500;
 }
 
-.session-icon { font-size: 1rem; opacity: 0.7; }
+.session-item .el-icon {
+  font-size: 1.2rem;
+}
+
 .session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .del-btn {
@@ -697,6 +782,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   background: #FFFFFF;
   position: relative;
+  overflow: hidden;
 }
 
 .has-digital-human .chat-viewport {
@@ -866,28 +952,6 @@ onBeforeUnmount(() => {
 }
 .attachment-link:hover { border-color: #0891B2; }
 
-.msg-tool-calls {
-  margin-top: 8px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  background: #FAFAFA;
-  font-family: 'Space Grotesk', monospace;
-}
-.tool-call-header {
-  padding: 6px 10px;
-  font-size: 0.75rem;
-  color: #64748B;
-  border-bottom: 1px solid #E2E8F0;
-  display: flex; align-items: center; gap: 6px;
-}
-.tool-call-item {
-  padding: 6px 10px;
-  font-size: 0.75rem;
-  display: flex; justify-content: space-between;
-}
-.tool-name { color: #0F172A; }
-.tool-status.success { color: #10B981; }
-
 /* Typing indicator */
 .thinking-bubble {
   background: #FAFAFA;
@@ -1009,13 +1073,27 @@ onBeforeUnmount(() => {
   gap: 1.5rem;
   overflow-y: auto;
   flex-shrink: 0;
+  align-items: center; /* 整体侧边栏内容水平居中 */
+  text-align: center;
 }
 
-.sidebar-header { display: flex; justify-content: space-between; align-items: center; }
-.sidebar-header h3 { margin: 0; font-size: 1.1rem; color: #0F172A; font-weight: 600; }
+.sidebar-header { 
+  display: flex; 
+  flex-direction: row; 
+  justify-content: space-between;
+  align-items: center; 
+  width: 100%;
+}
+.header-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+.sidebar-header h3 { margin: 0; font-size: 1.1rem; color: #0F172A; font-weight: 600; text-align: left; }
 
 .sync-badge {
-  display: flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   font-size: 0.7rem; font-family: 'Space Grotesk', monospace;
   color: #64748B; background: #E2E8F0; padding: 2px 8px; border-radius: 12px;
   transition: all 0.3s ease;
@@ -1024,37 +1102,72 @@ onBeforeUnmount(() => {
 .sync-badge.is-syncing { background: #ECFEFF; color: #0891B2; }
 .sync-badge.is-syncing .dot { background: #0891B2; box-shadow: 0 0 6px rgba(8,145,178,0.5); }
 
-.sidebar-desc { margin: 0; font-size: 0.8rem; color: #64748B; }
+.sidebar-desc { margin: 0; font-size: 0.8rem; color: #64748B; text-align: center; }
 
-.dimensions-grid { display: flex; flex-direction: column; gap: 1rem; }
-.dim-item { display: flex; flex-direction: column; gap: 6px; }
-.dim-top { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; }
-.dim-name { color: #334155; }
-.dim-score { font-family: 'Space Grotesk', monospace; }
-
-.progress-track {
-  width: 100%; height: 6px; background: #E2E8F0; border-radius: 3px; overflow: hidden;
+.tags-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  padding: 8px 0;
+  align-items: center; /* 子容器对齐 */
 }
-.progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease-out; }
-.dim-desc { font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.tags-section h4 { margin: 0 0 0.75rem 0; font-size: 0.9rem; color: #0F172A; font-weight: 600; }
-.tags-container { display: flex; flex-wrap: wrap; gap: 6px; }
+.tags-container { 
+  display: flex; 
+  flex-wrap: wrap; 
+  gap: 8px; 
+  justify-content: center;
+  padding: 4px 0;
+}
 .feature-tag {
-  background: #FFFFFF; border: 1px solid #E2E8F0;
-  padding: 2px 8px; border-radius: 4px;
-  font-size: 0.75rem; color: #475569;
+  background: #FFFFFF; 
+  border: 1px solid #E2E8F0;
+  padding: 8px 14px; 
+  border-radius: 20px;
+  font-size: 0.85rem; 
+  color: #0F172A;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.feature-tag:hover {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  transform: translateY(-1px);
+}
+.tag-icon {
+  color: #0891B2;
+  font-size: 1rem;
+}
+.empty-tags {
+  color: #94A3B8;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 2rem 0;
+  border: 1px dashed #E2E8F0;
+  border-radius: 12px;
+  background: #FAFAFA;
 }
 
 .ai-insight {
   margin-top: auto;
   background: #0F172A;
   border-radius: 12px;
-  padding: 1rem;
+  padding: 1.25rem;
   color: #F8FAFC;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-sizing: border-box;
 }
-.insight-header { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; color: #38BDF8; }
-.insight-content { font-size: 0.8rem; line-height: 1.6; color: #CBD5E1; }
+.insight-header { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; color: #38BDF8; }
+.insight-content { font-size: 0.85rem; line-height: 1.6; color: #CBD5E1; }
 
 /* Markdown 内容样式补丁 */
 :deep(.markdown-body) { font-family: 'Inter', sans-serif; font-size: 0.95rem !important; background: transparent !important; }
@@ -1066,4 +1179,122 @@ onBeforeUnmount(() => {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+
+/* ============================================== */
+/* Standard Mode (图文交互) 极简 UI 定制样式         */
+/* ============================================== */
+.mode-standard .session-sidebar {
+  background: #F9F9F9;
+  border-right: none;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.standard-sidebar-nav {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.standard-sidebar-nav .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #333;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+.standard-sidebar-nav .nav-item.new-chat {
+  margin-bottom: 8px;
+}
+.standard-sidebar-nav .nav-item.new-chat.active {
+  background: #E0F2FE;
+  color: #0284C7;
+  font-weight: 500;
+}
+.standard-sidebar-nav .nav-item:hover {
+  background: #EAEAEA;
+}
+.standard-sidebar-nav .nav-item .el-icon {
+  font-size: 1.2rem;
+}
+.mode-standard .chat-viewport {
+  background: #FFFFFF;
+}
+.standard-welcome {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.standard-welcome h2 {
+  font-size: 1.8rem;
+  font-weight: 500;
+  color: #111;
+  margin-top: -10vh; /* 微微上移，更居中视觉 */
+}
+.mode-standard .input-panel {
+  padding: 0 0 2.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+}
+.mode-standard .input-wrapper.pill-shape {
+  width: 65%;
+  max-width: 800px;
+  min-width: 400px;
+  background: #F9F9F9;
+  border: 1px solid #E5E5E5;
+  border-radius: 32px;
+  padding: 10px 16px;
+  align-items: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+}
+.mode-standard .input-wrapper.pill-shape:focus-within {
+  background: #FFFFFF;
+  border-color: #D1D5DB;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+}
+.mode-standard .toolbar-left {
+  padding-bottom: 0;
+  margin-right: 12px;
+}
+.standard-plus-btn {
+  font-size: 1.2rem;
+  color: #666;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  padding: 0;
+  transition: background 0.2s;
+}
+.standard-plus-btn:hover {
+  background: #E5E5E5;
+}
+.mode-standard textarea {
+  height: 24px;
+  padding: 0;
+  align-self: center;
+  font-size: 1rem;
+}
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+}
+.mode-standard .send-btn {
+  margin: 0;
+}
 </style>
