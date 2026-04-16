@@ -44,24 +44,11 @@ class ReadingAgent(BaseResourceAgent):
     tool_names = [
         "save_to_workplace", "read_file_safe",
         "write_file", "edit_file", "append_file", "read_file_lines",
-        "execute_shell", "execute_shell_sync",
-        "run_code", "run_file",
         "list_directory", "file_tree", "find_files", "get_file_info",
     ]
     skill_names = []
 
-    Attributes:
-        name:           "ReadingAgent"
-        agent_dir:      agents/reading/，包含 prompt.md
-        state_schema:   ReadingState，包含 recommendations_json/parsed_recommendations
-        method:         generate_reading() — 对外入口
-        output:         {success, recommendations, file_path, raw_json, error}
 
-    工作流: agent → validate(解析JSON + 校验数量/摘要/类型多样性) → retry/end
-    DAG 阶段: enrichment（依赖 mindmap、content、code）
-    黑板记忆: 读取 content.outline（内容大纲）
-    用户画像: 读取 interest_preference（兴趣偏好）和 cognitive_style（认知风格）
-    """
     def __init__(self) -> None:
         super().__init__(
             name="ReadingAgent",
@@ -104,7 +91,7 @@ class ReadingAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from app.tools.file_handler import save_to_workplace
+        from app.tools.file_operator import save_to_workplace
         # 阅读推荐同样落成 JSON，后续前端更容易做卡片列表和外链跳转。
         return save_to_workplace(
             sub_dir=sub_dir,

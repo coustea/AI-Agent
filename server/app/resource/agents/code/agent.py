@@ -60,17 +60,8 @@ def _extract_code_block(code_content: str) -> str:
 
 
 class CodeAgent(BaseResourceAgent):
-    """代码实操案例生成 Agent。"""
+    """代码实操案例生成 Agent。
 
-    tool_names = [
-        "save_to_workplace", "read_file_safe",
-        "write_file", "edit_file", "append_file", "read_file_lines",
-        "execute_shell", "execute_shell_sync",
-        "run_code", "run_file",
-        "list_directory", "file_tree", "find_files", "get_file_info",
-        "safe_shell",
-    ]
-    skill_names = []
     最后由 LLM 添加教学注释和逐步解析。
 
     Attributes:
@@ -85,6 +76,17 @@ class CodeAgent(BaseResourceAgent):
     黑板记忆: 读取 mindmap.agent_output（知识结构）和 content.outline（内容大纲）
     用户画像: 读取 knowledge_level（知识水平）和 learning_pace（学习节奏）
     """
+
+    tool_names = [
+        "save_to_workplace", "read_file_safe",
+        "write_file", "edit_file", "append_file", "read_file_lines",
+        "execute_shell", "execute_shell_sync",
+        "run_code", "run_file",
+        "list_directory", "file_tree", "find_files", "get_file_info",
+        "safe_shell",
+    ]
+    skill_names = []
+
     def __init__(self) -> None:
         super().__init__(
             name="CodeAgent",
@@ -142,7 +144,7 @@ class CodeAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成一个完整的可运行代码案例。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from app.tools.file_handler import save_to_workplace
+        from app.tools.file_operator import save_to_workplace
         # 代码案例统一保存成 markdown，便于同时承载代码、说明和运行结果。
         return save_to_workplace(
             sub_dir=sub_dir,

@@ -18,7 +18,7 @@ from langgraph.prebuilt import ToolNode
 
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.tools.file_handler import FileHandler
+from app.tools.file_operator import save_to_workplace
 
 logger = get_logger(__name__)
 
@@ -76,11 +76,10 @@ class ContentWriter(BaseResourceAgent):
     tool_names = [
         "save_to_workplace", "read_file_safe",
         "write_file", "edit_file", "append_file", "read_file_lines",
-        "execute_shell", "execute_shell_sync",
-        "run_code", "run_file",
         "list_directory", "file_tree", "find_files", "get_file_info",
+        "save_docx_file", "extract_pdf_text",
     ]
-    skill_names = []
+    skill_names = ["docx", "pdf"]
     def __init__(self) -> None:
         super().__init__(
             name="ContentAgent",
@@ -190,8 +189,8 @@ class ContentWriter(BaseResourceAgent):
         return ""
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        # 统一走共享 FileHandler，保持所有资源文件的命名和保存位置一致。
-        return FileHandler.save_to_workplace(
+        # 统一走共享 save_to_workplace，保持所有资源文件的命名和保存位置一致。
+        return save_to_workplace(
             sub_dir=sub_dir,
             topic=topic,
             content=content,
