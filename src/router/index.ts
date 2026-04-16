@@ -31,13 +31,13 @@ const router = createRouter({
 })
 
 // 路由守卫（无 token 跳转到登录页）
-router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('token')
-  if (to.path !== '/login' && to.path !== '/register' && !token) {
-    next('/login')
-  } else {
-    next()
-  }
-})
+// router.beforeEach((to, _from, next) => {
+//   const token = localStorage.getItem('token')
+//   if (to.path !== '/login' && to.path !== '/register' && !token) {
+//     next('/login')
+//   } else {
+//     next()
+//   }
+// })
 
 export default router
