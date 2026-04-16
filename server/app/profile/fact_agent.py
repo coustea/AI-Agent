@@ -70,6 +70,22 @@ class MemoryExtractionAgent:
     def _normalize_text(text: str) -> str:
         return normalize_text(text)
 
+    @staticmethod
+    def _select_dialogue_messages(recent_msgs: list) -> list:
+        """Only keep user/assistant turns for memory extraction prompts."""
+        return [
+            msg
+            for msg in recent_msgs
+            if getattr(msg, "role", "") in {"user", "assistant"} and getattr(msg, "content", "").strip()
+        ]
+
+    def _build_chat_history(self, recent_msgs: list) -> str:
+        filtered = self._select_dialogue_messages(recent_msgs)
+        return "\n".join(
+            f"[{msg.created_at.strftime('%m-%d %H:%M')}] {msg.role}: {msg.content}"
+            for msg in filtered
+        )
+
     def _has_extractable_signal(self, recent_msgs: list) -> bool:
         """Skip LLM extraction when recent user turns contain no stable-memory signal."""
         user_texts: list[str] = []
@@ -126,12 +142,15 @@ class MemoryExtractionAgent:
         if not recent_msgs or len(recent_msgs) < 1:
             return True
 
-        if not self._has_extractable_signal(recent_msgs):
+        dialogue_msgs = self._select_dialogue_messages(recent_msgs)
+        if not dialogue_msgs:
+            return True
+
+        if not self._has_extractable_signal(dialogue_msgs):
             logger.info(f"[FactAgent] 最近对话缺少长期记忆信号，跳过提取。")
             return True
 
-        chat_history_str = "\n".join(
-            [f"[{msg.created_at.strftime('%m-%d %H:%M')}] {msg.role}: {msg.content}" for msg in recent_msgs])
+        chat_history_str = self._build_chat_history(dialogue_msgs)
         profile_context = await self._build_profile_context(user_id)
         memory_context = await self._build_memory_context(user_id)
 
@@ -147,19 +166,28 @@ class MemoryExtractionAgent:
                 saved_count = 0
                 for item in extracted.facts[:3]:
                     expires_at = None
-                    if item.is_time_sensitive and item.expires_in_days:
+                    if item.is_time_sensitive and item.expires_in_days and item.expires_in_days > 0:
                         from datetime import timedelta
                         expires_at = datetime.now() + timedelta(days=item.expires_in_days)
 
                     # MemoryService owns deduplication, merge, and timestamp refresh.
                     logger.info(f"[FactAgent] 提取到新事实: {item.content} (type={item.memory_type})")
-                    await self.memory.save_user_fact(
-                        user_id=user_id,
-                        content=item.content,
-                        memory_type=item.memory_type,
-                        session_id=session_id,
-                        expires_at=expires_at,
-                    )
+                    try:
+                        await self.memory.save_user_fact(
+                            user_id=user_id,
+                            content=item.content,
+                            memory_type=item.memory_type,
+                            session_id=session_id,
+                            expires_at=expires_at,
+                        )
+                    except ValueError as exc:
+                        logger.info(
+                            "[FactAgent] 跳过无效事实: content=%r type=%s reason=%s",
+                            item.content,
+                            item.memory_type,
+                            exc,
+                        )
+                        continue
                     saved_count += 1
                 logger.info(f"[FactAgent] 本轮共处理 {saved_count} 条长期记忆候选。")
             else:

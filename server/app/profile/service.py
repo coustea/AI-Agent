@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlmodel import select
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.database import engine
@@ -30,45 +30,50 @@ class ProfileService:
         source_memory_ids: list[int] | None = None,
     ) -> UserProfile:
         async with AsyncSession(self.engine) as session:
-            profile = await session.get(UserProfile, user_id)
-            if not profile:
-                profile = UserProfile(user_id=user_id)
-
-            for field, value in features.items():
-                if hasattr(profile, field):
-                    setattr(profile, field, value)
-
-            session.add(profile)
-            await session.commit()
-            await session.refresh(profile)
-
-            # 写入历史
             import json
-            history = UserProfileHistory(
-                user_id=user_id,
-                version=0,
-                knowledge_level=profile.knowledge_level,
-                knowledge_level_score=profile.knowledge_level_score,
-                learning_goal=profile.learning_goal,
-                learning_goal_score=profile.learning_goal_score,
-                learning_history=profile.learning_history,
-                learning_history_score=profile.learning_history_score,
-                cognitive_style=profile.cognitive_style,
-                cognitive_style_score=profile.cognitive_style_score,
-                error_pattern=profile.error_pattern,
-                error_pattern_score=profile.error_pattern_score,
-                learning_pace=profile.learning_pace,
-                learning_pace_score=profile.learning_pace_score,
-                interest_preference=profile.interest_preference,
-                interest_preference_score=profile.interest_preference_score,
-                cognitive_level=profile.cognitive_level,
-                cognitive_level_score=profile.cognitive_level_score,
-                profile_summary=profile.profile_summary,
-                change_reason=change_reason,
-                source_memory_ids=json.dumps(source_memory_ids) if source_memory_ids else None,
-            )
-            session.add(history)
-            await session.commit()
+            async with session.begin():
+                profile = await session.get(UserProfile, user_id)
+                if not profile:
+                    profile = UserProfile(user_id=user_id)
+
+                for field, value in features.items():
+                    if hasattr(profile, field):
+                        setattr(profile, field, value)
+
+                session.add(profile)
+                await session.flush()
+
+                version_stmt = select(func.max(UserProfileHistory.version)).where(
+                    UserProfileHistory.user_id == user_id
+                )
+                latest_version = (await session.exec(version_stmt)).one()
+                next_version = 0 if latest_version is None else int(latest_version) + 1
+                history = UserProfileHistory(
+                    user_id=user_id,
+                    version=next_version,
+                    knowledge_level=profile.knowledge_level,
+                    knowledge_level_score=profile.knowledge_level_score,
+                    learning_goal=profile.learning_goal,
+                    learning_goal_score=profile.learning_goal_score,
+                    learning_history=profile.learning_history,
+                    learning_history_score=profile.learning_history_score,
+                    cognitive_style=profile.cognitive_style,
+                    cognitive_style_score=profile.cognitive_style_score,
+                    error_pattern=profile.error_pattern,
+                    error_pattern_score=profile.error_pattern_score,
+                    learning_pace=profile.learning_pace,
+                    learning_pace_score=profile.learning_pace_score,
+                    interest_preference=profile.interest_preference,
+                    interest_preference_score=profile.interest_preference_score,
+                    cognitive_level=profile.cognitive_level,
+                    cognitive_level_score=profile.cognitive_level_score,
+                    profile_summary=profile.profile_summary,
+                    change_reason=change_reason,
+                    source_memory_ids=json.dumps(source_memory_ids) if source_memory_ids else None,
+                )
+                session.add(history)
+
+            await session.refresh(profile)
 
             return profile
 

@@ -1,4 +1,4 @@
-"""Chat HTTP routes."""
+"""Chat HTTP 路由层 — 接收请求、鉴权、调用 ChatUseCases，返回响应。"""
 
 from __future__ import annotations
 
@@ -20,11 +20,13 @@ async def mentor_chat_stream(
     files: list[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
 ):
+    """SSE 流式对话主入口。支持多文件上传（图片 + 文档）。"""
     uc = get_chat_usecases()
-    effective_session = session_id or uc.default_session_id(current_user.id)
+    effective_session = session_id or uc.default_session_id(current_user.id)  # 无 session 时用默认
     image_urls: list[str] = []
     file_urls: list[str] = []
 
+    # 分类保存上传文件：图片 → image_urls，文档 → file_urls
     for upload in files:
         if not upload.filename:
             raise HTTPException(status_code=400, detail="文件名不能为空")
@@ -44,6 +46,7 @@ async def mentor_chat_stream(
         else:
             file_urls.append(saved["url"])
 
+    # 返回 SSE 流式响应
     return StreamingResponse(
         uc.stream_chat(
             user_id=current_user.id,
@@ -56,7 +59,7 @@ async def mentor_chat_stream(
     )
 
 
-@router.post("/chat/upload")
+@router.post("/chat/upload")  # 独立上传接口（前端可先上传再发消息）
 async def upload_file(
     file: UploadFile = File(...),
     session_id: str = Form(...),
@@ -78,7 +81,7 @@ async def upload_file(
     return HttpResponse.success(data=saved)
 
 
-@router.get("/chat/uploads/{owner_id}/{session_id}/{filename}")
+@router.get("/chat/uploads/{owner_id}/{session_id}/{filename}")  # 读取上传文件（带权限校验）
 async def get_uploaded_file(
     owner_id: int,
     session_id: str,
@@ -120,7 +123,7 @@ async def create_session(
     return HttpResponse.success(data=await uc.create_session(current_user.id))
 
 
-@router.delete("/chat/sessions/{session_id}")
+@router.delete("/chat/sessions/{session_id}")  # 软删除：标记为归档而非物理删除
 async def delete_session(
     session_id: str,
     current_user: User = Depends(get_current_user),

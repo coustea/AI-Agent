@@ -10,6 +10,7 @@ class ResourceAgentError(Exception):
     """资源生成 Agent 基础异常类"""
 
     def __init__(self, message: str, agent_name: str = "", context: dict | None = None):
+        # 把 agent 名直接嵌进错误文本，日志里一眼就能知道是哪一层抛出来的。
         self.agent_name = agent_name
         self.context = context or {}
         super().__init__(f"[{agent_name}] {message}" if agent_name else message)
@@ -23,6 +24,7 @@ class PlanningError(ResourceAgentError):
 
     def __init__(self, message: str, raw_output: str = ""):
         super().__init__(message, agent_name="Coordinator")
+        # 原始输出保留给后续排查 Planner 非法 JSON 或 prompt 漂移问题。
         self.raw_output = raw_output
 
 
@@ -45,6 +47,7 @@ class AgentExecutionError(ResourceAgentError):
 
     def __init__(self, message: str, agent_name: str, phase: str = ""):
         super().__init__(message, agent_name=agent_name)
+        # phase 能帮助区分是初始化、生成还是校验阶段挂掉。
         self.phase = phase
 
 

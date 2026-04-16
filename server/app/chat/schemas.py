@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-
+# 聊天请求（当前接口用 Form 接收参数，此类未直接使用）
 class MentorChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
@@ -12,38 +12,32 @@ class MentorChatRequest(BaseModel):
 
 
 class AttachmentInfo(BaseModel):
+    """单条附件信息。"""
     url: str
-    type: str
+    type: str       # "image" | "document"
     name: str
 
 
 class ToolCallRecord(BaseModel):
-    tool: str
+    """一次工具调用的完整记录。"""
+    tool: str        # 工具名称
     args: dict | str
-    result: str
-    status: str
-
-
-class ResourceCard(BaseModel):
-    type: str
-    title: str
-    summary: str
-    asset_urls: list[str]
-    file_path: Optional[str] = None
-    preview_text: str = ""
+    result: str | dict
+    status: str      # "success" | "error"
 
 
 class ChatMessageItem(BaseModel):
-    role: str
+    """返回给前端的消息条目。"""
+    role: str  # "user" | "assistant" | "tool"
     content: str
     attachments: Optional[list[AttachmentInfo]] = None
     tool_calls: Optional[list[ToolCallRecord]] = None
-    resource_cards: Optional[list[ResourceCard]] = None
     created_at: Optional[datetime] = None
 
 
 class UploadResponse(BaseModel):
-    url: str
-    file_type: str
+    """文件上传成功响应。"""
+    url: str            # 前端访问该文件的 API 路径
+    file_type: str      # "image" | "document"
     original_name: str
     size_bytes: int

@@ -40,6 +40,7 @@ _CODE_BLOCK_RE = re.compile(r"```(\w+)\s*\n(.*?)\n```", re.DOTALL)
 
 
 def _detect_language(code_content: str) -> str:
+    # 优先从 Markdown fenced code block 的语言标签识别语言，避免靠内容猜测。
     match = _CODE_BLOCK_RE.search(code_content)
     if match:
         lang_tag = match.group(1).lower()
@@ -51,6 +52,7 @@ def _detect_language(code_content: str) -> str:
 
 
 def _extract_code_block(code_content: str) -> str:
+    # 保存到前端或执行器时，更需要纯代码体，因此这里抽掉 markdown 外壳。
     match = _CODE_BLOCK_RE.search(code_content)
     if match:
         return match.group(2)
@@ -58,9 +60,17 @@ def _extract_code_block(code_content: str) -> str:
 
 
 class CodeAgent(BaseResourceAgent):
-    """代码实操案例生成 Agent。
+    """代码实操案例生成 Agent。"""
 
-    根据知识点生成可运行代码案例，并通过 safe_shell 工具验证执行，
+    tool_names = [
+        "save_to_workplace", "read_file_safe",
+        "write_file", "edit_file", "append_file", "read_file_lines",
+        "execute_shell", "execute_shell_sync",
+        "run_code", "run_file",
+        "list_directory", "file_tree", "find_files", "get_file_info",
+        "safe_shell",
+    ]
+    skill_names = []
     最后由 LLM 添加教学注释和逐步解析。
 
     Attributes:
@@ -85,6 +95,7 @@ class CodeAgent(BaseResourceAgent):
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         ctx = ""
+        # 代码案例通常需要跟知识结构和正文讲解保持一致，因此这里同时读取导图和内容大纲。
         if "mindmap" in shared_memory:
             mm = shared_memory["mindmap"].get("agent_output", "")
             if mm: ctx += f"【思维导图核心结构】\n{mm}\n"
@@ -94,6 +105,7 @@ class CodeAgent(BaseResourceAgent):
         return ctx
 
     def _format_user_profile(self, profile: dict[str, Any]) -> str:
+        # 这里只挑会直接影响代码案例难度和节奏的字段塞进 prompt。
         if not profile: return ""
         parts = []
         if profile.get("knowledge_level"):
@@ -130,7 +142,8 @@ class CodeAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成一个完整的可运行代码案例。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from .tools import save_to_workplace
+        from app.tools.file_handler import save_to_workplace
+        # 代码案例统一保存成 markdown，便于同时承载代码、说明和运行结果。
         return save_to_workplace(
             sub_dir=sub_dir,
             topic=topic,
@@ -139,6 +152,7 @@ class CodeAgent(BaseResourceAgent):
         )
 
     def _failure_result(self, state: Any, feedback: str, **fields: Any) -> dict[str, Any]:
+        # 校验失败时统一走这个出口，确保 retry_count、error 字段行为一致。
         retry_count = state.get("retry_count", 0) + 1
         result = {
             "is_valid": False,
@@ -153,6 +167,7 @@ class CodeAgent(BaseResourceAgent):
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
         code_content = ""
+        # 这里只取最后一条真正的 AI 文本输出，避免把工具消息误认为代码正文。
         for message in reversed(messages):
             if isinstance(message, AIMessage) and isinstance(message.content, str) and message.content.strip():
                 code_content = message.content.strip()
@@ -205,6 +220,7 @@ class CodeAgent(BaseResourceAgent):
             }
         except Exception as e:
             logger.error(f"[CodeAgent] 添加注释失败: {e}")
+            # 即使“教学讲解增强”失败，也不要丢掉前面好不容易生成出的代码。
             return {
                 "code_content": code_content,
                 "detected_language": language,
@@ -213,6 +229,7 @@ class CodeAgent(BaseResourceAgent):
             }
 
     async def _fallback_generate_code(self, state: CodeState) -> dict[str, Any]:
+        # 图工作流失败时，退回最保守的一次性 LLM 产出，至少保证有一份 Python 示例。
         prompt = (
             "你是一位编程教学专家。请直接生成一个完整、可运行的 Markdown 代码案例，"
             "不要调用工具，不要输出计划，不要追问用户。\n\n"
@@ -248,6 +265,7 @@ class CodeAgent(BaseResourceAgent):
         logger.info(f"[CodeAgent] 收到生成请求: topic={topic}")
         await self._ensure_graph()
 
+        # 初始状态只保留本次运行必需字段，避免上一轮结果污染当前任务。
         initial_state: CodeState = {
             "major": major,
             "course": course,
@@ -267,22 +285,27 @@ class CodeAgent(BaseResourceAgent):
         }
 
         try:
+            logger.info("[CodeAgent] 开始执行 LangGraph 工作流")
             result = await asyncio.wait_for(
                 self.graph.ainvoke(initial_state, {"recursion_limit": 15}),
                 timeout=90,
             )
+            logger.info("[CodeAgent] 工作流执行完成: keys=%s", sorted(result.keys()))
         except Exception as e:
             logger.error(f"[CodeAgent] 工作流执行失败: {e}")
             try:
+                logger.info("[CodeAgent] 进入降级生成流程")
                 result = await self._fallback_generate_code(initial_state)
             except Exception as fallback_error:
                 return {"success": False, "content": "", "detected_language": "unknown", "code_only": "", "error": str(fallback_error)}
 
         explained = result.get("explained_content", "") or result.get("code_content", "")
+        # 前端展示可以用 explained，运行器或调试器更适合消费纯 code_only。
         code_only = _extract_code_block(result.get("code_content", ""))
         language = result.get("detected_language", "unknown")
         if not explained:
             try:
+                logger.warning("[CodeAgent] 工作流无有效输出，尝试最终兜底生成")
                 fallback = await self._fallback_generate_code(initial_state)
                 explained = fallback.get("explained_content", "")
                 code_only = _extract_code_block(fallback.get("code_content", ""))
@@ -292,6 +315,7 @@ class CodeAgent(BaseResourceAgent):
         file_path = None
         if explained:
             file_path = self._save_to_workplace("code", topic, explained, "md")
+            logger.info("[CodeAgent] 代码案例已保存: file_path=%s language=%s", file_path, language)
 
         return {
             "success": bool(explained),

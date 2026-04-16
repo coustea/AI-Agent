@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
+from app.tools.markdown_to_mindmap import markdown_to_mindmap
 
 logger = get_logger(__name__)
 
@@ -23,6 +24,8 @@ class MindmapState(BaseAgentState):
     file_path: Optional[str]
     html_content: Optional[str]
     agent_output: Optional[str]
+    markdown_content: Optional[str]
+    node_count: int
 
 
 NEED_MAP = {
@@ -32,23 +35,99 @@ NEED_MAP = {
     "practice": "实践应用 (侧重代码或实操案例)",
 }
 
+_MARKDOWN_FENCE_RE = re.compile(r"```(?:markdown|md)?\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
+_ROOT_RE = re.compile(r"^#\s+.+$", re.MULTILINE)
+_TOP_LEVEL_BRANCH_RE = re.compile(r"^-\s+.+$", re.MULTILINE)
+_NESTED_BRANCH_RE = re.compile(r"^\s+-\s+.+$", re.MULTILINE)
+
+
+def _extract_markdown_content(text: str) -> str:
+    """从模型输出中提取 Markdown 思维导图源码。"""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+
+    match = _MARKDOWN_FENCE_RE.search(raw)
+    if match:
+        raw = match.group(1).strip()
+
+    if "# " not in raw or "- " not in raw:
+        return ""
+    return raw
+
+
+def _count_mindmap_nodes(markdown_text: str) -> int:
+    """统计导图节点数量，根节点也计入总数。"""
+    if not markdown_text.strip():
+        return 0
+    lines = [line.strip() for line in markdown_text.splitlines() if line.strip()]
+    return sum(1 for line in lines if line.startswith("# ") or line.startswith("- "))
+
+
+def _count_top_level_branches(markdown_text: str) -> int:
+    """统计一级分支数量，用来判断导图是否足够展开。"""
+    return len(_TOP_LEVEL_BRANCH_RE.findall(markdown_text))
+
+
+def _check_markdown_quality(markdown_text: str) -> tuple[bool, str, int]:
+    """对模型产出的 Markdown 导图做最小质量校验。"""
+    node_count = _count_mindmap_nodes(markdown_text)
+    if not markdown_text:
+        return False, "未检测到可用的 Markdown 思维导图内容。", node_count
+    if not _ROOT_RE.search(markdown_text):
+        return False, "导图缺少根节点标题，请以一级标题作为主题根节点。", node_count
+    if _count_top_level_branches(markdown_text) < 3:
+        return False, "导图结构过于单薄，一级分支至少需要 3 个。", node_count
+    if len(_NESTED_BRANCH_RE.findall(markdown_text)) < 4:
+        return False, "导图展开深度不足，请补充更多二级或三级节点。", node_count
+    if node_count < 8:
+        return False, "导图结构过于稀疏，请补充更多关键知识节点。", node_count
+    return True, "", node_count
+
+
+def _extract_file_path_from_tool_payload(content: Any) -> str | None:
+    """从工具返回载荷中提取导图 HTML 文件路径。"""
+    if isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                try:
+                    inner = json.loads(item["text"]) if isinstance(item["text"], str) else item["text"]
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                file_path = _extract_file_path_from_tool_payload(inner)
+                if file_path:
+                    return file_path
+        return None
+
+    if isinstance(content, dict):
+        return content.get("file_path") or content.get("filePath")
+
+    if isinstance(content, str):
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            match = re.search(r"(/.*\.html)", content)
+            return match.group(1) if match else None
+        return _extract_file_path_from_tool_payload(parsed)
+
+    return None
+
 
 class MindmapGenerator(BaseResourceAgent):
     """思维导图生成 Agent。
 
     使用本地工具将 Markdown 转换为交互式 HTML 思维导图。
-
-    Attributes:
-        name:           "MindmapAgent"
-        agent_dir:      agents/mindmap/，包含 prompt.md、tools/、skills/
-        state_schema:   MindmapState，包含 need/extra/file_path/html_content/agent_output
-        method:         generate_mindmap() — 对外入口
-        output:         {success, file_path, html_content, agent_output, error}
-
-    工作流: agent → tools(markdown_to_mindmap) → validate → retry/end
-    DAG 阶段: foundation（首个执行，产物供后续 Agent 参考）
-    黑板记忆: 无读取（作为首阶段，无前置依赖）
     """
+
+    tool_names = [
+        "save_to_workplace", "read_file_safe",
+        "write_file", "edit_file", "append_file", "read_file_lines",
+        "execute_shell", "execute_shell_sync",
+        "run_code", "run_file",
+        "list_directory", "file_tree", "find_files", "get_file_info",
+        "markdown_to_mindmap",
+    ]
+    skill_names = ["create-mindmap"]
     def __init__(self) -> None:
         super().__init__(
             name="MindmapAgent",
@@ -61,43 +140,33 @@ class MindmapGenerator(BaseResourceAgent):
         self._mindmap_skill_instructions: str = ""
 
     async def _load_tools(self) -> None:
-        """加载本地工具和 Skills，并记录详细日志。"""
+        """加载工具和技能，并缓存 create-mindmap 技能。"""
         await super()._load_tools()
 
-        local_tools = self.plugin_manager.list_local_tools()
-        logger.info(f"[MindmapAgent] 已加载本地工具: {local_tools}")
-
-        skills = self.plugin_manager.list_skills()
-        skill_names = [s["name"] for s in skills]
-        logger.info(f"[MindmapAgent] 已加载 Skills: {skill_names}")
-
-        summary = self.plugin_manager.summary()
-        logger.info(
-            f"[MindmapAgent] 工具加载完成 — "
-            f"本地: {len(summary['local_tools'])}, "
-            f"Skills: {len(summary['skills'])}"
-        )
+        logger.info(f"[MindmapAgent] 已加载工具: {[t.name for t in (self._tools or [])]}")
         self._cache_mindmap_skill()
 
     def _cache_mindmap_skill(self) -> None:
-        """缓存 create-mindmap 技能的元数据与正文，确保生成前可直接使用。"""
+        """缓存 create-mindmap 技能的元数据与正文。"""
+        from app.skills.manager import SkillManager
+
         self._mindmap_skill_tool_name = None
         self._mindmap_skill_description = ""
         self._mindmap_skill_instructions = ""
 
-        for skill in self.plugin_manager.list_skills():
+        sm = SkillManager()
+        # 同步调用 _load_skills（已在 load_all 中完成初始化）
+        sm._load_skills()
+        for skill in sm.list_skills():
             if skill.get("name") != "create-mindmap":
                 continue
 
             self._mindmap_skill_tool_name = skill.get("tool_name")
             self._mindmap_skill_description = skill.get("description", "")
 
-            reader = getattr(self.plugin_manager, "_read_skill_instructions", None)
-            if callable(reader):
-                try:
-                    self._mindmap_skill_instructions = str(reader("create-mindmap")).strip()
-                except Exception as exc:
-                    logger.warning(f"[MindmapAgent] 读取 create-mindmap 技能正文失败: {exc}")
+            instructions = sm.read_skill_instructions("create-mindmap")
+            if instructions:
+                self._mindmap_skill_instructions = instructions
 
             logger.info(
                 "[MindmapAgent] 已缓存 create-mindmap 技能: "
@@ -176,48 +245,36 @@ class MindmapGenerator(BaseResourceAgent):
                 agent_output = msg.content if isinstance(msg.content, str) else str(msg.content)
                 break
 
+        markdown_content = _extract_markdown_content(agent_output)
+        quality_ok, quality_feedback, node_count = _check_markdown_quality(markdown_content)
+
         # 从 ToolMessage 中提取 markmap 工具返回的文件路径
         for msg in messages:
             if isinstance(msg, ToolMessage) and msg.name == "markdown_to_mindmap":
-                content = msg.content
+                file_path = _extract_file_path_from_tool_payload(msg.content)
+                if file_path:
+                    break
 
-                # 统一转为可解析的对象
-                if isinstance(content, list):
-                    for item in content:
-                        if isinstance(item, dict) and "text" in item:
-                            try:
-                                inner = json.loads(item["text"]) if isinstance(item["text"], str) else item["text"]
-                                if isinstance(inner, dict):
-                                    file_path = inner.get("file_path") or inner.get("filePath")
-                                    break
-                            except (json.JSONDecodeError, TypeError):
-                                continue
-                        elif isinstance(item, str):
-                            try:
-                                inner = json.loads(item)
-                                if isinstance(inner, dict):
-                                    file_path = inner.get("file_path") or inner.get("filePath")
-                                    break
-                            except (json.JSONDecodeError, TypeError):
-                                continue
-                elif isinstance(content, dict):
-                    file_path = content.get("file_path") or content.get("filePath")
-                elif isinstance(content, str):
-                    try:
-                        res = json.loads(content)
-                        if isinstance(res, dict):
-                            file_path = res.get("file_path") or res.get("filePath")
-                        elif isinstance(res, list) and res and isinstance(res[0], dict) and "text" in res[0]:
-                            inner = json.loads(res[0]["text"]) if isinstance(res[0]["text"], str) else res[0]["text"]
-                            if isinstance(inner, dict):
-                                file_path = inner.get("file_path") or inner.get("filePath")
-                    except json.JSONDecodeError:
-                        pass
-
-                    if not file_path:
-                        m = re.search(r"(/.*\.html)", content)
-                        if m:
-                            file_path = m.group(1)
+        if not file_path and markdown_content:
+            if quality_ok:
+                logger.info("[MindmapAgent] 未检测到工具结果，尝试用 Markdown 自动补生成 HTML")
+                try:
+                    tool_result = markdown_to_mindmap.invoke({"markdown_text": markdown_content})
+                    file_path = _extract_file_path_from_tool_payload(tool_result)
+                except Exception as exc:
+                    logger.error("[MindmapAgent] 自动补生成 HTML 失败: %s", exc, exc_info=exc)
+                    return {
+                        "file_path": None,
+                        "html_content": None,
+                        "agent_output": agent_output,
+                        "markdown_content": markdown_content,
+                        "node_count": node_count,
+                        "is_valid": False,
+                        "retry_count": state.get("retry_count", 0) + 1,
+                        "validation_feedback": f"导图 Markdown 已生成，但转换 HTML 失败：{exc}",
+                    }
+            else:
+                logger.warning("[MindmapAgent] Markdown 导图质量不足: %s", quality_feedback)
 
         # 读取 HTML 内容
         if file_path and os.path.exists(file_path):
@@ -240,9 +297,11 @@ class MindmapGenerator(BaseResourceAgent):
             "file_path": file_path,
             "html_content": html_content,
             "agent_output": agent_output,
+            "markdown_content": markdown_content,
+            "node_count": node_count,
             "is_valid": is_valid,
             "retry_count": retry_count,
-            "validation_feedback": "" if is_valid else "未检测到思维导图文件路径。请确保调用了 markdown_to_mindmap 工具并正确生成了 HTML 文件。",
+            "validation_feedback": "" if is_valid else quality_feedback or "未检测到思维导图文件路径。请确保调用了 markdown_to_mindmap 工具并正确生成了 HTML 文件。",
         }
 
     async def generate_mindmap(
@@ -259,6 +318,7 @@ class MindmapGenerator(BaseResourceAgent):
         logger.info(f"[MindmapAgent] 收到生成请求: topic={topic}, gap={gap}")
         await self._ensure_graph()
 
+        # 思维导图是首阶段资源，所以这里不依赖其他 Agent，只吃用户请求和画像。
         initial_state: MindmapState = {
             "major": major,
             "course": course,
@@ -272,6 +332,8 @@ class MindmapGenerator(BaseResourceAgent):
             "file_path": None,
             "html_content": None,
             "agent_output": None,
+            "markdown_content": None,
+            "node_count": 0,
             "is_valid": False,
             "validation_feedback": "",
             "retry_count": 0,
@@ -280,7 +342,13 @@ class MindmapGenerator(BaseResourceAgent):
         }
 
         try:
+            logger.info("[MindmapAgent] 开始执行导图工作流: need=%s extra=%r", need, extra)
             result = await self.graph.ainvoke(initial_state, {"recursion_limit": 25})
+            logger.info(
+                "[MindmapAgent] 导图工作流完成: is_valid=%s file_path=%s",
+                result.get("is_valid"),
+                result.get("file_path"),
+            )
         except Exception as e:
             logger.error(f"[MindmapAgent] 工作流执行失败: {e}")
             return {"success": False, "file_path": None, "html_content": None, "agent_output": "", "error": str(e)}
@@ -290,6 +358,8 @@ class MindmapGenerator(BaseResourceAgent):
             "file_path": result.get("file_path"),
             "html_content": result.get("html_content"),
             "agent_output": result.get("agent_output", ""),
+            "markdown_content": result.get("markdown_content", ""),
+            "node_count": result.get("node_count", 0),
             "error": result.get("error") if not result.get("is_valid") else None,
         }
 

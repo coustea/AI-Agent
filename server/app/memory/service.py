@@ -28,9 +28,9 @@ from app.memory.helpers import normalize_text, estimate_token_count
 
 logger = get_logger(__name__)
 
-SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7
-MEMORY_EXTRACTION_TOKEN_THRESHOLD = 80
-PROFILE_UPDATE_TOKEN_THRESHOLD = 120
+SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7  # 短期消息默认保留天数
+MEMORY_EXTRACTION_TOKEN_THRESHOLD = 80  # 触发 FactAgent 长期记忆提取的 token 阈值
+PROFILE_UPDATE_TOKEN_THRESHOLD = 120  # 触发 ProfileAgent 画像更新的 token 阈值
 
 
 class MemoryService:
@@ -40,9 +40,9 @@ class MemoryService:
     """
 
     def __init__(self):
-        pass
+        logger.debug("[MemoryService] 初始化兼容外观层")
 
-    # -- helpers --
+    # -- helpers（委托 helpers 模块） --
     @staticmethod
     def _normalize_text(content: str) -> str:
         return normalize_text(content)
@@ -52,6 +52,7 @@ class MemoryService:
 
     # -- 会话管理 (委托 session_service) --
     async def create_chat_session(self, user_id: int, module: str, title: str = "新对话") -> ChatSession:
+        logger.debug("[MemoryService] 委托 create_chat_session: user_id=%d, module=%s", user_id, module)
         return await session_service.create_chat_session(user_id, module, title)
 
     async def get_chat_session(self, session_id: str) -> Optional[ChatSession]:
@@ -127,6 +128,28 @@ class MemoryService:
             user_id, session_id, content, memory_type, dimension, importance, source, source_message_count,
         )
 
+    # -- 画像服务 (延迟导入 profile_service，避免循环依赖) --
+    async def get_user_profile(self, user_id: int):
+        from app.profile.service import profile_service
+        logger.debug("[MemoryService] 委托 get_user_profile: user_id=%d", user_id)
+        return await profile_service.get_user_profile(user_id)
+
+    async def update_user_profile(
+        self,
+        user_id: int,
+        features: dict,
+        change_reason: str = "系统自动更新",
+        source_memory_ids: list[int] | None = None,
+    ):
+        from app.profile.service import profile_service
+        logger.debug("[MemoryService] 委托 update_user_profile: user_id=%d, reason=%s", user_id, change_reason)
+        return await profile_service.update_user_profile(
+            user_id=user_id,
+            features=features,
+            change_reason=change_reason,
+            source_memory_ids=source_memory_ids,
+        )
+
     # -- 压缩 (委托 compression_service) --
     async def summarize_and_compress(
         self, user_id: int, session_id: str, module: str, threshold: int = 30, keep_recent: int = 10,
@@ -159,4 +182,4 @@ class MemoryService:
         await session_service.reset_profile_update_counter(user_id, session_id, module)
 
 
-memory_service = MemoryService()
+memory_service = MemoryService()  # 模块级单例（兼容旧代码）

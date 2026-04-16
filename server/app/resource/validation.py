@@ -27,13 +27,16 @@ def extract_json_from_text(text: str) -> str:
     Returns:
         提取到的 JSON 字符串，未匹配则返回原文本
     """
+    # 先去掉首尾空白，避免 fenced code block 前后换行影响匹配。
     text = text.strip()
     match = _FENCE_RE.search(text)
     if match:
+        # 优先提取 ```json ... ``` 里的内容，因为这是最常见的模型输出格式。
         return match.group(1).strip()
     start = text.find("{")
     end = text.rfind("}") + 1
     if start != -1 and end > start:
+        # 如果没有 code fence，就退化为提取最外层 JSON 对象。
         return text[start:end]
     return text
 
@@ -54,6 +57,7 @@ def extract_last_ai_content(
     for msg in reversed(messages):
         if isinstance(msg, AIMessage):
             if skip_tool_calls and msg.tool_calls:
+                # 某些 Agent 会先返回带工具调用的 AIMessage，这里允许调用方跳过它们。
                 continue
             content = msg.content
             return content.strip() if isinstance(content, str) else str(content).strip()
@@ -77,6 +81,7 @@ def make_validation_result(
     Returns:
         适合从 _validate_node 返回的字典
     """
+    # 统一返回结构，避免每个 Agent 的 validate 节点手写一套字段。
     result: dict[str, Any] = {
         "is_valid": is_valid,
         "validation_feedback": feedback,
@@ -118,6 +123,7 @@ def validate_json_response(
         feedback = "未生成内容"
         return False, feedback, None, make_validation_result(False, retry_count, feedback)
 
+    # 先把模型输出里的 JSON 片段剥离出来，再进入反序列化。
     json_text = extract_json_from_text(raw)
 
     try:
@@ -127,6 +133,7 @@ def validate_json_response(
         return False, feedback, None, make_validation_result(False, retry_count, feedback)
 
     try:
+        # 让 Pydantic 负责字段级结构校验，避免 Agent 各自重复写 schema 判断。
         validated = pydantic_model.model_validate(data)
     except Exception as e:
         feedback = f"{error_prefix}不合法: {e}"

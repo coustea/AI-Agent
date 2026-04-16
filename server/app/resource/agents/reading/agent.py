@@ -39,10 +39,16 @@ class ReadingState(BaseAgentState):
 
 
 class ReadingAgent(BaseResourceAgent):
-    """拓展阅读推荐 Agent。
+    """拓展阅读推荐 Agent。"""
 
-    根据知识点和用户兴趣偏好，推荐多种类型的拓展阅读资源，
-    通过 Pydantic 校验推荐结构，确保数量、摘要质量和类型多样性。
+    tool_names = [
+        "save_to_workplace", "read_file_safe",
+        "write_file", "edit_file", "append_file", "read_file_lines",
+        "execute_shell", "execute_shell_sync",
+        "run_code", "run_file",
+        "list_directory", "file_tree", "find_files", "get_file_info",
+    ]
+    skill_names = []
 
     Attributes:
         name:           "ReadingAgent"
@@ -66,6 +72,7 @@ class ReadingAgent(BaseResourceAgent):
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         ctx = ""
+        # 拓展阅读会参考正文大纲，尽量让推荐内容和当前学习主题保持同一上下文。
         if "content" in shared_memory:
             outline = shared_memory["content"].get("outline", "")
             if outline:
@@ -73,6 +80,7 @@ class ReadingAgent(BaseResourceAgent):
         return ctx
 
     def _format_user_profile(self, profile: dict[str, Any]) -> str:
+        # 兴趣偏好影响推荐方向，认知风格影响推荐材料的表达形式。
         if not profile: return ""
         parts = []
         if profile.get("interest_preference"):
@@ -96,7 +104,8 @@ class ReadingAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from .tools import save_to_workplace
+        from app.tools.file_handler import save_to_workplace
+        # 阅读推荐同样落成 JSON，后续前端更容易做卡片列表和外链跳转。
         return save_to_workplace(
             sub_dir=sub_dir,
             topic=topic,
@@ -120,6 +129,7 @@ class ReadingAgent(BaseResourceAgent):
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
         retry_count = state.get("retry_count", 0)
+        # 只验证最后产出的 JSON 主体，不把中间解释文字一起带进解析器。
         raw = extract_last_ai_content(messages)
 
         error = state.get("error")
@@ -142,6 +152,7 @@ class ReadingAgent(BaseResourceAgent):
             return failure
 
         items = validated.recommendations
+        # 至少保证有一个“小列表”，否则阅读推荐对用户帮助太弱。
         if len(items) < 3:
             return self._failure_result(
                 state,
@@ -151,6 +162,7 @@ class ReadingAgent(BaseResourceAgent):
             )
 
         for i, item in enumerate(items):
+            # 摘要过短通常意味着模型只是罗列标题，没有给出为什么值得读。
             if len(item.abstract) < 20:
                 return self._failure_result(
                     state,
@@ -160,6 +172,7 @@ class ReadingAgent(BaseResourceAgent):
                 )
 
         types = {item.type for item in items}
+        # 这里要求资源类型至少有两种，避免全是“书籍”或全是“论文”。
         if len(types) < 2:
             return self._failure_result(
                 state,
@@ -189,6 +202,7 @@ class ReadingAgent(BaseResourceAgent):
         logger.info(f"[ReadingAgent] 收到生成请求: topic={topic}")
         await self._ensure_graph()
 
+        # 运行时状态里保留 recommendations_json，便于失败时直接定位原始模型输出。
         initial_state: ReadingState = {
             "major": major,
             "course": course,
@@ -207,7 +221,13 @@ class ReadingAgent(BaseResourceAgent):
         }
 
         try:
+            logger.info("[ReadingAgent] 开始执行阅读推荐工作流")
             result = await self.graph.ainvoke(initial_state, {"recursion_limit": 15})
+            logger.info(
+                "[ReadingAgent] 工作流完成: is_valid=%s recommendation_count=%d",
+                result.get("is_valid"),
+                len(result.get("parsed_recommendations", []) or []),
+            )
         except Exception as e:
             logger.error(f"[ReadingAgent] 工作流执行失败: {e}")
             return {"success": False, "recommendations": [], "raw_json": "", "error": str(e)}
@@ -222,6 +242,7 @@ class ReadingAgent(BaseResourceAgent):
                 json.dumps(parsed, ensure_ascii=False, indent=2),
                 "json",
             )
+            logger.info("[ReadingAgent] 推荐清单已保存: file_path=%s item_count=%d", file_path, len(parsed))
 
         return {
             "success": bool(parsed),

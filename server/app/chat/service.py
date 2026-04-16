@@ -1,13 +1,18 @@
-"""Chat service — 对话用例 + 会话存储。"""
+"""Chat service — 用例编排层。
+
+调用链: api.py → ChatUseCases → TutorChatRuntime → TutorAgent (agent.py)
+                                              ↕
+                                   SqlConversationStore  LocalFileStore
+"""
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from app.memory.short_term import short_term_service
 from app.memory.session import session_service
-from app.shared.resource_cards import build_resource_cards_from_tool_calls
-from app.chat.schemas import AttachmentInfo, ChatMessageItem, ResourceCard, ToolCallRecord
+from app.chat.schemas import AttachmentInfo, ChatMessageItem, ToolCallRecord
 
 CHAT_MODULE_NAME = "mentor"
 
@@ -15,10 +20,11 @@ CHAT_MODULE_NAME = "mentor"
 class SqlConversationStore:
     """对话会话持久化。"""
 
-    async def list_sessions(self, user_id: int, limit: int = 20) -> list[dict]:
+
+    async def list_sessions(self, user_id: int, limit: int = 30) -> list[dict]:
         sessions = await session_service.get_user_chat_sessions(
             user_id=user_id, module=CHAT_MODULE_NAME, limit=limit,
-        )
+        ) 
         return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in sessions]
 
     async def create_session(self, user_id: int, title: str = "新对话") -> dict:
@@ -37,6 +43,7 @@ class SqlConversationStore:
         session_id: str | None = None,
         limit: int = 50,
     ) -> list[ChatMessageItem]:
+        # 未指定 session 时取最近一个
         target_session = session_id
         if not target_session:
             sessions = await session_service.get_user_chat_sessions(
@@ -53,6 +60,7 @@ class SqlConversationStore:
             limit=limit,
         )
 
+        # 将 DB 模型转为前端 DTO，反序列化 JSON 字段
         items: list[ChatMessageItem] = []
         for msg in messages:
             attachments = None
@@ -72,24 +80,12 @@ class SqlConversationStore:
                     tool_calls = None
                     raw_tc = None
 
-            resource_cards = None
-            if msg.resource_cards:
-                try:
-                    resource_cards = [ResourceCard(**v) for v in json.loads(msg.resource_cards)]
-                except (json.JSONDecodeError, TypeError):
-                    resource_cards = None
-            elif raw_tc:
-                derived_cards = build_resource_cards_from_tool_calls(raw_tc)
-                if derived_cards:
-                    resource_cards = [ResourceCard(**v) for v in derived_cards]
-
             items.append(
                 ChatMessageItem(
                     role=msg.role,
                     content=msg.content,
                     attachments=attachments,
                     tool_calls=tool_calls,
-                    resource_cards=resource_cards,
                     created_at=msg.created_at,
                 )
             )
@@ -120,6 +116,7 @@ class ChatUseCases:
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
     ):
+        """委托给 TutorChatRuntime，透传流式输出。"""
         from app.chat.service import tutor_chat_runtime
         async for chunk in tutor_chat_runtime.stream_chat(
             user_id=user_id,
@@ -184,7 +181,7 @@ class ChatUseCases:
 
 
 class TutorChatRuntime:
-    """对话运行时：包装 TutorAgent 的流式调用。"""
+    """对话运行时：每次请求创建 TutorAgent 实例并流式输出。"""
 
     async def stream_chat(
         self,
@@ -197,33 +194,26 @@ class TutorChatRuntime:
     ):
         from app.chat.agent import TutorAgent
         from app.chat.context import set_user_id
-        from app.shared.plugin_manager import PluginManager
-        from app.shared.paths import WORKPLACE_DIR
-        from app.shared.spark_image import spark_image_service
 
         set_user_id(user_id)
-        agent = TutorAgent(
-            user_id=user_id,
-            session_id=session_id,
-            module=CHAT_MODULE_NAME,
-            image_urls=image_urls or [],
-            file_urls=file_urls or [],
-            spark_image_service=spark_image_service,
-            plugin_manager=PluginManager(
-                workspace=WORKPLACE_DIR / "chat",
-                skills_path=[
-                    WORKPLACE_DIR / "chat" / "skills",
-                ],
-            ),
-        )
-        async for chunk in agent.astream_chat(user_message):
-            yield chunk
-        await agent.plugin_manager.aclose()
+        # 每次请求创建新 Agent 实例
+        agent = TutorAgent()
+        try:
+            async for chunk in agent.chat_stream(
+                user_id=user_id,
+                user_message=user_message,
+                session_id=session_id,
+                image_urls=image_urls,
+                file_urls=file_urls,
+            ):
+                yield chunk
+        finally:
+            pass  # 清理资源
 
 
 # 模块级单例
-conversation_store = SqlConversationStore()
-tutor_chat_runtime = TutorChatRuntime()
+conversation_store = SqlConversationStore()  # 会话存储（委托 session_service）
+tutor_chat_runtime = TutorChatRuntime()      # Agent 运行时
 
 
 def _get_chat_usecases():
@@ -232,10 +222,11 @@ def _get_chat_usecases():
     return ChatUseCases(conversation_store=conversation_store, file_store=local_file_store)
 
 
-chat_usecases = None  # 延迟初始化
+chat_usecases = None  # 延迟初始化单例
 
 
 def get_chat_usecases() -> ChatUseCases:
+    """获取 ChatUseCases 单例（首次调用时创建）。"""
     global chat_usecases
     if chat_usecases is None:
         chat_usecases = _get_chat_usecases()

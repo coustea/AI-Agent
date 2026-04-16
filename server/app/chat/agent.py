@@ -1,7 +1,6 @@
 """TutorAgent: orchestrates direct, multimodal, and tool-assisted mentor chat."""
 
 import asyncio
-import importlib
 import json
 import os
 from pathlib import Path
@@ -22,8 +21,6 @@ from app.chat.context import chat_runtime_context
 from app.profile.profile_agent import PROFILE_UPDATE_TOKEN_THRESHOLD
 from app.memory.service import MEMORY_EXTRACTION_TOKEN_THRESHOLD, memory_service
 from app.shared.paths import WORKPLACE_DIR
-from app.shared.plugin_manager import PluginManager
-from app.shared.spark_image import spark_image_service
 
 logger = get_logger(__name__)
 
@@ -80,7 +77,6 @@ class TutorAgent:
         memory=memory_service,
         fact_agent=None,
         profile_agent=None,
-        plugin_manager: PluginManager | None = None,
     ) -> None:
         # 主模型：负责对话生成与工具调用，支持流式输出
         self.llm = ChatOpenAI(
@@ -99,6 +95,7 @@ class TutorAgent:
             max_tokens=100,
         )
         # GLM 图片理解模型
+
         self.glm_vision_llm = ChatOpenAI(
             model=os.getenv("GLM_VISION_MODEL", "glm-4v-flash"),
             api_key=os.getenv("GLM_API_KEY"),
@@ -114,79 +111,73 @@ class TutorAgent:
         self._init_lock = asyncio.Lock()
         self._background_tasks: set[asyncio.Task] = set()
 
-        self.plugin_manager = plugin_manager or PluginManager(
-            workspace=WORKPLACE_DIR / "chat",
-            skills_path=AGENT_DIR / "skills",
-        )
-    def _load_local_tools(self) -> list[BaseTool]:
-        """Discover local tools from the agent's tools directory."""
-        tools_dir = AGENT_DIR / "tools"
-        if not tools_dir.exists() or not tools_dir.is_dir():
-            return []
-
-        local_tools: list[BaseTool] = []
-        for py_file in sorted(tools_dir.glob("*.py")):
-            if py_file.name != "__init__.py" and py_file.name.startswith("_"):
-                continue
-            found = self._discover_tools_in_module(py_file)
-            local_tools.extend(found)
-
-        if local_tools:
-            logger.info(f"[TutorAgent] 本地工具: {[t.name for t in local_tools]}")
-        return local_tools
+        # Chat agent 的工具和技能声明
+        self.tool_names = [
+            "create_document_file",
+            "read_uploaded_file", "list_uploaded_files",
+            "save_to_workplace", "read_file_safe",
+            "write_file", "edit_file", "append_file", "read_file_lines",
+        ]
+        self.skill_names = ["baidu-search", "docx", "pdf"]
 
     @staticmethod
-    def _discover_tools_in_module(py_file: Path) -> list[BaseTool]:
-        """Import a Python module and collect exported BaseTool instances."""
-        tools_found: list[BaseTool] = []
-        module_name = f"_chat_tools_{py_file.stem}"
-
-        try:
-            spec = importlib.util.spec_from_file_location(module_name, py_file)
-            if spec is None or spec.loader is None:
-                return []
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-        except Exception as e:
-            logger.error(f"[TutorAgent] 导入工具模块失败 ({py_file}): {e}")
-            return []
-
-        for attr_name in dir(mod):
-            obj = getattr(mod, attr_name, None)
-            if isinstance(obj, BaseTool):
-                tools_found.append(obj)
-
-        return tools_found
+    def _looks_like_external_lookup_request(user_msg: str) -> bool:
+        """Detect search/fetch style requests that benefit from tools or skills."""
+        text = (user_msg or "").strip()
+        if not text:
+            return False
+        lookup_keywords = ("搜索", "搜一下", "查一下", "查找", "检索", "帮我找", "网上", "近几年", "最新")
+        return any(keyword in text for keyword in lookup_keywords)
 
     async def _ensure_graph(self) -> None:
-        """懒加载构建 LangGraph 状态图，首次调用时初始化。"""
+        """懒加载构建 LangGraph 状态图（双重检查锁），首次调用时初始化。
+
+        图结构:
+            START → classify ─┬→ direct_answer → END
+                              ├→ vision_answer → END
+                              └→ agent ↔ tools → END
+        """
         if self.graph is not None:
             return
 
-        async with self._init_lock:
+        async with self._init_lock:  # 防止并发重复构建
             if self.graph is not None:
                 return
 
-            local_tools = self._load_local_tools()
-            if local_tools:
-                self.plugin_manager.register(*local_tools)
+            # 从统一注册表加载声明的工具
+            from app.tools import registry
+            from app.resource.base_agent import _ensure_tools_loaded
+            from app.skills.manager import SkillManager
 
-            await self.plugin_manager.load_all()
+            _ensure_tools_loaded()
 
-            self._tools = await self.plugin_manager.get_tools()
+            registered_tools = []
+            if self.tool_names:
+                registered_tools = registry.get_many(self.tool_names)
+
+            # 从 SkillManager 加载声明的技能
+            skill_tools = []
+            if self.skill_names:
+                sm = SkillManager()
+                await sm.load_all()
+                skill_tools = await sm.get_tools(self.skill_names)
+
+            self._tools = registered_tools + skill_tools
             logger.info(
                 f"[TutorAgent] tools loaded: {[t.name for t in self._tools]}"
             )
 
+            # 构建状态图节点
             graph = StateGraph(TutorState)
-            graph.add_node("classify", self._classify_node)
-            graph.add_node("direct_answer", self._direct_answer_node)
-            graph.add_node("vision_answer", self._vision_answer_node)
-            graph.add_node("agent", self._agent_node)
-            graph.add_node("tools", ToolNode(self._tools))
+            graph.add_node("classify", self._classify_node)         # 意图分类
+            graph.add_node("direct_answer", self._direct_answer_node)  # 纯文本回答
+            graph.add_node("vision_answer", self._vision_answer_node)  # 图片理解
+            graph.add_node("agent", self._agent_node)               # 工具调用 LLM
+            graph.add_node("tools", ToolNode(self._tools))          # 工具执行节点
 
+            # 连接边
             graph.add_edge(START, "classify")
-            graph.add_conditional_edges(
+            graph.add_conditional_edges(  # 根据分类结果走不同路径
                 "classify",
                 self._classify_route,
                 {
@@ -197,8 +188,8 @@ class TutorAgent:
             )
             graph.add_edge("direct_answer", END)
             graph.add_edge("vision_answer", END)
-            graph.add_conditional_edges("agent", self._should_use_tools)
-            graph.add_edge("tools", "agent")
+            graph.add_conditional_edges("agent", self._should_use_tools)  # agent 输出含 tool_calls → tools，否则 → END
+            graph.add_edge("tools", "agent")  # 工具执行结果回到 agent 继续推理
 
             self.graph = graph.compile()
             logger.info("[TutorAgent] StateGraph 构建完成 (两阶段路由)")
@@ -209,22 +200,37 @@ class TutorAgent:
         file_urls = state.get("file_urls") or []
         image_urls = state.get("image_urls") or []
 
+        # 提取最后一条用户消息作为分类依据
         user_msg = ""
         for msg in reversed(messages):
             if isinstance(msg, HumanMessage):
                 user_msg = msg.content
                 break
 
-        # 如果有文档就进入工具调用
+        wants_lookup = self._looks_like_external_lookup_request(user_msg)
+        logger.info(
+            "[TutorAgent] classify input: text=%r file_count=%d image_count=%d wants_lookup=%s",
+            user_msg[:200],
+            len(file_urls),
+            len(image_urls),
+            wants_lookup,
+        )
+
+        # 硬规则：有文档直接走工具路径（需要 read_uploaded_file 工具）
         if file_urls:
             logger.info("[TutorAgent] classify: tool_needed (有文件附件)")
             return {"route": "tool_needed"}
 
-        # 如果有图片就进行图片分析
+        if wants_lookup:
+            logger.info("[TutorAgent] classify: tool_needed (外部检索请求)")
+            return {"route": "tool_needed"}
+
+        # 硬规则：有图片直接走视觉路径
         if image_urls:
             logger.info(f"[TutorAgent] classify: vision_needed ({len(image_urls)}张图片)")
             return {"route": "vision_needed"}
 
+        # 无附件时用分类 LLM 判断意图
         has_attachments = "有附件" if image_urls or file_urls else "无附件"
         classify_prompt = PROMPTS["classifier"].format(
             user_message=user_msg[:500],
@@ -235,8 +241,10 @@ class TutorAgent:
             result = await self.classifier_llm.ainvoke(
                 [HumanMessage(content=classify_prompt)]
             )
-            route = result.content.strip().lower()
+            raw_route = result.content.strip()
+            route = raw_route.lower()
             route = "tool_needed" if "tool" in route else "direct"
+            logger.info("[TutorAgent] classify llm raw=%r normalized=%s", raw_route, route)
         except Exception as e:
             logger.warning(f"[TutorAgent] classify failed, fallback to direct: {e}")
             route = "direct"
@@ -284,7 +292,7 @@ class TutorAgent:
         ]
 
     async def _direct_answer_node(self, state: TutorState) -> dict:
-        """直接回答路径：纯文本对话，不进入工具循环。"""
+        """直接回答路径：纯文本对话，不加载工具，延迟最低。"""
         system_prompt = state.get("system_prompt", "")
         messages = state.get("messages", [])
         full_messages = self._build_messages(system_prompt, messages)
@@ -293,7 +301,7 @@ class TutorAgent:
 
     @staticmethod
     def _resolve_image_file(image_url: str) -> Path | None:
-        """将上传接口的 URL 解析为本地文件路径，无法解析时返回 None。"""
+        """将上传接口的 URL（如 /api/v1/ai/chat/uploads/1/abc/xxx.png）解析为本地文件路径。"""
         prefix = "/api/v1/ai/chat/uploads/"
         if not image_url.startswith(prefix):
             return None
@@ -318,13 +326,13 @@ class TutorAgent:
         return "请描述这些图片"
 
     async def _vision_answer_node(self, state: TutorState) -> dict:
-        """图片理解路径：优先星火 API 识别，再由主 LLM 生成统一风格的回复；失败回退 GLM 多模态。"""
+        """图片理解路径：优先星火 API → 主 LLM 统一风格回复；失败回退 GLM 多模态。"""
         image_urls = state.get("image_urls") or []
         messages = list(state.get("messages", []))
         question = self._extract_question(messages)
         system_prompt = state.get("system_prompt", "")
 
-        # 尝试星火图片理解（逐张处理）
+        # 第一选择：星火图片理解（逐张处理，所有图都成功才行）
         if spark_image_service.configured and image_urls:
             spark_results: list[str] = []
             spark_ok = True
@@ -349,7 +357,7 @@ class TutorAgent:
             if spark_ok and spark_results:
                 combined = "\n\n".join(spark_results) if len(spark_results) > 1 else spark_results[0]
                 logger.info(f"[TutorAgent] vision: 星火图片理解成功 ({len(spark_results)}张)")
-                # 星火结果交由主 LLM 统一风格回复
+                # 将星火的 OCR 结果交给主 LLM，保持统一回复风格
                 vision_prompt = (
                     f"图片识别结果如下：\n{combined}\n\n"
                     f"请根据以上图片识别结果，回答用户的问题。如果用户没有具体问题，请对图片内容进行描述。"
@@ -361,7 +369,7 @@ class TutorAgent:
                 response = await self.llm.ainvoke(full_messages)
                 return {"messages": [response]}
 
-        # 回退：GLM 多模态（支持多图）
+        # 第二选择（回退）：直接用 GLM 多模态模型处理图片
         logger.info("[TutorAgent] vision: 使用 GLM 多模态")
         injected_messages = self._inject_images(messages, image_urls)
         full_messages = self._build_messages(system_prompt, injected_messages)
@@ -369,40 +377,66 @@ class TutorAgent:
         return {"messages": [response]}
 
     async def _agent_node(self, state: TutorState) -> dict:
-        """工具调用路径：绑定工具的 LLM 对话，并将 ToolMessage 内容转为纯文本以确保 API 兼容。"""
+        """工具调用路径：LLM 绑定工具后推理，输出可能包含 tool_calls（由 _should_use_tools 判断是否继续循环）。"""
         messages = self._add_system_msg(
             list(state.get("messages", [])),
             state.get("tool_system_prompt", ""),
         )
         messages = self._inject_images(messages, state.get("image_urls"))
 
+        # 清洗工具消息格式，确保 API 兼容
         from app.shared.sanitizers import sanitize_tool_messages
         messages = sanitize_tool_messages(messages)
 
-        llm_with_tools = self.llm.bind_tools(self._tools)
-        response = await llm_with_tools.ainvoke(messages)
+        last_human = next(
+            (msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)),
+            "",
+        )
         logger.info(
-            f"[TutorAgent] agent response, tool_calls={bool(response.tool_calls)}"
+            "[TutorAgent] agent invoke: tools=%d last_user=%r",
+            len(self._tools),
+            str(last_human)[:200],
+        )
+
+        llm_with_tools = self.llm.bind_tools(self._tools)  # 将工具注入 LLM，使其可以决定调用哪个
+        try:
+            response = await llm_with_tools.ainvoke(messages)
+        except Exception:
+            logger.exception("[TutorAgent] agent invoke failed")
+            raise
+
+        tool_names = [call.get("name", "unknown") for call in (response.tool_calls or [])]
+        if getattr(response, "tool_calls", None):
+            logger.info(
+                "[TutorAgent] LLM 选择工具: names=%s args=%s",
+                [call.get("name", "unknown") for call in response.tool_calls],
+                [call.get("args", {}) for call in response.tool_calls],
+            )
+        logger.info(
+            "[TutorAgent] agent response: tool_calls=%s names=%s content_preview=%r",
+            bool(response.tool_calls),
+            tool_names,
+            (response.content or "")[:200] if isinstance(response.content, str) else str(response.content)[:200],
         )
         return {"messages": [response]}
 
     @staticmethod
     def _should_use_tools(state: TutorState) -> str:
-        """判断 agent 节点输出是否包含工具调用，决定继续循环还是结束。"""
+        """条件边：如果 agent 最后输出含 tool_calls → 跳到 tools 节点执行；否则 → END 结束。"""
         messages = state.get("messages", [])
         if messages and isinstance(messages[-1], AIMessage) and messages[-1].tool_calls:
             return "tools"
         return END
 
     def _spawn_background(self, coro, task_name: str) -> None:
-        """创建后台任务，不阻塞流式响应，并在结束时安全回收。"""
+        """创建后台任务（不阻塞流式响应），完成后自动从集合移除并记录异常。"""
         task = asyncio.create_task(coro)
-        self._background_tasks.add(task)
+        self._background_tasks.add(task)  # 强引用防止被 GC 回收
 
         def _on_done(done: asyncio.Task):
-            self._background_tasks.discard(done)
+            self._background_tasks.discard(done)  # 完成后移除引用
             try:
-                done.result()
+                done.result()  # 触发异常传播
             except asyncio.CancelledError:
                 logger.info(f"[TutorAgent] 后台任务已取消 ({task_name})")
             except Exception as exc:
@@ -417,7 +451,7 @@ class TutorAgent:
             await asyncio.gather(*pending, return_exceptions=True)
 
     async def _build_profile_ctx(self, user_id: int) -> str:
-        """构建用户画像上下文：将画像字段渲染为紧凑的 prompt 文本。"""
+        """读取用户画像（8 维度学习特征），渲染为 system prompt 中的上下文段落。"""
         profile_str = "暂无画像信息（新用户），请直接开始对话。"
         profile = await self.memory.get_user_profile(user_id)
         if not profile:
@@ -431,7 +465,7 @@ class TutorAgent:
         return profile_str
 
     async def _build_memory_ctx(self, user_id: int) -> str:
-        """构建长期记忆上下文：按类型分组（偏好/目标/薄弱点等）渲染为 prompt 段落。"""
+        """读取长期记忆，按类型分组（偏好/目标/薄弱点/事实/背景）渲染为 prompt 段落。"""
         memories_by_type = await self.memory.get_user_context_memories(user_id=user_id)
         section_titles = {
             "preference": "偏好",
@@ -457,7 +491,7 @@ class TutorAgent:
         image_urls: Optional[List[str]],
         file_urls: Optional[List[str]],
     ) -> tuple[list[AnyMessage], str]:
-        """构建近期聊天上下文：返回 LangChain 消息列表和可读的历史摘要。"""
+        """读取最近 10 条历史消息，构造 LangChain 消息列表 + 可读摘要（供 prompt 填充）。"""
         initial_messages: list[AnyMessage] = []
         recent_context_lines: list[str] = []
         recent_msgs = await self.memory.get_recent_messages(
@@ -482,7 +516,7 @@ class TutorAgent:
 
     @staticmethod
     def _build_file_ctx(image_urls: Optional[List[str]], file_urls: Optional[List[str]]) -> str:
-        """构建附件信息文本：列出所有图片和文档供工具路径引用。"""
+        """将附件 URL 转为描述文本，告知 LLM 有哪些可用资源（图片可直接理解，文档需调用工具读取）。"""
         lines: list[str] = []
         if image_urls:
             for url in image_urls:
@@ -497,7 +531,7 @@ class TutorAgent:
         return "用户上传了以下附件:\n" + "\n".join(lines)
 
     async def _try_extract_memory(self, user_id: int, session_id: str) -> None:
-        """尝试触发长期记忆提取：当会话 token 累积超过阈值时，调用 fact_agent 提取并保存事实。"""
+        """当会话 token 累积超过阈值时，触发 fact_agent 从对话中提取长期事实记忆。"""
         should_trigger = await self.memory.should_trigger_memory_extraction(
             user_id=user_id,
             session_id=session_id,
@@ -517,7 +551,7 @@ class TutorAgent:
             logger.info(f"[TutorAgent] 长期记忆提取完成并重置计数 (user={user_id}, session={session_id})")
 
     async def _try_update_profile(self, user_id: int, session_id: str) -> None:
-        """尝试触发画像更新：需同时通过 token 累积阈值和对话显著性两个门控。"""
+        """双门控画像更新：token 累积阈值 + 对话显著性判断都通过后才触发 profile_agent。"""
         token_ready = await self.memory.should_trigger_profile_update_by_tokens(
             user_id=user_id,
             session_id=session_id,
@@ -553,7 +587,7 @@ class TutorAgent:
         user_message: str,
         assistant_reply: str,
     ) -> None:
-        """对话后处理流水线：累积 token → 尝试记忆提取 → 尝试画像更新。"""
+        """对话后处理流水线（后台执行）: 累积 token → 记忆提取 → 画像更新。"""
         try:
             await self.memory.accumulate_session_tokens(
                 user_id=user_id,
@@ -566,6 +600,36 @@ class TutorAgent:
         except Exception as exc:
             logger.error(f"[TutorAgent] post chat pipeline failed: {exc}")
 
+    async def _persist_tool_messages(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        tool_call_records: list[dict],
+    ) -> None:
+        """将工具调用记录落库为独立消息，便于后续审计与回放。"""
+        for record in tool_call_records:
+            tool_name = str(record.get("tool", "unknown"))
+            status = str(record.get("status", "success"))
+            args = record.get("args", {})
+            result = str(record.get("result", ""))
+
+            content = (
+                f"工具调用: {tool_name}\n"
+                f"状态: {status}\n"
+                f"参数: {args}\n"
+                f"结果: {result[:2000]}"
+            )
+            payload = json.dumps([record], ensure_ascii=False)
+            await self.memory.save_message(
+                user_id=user_id,
+                session_id=session_id,
+                module=self.module_name,
+                role="tool",
+                content=content,
+                tool_calls=payload,
+            )
+
     async def chat_stream(
         self,
         user_id: int,
@@ -574,13 +638,14 @@ class TutorAgent:
         image_urls: Optional[List[str]] = None,
         file_urls: Optional[List[str]] = None,
     ):
-        """主入口：保存用户消息 → 流式输出回复 → 后台触发记忆/画像更新。"""
+        """主入口：保存用户消息 → 构建 3 层上下文 → 流式输出回复 → 后台触发记忆/画像更新。"""
         effective_session = session_id or f"user-{user_id}-default-mentor"
         logger.info(f"[Tutor] User {user_id} message: {user_message[:50]}...")
 
-        await self._ensure_graph()
+        await self._ensure_graph()  # 确保 LangGraph 已构建
 
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        # 构造附件元数据列表（用于持久化到 ChatMessage.attachments）
         attachments_json = None
         attachment_items: list[dict] = []
         if image_urls:
@@ -604,6 +669,7 @@ class TutorAgent:
         if attachment_items:
             attachments_json = json.dumps(attachment_items)
 
+        # 步骤 1: 持久化用户消息到短期记忆
         try:
             msg_content = user_message
             if image_urls:
@@ -619,21 +685,30 @@ class TutorAgent:
             yield f"抱歉，系统暂时无法保存您的消息，请稍后重试 ({e})"
             return
 
+        # 步骤 2: 构建 3 层上下文（画像 + 长期记忆 + 附件信息）
         profile_str = await self._build_profile_ctx(user_id)
         fact_str = await self._build_memory_ctx(user_id)
         file_info_str = self._build_file_ctx(image_urls, file_urls)
 
+        # 构建可用技能描述
         skills_ctx = ""
-        skills = self.plugin_manager.list_skills()
-        if skills:
-            skills_desc = "\n".join(
-                f"- {s['name']}: {s['description']}" for s in skills
-            )
-            skills_ctx = (
-                f"## 【可用技能】\n"
-                f"你可以通过调用 load_skill_<name> 工具加载专家技能指令：\n{skills_desc}"
-            )
+        if self.skill_names:
+            from app.skills.manager import SkillManager
+            sm = SkillManager()
+            sm._load_skills()
+            skills = sm.list_skills()
+            # 过滤只显示声明的技能
+            skills = [s for s in skills if s["name"] in self.skill_names]
+            if skills:
+                skills_desc = "\n".join(
+                    f"- {s['name']}: {s['description']}" for s in skills
+                )
+                skills_ctx = (
+                    f"## 【可用技能】\n"
+                    f"你可以通过调用 load_skill_<name> 工具加载专家技能指令：\n{skills_desc}"
+                )
 
+        # 步骤 3: 读取近期聊天历史，构造 LangChain 消息列表
         initial_messages, recent_chat_context = await self._build_chat_ctx(
             user_id=user_id,
             session_id=effective_session,
@@ -642,6 +717,7 @@ class TutorAgent:
             file_urls=file_urls,
         )
 
+        # 步骤 4: 填充两套 system prompt（直接回答 vs 工具调用）
         direct_prompt = PROMPTS["direct_system"].format(
             profile_context=profile_str,
             fact_context=fact_str,
@@ -657,7 +733,9 @@ class TutorAgent:
 
         full_reply = ""
         tool_call_records: list[dict] = []
+        graph_error_text = ""
 
+        # 步骤 5: 构建初始状态并运行 LangGraph
         initial_state: TutorState = {
             "user_id": user_id,
             "session_id": effective_session,
@@ -670,16 +748,16 @@ class TutorAgent:
         }
 
         try:
-            # 运行 LangGraph 状态图，通过 chat_runtime_context 注入当前用户上下文
-            with chat_runtime_context(user_id):
+            # chat_runtime_context 通过 ContextVar 将 user_id/session_id 注入到工具调用中
+            with chat_runtime_context(user_id, effective_session):
                 async for event in self.graph.astream_events(
                     initial_state,
-                    version="v2",
-                    config={"recursion_limit": 15},
+                    version="v2",  # v2 事件格式，按节点输出事件
+                    config={"recursion_limit": 15},  # 防止工具调用无限循环
                 ):
                     kind = event.get("event", "")
 
-                    # 流式输出：捕获 LLM 逐 token 生成的内容
+                    # 事件 1: LLM 流式输出 — 逐 token yield 给前端
                     if kind == "on_chat_model_stream":
                         chunk = event.get("data", {}).get("chunk")
                         if chunk and chunk.content:
@@ -688,7 +766,7 @@ class TutorAgent:
                                 full_reply += text
                                 yield text
 
-                    # 非流式节点输出（如星火图片理解直接返回完整结果）
+                    # 事件 2: 非流式节点完成（vision_answer / direct_answer 不走流式）
                     if kind == "on_chain_end" and event.get("name") in ("vision_answer", "direct_answer"):
                         output = event.get("data", {}).get("output", {})
                         output_msgs = output.get("messages", []) if isinstance(output, dict) else []
@@ -697,25 +775,66 @@ class TutorAgent:
                                 full_reply += msg.content
                                 yield msg.content
 
-                    # 记录工具调用结果，用于后续持久化
+                    # 事件 3: 工具执行完成 — 记录调用结果用于持久化
                     if kind == "on_tool_end":
                         tool_input = event.get("data", {}).get("input", {})
                         tool_output = event.get("data", {}).get("output", "")
                         tool_name = event.get("name", "unknown")
+                        logger.info(
+                            "[TutorAgent] tool success: name=%s args=%r output_preview=%r",
+                            tool_name,
+                            tool_input,
+                            str(tool_output)[:300],
+                        )
+                        record_result = (
+                            json.dumps(tool_output, ensure_ascii=False)
+                            if isinstance(tool_output, dict)
+                            else str(tool_output)
+                        )
                         tool_call_records.append({
                             "tool": tool_name,
                             "args": tool_input if isinstance(tool_input, dict) else str(tool_input),
-                            "result": str(tool_output)[:2000],
+                            "result": record_result,
                             "status": "success",
+                        })
+                    if kind == "on_tool_error":
+                        tool_input = event.get("data", {}).get("input", {})
+                        tool_error = event.get("data", {}).get("error", "unknown tool error")
+                        tool_name = event.get("name", "unknown")
+                        logger.error(
+                            "[TutorAgent] tool error: name=%s args=%r error=%r",
+                            tool_name,
+                            tool_input,
+                            str(tool_error)[:500],
+                        )
+                        tool_call_records.append({
+                            "tool": tool_name,
+                            "args": tool_input if isinstance(tool_input, dict) else str(tool_input),
+                            "result": str(tool_error)[:2000],
+                            "status": "error",
                         })
 
         except Exception as e:
             logger.error(f"[Tutor] Graph execution error: {e}")
-            yield f"服务器出错，请稍后再试: {e}"
+            graph_error_text = f"服务器出错，请稍后再试: {e}"
 
+        if tool_call_records:
+            try:
+                await self._persist_tool_messages(
+                    user_id=user_id,
+                    session_id=effective_session,
+                    tool_call_records=tool_call_records,
+                )
+            except Exception as e:
+                logger.error(f"[Tutor] Failed to save tool messages: {e}")
+
+        if graph_error_text:
+            full_reply += graph_error_text
+            yield graph_error_text
+
+        # 步骤 6: 持久化助手回复 + 后台触发记忆/画像更新
         if full_reply:
             try:
-                # 保存助手回复（含工具调用记录），然后触发后台记忆/画像更新
                 tool_calls_json = json.dumps(tool_call_records) if tool_call_records else None
                 await self.memory.save_message(
                     user_id, effective_session, self.module_name, "assistant", full_reply,
@@ -723,6 +842,7 @@ class TutorAgent:
                 )
                 if tool_call_records:
                     logger.info(f"[Tutor] Saved reply with {len(tool_call_records)} tool call(s)")
+                # 后台不阻塞：累积 token → 记忆提取 → 画像更新
                 self._spawn_background(
                     self._post_chat_pipeline(
                         user_id=user_id,

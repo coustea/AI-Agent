@@ -1,4 +1,7 @@
-"""Helpers for resolving and reading uploaded chat attachments."""
+"""附件解析工具 — 将前端 URL 转为本地路径 + 读取文件内容。
+
+被 services/ 下的 document_analysis.py、vision.py 共用，也被 tools/read_upload.py 部分复用。
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,7 @@ from typing import Optional
 from app.shared.paths import WORKPLACE_DIR
 
 UPLOAD_DIR = WORKPLACE_DIR / "chat-uploads"
-MAX_FILE_CONTENT_CHARS = 15000
+MAX_FILE_CONTENT_CHARS = 15000  # 单文件最大读取字符数，超长截断
 
 
 def resolve_uploaded_path(file_url: str) -> Optional[tuple[int, str]]:
@@ -39,7 +42,7 @@ def resolve_uploaded_path(file_url: str) -> Optional[tuple[int, str]]:
 
     user_dir = (UPLOAD_DIR / owner_part).resolve()
     path = (user_dir / session_id / filename).resolve() if session_id else (user_dir / filename).resolve()
-    if not str(path).startswith(str(user_dir)):
+    if not str(path).startswith(str(user_dir)):  # 路径遍历攻击防护
         return None
     if not path.exists():
         return None

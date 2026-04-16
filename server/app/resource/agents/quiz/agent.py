@@ -40,10 +40,16 @@ class QuizState(BaseAgentState):
 
 
 class QuizAgent(BaseResourceAgent):
-    """分层练习题生成 Agent。
+    """分层练习题生成 Agent。"""
 
-    生成多难度层级的练习题（basic/intermediate/challenge），
-    支持选择题、简答题和判断题，通过 Pydantic 校验题目结构合法性。
+    tool_names = [
+        "save_to_workplace", "read_file_safe",
+        "write_file", "edit_file", "append_file", "read_file_lines",
+        "execute_shell", "execute_shell_sync",
+        "run_code", "run_file",
+        "list_directory", "file_tree", "find_files", "get_file_info",
+    ]
+    skill_names = []
 
     Attributes:
         name:           "QuizAgent"
@@ -67,6 +73,7 @@ class QuizAgent(BaseResourceAgent):
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         ctx = ""
+        # 题目生成依赖正文大纲，能帮助模型围绕已讲过的结构出题。
         if "content" in shared_memory:
             outline = shared_memory["content"].get("outline", "")
             if outline:
@@ -74,6 +81,7 @@ class QuizAgent(BaseResourceAgent):
         return ctx
 
     def _format_user_profile(self, profile: dict[str, Any]) -> str:
+        # 这里只选择“知识水平”和“易错模式”两个最直接影响题目设计的字段。
         if not profile: return ""
         parts = []
         if profile.get("error_pattern"):
@@ -98,7 +106,8 @@ class QuizAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成一套分层练习题。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from .tools import save_to_workplace
+        from app.tools.file_handler import save_to_workplace
+        # 题目最终以 json 保存，方便前端直接渲染成练习卡片或测验页面。
         return save_to_workplace(
             sub_dir=sub_dir,
             topic=topic,
@@ -109,6 +118,7 @@ class QuizAgent(BaseResourceAgent):
     async def _validate_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
         retry_count = state.get("retry_count", 0)
+        # 校验时只取最后一条 AI 文本，避免系统提示或工具输出干扰 JSON 解析。
         raw = extract_last_ai_content(messages)
 
         error = state.get("error")
@@ -127,6 +137,7 @@ class QuizAgent(BaseResourceAgent):
             return {**extra, "questions_json": raw, "parsed_questions": []}
 
         questions = validated.questions
+        # 先校验最小题量，避免生成出来只有一两道题就直接当成功。
         if len(questions) < 3:
             return make_validation_result(
                 False, retry_count,
@@ -135,6 +146,7 @@ class QuizAgent(BaseResourceAgent):
             )
 
         difficulties = {q.difficulty for q in questions}
+        # 再校验难度分层是否真的生效，确保“分层练习题”不是名义上的。
         if len(difficulties) < 2:
             return make_validation_result(
                 False, retry_count,
@@ -162,6 +174,7 @@ class QuizAgent(BaseResourceAgent):
         logger.info(f"[QuizAgent] 收到生成请求: topic={topic}")
         await self._ensure_graph()
 
+        # 这里初始化 parsed_questions，后面校验成功后会直接覆盖成结构化列表。
         initial_state: QuizState = {
             "major": major,
             "course": course,
@@ -180,7 +193,13 @@ class QuizAgent(BaseResourceAgent):
         }
 
         try:
+            logger.info("[QuizAgent] 开始执行题目生成工作流")
             result = await self.graph.ainvoke(initial_state, {"recursion_limit": 15})
+            logger.info(
+                "[QuizAgent] 工作流完成: is_valid=%s parsed_count=%d",
+                result.get("is_valid"),
+                len(result.get("parsed_questions", []) or []),
+            )
         except Exception as e:
             logger.error(f"[QuizAgent] 工作流执行失败: {e}")
             return {"success": False, "questions": [], "raw_json": "", "error": str(e)}
@@ -190,6 +209,7 @@ class QuizAgent(BaseResourceAgent):
         file_path = None
         if parsed:
             file_path = self._save_to_workplace("quiz", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
+            logger.info("[QuizAgent] 题库已保存: file_path=%s question_count=%d", file_path, len(parsed))
 
         return {
             "success": bool(parsed),

@@ -1,4 +1,4 @@
-"""Shared service for uploaded document analysis."""
+"""文档分析服务 — 读取用户上传的文档并拼接为 LLM 可用的分析文本。"""
 
 from __future__ import annotations
 

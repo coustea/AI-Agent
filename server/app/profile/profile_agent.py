@@ -109,6 +109,15 @@ class ProfileBuilderAgent:
     def _normalize_text(text: str) -> str:
         return normalize_text(text)
 
+    @staticmethod
+    def _select_dialogue_messages(recent_msgs: list) -> list:
+        """Only keep user/assistant turns for profile synthesis."""
+        return [
+            msg
+            for msg in recent_msgs
+            if getattr(msg, "role", "") in {"user", "assistant"} and getattr(msg, "content", "").strip()
+        ]
+
     def should_trigger_profile_update(self, messages: list) -> bool:
         """Use cheap heuristics to skip low-signal profile updates."""
         if not messages:
@@ -154,9 +163,10 @@ class ProfileBuilderAgent:
         return "\n".join(lines) if lines else "暂无已有长期记忆。"
 
     def _build_chat_history(self, recent_msgs: list) -> str:
+        filtered = self._select_dialogue_messages(recent_msgs)
         return "\n".join(
             f"[{msg.created_at.strftime('%m-%d %H:%M')}] {msg.role}: {self._clean_message_content(msg.content)}"
-            for msg in recent_msgs
+            for msg in filtered
         )
 
     async def build_profile(self, user_id: int, session_id: str | None = None) -> bool:
@@ -183,12 +193,17 @@ class ProfileBuilderAgent:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无新对话，无需更新。")
             return True
 
-        if not self.should_trigger_profile_update(recent_msgs):
+        dialogue_msgs = self._select_dialogue_messages(recent_msgs)
+        if not dialogue_msgs:
+            logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无有效对话，无需更新。")
+            return True
+
+        if not self.should_trigger_profile_update(dialogue_msgs):
             logger.info(f"[ProfileBuilder] 用户 {user_id} 最近对话缺少画像显著信息，跳过更新。")
             return True
 
-        logger.info(f"[ProfileBuilder] 找到用户 {user_id} 的 {len(recent_msgs)} 条近期对话，准备提取特征。")
-        chat_history_str = self._build_chat_history(recent_msgs)
+        logger.info(f"[ProfileBuilder] 找到用户 {user_id} 的 {len(dialogue_msgs)} 条有效近期对话，准备提取特征。")
+        chat_history_str = self._build_chat_history(dialogue_msgs)
         memory_context = await self._build_memory_context(user_id)
 
         current_profile = await self.memory.get_user_profile(user_id)
@@ -224,7 +239,7 @@ class ProfileBuilderAgent:
             await self.memory.update_user_profile(
                 user_id=user_id,
                 features=final_features,
-                change_reason=f"基于最近{len(recent_msgs)}条有效对话的显著特征增量合并"
+                change_reason=f"基于最近{len(dialogue_msgs)}条有效对话的显著特征增量合并"
             )
             logger.info(f"[ProfileBuilder] 用户 {user_id} 画像合并更新完毕！更新字段: {list(final_features.keys())}")
             return True

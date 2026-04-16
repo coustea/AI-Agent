@@ -1,4 +1,4 @@
-"""Shared service for image understanding."""
+"""图片理解服务 — 优先星火 API，失败回退 GLM 多模态。"""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ class VisionService:
         image_urls: list[str],
         question: str,
     ) -> dict:
+        """返回 {"success", "mode"(spark|glm), "analysis_text", "messages", "error"}。"""
         if spark_image_service.configured and image_urls:
             spark_results: list[str] = []
             spark_ok = True
