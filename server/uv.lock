@@ -3569,6 +3569,7 @@ dependencies = [
     { name = "sqlmodel" },
     { name = "tavily-python" },
     { name = "unstructured" },
+    { name = "uvicorn" },
     { name = "zhipuai" },
 ]
 
@@ -3608,6 +3609,7 @@ requires-dist = [
     { name = "sqlmodel", specifier = ">=0.0.38" },
     { name = "tavily-python", specifier = ">=0.7.23" },
     { name = "unstructured", specifier = ">=0.22.16" },
+    { name = "uvicorn", specifier = ">=0.44.0" },
     { name = "zhipuai", specifier = ">=1.0.7" },
 ]
 

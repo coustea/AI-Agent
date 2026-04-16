@@ -209,11 +209,13 @@ export interface ResourceHistoryItem {
   course: string
   gap: string
   need: string
+  status: string
   has_mindmap: boolean
   has_content: boolean
   has_code: boolean
   has_quiz: boolean
   has_reading: boolean
+  has_ppt: boolean
   has_image: boolean
   has_video: boolean
   created_at: string
@@ -224,18 +226,19 @@ export interface ResourceDetail {
   course: string
   gap: string
   need: string
-  extra: string
+  status: string
+  request_extra: string | null
+  plan_result: string | null
   results: Record<string, unknown>
   created_at: string
 }
 
 export interface ResourceGenerateEvent {
-  type: 'coordinator' | 'agent_start' | 'agent_log' | 'agent_done' | 'agent_error' | 'done'
+  type: 'workflow' | 'agent_status' | 'agent_log' | 'artifact_ready' | 'bundle_update' | 'done'
   [key: string]: unknown
 }
 
 export interface GenerateParams {
-  user_id: number
   learning_task: {
     course: string
     gap: string

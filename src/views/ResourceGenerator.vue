@@ -73,7 +73,7 @@
             <el-icon class="center-icon"><Position /></el-icon>
           </div>
           <h3>系统矩阵已就绪，等待调度指令</h3>
-          <p class="idle-desc">输入学习目标后，Coordinator Agent 将进行意图识别与任务拆解<br/>驱动 6 大专职智能体并发构建全息学习资源。</p>
+          <p class="idle-desc">输入学习目标后，Coordinator Agent 将进行意图识别与任务拆解<br/>驱动 8 大专职智能体分阶段构建个性化、多模态学习资源。</p>
           <div class="agent-roster">
             <div class="roster-badge" v-for="agent in Object.values(agentMeta)" :key="agent.id">
               <el-icon><component :is="agent.icon" /></el-icon> {{ agent.role }}
@@ -87,6 +87,10 @@
             <div class="coordinator-status">
               <el-icon><Guide /></el-icon>
               <span class="typewriter-text">{{ coordinatorMsg }}</span>
+            </div>
+            <div class="bundle-progress" v-if="bundleProgress.total > 0">
+              <span>资源进度 {{ bundleProgress.completed }}/{{ bundleProgress.total }}</span>
+              <span v-if="bundleProgress.coreReady">核心资源已就绪</span>
             </div>
           </div>
 
@@ -181,6 +185,11 @@
                     <div class="b-relevance"><strong>💡 推荐理由：</strong>{{ book.relevance }}</div>
                   </div>
                 </div>
+              </el-tab-pane>
+
+              <el-tab-pane name="ppt" v-if="results.ppt?.success">
+                <template #label><el-icon><Document /></el-icon> 演示讲稿</template>
+                <div class="res-card markdown-body" v-html="parseMarkdown(results.ppt.content || results.ppt.outline || '')"></div>
               </el-tab-pane>
 
               <el-tab-pane name="image" v-if="results.image?.success">
@@ -306,6 +315,11 @@
                 </div>
               </el-tab-pane>
 
+              <el-tab-pane name="ppt" v-if="results.ppt?.success">
+                <template #label><el-icon><Document /></el-icon> 演示讲稿</template>
+                <div class="res-card markdown-body" v-html="parseMarkdown(results.ppt.content || results.ppt.outline || '')"></div>
+              </el-tab-pane>
+
               <el-tab-pane name="image" v-if="results.image?.success">
                 <template #label><el-icon><Monitor /></el-icon> 教学配图</template>
                 <div class="res-card">
@@ -354,6 +368,7 @@ import { ref, reactive, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
+import { generateResources } from '@/api/ai'
 import {
   Cpu, Document, Edit, Collection, VideoPlay, Monitor, Position, Tools,
   Loading, Select, CloseBold, Share, User, Guide, ArrowDownBold, RefreshRight
@@ -373,19 +388,21 @@ const needOptions = [
 
 // ======================= 智能体与 DAG 配置 =======================
 const dagPhases = [
-  { name: 'foundation', label: '知识框架构建', agents: ['mindmap'] },
-  { name: 'core', label: '核心资源生成', agents: ['content', 'code'] },
-  { name: 'enrichment', label: '拓展资源丰富', agents: ['quiz', 'reading', 'image', 'video'] },
+  { name: 'core_generating', label: '核心资源生成', agents: ['content', 'mindmap', 'quiz'] },
+  { name: 'enhancement_generating', label: '增强资源补充', agents: ['reading', 'code', 'image'] },
+  { name: 'presentation_generating', label: '演示资源生成', agents: ['ppt'] },
+  { name: 'video_generating', label: '视频资源生成', agents: ['video'] },
 ]
 
 const agentMeta: Record<string, any> = {
-  'mindmap': { id: 'mindmap', role: 'Mindmap Agent', icon: Share, desc: '构建核心知识拓扑图' },
   'content': { id: 'content', role: 'Content Agent', icon: Document, desc: '撰写深度知识精讲' },
-  'code':    { id: 'code', role: 'Code Agent', icon: Cpu, desc: '编写可运行实操案例' },
+  'mindmap': { id: 'mindmap', role: 'Mindmap Agent', icon: Share, desc: '构建核心知识拓扑图' },
   'quiz':    { id: 'quiz', role: 'Quiz Agent', icon: Edit, desc: '生成分层练习题库' },
   'reading': { id: 'reading', role: 'Reading Agent', icon: Collection, desc: '检索拓展阅读与论文' },
+  'code':    { id: 'code', role: 'Code Agent', icon: Cpu, desc: '编写可运行实操案例' },
+  'ppt':     { id: 'ppt', role: 'PPT Agent', icon: Document, desc: '生成演示文稿与讲稿' },
   'image':   { id: 'image', role: 'Image Agent', icon: Monitor, desc: '生成教学配图与图解资源' },
-  'video':   { id: 'video', role: 'Video Agent', icon: VideoPlay, desc: '生成教学动画视频资源' }
+  'video':   { id: 'video', role: 'Video Agent', icon: VideoPlay, desc: '生成教学视频脚本与分镜' }
 }
 
 // 代理实时状态
@@ -409,6 +426,7 @@ const pushLog = (source: string, msg: string, type: 'info'|'success'|'error' = '
 const results = ref<Record<string, any>>({})
 const activeTab = ref('content')
 const liveTab = ref('mindmap')
+const bundleProgress = ref({ completed: 0, total: 0, coreReady: false })
 
 // 已完成的 agent id 列表（实时更新）
 const completedAgentIds = computed(() => {
@@ -421,6 +439,7 @@ const resetStates = () => {
   systemLogs.value = []
   results.value = {}
   coordinatorMsg.value = '系统初始化...'
+  bundleProgress.value = { completed: 0, total: 0, coreReady: false }
   Object.keys(agentMeta).forEach(key => {
     agentStates.value[key] = { status: 'wait', log: '等待分配计算资源...' }
   })
@@ -435,48 +454,16 @@ const startGeneration = async () => {
   pushLog('SYSTEM', 'Initiating Mult-Agent Workflow...', 'info')
 
   try {
-    const token = localStorage.getItem('token') || ''
-    const response = await fetch('/api/v1/ai/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        user_id: Number(localStorage.getItem('user_id') || 1),
-        learning_task: { ...taskForm }
-      })
+    await new Promise<void>((resolve, reject) => {
+      generateResources(
+        {
+          learning_task: { ...taskForm }
+        },
+        (event) => handleSSEEvent(event),
+        resolve,
+        reject,
+      )
     })
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(errText || `HTTP ${response.status}`)
-    }
-
-    if (!response.body) throw new Error('流式响应不可用')
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.substring(6))
-            handleSSEEvent(data)
-          } catch (e) {
-            console.error('SSE JSON 解析错误:', e)
-          }
-        }
-      }
-    }
   } catch (err: any) {
     ElMessage.error(`请求异常: ${err.message}`)
     pushLog('SYSTEM', `连接中断: ${err.message}`, 'error')
@@ -487,43 +474,49 @@ const startGeneration = async () => {
 
 // 解析 SSE 事件
 const handleSSEEvent = (event: any) => {
-  const { type, id, status, msg, log, error, data, message } = event
+  const { type, stage, status, message, agent, log, artifact, completed, total, core_ready, latest_agent } = event
 
-  if (type === 'coordinator') {
-    coordinatorMsg.value = msg || status
-    pushLog('COORDINATOR', msg, 'info')
+  if (type === 'workflow') {
+    coordinatorMsg.value = message || stage
+    pushLog('COORDINATOR', message || stage, 'info')
   }
-  else if (type === 'agent_start') {
-    if (agentStates.value[id]) {
-      agentStates.value[id].status = 'active'
-      agentStates.value[id].log = '模型推理生成中...'
+  else if (type === 'agent_status') {
+    const mappedStatus = status === 'running'
+      ? 'active'
+      : status === 'success'
+        ? 'done'
+        : status === 'failed'
+          ? 'error'
+          : 'wait'
+
+    if (agentStates.value[agent]) {
+      agentStates.value[agent].status = mappedStatus
+      agentStates.value[agent].log = message || '状态更新'
     }
-    pushLog(id.toUpperCase(), 'Agent context loaded and execution started', 'info')
+    pushLog(String(agent).toUpperCase(), String(message || status), mappedStatus === 'error' ? 'error' : mappedStatus === 'done' ? 'success' : 'info')
   }
   else if (type === 'agent_log') {
-    if (agentStates.value[id]) {
-      agentStates.value[id].log = log
+    if (agentStates.value[agent]) {
+      agentStates.value[agent].log = log
     }
   }
-  else if (type === 'agent_done') {
-    if (agentStates.value[id]) {
-      agentStates.value[id].status = 'done'
-      agentStates.value[id].log = '内容生成完毕'
-    }
-    results.value[id] = data
-    // 自动切换到最新完成的 tab
-    liveTab.value = id
-    pushLog(id.toUpperCase(), 'Generation task completed successfully', 'success')
+  else if (type === 'artifact_ready') {
+    results.value[agent] = artifact
+    liveTab.value = agent
+    pushLog(String(agent).toUpperCase(), '资源已可展示', 'success')
   }
-  else if (type === 'agent_error') {
-    if (agentStates.value[id]) {
-      agentStates.value[id].status = 'error'
-      agentStates.value[id].log = `异常: ${error}`
+  else if (type === 'bundle_update') {
+    bundleProgress.value = {
+      completed: Number(completed || 0),
+      total: Number(total || 0),
+      coreReady: Boolean(core_ready)
     }
-    pushLog(id.toUpperCase(), error, 'error')
+    if (latest_agent) {
+      pushLog('SYSTEM', `当前进度 ${completed}/${total}，最新完成: ${latest_agent}`, 'info')
+    }
   }
   else if (type === 'done') {
-    pushLog('SYSTEM', message || 'All agent pipelines finished.', 'success')
+    pushLog('SYSTEM', String(message || 'All agent pipelines finished.'), 'success')
     setTimeout(() => {
       isGenerating.value = false
       stage.value = 'done'
@@ -539,7 +532,7 @@ const parseMarkdown = (raw: string) => {
 }
 
 const determineInitialTab = () => {
-  const priority = ['content', 'mindmap', 'code', 'quiz', 'reading', 'image', 'video']
+  const priority = ['content', 'mindmap', 'quiz', 'reading', 'code', 'image', 'ppt', 'video']
   for (const p of priority) {
     if (results.value[p] && results.value[p].success) {
       activeTab.value = p
@@ -693,6 +686,7 @@ const determineInitialTab = () => {
 .monitor-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 1rem 0; display: flex; align-items: center; gap: 10px; color: #0F172A; }
 .live-dot { display: block; width: 10px; height: 10px; background: #10B981; border-radius: 50%; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); animation: pulse-green 2s infinite; }
 .coordinator-status { display: flex; align-items: center; gap: 12px; background: #EEF2FF; border-left: 4px solid #4F46E5; padding: 1rem 1.5rem; border-radius: 8px; color: #3730A3; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border: 1px solid #C7D2FE; border-left-width: 4px; }
+.bundle-progress { display: flex; gap: 1rem; margin-top: 0.9rem; font-size: 0.85rem; color: #475569; font-weight: 600; }
 
 .dag-topology { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-bottom: 4rem; }
 .topology-stage { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 700px; }
