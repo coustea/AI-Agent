@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from collections import Counter
 from pathlib import Path
 from typing import TypedDict, Optional, List, Annotated
@@ -19,7 +20,6 @@ from app.infra.logging import get_logger
 from app.profile import build_fact_agent, build_profile_agent
 from app.chat.service import CHAT_MODULE_NAME, build_vision_service, resolve_uploaded_path
 from app.chat.context import chat_runtime_context
-from app.profile.profile_agent import PROFILE_UPDATE_TOKEN_THRESHOLD
 from app.memory.service import MEMORY_EXTRACTION_TOKEN_THRESHOLD, memory_service
 from app.tools import registry
 from app.resource.base_agent import _ensure_tools_loaded
@@ -33,6 +33,29 @@ AGENT_DIR = Path(__file__).resolve().parent
 MODULE_NAME = CHAT_MODULE_NAME
 MAX_SEARCH_WEB_FETCH_CALLS = 4
 MAX_TOTAL_TOOL_CALLS = 6
+
+
+def _load_profile_gate_turn_interval() -> int:
+    """读取画像判定轮次间隔配置。最小为 1，默认 2。"""
+    raw_value = os.getenv("PROFILE_GATE_EVERY_N_ASSISTANT_TURNS", "2")
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        logger.warning(
+            "[TutorAgent] PROFILE_GATE_EVERY_N_ASSISTANT_TURNS=%r 非法，回退默认值 2",
+            raw_value,
+        )
+        return 2
+    if parsed < 1:
+        logger.warning(
+            "[TutorAgent] PROFILE_GATE_EVERY_N_ASSISTANT_TURNS=%r 小于 1，回退默认值 2",
+            raw_value,
+        )
+        return 2
+    return parsed
+
+
+PROFILE_GATE_EVERY_N_ASSISTANT_TURNS = _load_profile_gate_turn_interval()
 
 # 加载 Prompt
 def _load_prompt() -> dict[str, str]:
@@ -90,6 +113,7 @@ class TutorAgent:
         self.llm = get_llm(temperature=0.7, streaming=True)
         # 分类模型：轻量快速，用于判断用户意图走哪条路由
         self.classifier_llm = get_fast_llm(temperature=0.0, max_tokens=100)
+        self.profile_gate_llm = get_fast_llm(temperature=0.0, max_tokens=16)
         # GLM 图片理解模型
         self.glm_vision_llm = get_glm_vision_llm()
         self.vision_service = build_vision_service(self.glm_vision_llm)
@@ -102,6 +126,10 @@ class TutorAgent:
         self._init_lock = asyncio.Lock()
         self._background_tasks: set[asyncio.Task] = set()
         self.skills_manager = SkillManager()
+        logger.info(
+            "[TutorAgent] 配置: PROFILE_GATE_EVERY_N_ASSISTANT_TURNS=%d",
+            PROFILE_GATE_EVERY_N_ASSISTANT_TURNS,
+        )
 
         # Chat agent 的工具和技能声明
         self.tool_names = [
@@ -119,6 +147,26 @@ class TutorAgent:
         if cls._shared_instance is None:
             cls._shared_instance = cls()
         return cls._shared_instance
+
+    @staticmethod
+    def _normalize_message_content(content) -> str:
+        if content is None:
+            return ""
+        return content if isinstance(content, str) else str(content)
+
+    @classmethod
+    def _is_unusable_reply_text(cls, text: str) -> bool:
+        normalized = (text or "").strip()
+        if not normalized:
+            return True
+        if normalized in {"生成时间：", "生成时间:", "更新时间：", "更新时间:"}:
+            return True
+        if normalized.startswith("生成时间") and len(normalized) <= 16:
+            return True
+        # 过短回答通常是模型异常占位输出，不足以作为有效教学回复
+        if len(normalized) < 8:
+            return True
+        return False
 
     @staticmethod
     def _looks_like_external_lookup_request(user_msg: str) -> bool:
@@ -491,6 +539,21 @@ class TutorAgent:
         messages = state.get("messages", [])
         full_messages = self._build_messages(system_prompt, messages)
         response = await self.llm.ainvoke(full_messages)
+        response_text = self._normalize_message_content(response.content)
+        if self._is_unusable_reply_text(response_text):
+            logger.warning("[TutorAgent] direct 路径返回低质量内容，触发一次重试: %r", response_text[:80])
+            retry_messages = full_messages + [
+                HumanMessage(
+                    content=(
+                        "你上一条回复无效或过短。请重新回答用户问题，给出完整、可读、可执行的中文讲解。"
+                        "不要输出模板字段（如“生成时间”）或空内容。"
+                    )
+                )
+            ]
+            retry_response = await self.llm.ainvoke(retry_messages)
+            retry_text = self._normalize_message_content(retry_response.content)
+            if not self._is_unusable_reply_text(retry_text):
+                response = retry_response
         return {"messages": [response]}
 
     @staticmethod
@@ -727,27 +790,54 @@ class TutorAgent:
             logger.info(f"[TutorAgent] 长期记忆提取完成并重置计数 (user={user_id}, session={session_id})")
 
     async def _try_update_profile(self, user_id: int, session_id: str) -> None:
-        """双门控画像更新：token 累积阈值 + 对话显著性判断都通过后才触发 profile_agent。"""
-        token_ready = await self.memory.should_trigger_profile_update_by_tokens(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module_name,
-            threshold=PROFILE_UPDATE_TOKEN_THRESHOLD,
-        )
-        if not token_ready:
-            return
-
+        """每两轮对话使用 fastLLM 判定是否需要画像更新，再后台执行 ProfileAgent。"""
         recent_msgs = await self.memory.get_recent_messages(
             user_id=user_id,
             session_id=session_id,
             module=self.module_name,
-            limit=20,
+            limit=80,
         )
-        if not self.profile_agent.should_trigger_profile_update(recent_msgs):
-            logger.info(f"[TutorAgent] 画像更新未通过显著性判断 (user={user_id}, session={session_id})")
+        assistant_turns = sum(1 for msg in recent_msgs if getattr(msg, "role", "") == "assistant")
+        if assistant_turns == 0 or assistant_turns % PROFILE_GATE_EVERY_N_ASSISTANT_TURNS != 0:
             return
 
-        success = await self.profile_agent.build_profile(user_id=user_id, session_id=session_id)
+        dialogue_msgs = [
+            msg for msg in recent_msgs
+            if getattr(msg, "role", "") in {"user", "assistant"} and getattr(msg, "content", "").strip()
+        ]
+        if not dialogue_msgs:
+            return
+
+        latest_dialogue = "\n".join(
+            f"{msg.role}: {str(msg.content)[:300]}"
+            for msg in dialogue_msgs[-8:]
+        )
+        gate_prompt = (
+            "你是画像更新判定器。基于最近对话，判断是否值得执行一次学习画像更新。\n"
+            "只回答 YES 或 NO。\n"
+            "判定标准：只有当对话出现稳定、可复用的学习特征（目标/偏好/弱点/节奏/背景变化）时回答 YES；"
+            "纯知识问答、一次性问题、无新增个人特征时回答 NO。\n\n"
+            f"最近对话：\n{latest_dialogue}"
+        )
+        try:
+            gate_resp = await self.profile_gate_llm.ainvoke([HumanMessage(content=gate_prompt)])
+            gate_text = (gate_resp.content or "").strip().upper() if isinstance(gate_resp.content, str) else str(gate_resp.content).strip().upper()
+        except Exception as exc:
+            logger.warning("[TutorAgent] fastLLM 画像判定失败，跳过本轮更新 (user=%s, session=%s, error=%s)", user_id, session_id, exc)
+            return
+
+        need_update = gate_text.startswith("YES")
+        logger.info(
+            "[TutorAgent] fastLLM 画像判定: turns=%d decision=%s (user=%s, session=%s)",
+            assistant_turns,
+            "YES" if need_update else "NO",
+            user_id,
+            session_id,
+        )
+        if not need_update:
+            return
+
+        success = await self.profile_agent.build_profile(user_id=user_id, session_id=session_id, force=True)
         if success:
             await self.memory.reset_profile_update_counter(
                 user_id=user_id,
@@ -945,13 +1035,19 @@ class TutorAgent:
                                 yield self._stream_event("token", text)
 
                     # 事件 2: 非流式节点完成（vision_answer / direct_answer 不走流式）
-                    if kind == "on_chain_end" and event.get("name") in ("vision_answer", "direct_answer"):
+                    if kind == "on_chain_end" and event.get("name") in ("vision_answer", "direct_answer", "agent", "tool_summary"):
                         output = event.get("data", {}).get("output", {})
                         output_msgs = output.get("messages", []) if isinstance(output, dict) else []
                         for msg in output_msgs:
-                            if isinstance(msg, AIMessage) and msg.content and msg.content not in full_reply:
-                                full_reply += msg.content
-                                yield self._stream_event("token", msg.content)
+                            if not isinstance(msg, AIMessage):
+                                continue
+                            content = msg.content
+                            if not content:
+                                continue
+                            text = content if isinstance(content, str) else str(content)
+                            if text and text not in full_reply:
+                                full_reply += text
+                                yield self._stream_event("token", text)
 
                     # 事件 3: 工具执行完成 — 记录调用结果用于持久化
                     if kind == "on_tool_end":
@@ -1010,6 +1106,11 @@ class TutorAgent:
             yield self._stream_event("error", graph_error_text)
             return
 
+        if self._is_unusable_reply_text(full_reply):
+            logger.error("[Tutor] Empty assistant reply: route=%s session=%s", initial_state.get("route"), effective_session)
+            yield self._stream_event("error", "模型未返回有效内容，请重试。")
+            return
+
         # 步骤 6: 持久化助手回复 + 后台触发记忆/画像更新
         if full_reply:
             try:
@@ -1030,6 +1131,7 @@ class TutorAgent:
                     ),
                     task_name="post_chat_pipeline",
                 )
+                logger.info(f"[Tutor]: response: {full_reply}")
             except Exception as e:
                 logger.error(f"[Tutor] Failed to save reply: {e}")
                 yield self._stream_event("error", f"保存回复失败，请稍后重试 ({e})")
