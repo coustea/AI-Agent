@@ -35,6 +35,7 @@ dependencies = [
     "greenlet>=3.3.2",
     "zhipuai>=1.0.7",
     "uvicorn>=0.44.0",
+    "websockets>=12.0",
 ]
 
 [dependency-groups]

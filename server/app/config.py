@@ -58,3 +58,21 @@ MAX_MESSAGE_HISTORY: int = _env_int("MAX_MESSAGE_HISTORY", 20)
 
 # Debug
 APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
+
+# Avatar (数字人)
+AVATAR_ASR_APP_ID: str = _env("AVATAR_ASR_APP_ID", "")
+AVATAR_ASR_API_KEY: str = _env("AVATAR_ASR_API_KEY", "")
+AVATAR_ASR_API_SECRET: str = _env("AVATAR_ASR_API_SECRET", "")
+AVATAR_APP_ID: str = _env("AVATAR_APP_ID", "")
+AVATAR_API_KEY: str = _env("AVATAR_API_KEY", "")
+AVATAR_API_SECRET: str = _env("AVATAR_API_SECRET", "")
+AVATAR_URL: str = _env("AVATAR_URL", "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact")
+ANCHOR_ID: str = _env("ANCHOR_ID", "110017006")
+VCN: str = _env("VCN", "x4_yezi")
+IAT_URL: str = _env("IAT_URL", "wss://iat-api.xfyun.cn/v2/iat")
+AVATAR_BRIDGE_PORT: int = _env_int("AVATAR_BRIDGE_PORT", 8765)
+
+# Aliases for ASR (shared app_id/key/secret for ASR and Spark LLM)
+ASR_SPARK_APP_ID: str = AVATAR_ASR_APP_ID or _env("ASR_SPARK_APP_ID", "")
+ASR_SPARK_API_KEY: str = AVATAR_ASR_API_KEY or _env("ASR_SPARK_API_KEY", "")
+ASR_SPARK_API_SECRET: str = AVATAR_ASR_API_SECRET or _env("ASR_SPARK_API_SECRET", "")

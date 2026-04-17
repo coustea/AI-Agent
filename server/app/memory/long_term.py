@@ -172,10 +172,12 @@ class LongTermMemoryService:
         memory_types: Iterable[str] | None = None,
         per_type_limits: dict[str, int] | None = None,
         only_unexpired: bool = True,
+        source: str | None = "fact_agent",
     ) -> dict[str, list[UserMemory]]:
         """按类型返回用于上下文注入的长期记忆，自动去重与限量。
         返回格式：{"preference": [...], "goal": [...], ...}
-        每个类型内部按 last_seen_at 倒序排列，且经过归一化去重。"""
+        每个类型内部按 last_seen_at 倒序排列，且经过归一化去重。
+        source 参数：按来源过滤记忆，默认 "fact_agent"。传 None 不过滤来源。"""
         target_types = list(memory_types) if memory_types else list(DEFAULT_MEMORY_TYPE_LIMITS.keys())
         limits = dict(DEFAULT_MEMORY_TYPE_LIMITS)  # 复制默认限制
         if per_type_limits:
@@ -183,10 +185,9 @@ class LongTermMemoryService:
 
         async with AsyncSession(self.engine) as session:
             _now = now()
-            stmt = select(UserMemory).where(
-                UserMemory.user_id == user_id,
-                UserMemory.source == "fact_agent",
-            )
+            stmt = select(UserMemory).where(UserMemory.user_id == user_id)
+            if source is not None:
+                stmt = stmt.where(UserMemory.source == source)
             if target_types:
                 stmt = stmt.where(UserMemory.memory_type.in_(target_types))  # 按类型过滤
             if only_unexpired:
