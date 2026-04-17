@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.memory.service import memory_service
@@ -53,6 +54,35 @@ FACT_BUILDER_PROMPT = """
 {chat_history}
 """
 
+FACT_FALLBACK_JSON_PROMPT = """
+你是长期记忆抽取引擎。请严格输出 JSON（不要 markdown 代码块），格式如下：
+{{
+  "has_fact": true/false,
+  "facts": [
+    {{
+      "content": "事实内容",
+      "memory_type": "preference|fact|goal|weakness|background",
+      "is_time_sensitive": true/false,
+      "expires_in_days": null 或 正整数
+    }}
+  ]
+}}
+
+规则：
+1. 最多 3 条；
+2. 无可提取事实时 has_fact=false, facts=[]；
+3. 只输出 JSON。
+
+当前用户画像：
+{profile_context}
+
+已有长期记忆：
+{memory_context}
+
+最新对话记录：
+{chat_history}
+"""
+
 class MemoryExtractionAgent:
     def __init__(self, memory=memory_service):
         self.memory = memory
@@ -61,14 +91,43 @@ class MemoryExtractionAgent:
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             temperature=0.1,
         )
-        self.structured_llm = llm.with_structured_output(FactExtraction)
+        self.structured_llm = llm.with_structured_output(FactExtraction, method="function_calling")
+        self.raw_llm = llm
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", FACT_BUILDER_PROMPT)
+        ])
+        self.fallback_prompt_template = ChatPromptTemplate.from_messages([
+            ("system", FACT_FALLBACK_JSON_PROMPT)
         ])
 
     @staticmethod
     def _normalize_text(text: str) -> str:
         return normalize_text(text)
+
+    @staticmethod
+    def _strip_json_fence(text: str) -> str:
+        cleaned = (text or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.startswith("json"):
+                cleaned = cleaned[4:].strip()
+        return cleaned
+
+    @classmethod
+    def _coerce_fact_extraction(cls, payload) -> FactExtraction:
+        """将结构化/非结构化返回统一为 FactExtraction。"""
+        if isinstance(payload, FactExtraction):
+            return payload
+        if payload is None:
+            raise ValueError("empty structured output")
+        if isinstance(payload, str):
+            return FactExtraction.model_validate_json(cls._strip_json_fence(payload))
+        if isinstance(payload, dict):
+            return FactExtraction.model_validate(payload)
+        # 兼容 LangChain 某些 provider 返回对象可转 dict 的情况
+        if hasattr(payload, "model_dump"):
+            return FactExtraction.model_validate(payload.model_dump())
+        raise TypeError(f"unsupported extraction payload type: {type(payload).__name__}")
 
     @staticmethod
     def _select_dialogue_messages(recent_msgs: list) -> list:
@@ -160,7 +219,19 @@ class MemoryExtractionAgent:
                 "memory_context": memory_context,
                 "chat_history": chat_history_str
             })
-            extracted: FactExtraction = await self.structured_llm.ainvoke(prompt)
+            try:
+                structured_payload = await self.structured_llm.ainvoke(prompt)
+                extracted: FactExtraction = self._coerce_fact_extraction(structured_payload)
+            except Exception as structured_exc:
+                logger.warning("[FactAgent] 结构化输出失败，回退 JSON 解析: %s", structured_exc)
+                fallback_prompt = self.fallback_prompt_template.invoke({
+                    "profile_context": profile_context,
+                    "memory_context": memory_context,
+                    "chat_history": chat_history_str,
+                })
+                fallback_resp = await self.raw_llm.ainvoke([HumanMessage(content=fallback_prompt.to_string())])
+                raw_text = fallback_resp.content if isinstance(fallback_resp.content, str) else str(fallback_resp.content)
+                extracted = self._coerce_fact_extraction(raw_text)
 
             if extracted.has_fact and extracted.facts:
                 saved_count = 0

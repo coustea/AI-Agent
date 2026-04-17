@@ -12,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource
 from app.infra.logging import get_logger
-from app.resource.coordinator import AGENT_REGISTRY, CoordinatorAgent
+from app.resource.coordinator import CoordinatorAgent, get_agent_registry
 from app.resource.events import AgentEventEmitter
 
 logger = get_logger(__name__)
@@ -54,9 +54,10 @@ class ResourceGenerationRuntime:
 
     def list_agents(self) -> list[dict]:
         # 前端工作看板需要这份注册表来渲染 agent 名称、角色和类型。
+        registry = get_agent_registry()
         return [
             {"id": name, "role": info.role, "desc": info.desc, "type": info.type}
-            for name, info in AGENT_REGISTRY.items()
+            for name, info in registry.items()
         ]
 
     async def stream_bundle(

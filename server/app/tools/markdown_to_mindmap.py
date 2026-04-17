@@ -9,7 +9,7 @@ import re
 
 from langchain.tools import tool
 
-from app.tools.file_handler import FileHandler
+from app.tools.file_operator import save_to_workplace
 from app.tools.registry import register
 
 # HTML 模板：用 markmap-lib + markmap-view（CDN）渲染真正的思维导图
@@ -58,7 +58,7 @@ def markdown_to_mindmap(markdown_text: str) -> str:
     title = title_match.group(1).strip() if title_match else "思维导图"
 
     html_content = _render_markmap_html(markdown_text)
-    file_path = FileHandler.save_to_workplace("mindmap", title, html_content, "html")
+    file_path = save_to_workplace("mindmap", title, html_content, "html")
     return json.dumps(
         {
             "file_path": file_path,

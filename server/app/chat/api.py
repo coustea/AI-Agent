@@ -1,4 +1,4 @@
-"""Chat HTTP 路由层 — 接收请求、鉴权、调用 ChatUseCases，返回响应。"""
+"""Chat HTTP routing."""
 
 from __future__ import annotations
 
@@ -18,33 +18,41 @@ async def mentor_chat_stream(
     message: str = Form(...),
     session_id: str | None = Form(default=None),
     files: list[UploadFile] = File(default=[]),
+    file: UploadFile | None = File(default=None),
+    image_urls: str | None = Form(default=None),
+    file_urls: str | None = Form(default=None),
     current_user: User = Depends(get_current_user),
 ):
-    """SSE 流式对话主入口。支持多文件上传（图片 + 文档）。"""
+    """SSE 流式对话主入口。兼容多种附件传参（files/file/image_urls/file_urls）。"""
     uc = get_chat_usecases()
-    effective_session = session_id or uc.default_session_id(current_user.id)  # 无 session 时用默认
-    image_urls: list[str] = []
-    file_urls: list[str] = []
+    upload_payloads: list[tuple[str, bytes]] = []
+    all_uploads = list(files)
+    if file is not None:
+        all_uploads.append(file)
 
-    # 分类保存上传文件：图片 → image_urls，文档 → file_urls
-    for upload in files:
+    for upload in all_uploads:
         if not upload.filename:
             raise HTTPException(status_code=400, detail="文件名不能为空")
-        content = await upload.read()
-        try:
-            saved = await uc.save_upload(
-                filename=upload.filename,
-                content=content,
-                user_id=current_user.id,
-                session_id=effective_session,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        upload_payloads.append((upload.filename, await upload.read()))
 
-        if saved["file_type"] == "image":
-            image_urls.append(saved["url"])
-        else:
-            file_urls.append(saved["url"])
+    parsed_image_urls: list[str] = []
+    parsed_file_urls: list[str] = []
+    if image_urls:
+        parsed_image_urls = [u.strip() for u in image_urls.split(",") if u.strip()]
+    if file_urls:
+        parsed_file_urls = [u.strip() for u in file_urls.split(",") if u.strip()]
+
+    try:
+        effective_session, uploaded_image_urls, uploaded_file_urls = await uc.prepare_uploads(
+            files=upload_payloads,
+            user_id=current_user.id,
+            session_id=session_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    merged_image_urls = uploaded_image_urls + parsed_image_urls
+    merged_file_urls = uploaded_file_urls + parsed_file_urls
 
     # 返回 SSE 流式响应
     return StreamingResponse(
@@ -52,8 +60,8 @@ async def mentor_chat_stream(
             user_id=current_user.id,
             user_message=message,
             session_id=effective_session,
-            image_urls=image_urls or None,
-            file_urls=file_urls or None,
+            image_urls=merged_image_urls or None,
+            file_urls=merged_file_urls or None,
         ),
         media_type="text/event-stream",
     )

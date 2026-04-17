@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 from pydantic import BaseModel, Field
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from app.memory.service import memory_service
 from app.infra.logging import get_logger
@@ -82,6 +83,45 @@ PROFILE_BUILDER_PROMPT = """
 10. **评分依据**：评分应基于对话中展现的实际水平，而非主观臆测。如果某维度信息不足，请输出 null 而非猜测分数。
 11. **合并评分**：如果原有评分存在且对话中没有新的相关证据，保留原有评分。如有新证据，合理调整。
 """
+
+PROFILE_FALLBACK_JSON_PROMPT = """
+你是学习画像建模引擎。请严格输出 JSON（不要 markdown 代码块），格式如下：
+{{
+  "knowledge_level": null 或 字符串,
+  "knowledge_level_score": null 或 0-100整数,
+  "cognitive_style": null 或 字符串,
+  "cognitive_style_score": null 或 0-100整数,
+  "error_pattern": null 或 字符串,
+  "error_pattern_score": null 或 0-100整数,
+  "learning_goal": null 或 字符串,
+  "learning_goal_score": null 或 0-100整数,
+  "learning_history": null 或 字符串,
+  "learning_history_score": null 或 0-100整数,
+  "interest_preference": null 或 字符串,
+  "interest_preference_score": null 或 0-100整数,
+  "learning_pace": null 或 字符串,
+  "learning_pace_score": null 或 0-100整数,
+  "cognitive_level": null 或 字符串,
+  "cognitive_level_score": null 或 0-100整数,
+  "profile_summary": null 或 字符串
+}}
+
+规则：
+1. 只输出 JSON；
+2. 无信息则字段给 null；
+3. 评分只能是 0-100 的整数或 null。
+
+原有学习画像：
+{current_profile}
+
+已有长期记忆：
+{memory_context}
+
+最新对话记录：
+{chat_history}
+"""
+
+
 class ProfileBuilderAgent:
     def __init__(self, memory=memory_service):
         self.memory = memory
@@ -91,9 +131,13 @@ class ProfileBuilderAgent:
             temperature=0.1,
         )
 
-        self.structured_llm = llm.with_structured_output(ProfileExtraction)
+        self.structured_llm = llm.with_structured_output(ProfileExtraction, method="function_calling")
+        self.raw_llm = llm
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", PROFILE_BUILDER_PROMPT)
+        ])
+        self.fallback_prompt_template = ChatPromptTemplate.from_messages([
+            ("system", PROFILE_FALLBACK_JSON_PROMPT)
         ])
 
     @staticmethod
@@ -108,6 +152,30 @@ class ProfileBuilderAgent:
     @staticmethod
     def _normalize_text(text: str) -> str:
         return normalize_text(text)
+
+    @staticmethod
+    def _strip_json_fence(text: str) -> str:
+        cleaned = (text or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.startswith("json"):
+                cleaned = cleaned[4:].strip()
+        return cleaned
+
+    @classmethod
+    def _coerce_profile_extraction(cls, payload) -> ProfileExtraction:
+        """将结构化/非结构化返回统一为 ProfileExtraction。"""
+        if isinstance(payload, ProfileExtraction):
+            return payload
+        if payload is None:
+            raise ValueError("empty structured output")
+        if isinstance(payload, str):
+            return ProfileExtraction.model_validate_json(cls._strip_json_fence(payload))
+        if isinstance(payload, dict):
+            return ProfileExtraction.model_validate(payload)
+        if hasattr(payload, "model_dump"):
+            return ProfileExtraction.model_validate(payload.model_dump())
+        raise TypeError(f"unsupported profile payload type: {type(payload).__name__}")
 
     @staticmethod
     def _select_dialogue_messages(recent_msgs: list) -> list:
@@ -169,7 +237,7 @@ class ProfileBuilderAgent:
             for msg in filtered
         )
 
-    async def build_profile(self, user_id: int, session_id: str | None = None) -> bool:
+    async def build_profile(self, user_id: int, session_id: str | None = None, force: bool = False) -> bool:
         """Refresh the user's single global profile from recent mentor dialogue."""
         effective_session = session_id
         if effective_session is None:
@@ -198,7 +266,7 @@ class ProfileBuilderAgent:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无有效对话，无需更新。")
             return True
 
-        if not self.should_trigger_profile_update(dialogue_msgs):
+        if not force and not self.should_trigger_profile_update(dialogue_msgs):
             logger.info(f"[ProfileBuilder] 用户 {user_id} 最近对话缺少画像显著信息，跳过更新。")
             return True
 
@@ -223,7 +291,19 @@ class ProfileBuilderAgent:
                 "memory_context": memory_context,
                 "chat_history": chat_history_str
             })
-            updated_data: ProfileExtraction = await self.structured_llm.ainvoke(prompt)
+            try:
+                structured_payload = await self.structured_llm.ainvoke(prompt)
+                updated_data: ProfileExtraction = self._coerce_profile_extraction(structured_payload)
+            except Exception as structured_exc:
+                logger.warning("[ProfileBuilder] 结构化输出失败，回退 JSON 解析: %s", structured_exc)
+                fallback_prompt = self.fallback_prompt_template.invoke({
+                    "current_profile": current_profile_str,
+                    "memory_context": memory_context,
+                    "chat_history": chat_history_str,
+                })
+                fallback_resp = await self.raw_llm.ainvoke([HumanMessage(content=fallback_prompt.to_string())])
+                raw_text = fallback_resp.content if isinstance(fallback_resp.content, str) else str(fallback_resp.content)
+                updated_data = self._coerce_profile_extraction(raw_text)
             logger.info(f"[ProfileBuilder] LLM 提取成功 (user_id={user_id})")
         except Exception as e:
             logger.error(f"[ProfileBuilder] 画像提取与合并失败: {str(e)}")

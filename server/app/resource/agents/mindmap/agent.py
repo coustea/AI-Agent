@@ -122,8 +122,6 @@ class MindmapGenerator(BaseResourceAgent):
     tool_names = [
         "save_to_workplace", "read_file_safe",
         "write_file", "edit_file", "append_file", "read_file_lines",
-        "execute_shell", "execute_shell_sync",
-        "run_code", "run_file",
         "list_directory", "file_tree", "find_files", "get_file_info",
         "markdown_to_mindmap",
     ]

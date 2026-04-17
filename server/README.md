@@ -1,89 +1,163 @@
 # AI Learning Platform Backend
 
-基于 FastAPI + LangGraph 的多智能体学习平台后端。
-
-当前版本已经切到新主架构：
-
-- `interface`：HTTP / SSE 入口
-- `usecases`：用例编排
-- `runtime`：Agent 运行时
-- `agents`：聊天、画像、资源智能体
-- `ports`：抽象接口
-- `adapters`：数据库、鉴权、存储、外部服务适配
-
-仓库里原来的 `app/api`、`app/application`、`app/modules` 已删除，README 仅描述现行结构。
+基于 FastAPI + LangChain 的多智能体个性化学习平台后端。
 
 ## 功能
 
-- JWT 用户认证
-- AI 导师流式对话
+- JWT 用户认证（注册、登录、登出）
+- AI 导师流式对话（SSE）
 - 图片 / 文档上传与会话内读取
-- 用户画像构建与历史查询
-- 多智能体学习资源生成
-- SSE 流式资源生成事件
+- 用户画像构建（8 维度）与历史版本查询
+- 多智能体学习资源生成（DAG 编排，6 个子 Agent）
+- 短期 / 长期记忆管理与自动压缩
+- SSE 流式资源生成事件推送
 
 ## 技术栈
 
-- Python 3.13
-- uv
-- FastAPI
-- SQLModel + SQLAlchemy Async + MySQL
+- Python 3.13 + uv
+- FastAPI + SQLModel + SQLAlchemy Async + MySQL
 - LangChain + LangGraph
 - OpenAI-compatible LLM API
-- GLM-4V / 星火图片理解
+- GLM-4V / 讯飞星火图片理解
 
 ## 目录结构
 
 ```text
 app/
-├── main.py
-├── bootstrap/          # 应用启动、容器、lifespan、环境加载
-├── interface/http/     # FastAPI 路由与依赖
-├── usecases/           # 认证、聊天、画像、资源生成用例
-├── runtime/            # Chat / Profile / Resource 运行时
-├── agents/             # 具体 Agent 实现与共享工具
-├── adapters/           # DB / Auth / Storage / External adapters
-├── ports/              # 抽象接口
-├── domain/             # 领域服务
-├── infrastructure/     # 基础设施实现（仍有部分过渡代码）
-├── services/           # 旧 memory facade，仍在迁移中
-├── shared/             # DTO / 共享结构
-├── models/             # SQLModel 模型
-└── utils/              # 纯工具与路径辅助
+├── main.py              # FastAPI 入口，挂载各模块路由
+├── config.py            # 环境变量配置（typed settings）
+│
+├── auth/                # 认证模块
+│   ├── api.py           #   路由：注册、登录、登出、个人信息 CRUD
+│   ├── schemas.py       #   DTO：UserRegister、UserLogin、UserRead、UserUpdate
+│   ├── security.py      #   JWT 创建/吊销、bcrypt、get_current_user 依赖
+│   └── service.py       #   UserAccountStore、AuthUseCases
+│
+├── chat/                # 对话模块
+│   ├── api.py           #   路由：SSE 流式聊天、文件上传、会话 CRUD、历史查询
+│   ├── agent.py         #   TutorAgent（LangGraph StateGraph 多工具循环）
+│   ├── context.py       #   ContextVar 用户上下文注入
+│   ├── schemas.py       #   DTO：ChatMessageItem、UploadResponse、ResourceCard 等
+│   ├── service.py       #   ChatUseCases、TutorChatRuntime、SqlConversationStore
+│   ├── prompt.md        #   Agent 系统提示词模板
+│   ├── tools/           #   LangChain 工具（文件读取、学习资源生成）
+│   ├── skills/          #   技能包（百度搜索、PDF 解析、Word 文档）
+│   └── services/        #   辅助服务（文档分析、视觉理解、附件处理、学习资源）
+│
+├── profile/             # 画像模块
+│   ├── api.py           #   路由：画像查询、变更历史
+│   ├── profile_agent.py #   ProfileBuilderAgent（8 维度画像提取）
+│   ├── fact_agent.py    #   MemoryExtractionAgent（长期事实提取与去重）
+│   ├── schemas.py       #   DTO：ProfileResponse、ProfileHistoryItem
+│   └── service.py       #   ProfileService、LearnerProfileRuntime、ProfileUseCases
+│
+├── resource/            # 资源生成模块
+│   ├── api.py           #   路由：资源生成（SSE）、Agent 列表、资源查询
+│   ├── coordinator.py   #   CoordinatorAgent（DAG 任务规划 + 分阶段并行编排）
+│   ├── base_agent.py    #   BaseResourceAgent 抽象基类（LangGraph agent→tools→validate 循环）
+│   ├── events.py        #   AgentEventEmitter（asyncio.Queue → SSE 事件流）
+│   ├── exceptions.py    #   资源生成异常层级（ResourceAgentError 体系）
+│   ├── validation.py    #   JSON 提取、内容校验工具函数
+│   ├── schemas.py       #   DTO：LearningTask、ResourceGenerateRequest
+│   ├── service.py       #   ResourceService、ResourceGenerationRuntime、ResourceUseCases
+│   ├── agents/          #   6 个子 Agent
+│   │   ├── code/        #     代码生成（含 Shell 执行工具）
+│   │   ├── content/     #     内容写作（分步生成：大纲 → 正文）
+│   │   ├── mindmap/     #     思维导图（MCP markmap 服务 → HTML）
+│   │   ├── ppt/         #     PPT 生成（百度 PPT + 文件保存）
+│   │   ├── quiz/        #     分层练习题生成
+│   │   └── reading/     #     推荐阅读清单
+│   ├── shared_tools/    #   共享工具（文件处理、代码运行、Shell 执行、目录导航）
+│   ├── skills/          #   技能包（百度搜索）
+│   └── prompts/         #   Planner 提示词模板
+│
+├── memory/              # 记忆模块
+│   ├── service.py       #   MemoryService 兼容外观层（委托给子服务）
+│   ├── short_term.py    #   短期记忆（ChatMessage CRUD、过期清理）
+│   ├── long_term.py     #   长期记忆（UserMemory 读写、去重/合并、按类型查询）
+│   ├── compression.py   #   短期→长期压缩（LLM 批量摘要）
+│   ├── session.py       #   会话管理（ChatSession CRUD + token 累计阈值触发）
+│   └── helpers.py       #   文本标准化、token 估算、时间工具
+│
+├── infra/               # 基础设施
+│   ├── models.py        #   全部 SQLModel 表定义（7 张表）
+│   ├── database.py      #   MySQL 异步引擎、init_db()、get_session()
+│   ├── llm.py           #   LLM 客户端工厂（get_llm、get_fast_llm，lru_cache）
+│   └── logging.py       #   日志配置（按天轮转 + 错误日志 + 控制台）
+│
+└── shared/              # 共享工具
+    ├── response.py      #   HttpResponse 统一响应 {code, message, data}
+    ├── paths.py         #   全局路径常量（SERVER_DIR、WORKPLACE_DIR、LOGS_DIR）
+    ├── storage.py       #   本地文件存储（上传保存、权限校验、路径安全）
+    ├── plugin_manager.py#   PluginManager（从 SKILL.md 动态加载技能/工具）
+    ├── spark_image.py   #   讯飞星火图片理解 WebSocket 客户端
+    ├── sanitizers.py    #   ToolMessage list→text 内容清理
+    └── resource_cards.py#   从工具调用链构建资源卡片
 ```
 
-## 架构说明
+## 架构设计
 
-主调用链：
+### Feature Module Architecture
+
+按业务域垂直划分模块，每个模块自包含：
 
 ```text
-HTTP Request
-  -> interface/http
-  -> usecases
-  -> runtime
-  -> agents / ports
-  -> adapters / domain / infrastructure
+模块/
+├── api.py        # FastAPI 路由 + 依赖注入
+├── service.py    # 业务逻辑 + 运行时 + 持久化
+├── schemas.py    # Pydantic 请求/响应模型
+└── *.py          # 模块特有文件（Agent、工具、提示词等）
 ```
 
-设计原则：
+调用链：
 
-- Router 只处理协议、鉴权、参数校验
-- UseCase 负责流程编排
-- Runtime 负责 Agent 调用和流式输出
-- Adapter 负责技术接入，不承载业务流程
+```text
+HTTP Request → api.py → service.py → Agent / infra / memory
+```
 
-当前仍在迁移中的部分：
+模块间通过直接导入服务单例协作，无 DI 容器。
 
-- `app/services/memory.py`
-- `app/infrastructure/*` 的部分能力
+### 多智能体系统
 
-也就是说，入口层和主业务层已经是新架构，但底层还有少量兼容层未彻底收口。
+```text
+用户消息 → TutorAgent (LangGraph StateGraph)
+            ├── 三层上下文：用户画像 + 长期记忆 + 短期聊天
+            ├── 工具调用：文件读取、学习资源生成、百度搜索
+            ├── 图片理解：讯飞星火 / GLM-4V
+            └── SSE 流式输出
+
+资源请求 → CoordinatorAgent (DAG 分阶段编排)
+            ├── Phase 1: mindmap + reading (并行)
+            ├── Phase 2: content + quiz + code (并行)
+            ├── Phase 3: ppt
+            └── 每个 Agent: BaseResourceAgent → tools → validate → retry
+```
+
+### 记忆系统
+
+```text
+短期记忆 (ChatMessage)
+    ↓ 达到阈值 (30条) 或 token 累计
+压缩服务 (LLM 摘要)
+    ↓
+长期记忆 (UserMemory)
+    ├── summary: 对话批量总结
+    ├── fact: 用户事实（去重 + evidence_count）
+    ├── preference / goal / weakness: 画像维度
+    └── 过期自动忽略
+
+会话服务 (ChatSession)
+    ├── memory_token_count → 触发事实提取 (80 tokens)
+    └── profile_token_count → 触发画像更新 (120 tokens)
+```
 
 ## 环境要求
 
 - Python `>=3.13`
 - MySQL 8+
-- `uv`
+- uv（包管理）
+- Tesseract OCR（图片文字识别）
+- Node.js >= 18（思维导图 MCP 服务）
 
 ## 安装依赖
 
@@ -93,7 +167,7 @@ uv sync
 
 ## 环境变量
 
-最少需要配置：
+复制 `server/.env.example` 为 `server/.env`：
 
 ```dotenv
 # Server
@@ -135,116 +209,68 @@ SPARK_IMAGE_API_SECRET=your_secret
 
 说明：
 
-- `DB_PASSWORD` 为必填，未配置时应用启动会失败
-- `.env` 由 `app/main.py` 启动时统一加载
-- `APP_DEBUG=true` 会在启动时重建表，只能用于临时开发库
+- `DB_PASSWORD` 必填，未配置时应用启动会失败
+- `.env` 由 `app/main.py` 启动时通过 `load_dotenv()` 加载
+- `APP_DEBUG=true` 会在启动时先 DROP 再 CREATE 表，仅用于开发
 
 ## 启动
 
-开发模式：
-
 ```bash
+# 开发模式（热重载）
 uv run fastapi dev app/main.py
-```
 
-生产模式：
-
-```bash
+# 生产模式
 uv run python app/main.py
 ```
-
-默认地址：
 
 - API: `http://127.0.0.1:9999`
 - Swagger: `http://127.0.0.1:9999/docs`
 
-## 测试与校验
-
-运行测试：
+## 测试
 
 ```bash
 uv run pytest -q
 ```
 
-快速静态校验：
+## API 路由
 
-```bash
-uv run python -m py_compile $(rg --files app -g '*.py')
-```
+### 用户认证 — `/api/v1/users`
 
-## API 概览
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/` | 注册 |
+| POST | `/auth` | 登录 |
+| DELETE | `/auth` | 登出（触发画像构建） |
+| GET | `/me` | 获取当前用户 |
+| PATCH | `/me` | 更新用户信息 |
 
-### 用户认证
+### AI 对话 — `/api/v1/ai`
 
-前缀：`/api/v1/users`
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/chat/stream` | SSE 流式对话 |
+| POST | `/chat/upload` | 单文件上传 |
+| GET | `/chat/uploads/{owner_id}/{session_id}/{filename}` | 读取上传文件 |
+| GET | `/chat/sessions` | 会话列表 |
+| POST | `/chat/sessions` | 创建会话 |
+| DELETE | `/chat/sessions/{session_id}` | 归档会话 |
+| GET | `/chat/history` | 历史消息 |
 
-- `POST /api/v1/users`：注册
-- `POST /api/v1/users/auth`：登录
-- `DELETE /api/v1/users/auth`：登出
-- `GET /api/v1/users/me`：当前用户
-- `PATCH /api/v1/users/me`：更新当前用户
+### 画像 — `/api/v1/ai`
 
-### 聊天
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/profile` | 当前画像 |
+| GET | `/profile/history` | 画像变更历史 |
 
-前缀：`/api/v1/ai/chat`
+### 资源生成 — `/api/v1/ai`
 
-- `POST /api/v1/ai/chat/stream`：SSE 流式对话
-- `POST /api/v1/ai/chat/upload`：单文件上传
-- `GET /api/v1/ai/chat/uploads/{owner_id}/{session_id}/{filename}`：读取上传文件
-- `GET /api/v1/ai/chat/sessions`：会话列表
-- `POST /api/v1/ai/chat/sessions`：创建会话
-- `DELETE /api/v1/ai/chat/sessions/{session_id}`：归档会话
-- `GET /api/v1/ai/chat/history`：历史消息
-
-### 用户画像
-
-前缀：`/api/v1/ai`
-
-- `GET /api/v1/ai/profile`：当前画像
-- `GET /api/v1/ai/profile/history`：画像历史
-
-### 学习资源
-
-前缀：`/api/v1/ai`
-
-- `POST /api/v1/ai/generate`：SSE 生成学习资源
-- `GET /api/v1/ai/agents`：可用资源 Agent 列表
-- `GET /api/v1/ai/resources`：资源历史
-- `GET /api/v1/ai/resources/{resource_id}`：资源详情
-
-## 运行时说明
-
-### Chat Runtime
-
-聊天运行时入口：
-
-- `app/runtime/chat/tutor_runtime.py`
-- `app/agents/chat/tutor_agent.py`
-
-主要能力：
-
-- 普通文本问答
-- 图片理解
-- 工具调用
-- 会话级文件读取
-
-### Resource Runtime
-
-资源生成运行时入口：
-
-- `app/runtime/resource/resource_runtime.py`
-- `app/runtime/resource/coordinator.py`
-
-当前已注册资源 Agent：
-
-- `mindmap`
-- `content`
-- `code`
-- `quiz`
-- `reading`
-- `ppt`
-
-资源生成通过 `text/event-stream` 输出阶段事件。
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/generate` | SSE 生成学习资源 |
+| GET | `/agents` | 可用资源 Agent 列表 |
+| GET | `/resources` | 资源历史列表 |
+| GET | `/resources/{resource_id}` | 资源详情 |
 
 ## 示例
 
@@ -293,23 +319,8 @@ curl -N -X POST http://127.0.0.1:9999/api/v1/ai/generate \
 
 ## 开发约定
 
-- 新功能不要再放入旧 `modules` 风格目录
-- 新入口统一放到 `interface/http`
-- 业务流程放到 `usecases`
-- 新的外部依赖接入优先放 `adapters`
-- 如果要继续重构，优先收口 `services/memory.py`
-
-## 当前状态
-
-这是一个已经完成主入口切换、但仍处于重构中的代码库。
-
-你在仓库里看到的新旧并存现象，含义应这样理解：
-
-- `interface / usecases / runtime / agents / adapters / ports`：现行主结构
-- `services / infrastructure`：仍待进一步拆分
-
-如果要继续推进架构演进，建议优先做：
-
-1. 去掉 `services/memory.py` facade
-2. 把 `infrastructure.llm` 的工厂进一步上提到 `adapters`
-3. 继续压缩 `agents` 对 legacy domain/service 的直接依赖
+- 新功能放入对应业务模块（auth / chat / profile / resource / memory）
+- 每个模块自包含：`api.py` + `service.py` + `schemas.py`
+- 共享基础设施放 `infra/`，通用工具放 `shared/`
+- 所有 API 响应使用 `HttpResponse` 统一封装
+- 模块级单例模式，通过 `get_current_user` / `get_session` 依赖注入

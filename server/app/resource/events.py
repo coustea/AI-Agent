@@ -12,17 +12,24 @@ from typing import Any
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+DEFAULT_QUEUE_SIZE = 200
 
 
 class AgentEventEmitter:
     def __init__(self):
         # 所有 SSE 事件先入队，路由层只负责把队列转成流式输出。
-        self._queue: asyncio.Queue[dict | None] = asyncio.Queue()
+        self._queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=DEFAULT_QUEUE_SIZE)
         logger.info("[Emitter] SSE 事件发射器已创建")
 
     async def emit(self, event_type: str, **kwargs) -> None:
         payload = {"type": event_type, **kwargs}
         logger.info("[Emitter] 推送事件: type=%s keys=%s", event_type, list(payload.keys()))
+        if self._queue.full():
+            try:
+                dropped = self._queue.get_nowait()
+                logger.warning("[Emitter] 事件队列已满，丢弃最旧事件: type=%s", dropped.get("type") if isinstance(dropped, dict) else "unknown")
+            except asyncio.QueueEmpty:
+                pass
         await self._queue.put(payload)
 
     async def emit_workflow(self, stage: str, message: str, **meta: Any) -> None:

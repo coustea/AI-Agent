@@ -8,7 +8,7 @@
 
 import os
 
-from langchain_openai import ChatOpenAI
+from app.infra.llm import get_llm
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.infra.database import engine
@@ -73,13 +73,8 @@ class CompressionService:
         ])
 
         try:
-            # 创建 LLM 实例（低温度以获得稳定的总结结果）
-            llm = ChatOpenAI(
-                model=os.getenv("OPENAI_MODEL"),
-                api_key=os.getenv("OPENAI_API_KEY"),
-                base_url=os.getenv("OPENAI_API_BASE"),
-                temperature=0.1,  # 低温度确保总结质量稳定
-            )
+            # 创建 LLM 实例（低温度以获得稳定的总结结果，复用缓存）
+            llm = get_llm(temperature=0.1)
             logger.info("[Compression] 开始 LLM 总结: session_id=%s, user_id=%d, "
                         "msg_count=%d, to_summarize=%d, keep_recent=%d",
                         session_id, user_id, len(recent_msgs),

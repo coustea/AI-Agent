@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, TypedDict, Optional, Annotated
 
-from langchain_openai import ChatOpenAI
+from app.infra.llm import get_llm
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, AnyMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph.message import add_messages
@@ -25,10 +25,6 @@ from langgraph.prebuilt import ToolNode
 
 from app.infra.logging import get_logger
 from app.shared.paths import WORKPLACE_DIR
-
-# 清除代理环境变量，避免 ChatOpenAI 因不支持的代理协议（如 socks://）初始化失败
-for _pk in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
-    os.environ.pop(_pk, None)
 
 logger = get_logger(__name__)
 
@@ -119,13 +115,8 @@ class BaseResourceAgent(ABC):
         self.agent_dir = agent_dir
         self.state_schema = state_schema
 
-        # 初始化 LLM 实例
-        self.llm = ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_API_BASE"),
-            temperature=temperature,
-        )
+        # 初始化 LLM 实例（复用缓存）
+        self.llm = get_llm(temperature=temperature)
         self.graph = None
         self._tools: list[BaseTool] | None = None
 
@@ -395,23 +386,20 @@ def _ensure_tools_loaded() -> None:
     global _tools_loaded
     if _tools_loaded:
         return
-    _tools_loaded = True
 
     import importlib
     _tool_modules = [
-        "app.tools.file_handler",
-        "app.tools.file_editor",
+        "app.tools.file_operator",
         "app.tools.shell_executor",
-        "app.tools.shell_execute",
         "app.tools.code_runner",
-        "app.tools.directory_navigator",
         "app.tools.markdown_to_mindmap",
-        "app.tools.save_ppt_file",
-        "app.tools.create_document",
-        "app.tools.read_upload",
+        "app.tools.web_fetcher",
+        "app.tools.duckduckgo_search",
+        "app.tools.document_executor",
     ]
     for mod_name in _tool_modules:
         try:
             importlib.import_module(mod_name)
         except Exception as exc:
             logger.warning("[BaseResourceAgent] 工具模块加载失败 %s: %s", mod_name, exc)
+    _tools_loaded = True

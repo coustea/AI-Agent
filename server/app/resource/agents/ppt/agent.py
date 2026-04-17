@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.tools.save_ppt_file import save_ppt_file
+from app.tools.file_operator import save_ppt_file
 
 logger = get_logger(__name__)
 
@@ -114,25 +114,11 @@ class PptAgent(BaseResourceAgent):
     tool_names = [
         "save_to_workplace", "read_file_safe",
         "write_file", "edit_file", "append_file", "read_file_lines",
-        "execute_shell", "execute_shell_sync",
-        "run_code", "run_file",
         "list_directory", "file_tree", "find_files", "get_file_info",
         "save_ppt_file",
     ]
     skill_names = ["ppt-generation", "ppt-visual", "pptx"]
 
-    Attributes:
-        name:           "PptAgent"
-        agent_dir:      agents/ppt/，包含 prompt.md
-        state_schema:   PptState，包含 slide_count/outline/speaker_notes/file_path
-        method:         generate_ppt() — 对外入口
-        output:         {success, content, file_path, slide_count, outline, speaker_notes, error}
-
-    工作流: agent → tools(save_ppt_file) → validate → retry/end
-    DAG 阶段: presentation（最后执行，依赖所有前置 Agent）
-    黑板记忆: 读取 content.outline（内容大纲）和 mindmap.file_path（思维导图）
-    用户画像: 读取 cognitive_style（认知风格）
-    """
     def __init__(self) -> None:
         super().__init__(
             name="PptAgent",

@@ -45,24 +45,11 @@ class QuizAgent(BaseResourceAgent):
     tool_names = [
         "save_to_workplace", "read_file_safe",
         "write_file", "edit_file", "append_file", "read_file_lines",
-        "execute_shell", "execute_shell_sync",
-        "run_code", "run_file",
         "list_directory", "file_tree", "find_files", "get_file_info",
     ]
     skill_names = []
 
-    Attributes:
-        name:           "QuizAgent"
-        agent_dir:      agents/quiz/，包含 prompt.md
-        state_schema:   QuizState，包含 questions_json/parsed_questions
-        method:         generate_quiz() — 对外入口
-        output:         {success, questions, file_path, raw_json, error}
 
-    工作流: agent → validate(解析JSON + 校验题数/难度分布) → retry/end
-    DAG 阶段: enrichment（依赖 mindmap、content、code）
-    黑板记忆: 读取 content.outline（内容大纲）
-    用户画像: 读取 error_pattern（易错模式）和 knowledge_level（知识水平）
-    """
     def __init__(self) -> None:
         super().__init__(
             name="QuizAgent",
@@ -106,7 +93,7 @@ class QuizAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成一套分层练习题。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from app.tools.file_handler import save_to_workplace
+        from app.tools.file_operator import save_to_workplace
         # 题目最终以 json 保存，方便前端直接渲染成练习卡片或测验页面。
         return save_to_workplace(
             sub_dir=sub_dir,

@@ -38,6 +38,24 @@ def get_llm(
     )
 
 
+@lru_cache(maxsize=2)
+def get_glm_vision_llm(
+    model: str | None = None,
+    temperature: float = 0.7,
+) -> ChatOpenAI:
+    """创建或返回缓存的 GLM 视觉理解 LLM 实例。
+    使用智谱 BigModel API，用于图片理解等多模态任务。"""
+    resolved_model = model or os.getenv("GLM_VISION_MODEL", "glm-4v-flash")
+    logger.debug("[LLM] 创建 GLM 视觉 LLM 实例: model=%s, temp=%.2f",
+                 resolved_model, temperature)
+    return ChatOpenAI(
+        model=resolved_model,
+        api_key=os.getenv("GLM_API_KEY"),
+        base_url="https://open.bigmodel.cn/api/paas/v4/",
+        temperature=temperature,
+    )
+
+
 def get_fast_llm(temperature: float = 0.0, max_tokens: int = 100) -> ChatOpenAI:
     """获取快速/分类 LLM 实例（不缓存，每次创建新实例）。
     使用 FAST_LLM_MODEL 环境变量指定的模型，默认 temperature=0 确保分类结果稳定。

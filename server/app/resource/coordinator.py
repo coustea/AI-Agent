@@ -5,6 +5,7 @@ Coordinator Agent：画像加载 + 任务规划 + 分阶段编排 + SSE 实时�
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -12,18 +13,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from app.infra.llm import get_fast_llm
 
 from app.infra.database import engine
 from app.infra.logging import get_logger
-from app.resource.agents.code import code_agent
-from app.resource.agents.content import content_writer
-from app.resource.agents.image import image_agent
-from app.resource.agents.mindmap import mindmap_generator
-from app.resource.agents.ppt import ppt_agent
-from app.resource.agents.quiz import quiz_agent
-from app.resource.agents.reading import reading_agent
-from app.resource.agents.video import video_agent
 from app.resource.events import AgentEventEmitter
 from app.resource.exceptions import PlanningError
 from app.resource.planning import (
@@ -46,19 +39,28 @@ class AgentEntry:
     desc: str
     type: str
     stage: str
-    agent: Any
+    agent_loader: Callable[[], Any]
     method: str
     result_summary: Callable[[dict], str] = field(default=lambda r: "")
     extra_kwargs: dict = field(default_factory=dict)
 
 
-AGENT_REGISTRY: dict[str, AgentEntry] = {
+def _load_agent(module_path: str, attr_name: str) -> Callable[[], Any]:
+    def _loader() -> Any:
+        module = importlib.import_module(module_path)
+        return getattr(module, attr_name)
+
+    return _loader
+
+
+def build_agent_registry() -> dict[str, AgentEntry]:
+    return {
     "content": AgentEntry(
         role="Content Agent",
         desc="撰写深度知识精讲",
         type="doc",
         stage="core",
-        agent=content_writer,
+        agent_loader=_load_agent("app.resource.agents.content", "content_writer"),
         method="generate_content",
         result_summary=lambda r: f"文档 {len(r.get('content', ''))} 字",
     ),
@@ -67,7 +69,7 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         desc="构建核心知识拓扑图",
         type="mindmap",
         stage="core",
-        agent=mindmap_generator,
+        agent_loader=_load_agent("app.resource.agents.mindmap", "mindmap_generator"),
         method="generate_mindmap",
         result_summary=lambda r: f"导图已生成 → {r.get('file_path') or '内存结果'}",
     ),
@@ -76,7 +78,7 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         desc="生成分层练习题库",
         type="quiz",
         stage="core",
-        agent=quiz_agent,
+        agent_loader=_load_agent("app.resource.agents.quiz", "quiz_agent"),
         method="generate_quiz",
         result_summary=lambda r: f"共 {len(r.get('questions', []))} 道题",
     ),
@@ -85,7 +87,7 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         desc="检索拓展阅读与论文",
         type="reading",
         stage="enhancement",
-        agent=reading_agent,
+        agent_loader=_load_agent("app.resource.agents.reading", "reading_agent"),
         method="generate_reading",
         result_summary=lambda r: f"共 {len(r.get('recommendations', []))} 条推荐",
     ),
@@ -94,7 +96,7 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         desc="编写可运行实操案例",
         type="code",
         stage="enhancement",
-        agent=code_agent,
+        agent_loader=_load_agent("app.resource.agents.code", "code_agent"),
         method="generate_code",
         result_summary=lambda r: f"语言: {r.get('detected_language', 'unknown')}",
     ),
@@ -103,7 +105,7 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         desc="生成教学配图与图解资源",
         type="image",
         stage="enhancement",
-        agent=image_agent,
+        agent_loader=_load_agent("app.resource.agents.image", "image_agent"),
         method="generate_image",
         result_summary=lambda r: f"生成 {len(r.get('images', []))} 张图解",
     ),
@@ -112,7 +114,7 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         desc="生成演示文稿与讲稿",
         type="ppt",
         stage="presentation",
-        agent=ppt_agent,
+        agent_loader=_load_agent("app.resource.agents.ppt", "ppt_agent"),
         method="generate_ppt",
         result_summary=lambda r: "PPT 大纲已生成",
     ),
@@ -121,11 +123,21 @@ AGENT_REGISTRY: dict[str, AgentEntry] = {
         desc="生成视频讲解脚本与分镜",
         type="video",
         stage="presentation",
-        agent=video_agent,
+        agent_loader=_load_agent("app.resource.agents.video", "video_agent"),
         method="generate_video",
         result_summary=lambda r: f"分镜 {len(r.get('storyboard', []))} 幕",
     ),
 }
+
+
+AGENT_REGISTRY: dict[str, AgentEntry] | None = None
+
+
+def get_agent_registry() -> dict[str, AgentEntry]:
+    global AGENT_REGISTRY
+    if AGENT_REGISTRY is None:
+        AGENT_REGISTRY = build_agent_registry()
+    return AGENT_REGISTRY
 
 
 class CoordinatorAgent:
@@ -136,12 +148,7 @@ class CoordinatorAgent:
     ):
         self.emitter = emitter
         self.profile_loader = profile_loader or ProfileSnapshotLoader()
-        self.llm = ChatOpenAI(
-            model=os.getenv("FAST_LLM_MODEL", "general"),
-            api_key=os.getenv("FAST_LLM_API_KEY", os.getenv("OPENAI_API_KEY")),
-            base_url=os.getenv("OPENAI_API_BASE"),
-            temperature=0,
-        )
+        self.llm = get_fast_llm()
         logger.info("[Coordinator] 初始化完成: planner_model=%s", os.getenv("FAST_LLM_MODEL", "general"))
 
     async def run(
@@ -369,7 +376,7 @@ class CoordinatorAgent:
         personalized_context: PersonalizedTaskContext,
         shared_memory: dict,
     ) -> dict:
-        entry = AGENT_REGISTRY[agent_name]
+        entry = get_agent_registry()[agent_name]
         logger.info(
             "[Coordinator] Agent 启动: agent=%s stage=%s params_keys=%s shared_memory_keys=%s",
             agent_name,
@@ -402,7 +409,7 @@ class CoordinatorAgent:
 
         try:
             logger.info("[Coordinator] 调用 Agent 方法: agent=%s method=%s", agent_name, entry.method)
-            fn = getattr(entry.agent, entry.method)
+            fn = getattr(entry.agent_loader(), entry.method)
             result = await fn(**kwargs)
         except Exception as exc:
             logger.error("[Coordinator] Agent %s 执行失败: %s", agent_name, exc, exc_info=exc)
@@ -471,12 +478,13 @@ class CoordinatorAgent:
 
         normalized: list[str] = []
         seen: set[str] = set()
-        default_order = list(AGENT_REGISTRY.keys())
+        registry = get_agent_registry()
+        default_order = list(registry.keys())
         order_index = {name: idx for idx, name in enumerate(default_order)}
 
         for raw_name in selected_resources:
             name = str(raw_name).strip().lower()
-            if not name or name not in AGENT_REGISTRY or name in seen:
+            if not name or name not in registry or name in seen:
                 continue
             normalized.append(name)
             seen.add(name)
@@ -525,6 +533,14 @@ class CoordinatorAgent:
             task.get("course", ""),
             list(results.keys()),
         )
+        successful_agents = [name for name, value in results.items() if value.get("success")]
+        failed_agents = [name for name, value in results.items() if not value.get("success")]
+        if failed_agents and successful_agents:
+            status = "partial_success"
+        elif failed_agents:
+            status = "failed"
+        else:
+            status = "completed"
         async with AsyncSession(engine) as session:
             resource = GeneratedResource(
                 user_id=user_id,
@@ -532,7 +548,7 @@ class CoordinatorAgent:
                 gap=task.get("gap", ""),
                 need=task.get("need", "review"),
                 request_extra=task.get("extra", ""),
-                status="completed",
+                status=status,
                 plan_result=json.dumps(resource_plan.model_dump(), ensure_ascii=False),
                 mindmap_result=_serialize(results.get("mindmap")),
                 content_result=_serialize(results.get("content")),
@@ -545,4 +561,10 @@ class CoordinatorAgent:
             )
             session.add(resource)
             await session.commit()
-            logger.info("[Coordinator] 资源包持久化完成: user_id=%s", user_id)
+            logger.info(
+                "[Coordinator] 资源包持久化完成: user_id=%s status=%s successful=%s failed=%s",
+                user_id,
+                status,
+                successful_agents,
+                failed_agents,
+            )
