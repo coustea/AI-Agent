@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from langchain_core.messages import AIMessage, ToolMessage
 
+from app.infra.llm import get_spark_x_llm
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
 from app.tools.markdown_to_mindmap import markdown_to_mindmap
@@ -133,6 +134,7 @@ class MindmapGenerator(BaseResourceAgent):
             state_schema=MindmapState,
             temperature=0.1,
         )
+        self.llm = get_spark_x_llm(temperature=0.1)
         self._mindmap_skill_tool_name: str | None = None
         self._mindmap_skill_description: str = ""
         self._mindmap_skill_instructions: str = ""

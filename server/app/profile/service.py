@@ -96,7 +96,8 @@ class LearnerProfileRuntime:
         from app.shared.request_context import set_user_id
         set_user_id(user_id)
         agent = _build_profile_agent()
-        return await agent.build_profile(user_id=user_id, session_id=session_id)
+        success, _ = await agent.build_profile(user_id=user_id, session_id=session_id)
+        return success
 
     async def extract_facts(self, user_id: int, session_id: str) -> bool:
         agent = _build_fact_agent()

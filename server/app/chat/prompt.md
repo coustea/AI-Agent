@@ -2,7 +2,13 @@
 
 ## classifier
 
-你是一个问题分类器。根据用户的最新消息判断这次回答是否需要调用外部工具。
+你是一个问题分类器。根据用户的最新消息判断应走哪条处理路径。
+
+可选分类标签（四选一）：
+- direct：纯文本可直接回答
+- tool_needed：需要调用工具（检索、读取文件、执行工具）
+- vision_needed：需要图像理解
+- illustration_needed：用户明确要求生成图解/示意图/流程图/知识图谱等
 
 需要调用工具的情况：
 - 用户上传了文件并要求分析文件内容
@@ -23,7 +29,8 @@
 ## 是否有附件
 {has_attachments}
 
-请只回答 "direct" 或 "tool_needed"，不要输出任何其他内容。
+请只回答以下四个标签之一，不要输出任何其他内容：
+"direct"、"tool_needed"、"vision_needed"、"illustration_needed"
 
 ---
 

@@ -140,6 +140,16 @@
                 </a>
               </div>
 
+              <div v-if="msg.illustrations && msg.illustrations.length > 0" class="msg-illustrations">
+                <img
+                    v-for="(img, idx) in msg.illustrations"
+                    :key="`${msg.id}-ill-${idx}`"
+                    :src="img"
+                    alt="AI 图解"
+                    class="illustration-image"
+                />
+              </div>
+
             </div>
           </div>
 
@@ -289,12 +299,12 @@ const sessionSidebarCollapsed = ref(false)
 // 文件上传
 const docInput = ref<HTMLInputElement | null>(null)
 const imgInput = ref<HTMLInputElement | null>(null)
-interface PendingFile { url: string; fileType: string; name: string }
+interface PendingFile { file?: File; url?: string; fileType: string; name: string }
 const pendingFiles = ref<PendingFile[]>([])
 
 // 聊天消息
 interface Attachment { url: string; type: string; name: string }
-interface ChatMsg { id: number; role: 'user' | 'ai'; content: string; time: string; attachments?: Attachment[] | null }
+interface ChatMsg { id: number; role: 'user' | 'ai'; content: string; time: string; attachments?: Attachment[] | null; illustrations?: string[] }
 const messages = ref<ChatMsg[]>([])
 
 // 画像
@@ -336,6 +346,12 @@ const scrollToBottom = () => {
 }
 
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+const resolveIllustrationUrl = (path: string) => {
+  if (!path) return ''
+  if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
+  return path
+}
 
 // ==========================================
 // 画像加载与轮询
@@ -408,6 +424,7 @@ const loadSessions = async () => {
 const newSession = () => {
   currentSessionId.value = undefined
   messages.value = []
+  pendingFiles.value = []
 }
 
 const switchSession = async (sessionId: string) => {
@@ -423,6 +440,7 @@ const switchSession = async (sessionId: string) => {
       content: msg.content,
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
+      illustrations: [],
     }))
   } catch {
     // 加载历史失败时保持空消息
@@ -452,26 +470,18 @@ const archiveSession = async (sessionId: string) => {
 const triggerDocUpload = () => docInput.value?.click()
 const triggerImgUpload = () => imgInput.value?.click()
 
-const onFileSelected = async (event: Event, _expectedType: string) => {
+const onFileSelected = async (event: Event, expectedType: string) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
 
-  uploadingFile.value = true
-  try {
-    const res = await uploadFile(file)
-    const data = res.data.data
-    pendingFiles.value.push({
-      url: data.url,
-      fileType: data.file_type,
-      name: data.original_name,
-    })
-  } catch {
-    // 上传失败时静默处理
-  } finally {
-    uploadingFile.value = false
-    input.value = '' // 重置以允许重复选择同一文件
-  }
+  const fileType = expectedType === 'image' ? 'image' : 'document'
+  pendingFiles.value.push({
+    file,
+    fileType,
+    name: file.name,
+  })
+  input.value = '' // 重置以允许重复选择同一文件
 }
 
 const removeAttachment = (idx: number) => {
@@ -498,18 +508,17 @@ const handleSend = async () => {
     }
   }
 
-  // 用户消息
+  const userMsgId = Date.now()
+
+  // 用户消息（附件先占位，上传成功后回填真实链接）
   const displayText = text || (hasFiles ? `[附件分析] ${pendingFiles.value.map(f => f.name).join(', ')}` : '')
-  const currentAttachments: Attachment[] | null = hasFiles
-      ? pendingFiles.value.map(f => ({ url: f.url, type: f.fileType, name: f.name }))
-      : null
   if (displayText) {
     messages.value.push({
-      id: Date.now(),
+      id: userMsgId,
       role: 'user',
       content: displayText,
       time: now(),
-      attachments: currentAttachments,
+      attachments: null,
     })
   }
 
@@ -518,10 +527,60 @@ const handleSend = async () => {
   profileUpdated.value = false
   scrollToBottom()
 
-  // 收集附件信息
-  const imageUrl = pendingFiles.value.find(f => f.fileType === 'image')?.url
-  const fileUrls = pendingFiles.value.filter(f => f.fileType === 'document').map(f => f.url)
-  pendingFiles.value = []
+  // 上传未持久化附件（绑定当前会话）
+  const currentPending = [...pendingFiles.value]
+  const uploadedAttachments: Attachment[] = []
+
+  uploadingFile.value = true
+  try {
+    const uploaded = await Promise.all(
+        currentPending.map(async (pending) => {
+          if (pending.url) {
+            return {
+              url: pending.url,
+              fileType: pending.fileType,
+              name: pending.name,
+            }
+          }
+          if (!pending.file || !currentSessionId.value) {
+            throw new Error('会话不存在，无法上传附件')
+          }
+          const res = await uploadFile(pending.file, currentSessionId.value)
+          const data = res.data.data
+          return {
+            url: data.url,
+            fileType: data.file_type,
+            name: data.original_name,
+          }
+        })
+    )
+    uploaded.forEach((item) => {
+      uploadedAttachments.push({
+        url: item.url,
+        type: item.fileType,
+        name: item.name,
+      })
+    })
+    pendingFiles.value = []
+  } catch {
+    uploadingFile.value = false
+    isAIThinking.value = false
+    messages.value.push({
+      id: Date.now() + 99,
+      role: 'ai',
+      content: '附件上传失败，请重试。',
+      time: now(),
+    })
+    return
+  }
+  uploadingFile.value = false
+
+  const imageUrls = uploadedAttachments.filter(f => f.type === 'image').map(f => f.url)
+  const fileUrls = uploadedAttachments.filter(f => f.type === 'document').map(f => f.url)
+  const userMsg = messages.value.find(m => m.id === userMsgId)
+  if (userMsg) {
+    userMsg.attachments = uploadedAttachments.length > 0 ? uploadedAttachments : null
+  }
 
   // AI 消息占位
   const aiMsgId = Date.now() + 1
@@ -532,7 +591,7 @@ const handleSend = async () => {
       {
         message: text || '请分析附件',
         session_id: currentSessionId.value,
-        image_url: imageUrl,
+        image_urls: imageUrls.length > 0 ? imageUrls : undefined,
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
       },
       // onChunk
@@ -561,6 +620,19 @@ const handleSend = async () => {
         }
         isAIThinking.value = false
         abortController = null
+      },
+      // onEvent
+      (evt) => {
+        if (evt.event !== 'illustration') return
+        const payload = evt.data as { path?: string }
+        const imagePath = resolveIllustrationUrl(payload?.path || '')
+        if (!imagePath) return
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (!aiMsg) return
+        if (!aiMsg.illustrations) aiMsg.illustrations = []
+        if (!aiMsg.illustrations.includes(imagePath)) {
+          aiMsg.illustrations.push(imagePath)
+        }
       },
   )
 }
@@ -828,6 +900,20 @@ onBeforeUnmount(() => {
   padding: 4px;
 }
 .session-item:hover .del-btn { opacity: 1; }
+
+.msg-illustrations {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.illustration-image {
+  width: min(480px, 100%);
+  border-radius: 10px;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+}
 
 .session-empty {
   font-size: 0.8rem;

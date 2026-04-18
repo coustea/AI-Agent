@@ -118,8 +118,8 @@ class TutorState(TypedDict, total=False):
     file_urls: Optional[list[str]]           # 用户上传的文件 URL 列表
 
     # ---- 路由与执行模式 ----
-    route: str                               # 分类结果: "direct" | "vision_needed" | "tool_needed"
-    execution_mode: str                      # 执行模式: "direct" | "vision" | "plan_execute"
+    route: str                               # 分类结果: "direct" | "vision_needed" | "tool_needed" | "illustration_needed"
+    execution_mode: str                      # 执行模式: "direct" | "vision" | "plan_execute" | "illustration_needed"
 
     # ---- 上下文信息（在 _build_* 方法中构建） ----
     profile_context: str                     # 用户画像文本（8维学习偏好）

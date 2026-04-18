@@ -15,7 +15,6 @@ from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
 from app.chat.utils import normalize_message_content, truncate
 from app.chat.schemas import ToolCallDetail
 from app.config import PROFILE_GATE_EVERY_N_ASSISTANT_TURNS
-from app.infra.llm import get_fast_llm
 from app.infra.logging import get_logger
 from app.memory.service import (
     MEMORY_COMPRESSION_TOKEN_THRESHOLD,
@@ -50,7 +49,6 @@ class AgentContextService:
         self.memory = memory_service
         self.fact_agent = _build_fact_agent()
         self.profile_agent = _build_profile_agent()
-        self.profile_gate_llm = get_fast_llm(temperature=0.0, max_tokens=16)
         self.module_name = module_name
 
     # ------------------------------------------------------------------
@@ -210,7 +208,7 @@ class AgentContextService:
             logger.warning("[%s] 记忆提取无更新 user=%s session=%s", self.module_name, user_id, session_id)
 
     async def try_update_profile(self, user_id: int, session_id: str) -> None:
-        """尝试更新用户学习画像。每隔 N 轮 assistant 回复触发一次门控判定。"""
+        """尝试更新用户学习画像。每隔 N 轮 assistant 回复触发一次画像构建。"""
         recent_msgs = await self.memory.get_recent_messages(
             user_id=user_id,
             session_id=session_id,
@@ -237,63 +235,18 @@ class AgentContextService:
             )
             return
 
-        existing_profile = await self.memory.get_user_profile(user_id)
-        if not existing_profile:
-            logger.debug("[%s] 画像强制构建 user=%s", self.module_name, user_id)
-            success = await self.profile_agent.build_profile(user_id=user_id, session_id=session_id)
-            if success:
-                await self.memory.reset_profile_update_counter(
-                    user_id=user_id, session_id=session_id, module=self.module_name,
-                )
-                logger.debug(
-                    "[%s] 画像更新成功 user=%s session=%s 模式=新用户",
-                    self.module_name, user_id, session_id,
-                )
-            else:
-                logger.warning(
-                    "[%s] 画像更新失败 user=%s session=%s 模式=新用户",
-                    self.module_name, user_id, session_id,
-                )
-            return
-
-        latest_dialogue = "\n".join(f"{m.role}: {str(m.content)[:300]}" for m in dialogue_msgs[-8:])
-        gate_prompt = (
-            "你是画像更新判定器。基于最近对话，判断是否值得执行一次学习画像更新。\n"
-            "只回答 YES 或 NO。\n"
-            "仅当对话出现稳定可复用学习特征变化时回答 YES。\n\n"
-            f"最近对话:\n{latest_dialogue}"
-        )
-
-        try:
-            gate_resp = await self.profile_gate_llm.ainvoke([HumanMessage(content=gate_prompt)])
-            gate_text = normalize_message_content(gate_resp.content).strip().upper()
-        except Exception:
-            logger.exception(
-                "[%s] 画像更新判定异常 user=%s session=%s",
-                self.module_name, user_id, session_id,
-            )
-            return
-
-        need_update = gate_text.startswith("YES")
-        logger.debug(
-            "[%s] 画像更新判定 user=%s session=%s 决策=%s",
-            self.module_name, user_id, session_id, "YES" if need_update else "NO",
-        )
-        if not need_update:
-            return
-
-        success = await self.profile_agent.build_profile(user_id=user_id, session_id=session_id)
+        success, updated = await self.profile_agent.build_profile(user_id=user_id, session_id=session_id)
         if success:
             await self.memory.reset_profile_update_counter(
                 user_id=user_id, session_id=session_id, module=self.module_name,
             )
             logger.debug(
-                "[%s] 画像更新成功 user=%s session=%s 模式=判定通过",
-                self.module_name, user_id, session_id,
+                "[%s] 画像流程完成 user=%s session=%s updated=%s",
+                self.module_name, user_id, session_id, updated,
             )
         else:
             logger.warning(
-                "[%s] 画像更新失败 user=%s session=%s 模式=判定通过",
+                "[%s] 画像更新失败 user=%s session=%s",
                 self.module_name, user_id, session_id,
             )
 

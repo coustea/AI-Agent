@@ -15,6 +15,10 @@ class ProfileExtraction(BaseModel):
     """Structured profile fields returned by the profile LLM."""
     model_config = ConfigDict(extra="forbid")
 
+    should_update: bool = Field(
+        default=False,
+        description="是否需要更新画像。仅当最近对话出现稳定可复用学习特征变化时为 true，否则为 false。",
+    )
     knowledge_level: Optional[str] = Field(default=None, description="知识基础: 当前专业、学情边界")
     knowledge_level_score: Optional[Score] = Field(default=None, description="知识基础评分(0-100)")
     cognitive_style: Optional[str] = Field(default=None, description="认知风格: 偏好视觉/案例/推导等")
@@ -57,6 +61,7 @@ PROFILE_BUILDER_PROMPT = """
 {chat_history}
 
 # 更新与合并规则 (最高优先级)
+0. **先判定是否更新**：先判断最近对话是否出现“稳定可复用学习特征变化”。若没有变化，`should_update=false`，并尽量保持其余字段为 null（不要臆造新画像内容）。
 1. **合并而非覆盖**：如果最新对话中出现了新的特征（比如新的易错点、新兴趣），请将其与"原有学习画像"中的对应字段进行**逻辑合并**。保留旧信息，补充新信息。
 2. **保持原有**：如果最新对话中没有涉及到某个维度的信息，请直接**照搬**"原有学习画像"中该字段的内容，绝对不能将其清空。
 3. **状态更替**：如果最新对话中显示学生已经克服了之前的错误，或者改变了目标，请根据最新情况**修改**原有描述。
@@ -135,7 +140,7 @@ class ProfileBuilderAgent:
             for msg in filtered
         )
 
-    async def build_profile(self, user_id: int, session_id: str | None = None) -> bool:
+    async def build_profile(self, user_id: int, session_id: str | None = None) -> tuple[bool, bool]:
         """Refresh the user's single global profile from recent mentor dialogue."""
         effective_session = session_id
         if effective_session is None:
@@ -157,12 +162,12 @@ class ProfileBuilderAgent:
         )
         if not recent_msgs:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无新对话，无需更新。")
-            return True
+            return True, False
 
         dialogue_msgs = self._select_dialogue_messages(recent_msgs)
         if not dialogue_msgs:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无有效对话，无需更新。")
-            return True
+            return True, False
 
         logger.info(f"[ProfileBuilder] 找到用户 {user_id} 的 {len(dialogue_msgs)} 条有效近期对话，准备提取特征。")
         chat_history_str = self._build_chat_history(dialogue_msgs)
@@ -190,13 +195,18 @@ class ProfileBuilderAgent:
             logger.info(f"[ProfileBuilder] LLM 提取成功 (user_id={user_id})")
         except Exception as e:
             logger.error(f"[ProfileBuilder] 画像提取与合并失败: {str(e)}")
-            return False
+            return False, False
+
+        if not updated_data.should_update:
+            logger.info(f"[ProfileBuilder] 用户 {user_id} 判定无需更新画像。")
+            return True, False
 
         final_features = updated_data.model_dump(exclude_none=True)
+        final_features.pop("should_update", None)
 
         if not final_features:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 画像无实质性更新。")
-            return True
+            return True, False
 
         try:
             await self.memory.update_user_profile(
@@ -205,7 +215,7 @@ class ProfileBuilderAgent:
                 change_reason=f"基于最近{len(dialogue_msgs)}条有效对话的显著特征增量合并"
             )
             logger.info(f"[ProfileBuilder] 用户 {user_id} 画像合并更新完毕！更新字段: {list(final_features.keys())}")
-            return True
+            return True, True
         except Exception as e:
             logger.error(f"[ProfileBuilder] 保存更新后的画像失败 (user_id={user_id}): {str(e)}")
-            return False
+            return False, False

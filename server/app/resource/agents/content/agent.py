@@ -15,6 +15,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
 
+from app.infra.llm import get_deepseek_chat_llm
 from app.infra.logging import get_logger
 from app.config import CONTENT_AGENT_TIMEOUT_SECONDS, CONTENT_LLM_TIMEOUT
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
@@ -76,6 +77,7 @@ class ContentWriter(BaseResourceAgent):
             state_schema=ContentState,
             temperature=0.3,
         )
+        self.llm = get_deepseek_chat_llm(temperature=0.3)
 
     @staticmethod
     def _workflow_timeout_seconds() -> int:

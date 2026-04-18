@@ -86,8 +86,14 @@ export interface UploadResult {
 export interface StreamChatParams {
   message: string
   session_id?: string
-  image_url?: string
+  image_urls?: string[]
   file_urls?: string[]
+  files?: File[]
+}
+
+export interface StreamChatEvent {
+  event: string
+  data: unknown
 }
 
 // ==========================================
@@ -136,13 +142,31 @@ export function deleteSession(sessionId: string) {
 // 文件上传 API
 // ==========================================
 
-export function uploadFile(file: File) {
+export function uploadFile(file: File, sessionId: string) {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('session_id', sessionId)
   return http.post<{ code: number; message: string; data: UploadResult }>('/ai/chat/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 30000,
   })
+}
+
+function normalizeSsePayload(payload: string): unknown {
+  const trimmed = payload.trim()
+  if (!trimmed) return ''
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return payload
+  }
+}
+
+function parseSseFrames(raw: string): { frames: string[]; rest: string } {
+  const normalized = raw.replace(/\r\n/g, '\n')
+  const parts = normalized.split('\n\n')
+  const rest = parts.pop() || ''
+  return { frames: parts, rest }
 }
 
 // ==========================================
@@ -154,17 +178,32 @@ export function streamChat(
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (err: Error) => void,
+  onEvent?: (event: StreamChatEvent) => void,
 ): AbortController {
   const controller = new AbortController()
   const token = localStorage.getItem('token')
 
+  const formData = new FormData()
+  formData.append('message', params.message)
+  if (params.session_id) {
+    formData.append('session_id', params.session_id)
+  }
+  if (params.image_urls && params.image_urls.length > 0) {
+    formData.append('image_urls', params.image_urls.join(','))
+  }
+  if (params.file_urls && params.file_urls.length > 0) {
+    formData.append('file_urls', params.file_urls.join(','))
+  }
+  if (params.files && params.files.length > 0) {
+    params.files.forEach((file) => formData.append('files', file))
+  }
+
   fetch('/api/v1/ai/chat/stream', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(params),
+    body: formData,
     signal: controller.signal,
   })
     .then(async (response) => {
@@ -174,16 +213,66 @@ export function streamChat(
       }
 
       const reader = response.body?.getReader()
-      if (!reader) throw new Error('No response body')
+      if (!reader) throw new Error('ReadableStream not supported')
 
       const decoder = new TextDecoder()
+      let buffer = ''
+      let completed = false
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        onChunk(chunk)
+
+        buffer += decoder.decode(value, { stream: true })
+        const { frames, rest } = parseSseFrames(buffer)
+        buffer = rest
+
+        for (const frame of frames) {
+          if (!frame.trim()) continue
+
+          let eventName = 'message'
+          const dataLines: string[] = []
+
+          frame.split('\n').forEach((line) => {
+            if (line.startsWith('event:')) {
+              eventName = line.slice(6).trim() || 'message'
+              return
+            }
+            if (line.startsWith('data:')) {
+              dataLines.push(line.slice(5).replace(/^ /, ''))
+            }
+          })
+
+          const payloadRaw = dataLines.join('\n')
+          const payload = normalizeSsePayload(payloadRaw)
+
+          if (eventName === 'token') {
+            if (typeof payload === 'string') {
+              onChunk(payload)
+            } else {
+              onChunk(JSON.stringify(payload))
+            }
+            continue
+          }
+
+          onEvent?.({ event: eventName, data: payload })
+
+          if (eventName === 'error') {
+            const msg = typeof payload === 'string' ? payload : JSON.stringify(payload)
+            throw new Error(msg || 'stream error')
+          }
+
+          if (eventName === 'done') {
+            completed = true
+            onDone()
+            return
+          }
+        }
       }
-      onDone()
+
+      if (!completed) {
+        onDone()
+      }
     })
     .catch((err) => {
       if (err.name === 'AbortError') return

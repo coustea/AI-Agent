@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.infra.llm import get_fast_llm
+from app.infra.llm import get_deepseek_reasoner_llm
 
-from app.config import FAST_LLM_MODEL
+from app.config import DEEPSEEK_REASONER_MODEL
 from app.infra.database import engine
 from app.infra.logging import get_logger
 from app.resource.events import AgentEventEmitter
@@ -148,8 +148,8 @@ class CoordinatorAgent:
     ):
         self.emitter = emitter
         self.profile_loader = profile_loader or ProfileSnapshotLoader()
-        self.llm = get_fast_llm()
-        logger.info("[Coordinator] 初始化完成: planner_model=%s", FAST_LLM_MODEL)
+        self.llm = get_deepseek_reasoner_llm(streaming=False)
+        logger.info("[Coordinator] 初始化完成: planner_model=%s", DEEPSEEK_REASONER_MODEL)
 
     async def run(
         self,

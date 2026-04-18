@@ -23,6 +23,7 @@ import os
 import re
 import time
 import traceback
+from urllib.parse import quote
 from pathlib import Path
 from typing import Any, Optional
 
@@ -61,7 +62,7 @@ from app.chat.utils import (
 from app.shared.vision import build_vision_service
 from app.shared.agent_context import AgentContextService
 # LLM 工厂：主模型（流式）、快速模型（分类/规划/守卫）、视觉模型
-from app.infra.llm import get_llm, get_fast_llm, get_glm_vision_llm
+from app.infra.llm import get_deepseek_chat_llm, get_deepseek_llm, get_deepseek_reasoner_llm, get_glm_vision_llm, get_spark_x_llm
 from app.infra.logging import get_logger
 # 确保工具模块被 import 以触发 register() 调用
 from app.resource.base_agent import _ensure_tools_loaded
@@ -123,11 +124,11 @@ class TutorAgent:
 
     def __init__(self) -> None:
         # ---- LLM 实例（按用途区分温度和 token 限制） ----
-        self.llm = get_llm(temperature=1.0, streaming=True)         # 主模型：流式输出，高温度（创造性回答）
-        self.worker_llm = get_llm(temperature=0.2, streaming=False) # 工作模型：低温度（中间步骤分析）
-        self.classifier_llm = get_fast_llm(temperature=0.0, max_tokens=120)   # 分类器：判断 direct/vision/tool
-        self.planner_llm = get_llm(temperature=0.0, streaming=False, max_tokens=1400)  # 规划器：使用主模型提升计划稳定性
-        self.guard_llm = get_fast_llm(temperature=0.0, max_tokens=180)        # 守卫：评估步骤结果，决定下一步
+        self.llm = get_spark_x_llm(temperature=1.0, streaming=True)         # 聊天模型：SparkMAX（流式输出）
+        self.worker_llm = get_deepseek_llm(temperature=0.2, streaming=False) # 工作模型：DeepSeek（中间步骤分析）
+        self.classifier_llm = get_deepseek_chat_llm(temperature=0.0, streaming=False, max_tokens=120)   # 决策模型：DeepSeek Chat 分类
+        self.planner_llm = get_deepseek_reasoner_llm(streaming=False, max_tokens=1400)     # 规划模型：DeepSeek Reasoner (R1)
+        self.guard_llm = get_deepseek_llm(temperature=0.0, streaming=False, max_tokens=180)        # 决策模型：DeepSeek 守卫
 
         # ---- 视觉模型（图片理解） ----
         self.glm_vision_llm = get_glm_vision_llm()                 # GLM-4V 视觉模型实例
@@ -497,6 +498,7 @@ class TutorAgent:
                         "direct": "direct_answer",
                         "vision_needed": "vision_answer",
                         "tool_needed": "planner",
+                        "illustration_needed": "illustration_node",
                     },
                 )
                 # direct_answer 完成后，条件路由到图解节点或直接结束
@@ -582,13 +584,14 @@ class TutorAgent:
 
             # 慢速路径：无附件时使用分类 LLM 判断用户意图。
             # classifier prompt 包含用户消息（截断到800字符防超限）和分类要求。
-            # 附加指令明确了三种路由标签的判定标准，引导 LLM 输出单一标签。
+            # 附加指令明确了四种路由标签的判定标准，引导 LLM 输出单一标签。
             classify_prompt = PROMPTS["classifier"].format(
                 user_message=user_message[:800],
                 has_attachments="无附件",
             ) + (
                 "\n额外要求：如果问题明显需要外部检索、文件读取、工具执行，请输出 tool_needed；"
-                "如果纯文本即可回答，输出 direct；如果需要图像理解，输出 vision_needed。"
+                "如果纯文本即可回答，输出 direct；如果需要图像理解，输出 vision_needed；"
+                "如果用户明确要求生成图解/示意图/流程图/知识图谱，输出 illustration_needed。"
                 "只输出一个标签。"
             )
 
@@ -598,8 +601,10 @@ class TutorAgent:
                 raw = normalize_message_content(response.content)
                 raw_norm = raw.strip().lower()
 
-                # 关键词匹配判断路由：包含"tool"走工具路径，包含"vision"/"image"走视觉路径，其余走直接回答
-                if "tool" in raw_norm:
+                # 关键词匹配判断路由：优先识别图解，其次工具/视觉，其余走 direct
+                if "illustration" in raw_norm or "diagram" in raw_norm or "图解" in raw_norm:
+                    route = "illustration_needed"
+                elif "tool" in raw_norm:
                     route = "tool_needed"
                 elif "vision" in raw_norm or "image" in raw_norm:
                     route = "vision_needed"
@@ -613,7 +618,7 @@ class TutorAgent:
 
                 return {
                     "route": route,
-                    # tool_needed 时进入 plan_execute 循环，其余（direct/vision_needed）直接作为执行模式
+                    # tool_needed 时进入 plan_execute 循环，其余路由直接作为执行模式
                     "execution_mode": "plan_execute" if route == "tool_needed" else route,
                 }
 
@@ -1487,7 +1492,7 @@ class TutorAgent:
     # 图解生成节点
     # 在回答完成后独立运行，判断是否需要生成教学图解来补充说明。
     # 流程：提取问答 → 快速LLM分类判断 → 调用星火图片生成服务 → 写入state
-    # 触发条件：SPARK_IMAGE_ENABLED=true 且回答涉及需要可视化的概念/流程
+    # 触发条件：SPARK_IMAGE_GENERATION_ENABLED=true 且回答涉及需要可视化的概念/流程
     # ------------------------------------------------------------------
 
     async def _illustration_node(self, state: TutorState) -> dict[str, Any]:
@@ -1514,29 +1519,83 @@ class TutorAgent:
         user_question = extract_question(messages)
         force_illustration = explicitly_requests_illustration(user_question)
 
-        # 如果没有有效回答内容，跳过图解
-        if not ai_answer or len(ai_answer) < 30:
+        # 如果没有有效回答内容且不是强制要求，跳过图解
+        if (not ai_answer or len(ai_answer) < 30) and not force_illustration:
             logger.debug("[TutorAgent] 图解跳过: 回答内容过短 user=%s", user_id)
             return {}
 
-        # --- 用快速 LLM 判断是否需要图解 + 规划图解内容 ---
-        classify_prompt = (
-            '请分析以下学生问题和AI回答，判断是否需要生成教学图解来说明。\n'
-            '只允许基于本轮的学生问题和本轮AI讲解判断；禁止参考用户画像、历史偏好、长期记忆。\n'
-            '需要图解的情况: 涉及流程/步骤、系统架构/组件关系、概念对比、数据结构、算法过程、'
-            '网络协议、物理原理等需要可视化理解的场景。\n'
-            '不需要图解的情况: 纯文字讨论、简单问答、代码调试、学习方法建议、闲聊。\n\n'
-            f'学生问题: {user_question[:200]}\n\n'
-            f'AI回答(摘要): {ai_answer[:500]}\n\n'
-            '请严格按以下JSON格式回复，不要输出其他内容:\n'
-            '{"need": true/false, "confidence": 0~1, "knowledge_points":["..."], "content": "图解内容描述，描述要具体，包含关键要素和关系"}'
-        )
+        knowledge_points: list[str] = []
+        illustration_content = ""
+
+        # --- 逻辑优化：如果用户显式要求，直接进入设计阶段 ---
+        if force_illustration:
+            logger.info("[TutorAgent] 图解强制触发 user=%s session=%s 原因=用户显式要求", user_id, session_id)
+            illustration_content = f"基于用户要求生成图解：{user_question}"
+        else:
+            # --- 用快速 LLM 判断是否需要图解 + 规划图解内容 ---
+            classify_prompt = (
+                '请分析以下学生问题和AI回答，判断是否需要生成教学图解来说明。\n'
+                '只允许基于本轮的学生问题和本轮AI讲解判断；禁止参考用户画像、历史偏好、长期记忆。\n'
+                '需要图解的情况: 涉及流程/步骤、系统架构/组件关系、概念对比、数据结构、算法过程、'
+                '网络协议、物理原理等需要可视化理解的场景。\n'
+                '不需要图解的情况: 纯文字讨论、简单问答、代码调试、学习方法建议、闲聊。\n\n'
+                f'学生问题: {user_question[:200]}\n\n'
+                f'AI回答(摘要): {ai_answer[:500]}\n\n'
+                '请严格按以下JSON格式回复，不要输出其他内容:\n'
+                '{"need": true/false, "confidence": 0~1, "knowledge_points":["..."], "content": "图解内容描述，描述要具体，包含关键要素和关系"}'
+            )
+            try:
+                # 使用 DeepSeek 做图解决策判断，统一决策模型来源
+                decision_llm = get_deepseek_llm(temperature=0.0, streaming=False, max_tokens=400)
+                classify_resp = await decision_llm.ainvoke([HumanMessage(content=classify_prompt)])
+                classify_text = normalize_message_content(classify_resp.content)
+
+                # 解析 JSON 响应
+                from app.shared.json_utils import parse_first_json_object
+                data = parse_first_json_object(classify_text)
+
+                if not data.get("need"):
+                    logger.debug(
+                        "[TutorAgent] 图解跳过: LLM判断不需要 user=%s reason=%s",
+                        user_id, truncate(str(data), 120),
+                    )
+                    return {}
+
+                raw_points = (data or {}).get("knowledge_points", [])
+                if isinstance(raw_points, list):
+                    knowledge_points = [str(x).strip() for x in raw_points if str(x).strip()]
+                
+                classify_confidence = (data or {}).get("confidence", 0.0)
+                try:
+                    classify_confidence = float(classify_confidence)
+                except Exception:
+                    classify_confidence = 0.0
+
+                # 当分类置信度偏低时，避免盲目出图。
+                if classify_confidence < 0.45:
+                    logger.info(
+                        "[TutorAgent] 图解跳过: 分类置信度不足 user=%s confidence=%.2f",
+                        user_id,
+                        classify_confidence,
+                    )
+                    return {}
+
+                # 提取图解内容描述
+                illustration_content = str(data.get("content", "")).strip()
+            except Exception as exc:
+                logger.warning("[TutorAgent] 图解判定异常，跳过 user=%s: %s", user_id, exc)
+                return {}
+
+        if not illustration_content:
+            return {}
+
+        # 第二阶段：用主模型规划高质量图像提示词
         design_prompt = (
             "你是知识图解设计专家。基于学生问题与AI讲解，生成高质量图片提示词。\n"
             "要求：\n"
             "1) 输出 JSON，不要额外解释。\n"
             "2) image_prompt 必须是可直接给图片模型使用的中文提示词，包含：图解类型、布局、关键节点、关系箭头、文字标签风格、配色和留白要求。\n"
-            "3) focus_points 列出图中必须出现的 3-8 个知识点，且必须来自知识点列表。\n"
+            "3) focus_points 列出图中必须出现的 3-8 个知识点。\n"
             "4) diagram_type 只能是: 流程图/结构图/对比图/时序图/概念图/思维导图 之一。\n"
             "5) 不要出现“AI”“模型”“系统提示词”等元信息。\n\n"
             "6) 严禁参考用户画像、历史偏好、长期记忆；只依据本轮学生问题和本轮AI讲解内容。\n\n"
@@ -1544,54 +1603,8 @@ class TutorAgent:
             f"AI讲解: {ai_answer[:1600]}\n\n"
             '输出格式: {"diagram_type":"...","focus_points":["..."],"image_prompt":"...","explain_mapping":"focus_points如何对应讲解知识点"}'
         )
-        knowledge_points: list[str] = []
 
         try:
-            # 使用快速 LLM 做分类判断，避免占用主模型资源
-            fast_llm = get_fast_llm()
-            classify_resp = await fast_llm.ainvoke([HumanMessage(content=classify_prompt)])
-            classify_text = normalize_message_content(classify_resp.content)
-
-            # 解析 JSON 响应
-            from app.shared.json_utils import parse_first_json_object
-            data = parse_first_json_object(classify_text)
-
-            if not data.get("need") and not force_illustration:
-                logger.debug(
-                    "[TutorAgent] 图解跳过: LLM判断不需要 user=%s reason=%s",
-                    user_id, truncate(str(data), 120),
-                )
-                return {}
-
-            raw_points = (data or {}).get("knowledge_points", [])
-            if isinstance(raw_points, list):
-                knowledge_points = [str(x).strip() for x in raw_points if str(x).strip()]
-            classify_confidence = (data or {}).get("confidence", 0.0)
-            try:
-                classify_confidence = float(classify_confidence)
-            except Exception:
-                classify_confidence = 0.0
-
-            # 当分类置信度偏低且不是用户强制要求时，避免盲目出图。
-            if classify_confidence < 0.45 and not force_illustration:
-                logger.info(
-                    "[TutorAgent] 图解跳过: 分类置信度不足 user=%s confidence=%.2f",
-                    user_id,
-                    classify_confidence,
-                )
-                return {}
-
-            # 提取图解内容描述
-            illustration_content = str(data.get("content", "")).strip()
-            if not illustration_content and not force_illustration:
-                logger.debug("[TutorAgent] 图解跳过: 内容描述为空 user=%s", user_id)
-                return {}
-            if not illustration_content and force_illustration:
-                illustration_content = f"基于以下讲解生成知识图解：{truncate(ai_answer, 1200)}"
-            if force_illustration:
-                logger.info("[TutorAgent] 图解强制触发 user=%s session=%s 原因=用户显式要求", user_id, session_id)
-
-            # 第二阶段：用主模型规划高质量图像提示词
             design_resp = await self.llm.ainvoke([HumanMessage(content=design_prompt)])
             design_text = normalize_message_content(design_resp.content)
             design_data = parse_first_json_object(design_text)
@@ -1601,52 +1614,43 @@ class TutorAgent:
             if not isinstance(focus_points, list):
                 focus_points = []
             focus_points = [str(x).strip() for x in focus_points if str(x).strip()]
-            coverage = point_overlap_ratio(knowledge_points, focus_points)
-            if coverage < 0.5 and not force_illustration:
-                logger.info(
-                    "[TutorAgent] 图解跳过: 知识点覆盖不足 user=%s coverage=%.2f kp=%s fp=%s",
-                    user_id,
-                    coverage,
-                    truncate(knowledge_points, 200),
-                    truncate(focus_points, 200),
-                )
-                return {}
+
+            # 只有在非强制模式下才校验覆盖率
+            if not force_illustration:
+                coverage = point_overlap_ratio(knowledge_points, focus_points)
+                if coverage < 0.5:
+                    logger.info(
+                        "[TutorAgent] 图解跳过: 知识点覆盖不足 user=%s coverage=%.2f kp=%s fp=%s",
+                        user_id,
+                        coverage,
+                        truncate(knowledge_points, 200),
+                        truncate(focus_points, 200),
+                    )
+                    return {}
 
             image_prompt = str((design_data or {}).get("image_prompt", "")).strip()
-            if not image_prompt:
-                fallback_points = focus_points or knowledge_points
-                points_text = "；".join(fallback_points[:6]) if fallback_points else truncate(illustration_content, 300)
-                image_prompt = (
-                    f"请生成一张知识图解，主题：{diagram_type or '概念图'}。"
-                    f"核心要点：{points_text}。"
-                    "要求：中文标注清晰，结构层级分明，箭头关系准确，版式简洁，教育信息图风格，浅色背景，2D 矢量感。"
-                )
-            illustration_content = (
-                f"{diagram_type or '知识图解'} | "
-                f"{'、'.join((focus_points or knowledge_points)[:6]) if (focus_points or knowledge_points) else truncate(illustration_content, 180)}"
-            )
-
-        except Exception as exc:
-            if force_illustration:
-                illustration_content = f"基于以下讲解生成知识图解：{truncate(ai_answer, 1200)}"
+            if not image_prompt and force_illustration:
                 image_prompt = (
                     "请根据以下讲解生成高质量知识图解，要求中文标注清晰、结构分层明确、箭头关系准确、版式简洁："
                     f"{truncate(ai_answer, 1200)}"
                 )
-                logger.warning(
-                    "[TutorAgent] 图解分类失败但继续生成 user=%s session=%s error=%s",
-                    user_id,
-                    session_id,
-                    truncate(str(exc), 180),
-                )
-            else:
-                logger.warning("[TutorAgent] 图解分类失败，跳过 user=%s: %s", user_id, exc)
+
+            if not image_prompt:
                 return {}
-        if "image_prompt" not in locals():
-            image_prompt = (
-                "请根据以下内容生成教学知识图解，要求结构清晰、重点突出、中文标注准确："
-                f"{truncate(illustration_content, 800)}"
+
+            illustration_content = (
+                f"{diagram_type or '知识图解'} | "
+                f"{'、'.join(focus_points[:6]) if focus_points else truncate(illustration_content, 180)}"
             )
+
+        except Exception as exc:
+            if force_illustration:
+                image_prompt = f"高质量教学图解，关于：{user_question}"
+                illustration_content = f"图解 | {user_question}"
+                logger.warning("[TutorAgent] 图解提示词设计失败，使用兜底 user=%s: %s", user_id, exc)
+            else:
+                logger.warning("[TutorAgent] 图解提示词设计失败，跳过 user=%s: %s", user_id, exc)
+                return {}
 
         # --- 调用图片生成服务 ---
         logger.info(
@@ -1690,15 +1694,15 @@ class TutorAgent:
     def _illustration_route(self, state: TutorState) -> str:
         """路由函数：判断回答完成后是否需要进入图解生成节点。
 
-        触发条件: SPARK_IMAGE_ENABLED=true 且尚未生成过图解。
+        触发条件: SPARK_IMAGE_GENERATION_ENABLED=true 且尚未生成过图解。
         """
         # 已生成过图解，不重复生成
         if state.get("illustration_path"):
             return "end"
 
         # 全局开关未开启，跳过
-        from app.config import SPARK_IMAGE_ENABLED
-        if not SPARK_IMAGE_ENABLED:
+        from app.config import SPARK_IMAGE_GENERATION_ENABLED
+        if not SPARK_IMAGE_GENERATION_ENABLED:
             return "end"
 
         return "illustration_node"
@@ -1895,12 +1899,14 @@ class TutorAgent:
                             ill_path = output.get("illustration_path")
                             ill_prompt = output.get("illustration_prompt", "")
                             if ill_path:
+                                ill_name = Path(str(ill_path)).name
+                                ill_url = f"/api/v1/ai/chat/illustrations/{quote(ill_name)}" if ill_name else str(ill_path)
                                 logger.info(
                                     "[TutorAgent] 图解结果发送 user=%s path=%s",
                                     user_id, ill_path,
                                 )
                                 yield stream_event("illustration", {
-                                    "path": ill_path,
+                                    "path": ill_url,
                                     "prompt": ill_prompt,
                                 })
 

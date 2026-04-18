@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.auth.security import get_current_user
 from app.infra.models import User
 from app.chat.service import get_chat_usecases
+from app.shared.paths import WORKPLACE_DIR
 from app.shared.response import HttpResponse
 
 router = APIRouter()
@@ -112,6 +115,26 @@ async def get_uploaded_file(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return FileResponse(path=str(file_path), filename=filename)
+
+
+@router.get("/chat/illustrations/{filename}")  # 读取 AI 生成图解（当前登录用户可见）
+async def get_illustration_file(
+    filename: str,
+    current_user: User = Depends(get_current_user),
+):
+    del current_user
+    safe_name = Path(filename).name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    candidate = (WORKPLACE_DIR / "illustrations" / safe_name).resolve()
+    root = (WORKPLACE_DIR / "illustrations").resolve()
+    if not str(candidate).startswith(str(root)):
+        raise HTTPException(status_code=400, detail="非法路径")
+    if not candidate.exists() or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    return FileResponse(path=str(candidate), filename=safe_name)
 
 
 @router.get("/chat/sessions")

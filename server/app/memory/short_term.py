@@ -245,7 +245,7 @@ class ShortTermMemoryService:
             return len(expired_msgs)
 
     async def should_summarize(
-        self, user_id: int, session_id: str, module: str, threshold: int = 150
+        self, user_id: int, session_id: str, module: str, threshold: int = 800
     ) -> bool:
         """判断短期记忆是否达到总结阈值（短期消息 token 总量 >= threshold）。
         用于触发短期→长期记忆的压缩流程。"""

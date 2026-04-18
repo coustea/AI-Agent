@@ -12,7 +12,9 @@ from langchain_openai import ChatOpenAI
 from app.config import (
     DEEPSEEK_API_BASE,
     DEEPSEEK_API_KEY,
+    DEEPSEEK_CHAT_MODEL,
     DEEPSEEK_MODEL,
+    DEEPSEEK_REASONER_MODEL,
     FAST_LLM_API_BASE,
     FAST_LLM_API_KEY,
     FAST_LLM_MODEL,
@@ -22,6 +24,9 @@ from app.config import (
     OPENAI_API_BASE,
     OPENAI_API_KEY,
     OPENAI_MODEL,
+    SPARK_X_API_BASE,
+    SPARK_X_API_KEY,
+    SPARK_X_MODEL,
 )
 from app.infra.logging import get_logger
 
@@ -52,29 +57,6 @@ def get_llm(
 
 
 @lru_cache(maxsize=2)
-def get_glm_llm(
-    model: str | None = None,
-    temperature: float = 0.3,
-    streaming: bool = False,
-    max_tokens: int | None = None,
-) -> ChatOpenAI:
-    """创建或返回缓存的 GLM 文本 LLM 实例（通用结构化输出场景）。
-    使用智谱 BigModel API，默认模型由 GLM_MODEL 指定。"""
-    resolved_model = model or GLM_MODEL
-    logger.debug(
-        "[LLM] 创建 GLM 文本 LLM 实例: model=%s, temp=%.2f, streaming=%s, max_tokens=%s",
-        resolved_model, temperature, streaming, max_tokens,
-    )
-    return ChatOpenAI(
-        model=resolved_model,
-        api_key=GLM_API_KEY,
-        base_url="https://open.bigmodel.cn/api/paas/v4/",
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-
-
-@lru_cache(maxsize=2)
 def get_deepseek_llm(
     model: str | None = None,
     temperature: float = 0.3,
@@ -91,6 +73,58 @@ def get_deepseek_llm(
         model=resolved_model,
         api_key=DEEPSEEK_API_KEY or OPENAI_API_KEY,
         base_url=DEEPSEEK_API_BASE,
+        temperature=temperature,
+        streaming=streaming,
+        max_tokens=max_tokens,
+    )
+
+
+@lru_cache(maxsize=2)
+def get_deepseek_chat_llm(
+    temperature: float = 0.3,
+    streaming: bool = False,
+    max_tokens: int | None = None,
+) -> ChatOpenAI:
+    """获取 DeepSeek Chat 模型实例。"""
+    return get_deepseek_llm(
+        model=DEEPSEEK_CHAT_MODEL,
+        temperature=temperature,
+        streaming=streaming,
+        max_tokens=max_tokens,
+    )
+
+
+@lru_cache(maxsize=2)
+def get_deepseek_reasoner_llm(
+    streaming: bool = False,
+    max_tokens: int | None = None,
+) -> ChatOpenAI:
+    """获取 DeepSeek Reasoner (R1) 模型实例。
+    注意：推理模型通常建议使用默认 temperature (1.0) 或固定值，此处不开放 temp 调整。"""
+    return get_deepseek_llm(
+        model=DEEPSEEK_REASONER_MODEL,
+        temperature=1.0,
+        streaming=streaming,
+        max_tokens=max_tokens,
+    )
+
+@lru_cache(maxsize=2)
+def get_spark_x_llm(
+    model: str | None = None,
+    temperature: float = 0.3,
+    streaming: bool = False,
+    max_tokens: int | None = None,
+) -> ChatOpenAI:
+    """创建或返回缓存的 SparkMAX(Spark X) 文本 LLM 实例。"""
+    resolved_model = model or SPARK_X_MODEL
+    logger.debug(
+        "[LLM] 创建 SparkX LLM 实例: model=%s, temp=%.2f, streaming=%s, max_tokens=%s",
+        resolved_model, temperature, streaming, max_tokens,
+    )
+    return ChatOpenAI(
+        model=resolved_model,
+        api_key=SPARK_X_API_KEY or OPENAI_API_KEY,
+        base_url=SPARK_X_API_BASE or OPENAI_API_BASE,
         temperature=temperature,
         streaming=streaming,
         max_tokens=max_tokens,
