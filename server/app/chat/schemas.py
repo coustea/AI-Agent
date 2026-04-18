@@ -118,8 +118,8 @@ class TutorState(TypedDict, total=False):
     file_urls: Optional[list[str]]           # 用户上传的文件 URL 列表
 
     # ---- 路由与执行模式 ----
-    route: str                               # 分类结果: "direct" | "vision_needed" | "tool_needed" | "illustration_needed"
-    execution_mode: str                      # 执行模式: "direct" | "vision" | "plan_execute" | "illustration_needed"
+    route: str                               # 分类结果: "direct" | "vision_needed" | "tool_needed"
+    execution_mode: str                      # 执行模式: "direct" | "vision" | "plan_execute"
 
     # ---- 上下文信息（在 _build_* 方法中构建） ----
     profile_context: str                     # 用户画像文本（8维学习偏好）
@@ -157,7 +157,3 @@ class TutorState(TypedDict, total=False):
     # ---- 工具调用记录 ----
     budget: BudgetState                      # 工具调用统计状态
     tool_call_records: list[ToolCallDetail]  # 所有工具调用记录（持久化用）
-
-    # ---- 图解生成（由独立节点在回答完成后写入） ----
-    illustration_path: Optional[str]         # 生成成功后的图片本地路径
-    illustration_prompt: Optional[str]       # 提炼的图解内容描述（用于前端展示）

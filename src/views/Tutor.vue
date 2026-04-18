@@ -47,7 +47,10 @@
                   @click="switchSession(s.id)"
               >
                 <el-icon class="session-icon"><ChatLineSquare /></el-icon>
-                <span class="session-title nav-text">{{ s.title || '新对话' }}</span>
+                <div class="session-info nav-text">
+                  <span class="session-title">{{ s.title || '新对话' }}</span>
+                  <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
+                </div>
                 <el-button link class="del-btn nav-text" @click.stop="archiveSession(s.id)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
@@ -67,6 +70,7 @@
           >
             <el-icon class="session-icon"><ChatLineSquare /></el-icon>
             <span class="session-title nav-text">{{ s.title || '新对话' }}</span>
+	                <span class="session-time nav-text">{{ formatRelativeTime(s.updated_at) }}</span>
             <el-button link class="del-btn nav-text" @click.stop="archiveSession(s.id)">
               <el-icon><Delete /></el-icon>
             </el-button>
@@ -130,7 +134,7 @@
                 <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : 'You' }}</span>
                 <span class="time">{{ msg.time }}</span>
               </div>
-              <div class="bubble markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div :class="['bubble', 'markdown-body', { streaming: msg.id === streamingMsgId && isAIThinking }]" v-html="renderMarkdown(msg.content)"></div>
 
               <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
                 <a v-for="att in msg.attachments" :key="att.url" :href="att.url" target="_blank" class="attachment-link">
@@ -153,7 +157,7 @@
             </div>
           </div>
 
-          <div v-if="isAIThinking" class="message-row ai thinking-row">
+          <div v-if="showThinkingIndicator" class="message-row ai thinking-row">
             <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
             <div class="thinking-bubble">
               <span class="dot-typing"></span>
@@ -329,6 +333,7 @@ const activeProfileTags = computed(() => {
 
 // 流式控制器
 let abortController: AbortController | null = null
+const streamingMsgId = ref<number | null>(null)
 // 画像轮询计时器
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
 
@@ -337,8 +342,19 @@ let profilePollTimers: ReturnType<typeof setTimeout>[] = []
 // ==========================================
 const renderMarkdown = (text: string) => marked.parse(text)
 
+const showThinkingIndicator = computed(() => {
+  if (!isAIThinking.value) return false
+  if (chatMode.value === 'digital_human') return false
+  const streamingMsg = messages.value.find(m => m.id === streamingMsgId.value)
+  return !streamingMsg || !streamingMsg.content
+})
+
+let scrollPending = false
 const scrollToBottom = () => {
+  if (scrollPending) return
+  scrollPending = true
   nextTick(() => {
+    scrollPending = false
     if (chatScroll.value) {
       chatScroll.value.scrollTop = chatScroll.value.scrollHeight
     }
@@ -346,6 +362,19 @@ const scrollToBottom = () => {
 }
 
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+const formatRelativeTime = (dateStr: string) => {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}天前`
+  return new Date(dateStr).toLocaleDateString()
+}
 
 const resolveIllustrationUrl = (path: string) => {
   if (!path) return ''
@@ -508,6 +537,14 @@ const handleSend = async () => {
     }
   }
 
+  // 首条消息自动更新会话标题
+  if (currentSessionId.value && text) {
+    const session = sessions.value.find(s => s.id === currentSessionId.value)
+    if (session && (!session.title || session.title === '新对话')) {
+      session.title = text.length > 20 ? text.slice(0, 20) + '...' : text
+    }
+  }
+
   const userMsgId = Date.now()
 
   // 用户消息（附件先占位，上传成功后回填真实链接）
@@ -585,6 +622,7 @@ const handleSend = async () => {
   // AI 消息占位
   const aiMsgId = Date.now() + 1
   messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
+  streamingMsgId.value = aiMsgId
 
   // 发起 SSE 流式请求
   abortController = streamChat(
@@ -605,6 +643,7 @@ const handleSend = async () => {
       // onDone
       () => {
         isAIThinking.value = false
+        streamingMsgId.value = null
         isSpeaking.value = chatMode.value === 'digital_human'
         if (isSpeaking.value) {
           setTimeout(() => { isSpeaking.value = false }, 3000)
@@ -619,6 +658,7 @@ const handleSend = async () => {
           aiMsg.content = `Generate failed: ${err.message}`
         }
         isAIThinking.value = false
+        streamingMsgId.value = null
         abortController = null
       },
       // onEvent
@@ -892,7 +932,9 @@ onBeforeUnmount(() => {
   color: #4F46E5;
 }
 
-.session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-info { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
+.session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-time { font-size: 0.7rem; color: #94A3B8; white-space: nowrap; }
 
 .del-btn {
   opacity: 0;
@@ -1132,6 +1174,12 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 1rem;
   max-width: 85%;
+  animation: msg-appear 0.3s ease-out;
+}
+
+@keyframes msg-appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .message-row.user {
@@ -1423,6 +1471,19 @@ onBeforeUnmount(() => {
 :deep(.markdown-body p:last-child) { margin-bottom: 0; }
 :deep(.markdown-body pre) { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; }
 
+/* 流式输出光标 */
+.bubble.streaming::after {
+  content: '▍';
+  animation: cursor-blink 1s step-end infinite;
+  color: #94A3B8;
+  font-weight: 400;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1433,7 +1494,7 @@ onBeforeUnmount(() => {
 /* ============================================== */
 .mode-standard .session-sidebar {
   background: #F9F9F9;
-  border-right: none;
+  border-right: 1px solid #F0F0F0;
   display: flex;
   flex-direction: column;
   height: 100%;

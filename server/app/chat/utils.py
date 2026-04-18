@@ -236,34 +236,6 @@ def likely_requires_lookup(question: str) -> bool:
     return any(m in text for m in markers)
 
 
-def explicitly_requests_illustration(question: str) -> bool:
-    """识别用户是否明确要求生成图解/图示/流程图等可视化输出。"""
-    text = (question or "").strip().lower()
-    if not text:
-        return False
-    markers = [
-        "图解", "图示", "示意图", "流程图", "结构图", "思维导图",
-        "画图", "配图", "可视化", "知识图谱",
-        "knowledge map", "diagram", "flowchart", "mindmap",
-    ]
-    return any(m in text for m in markers)
-
-
-def point_overlap_ratio(required_points: list[str], candidate_points: list[str]) -> float:
-    """计算图解要点对讲解知识点的覆盖率，用于避免盲目生成。"""
-    req = [str(x).strip().lower() for x in required_points if str(x).strip()]
-    cand = [str(x).strip().lower() for x in candidate_points if str(x).strip()]
-    if not req:
-        return 1.0
-    if not cand:
-        return 0.0
-    hit = 0
-    for p in req:
-        if any((p in c) or (c in p) for c in cand):
-            hit += 1
-    return hit / max(len(req), 1)
-
-
 def is_repairable_failure(reason: str, step: dict | None) -> bool:
     """判断步骤失败是否可以通过"修复参数后重试"来恢复。"""
     if not step:

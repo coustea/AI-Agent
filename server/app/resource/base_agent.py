@@ -418,7 +418,6 @@ def _ensure_tools_loaded() -> None:
         "app.tools.web_fetcher",
         "app.tools.duckduckgo_search",
         "app.tools.document_executor",
-        "app.tools.spark_image_generation",
     ]
     for mod_name in _tool_modules:
         try:
