@@ -37,7 +37,7 @@
       <div class="navbar-right">
         <div class="system-status" title="Agent System Synced">
           <span class="status-dot pulsing"></span>
-          <span class="status-text">Agent System Synced</span>
+          <span class="status-text">System Synced</span>
         </div>
         <div class="time-display">
           <el-icon class="time-icon"><Clock /></el-icon>
@@ -402,9 +402,18 @@ const handleCommand = async (command: string) => {
 
 /* ================== 动画 ================== */
 @keyframes pulse-green {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
 .fade-slide-enter-active,

@@ -2,68 +2,100 @@
   <div :class="['tutor-dashboard', `mode-${chatMode}`]">
 
     <main class="dashboard-main">
-      <!-- 左侧：会话列表 -->
       <aside class="session-sidebar" :class="{ collapsed: sessionSidebarCollapsed }">
 
-        <!-- 悬浮折叠按钮 -->
-        <div class="sidebar-toggle-float">
-          <el-button class="float-collapse-btn" @click="sessionSidebarCollapsed = !sessionSidebarCollapsed" circle>
-            <el-icon><Fold v-if="!sessionSidebarCollapsed" /><Expand v-else /></el-icon>
-          </el-button>
+        <div class="sidebar-top-header">
+          <div class="sidebar-brand" v-if="!sessionSidebarCollapsed">
+            <el-icon class="brand-icon"><ChatDotRound /></el-icon>
+            <span class="brand-text">智能辅导</span>
+          </div>
+          <button class="collapse-toggle-btn" @click="sessionSidebarCollapsed = !sessionSidebarCollapsed" :title="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="4" ry="4"></rect>
+              <line x1="9" y1="4" x2="9" y2="20"></line>
+            </svg>
+          </button>
         </div>
 
-        <template v-if="!sessionSidebarCollapsed">
-          <!-- 顶部导航 -->
-          <div class="standard-sidebar-nav">
-            <div :class="['nav-item', 'new-chat', { active: !currentSessionId }]" @click="newSession">
-              <el-icon><EditPen /></el-icon> <span>新对话</span>
-            </div>
-            <div class="nav-item">
-              <el-icon><Search /></el-icon> <span>搜索历史</span>
-            </div>
+        <div class="standard-sidebar-nav">
+          <div :class="['nav-item', 'new-chat', { active: !currentSessionId }]" @click="newSession" title="新对话">
+            <el-icon><EditPen /></el-icon> <span class="nav-text">新对话</span>
+          </div>
+          <div class="nav-item search-item" title="搜索历史">
+            <el-icon><Search /></el-icon> <span class="nav-text">搜索历史</span>
           </div>
 
-          <div class="session-list">
-            <div class="standard-list-title">历史记录</div>
-            <div
+          <el-popover
+              placement="right-start"
+              :width="260"
+              trigger="click"
+              :disabled="!sessionSidebarCollapsed"
+              popper-style="padding: 12px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);"
+          >
+            <template #reference>
+              <div class="nav-item history-toggle-btn" :class="{ 'inactive-click': !sessionSidebarCollapsed }" title="历史记录">
+                <el-icon><Clock /></el-icon> <span class="nav-text">历史记录</span>
+              </div>
+            </template>
+
+            <div class="popover-session-scroll">
+              <div class="popover-title">历史记录</div>
+              <div
+                  v-for="s in sessions"
+                  :key="s.id"
+                  :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
+                  @click="switchSession(s.id)"
+              >
+                <el-icon class="session-icon"><ChatLineSquare /></el-icon>
+                <span class="session-title nav-text">{{ s.title || '新对话' }}</span>
+                <el-button link class="del-btn nav-text" @click.stop="archiveSession(s.id)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+              <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
+            </div>
+          </el-popover>
+        </div>
+
+        <div class="session-list" v-show="!sessionSidebarCollapsed">
+          <div
               v-for="s in sessions"
               :key="s.id"
               :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
               @click="switchSession(s.id)"
-            >
-              <el-icon class="session-icon"><ChatLineSquare /></el-icon>
-              <span class="session-title">{{ s.title || '新对话' }}</span>
-              <el-button link class="del-btn" @click.stop="archiveSession(s.id)">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </div>
-            <div v-if="sessions.length === 0" class="session-empty">暂无对话记录</div>
+              :title="s.title || '新对话'"
+          >
+            <el-icon class="session-icon"><ChatLineSquare /></el-icon>
+            <span class="session-title nav-text">{{ s.title || '新对话' }}</span>
+            <el-button link class="del-btn nav-text" @click.stop="archiveSession(s.id)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
           </div>
-        </template>
+          <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
+        </div>
 
-        <!-- 侧边栏底部：模式切换 -->
-        <div class="sidebar-footer" v-if="!sessionSidebarCollapsed">
+        <div class="sidebar-footer">
           <div class="mode-toggle-group">
-            <button 
-              :class="['mode-btn', { active: chatMode === 'standard' }]" 
-              @click="chatMode = 'standard'"
+            <button
+                :class="['mode-btn', { active: chatMode === 'standard' }]"
+                @click="chatMode = 'standard'"
+                title="图文交互"
             >
-              <el-icon><ChatLineRound /></el-icon> 图文交互
+              <el-icon><ChatLineRound /></el-icon> <span class="nav-text">图文交互</span>
             </button>
-            <button 
-              :class="['mode-btn', { active: chatMode === 'digital_human' }]" 
-              @click="chatMode = 'digital_human'"
+            <button
+                :class="['mode-btn', { active: chatMode === 'digital_human' }]"
+                @click="chatMode = 'digital_human'"
+                title="数字人互动"
             >
-              <el-icon><Avatar /></el-icon> 数字人互动
+              <el-icon><Avatar /></el-icon> <span class="nav-text">数字人互动</span>
             </button>
           </div>
         </div>
       </aside>
 
-      <!-- 中央：聊天主界面 -->
       <section class="chat-container">
 
-        <!-- 数字人展示舞台 -->
         <div v-if="chatMode === 'digital_human'" class="digital-human-stage">
           <div class="avatar-ring" :class="{ 'is-speaking': isAIThinking || isSpeaking }">
             <img src="https://api.dicebear.com/7.x/bottts/svg?seed=AIAssistant&backgroundColor=0891B2&textureChance=50" alt="Digital Human Avatar" class="bot-avatar-img"/>
@@ -75,12 +107,12 @@
         </div>
 
         <div class="chat-viewport" ref="chatScroll">
-          <!-- Standard 模式空状态 -->
           <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
-            <h2></h2>
+            <h2>
+              你好，学习者！
+            </h2>
           </div>
 
-          <!-- Digital Human 模式空状态 -->
           <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
             <div class="welcome-icon"><el-icon><Cpu /></el-icon></div>
             <h3>我是您的 AI 私人导师</h3>
@@ -99,7 +131,7 @@
                 <span class="time">{{ msg.time }}</span>
               </div>
               <div class="bubble markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              
+
               <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
                 <a v-for="att in msg.attachments" :key="att.url" :href="att.url" target="_blank" class="attachment-link">
                   <el-icon v-if="att.type === 'image'"><Picture /></el-icon>
@@ -107,7 +139,7 @@
                   <span>{{ att.name }}</span>
                 </a>
               </div>
-              
+
             </div>
           </div>
 
@@ -120,7 +152,6 @@
         </div>
 
         <div class="input-panel" :class="{ 'standard-input': chatMode === 'standard' }">
-          <!-- 附件预览 -->
           <div v-if="pendingFiles.length > 0" class="attachments-preview">
             <div v-for="(f, idx) in pendingFiles" :key="idx" class="attachment-chip">
               <el-icon v-if="f.fileType === 'image'"><Picture /></el-icon>
@@ -129,7 +160,7 @@
               <el-icon class="close-icon" @click="removeAttachment(idx)"><Close /></el-icon>
             </div>
           </div>
-          
+
           <div class="input-wrapper" :class="{ 'pill-shape': chatMode === 'standard' }">
             <div class="toolbar-left">
               <template v-if="chatMode === 'standard'">
@@ -157,9 +188,9 @@
             </div>
 
             <textarea
-              v-model="userInput"
-              :placeholder="chatMode === 'standard' ? '有问题，尽管问 (Shift + Enter 换行)' : '向 AI 导师提问 (Shift + Enter 换行)...'"
-              @keydown.enter.exact.prevent="handleSend"
+                v-model="userInput"
+                :placeholder="chatMode === 'standard' ? '在此输入你的问题(Shift + Enter 换行)' : '向 AI 导师提问 (Shift + Enter 换行)...'"
+                @keydown.enter.exact.prevent="handleSend"
             ></textarea>
 
             <div class="toolbar-right">
@@ -171,12 +202,10 @@
           <div class="input-footer" v-if="chatMode === 'digital_human'">AI 可能会产生误导性信息，请注意甄别。</div>
         </div>
 
-        <!-- 隐藏文件输入 -->
         <input ref="docInput" type="file" accept=".pdf,.doc,.docx,.txt" style="display:none" @change="onFileSelected($event, 'document')" />
         <input ref="imgInput" type="file" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onFileSelected($event, 'image')" />
       </section>
 
-      <!-- 右侧：动态画像面板 -->
       <aside class="profile-sidebar">
         <div class="sidebar-header">
           <div class="header-title-row">
@@ -215,9 +244,9 @@
 import { ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
-  Picture, Microphone, Document, ChatLineSquare,
-  MagicStick, Fold, Expand, Plus, Delete, Close, Top,
-  EditPen, Search, Discount
+  Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
+  MagicStick, Plus, Delete, Close, Top,
+  EditPen, Search, Discount, Clock
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
@@ -279,7 +308,7 @@ interface ProfileDimension {
 }
 
 const profileDimensions = ref<ProfileDimension[]>(
-  DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
+    DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
 )
 const extractedTags = ref<string[]>([])
 const tutorStrategy = ref('开始对话后，系统将自动提取特征,为您生成专属策略，快开始您的对话吧！')
@@ -337,8 +366,8 @@ const fetchProfile = async () => {
 
     // 从非空维度描述中提取标签
     const tags = profileDimensions.value
-      .filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
-      .map(d => d.name)
+        .filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
+        .map(d => d.name)
     if (tags.length > 0) {
       extractedTags.value = tags
     }
@@ -472,8 +501,8 @@ const handleSend = async () => {
   // 用户消息
   const displayText = text || (hasFiles ? `[附件分析] ${pendingFiles.value.map(f => f.name).join(', ')}` : '')
   const currentAttachments: Attachment[] | null = hasFiles
-    ? pendingFiles.value.map(f => ({ url: f.url, type: f.fileType, name: f.name }))
-    : null
+      ? pendingFiles.value.map(f => ({ url: f.url, type: f.fileType, name: f.name }))
+      : null
   if (displayText) {
     messages.value.push({
       id: Date.now(),
@@ -500,39 +529,39 @@ const handleSend = async () => {
 
   // 发起 SSE 流式请求
   abortController = streamChat(
-    {
-      message: text || '请分析附件',
-      session_id: currentSessionId.value,
-      image_url: imageUrl,
-      file_urls: fileUrls.length > 0 ? fileUrls : undefined,
-    },
-    // onChunk
-    (chunk) => {
-      const aiMsg = messages.value.find(m => m.id === aiMsgId)
-      if (aiMsg) {
-        aiMsg.content += chunk
-        scrollToBottom()
-      }
-    },
-    // onDone
-    () => {
-      isAIThinking.value = false
-      isSpeaking.value = chatMode.value === 'digital_human'
-      if (isSpeaking.value) {
-        setTimeout(() => { isSpeaking.value = false }, 3000)
-      }
-      scheduleProfilePoll()
-      abortController = null
-    },
-    // onError
-    (err) => {
-      const aiMsg = messages.value.find(m => m.id === aiMsgId)
-      if (aiMsg && !aiMsg.content) {
-        aiMsg.content = `Generate failed: ${err.message}`
-      }
-      isAIThinking.value = false
-      abortController = null
-    },
+      {
+        message: text || '请分析附件',
+        session_id: currentSessionId.value,
+        image_url: imageUrl,
+        file_urls: fileUrls.length > 0 ? fileUrls : undefined,
+      },
+      // onChunk
+      (chunk) => {
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg) {
+          aiMsg.content += chunk
+          scrollToBottom()
+        }
+      },
+      // onDone
+      () => {
+        isAIThinking.value = false
+        isSpeaking.value = chatMode.value === 'digital_human'
+        if (isSpeaking.value) {
+          setTimeout(() => { isSpeaking.value = false }, 3000)
+        }
+        scheduleProfilePoll()
+        abortController = null
+      },
+      // onError
+      (err) => {
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg && !aiMsg.content) {
+          aiMsg.content = `Generate failed: ${err.message}`
+        }
+        isAIThinking.value = false
+        abortController = null
+      },
   )
 }
 
@@ -551,7 +580,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
+@import url('https://gs.jurieo.com/gemini/fonts-googleapis/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
 /* ================= 全局设定 ================= */
 .tutor-dashboard {
@@ -564,21 +593,270 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-/* ================= 模式切换 ================= */
+/* ================= 主体排版 ================= */
+.dashboard-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* --- 左侧：会话列表 --- */
+.session-sidebar {
+  position: relative;
+  width: 240px;
+  background: #FAFAFA;
+  border-right: 1px solid #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease;
+  flex-shrink: 0;
+}
+
+/* 折叠状态的侧边栏样式 */
+.session-sidebar.collapsed {
+  width: 64px;
+}
+
+/* 折叠时隐藏所有带有 nav-text 的文字标签 */
+.session-sidebar.collapsed .nav-text {
+  display: none;
+}
+
+/* 折叠时调整各个导航项居中并固定为方形 */
+.session-sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 10px 0;
+  width: 42px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.session-sidebar.collapsed .session-item {
+  justify-content: center;
+  padding: 10px 0;
+  width: 42px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.session-sidebar.collapsed .standard-sidebar-nav {
+  align-items: stretch;
+}
+
+/* 侧边栏顶部 Header */
+.sidebar-top-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 12px 8px 16px;
+  height: 56px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #0F172A;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.brand-icon {
+  color: #4F46E5;
+  font-size: 1.25rem;
+}
+
+/* 侧栏折叠控制按钮 - 定制化 SVG 样式 */
+.collapse-toggle-btn {
+  background: transparent;
+  border: none;
+  color: #64748B;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0;
+}
+.collapse-toggle-btn:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+.collapse-toggle-btn svg {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+/* ★ 关键对齐：折叠状态下，控制按钮宽度与下方导航项完美统一（均为 42px），确保绝对居中上下对齐 ★ */
+.session-sidebar.collapsed .sidebar-top-header {
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+.session-sidebar.collapsed .collapse-toggle-btn {
+  width: 42px;
+  height: 42px;
+}
+
+.standard-sidebar-nav {
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* 通用统一导航项/按钮微卡片样式 */
+.nav-item {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #475569;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.nav-item:hover {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  color: #334155;
+}
+
+.nav-item.active {
+  background: #EEF2FF;
+  color: #4F46E5;
+  border-color: #C7D2FE;
+  font-weight: 600;
+}
+
+/* 不可点击状态的静默历史记录按钮（侧边栏展开时使用） */
+.history-toggle-btn.inactive-click {
+  cursor: default;
+  box-shadow: none;
+}
+.history-toggle-btn.inactive-click:hover {
+  background: #FFFFFF;
+  border-color: #E2E8F0;
+  color: #475569;
+}
+
+/* 折叠悬浮窗内的历史记录滚动区域 */
+.popover-session-scroll {
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.popover-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #94A3B8;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid #E2E8F0;
+  margin-bottom: 8px;
+}
+.popover-session-scroll .session-item {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  margin: 0;
+  padding: 8px;
+}
+.popover-session-scroll .session-item:hover {
+  background: #F8FAFC;
+  border-color: #E2E8F0;
+}
+.popover-session-scroll .session-item.active {
+  background: #EEF2FF;
+  color: #4F46E5;
+  font-weight: 600;
+}
+
+/* 下方实际展现的历史记录列表 */
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 历史记录平时透明，Hover 或 Active 时呈现卡片样式 */
+.session-item {
+  margin-bottom: 4px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.session-item:hover {
+  background: #FFFFFF;
+  border-color: #E2E8F0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+.session-item.active {
+  background: #EEF2FF;
+  color: #4F46E5;
+  border-color: #C7D2FE;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.session-icon {
+  font-size: 1.15rem;
+  color: #94A3B8;
+  transition: color 0.2s;
+}
+.session-item.active .session-icon {
+  color: #4F46E5;
+}
+
+.session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.del-btn {
+  opacity: 0;
+  color: #EF4444;
+  padding: 4px;
+}
+.session-item:hover .del-btn { opacity: 1; }
+
+.session-empty {
+  font-size: 0.8rem;
+  color: #94A3B8;
+  text-align: center;
+  margin-top: 2rem;
+}
+
+/* ================= 模式切换底部区域 ================= */
 .sidebar-footer {
   padding: 1rem;
   border-top: 1px solid #E2E8F0;
   margin-top: auto;
   background: #FAFAFA;
+  transition: padding 0.3s ease;
+}
+
+/* 折叠时，极限缩减水平 padding，让 48px 的大按钮能在 64px 宽度的侧边栏内居中且不溢出 */
+.session-sidebar.collapsed .sidebar-footer {
+  padding: 16px 4px;
 }
 
 .mode-toggle-group {
   display: flex;
   flex-direction: column;
   background: #F1F5F9;
-  padding: 5px;
+  padding: 6px;
   border-radius: 12px;
-  gap: 4px;
+  gap: 6px;
   border: 1px solid #E2E8F0;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
 }
@@ -588,12 +866,12 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: 10px;
+  padding: 12px 16px; /* 展开时按钮正常大小 */
   border: 1px solid transparent;
   background: transparent;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #64748B;
   cursor: pointer;
@@ -632,7 +910,7 @@ onBeforeUnmount(() => {
 }
 
 .mode-btn .el-icon {
-  font-size: 1.15rem;
+  font-size: 1.25rem; /* 展开时的基础图标尺寸 */
   transition: color 0.3s ease, transform 0.3s ease;
 }
 
@@ -640,139 +918,23 @@ onBeforeUnmount(() => {
   transform: scale(1.1);
 }
 
-/* ================= 主体排版 ================= */
-.dashboard-main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-/* --- 左侧：会话列表 --- */
-.session-sidebar {
-  position: relative;
-  width: 240px;
-  background: #FAFAFA;
-  border-right: 1px solid #E2E8F0;
-  display: flex;
-  flex-direction: column;
-  transition: width 0.3s ease;
-  flex-shrink: 0;
-}
-
-.session-sidebar.collapsed {
-  width: 0;
-  border-right: none;
-}
-
-.sidebar-toggle-float {
-  position: absolute;
-  top: 1rem;
-  right: -14px;
-  z-index: 50;
-}
-
-.float-collapse-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  color: #64748B;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.2s ease;
-}
-
-.float-collapse-btn:hover {
-  color: #0F172A;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  transform: scale(1.05);
-}
-
-.float-collapse-btn .el-icon {
-  font-size: 0.9rem;
-}
-
-.session-sidebar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-}
-
-.sidebar-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #64748B;
-}
-
-.collapse-btn {
-  color: #94A3B8;
-  font-size: 1rem;
-}
-
-.session-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 1rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.standard-list-title {
-  padding: 0.5rem 0.5rem 0.25rem;
-  font-size: 0.75rem;
-  color: #94A3B8;
-  font-weight: 600;
-  flex-shrink: 0;
-  margin-top: 0.5rem;
-}
-
-.session-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: #333;
-  font-size: 0.95rem;
-  transition: background 0.2s;
-}
-
-.session-item:hover {
-  background: #EAEAEA;
-}
-
-.session-item.active {
-  background: #E0F2FE;
-  color: #0284C7;
-  font-weight: 500;
-}
-
-.session-item .el-icon {
-  font-size: 1.2rem;
-}
-
-.session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.del-btn {
-  opacity: 0;
-  color: #EF4444;
+/* ================= 折叠时模式切换按钮专属样式（放大版） ================= */
+.session-sidebar.collapsed .mode-toggle-group {
   padding: 4px;
+  gap: 10px;
 }
-.session-item:hover .del-btn { opacity: 1; }
 
-.session-empty {
-  font-size: 0.8rem;
-  color: #94A3B8;
-  text-align: center;
-  margin-top: 2rem;
+.session-sidebar.collapsed .mode-btn {
+  justify-content: center;
+  padding: 0;
+  width: 48px;  /* 增加至 48px，让按钮更加庞大饱满 */
+  height: 48px; /* 增加至 48px */
+  margin: 0 auto;
+  border-radius: 12px; /* 按钮变大，对应圆角也变得更平滑 */
+}
+
+.session-sidebar.collapsed .mode-btn .el-icon {
+  font-size: 1.65rem; /* 大幅增加图标字号，提升视觉分量与操作手感 */
 }
 
 /* --- 中央：聊天容器 --- */
@@ -1077,11 +1239,11 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.sidebar-header { 
-  display: flex; 
-  flex-direction: row; 
+.sidebar-header {
+  display: flex;
+  flex-direction: row;
   justify-content: space-between;
-  align-items: center; 
+  align-items: center;
   width: 100%;
 }
 .header-title-row {
@@ -1114,19 +1276,19 @@ onBeforeUnmount(() => {
   padding: 8px 0;
   align-items: center; /* 子容器对齐 */
 }
-.tags-container { 
-  display: flex; 
-  flex-wrap: wrap; 
-  gap: 8px; 
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: center;
   padding: 4px 0;
 }
 .feature-tag {
-  background: #FFFFFF; 
+  background: #FFFFFF;
   border: 1px solid #E2E8F0;
-  padding: 8px 14px; 
+  padding: 8px 14px;
   border-radius: 20px;
-  font-size: 0.85rem; 
+  font-size: 0.85rem;
   color: #0F172A;
   display: flex;
   align-items: center;
@@ -1189,38 +1351,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-.standard-sidebar-nav {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.standard-sidebar-nav .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: #333;
-  font-size: 0.95rem;
-  transition: background 0.2s;
-}
-.standard-sidebar-nav .nav-item.new-chat {
-  margin-bottom: 8px;
-}
-.standard-sidebar-nav .nav-item.new-chat.active {
-  background: #E0F2FE;
-  color: #0284C7;
-  font-weight: 500;
-}
-.standard-sidebar-nav .nav-item:hover {
-  background: #EAEAEA;
-}
-.standard-sidebar-nav .nav-item .el-icon {
-  font-size: 1.2rem;
 }
 .mode-standard .chat-viewport {
   background: #FFFFFF;
