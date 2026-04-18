@@ -42,6 +42,9 @@ class QuizState(BaseAgentState):
 class QuizAgent(BaseResourceAgent):
     """分层练习题生成 Agent。"""
 
+    # 题目输出必须是 JSON，启用 JSON Mode 让模型直接输出结构化对象（不依赖正则提取）。
+    force_json_mode = True
+
     tool_names = [
         "save_to_workplace", "read_file_safe",
         "write_file", "edit_file", "append_file", "read_file_lines",

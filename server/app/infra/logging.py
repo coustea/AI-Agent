@@ -1,76 +1,213 @@
-"""
-集中日志配置模块。
+"""集中日志配置模块（Loguru 版本，异步写入）。
 
-使用方式：
-    from app.infra.logging import get_logger
-    logger = get_logger(__name__)
-
-配置三个输出通道：
-  1. 全量日志文件（app.log）— 按天轮转，保留 30 天
-  2. 错误日志文件（error.log）— 按大小轮转，10MB/份，保留 10 份
-  3. 控制台输出 — 开发调试用
+兼容性目标：
+- 代码侧仍然可以继续使用 `logger = get_logger(__name__)` 与 logging 风格的 `%s` 占位符
+- 底层输出统一由 Loguru 负责（文件 + 控制台），并启用 `enqueue=True` 异步写入
+- 捕获 `logging` 标准库日志、uvicorn/fastapi/sqlalchemy 等第三方日志，统一导入 Loguru
 """
+
+from __future__ import annotations
 
 import logging
-from logging.handlers import TimedRotatingFileHandler, RotatingFileHandler
+import sys
+from typing import Any, Optional
 
+from loguru import logger as _loguru_logger
+
+from app.config import LOG_LEVEL
 from app.shared.paths import LOGS_DIR as LOG_DIR
 
-LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"  # 统一日志格式
-DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+# 输出格式尽量与旧 logging 版保持一致，便于 grep/排障。
+_LOGURU_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {extra[logger_name]} | {message}"
 
 
-def get_logger(name: str) -> logging.Logger:
-    """获取子 logger，各模块通过 get_logger(__name__) 使用。
-    返回的是 Python 标准 logging.Logger，日志级别和 handler 由 root logger 统一控制。"""
-    return logging.getLogger(name)
+class _InterceptHandler(logging.Handler):
+    """把标准 logging.Record 转发到 loguru。"""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            level = _loguru_logger.level(record.levelname).name
+        except Exception:
+            level = record.levelno
+
+        # record.getMessage() 已经完成了 %-style 格式化
+        msg = record.getMessage()
+
+        # 让 loguru 的 caller 定位尽量指向“真实调用点”，而不是 logging 框架内部。
+        frame = logging.currentframe()
+        depth = 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        _loguru_logger.bind(logger_name=record.name).opt(
+            depth=depth,
+            exception=record.exc_info,
+        ).log(level, msg)
 
 
-def setup_logging() -> None:
+class LoguruLoggerProxy:
+    """项目内统一 logger 对象。
+
+    目标：不用改全项目日志调用代码，就能把输出切到 Loguru，并启用异步写入。
+    同时支持两种常见写法：
+    - logging 风格：logger.info("x=%s", x)
+    - loguru 风格： logger.info("x={}", x)
     """
-    配置 root logger，同时输出到文件和控制台。
-    在应用启动时由 lifespan 调用一次。
 
-    注意：每次调用会先清空已有 handler，防止 FastAPI 热重载时重复添加导致日志重复输出。
+    def __init__(self, name: str):
+        self._name = name
+        self._logger = _loguru_logger.bind(logger_name=name)
+
+    def bind(self, **kwargs: Any) -> "LoguruLoggerProxy":
+        proxy = LoguruLoggerProxy(self._name)
+        proxy._logger = self._logger.bind(**kwargs)  # type: ignore[attr-defined]
+        return proxy
+
+    def _format_message(self, message: Any, args: tuple[Any, ...]) -> tuple[str, tuple[Any, ...]]:
+        if not args:
+            return (str(message), ())
+
+        if not isinstance(message, str):
+            return (str(message), ())
+
+        # 优先保留 loguru 的 {} 格式化能力
+        if "{" in message and "}" in message:
+            return (message, args)
+
+        # 兼容 logging 的 %-style 格式化
+        try:
+            return (message % args, ())
+        except Exception:
+            # 兜底：不让日志调用因为格式问题崩掉
+            return (f"{message} args={args!r}", ())
+
+    def _log(self, level: str, message: Any, *args: Any, **kwargs: Any) -> None:
+        exc_info = kwargs.pop("exc_info", None)
+        msg, fmt_args = self._format_message(message, args)
+
+        l = self._logger
+        if exc_info:
+            if exc_info is True:
+                l = l.opt(exception=True)
+            else:
+                l = l.opt(exception=exc_info)
+        l.log(level, msg, *fmt_args, **kwargs)
+
+    def debug(self, message: Any, *args: Any, **kwargs: Any) -> None:
+        self._log("DEBUG", message, *args, **kwargs)
+
+    def info(self, message: Any, *args: Any, **kwargs: Any) -> None:
+        self._log("INFO", message, *args, **kwargs)
+
+    def warning(self, message: Any, *args: Any, **kwargs: Any) -> None:
+        self._log("WARNING", message, *args, **kwargs)
+
+    def error(self, message: Any, *args: Any, **kwargs: Any) -> None:
+        self._log("ERROR", message, *args, **kwargs)
+
+    def exception(self, message: Any, *args: Any, **kwargs: Any) -> None:
+        # 与 logging 行为一致：记录当前异常堆栈（需要在 except 块内调用）
+        msg, fmt_args = self._format_message(message, args)
+        self._logger.opt(exception=True).error(msg, *fmt_args, **kwargs)
+
+    def critical(self, message: Any, *args: Any, **kwargs: Any) -> None:
+        self._log("CRITICAL", message, *args, **kwargs)
+
+
+def get_logger(name: str) -> LoguruLoggerProxy:
+    """获取项目 logger（不再返回标准库 logging.Logger）。"""
+    return LoguruLoggerProxy(name)
+
+
+def get_loguru_logger(name: str):
+    """可选：直接拿 loguru logger（新代码可用），带上 logger_name。"""
+    return _loguru_logger.bind(logger_name=name)
+
+
+def _parse_level(raw: str) -> str:
+    value = (raw or "").strip().upper()
+    return value if value in {"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"
+
+_CONFIGURED = False
+
+
+def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
+    """初始化 Loguru + 标准库 logging 拦截。
+
+    在应用启动时调用一次即可（FastAPI lifespan）。
     """
+    global _CONFIGURED
+    if _CONFIGURED and not force:
+        return
+
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)  # 全局最低级别 INFO
-    # 防止热重载时重复添加 handler
-    root_logger.handlers.clear()
+    log_level = _parse_level(level or LOG_LEVEL)
 
-    formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
+    # 1) 配置 loguru sinks（enqueue=True 异步写入）
+    _loguru_logger.remove()
+    _loguru_logger.configure(extra={"logger_name": "root"})
 
-    # 通道 1：全量日志 — 按天轮转（每天一个文件），保留最近 30 天
-    timed_handler = TimedRotatingFileHandler(
-        filename=LOG_DIR / "app.log",
-        when="midnight",  # 每天午夜轮转
-        interval=1,
-        backupCount=30,  # 保留 30 天
-        encoding="utf-8",
+    # 控制台
+    _loguru_logger.add(
+        sys.stdout,
+        level=log_level,
+        format=_LOGURU_FORMAT,
+        backtrace=True,
+        diagnose=False,
+        enqueue=True,
     )
-    timed_handler.suffix = "%Y-%m-%d"  # 轮转后的文件名后缀格式
-    timed_handler.setLevel(logging.INFO)
-    timed_handler.setFormatter(formatter)
 
-    # 通道 2：错误日志 — 按大小轮转，10MB 一个文件，保留 10 份
-    error_handler = RotatingFileHandler(
-        filename=LOG_DIR / "error.log",
-        maxBytes=10 * 1024 * 1024,  # 10 MB
-        backupCount=10,  # 最多保留 10 个备份文件
+    # 全量日志：按天轮转，保留 30 天
+    _loguru_logger.add(
+        str(LOG_DIR / "app.log"),
+        level=log_level,
+        format=_LOGURU_FORMAT,
+        rotation="00:00",
+        retention="30 days",
         encoding="utf-8",
+        backtrace=True,
+        diagnose=False,
+        enqueue=True,
     )
-    error_handler.setLevel(logging.ERROR)  # 只记录 ERROR 及以上级别
-    error_handler.setFormatter(formatter)
 
-    # 通道 3：控制台输出 — 开发调试时直接在终端查看日志
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
+    # 错误日志：按大小轮转，最多 10 份
+    _loguru_logger.add(
+        str(LOG_DIR / "error.log"),
+        level="ERROR",
+        format=_LOGURU_FORMAT,
+        rotation="10 MB",
+        retention=10,
+        encoding="utf-8",
+        backtrace=True,
+        diagnose=False,
+        enqueue=True,
+    )
 
-    root_logger.addHandler(timed_handler)
-    root_logger.addHandler(error_handler)
-    root_logger.addHandler(console_handler)
+    # 2) 拦截标准 logging：所有旧代码 logger.info("x=%s", x) 都会被转发到 loguru
+    logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
 
-    root_logger.info("[Logging] 日志系统初始化完成: log_dir=%s", LOG_DIR)
+    # 清理常见第三方 logger 的 handler，避免重复输出
+    for name in (
+        "uvicorn",
+        "uvicorn.error",
+        "uvicorn.access",
+        "fastapi",
+        "sqlalchemy",
+        "sqlalchemy.engine",
+        "aiomysql",
+    ):
+        ext_logger = logging.getLogger(name)
+        ext_logger.handlers.clear()
+        ext_logger.propagate = True
+
+    _loguru_logger.bind(logger_name="root").info(
+        "[Logging] 日志系统初始化完成: log_dir={log_dir} level={level} async_enqueue={enqueue}",
+        log_dir=str(LOG_DIR),
+        level=log_level,
+        enqueue=True,
+    )
+
+    _CONFIGURED = True

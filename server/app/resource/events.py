@@ -60,6 +60,7 @@ class AgentEventEmitter:
         total: int,
         core_ready: bool,
         latest_agent: str | None = None,
+        **meta: Any,
     ) -> None:
         await self.emit(
             "bundle_update",
@@ -67,6 +68,7 @@ class AgentEventEmitter:
             total=total,
             core_ready=core_ready,
             latest_agent=latest_agent,
+            meta=meta or {},
         )
 
     async def emit_done(self, message: str = "资源包构建完成") -> None:

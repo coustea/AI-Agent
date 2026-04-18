@@ -1,14 +1,11 @@
 """全局路径常量。"""
-import os
 from pathlib import Path
 
+from app.config import KNOWLEDGE_BASE_DIR as KNOWLEDGE_BASE_DIR_NAME
+from app.config import LOGS_DIR as LOGS_DIR_NAME
+from app.config import WORKPLACE_DIR as WORKPLACE_DIR_NAME
+
 SERVER_DIR = Path(__file__).resolve().parents[2]
-
-
-def _env_path(key: str, default: str) -> Path:
-    return SERVER_DIR / os.getenv(key, default)
-
-
-WORKPLACE_DIR = _env_path("WORKPLACE_DIR", "workplace")
-LOGS_DIR = _env_path("LOGS_DIR", "logs")
-KNOWLEDGE_BASE_DIR = _env_path("KNOWLEDGE_BASE_DIR", "data")
+WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
+LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
+KNOWLEDGE_BASE_DIR = SERVER_DIR / KNOWLEDGE_BASE_DIR_NAME

@@ -11,10 +11,12 @@ Environment loading is handled in ``app.main`` only.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
 from urllib.parse import quote_plus
 
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.exc import OperationalError
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -30,11 +32,31 @@ from app.config import (
     DB_POOL_TIMEOUT,
     DB_PORT,
     DB_USER,
+    DB_INIT_MAX_RETRIES,
+    DB_INIT_RETRY_DELAY_SEC,
 )
 from app.infra.logging import get_logger
 from app.infra.models import import_all_models
 
 logger = get_logger(__name__)
+
+RETRYABLE_MYSQL_ERROR_CODES = {
+    2003,  # Can't connect to MySQL server
+    2006,  # MySQL server has gone away
+    2013,  # Lost connection to MySQL server during query
+    2055,  # Lost connection to MySQL server at '%s', system error: %d
+}
+
+
+def _extract_mysql_error_code(exc: OperationalError) -> int | None:
+    """从 sqlalchemy OperationalError 中提取 MySQL 错误码。"""
+    orig = getattr(exc, "orig", None)
+    args = getattr(orig, "args", ())
+    if isinstance(args, tuple) and args:
+        first = args[0]
+        if isinstance(first, int):
+            return first
+    return None
 
 
 def _validate_database_settings() -> None:
@@ -86,17 +108,67 @@ engine = create_async_engine(
 async def init_db() -> None:
     """创建数据库表。在应用启动时由 lifespan 调用。
     APP_DEBUG=true 时会先 DROP ALL 再 CREATE，仅用于开发环境。"""
-    # 确保所有模型类被导入（触发 SQLModel 元数据注册）
+    # 启动期数据库偶发抖动较常见，这里增加有限次重试，避免一次网络抖动导致服务直接退出。
+    max_retries = DB_INIT_MAX_RETRIES
+    retry_delay_sec = DB_INIT_RETRY_DELAY_SEC
+
+    # 确保所有模型类被导入（触发 SQLModel 元数据注册）。
+    # 放在重试循环外避免重复导入带来的噪音。
     import_all_models()
 
-    if APP_DEBUG:
-        logger.warning("[Database] APP_DEBUG=true，将删除并重建所有表！")
+    async def _run_once() -> None:
+        if APP_DEBUG:
+            logger.warning("[Database] APP_DEBUG=true，将删除并重建所有表！")
+            async with engine.begin() as conn:
+                await conn.run_sync(SQLModel.metadata.drop_all)
         async with engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.drop_all)
+            await conn.run_sync(SQLModel.metadata.create_all)
 
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    logger.info("[Database] 数据库表初始化完成: db=%s, debug=%s", DB_NAME, APP_DEBUG)
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(
+                "[Database] 开始初始化数据库: db=%s debug=%s attempt=%s/%s",
+                DB_NAME,
+                APP_DEBUG,
+                attempt,
+                max_retries,
+            )
+            await _run_once()
+            logger.info(
+                "[Database] 数据库表初始化完成: db=%s, debug=%s, attempt=%s/%s",
+                DB_NAME,
+                APP_DEBUG,
+                attempt,
+                max_retries,
+            )
+            return
+        except OperationalError as exc:
+            mysql_code = _extract_mysql_error_code(exc)
+            if mysql_code is not None and mysql_code not in RETRYABLE_MYSQL_ERROR_CODES:
+                logger.error(
+                    "[Database] 初始化失败（非重试型错误）: db=%s mysql_code=%s error=%s",
+                    DB_NAME,
+                    mysql_code,
+                    exc,
+                )
+                raise
+            if attempt >= max_retries:
+                logger.exception(
+                    "[Database] 初始化失败且重试耗尽: db=%s attempts=%s error=%s",
+                    DB_NAME,
+                    max_retries,
+                    exc,
+                )
+                raise
+            logger.warning(
+                "[Database] 初始化失败，准备重试: db=%s attempt=%s/%s retry_after=%.1fs error=%s",
+                DB_NAME,
+                attempt,
+                max_retries,
+                retry_delay_sec,
+                exc,
+            )
+            await asyncio.sleep(retry_delay_sec)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

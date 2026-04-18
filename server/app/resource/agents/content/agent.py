@@ -5,8 +5,7 @@
 
 import asyncio
 import json
-import os
-import re
+import shlex
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -17,7 +16,9 @@ from langgraph.prebuilt import ToolNode
 
 
 from app.infra.logging import get_logger
+from app.config import CONTENT_AGENT_TIMEOUT_SECONDS, CONTENT_LLM_TIMEOUT
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
+from app.shared.json_utils import parse_first_json_object
 from app.tools.file_operator import save_to_workplace
 
 logger = get_logger(__name__)
@@ -27,29 +28,16 @@ class ContentState(BaseAgentState):
     current_step: str
     outline: str
     content: str
-
-
-_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
+    skill_context: str
 
 
 def _extract_json(text: str) -> dict:
-    # 先尝试解析标准 ```json ... ``` 代码块，兼容审查模型常见输出格式。
-    match = _FENCE_RE.search(text)
-    if match:
-        text = match.group(1).strip()
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    # 如果模型前后夹杂解释文字，这里再退一步抽取最外层 JSON 对象。
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start != -1 and end > start:
-        try:
-            return json.loads(text[start:end])
-        except json.JSONDecodeError:
-            pass
-    return {"passed": False, "feedback": "无法解析审查结果"}
+        return parse_first_json_object(text)
+    except Exception:
+        # 审查失败时允许走降级：上游会把它当作“不通过”并重试或放行
+        # 这里不使用正则抽取 JSON，避免通过 regex “抠 JSON”。
+        return {"passed": False, "feedback": "无法解析审查结果"}
 
 
 _REVIEW_PROMPT = (
@@ -80,6 +68,7 @@ class ContentWriter(BaseResourceAgent):
         "save_docx_file", "extract_pdf_text",
     ]
     skill_names = ["docx", "pdf"]
+    _TEXT_ASSET_EXTS = {".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".toml", ".ini", ".xml", ".html"}
     def __init__(self) -> None:
         super().__init__(
             name="ContentAgent",
@@ -92,7 +81,7 @@ class ContentWriter(BaseResourceAgent):
     def _workflow_timeout_seconds() -> int:
         """Allow enough time for outline + content + review, while staying configurable."""
         # 内容 Agent 需要经历“大纲 -> 正文 -> 审查”三轮，因此超时阈值单独拉高。
-        return int(os.getenv("CONTENT_AGENT_TIMEOUT_SECONDS", "360"))
+        return CONTENT_AGENT_TIMEOUT_SECONDS
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         ctx = ""
@@ -182,6 +171,14 @@ class ContentWriter(BaseResourceAgent):
             topic=state.get("topic", ""),
             user_profile="",
         )
+        skill_context = (state.get("skill_context") or "").strip()
+        if skill_context:
+            system_prompt += (
+                "\n\n## 文档技能资产（必须优先参考）\n"
+                "以下内容来自 docx/pdf skills 的指令、示例和可执行脚本，"
+                "写作时必须遵循其规范并吸收其结构风格：\n"
+                f"{skill_context}"
+            )
         return self._append_context_to_prompt(system_prompt, state)
 
     def _build_initial_human_message(self, state: Any) -> str:
@@ -190,12 +187,15 @@ class ContentWriter(BaseResourceAgent):
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
         # 统一走共享 save_to_workplace，保持所有资源文件的命名和保存位置一致。
-        return save_to_workplace(
-            sub_dir=sub_dir,
-            topic=topic,
-            content=content,
-            ext=ext,
+        result = save_to_workplace.invoke(
+            {
+                "sub_dir": sub_dir,
+                "topic": topic,
+                "content": content,
+                "ext": ext,
+            }
         )
+        return result if isinstance(result, str) else str(result)
 
     @staticmethod
     def _build_content_request(outline: str) -> str:
@@ -230,6 +230,208 @@ class ContentWriter(BaseResourceAgent):
         if cls._looks_like_refusal(text):
             return True
         return len(text) < 500
+
+    @staticmethod
+    def _parse_bullet_items(text: str) -> list[str]:
+        items: list[str] = []
+        for line in (text or "").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                item = stripped[2:].strip()
+                if item and item != "(none)":
+                    items.append(item)
+        return items
+
+    @staticmethod
+    def _trim_text(text: str, limit: int = 2500) -> str:
+        value = text or ""
+        if len(value) <= limit:
+            return value
+        return value[:limit] + f"\n...(已截断，共 {len(value)} 字符)"
+
+    async def _call_tool_safely(self, tool_name: str, payload: dict[str, Any]) -> str:
+        tool_map = {tool.name: tool for tool in (self._tools or [])}
+        tool_obj = tool_map.get(tool_name)
+        if not tool_obj:
+            logger.warning("[ContentAgent] 技能工具不存在: %s", tool_name)
+            return ""
+        try:
+            result = await tool_obj.ainvoke(payload)
+            if isinstance(result, str):
+                return result
+            return str(result)
+        except Exception as exc:
+            logger.warning("[ContentAgent] 技能工具调用失败: tool=%s error=%s", tool_name, exc)
+            return ""
+
+    async def _prepare_skill_context(self) -> tuple[str, dict[str, Any]]:
+        """主动加载技能指令、脚本、示例、参考资料和资产，避免只依赖 SKILL.md。"""
+        sections: list[str] = []
+        usage_report: dict[str, Any] = {"skills": {}}
+
+        for skill_name in self.skill_names:
+            skill_report: dict[str, Any] = {
+                "loaded_instruction": False,
+                "read_scripts": [],
+                "read_examples": [],
+                "read_references": [],
+                "read_assets": [],
+                "listed_scripts": [],
+            }
+
+            instruction_text = await self._call_tool_safely(
+                "skill",
+                {"name": skill_name, "include_resources": False},
+            )
+            instruction_excerpt = self._trim_text(instruction_text, limit=1800)
+            if instruction_excerpt:
+                skill_report["loaded_instruction"] = True
+
+            examples_listing = await self._call_tool_safely(
+                "skill_read",
+                {"name": skill_name, "kind": "examples", "relative_path": ""},
+            )
+            example_files = self._parse_bullet_items(examples_listing)[:3]
+            example_chunks: list[str] = []
+            for rel_path in example_files:
+                content = await self._call_tool_safely(
+                    "skill_read",
+                    {
+                        "name": skill_name,
+                        "kind": "examples",
+                        "relative_path": rel_path,
+                        "max_chars": 1600,
+                    },
+                )
+                if content:
+                    example_chunks.append(f"示例文件 `{rel_path}`:\n{self._trim_text(content, limit=1600)}")
+                    skill_report["read_examples"].append(rel_path)
+
+            reference_listing = await self._call_tool_safely(
+                "skill_read",
+                {"name": skill_name, "kind": "references", "relative_path": ""},
+            )
+            reference_files = self._parse_bullet_items(reference_listing)[:2]
+            reference_chunks: list[str] = []
+            for rel_path in reference_files:
+                content = await self._call_tool_safely(
+                    "skill_read",
+                    {
+                        "name": skill_name,
+                        "kind": "references",
+                        "relative_path": rel_path,
+                        "max_chars": 1500,
+                    },
+                )
+                if content:
+                    reference_chunks.append(f"参考文件 `{rel_path}`:\n{self._trim_text(content, limit=1500)}")
+                    skill_report["read_references"].append(rel_path)
+
+            asset_listing = await self._call_tool_safely(
+                "skill_read",
+                {"name": skill_name, "kind": "assets", "relative_path": ""},
+            )
+            asset_files = self._parse_bullet_items(asset_listing)[:2]
+            asset_chunks: list[str] = []
+            for rel_path in asset_files:
+                if Path(rel_path).suffix.lower() not in self._TEXT_ASSET_EXTS:
+                    continue
+                content = await self._call_tool_safely(
+                    "skill_read",
+                    {
+                        "name": skill_name,
+                        "kind": "assets",
+                        "relative_path": rel_path,
+                        "max_chars": 1200,
+                    },
+                )
+                if content:
+                    asset_chunks.append(f"资产文件 `{rel_path}`:\n{self._trim_text(content, limit=1200)}")
+                    skill_report["read_assets"].append(rel_path)
+
+            script_listing = await self._call_tool_safely("skill_run", {"name": skill_name, "script_path": ""})
+            script_files = self._parse_bullet_items(script_listing)[:8]
+            if script_files:
+                skill_report["listed_scripts"] = script_files
+
+            script_chunks: list[str] = []
+            for rel_path in script_files[:2]:
+                script_content = await self._call_tool_safely(
+                    "skill_read",
+                    {
+                        "name": skill_name,
+                        "kind": "scripts",
+                        "relative_path": rel_path,
+                        "max_chars": 1200,
+                    },
+                )
+                if script_content:
+                    script_chunks.append(f"脚本 `{rel_path}`:\n{self._trim_text(script_content, limit=1200)}")
+                    skill_report["read_scripts"].append(rel_path)
+
+            section_lines = [
+                f"### 技能 `{skill_name}`",
+                "- 调用方式: `skill / skill_read / skill_run`",
+            ]
+            if instruction_excerpt:
+                section_lines.append("指令要点:")
+                section_lines.append(instruction_excerpt)
+            if reference_chunks:
+                section_lines.append("参考资料:")
+                section_lines.extend(reference_chunks)
+            if example_chunks:
+                section_lines.append("示例参考:")
+                section_lines.extend(example_chunks)
+            if asset_chunks:
+                section_lines.append("模板/资产:")
+                section_lines.extend(asset_chunks)
+            if script_files:
+                section_lines.append("可执行脚本清单:")
+                section_lines.append("\n".join(f"- `{script}`" for script in script_files))
+            if script_chunks:
+                section_lines.append("脚本实现片段:")
+                section_lines.extend(script_chunks)
+
+            usage_report["skills"][skill_name] = skill_report
+            sections.append("\n".join(section_lines))
+
+        skill_context = self._trim_text("\n\n".join(sections), limit=10000)
+        return skill_context, usage_report
+
+    async def _run_skill_postprocess(
+        self,
+        docx_path: str | None,
+        pdf_path: str | None,
+    ) -> dict[str, str]:
+        """文档生成后调用技能脚本做基础校验。"""
+        postprocess: dict[str, str] = {}
+        if docx_path:
+            docx_output = await self._call_tool_safely(
+                "skill_run",
+                {
+                    "name": "docx",
+                    "script_path": "scripts/office/validate.py",
+                    "script_args": shlex.quote(docx_path),
+                    "timeout_sec": 90,
+                },
+            )
+            if docx_output:
+                postprocess["docx_validate"] = self._trim_text(docx_output, limit=2500)
+
+        if pdf_path:
+            pdf_output = await self._call_tool_safely(
+                "skill_run",
+                {
+                    "name": "pdf",
+                    "script_path": "scripts/check_fillable_fields.py",
+                    "script_args": shlex.quote(pdf_path),
+                    "timeout_sec": 60,
+                },
+            )
+            if pdf_output:
+                postprocess["pdf_check_fillable_fields"] = self._trim_text(pdf_output, limit=2000)
+
+        return postprocess
 
     async def _agent_node(self, state: Any) -> dict:
         messages = state.get("messages", [])
@@ -276,7 +478,7 @@ class ContentWriter(BaseResourceAgent):
             len(outline),
             feedback[:200],
         )
-        llm_timeout = int(os.getenv("CONTENT_LLM_TIMEOUT", "180"))
+        llm_timeout = CONTENT_LLM_TIMEOUT
         try:
             response = await asyncio.wait_for(
                 llm_with_tools.ainvoke(messages),
@@ -360,7 +562,13 @@ class ContentWriter(BaseResourceAgent):
         )
 
         try:
-            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            # 审查输出必须是 JSON：优先启用 JSON Mode（OpenAI 兼容 response_format）。
+            try:
+                review_llm = self.llm.bind(response_format={"type": "json_object"})
+                response = await review_llm.ainvoke([HumanMessage(content=prompt)])
+            except Exception as exc:
+                logger.warning("[ContentAgent] 审查 JSON Mode 不支持，fallback=plain error=%s", exc, exc_info=exc)
+                response = await self.llm.ainvoke([HumanMessage(content=prompt)])
             review = _extract_json(response.content)
             passed = review.get("passed", False)
             feedback = review.get("feedback", "")
@@ -412,6 +620,7 @@ class ContentWriter(BaseResourceAgent):
         await self._ensure_graph()
         start_time = time.perf_counter()
         timeout_seconds = self._workflow_timeout_seconds()
+        skill_context, skill_usage_report = await self._prepare_skill_context()
 
         initial_state: ContentState = {
             "major": major,
@@ -429,6 +638,7 @@ class ContentWriter(BaseResourceAgent):
             "retry_count": 0,
             "max_retries": 2,
             "error": None,
+            "skill_context": skill_context,
         }
 
         try:
@@ -504,6 +714,9 @@ class ContentWriter(BaseResourceAgent):
 
         success = bool(content)
         file_path = None
+        docx_path = None
+        pdf_path = None
+        skill_postprocess: dict[str, str] = {}
         if success:
             file_path = self._save_to_workplace("content", topic, content, "md")
             try:
@@ -519,6 +732,29 @@ class ContentWriter(BaseResourceAgent):
                 len(outline),
                 time.perf_counter() - start_time,
             )
+
+            # 额外生成 DOCX 和 PDF 格式
+            try:
+                from app.tools.document_executor import save_docx_file
+                docx_result = json.loads(save_docx_file.invoke({"title": topic, "content": content}))
+                docx_path = docx_result.get("file_path")
+                logger.info("[ContentAgent] DOCX 已生成: %s", docx_path)
+            except Exception:
+                logger.exception("[ContentAgent] DOCX 生成失败")
+
+            try:
+                from app.tools.document_executor import save_pdf_file
+                pdf_result = json.loads(save_pdf_file.invoke({"title": topic, "content": content}))
+                pdf_path = pdf_result.get("file_path")
+                logger.info("[ContentAgent] PDF 已生成: %s", pdf_path)
+            except Exception:
+                logger.exception("[ContentAgent] PDF 生成失败")
+
+            try:
+                skill_postprocess = await self._run_skill_postprocess(docx_path, pdf_path)
+            except Exception:
+                logger.exception("[ContentAgent] 技能后处理脚本执行失败")
+
         else:
             logger.error(
                 "[ContentAgent] 文档生成失败: outline_len=%d error=%r elapsed=%.2fs",
@@ -532,5 +768,9 @@ class ContentWriter(BaseResourceAgent):
             "content": content,
             "outline": outline,
             "file_path": file_path,
+            "docx_path": docx_path,
+            "pdf_path": pdf_path,
+            "skill_usage_report": skill_usage_report,
+            "skill_postprocess": skill_postprocess,
             "error": result.get("error") if not success else None,
         }

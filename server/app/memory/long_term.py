@@ -16,16 +16,24 @@ from app.infra.database import engine
 from app.infra.logging import get_logger
 from app.infra.models import UserMemory
 from app.memory.helpers import normalize_text, now
+from app.memory.memory_types import (
+    FACT_AGENT_MEMORY_TYPES,
+    MEMORY_TYPE_BACKGROUND,
+    MEMORY_TYPE_FACT,
+    MEMORY_TYPE_GOAL,
+    MEMORY_TYPE_PREFERENCE,
+    MEMORY_TYPE_WEAKNESS,
+)
 
 logger = get_logger(__name__)
 
 # 各类型记忆的默认数量上限，查询时按此限制返回条数
 DEFAULT_MEMORY_TYPE_LIMITS: dict[str, int] = {
-    "preference": 3,   # 用户偏好（如"喜欢图解说明"）
-    "goal": 2,         # 学习目标（如"准备数据结构考试"）
-    "weakness": 3,     # 薄弱点（如"递归理解困难"）
-    "fact": 3,         # 事实信息（如"正在学 Python"）
-    "background": 2,   # 背景信息（如"计算机专业大二"）
+    MEMORY_TYPE_PREFERENCE: 3,   # 用户偏好（如"喜欢图解说明"）
+    MEMORY_TYPE_GOAL: 2,         # 学习目标（如"准备数据结构考试"）
+    MEMORY_TYPE_WEAKNESS: 3,     # 薄弱点（如"递归理解困难"）
+    MEMORY_TYPE_FACT: 3,         # 事实信息（如"正在学 Python"）
+    MEMORY_TYPE_BACKGROUND: 2,   # 背景信息（如"计算机专业大二"）
 }
 
 
@@ -40,7 +48,7 @@ class LongTermMemoryService:
         """同类长期记忆的轻量合并策略（基于子串包含关系），避免重复堆叠。
         仅对 goal/preference/weakness 三类进行合并判断，fact 和 background 不合并。
         合并条件：归一化后的新文本是旧文本的子串，或反之。"""
-        if memory_type not in {"goal", "preference", "weakness"}:
+        if memory_type not in {MEMORY_TYPE_GOAL, MEMORY_TYPE_PREFERENCE, MEMORY_TYPE_WEAKNESS}:
             return False
         if not existing_text:
             return False
@@ -66,10 +74,10 @@ class LongTermMemoryService:
         3. 近似合并：如果同类记忆中存在语义近似的记录，保留较长内容并增加 evidence_count
         4. 新建记录：如果以上都不匹配，创建新的 UserMemory 记录
         """
-        normalized_type = (memory_type or "fact").strip().lower()
-        if normalized_type not in DEFAULT_MEMORY_TYPE_LIMITS:
+        normalized_type = (memory_type or MEMORY_TYPE_FACT).strip().lower()
+        if normalized_type not in FACT_AGENT_MEMORY_TYPES:
             logger.warning("[LongTermMemory] 未知 memory_type=%s, 已回退为 fact", memory_type)
-            normalized_type = "fact"
+            normalized_type = MEMORY_TYPE_FACT
 
         cleaned_content = (content or "").strip()
         normalized_content = normalize_text(cleaned_content)
@@ -155,7 +163,13 @@ class LongTermMemoryService:
         内部调用 get_user_context_memories 并将结果展平为单列表。"""
         memories_by_type = await self.get_user_context_memories(
             user_id=user_id,
-            per_type_limits={"fact": limit, "preference": limit, "goal": limit, "weakness": limit, "background": limit},
+            per_type_limits={
+                MEMORY_TYPE_FACT: limit,
+                MEMORY_TYPE_PREFERENCE: limit,
+                MEMORY_TYPE_GOAL: limit,
+                MEMORY_TYPE_WEAKNESS: limit,
+                MEMORY_TYPE_BACKGROUND: limit,
+            },
         )
         flat: list[UserMemory] = []
         for _, items in memories_by_type.items():
@@ -202,7 +216,7 @@ class LongTermMemoryService:
         grouped: dict[str, list[UserMemory]] = defaultdict(list)
         seen_by_type: dict[str, set[str]] = defaultdict(set)  # 每个类型已见过的归一化内容
         for item in memories:
-            m_type = item.memory_type or "fact"
+            m_type = item.memory_type or MEMORY_TYPE_FACT
             if m_type not in target_types:
                 continue
             normalized = normalize_text(item.content)

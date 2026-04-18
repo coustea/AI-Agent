@@ -6,7 +6,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import ssl
 from datetime import datetime
 from time import mktime
@@ -15,6 +14,7 @@ from wsgiref.handlers import format_date_time
 
 import websockets
 
+from app.config import SPARK_VISION_API_KEY, SPARK_VISION_API_SECRET, SPARK_VISION_APPID
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -50,9 +50,9 @@ class _WsParam:
 
 class SparkImageService:
     def __init__(self):
-        self.appid = os.getenv("SPARK_IMAGE_APPID", "")
-        self.api_key = os.getenv("SPARK_IMAGE_API_KEY", "")
-        self.api_secret = os.getenv("SPARK_IMAGE_API_SECRET", "")
+        self.appid = SPARK_VISION_APPID
+        self.api_key = SPARK_VISION_API_KEY
+        self.api_secret = SPARK_VISION_API_SECRET
         if not all([self.appid, self.api_key, self.api_secret]):
             logger.warning("[SparkImage] 凭据未完整配置，图片理解将回退到 GLM")
 

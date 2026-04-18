@@ -387,7 +387,7 @@ def save_docx_file(
             table_lines = []
             while i < len(lines) and lines[i].strip().startswith('|'):
                 row_text = lines[i].strip()
-                if not re.match(r'^\|[\s-|]+\|$', row_text):
+                if not re.match(r'^\|[\s\-]+\|$', row_text):
                     cells = [c.strip() for c in row_text.split('|')[1:-1]]
                     table_lines.append(cells)
                 i += 1
@@ -477,8 +477,257 @@ def extract_pdf_text(
         return f"PDF 提取失败: {e}"
 
 
+# ── PDF 生成 ───────────────────────────────────────────────────
+
+def _register_chinese_font():
+    """注册中文字体供 reportlab 使用。优先使用系统中文字体，回退到 CIDFont。"""
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+
+    font_name = "ChineseFont"
+    try:
+        pdfmetrics.getFont(font_name)
+        return font_name
+    except Exception:
+        pass
+
+    # 尝试注册 macOS 系统中文字体
+    import platform
+    if platform.system() == "Darwin":
+        mac_font_paths = [
+            "/System/Library/Fonts/STSong.ttf",
+            "/System/Library/Fonts/PingFang.ttc",
+            "/Library/Fonts/Arial Unicode.ttf",
+        ]
+        from reportlab.pdfbase.ttfonts import TTFont
+        for fp in mac_font_paths:
+            if Path(fp).exists():
+                try:
+                    pdfmetrics.registerFont(TTFont(font_name, fp))
+                    return font_name
+                except Exception:
+                    continue
+
+    # 回退：使用 reportlab 内置 CID 字体（STSong-Light）
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        return "STSong-Light"
+    except Exception:
+        pass
+
+    return "Helvetica"
+
+
+@tool("save_pdf_file")
+def save_pdf_file(
+    title: str,
+    content: str,
+) -> str:
+    """将 Markdown 内容转换为 PDF 文档并保存。
+
+    Args:
+        title: 文档标题，用于文件命名和文档内首标题
+        content: Markdown 格式的文档内容
+    """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib import colors
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, PageBreak,
+        Table, TableStyle, ListFlowable, ListItem,
+    )
+
+    font_name = _register_chinese_font()
+
+    PDF_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    filename = _safe_filename(title) + ".pdf"
+    filepath = PDF_OUTPUT_DIR / filename
+
+    doc = SimpleDocTemplate(
+        str(filepath),
+        pagesize=A4,
+        topMargin=25 * mm,
+        bottomMargin=25 * mm,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+    )
+
+    # 样式定义
+    base_size = 11
+    styles = {
+        "title": ParagraphStyle(
+            "Title", fontName=font_name, fontSize=22,
+            alignment=TA_CENTER, spaceAfter=12 * mm, spaceBefore=6 * mm,
+            leading=28,
+        ),
+        "h1": ParagraphStyle(
+            "H1", fontName=font_name, fontSize=18,
+            spaceBefore=8 * mm, spaceAfter=4 * mm, leading=24,
+            textColor=colors.HexColor("#1a1a1a"),
+        ),
+        "h2": ParagraphStyle(
+            "H2", fontName=font_name, fontSize=15,
+            spaceBefore=6 * mm, spaceAfter=3 * mm, leading=20,
+            textColor=colors.HexColor("#2c3e50"),
+        ),
+        "h3": ParagraphStyle(
+            "H3", fontName=font_name, fontSize=13,
+            spaceBefore=4 * mm, spaceAfter=2 * mm, leading=17,
+            textColor=colors.HexColor("#34495e"),
+        ),
+        "body": ParagraphStyle(
+            "Body", fontName=font_name, fontSize=base_size,
+            spaceBefore=2 * mm, spaceAfter=2 * mm, leading=17,
+            firstLineIndent=22,
+        ),
+        "code": ParagraphStyle(
+            "Code", fontName="Courier", fontSize=9,
+            spaceBefore=2 * mm, spaceAfter=2 * mm, leading=13,
+            backColor=colors.HexColor("#f5f5f5"),
+            borderColor=colors.HexColor("#e0e0e0"),
+            borderWidth=0.5,
+            borderPadding=4,
+        ),
+        "bullet": ParagraphStyle(
+            "Bullet", fontName=font_name, fontSize=base_size,
+            spaceBefore=1 * mm, spaceAfter=1 * mm, leading=17,
+            leftIndent=20, bulletIndent=8,
+        ),
+        "numbered": ParagraphStyle(
+            "Numbered", fontName=font_name, fontSize=base_size,
+            spaceBefore=1 * mm, spaceAfter=1 * mm, leading=17,
+            leftIndent=20, bulletIndent=8,
+        ),
+    }
+
+    story: list = []
+
+    # 文档标题
+    story.append(Paragraph(_escape_xml(title), styles["title"]))
+    story.append(Spacer(1, 4 * mm))
+
+    # 解析 Markdown 并转为 reportlab 元素
+    lines = content.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
+        if not line:
+            i += 1
+            continue
+
+        # 代码块
+        if line.startswith("```"):
+            code_lines = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code_lines.append(_escape_xml(lines[i]))
+                i += 1
+            code_text = "<br/>".join(code_lines) if code_lines else ""
+            if code_text:
+                story.append(Paragraph(code_text, styles["code"]))
+            i += 1
+            continue
+
+        # 标题
+        if line.startswith("#### "):
+            story.append(Paragraph(_escape_xml(line[5:].strip()), styles["h3"]))
+        elif line.startswith("### "):
+            story.append(Paragraph(_escape_xml(line[4:].strip()), styles["h2"]))
+        elif line.startswith("## "):
+            story.append(Paragraph(_escape_xml(line[3:].strip()), styles["h1"]))
+        elif line.startswith("# "):
+            story.append(Paragraph(_escape_xml(line[2:].strip()), styles["h1"]))
+        elif line.startswith("- ") or line.startswith("* "):
+            text = _format_inline_markdown(line[2:].strip())
+            story.append(Paragraph(f"• {text}", styles["bullet"]))
+        elif re.match(r"^\d+\.\s+", line):
+            text = re.sub(r"^\d+\.\s+", "", line)
+            text = _format_inline_markdown(text.strip())
+            story.append(Paragraph(text, styles["numbered"]))
+        elif line.startswith("---"):
+            story.append(Spacer(1, 3 * mm))
+        elif line.startswith("|") and "|" in line[1:]:
+            # 表格处理
+            table_lines = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                row_text = lines[i].strip()
+                if not re.match(r"^\|[\s\-]+\|$", row_text):
+                    cells = [_escape_xml(c.strip()) for c in row_text.split("|")[1:-1]]
+                    table_lines.append(cells)
+                i += 1
+            if table_lines:
+                cols = max(len(row) for row in table_lines)
+                # 补齐列数
+                for row in table_lines:
+                    while len(row) < cols:
+                        row.append("")
+                table = Table(table_lines, colWidths=[doc.width / cols] * cols)
+                table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f0f0")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
+                    ("FONTNAME", (0, 0), (-1, -1), font_name),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]))
+                story.append(table)
+            continue
+        else:
+            text = _format_inline_markdown(line)
+            story.append(Paragraph(text, styles["body"]))
+
+        i += 1
+
+    doc.build(story)
+
+    result = {
+        "file_path": str(filepath),
+        "title": title,
+    }
+    logger.info("[save_pdf_file] saved: path=%s", filepath)
+    return json.dumps(result, ensure_ascii=False)
+
+
+def _escape_xml(text: str) -> str:
+    """转义 XML 特殊字符，防止 reportlab Paragraph 解析报错。"""
+    return (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
+    )
+
+
+def _format_inline_markdown(text: str) -> str:
+    """将 Markdown 行内格式（粗体、行内代码）转为 reportlab XML 标记。
+
+    先提取 Markdown 标记片段，对其余部分做 XML 转义，再拼接标签。
+    """
+    parts: list[str] = []
+    # 按粗体和行内代码分片
+    pattern = re.compile(r"(\*\*(.+?)\*\*|`(.+?)`)")
+    last = 0
+    for m in pattern.finditer(text):
+        # 转义标记之前的普通文本
+        parts.append(_escape_xml(text[last:m.start()]))
+        if m.group(2):  # **bold**
+            parts.append(f"<b>{_escape_xml(m.group(2))}</b>")
+        elif m.group(3):  # `code`
+            parts.append(f'<font face="Courier" size="9">{_escape_xml(m.group(3))}</font>')
+        last = m.end()
+    parts.append(_escape_xml(text[last:]))
+    return "".join(parts)
+
+
 # ── 注册所有工具 ───────────────────────────────────────────────
 
 register(save_ppt_file)
 register(save_docx_file)
 register(extract_pdf_text)
+register(save_pdf_file)

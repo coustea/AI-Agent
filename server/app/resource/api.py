@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -18,6 +19,23 @@ from app.shared.response import HttpResponse
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _extract_visible_agents_from_plan(plan_result: str | None) -> set[str] | None:
+    """从 plan_result 中提取 visible_agents。
+
+    兼容旧数据：旧记录没有 visible_agents 字段时返回 None（表示不过滤）。
+    """
+    if not plan_result:
+        return None
+    try:
+        payload: dict[str, Any] = json.loads(plan_result)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    visible = payload.get("visible_agents")
+    if not isinstance(visible, list):
+        return None
+    return {str(item) for item in visible if str(item).strip()}
 
 
 @router.post("/generate")
@@ -63,25 +81,27 @@ async def list_resources(
     logger.info("[ResourceAPI] 查询资源列表: user_id=%s limit=%s", current_user.id, limit)
     resources = await resource_usecases.list_resources(session, current_user.id, limit)
 
-    items = [
-        {
-            "id": value.id,
-            "course": value.course,
-            "gap": value.gap,
-            "need": value.need,
-            "status": value.status,
-            "has_mindmap": value.mindmap_result is not None,
-            "has_content": value.content_result is not None,
-            "has_code": value.code_result is not None,
-            "has_quiz": value.quiz_result is not None,
-            "has_reading": value.reading_result is not None,
-            "has_image": value.image_result is not None,
-            "has_ppt": value.ppt_result is not None,
-            "has_video": value.video_result is not None,
-            "created_at": value.created_at,
-        }
-        for value in resources
-    ]
+    items: list[dict[str, Any]] = []
+    for value in resources:
+        visible = _extract_visible_agents_from_plan(value.plan_result)
+        items.append(
+            {
+                "id": value.id,
+                "course": value.course,
+                "gap": value.gap,
+                "need": value.need,
+                "status": value.status,
+                "has_mindmap": value.mindmap_result is not None and (visible is None or "mindmap" in visible),
+                "has_content": value.content_result is not None and (visible is None or "content" in visible),
+                "has_code": value.code_result is not None and (visible is None or "code" in visible),
+                "has_quiz": value.quiz_result is not None and (visible is None or "quiz" in visible),
+                "has_reading": value.reading_result is not None and (visible is None or "reading" in visible),
+                "has_image": value.image_result is not None and (visible is None or "image" in visible),
+                "has_ppt": value.ppt_result is not None and (visible is None or "ppt" in visible),
+                "has_video": value.video_result is not None and (visible is None or "video" in visible),
+                "created_at": value.created_at,
+            }
+        )
     return HttpResponse.success(data=items)
 
 
@@ -108,7 +128,10 @@ async def get_resource(
         "results": {},
         "created_at": resource.created_at,
     }
+    visible_agents = _extract_visible_agents_from_plan(resource.plan_result)
     for key in ("mindmap", "content", "code", "quiz", "reading", "image", "ppt", "video"):
+        if visible_agents is not None and key not in visible_agents:
+            continue
         raw = getattr(resource, f"{key}_result")
         if raw:
             try:

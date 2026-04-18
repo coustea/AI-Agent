@@ -2,10 +2,14 @@
 统一配置模块。
 
 从环境变量读取所有配置，提供 typed settings。
-load_dotenv() 由 main.py 统一调用，此模块不做 load_dotenv。
+此模块是唯一的 `.env` 读取入口。
 """
 
 import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _env(key: str, default: str = "") -> str:
@@ -14,6 +18,10 @@ def _env(key: str, default: str = "") -> str:
 
 def _env_int(key: str, default: int = 0) -> int:
     return int(os.getenv(key, str(default)))
+
+
+def _env_float(key: str, default: float = 0.0) -> float:
+    return float(os.getenv(key, str(default)))
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -35,6 +43,8 @@ DB_POOL_SIZE: int = _env_int("DB_POOL_SIZE", 10)
 DB_MAX_OVERFLOW: int = _env_int("DB_MAX_OVERFLOW", 20)
 DB_POOL_RECYCLE: int = _env_int("DB_POOL_RECYCLE", 1800)
 DB_POOL_TIMEOUT: int = _env_int("DB_POOL_TIMEOUT", 30)
+DB_INIT_MAX_RETRIES: int = _env_int("DB_INIT_MAX_RETRIES", 5)
+DB_INIT_RETRY_DELAY_SEC: float = _env_float("DB_INIT_RETRY_DELAY_SEC", 1.5)
 
 # JWT
 JWT_SECRET_KEY: str = _env("JWT_SECRET_KEY", "")
@@ -46,7 +56,12 @@ OPENAI_API_KEY: str = _env("OPENAI_API_KEY", "")
 OPENAI_MODEL: str = _env("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_BASE: str = _env("OPENAI_API_BASE", "")
 FAST_LLM_MODEL: str = _env("FAST_LLM_MODEL", "general")
+FAST_LLM_API_BASE: str = _env("FAST_LLM_API_BASE", OPENAI_API_BASE)
 FAST_LLM_API_KEY: str = _env("FAST_LLM_API_KEY", OPENAI_API_KEY)
+GLM_MODEL: str = _env("GLM_MODEL", "glm-4.7")
+DEEPSEEK_API_KEY: str = _env("DEEPSEEK_API_KEY", "")
+DEEPSEEK_API_BASE: str = _env("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
+DEEPSEEK_MODEL: str = _env("DEEPSEEK_MODEL", "deepseek-chat")
 
 # Vision
 GLM_VISION_MODEL: str = _env("GLM_VISION_MODEL", "glm-4v-flash")
@@ -55,9 +70,25 @@ GLM_API_KEY: str = _env("GLM_API_KEY", "")
 # Agent
 LLM_TIMEOUT: int = _env_int("LLM_TIMEOUT", 300)
 MAX_MESSAGE_HISTORY: int = _env_int("MAX_MESSAGE_HISTORY", 20)
+PROFILE_GATE_EVERY_N_ASSISTANT_TURNS: int = _env_int("PROFILE_GATE_EVERY_N_ASSISTANT_TURNS", 2)
+CONTENT_AGENT_TIMEOUT_SECONDS: int = _env_int("CONTENT_AGENT_TIMEOUT_SECONDS", 360)
+CONTENT_LLM_TIMEOUT: int = _env_int("CONTENT_LLM_TIMEOUT", 180)
+MULTIMODAL_DOC_ENABLED: bool = _env_bool("MULTIMODAL_DOC_ENABLED", True)
 
 # Debug
 APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
+LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
+
+# Image Generation (星火图片生成)
+SPARK_IMAGE_APPID: str = _env("SPARK_IMAGE_GENERATION_APPID", "")
+SPARK_IMAGE_API_KEY: str = _env("SPARK_IMAGE_GENERATION_API_KEY", "")
+SPARK_IMAGE_API_SECRET: str = _env("SPARK_IMAGE_GENERATION_APP_SECRET", "")
+SPARK_IMAGE_ENABLED: bool = _env_bool("SPARK_IMAGE_ENABLED", False)
+
+# Spark Vision (星火图片理解)
+SPARK_VISION_APPID: str = _env("SPARK_IMAGE_APPID", "")
+SPARK_VISION_API_KEY: str = _env("SPARK_IMAGE_API_KEY", "")
+SPARK_VISION_API_SECRET: str = _env("SPARK_IMAGE_API_SECRET", "")
 
 # Avatar (数字人)
 AVATAR_ASR_APP_ID: str = _env("AVATAR_ASR_APP_ID", "")
@@ -76,3 +107,8 @@ AVATAR_BRIDGE_PORT: int = _env_int("AVATAR_BRIDGE_PORT", 8765)
 ASR_SPARK_APP_ID: str = AVATAR_ASR_APP_ID or _env("ASR_SPARK_APP_ID", "")
 ASR_SPARK_API_KEY: str = AVATAR_ASR_API_KEY or _env("ASR_SPARK_API_KEY", "")
 ASR_SPARK_API_SECRET: str = AVATAR_ASR_API_SECRET or _env("ASR_SPARK_API_SECRET", "")
+
+# Paths
+WORKPLACE_DIR: str = _env("WORKPLACE_DIR", "workplace")
+LOGS_DIR: str = _env("LOGS_DIR", "logs")
+KNOWLEDGE_BASE_DIR: str = _env("KNOWLEDGE_BASE_DIR", "data")

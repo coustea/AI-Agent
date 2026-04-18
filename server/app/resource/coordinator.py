@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -15,6 +14,7 @@ from typing import Any, Callable
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.infra.llm import get_fast_llm
 
+from app.config import FAST_LLM_MODEL
 from app.infra.database import engine
 from app.infra.logging import get_logger
 from app.resource.events import AgentEventEmitter
@@ -149,7 +149,7 @@ class CoordinatorAgent:
         self.emitter = emitter
         self.profile_loader = profile_loader or ProfileSnapshotLoader()
         self.llm = get_fast_llm()
-        logger.info("[Coordinator] 初始化完成: planner_model=%s", os.getenv("FAST_LLM_MODEL", "general"))
+        logger.info("[Coordinator] 初始化完成: planner_model=%s", FAST_LLM_MODEL)
 
     async def run(
         self,
@@ -184,16 +184,24 @@ class CoordinatorAgent:
             allowed_agents=allowed_agents,
         )
         logger.info(
-            "[Coordinator] 资源计划已确定: core=%s enhancement=%s presentation=%s",
+            "[Coordinator] 资源计划已确定: core=%s enhancement=%s presentation=%s requested=%s execution=%s visible=%s hidden=%s",
             resource_plan.core_agents,
             resource_plan.enhancement_agents,
             resource_plan.presentation_agents,
+            resource_plan.requested_agents,
+            resource_plan.execution_agents,
+            resource_plan.visible_agents,
+            resource_plan.hidden_dependency_agents,
         )
 
         final: dict[str, dict] = {}
         context_bag: dict[str, dict] = {}
         completed_count = 0
         total_agents = len(resource_plan.ordered_agents)
+        visible_set = set(resource_plan.visible_agents)
+        hidden_set = set(resource_plan.hidden_dependency_agents)
+        visible_completed_count = 0
+        visible_total = len(resource_plan.visible_agents)
 
         for stage_key, stage_label, stage_agents in iter_plan_phases(resource_plan):
             if not stage_agents:
@@ -218,6 +226,8 @@ class CoordinatorAgent:
                     "queued",
                     f"等待进入 {stage_label}",
                     stage=stage_key,
+                    visible=agent_name in visible_set,
+                    dependency_only=agent_name in hidden_set,
                 )
 
             futures = [
@@ -228,6 +238,7 @@ class CoordinatorAgent:
                         profile=snapshot.as_agent_profile(),
                         personalized_context=personalized_context,
                         shared_memory=context_bag,
+                        visible_agents=visible_set,
                     )
                 )
                 for agent_name in stage_agents
@@ -247,11 +258,15 @@ class CoordinatorAgent:
                         result.get("error"),
                     )
                 completed_count += 1
+                if agent_name in visible_set:
+                    visible_completed_count += 1
                 await self.emitter.emit_bundle_update(
                     completed=completed_count,
                     total=total_agents,
                     core_ready=self._core_ready(resource_plan, final),
                     latest_agent=agent_name,
+                    visible_completed=visible_completed_count,
+                    visible_total=visible_total,
                 )
             logger.info("[Coordinator] 阶段结束: stage=%s completed=%s/%s", stage_key, completed_count, total_agents)
 
@@ -263,9 +278,14 @@ class CoordinatorAgent:
             logger.error("[Coordinator] 保存资源记录失败: %s", exc, exc_info=exc)
             await self.emitter.emit_agent_log("coordinator", f"资源包保存失败，将仅保留本次流式结果：{exc}")
 
-        logger.info("[Coordinator] 执行结束: user_id=%s completed_agents=%s", user_id, list(final.keys()))
+        logger.info("[Coordinator] 执行结束: user_id=%s completed_agents=%s visible_agents=%s", user_id, list(final.keys()), resource_plan.visible_agents)
         await self.emitter.emit_done("资源包构建完成")
-        return final
+        visible_final = {
+            agent: final[agent]
+            for agent in resource_plan.visible_agents
+            if agent in final
+        }
+        return visible_final
 
     async def _safe_load_profile(self, user_id: int) -> LearnerProfileSnapshot:
         try:
@@ -292,7 +312,14 @@ class CoordinatorAgent:
         allowed_agents: list[str] | None,
     ) -> ResourcePlan:
         base_plan = build_default_resource_plan(task, allowed_agents)
-        logger.info("[Coordinator] 默认资源计划已构建: ordered_agents=%s", base_plan.ordered_agents)
+        logger.info(
+            "[Coordinator] 默认资源计划已构建: ordered_agents=%s requested=%s execution=%s visible=%s hidden=%s",
+            base_plan.ordered_agents,
+            base_plan.requested_agents,
+            base_plan.execution_agents,
+            base_plan.visible_agents,
+            base_plan.hidden_dependency_agents,
+        )
         for parameters in base_plan.agent_parameters.values():
             # 这里先补齐画像增强参数，Planner 失败时也能继续执行默认流程。
             parameters["major"] = snapshot.major or parameters.get("major", "")
@@ -306,7 +333,9 @@ class CoordinatorAgent:
                 task=task,
                 snapshot=snapshot,
                 personalized_context=personalized_context,
-                allowed_agents=allowed_agents,
+                allowed_agents=base_plan.execution_agents,
+                requested_agents=base_plan.requested_agents,
+                hidden_dependency_agents=base_plan.hidden_dependency_agents,
             )
             logger.info("[Coordinator] Planner 规划成功，开始合并参数")
             return merge_planned_tasks_into_plan(base_plan, planned_tasks)
@@ -325,6 +354,8 @@ class CoordinatorAgent:
         snapshot: LearnerProfileSnapshot,
         personalized_context: PersonalizedTaskContext,
         allowed_agents: list[str] | None,
+        requested_agents: list[str] | None = None,
+        hidden_dependency_agents: list[str] | None = None,
     ) -> list[dict]:
         if not PLANNER_PROMPT_PATH.exists():
             raise PlanningError(f"Planner prompt 不存在: {PLANNER_PROMPT_PATH}")
@@ -332,7 +363,11 @@ class CoordinatorAgent:
         resource_scope = (
             "未指定，默认生成全部资源类型。"
             if allowed_agents is None
-            else f"仅允许以下资源类型: {', '.join(allowed_agents)}"
+            else (
+                f"执行范围(含依赖补全): {', '.join(allowed_agents)}；"
+                f"用户请求返回: {', '.join(requested_agents or [])}；"
+                f"依赖补全(默认不返回前端): {', '.join(hidden_dependency_agents or []) or '无'}"
+            )
         )
         prompt_text = PLANNER_PROMPT_PATH.read_text(encoding="utf-8")
         formatted = prompt_text.format(
@@ -351,10 +386,17 @@ class CoordinatorAgent:
             allowed_agents or "ALL",
             PLANNER_PROMPT_PATH,
         )
-        response = await self.llm.ainvoke(messages)
+        # Planner 输出要求是 JSON：优先启用 JSON Mode，减少 code fence/解释性文字导致的解析失败。
+        # 若后端不支持 response_format，则回退到普通调用（仍要求 prompt 输出 JSON）。
+        try:
+            planner_llm = self.llm.bind(response_format={"type": "json_object"})
+            response = await planner_llm.ainvoke(messages)
+        except Exception as exc:
+            logger.warning("[Coordinator] Planner JSON Mode 不支持，fallback=plain error=%s", exc, exc_info=exc)
+            response = await self.llm.ainvoke(messages)
         content = response.content.strip()
-        if content.startswith("```"):
-            lines = [line for line in content.splitlines() if not line.startswith("```")]
+        if content.lstrip().startswith("```"):
+            lines = [line for line in content.splitlines() if not line.strip().startswith("```")]
             content = "\n".join(lines).strip()
         try:
             plan_payload = json.loads(content)
@@ -375,16 +417,25 @@ class CoordinatorAgent:
         profile: dict,
         personalized_context: PersonalizedTaskContext,
         shared_memory: dict,
+        visible_agents: set[str] | None = None,
     ) -> dict:
         entry = get_agent_registry()[agent_name]
+        is_visible = True if visible_agents is None else (agent_name in visible_agents)
         logger.info(
-            "[Coordinator] Agent 启动: agent=%s stage=%s params_keys=%s shared_memory_keys=%s",
+            "[Coordinator] Agent 启动: agent=%s stage=%s visible=%s params_keys=%s shared_memory_keys=%s",
             agent_name,
             entry.stage,
+            is_visible,
             list(params.keys()),
             list(shared_memory.keys()),
         )
-        await self.emitter.emit_agent_status(agent_name, "running", f"{entry.role} 正在执行 {entry.desc}")
+        await self.emitter.emit_agent_status(
+            agent_name,
+            "running",
+            f"{entry.role} 正在执行 {entry.desc}",
+            visible=is_visible,
+            dependency_only=not is_visible,
+        )
 
         profile_summary = profile.get("profile_summary") or "暂无稳定画像摘要"
         await self.emitter.emit_agent_log(agent_name, f"已注入学习画像：{profile_summary}")
@@ -427,8 +478,22 @@ class CoordinatorAgent:
         if success:
             summary = entry.result_summary(result)
             logger.info("[Coordinator] Agent 执行成功: agent=%s summary=%s", agent_name, summary)
-            await self.emitter.emit_agent_status(agent_name, "success", f"生成完成：{summary}")
-            await self.emitter.emit_artifact_ready(agent_name, result)
+            await self.emitter.emit_agent_status(
+                agent_name,
+                "success",
+                f"生成完成：{summary}",
+                visible=is_visible,
+                dependency_only=not is_visible,
+            )
+            if is_visible:
+                await self.emitter.emit_artifact_ready(agent_name, result)
+            else:
+                await self.emitter.emit_agent_log(
+                    agent_name,
+                    "该资源属于依赖补全产物，已用于下游执行，默认不对前端返回。",
+                    visible=False,
+                    dependency_only=True,
+                )
         else:
             logger.warning(
                 "[Coordinator] Agent 执行完成但未成功: agent=%s error=%r",
@@ -439,6 +504,8 @@ class CoordinatorAgent:
                 agent_name,
                 "failed",
                 result.get("error", "生成失败"),
+                visible=is_visible,
+                dependency_only=not is_visible,
             )
         return result
 
@@ -449,6 +516,7 @@ class CoordinatorAgent:
         profile: dict,
         personalized_context: PersonalizedTaskContext,
         shared_memory: dict,
+        visible_agents: set[str] | None = None,
     ) -> tuple[str, dict]:
         result = await self._run_agent(
             agent_name=agent_name,
@@ -456,6 +524,7 @@ class CoordinatorAgent:
             profile=profile,
             personalized_context=personalized_context,
             shared_memory=shared_memory,
+            visible_agents=visible_agents,
         )
         return agent_name, result
 

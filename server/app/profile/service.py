@@ -93,7 +93,7 @@ class LearnerProfileRuntime:
     """画像运行时：触发画像构建和事实提取。"""
 
     async def build_profile(self, user_id: int, session_id: str | None = None) -> bool:
-        from app.chat.context import set_user_id
+        from app.shared.request_context import set_user_id
         set_user_id(user_id)
         agent = _build_profile_agent()
         return await agent.build_profile(user_id=user_id, session_id=session_id)

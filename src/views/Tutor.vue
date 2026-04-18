@@ -215,7 +215,7 @@
 import { ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
-  Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
+  Picture, Microphone, Document, ChatLineSquare,
   MagicStick, Fold, Expand, Plus, Delete, Close, Top,
   EditPen, Search, Discount
 } from '@element-plus/icons-vue'

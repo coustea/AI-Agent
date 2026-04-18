@@ -123,5 +123,3 @@
 
 ## 【用户上传的文件信息】
 {file_info_context}
-
-{skills_context}

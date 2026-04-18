@@ -41,6 +41,9 @@ class ReadingState(BaseAgentState):
 class ReadingAgent(BaseResourceAgent):
     """拓展阅读推荐 Agent。"""
 
+    # 推荐列表输出必须是 JSON，启用 JSON Mode 让模型直接输出结构化对象（不依赖正则提取）。
+    force_json_mode = True
+
     tool_names = [
         "save_to_workplace", "read_file_safe",
         "write_file", "edit_file", "append_file", "read_file_lines",

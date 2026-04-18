@@ -1,44 +1,36 @@
-import os
-from typing import Optional
-from pydantic import BaseModel, Field
-from langchain_core.messages import HumanMessage
+from typing import Optional, Annotated
+from pydantic import BaseModel, Field, ConfigDict
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 from app.memory.service import memory_service
 from app.infra.logging import get_logger
-from app.memory.helpers import normalize_text
-from app.infra.llm import get_llm
+from app.infra.llm import get_deepseek_llm
 
 logger = get_logger(__name__)
 
-PROFILE_UPDATE_TOKEN_THRESHOLD = 120
-PROFILE_SIGNIFICANT_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "learning_goal": ("目标", "计划", "考试", "考研", "冲刺", "通过", "下周", "期末", "证书"),
-    "preference": ("偏好", "喜欢", "不喜欢", "习惯", "更想", "更愿意", "风格", "案例", "图解"),
-    "weakness": ("不会", "薄弱", "总是错", "卡住", "困难", "看不懂", "做错", "没思路"),
-    "learning_pace": ("每天", "每周", "节奏", "进度", "突击", "复习", "时间不够", "拖延"),
-    "background": ("我是", "专业", "年级", "基础", "工作", "转行", "之前学过"),
-}
-PROFILE_NON_SIGNIFICANT_TEXTS = {"谢谢", "好的", "收到", "明白了", "再来一道题", "继续", "ok", "OK"}
+Score = Annotated[int, Field(ge=0, le=100)]
 
 
 class ProfileExtraction(BaseModel):
     """Structured profile fields returned by the profile LLM."""
+    model_config = ConfigDict(extra="forbid")
+
     knowledge_level: Optional[str] = Field(default=None, description="知识基础: 当前专业、学情边界")
-    knowledge_level_score: Optional[int] = Field(default=None, description="知识基础评分(0-100)")
+    knowledge_level_score: Optional[Score] = Field(default=None, description="知识基础评分(0-100)")
     cognitive_style: Optional[str] = Field(default=None, description="认知风格: 偏好视觉/案例/推导等")
-    cognitive_style_score: Optional[int] = Field(default=None, description="认知风格评分(0-100)")
+    cognitive_style_score: Optional[Score] = Field(default=None, description="认知风格评分(0-100)")
     error_pattern: Optional[str] = Field(default=None, description="易错点偏好: 逻辑盲区、常犯错误")
-    error_pattern_score: Optional[int] = Field(default=None, description="易错模式评分(0-100)")
+    error_pattern_score: Optional[Score] = Field(default=None, description="易错模式评分(0-100)")
     learning_goal: Optional[str] = Field(default=None, description="学习目标: 考试/兴趣/职业等")
-    learning_goal_score: Optional[int] = Field(default=None, description="学习目标评分(0-100)")
+    learning_goal_score: Optional[Score] = Field(default=None, description="学习目标评分(0-100)")
     learning_history: Optional[str] = Field(default=None, description="学习历史: 过去经验、相关背景")
-    learning_history_score: Optional[int] = Field(default=None, description="学习历史评分(0-100)")
+    learning_history_score: Optional[Score] = Field(default=None, description="学习历史评分(0-100)")
     interest_preference: Optional[str] = Field(default=None, description="兴趣偏好: 个人喜好、关注点")
-    interest_preference_score: Optional[int] = Field(default=None, description="兴趣偏好评分(0-100)")
+    interest_preference_score: Optional[Score] = Field(default=None, description="兴趣偏好评分(0-100)")
     learning_pace: Optional[str] = Field(default=None, description="学习节奏: 频率、时长、突击/平稳")
-    learning_pace_score: Optional[int] = Field(default=None, description="学习节奏评分(0-100)")
+    learning_pace_score: Optional[Score] = Field(default=None, description="学习节奏评分(0-100)")
     cognitive_level: Optional[str] = Field(default=None, description="认知水平: 深度思考、逻辑推演能力")
-    cognitive_level_score: Optional[int] = Field(default=None, description="认知水平评分(0-100)")
+    cognitive_level_score: Optional[Score] = Field(default=None, description="认知水平评分(0-100)")
     profile_summary: Optional[str] = Field(default=None, description="画像总结: 用一句话概括整体学习状态")
 
 PROFILE_BUILDER_PROMPT = """
@@ -82,43 +74,9 @@ PROFILE_BUILDER_PROMPT = """
    - 81-100: 优秀（深入掌握，能举一反三，有系统性思考）
 10. **评分依据**：评分应基于对话中展现的实际水平，而非主观臆测。如果某维度信息不足，请输出 null 而非猜测分数。
 11. **合并评分**：如果原有评分存在且对话中没有新的相关证据，保留原有评分。如有新证据，合理调整。
-"""
 
-PROFILE_FALLBACK_JSON_PROMPT = """
-你是学习画像建模引擎。请严格输出 JSON（不要 markdown 代码块），格式如下：
-{{
-  "knowledge_level": null 或 字符串,
-  "knowledge_level_score": null 或 0-100整数,
-  "cognitive_style": null 或 字符串,
-  "cognitive_style_score": null 或 0-100整数,
-  "error_pattern": null 或 字符串,
-  "error_pattern_score": null 或 0-100整数,
-  "learning_goal": null 或 字符串,
-  "learning_goal_score": null 或 0-100整数,
-  "learning_history": null 或 字符串,
-  "learning_history_score": null 或 0-100整数,
-  "interest_preference": null 或 字符串,
-  "interest_preference_score": null 或 0-100整数,
-  "learning_pace": null 或 字符串,
-  "learning_pace_score": null 或 0-100整数,
-  "cognitive_level": null 或 字符串,
-  "cognitive_level_score": null 或 0-100整数,
-  "profile_summary": null 或 字符串
-}}
-
-规则：
-1. 只输出 JSON；
-2. 无信息则字段给 null；
-3. 评分只能是 0-100 的整数或 null。
-
-原有学习画像：
-{current_profile}
-
-已有长期记忆：
-{memory_context}
-
-最新对话记录：
-{chat_history}
+# 输出格式要求（必须严格遵守）：
+{format_instructions}
 """
 
 
@@ -126,18 +84,11 @@ class ProfileBuilderAgent:
     def __init__(self, memory=memory_service):
         self.memory = memory
         self.module_name = "mentor"
-        llm = get_llm(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            temperature=0.1,
-        )
+        self.llm = get_deepseek_llm(temperature=0.1, streaming=False)
+        self.output_parser = PydanticOutputParser(pydantic_object=ProfileExtraction)
 
-        self.structured_llm = llm.with_structured_output(ProfileExtraction, method="function_calling")
-        self.raw_llm = llm
         self.prompt_template = ChatPromptTemplate.from_messages([
-            ("system", PROFILE_BUILDER_PROMPT)
-        ])
-        self.fallback_prompt_template = ChatPromptTemplate.from_messages([
-            ("system", PROFILE_FALLBACK_JSON_PROMPT)
+            ("human", PROFILE_BUILDER_PROMPT)
         ])
 
     @staticmethod
@@ -149,33 +100,10 @@ class ProfileBuilderAgent:
             .strip()
         )
 
-    @staticmethod
-    def _normalize_text(text: str) -> str:
-        return normalize_text(text)
-
-    @staticmethod
-    def _strip_json_fence(text: str) -> str:
-        cleaned = (text or "").strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.strip("`")
-            if cleaned.startswith("json"):
-                cleaned = cleaned[4:].strip()
-        return cleaned
-
-    @classmethod
-    def _coerce_profile_extraction(cls, payload) -> ProfileExtraction:
-        """将结构化/非结构化返回统一为 ProfileExtraction。"""
-        if isinstance(payload, ProfileExtraction):
-            return payload
-        if payload is None:
-            raise ValueError("empty structured output")
-        if isinstance(payload, str):
-            return ProfileExtraction.model_validate_json(cls._strip_json_fence(payload))
-        if isinstance(payload, dict):
-            return ProfileExtraction.model_validate(payload)
-        if hasattr(payload, "model_dump"):
-            return ProfileExtraction.model_validate(payload.model_dump())
-        raise TypeError(f"unsupported profile payload type: {type(payload).__name__}")
+    async def _invoke_structured(self, prompt) -> ProfileExtraction:
+        resp = await self.llm.ainvoke(prompt.to_messages())
+        raw_text = resp.content if isinstance(resp.content, str) else str(resp.content)
+        return self.output_parser.parse(raw_text)
 
     @staticmethod
     def _select_dialogue_messages(recent_msgs: list) -> list:
@@ -185,36 +113,6 @@ class ProfileBuilderAgent:
             for msg in recent_msgs
             if getattr(msg, "role", "") in {"user", "assistant"} and getattr(msg, "content", "").strip()
         ]
-
-    def should_trigger_profile_update(self, messages: list) -> bool:
-        """Use cheap heuristics to skip low-signal profile updates."""
-        if not messages:
-            return False
-
-        non_significant = {self._normalize_text(t) for t in PROFILE_NON_SIGNIFICANT_TEXTS}
-        candidate_texts: list[str] = []
-        for msg in messages[-8:]:
-            if msg.role != "user":
-                continue
-            cleaned = self._normalize_text(msg.content)
-            if not cleaned:
-                continue
-            if cleaned in non_significant:
-                continue
-            candidate_texts.append(cleaned)
-
-        if not candidate_texts:
-            return False
-
-        joined = "\n".join(candidate_texts)
-        for _, keywords in PROFILE_SIGNIFICANT_KEYWORDS.items():
-            if any(k.lower() in joined for k in keywords):
-                return True
-
-        return any(
-            ("我" in text and len(text) >= 20 and ("想" in text or "需要" in text or "不会" in text))
-            for text in candidate_texts
-        )
 
     async def _build_memory_context(self, user_id: int) -> str:
         """Provide existing memory context so profile updates stay abstract and non-duplicative."""
@@ -237,7 +135,7 @@ class ProfileBuilderAgent:
             for msg in filtered
         )
 
-    async def build_profile(self, user_id: int, session_id: str | None = None, force: bool = False) -> bool:
+    async def build_profile(self, user_id: int, session_id: str | None = None) -> bool:
         """Refresh the user's single global profile from recent mentor dialogue."""
         effective_session = session_id
         if effective_session is None:
@@ -266,10 +164,6 @@ class ProfileBuilderAgent:
             logger.info(f"[ProfileBuilder] 用户 {user_id} 暂无有效对话，无需更新。")
             return True
 
-        if not force and not self.should_trigger_profile_update(dialogue_msgs):
-            logger.info(f"[ProfileBuilder] 用户 {user_id} 最近对话缺少画像显著信息，跳过更新。")
-            return True
-
         logger.info(f"[ProfileBuilder] 找到用户 {user_id} 的 {len(dialogue_msgs)} 条有效近期对话，准备提取特征。")
         chat_history_str = self._build_chat_history(dialogue_msgs)
         memory_context = await self._build_memory_context(user_id)
@@ -289,21 +183,10 @@ class ProfileBuilderAgent:
             prompt = self.prompt_template.invoke({
                 "current_profile": current_profile_str,
                 "memory_context": memory_context,
-                "chat_history": chat_history_str
+                "chat_history": chat_history_str,
+                "format_instructions": self.output_parser.get_format_instructions(),
             })
-            try:
-                structured_payload = await self.structured_llm.ainvoke(prompt)
-                updated_data: ProfileExtraction = self._coerce_profile_extraction(structured_payload)
-            except Exception as structured_exc:
-                logger.warning("[ProfileBuilder] 结构化输出失败，回退 JSON 解析: %s", structured_exc)
-                fallback_prompt = self.fallback_prompt_template.invoke({
-                    "current_profile": current_profile_str,
-                    "memory_context": memory_context,
-                    "chat_history": chat_history_str,
-                })
-                fallback_resp = await self.raw_llm.ainvoke([HumanMessage(content=fallback_prompt.to_string())])
-                raw_text = fallback_resp.content if isinstance(fallback_resp.content, str) else str(fallback_resp.content)
-                updated_data = self._coerce_profile_extraction(raw_text)
+            updated_data = await self._invoke_structured(prompt)
             logger.info(f"[ProfileBuilder] LLM 提取成功 (user_id={user_id})")
         except Exception as e:
             logger.error(f"[ProfileBuilder] 画像提取与合并失败: {str(e)}")

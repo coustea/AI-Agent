@@ -11,6 +11,8 @@ AvatarAgent — 数字人独立 LangGraph 智能体
 
 from __future__ import annotations
 
+import asyncio
+
 from typing import Annotated, Any, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, AnyMessage
@@ -19,7 +21,9 @@ from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 from app.infra.logging import get_logger
-from app.infra.llm import get_llm, get_fast_llm
+from app.infra.llm import get_llm, get_fast_llm, get_glm_vision_llm
+from app.shared.agent_context import AgentContextService
+from app.shared.vision import build_vision_service
 
 logger = get_logger(__name__)
 
@@ -132,6 +136,8 @@ class AvatarAgent:
     def __init__(self) -> None:
         self.llm = get_llm(temperature=0.7, streaming=True)
         self.classifier_llm = get_fast_llm(temperature=0.0, max_tokens=100)
+        self.ctx_service = AgentContextService(module_name="avatar")
+        self.vision_service = build_vision_service(get_glm_vision_llm())
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -169,15 +175,17 @@ class AvatarAgent:
 
     async def chat_stream(
         self,
-        user_text: str,
         user_id: int,
         session_id: str,
-        profile_ctx: str,
-        memory_ctx: str,
-        chat_ctx: list,
+        user_message: str | None = None,
+        user_text: str | None = None,
+        profile_ctx: str | None = None,
+        memory_ctx: str | None = None,
+        chat_ctx: list[AnyMessage] | None = None,
         input_source: str = "text",
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
+        attachment_analysis: dict[str, Any] | None = None,
     ):
         """流式生成 — yield 事件字典
 
@@ -186,22 +194,53 @@ class AvatarAgent:
         - {"type": "tool_result", "data": {...}}
         - {"type": "tool_error", "data": "..."}
         """
+        text = (user_message if user_message is not None else user_text) or ""
+        image_urls = image_urls or []
+        file_urls = file_urls or []
+        attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
+
+        if chat_ctx is None:
+            _, recent_chat_context = await self.ctx_service.build_chat_ctx(
+                user_id=user_id,
+                session_id=session_id,
+                user_message=text,
+                image_urls=image_urls,
+                file_urls=file_urls,
+            )
+            chat_ctx = []
+        else:
+            recent_chat_context = self._format_chat_ctx(chat_ctx)
+
+        if profile_ctx is None or memory_ctx is None:
+            built_profile_ctx, built_memory_ctx = await asyncio.gather(
+                self.ctx_service.build_profile_ctx(user_id),
+                self.ctx_service.build_memory_ctx(user_id),
+            )
+            profile_ctx = profile_ctx if profile_ctx is not None else built_profile_ctx
+            memory_ctx = memory_ctx if memory_ctx is not None else built_memory_ctx
+
         # 构建技能上下文
         skills_ctx = self._build_skills_context()
+        analysis_hint = (
+            "\n\n## 附件并行预分析结果（上传后自动生成，可直接参考）\n"
+            f"{attachment_analysis_context}\n"
+            if attachment_analysis_context
+            else ""
+        )
 
         # 填充 prompt
         system_prompt = AVATAR_SYSTEM_PROMPT.format(
             profile_context=profile_ctx or "暂无",
             fact_context=memory_ctx or "暂无",
-            recent_chat_context=self._format_chat_ctx(chat_ctx),
-        )
+            recent_chat_context=recent_chat_context,
+        ) + analysis_hint
         tool_system_prompt = AVATAR_TOOL_SYSTEM_PROMPT.format(
             profile_context=profile_ctx or "暂无",
             fact_context=memory_ctx or "暂无",
-            recent_chat_context=self._format_chat_ctx(chat_ctx),
+            recent_chat_context=recent_chat_context,
             skills_context=skills_ctx,
             file_info_context=self._build_file_ctx(image_urls, file_urls),
-        )
+        ) + analysis_hint
 
         initial_state = AvatarState(
             user_id=user_id,
@@ -212,7 +251,7 @@ class AvatarAgent:
             route="",
             system_prompt=system_prompt,
             tool_system_prompt=tool_system_prompt,
-            messages=[HumanMessage(content=user_text)],
+            messages=[HumanMessage(content=text)],
         )
 
         full_response = ""
@@ -323,18 +362,22 @@ class AvatarAgent:
 
     async def _vision_answer_node(self, state: AvatarState) -> dict:
         """视觉回答路径 — 使用 GLM 多模态"""
-        from app.chat.services.vision import VisionService
-        vision_service = VisionService()
-        messages = [SystemMessage(content=state["system_prompt"])] + state["messages"]
-        response = await vision_service.analyze(messages, state.get("image_urls", []))
-        return {"messages": [AIMessage(content=response)]}
+        messages = state.get("messages") or []
+        user_msg = ""
+        for m in reversed(messages):
+            if isinstance(m, HumanMessage):
+                user_msg = m.content
+                break
+        result = await self.vision_service.analyze_images(state.get("image_urls") or [], user_msg)
+        text = str(result.get("analysis_text", "")).strip() or "我看完图片了，我们继续。"
+        return {"messages": [AIMessage(content=text)]}
 
     async def _agent_node(self, state: AvatarState) -> dict:
         """工具调用路径"""
         tools = _lazy_import_tools()
         llm_with_tools = self.llm.bind_tools(tools) if tools else self.llm
 
-        from app.chat.context import set_user_id, set_session_id
+        from app.shared.request_context import set_user_id, set_session_id
         set_user_id(state["user_id"])
         set_session_id(state["session_id"])
 

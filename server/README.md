@@ -210,7 +210,7 @@ SPARK_IMAGE_API_SECRET=your_secret
 说明：
 
 - `DB_PASSWORD` 必填，未配置时应用启动会失败
-- `.env` 由 `app/main.py` 启动时通过 `load_dotenv()` 加载
+- `.env` 由 `app/config.py` 统一通过 `load_dotenv()` 加载
 - `APP_DEBUG=true` 会在启动时先 DROP 再 CREATE 表，仅用于开发
 
 ## 启动

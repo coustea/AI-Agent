@@ -2,43 +2,18 @@
 资源 Agent 通用校验工具。
 
 提供跨 Agent 的共享校验辅助函数：
-- extract_json_from_text: 从 LLM 响应中提取 JSON
+- parse_first_json_value: 从 LLM 响应中解析 JSON（不使用正则）
 - extract_last_ai_content: 提取最后一条 AI 消息内容
 - make_validation_result: 构建标准校验返回字典
 - validate_json_response: JSON + Pydantic 统一校验流程
 """
 
 import json
-import re
 from typing import Any
 
 from langchain_core.messages import AIMessage, AnyMessage
 
-# 匹配 fenced code block 中的 JSON（```json ... ``` 或 ``` ... ```）
-_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
-
-
-def extract_json_from_text(text: str) -> str:
-    """从文本中提取 JSON 内容，支持 fenced code block 和裸 JSON。
-
-    Args:
-        text: 可能包含 JSON 的原始文本
-
-    Returns:
-        提取到的 JSON 字符串，未匹配则返回原文本
-    """
-    # 先去掉首尾空白，避免 fenced code block 前后换行影响匹配。
-    text = text.strip()
-    match = _FENCE_RE.search(text)
-    if match:
-        # 优先提取 ```json ... ``` 里的内容，因为这是最常见的模型输出格式。
-        return match.group(1).strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start != -1 and end > start:
-        # 如果没有 code fence，就退化为提取最外层 JSON 对象。
-        return text[start:end]
-    return text
+from app.shared.json_utils import parse_first_json_value
 
 
 def extract_last_ai_content(
@@ -123,12 +98,10 @@ def validate_json_response(
         feedback = "未生成内容"
         return False, feedback, None, make_validation_result(False, retry_count, feedback)
 
-    # 先把模型输出里的 JSON 片段剥离出来，再进入反序列化。
-    json_text = extract_json_from_text(raw)
-
     try:
-        data = json.loads(json_text)
-    except json.JSONDecodeError as e:
+        # 不使用正则剥离 fenced code block；由 parse_first_json_value 负责兼容常见输出形态。
+        data = parse_first_json_value(raw)
+    except Exception as e:
         feedback = f"JSON 解析失败: {e}。请确保输出合法 JSON。"
         return False, feedback, None, make_validation_result(False, retry_count, feedback)
 

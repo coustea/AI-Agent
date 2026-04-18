@@ -85,6 +85,10 @@ class ResourcePlan(BaseModel):
     core_agents: list[str] = Field(default_factory=list)
     enhancement_agents: list[str] = Field(default_factory=list)
     presentation_agents: list[str] = Field(default_factory=list)
+    requested_agents: list[str] = Field(default_factory=list)
+    execution_agents: list[str] = Field(default_factory=list)
+    visible_agents: list[str] = Field(default_factory=list)
+    hidden_dependency_agents: list[str] = Field(default_factory=list)
     dependencies: dict[str, list[str]] = Field(default_factory=dict)
     agent_parameters: dict[str, dict[str, Any]] = Field(default_factory=dict)
 

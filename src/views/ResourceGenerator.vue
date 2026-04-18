@@ -1,806 +1,530 @@
 <template>
-  <div class="agent-studio-container">
-    <aside class="control-panel">
-      <div class="panel-header">
-        <div class="logo-box">
-          <el-icon><Cpu /></el-icon>
-        </div>
-        <div class="header-titles">
-          <h2>多智能体资源工坊</h2>
-          <p>Multi-Agent Resource Studio</p>
+  <div class="resource-generator-layout" :class="{ 'sidebar-collapsed': isSidebarCollapsed }">
+    
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo-box"><el-icon class="brand-icon"><Cpu /></el-icon></div>
+        <div class="brand-title">
+          <h2>资源编排中枢</h2>
+          <span class="sub-title">Multi-Agent Studio</span>
         </div>
       </div>
 
-      <div class="form-scroll-area">
-        <el-form :model="taskForm" layout="vertical" class="studio-form">
-          <div class="input-block">
-            <label>学习课题 / 课程名 <span class="req">*</span></label>
-            <el-input v-model="taskForm.course" placeholder="例如：计算机网络 TCP/IP" size="large" clearable />
-          </div>
+      <div class="sidebar-form">
+        <el-form label-position="top" class="custom-form">
+          <el-form-item>
+            <template #label><div class="custom-label"><el-icon><CollectionTag /></el-icon> 学习课题 <span class="req-star">*</span></div></template>
+            <el-input v-model="form.topic" placeholder="例如：TCP/IP 三次握手" clearable class="modern-input" />
+          </el-form-item>
 
-          <div class="input-block">
-            <label>知识瓶颈 / 痛点盲区 <span class="req">*</span></label>
-            <el-input
-                v-model="taskForm.gap"
-                type="textarea"
-                :rows="4"
-                placeholder="例如：对三次握手的状态转移过程理解模糊，总是记不住边界条件和异常处理。"
-                resize="none"
-            />
-          </div>
+          <el-form-item>
+            <template #label><div class="custom-label"><el-icon><Aim /></el-icon> 知识盲区 <span class="req-star">*</span></div></template>
+            <el-input v-model="form.gap" type="textarea" :rows="3" placeholder="例如：总是记不住状态流转过程" resize="none" class="modern-input" />
+          </el-form-item>
 
-          <div class="input-block">
-            <label>资源生成偏好</label>
-            <div class="preference-grid">
-              <div
-                  v-for="opt in needOptions" :key="opt.value"
-                  class="pref-card"
-                  :class="{ active: taskForm.need === opt.value }"
-                  @click="taskForm.need = opt.value"
-              >
-                <div class="pref-title">{{ opt.label }}</div>
-                <div class="pref-desc">{{ opt.desc }}</div>
-                <div class="active-indicator" v-if="taskForm.need === opt.value"></div>
+          <div class="divider-with-text"><span>智能体集群配置</span></div>
+
+          <el-form-item>
+            <template #label>
+              <div class="checkbox-header">
+                <div class="custom-label"><el-icon><Setting /></el-icon> 定制生成项</div>
+                <el-button type="primary" link size="small" @click="selectAll">一键全选</el-button>
               </div>
+            </template>
+            
+            <div class="custom-agent-grid">
+              <label v-for="agent in agentConfig" :key="agent.id" class="agent-select-card" :class="{ 'is-active': form.selected.includes(agent.id) }">
+                <input type="checkbox" v-model="form.selected" :value="agent.id" hidden />
+                <div class="card-icon"><el-icon><component :is="agent.icon" /></el-icon></div>
+                <div class="card-name">{{ agent.name }}</div>
+                <div class="active-indicator"><el-icon><Check /></el-icon></div>
+              </label>
             </div>
-          </div>
+          </el-form-item>
 
-          <div class="input-block">
-            <label>自定义 Agent 指令 (选填)</label>
-            <el-input v-model="taskForm.extra" placeholder="例如：尽量用通俗的比喻，结合前端开发场景" size="large" clearable />
-          </div>
         </el-form>
       </div>
 
-      <div class="panel-action">
-        <button
-            class="primary-btn"
-            :disabled="isGenerating || !taskForm.course || !taskForm.gap"
-            @click="startGeneration"
-        >
-          <span v-if="!isGenerating" class="btn-content"><el-icon><Monitor /></el-icon> 唤醒 Agent 集群并生成</span>
-          <span v-else class="btn-content"><el-icon class="is-loading"><Loading /></el-icon> 智能体运转中...</span>
+      <div class="sidebar-footer">
+        <button class="magic-submit-btn" :disabled="!canGenerate || isGenerating" @click="startSimulatedWorkflow">
+          <span class="btn-text">
+            <el-icon v-if="!isGenerating" class="mr-2"><VideoPlay /></el-icon>
+            <el-icon v-else class="mr-2 is-loading"><Loading /></el-icon>
+            {{ isGenerating ? '系统调度运转中...' : '启动智能体工作流' }}
+          </span>
         </button>
       </div>
     </aside>
 
-    <main class="workspace">
-      <transition name="fade-slide" mode="out-in">
+    <main class="main-workspace">
+      <div class="expand-trigger" v-if="isSidebarCollapsed" @click="isSidebarCollapsed = false" title="修改需求">
+        <el-icon><ArrowRightBold /></el-icon>
+      </div>
 
-        <div v-if="stage === 'idle'" class="view-layer idle-view" key="idle">
-          <div class="idle-graphic">
-            <div class="pulse-ring"></div>
-            <el-icon class="center-icon"><Position /></el-icon>
-          </div>
-          <h3>系统矩阵已就绪，等待调度指令</h3>
-          <p class="idle-desc">输入学习目标后，Coordinator Agent 将进行意图识别与任务拆解<br/>驱动 8 大专职智能体分阶段构建个性化、多模态学习资源。</p>
-          <div class="agent-roster">
-            <div class="roster-badge" v-for="agent in Object.values(agentMeta)" :key="agent.id">
-              <el-icon><component :is="agent.icon" /></el-icon> {{ agent.role }}
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="stage === 'working'" class="view-layer working-view" key="working">
-          <div class="working-top">
-            <h3 class="monitor-title"><span class="live-dot"></span> 集群协同网络 (DAG) 实时监控</h3>
-            <div class="coordinator-status">
-              <el-icon><Guide /></el-icon>
-              <span class="typewriter-text">{{ coordinatorMsg }}</span>
-            </div>
-            <div class="bundle-progress" v-if="bundleProgress.total > 0">
-              <span>资源进度 {{ bundleProgress.completed }}/{{ bundleProgress.total }}</span>
-              <span v-if="bundleProgress.coreReady">核心资源已就绪</span>
+      <div class="workspace-scroll-container">
+        
+        <section class="workflow-section">
+          <div class="section-header">
+            <h3><el-icon><Connection /></el-icon> 实时协同执行流</h3>
+            <div class="progress-info" v-if="isGenerating || progress === 100">
+              <span>构建总进度: {{ progress }}%</span>
+              <el-progress :percentage="progress" :show-text="false" class="top-progress" />
             </div>
           </div>
 
-          <div class="dag-topology">
-            <div v-for="(phase, idx) in dagPhases" :key="phase.name" class="topology-stage">
-              <div class="stage-tag">STAGE 0{{ idx + 1 }} // {{ phase.label }}</div>
-              <div class="stage-nodes">
-                <div
-                    v-for="agentId in phase.agents" :key="agentId"
-                    class="white-node"
-                    :class="agentStates[agentId]?.status"
-                >
-                  <div class="node-icon-box">
-                    <el-icon v-if="agentStates[agentId]?.status === 'done'" class="text-green"><Select /></el-icon>
-                    <el-icon v-else-if="agentStates[agentId]?.status === 'error'" class="text-red"><CloseBold /></el-icon>
-                    <el-icon v-else-if="agentStates[agentId]?.status === 'active'" class="is-loading text-primary"><Loading /></el-icon>
-                    <el-icon v-else><component :is="agentMeta[agentId].icon" /></el-icon>
+          <div class="network-topology" v-if="form.selected.length > 0">
+            
+            <div class="coordinator-zone">
+              <div class="agent-workflow-node brain-node" :class="coordinatorState.status">
+                <div class="node-header">
+                  <div class="n-title"><el-icon class="n-icon"><Guide /></el-icon> Coordinator (主控大脑)</div>
+                  <el-tag size="small" :type="getStatusTagType(coordinatorState.status)" effect="dark">{{ getStatusText(coordinatorState.status) }}</el-tag>
+                </div>
+                
+                <div class="node-animation-window" v-if="coordinatorState.status === 'running'">
+                  <div class="human-action-text text-primary">
+                    <el-icon class="is-loading"><Loading /></el-icon><span>{{ coordinatorState.currentAction }}</span>
                   </div>
-                  <div class="node-text">
-                    <div class="n-name">{{ agentMeta[agentId].role }}</div>
-                    <div class="n-log">{{ agentStates[agentId]?.log }}</div>
-                  </div>
+                  <div class="skeleton-builder brain-skeleton"><div class="sk-line w-full"></div><div class="sk-line w-80"></div></div>
+                </div>
+
+                <div class="node-summary" v-if="coordinatorState.status === 'done'">
+                  <div class="success-circle"><el-icon><Select /></el-icon></div><span>意图拆解完毕，数据流推送中</span>
                 </div>
               </div>
-              <div class="stage-arrow" v-if="idx < dagPhases.length - 1">
-                <el-icon><ArrowDownBold /></el-icon>
-              </div>
             </div>
-          </div>
 
-          <!-- 实时产出预览：每个 Agent 完成后立即展示结果 -->
-          <div v-if="completedAgentIds.length > 0" class="live-results-section">
-            <div class="live-results-header">
-              <h3><el-icon class="text-green"><Select /></el-icon> 实时产出预览 <span>({{ completedAgentIds.length }}/{{ totalAgentCount }})</span></h3>
+            <div class="tree-trunk" v-if="dynamicExecutionQueue.length > 0">
+               <div class="trunk-flow" :class="{'is-flowing': isGenerating && coordinatorState.status === 'done'}"></div>
             </div>
-            <el-tabs v-model="liveTab" class="modern-tabs">
-              <el-tab-pane name="mindmap" v-if="results.mindmap?.success">
-                <template #label><el-icon><Share /></el-icon> 知识图谱</template>
-                <div class="res-card">
-                  <el-alert title="知识拓扑结构生成完毕" type="success" :closable="false" show-icon style="margin-bottom:1rem;" />
-                  <div class="code-wrapper">
-                    <pre><code>{{ results.mindmap.agent_output }}</code></pre>
+
+            <div class="execution-zone">
+              <div class="worker-column" v-for="(col, colIndex) in chunkedExecutionQueue" :key="'col-' + colIndex">
+                
+                <div class="worker-row slide-fade-enter" v-for="(agentId, rowIndex) in col" :key="agentId">
+                  <div class="spine-segment" :class="{ 'is-first': rowIndex === 0, 'is-last': rowIndex === col.length - 1, 'is-only': col.length === 1 }"></div>
+                  <div class="branch-segment">
+                    <div class="branch-flow" :class="{'is-flowing': nodesState[agentId]?.status === 'running'}"></div>
+                    <el-icon class="branch-arrow is-active"><CaretRight /></el-icon>
                   </div>
-                </div>
-              </el-tab-pane>
 
-              <el-tab-pane name="content" v-if="results.content?.success">
-                <template #label><el-icon><Document /></el-icon> 核心精讲</template>
-                <div class="res-card markdown-body" v-html="parseMarkdown(results.content.content)"></div>
-              </el-tab-pane>
-
-              <el-tab-pane name="code" v-if="results.code?.success">
-                <template #label><el-icon><Cpu /></el-icon> 实战案例</template>
-                <div class="res-card">
-                  <div class="lang-tag"><el-icon><Tools /></el-icon> 适配语言: <strong>{{ results.code.detected_language.toUpperCase() }}</strong></div>
-                  <div class="markdown-body" v-html="parseMarkdown(results.code.content)"></div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="quiz" v-if="results.quiz?.success">
-                <template #label><el-icon><Edit /></el-icon> 专项题库</template>
-                <div class="quiz-masonry">
-                  <div class="quiz-box" v-for="(q, i) in results.quiz.questions" :key="i">
-                    <div class="q-top">
-                      <span class="q-num">Q{{ Number(i) + 1 }}</span>
-                      <span class="q-diff" :class="q.difficulty">{{ q.difficulty.toUpperCase() }}</span>
-                      <span class="q-type">{{ q.question_type }}</span>
+                  <div class="agent-workflow-node worker-node" :class="nodesState[agentId]?.status || 'idle'">
+                    <div class="node-header">
+                      <div class="n-title"><el-icon class="n-icon"><component :is="getAgentMeta(agentId).icon" /></el-icon>{{ getAgentMeta(agentId).name }}</div>
+                      <el-tag size="small" :type="getStatusTagType(nodesState[agentId]?.status)">{{ getStatusText(nodesState[agentId]?.status) }}</el-tag>
                     </div>
-                    <div class="q-stem">{{ q.stem }}</div>
-                    <div class="q-opts" v-if="q.options">
-                      <div class="opt-row" v-for="(opt, oIdx) in q.options" :key="oIdx">{{ opt }}</div>
-                    </div>
-                    <details class="q-reveal">
-                      <summary>解析与答案</summary>
-                      <div class="q-answer-box">
-                        <p class="ans-correct"><strong>正确答案：</strong>{{ q.answer }}</p>
-                        <p class="ans-exp"><strong>深度解析：</strong>{{ q.explanation }}</p>
+                    
+                    <div class="node-animation-window" v-if="nodesState[agentId]?.status === 'running'">
+                      <div class="human-action-text">
+                        <el-icon class="is-loading"><Loading /></el-icon><span>{{ nodesState[agentId]?.currentAction }}</span>
                       </div>
-                    </details>
+                      <div class="skeleton-builder"><div class="sk-line w-full"></div><div class="sk-line w-60"></div></div>
+                    </div>
+
+                    <div class="node-summary" v-if="nodesState[agentId]?.status === 'done'">
+                      <el-icon class="text-success" style="font-size: 1.2rem;"><CircleCheckFilled /></el-icon><span>资源构建成功</span>
+                    </div>
                   </div>
                 </div>
-              </el-tab-pane>
 
-              <el-tab-pane name="reading" v-if="results.reading?.success">
-                <template #label><el-icon><Collection /></el-icon> 拓展阅读</template>
-                <div class="reading-masonry">
-                  <div class="book-card" v-for="(book, i) in results.reading.recommendations" :key="i">
-                    <div class="b-type">{{ book.type }}</div>
-                    <h4 class="b-title">{{ book.title }}</h4>
-                    <div class="b-author"><el-icon><User /></el-icon> {{ book.author_or_source }}</div>
-                    <div class="b-abstract">{{ book.abstract }}</div>
-                    <div class="b-relevance"><strong>💡 推荐理由：</strong>{{ book.relevance }}</div>
-                  </div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="ppt" v-if="results.ppt?.success">
-                <template #label><el-icon><Document /></el-icon> 演示讲稿</template>
-                <div class="res-card markdown-body" v-html="parseMarkdown(results.ppt.content || results.ppt.outline || '')"></div>
-              </el-tab-pane>
-
-              <el-tab-pane name="image" v-if="results.image?.success">
-                <template #label><el-icon><Monitor /></el-icon> 教学配图</template>
-                <div class="res-card">
-                  <div v-if="results.image.images?.length" class="image-grid">
-                    <img
-                      v-for="(url, i) in results.image.images"
-                      :key="i"
-                      :src="url"
-                      alt="教学配图"
-                      class="generated-image"
-                    />
-                  </div>
-                  <div class="markdown-body" v-html="parseMarkdown(results.image.content)"></div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="video" v-if="results.video?.success">
-                <template #label><el-icon><VideoPlay /></el-icon> 教学视频</template>
-                <div class="res-card">
-                  <div v-if="results.video.videos?.length" class="video-links">
-                    <a
-                      v-for="(url, i) in results.video.videos"
-                      :key="i"
-                      :href="url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="video-link"
-                    >
-                      视频资源 {{ Number(i) + 1 }}
-                    </a>
-                  </div>
-                  <div class="markdown-body" v-html="parseMarkdown(results.video.content)"></div>
-                </div>
-              </el-tab-pane>
-            </el-tabs>
-          </div>
-
-          <div class="terminal-window">
-            <div class="term-header">
-              <div class="mac-dots"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
-              <div class="term-title">System Log - Execution Trace</div>
-            </div>
-            <div class="term-body" ref="terminalBody">
-              <div v-for="(log, idx) in systemLogs" :key="idx" class="term-line">
-                <span class="t-time">[{{ log.time }}]</span>
-                <span class="t-source" :class="log.source">{{ log.source }}</span>
-                <span class="t-msg" :class="log.type">{{ log.msg }}</span>
               </div>
             </div>
+            
           </div>
-        </div>
+          <el-empty v-else description="请在左侧勾选需要生成的资源" :image-size="100" />
+        </section>
 
-        <div v-else-if="stage === 'done'" class="view-layer result-view" key="done">
-          <div class="result-hero">
-            <div class="hero-left">
-              <h2>🎉 您的专属资源包已装载完毕</h2>
-              <p>知识提取与资源构建成功，已沉淀至您的学习档案。</p>
-            </div>
-            <el-button class="reset-btn" @click="stage = 'idle'" :icon="RefreshRight">重置并发起新任务</el-button>
+        <section class="results-section" v-if="completedAgentsQueue.length > 0">
+          <div class="section-header">
+            <h3><el-icon><FolderOpened /></el-icon> 专属资源产出 ({{ completedAgentsQueue.length }})</h3>
           </div>
-
-          <div class="result-tabs-container">
-            <el-tabs v-model="activeTab" class="modern-tabs">
-              <el-tab-pane name="content" v-if="results.content?.success">
-                <template #label><el-icon><Document /></el-icon> 核心精讲</template>
-                <div class="res-card markdown-body" v-html="parseMarkdown(results.content.content)"></div>
-              </el-tab-pane>
-
-              <el-tab-pane name="mindmap" v-if="results.mindmap?.success">
-                <template #label><el-icon><Share /></el-icon> 知识图谱</template>
-                <div class="res-card">
-                  <el-alert title="知识拓扑结构生成完毕" type="success" :closable="false" show-icon style="margin-bottom:1rem;" />
-                  <div class="code-wrapper">
-                    <pre><code>{{ results.mindmap.agent_output }}</code></pre>
-                  </div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="code" v-if="results.code?.success">
-                <template #label><el-icon><Cpu /></el-icon> 实战案例</template>
-                <div class="res-card">
-                  <div class="lang-tag"><el-icon><Tools /></el-icon> 适配语言: <strong>{{ results.code.detected_language.toUpperCase() }}</strong></div>
-                  <div class="markdown-body" v-html="parseMarkdown(results.code.content)"></div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="quiz" v-if="results.quiz?.success">
-                <template #label><el-icon><Edit /></el-icon> 专项题库</template>
-                <div class="quiz-masonry">
-                  <div class="quiz-box" v-for="(q, i) in results.quiz.questions" :key="i">
-                    <div class="q-top">
-                      <span class="q-num">Q{{ Number(i) + 1 }}</span>
-                      <span class="q-diff" :class="q.difficulty">{{ q.difficulty.toUpperCase() }}</span>
-                      <span class="q-type">{{ q.question_type }}</span>
-                    </div>
-                    <div class="q-stem">{{ q.stem }}</div>
-                    <div class="q-opts" v-if="q.options">
-                      <div class="opt-row" v-for="(opt, oIdx) in q.options" :key="oIdx">{{ opt }}</div>
-                    </div>
-                    <details class="q-reveal">
-                      <summary>解析与答案</summary>
-                      <div class="q-answer-box">
-                        <p class="ans-correct"><strong>正确答案：</strong>{{ q.answer }}</p>
-                        <p class="ans-exp"><strong>深度解析：</strong>{{ q.explanation }}</p>
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="reading" v-if="results.reading?.success">
-                <template #label><el-icon><Collection /></el-icon> 拓展阅读</template>
-                <div class="reading-masonry">
-                  <div class="book-card" v-for="(book, i) in results.reading.recommendations" :key="i">
-                    <div class="b-type">{{ book.type }}</div>
-                    <h4 class="b-title">{{ book.title }}</h4>
-                    <div class="b-author"><el-icon><User /></el-icon> {{ book.author_or_source }}</div>
-                    <div class="b-abstract">{{ book.abstract }}</div>
-                    <div class="b-relevance"><strong>💡 推荐理由：</strong>{{ book.relevance }}</div>
-                  </div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="ppt" v-if="results.ppt?.success">
-                <template #label><el-icon><Document /></el-icon> 演示讲稿</template>
-                <div class="res-card markdown-body" v-html="parseMarkdown(results.ppt.content || results.ppt.outline || '')"></div>
-              </el-tab-pane>
-
-              <el-tab-pane name="image" v-if="results.image?.success">
-                <template #label><el-icon><Monitor /></el-icon> 教学配图</template>
-                <div class="res-card">
-                  <div v-if="results.image.images?.length" class="image-grid">
-                    <img
-                      v-for="(url, i) in results.image.images"
-                      :key="i"
-                      :src="url"
-                      alt="教学配图"
-                      class="generated-image"
-                    />
-                  </div>
-                  <div class="markdown-body" v-html="parseMarkdown(results.image.content)"></div>
-                </div>
-              </el-tab-pane>
-
-              <el-tab-pane name="video" v-if="results.video?.success">
-                <template #label><el-icon><VideoPlay /></el-icon> 教学视频</template>
-                <div class="res-card">
-                  <div v-if="results.video.videos?.length" class="video-links">
-                    <a
-                      v-for="(url, i) in results.video.videos"
-                      :key="i"
-                      :href="url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="video-link"
-                    >
-                      视频资源 {{ Number(i) + 1 }}
-                    </a>
-                  </div>
-                  <div class="markdown-body" v-html="parseMarkdown(results.video.content)"></div>
-                </div>
-              </el-tab-pane>
-            </el-tabs>
+          <div class="results-grid">
+            <ResourceCard 
+              v-for="agentId in completedAgentsQueue" 
+              :key="'res-' + agentId"
+              :agent-id="agentId"
+              :meta="getAgentMeta(agentId)"
+              :topic="form.topic"
+              :gap="form.gap"
+              :result-data="results[agentId]"
+              @preview="handlePreview"
+            />
           </div>
-        </div>
+        </section>
 
-      </transition>
+      </div>
     </main>
+
+    <!-- 全局预览弹窗 -->
+    <el-dialog
+      v-model="previewDialogVisible"
+      :title="previewData?.title ? `预览 - ${previewData.title}` : '预览内容'"
+      width="75%"
+      top="8vh"
+      class="custom-preview-dialog"
+      destroy-on-close
+    >
+      <div v-if="previewData" class="preview-dialog-body">
+        
+        <template v-if="previewData.hasFile">
+          <video 
+            v-if="previewData.fileCategory === 'video'" 
+            :src="previewData.fileUrl" 
+            controls 
+            class="full-media"
+          ></video>
+          
+          <div v-else-if="previewData.fileCategory === 'image'" class="flex-center">
+            <el-image :src="previewData.fileUrl" fit="contain" class="full-media" />
+          </div>
+          
+          <iframe 
+            v-else-if="['html', 'pdf'].includes(previewData.fileCategory)" 
+            :src="previewData.fileUrl" 
+            class="full-iframe" 
+            frameborder="0"
+          ></iframe>
+          
+          <div v-else-if="['ppt', 'json', 'markdown', 'other'].includes(previewData.fileCategory)" class="placeholder-view">
+            <el-icon class="huge-icon" :class="previewData.fileCategory === 'ppt' ? 'text-ppt' : 'text-slate'"><DataBoard v-if="previewData.fileCategory === 'ppt'"/><Document v-else/></el-icon>
+            <p class="placeholder-text">{{ previewData.fileCategory === 'ppt' ? 'PPT 演示文稿' : (previewData.fileCategory.toUpperCase() + ' 文件') }}暂不支持直接内嵌预览</p>
+            <el-button type="primary" size="large" @click="downloadUrl(previewData.fileUrl, previewData.title)">
+              <el-icon class="mr-2"><Download /></el-icon> 立即下载文件
+            </el-button>
+          </div>
+        </template>
+
+        <template v-else>
+          <div 
+            v-if="['content', 'reading', 'ppt'].includes(previewData.agentId) || (typeof previewData.resultData === 'string' && previewData.resultData.includes('#'))" 
+            class="markdown-body custom-md" 
+            v-html="parseMarkdown(previewData.resultData?.content || previewData.resultData?.outline || previewData.resultData)"
+          ></div>
+          
+          <div v-else-if="previewData.agentId === 'code'" class="code-view">
+            <pre><code>{{ extractCode(previewData.resultData?.content) || previewData.resultData }}</code></pre>
+          </div>
+          
+          <div v-else-if="previewData.agentId === 'quiz'" class="quiz-view">
+            <div class="quiz-item" v-for="(q, i) in (previewData.resultData?.questions || [])" :key="i">
+              <div class="q-stem"><strong>Q{{ i+1 }}:</strong> {{ q.stem }}</div>
+              <div class="q-options" v-if="q.options">
+                <div v-for="(opt, oi) in q.options" :key="oi" class="q-opt">{{ opt }}</div>
+              </div>
+              <div class="q-answer" v-if="q.answer"><strong>答案:</strong> {{ q.answer }}</div>
+              <div class="q-analysis" v-if="q.analysis"><strong>解析:</strong> {{ q.analysis }}</div>
+            </div>
+            <pre v-if="!previewData.resultData?.questions" class="code-view"><code>{{ formatJson(previewData.resultData) }}</code></pre>
+          </div>
+          
+          <div v-else class="code-view">
+            <pre><code>{{ formatJson(previewData.resultData) }}</code></pre>
+          </div>
+        </template>
+        
+      </div>
+    </el-dialog>
+    
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
-import 'github-markdown-css/github-markdown-light.css'
-import { generateResources } from '@/api/ai'
+import { ref, reactive, computed } from 'vue'
 import {
-  Cpu, Document, Edit, Collection, VideoPlay, Monitor, Position, Tools,
-  Loading, Select, CloseBold, Share, User, Guide, ArrowDownBold, RefreshRight
+  Cpu, Document, Edit, Collection, VideoPlay, Monitor, Guide, Setting,
+  Share, Connection, FolderOpened, Select, ArrowRightBold, CaretRight, Loading, CircleCheckFilled, CollectionTag, Aim, Check, Download, DataBoard
 } from '@element-plus/icons-vue'
 
-// ======================= 数据定义 =======================
-const stage = ref<'idle' | 'working' | 'done'>('idle')
+import ResourceCard from '@/components/ResourceCard.vue'
+import { marked } from 'marked'
+import 'github-markdown-css/github-markdown-light.css'
+
+// ================= 数据定义 =================
+const isSidebarCollapsed = ref(false)
 const isGenerating = ref(false)
+const progress = ref(0)
+const results = ref<Record<string, any>>({}) 
 
-const taskForm = reactive({ course: '', gap: '', need: 'review', extra: '' })
-
-const needOptions = [
-  { value: 'exam', label: '考前突击', desc: '侧重考点与易错题分析' },
-  { value: 'review', label: '课后复习', desc: '侧重知识图解与脉络梳理' },
-  { value: 'deep', label: '深度探究', desc: '侧重底层原理与工程拓展' }
-]
-
-// ======================= 智能体与 DAG 配置 =======================
-const dagPhases = [
-  { name: 'core_generating', label: '核心资源生成', agents: ['content', 'mindmap', 'quiz'] },
-  { name: 'enhancement_generating', label: '增强资源补充', agents: ['reading', 'code', 'image'] },
-  { name: 'presentation_generating', label: '演示资源生成', agents: ['ppt'] },
-  { name: 'video_generating', label: '视频资源生成', agents: ['video'] },
-]
-
-const agentMeta: Record<string, any> = {
-  'content': { id: 'content', role: 'Content Agent', icon: Document, desc: '撰写深度知识精讲' },
-  'mindmap': { id: 'mindmap', role: 'Mindmap Agent', icon: Share, desc: '构建核心知识拓扑图' },
-  'quiz':    { id: 'quiz', role: 'Quiz Agent', icon: Edit, desc: '生成分层练习题库' },
-  'reading': { id: 'reading', role: 'Reading Agent', icon: Collection, desc: '检索拓展阅读与论文' },
-  'code':    { id: 'code', role: 'Code Agent', icon: Cpu, desc: '编写可运行实操案例' },
-  'ppt':     { id: 'ppt', role: 'PPT Agent', icon: Document, desc: '生成演示文稿与讲稿' },
-  'image':   { id: 'image', role: 'Image Agent', icon: Monitor, desc: '生成教学配图与图解资源' },
-  'video':   { id: 'video', role: 'Video Agent', icon: VideoPlay, desc: '生成教学视频脚本与分镜' }
-}
-
-// 代理实时状态
-const agentStates = ref<Record<string, { status: 'wait'|'active'|'done'|'error', log: string }>>({})
-
-// ======================= 监控与日志 =======================
-const coordinatorMsg = ref('等待系统唤醒...')
-interface LogEntry { time: string; source: string; msg: string; type: 'info'|'success'|'error' }
-const systemLogs = ref<LogEntry[]>([])
-const terminalBody = ref<HTMLElement | null>(null)
-
-const pushLog = (source: string, msg: string, type: 'info'|'success'|'error' = 'info') => {
-  const time = new Date().toLocaleTimeString([], { hour12: false })
-  systemLogs.value.push({ time, source, msg, type })
-  nextTick(() => {
-    if (terminalBody.value) terminalBody.value.scrollTop = terminalBody.value.scrollHeight
-  })
-}
-
-// ======================= 结果数据 =======================
-const results = ref<Record<string, any>>({})
-const activeTab = ref('content')
-const liveTab = ref('mindmap')
-const bundleProgress = ref({ completed: 0, total: 0, coreReady: false })
-
-// 已完成的 agent id 列表（实时更新）
-const completedAgentIds = computed(() => {
-  return Object.keys(results.value).filter(k => results.value[k]?.success)
+const form = reactive({
+  topic: 'TCP/IP 三次握手',
+  gap: '总是记不住状态流转过程',
+  selected: ['content', 'mindmap', 'quiz', 'code', 'image', 'ppt'] // 默认多选几个以测试分列效果
 })
-const totalAgentCount = computed(() => Object.keys(agentMeta).length)
 
-// ======================= 核心业务逻辑 =======================
-const resetStates = () => {
-  systemLogs.value = []
-  results.value = {}
-  coordinatorMsg.value = '系统初始化...'
-  bundleProgress.value = { completed: 0, total: 0, coreReady: false }
-  Object.keys(agentMeta).forEach(key => {
-    agentStates.value[key] = { status: 'wait', log: '等待分配计算资源...' }
-  })
+// 🌟 动态排序队列 (决定前端展示顺序)
+const dynamicExecutionQueue = ref<string[]>([])
+const completedAgentsQueue = ref<string[]>([])
+
+const agentConfig = [
+  { id: 'content', name: '核心精讲', icon: Document },
+  { id: 'mindmap', name: '思维导图', icon: Share },
+  { id: 'quiz', name: '专项题库', icon: Edit },
+  { id: 'code', name: '实操代码', icon: Cpu },
+  { id: 'image', name: '教学配图', icon: Monitor },
+  { id: 'reading', name: '拓展阅读', icon: Collection },
+  { id: 'ppt', name: '演示讲稿', icon: Document },
+  { id: 'video', name: '视频脚本', icon: VideoPlay }
+]
+
+const friendlyActions: Record<string, string[]> = {
+  coordinator: ['应用全局编排指令...', '诊断知识盲区特征...', '拆解任务并下发...'],
+  content: ['正在重组知识脉络...', '结合痛点润色细节...'],
+  mindmap: ['提炼核心层级...', '构建关联拓扑...'],
+  quiz:    ['检索大纲...', '定制专项习题...'],
+  code:    ['分析逻辑边界...', '编写实操样例...'],
+  image:   ['提炼结构特征...', '渲染核心图表...'],
+  reading: ['匹配学术库...', '提取论文摘要...'],
+  ppt:     ['拆分演示切片...', '生成演讲备注...'],
+  video:   ['转化多模态解说...', '编排分镜时间...']
 }
 
-const startGeneration = async () => {
-  if (!taskForm.course || !taskForm.gap) return
+interface NodeState { status: 'idle' | 'running' | 'done'; currentAction: string; }
+const coordinatorState = ref<NodeState>({ status: 'idle', currentAction: '' })
+const nodesState = ref<Record<string, NodeState>>({})
 
-  isGenerating.value = true
-  stage.value = 'working'
-  resetStates()
-  pushLog('SYSTEM', 'Initiating Mult-Agent Workflow...', 'info')
+// ================= 计算属性 =================
+const canGenerate = computed(() => form.topic.trim() !== '' && form.selected.length > 0)
+const getAgentMeta = (id: string) => agentConfig.find(a => a.id === id)!
 
+// 🌟 核心：计算每列 4 个元素的二维数组
+const chunkedExecutionQueue = computed(() => {
+  const chunkSize = 4
+  const chunks = []
+  for (let i = 0; i < dynamicExecutionQueue.value.length; i += chunkSize) {
+    chunks.push(dynamicExecutionQueue.value.slice(i, i + chunkSize))
+  }
+  return chunks
+})
+
+const selectAll = () => { form.selected = agentConfig.map(a => a.id) }
+const getStatusTagType = (status?: string) => {
+  if (status === 'running') return 'primary'
+  if (status === 'done') return 'success'
+  return 'info'
+}
+const getStatusText = (status?: string) => {
+  if (status === 'running') return 'AI 处理中'
+  if (status === 'done') return '已产出'
+  return '等待调度'
+}
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// ================= 预览功能 =================
+const previewDialogVisible = ref(false)
+const previewData = ref<any>(null)
+
+const handlePreview = (data: any) => {
+  previewData.value = data
+  previewDialogVisible.value = true
+}
+
+const parseMarkdown = (text: string) => {
+  if (!text) return ''
+  return marked.parse(text)
+}
+
+const extractCode = (text: string) => {
+  if (!text) return ''
+  return text.replace(/```[\w]*\n/g, '').replace(/```/g, '')
+}
+
+const formatJson = (data: any) => {
   try {
-    await new Promise<void>((resolve, reject) => {
-      generateResources(
-        {
-          learning_task: { ...taskForm }
-        },
-        (event) => handleSSEEvent(event),
-        resolve,
-        reject,
-      )
-    })
-  } catch (err: any) {
-    ElMessage.error(`请求异常: ${err.message}`)
-    pushLog('SYSTEM', `连接中断: ${err.message}`, 'error')
-    isGenerating.value = false
-    stage.value = 'idle'
+    return JSON.stringify(data, null, 2)
+  } catch (e) {
+    return String(data)
   }
 }
 
-// 解析 SSE 事件
-const handleSSEEvent = (event: any) => {
-  const { type, stage, status, message, agent, log, artifact, completed, total, core_ready, latest_agent } = event
-
-  if (type === 'workflow') {
-    coordinatorMsg.value = message || stage
-    pushLog('COORDINATOR', message || stage, 'info')
-  }
-  else if (type === 'agent_status') {
-    const mappedStatus = status === 'running'
-      ? 'active'
-      : status === 'success'
-        ? 'done'
-        : status === 'failed'
-          ? 'error'
-          : 'wait'
-
-    if (agentStates.value[agent]) {
-      agentStates.value[agent].status = mappedStatus
-      agentStates.value[agent].log = message || '状态更新'
-    }
-    pushLog(String(agent).toUpperCase(), String(message || status), mappedStatus === 'error' ? 'error' : mappedStatus === 'done' ? 'success' : 'info')
-  }
-  else if (type === 'agent_log') {
-    if (agentStates.value[agent]) {
-      agentStates.value[agent].log = log
-    }
-  }
-  else if (type === 'artifact_ready') {
-    results.value[agent] = artifact
-    liveTab.value = agent
-    pushLog(String(agent).toUpperCase(), '资源已可展示', 'success')
-  }
-  else if (type === 'bundle_update') {
-    bundleProgress.value = {
-      completed: Number(completed || 0),
-      total: Number(total || 0),
-      coreReady: Boolean(core_ready)
-    }
-    if (latest_agent) {
-      pushLog('SYSTEM', `当前进度 ${completed}/${total}，最新完成: ${latest_agent}`, 'info')
-    }
-  }
-  else if (type === 'done') {
-    pushLog('SYSTEM', String(message || 'All agent pipelines finished.'), 'success')
-    setTimeout(() => {
-      isGenerating.value = false
-      stage.value = 'done'
-      determineInitialTab()
-    }, 1200)
-  }
+const downloadUrl = (url: string, title: string) => {
+  const link = document.createElement('a')
+  link.href = url
+  link.target = '_blank'
+  link.download = title || 'download'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
-// ======================= 辅助呈现逻辑 =======================
-const parseMarkdown = (raw: string) => {
-  if (!raw) return ''
-  return marked.parse(raw)
-}
+// ================= 动画流模拟 (乱序发车) =================
+const startSimulatedWorkflow = async () => {
 
-const determineInitialTab = () => {
-  const priority = ['content', 'mindmap', 'quiz', 'reading', 'code', 'image', 'ppt', 'video']
-  for (const p of priority) {
-    if (results.value[p] && results.value[p].success) {
-      activeTab.value = p
-      break
-    }
+  isSidebarCollapsed.value = true
+  isGenerating.value = true
+  progress.value = 0
+  
+  // 清空队列，准备迎接新任务
+  dynamicExecutionQueue.value = []
+  completedAgentsQueue.value = []
+  coordinatorState.value = { status: 'idle', currentAction: '' }
+  
+  form.selected.forEach(id => { nodesState.value[id] = { status: 'idle', currentAction: '' } })
+
+  const totalTasks = form.selected.length + 1
+  let completedCount = 0
+
+  // 1. 大脑首先启动
+  coordinatorState.value.status = 'running'
+  const coordinatorActions = friendlyActions.coordinator || ['应用全局编排指令...']
+  for (const action of coordinatorActions) {
+    coordinatorState.value.currentAction = action
+    await sleep(600 + Math.random() * 400)
   }
+  coordinatorState.value.status = 'done'
+  completedCount++
+  progress.value = Math.floor((completedCount / totalTasks) * 100)
+
+  // 2. 模拟后端随机发送启动信号
+  const workerPromises = form.selected.map(async (agentId) => {
+    // 随机延迟 0.5s ~ 2.5s 启动，模拟网络先后顺序
+    await sleep(500 + Math.random() * 2000) 
+
+    // 后端信号到达！将它 push 到动态展示队列，前端会立即在一列中渲染出它
+    if (!dynamicExecutionQueue.value.includes(agentId)) {
+      dynamicExecutionQueue.value.push(agentId)
+    }
+    
+    if (!nodesState.value[agentId]) {
+      nodesState.value[agentId] = { status: 'idle', currentAction: '' }
+    }
+    const currentNode = nodesState.value[agentId]
+    currentNode.status = 'running'
+    const actions = friendlyActions[agentId] || ['正在构建资源...']
+    
+    for (const actionText of actions) {
+      currentNode.currentAction = actionText
+      await sleep(1000 + Math.random() * 600) 
+    }
+    
+    currentNode.status = 'done'
+    
+    // 干完活了，进入完成队列，底部的卡片瀑布流会立即呈现
+    if (!completedAgentsQueue.value.includes(agentId)) {
+      completedAgentsQueue.value.push(agentId)
+    }
+
+    completedCount++
+    progress.value = Math.floor((completedCount / totalTasks) * 100)
+  })
+
+  await Promise.all(workerPromises)
+  isGenerating.value = false
 }
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+/* ================= 全局与左侧 (保持精美原样) ================= */
+.resource-generator-layout { display: flex; height: calc(100vh - 60px); background-color: #F8FAFC; overflow: hidden; transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+.sidebar { width: 400px; background-color: #FFFFFF; border-right: 1px solid #E2E8F0; display: flex; flex-direction: column; z-index: 20; transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 4px 0 24px rgba(0,0,0,0.02); }
+.resource-generator-layout.sidebar-collapsed .sidebar { margin-left: -400px; }
+.sidebar-header { padding: 28px 24px; border-bottom: 1px solid #F1F5F9; display: flex; align-items: center; gap: 16px; }
+.brand-logo-box { width: 48px; height: 48px; background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(99, 102, 241, 0.1); }
+.brand-icon { font-size: 24px; color: #4F46E5; }
+.brand-title h2 { margin: 0 0 4px 0; font-size: 1.15rem; font-weight: 800; color: #0F172A; letter-spacing: 0.5px;}
+.brand-title .sub-title { font-size: 0.75rem; color: #64748B; font-weight: 600; font-family: 'JetBrains Mono', monospace;}
+.sidebar-form { flex: 1; padding: 24px; overflow-y: auto; }
+.custom-form :deep(.el-form-item) { margin-bottom: 24px; }
+.custom-label { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 700; color: #1E293B; margin-bottom: 4px; }
+.custom-label .el-icon { color: #6366F1; font-size: 1.1rem; }
+.req-star { color: #EF4444; }
+.modern-input :deep(.el-input__wrapper), .modern-input :deep(.el-textarea__inner) { background-color: #F8FAFC; border-radius: 8px; border: 1px solid transparent; box-shadow: none !important; padding: 8px 12px; transition: all 0.3s ease; font-size: 0.95rem; }
+.modern-input :deep(.el-input__wrapper:focus), .modern-input :deep(.el-textarea__inner:focus) { background-color: #FFFFFF; border-color: #6366F1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important; }
+.divider-with-text { position: relative; text-align: center; margin: 32px 0 24px; }
+.divider-with-text::before { content: ''; position: absolute; left: 0; top: 50%; width: 100%; height: 1px; background: #E2E8F0; z-index: 1; }
+.divider-with-text span { position: relative; z-index: 2; background: #FFFFFF; padding: 0 16px; font-size: 0.8rem; color: #94A3B8; font-weight: 600; }
+.checkbox-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.custom-agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+.agent-select-card { position: relative; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
+.agent-select-card.is-active { background: #EEF2FF; border-color: #6366F1; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1); }
+.agent-select-card.is-active .card-icon, .agent-select-card.is-active .card-name { color: #4F46E5; }
+.active-indicator { position: absolute; top: -20px; right: -20px; width: 40px; height: 40px; background: #6366F1; transform: rotate(45deg); transition: all 0.3s; opacity: 0; }
+.active-indicator .el-icon { position: absolute; bottom: 4px; left: 14px; color: #FFFFFF; font-size: 0.75rem; transform: rotate(-45deg); }
+.agent-select-card.is-active .active-indicator { opacity: 1; }
+.sidebar-footer { padding: 24px; border-top: 1px solid #F1F5F9; background: #FFFFFF; }
+.magic-submit-btn { position: relative; width: 100%; height: 50px; border: none; border-radius: 10px; background: linear-gradient(135deg, #4F46E5 0%, #6366F1 100%); color: #FFFFFF; font-size: 1rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3); }
+.magic-submit-btn:disabled { background: #E2E8F0; color: #94A3B8; box-shadow: none; cursor: not-allowed; }
 
-/* 全局布局 - 白色主题 */
-.agent-studio-container {
-  display: flex;
-  height: calc(100vh - 60px);
-  background-color: #FFFFFF; /* 纯白背景 */
-  font-family: 'Inter', system-ui, sans-serif;
-  color: #0F172A;
-  overflow: hidden;
+/* ================= 右侧工作区 ================= */
+.main-workspace { flex: 1; position: relative; display: flex; flex-direction: column; overflow: hidden; background-image: radial-gradient(#E2E8F0 1px, transparent 1px); background-size: 24px 24px; }
+.expand-trigger { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 24px; height: 60px; background: #FFFFFF; border: 1px solid #E2E8F0; border-left: none; border-radius: 0 8px 8px 0; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; box-shadow: 4px 0 10px rgba(0,0,0,0.05); color: #64748B; transition: all 0.2s; }
+.workspace-scroll-container { flex: 1; overflow-y: auto; padding: 32px 40px; display: flex; flex-direction: column; gap: 40px; }
+.section-header h3 { display: flex; align-items: center; gap: 8px; font-size: 1.2rem; font-weight: 700; color: #1E293B; margin: 0; }
+.progress-info { display: flex; align-items: center; gap: 16px; margin-top: 12px; font-size: 0.9rem; font-weight: 600; color: #4F46E5; }
+.top-progress { flex: 1; max-width: 400px; }
+
+/* 🌟 核心：矩阵式排版网络布局 */
+.network-topology {
+  display: flex; align-items: flex-start; justify-content: flex-start; gap: 20px;
+  background: transparent; padding: 20px 0; overflow-x: auto;
 }
+.coordinator-zone { flex-shrink: 0; width: 340px; position: relative; z-index: 2; }
+.tree-trunk { width: 40px; height: 2px; background: #E2E8F0; position: relative; flex-shrink: 0; margin-top: 50px; /* 对齐到卡片中间 */ }
+.trunk-flow { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: transparent; }
+.trunk-flow.is-flowing { background: repeating-linear-gradient(90deg, #6366F1 0, #6366F1 6px, transparent 6px, transparent 12px); animation: flowRight 0.5s linear infinite; }
 
-/* ================== 左侧表单 ================== */
-.control-panel {
-  width: 400px;
-  background: #FFFFFF;
-  border-right: 1px solid #E2E8F0;
-  display: flex;
-  flex-direction: column;
-  z-index: 10;
-  box-shadow: 4px 0 15px rgba(0,0,0,0.02);
-  flex-shrink: 0;
+/* 多列执行区 Flex 布局 */
+.execution-zone { 
+  display: flex; flex-direction: row; gap: 40px; flex: 1; align-items: flex-start;
 }
-
-.panel-header {
-  padding: 2rem 2rem 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  border-bottom: 1px solid #F8FAFC;
+/* 每一列内部竖向排列 */
+.worker-column {
+  display: flex; flex-direction: column; gap: 20px; position: relative;
 }
-.logo-box {
-  width: 44px; height: 44px;
-  background: #EEF2FF; color: #4F46E5;
-  border-radius: 12px; display: flex;
-  align-items: center; justify-content: center;
-  font-size: 1.5rem;
-}
-.header-titles h2 { margin: 0 0 4px 0; font-size: 1.2rem; font-weight: 700; color: #0F172A; }
-.header-titles p { margin: 0; font-size: 0.75rem; color: #64748B; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px; }
+.worker-row { display: flex; align-items: center; position: relative; }
 
-.image-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
+/* ================= 节点组件样式 ================= */
+.spine-segment { position: absolute; left: 0; width: 2px; background: #E2E8F0; top: -10px; bottom: -10px; }
+.spine-segment.is-first { top: 50%; } 
+.spine-segment.is-last { bottom: 50%; } 
+.spine-segment.is-only { display: none; }
+.spine-segment.is-active { background: #E2E8F0; /* 保持静态，通过支线发光展示流向 */ }
 
-.generated-image {
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid #E2E8F0;
-  background: #F8FAFC;
-  object-fit: cover;
-}
+.branch-segment { width: 40px; height: 2px; background: #E2E8F0; position: relative; display: flex; align-items: center; flex-shrink: 0; }
+.branch-flow { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: transparent; }
+.branch-flow.is-flowing { background: repeating-linear-gradient(90deg, #3B82F6 0, #3B82F6 6px, transparent 6px, transparent 12px); animation: flowRight 0.5s linear infinite; }
+.branch-arrow { position: absolute; right: -12px; color: #E2E8F0; font-size: 20px; background: #F8FAFC; z-index: 1; }
+.branch-arrow.is-active { color: #6366F1; }
 
-.video-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
+.agent-workflow-node { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; position: relative; z-index: 2; }
+.worker-node { width: 320px; }
+.brain-node { border-width: 2px; }
+.brain-node.running { border-color: #6366F1; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2); transform: scale(1.02); }
+.brain-node.done { border-color: #8B5CF6; }
+.worker-node.running { border-color: #3B82F6; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15); transform: translateY(-4px); }
+.worker-node.done { border-color: #10B981; }
 
-.video-link {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.65rem 0.95rem;
-  border-radius: 999px;
-  background: #EEF2FF;
-  color: #3730A3;
-  font-weight: 600;
-  text-decoration: none;
-}
+.node-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; background: #F8FAFC; border-bottom: 1px solid #F1F5F9; }
+.brain-node .node-header { background: #EEF2FF; border-bottom-color: #E0E7FF; }
+.brain-node.done .node-header { background: #F5F3FF; border-bottom-color: #EDE9FE; }
+.worker-node.running .node-header { background: #EFF6FF; border-bottom-color: #DBEAFE; }
 
-.form-scroll-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem 2rem;
-}
-.studio-form { display: flex; flex-direction: column; gap: 1.75rem; }
-.input-block label { display: block; font-size: 0.9rem; font-weight: 600; color: #1E293B; margin-bottom: 0.5rem; }
-.req { color: #EF4444; margin-left: 2px; }
-:deep(.el-input__wrapper), :deep(.el-textarea__inner) {
-  background-color: #F8FAFC; border-color: #E2E8F0; box-shadow: none; transition: all 0.2s;
-}
-:deep(.el-input__wrapper.is-focus), :deep(.el-textarea__inner:focus) {
-  background-color: #FFFFFF; border-color: #4F46E5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
-}
+.n-title { font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 8px; font-size: 0.95rem;}
+.brain-node .n-title { color: #4338CA; font-size: 1.05rem; }
+.n-icon { font-size: 1.1rem; color: #64748B; }
+.brain-node.running .n-icon { color: #6366F1; } .worker-node.running .n-icon { color: #3B82F6; } .done .n-icon { color: #10B981; } .brain-node.done .n-icon { color: #8B5CF6; }
 
-.preference-grid { display: flex; flex-direction: column; gap: 0.75rem; }
-.pref-card {
-  position: relative; padding: 1rem 1.25rem;
-  border: 1px solid #E2E8F0; border-radius: 10px;
-  background: #FFFFFF; cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-.pref-card:hover { border-color: #CBD5E1; background: #F8FAFC; }
-.pref-card.active { border-color: #4F46E5; background: #EEF2FF; }
-.pref-title { font-size: 0.9rem; font-weight: 600; color: #1E293B; margin-bottom: 4px; transition: color 0.2s; }
-.pref-card.active .pref-title { color: #4F46E5; }
-.pref-desc { font-size: 0.75rem; color: #64748B; }
-.active-indicator {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #4F46E5;
-}
+.node-animation-window { padding: 16px; background: #FFFFFF; }
+.human-action-text { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; color: #3B82F6; margin-bottom: 16px; }
+.text-primary { color: #6366F1 !important; }
+.skeleton-builder { display: flex; flex-direction: column; gap: 10px; }
+.sk-line { height: 8px; border-radius: 4px; background: #F1F5F9; position: relative; overflow: hidden; }
+.sk-line.w-full { width: 100%; } .sk-line.w-80 { width: 80%; } .sk-line.w-60 { width: 60%; }
+.sk-line::after { content: ""; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.15), transparent); animation: shimmer 1.5s infinite; }
+.brain-skeleton .sk-line::after { background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.2), transparent); }
+.node-summary { padding: 16px; display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: #475569; font-weight: 600; background: #F8FAFC; }
+.success-circle { width: 24px; height: 24px; background: #8B5CF6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
-.panel-action { padding: 1.5rem 2rem 2rem; background: #FFFFFF; border-top: 1px solid #F8FAFC; }
-.primary-btn {
-  width: 100%; height: 52px;
-  background: #4F46E5; color: #FFFFFF;
-  border: none; border-radius: 12px;
-  font-size: 1rem; font-weight: 600;
-  cursor: pointer; transition: all 0.3s;
-  display: flex; align-items: center; justify-content: center;
-}
-.primary-btn:hover:not(:disabled) { background: #4338CA; transform: translateY(-2px); box-shadow: 0 10px 20px rgba(79,70,229,0.2); }
-.primary-btn:disabled { background: #E2E8F0; color: #94A3B8; cursor: not-allowed; }
-.btn-content { display: flex; align-items: center; gap: 8px; }
+/* 🌟 卡片区网格布局 */
+.results-section { border-top: 2px dashed #CBD5E1; padding-top: 40px; }
+.results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
 
-/* ================== 右侧动态空间 ================== */
-.workspace {
-  flex: 1;
-  position: relative;
-  background-color: #F8FAFC; /* 浅色背景区分工作区与表单 */
-  background-image: radial-gradient(#E2E8F0 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-.view-layer { position: absolute; inset: 0; display: flex; flex-direction: column; overflow-y: auto; padding: 3rem 4rem; }
+/* Vue 入场动画 */
+.slide-fade-enter-active { transition: all 0.5s ease-out; }
+.slide-fade-enter-from { transform: translateX(-20px); opacity: 0; }
 
-/* 1. 待机状态 */
-.idle-view { align-items: center; justify-content: center; text-align: center; }
-.idle-graphic { position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; margin-bottom: 2rem; }
-.pulse-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px dashed #CBD5E1; animation: spin-slow 10s linear infinite; }
-.center-icon { font-size: 3.5rem; color: #94A3B8; }
-.idle-view h3 { font-size: 1.4rem; color: #1E293B; margin: 0 0 1rem 0; font-weight: 700; }
-.idle-desc { font-size: 0.95rem; color: #64748B; line-height: 1.6; margin-bottom: 3rem; }
-.agent-roster { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; max-width: 600px; }
-.roster-badge { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 20px; font-size: 0.8rem; font-weight: 600; color: #475569; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+@keyframes shimmer { 100% { left: 200%; } }
+@keyframes flowRight { from { background-position: 0 0; } to { background-position: 12px 0; } }
 
-/* 2. 工作状态 (白色明亮监控) */
-.working-top { margin-bottom: 3rem; }
-.monitor-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 1rem 0; display: flex; align-items: center; gap: 10px; color: #0F172A; }
-.live-dot { display: block; width: 10px; height: 10px; background: #10B981; border-radius: 50%; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); animation: pulse-green 2s infinite; }
-.coordinator-status { display: flex; align-items: center; gap: 12px; background: #EEF2FF; border-left: 4px solid #4F46E5; padding: 1rem 1.5rem; border-radius: 8px; color: #3730A3; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border: 1px solid #C7D2FE; border-left-width: 4px; }
-.bundle-progress { display: flex; gap: 1rem; margin-top: 0.9rem; font-size: 0.85rem; color: #475569; font-weight: 600; }
-
-.dag-topology { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-bottom: 4rem; }
-.topology-stage { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 700px; }
-.stage-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #475569; background: #F1F5F9; padding: 4px 16px; border-radius: 20px; margin-bottom: 1.5rem; font-weight: 700; border: 1px solid #E2E8F0; }
-.stage-nodes { display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
-.stage-arrow { margin-top: 1.5rem; color: #94A3B8; font-size: 1.5rem; animation: float-down 2s infinite; }
-
-.white-node { display: flex; align-items: center; gap: 1rem; width: 240px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 1rem 1.25rem; border-radius: 12px; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
-.white-node.wait { opacity: 0.5; border-style: dashed; background: #F8FAFC; box-shadow: none; }
-.white-node.active { border-color: #4F46E5; background: #EEF2FF; transform: scale(1.02); box-shadow: 0 10px 20px rgba(79,70,229,0.1); }
-.white-node.done { border-color: #10B981; background: #F0FDF4; }
-.white-node.error { border-color: #EF4444; background: #FEF2F2; }
-
-.node-icon-box { font-size: 1.4rem; color: #64748B; background: #F1F5F9; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 8px; flex-shrink: 0; }
-.active .node-icon-box { background: #FFFFFF; color: #4F46E5; }
-.done .node-icon-box { background: #DCFCE7; color: #10B981; }
-.error .node-icon-box { background: #FEE2E2; color: #EF4444; }
-
-.node-text { display: flex; flex-direction: column; overflow: hidden; }
-.n-name { font-size: 0.85rem; font-weight: 700; color: #1E293B; margin-bottom: 4px; }
-.n-log { font-size: 0.7rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'JetBrains Mono', monospace; }
-.active .n-log { color: #4F46E5; }
-.done .n-log { color: #10B981; }
-
-.text-primary { color: #4F46E5; }
-.text-green { color: #10B981; }
-.text-red { color: #EF4444; }
-
-/* 终端日志 (明亮白底) */
-.live-results-section { margin-top: 2rem; background: #FFFFFF; border: 1px solid #BBF7D0; border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.08); }
-.live-results-header { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #E2E8F0; }
-.live-results-header h3 { margin: 0; font-size: 1.1rem; color: #059669; display: flex; align-items: center; gap: 8px; }
-.live-results-header h3 span { font-size: 0.85rem; color: #64748B; font-weight: 400; }
-
-.terminal-window { background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
-.term-header { background: #F8FAFC; padding: 8px 16px; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid #E2E8F0; }
-.mac-dots { display: flex; gap: 6px; }
-.mac-dots span { width: 10px; height: 10px; border-radius: 50%; }
-.mac-dots .red { background: #EF4444; } .mac-dots .yellow { background: #F59E0B; } .mac-dots .green { background: #10B981; }
-.term-title { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #64748B; flex: 1; text-align: center; font-weight: 600; }
-.term-body { height: 260px; padding: 1rem; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.6; color: #334155; }
-.term-line { display: flex; gap: 1rem; margin-bottom: 4px; word-break: break-all; }
-.t-time { color: #94A3B8; flex-shrink: 0; }
-.t-source { color: #8B5CF6; width: 100px; flex-shrink: 0; font-weight: 700; }
-.t-source.SYSTEM { color: #0284C7; }
-.t-source.COORDINATOR { color: #DB2777; }
-.t-msg { color: #1E293B; }
-.t-msg.success { color: #059669; }
-.t-msg.error { color: #DC2626; }
-
-/* 3. 结果状态 (清爽明亮) */
-.result-view { background: #FFFFFF; padding: 3rem 4rem; }
-.result-hero { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2.5rem; border-bottom: 1px solid #F1F5F9; padding-bottom: 1.5rem; }
-.hero-left h2 { margin: 0 0 8px 0; font-size: 1.8rem; color: #0F172A; font-weight: 800; }
-.hero-left p { margin: 0; color: #64748B; font-size: 1rem; }
-
-.reset-btn { border-radius: 8px; font-weight: 600; color: #4F46E5; border-color: #C7D2FE; background: #EEF2FF; }
-.reset-btn:hover { background: #E0E7FF; border-color: #A5B4FC; }
-
-.modern-tabs :deep(.el-tabs__nav-wrap::after) { background-color: #E2E8F0; height: 1px; }
-.modern-tabs :deep(.el-tabs__item) { font-size: 1rem; color: #64748B; padding: 0 20px; height: 48px; line-height: 48px; }
-.modern-tabs :deep(.el-tabs__item.is-active) { color: #4F46E5; font-weight: 700; }
-.modern-tabs :deep(.el-tabs__active-bar) { background-color: #4F46E5; height: 3px; border-radius: 3px 3px 0 0; }
-
-.res-card { padding: 2rem 0; }
-.lang-tag { display: inline-flex; align-items: center; gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; color: #334155; margin-bottom: 1.5rem; }
-.code-wrapper { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 1.5rem; overflow-x: auto; }
-.code-wrapper pre { margin: 0; color: #1E293B; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; line-height: 1.6; }
-
-.quiz-masonry { display: grid; gap: 1.5rem; padding: 1.5rem 0; }
-.quiz-box { border: 1px solid #E2E8F0; border-radius: 12px; padding: 1.5rem; background: #FFFFFF; transition: box-shadow 0.2s; }
-.quiz-box:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.03); }
-.q-top { display: flex; gap: 8px; margin-bottom: 1rem; align-items: center; }
-.q-num { font-weight: 800; font-size: 1.1rem; color: #0F172A; margin-right: 4px; }
-.q-diff, .q-type { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
-.q-diff.basic { background: #ECFDF5; color: #047857; }
-.q-diff.intermediate { background: #FFFBEB; color: #B45309; }
-.q-diff.challenge { background: #FEF2F2; color: #B91C1C; }
-.q-type { background: #F1F5F9; color: #475569; }
-.q-stem { font-size: 1.05rem; font-weight: 600; color: #1E293B; line-height: 1.6; margin-bottom: 1.25rem; }
-.q-opts { display: flex; flex-direction: column; gap: 10px; margin-bottom: 1.5rem; }
-.opt-row { padding: 12px 16px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 0.95rem; color: #334155; }
-.q-reveal { background: #EEF2FF; border-radius: 8px; overflow: hidden; border: 1px solid #E0E7FF; }
-.q-reveal summary { padding: 12px 16px; cursor: pointer; font-weight: 600; color: #4F46E5; font-size: 0.9rem; outline: none; }
-.q-answer-box { padding: 0 16px 16px; font-size: 0.9rem; color: #312E81; line-height: 1.6; }
-.ans-correct { color: #047857; margin: 0 0 8px; }
-.ans-exp { margin: 0; }
-
-.reading-masonry { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; padding: 1.5rem 0; }
-.book-card { border: 1px solid #E2E8F0; border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; background: #FFFFFF; transition: transform 0.2s; }
-.book-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.04); }
-.b-type { font-size: 0.75rem; font-weight: 700; color: #4F46E5; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.5px; }
-.b-title { margin: 0 0 10px 0; font-size: 1.1rem; color: #0F172A; line-height: 1.4; }
-.b-author { font-size: 0.85rem; color: #64748B; margin-bottom: 1rem; display: flex; align-items: center; gap: 6px; }
-.b-abstract { font-size: 0.9rem; color: #475569; line-height: 1.6; flex: 1; margin-bottom: 1.25rem; }
-.b-relevance { font-size: 0.85rem; background: #F8FAFC; padding: 12px; border-radius: 8px; color: #334155; line-height: 1.5; border-left: 3px solid #10B981; }
-
-/* Markdown 样式 */
-:deep(.markdown-body) { font-family: 'Inter', sans-serif; color: #1E293B; }
-:deep(.markdown-body h2) { font-size: 1.5rem; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.75rem; margin-top: 1.5rem; color: #0F172A; }
-:deep(.markdown-body h3) { font-size: 1.2rem; margin-top: 1.25rem; color: #1E293B; }
-:deep(.markdown-body p) { line-height: 1.8; font-size: 1rem; color: #334155; }
-:deep(.markdown-body pre) { background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; font-family: 'JetBrains Mono', monospace; padding: 1.25rem; color: #1E293B; }
-
-/* 动画定义 */
-.fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-.fade-slide-enter-from { opacity: 0; transform: translateY(15px); }
-.fade-slide-leave-to { opacity: 0; transform: translateY(-15px); }
-
-@keyframes spin-slow { 100% { transform: rotate(360deg); } }
-@keyframes pulse-green { 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
-@keyframes float-down { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
-
-/* 滚动条美化 */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }

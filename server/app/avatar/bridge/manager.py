@@ -312,10 +312,8 @@ class RealtimeBridge:
         """核心方法：用户文本 → AvatarAgent → 回复 → Avatar 视频"""
         from app.avatar.agent import AvatarAgent
         from app.memory.short_term import short_term_service
-        from app.memory.long_term import long_term_service
         from app.memory.session import session_service
-        from app.memory.service import memory_service
-        from app.profile.service import profile_service
+        from app.chat.service import get_avatar_chat_usecases
 
         if not self.session_id:
             # 自动创建会话
@@ -333,76 +331,34 @@ class RealtimeBridge:
             module="avatar",
         )
 
-        # 2. 构建三层上下文
-        profile_ctx = ""
-        try:
-            profile = await profile_service.get_user_profile(self.user_id)
-            if profile:
-                lines = []
-                for dim in ["knowledge_level", "learning_goal", "learning_history",
-                            "cognitive_style", "error_pattern", "learning_pace",
-                            "interest_preference", "cognitive_level"]:
-                    val = getattr(profile, dim, None)
-                    score = getattr(profile, f"{dim}_score", None)
-                    if val:
-                        lines.append(f"- {dim}: {val}" + (f" (评分: {score})" if score else ""))
-                profile_ctx = "\n".join(lines)
-        except Exception:
-            pass
-
-        memory_ctx = ""
-        try:
-            memories = await long_term_service.get_user_context_memories(
-                user_id=self.user_id, source="avatar_fact",
-            )
-            parts = []
-            for mtype, items in memories.items():
-                if items:
-                    parts.append(f"### {mtype}\n" + "\n".join(f"- {m.content}" for m in items))
-            memory_ctx = "\n\n".join(parts)
-        except Exception:
-            pass
-
-        chat_ctx = []
-        try:
-            messages = await short_term_service.get_recent_messages(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                limit=10,
-            )
-            from langchain_core.messages import HumanMessage as HM, AIMessage as AM
-            for m in messages:
-                if m.role == "user":
-                    chat_ctx.append(HM(content=m.content))
-                elif m.role == "assistant":
-                    chat_ctx.append(AM(content=m.content))
-        except Exception:
-            pass
-
-        # 3. AvatarAgent 流式生成
+        # 2. 通过通用 ChatUseCases 复用附件分析与运行时上下文编排
+        chat_uc = get_avatar_chat_usecases()
         agent = AvatarAgent()
         full_response = ""
-
-        async for event in agent.chat_stream(
-            user_text=user_text,
+        async for event in chat_uc.stream_chat_events(
             user_id=self.user_id,
+            user_message=user_text,
             session_id=self.session_id,
-            profile_ctx=profile_ctx,
-            memory_ctx=memory_ctx,
-            chat_ctx=chat_ctx,
+            stream_runner=agent.chat_stream,
             input_source=source,
         ):
-            if event["type"] == "text_chunk":
-                content = event["content"]
+            event_type = str(event.get("event", ""))
+            payload = event.get("data")
+
+            if event_type == "text_chunk":
+                content = str(payload or "")
                 full_response += content
                 await self._send_to_frontend({"type": "assistant_chunk", "content": content})
 
-            elif event["type"] == "tool_result":
-                await self._send_to_frontend({"type": "tool_result", "data": event["data"]})
+            elif event_type == "tool_result":
+                await self._send_to_frontend({"type": "tool_result", "data": payload})
 
-            elif event["type"] == "complete":
-                if not full_response and event.get("full_response"):
-                    full_response = event["full_response"]
+            elif event_type == "tool_error":
+                await self._send_to_frontend({"type": "tool_error", "data": payload})
+
+            elif event_type == "complete":
+                if not full_response and isinstance(payload, dict):
+                    full_response = str(payload.get("full_response", "") or "")
 
         # 完整回复生成后，一次性发送给虚拟人播报
         if full_response.strip() and self._avatar_controller:

@@ -29,6 +29,7 @@ from app.memory.helpers import normalize_text, estimate_token_count
 logger = get_logger(__name__)
 
 SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7  # 短期消息默认保留天数
+MEMORY_COMPRESSION_TOKEN_THRESHOLD = 150  # 触发短期→长期记忆压缩的 token 阈值
 MEMORY_EXTRACTION_TOKEN_THRESHOLD = 80  # 触发 FactAgent 长期记忆提取的 token 阈值
 PROFILE_UPDATE_TOKEN_THRESHOLD = 120  # 触发 ProfileAgent 画像更新的 token 阈值
 
@@ -93,7 +94,13 @@ class MemoryService:
     ) -> int:
         return await short_term_service.cleanup_expired_short_term_messages(user_id, session_id, module, days)
 
-    async def should_summarize(self, user_id: int, session_id: str, module: str, threshold: int = 20) -> bool:
+    async def should_summarize(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str,
+        threshold: int = MEMORY_COMPRESSION_TOKEN_THRESHOLD,
+    ) -> bool:
         return await short_term_service.should_summarize(user_id, session_id, module, threshold)
 
     # -- 长期记忆 (委托 long_term_service) --
@@ -152,7 +159,12 @@ class MemoryService:
 
     # -- 压缩 (委托 compression_service) --
     async def summarize_and_compress(
-        self, user_id: int, session_id: str, module: str, threshold: int = 30, keep_recent: int = 10,
+        self,
+        user_id: int,
+        session_id: str,
+        module: str,
+        threshold: int = MEMORY_COMPRESSION_TOKEN_THRESHOLD,
+        keep_recent: int = 10,
     ) -> None:
         await compression_service.summarize_and_compress(user_id, session_id, module, threshold, keep_recent)
 

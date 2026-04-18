@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.database import engine
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession
-from app.memory.helpers import now, message_expire_cutoff
+from app.memory.helpers import now, message_expire_cutoff, estimate_token_count
 
 logger = get_logger(__name__)
 
@@ -131,6 +131,28 @@ class ShortTermMemoryService:
             logger.debug("[ShortTermMemory] 消息计数: session_id=%s, count=%d", session_id, count)
             return count
 
+    async def get_message_token_count(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str,
+        days: int = SHORT_TERM_MESSAGE_EXPIRE_DAYS,
+        only_unexpired: bool = True,
+    ) -> int:
+        """统计指定会话短期消息的估算 token 总量。"""
+        messages = await self.get_recent_messages(
+            user_id=user_id,
+            session_id=session_id,
+            module=module,
+            limit=None,
+            days=days,
+            only_unexpired=only_unexpired,
+        )
+        total_tokens = sum(estimate_token_count(getattr(msg, "content", "")) for msg in messages)
+        logger.debug("[ShortTermMemory] 消息 token 计数: session_id=%s, total_tokens=%d, message_count=%d",
+                     session_id, total_tokens, len(messages))
+        return total_tokens
+
     async def delete_old_messages(
         self,
         user_id: int,
@@ -223,14 +245,14 @@ class ShortTermMemoryService:
             return len(expired_msgs)
 
     async def should_summarize(
-        self, user_id: int, session_id: str, module: str, threshold: int = 20
+        self, user_id: int, session_id: str, module: str, threshold: int = 150
     ) -> bool:
-        """判断短期记忆是否达到总结阈值（消息条数 >= threshold）。
+        """判断短期记忆是否达到总结阈值（短期消息 token 总量 >= threshold）。
         用于触发短期→长期记忆的压缩流程。"""
-        count = await self.get_message_count(user_id, session_id, module)
-        should = count >= threshold
-        logger.debug("[ShortTermMemory] 总结判断: session_id=%s, count=%d, threshold=%d, should=%s",
-                     session_id, count, threshold, should)
+        token_count = await self.get_message_token_count(user_id, session_id, module)
+        should = token_count >= threshold
+        logger.debug("[ShortTermMemory] 总结判断: session_id=%s, token_count=%d, threshold=%d, should=%s",
+                     session_id, token_count, threshold, should)
         return should
 
 

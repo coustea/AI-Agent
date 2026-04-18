@@ -12,7 +12,7 @@ class LocalFileStore:
     def __init__(self) -> None:
         self.upload_dir = WORKPLACE_DIR / "chat-uploads"
         self.allowed_image_ext = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        self.allowed_doc_ext = {".pdf", ".docx", ".txt", ".md", ".log"}
+        self.allowed_doc_ext = {".pdf", ".docx", ".txt", ".md", ".log", ".xlsx", ".xls", ".csv", ".tsv"}
         self.max_image_size = 5 * 1024 * 1024
         self.max_doc_size = 10 * 1024 * 1024
 

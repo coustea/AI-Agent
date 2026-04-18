@@ -10,7 +10,6 @@
 
 import asyncio
 import json
-import os
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -24,6 +23,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
 from app.infra.logging import get_logger
+from app.config import MAX_MESSAGE_HISTORY, LLM_TIMEOUT
 from app.shared.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
@@ -102,6 +102,9 @@ class BaseResourceAgent(ABC):
     # 子类覆盖这两个列表来声明依赖
     tool_names: list[str] = []
     skill_names: list[str] = []
+    # 子类可显式开启：要求本 Agent 的 LLM 输出严格 JSON（OpenAI 兼容 response_format）。
+    # 注意：这不是用正则“抽 JSON”，而是让模型原生输出结构化 JSON，稳定性更高。
+    force_json_mode: bool = False
 
     def __init__(
         self,
@@ -287,16 +290,25 @@ class BaseResourceAgent(ABC):
 
             llm_messages = list(existing_messages) + new_messages
 
-        max_history = int(os.getenv("MAX_MESSAGE_HISTORY", "20"))
+        max_history = MAX_MESSAGE_HISTORY
         llm_messages = self._truncate_messages(llm_messages, keep_last_n=max_history)
 
         from app.shared.sanitizers import sanitize_tool_messages
         llm_messages = sanitize_tool_messages(llm_messages)
 
         try:
-            llm_with_tools = self.llm.bind_tools(self._tools) if self._tools else self.llm
+            llm_plain = self.llm.bind_tools(self._tools) if self._tools else self.llm
+            llm_with_tools = llm_plain
+            if self.force_json_mode:
+                # 结构化 JSON 输出：优先使用 JSON Mode。
+                # 若下游 OpenAI 兼容端点不支持 response_format，则回退到普通调用。
+                try:
+                    llm_with_tools = llm_plain.bind(response_format={"type": "json_object"})
+                except Exception as exc:
+                    logger.warning(f"[{self.name}] JSON Mode bind 失败，fallback=plain: {exc}")
+                    llm_with_tools = llm_plain
 
-            llm_timeout = int(os.getenv("LLM_TIMEOUT", "300"))
+            llm_timeout = LLM_TIMEOUT
             try:
                 response = await asyncio.wait_for(
                     llm_with_tools.ainvoke(llm_messages),
@@ -305,6 +317,16 @@ class BaseResourceAgent(ABC):
             except asyncio.TimeoutError:
                 logger.error(f"[{self.name}] LLM 调用超时")
                 return {"error": f"LLM 调用超时", "is_valid": False}
+            except Exception as exc:
+                # 若 JSON Mode 触发了后端参数不兼容，这里再做一次兜底重试。
+                if self.force_json_mode:
+                    logger.warning(f"[{self.name}] JSON Mode 调用失败，retry=plain: {exc}")
+                    response = await asyncio.wait_for(
+                        llm_plain.ainvoke(llm_messages),
+                        timeout=llm_timeout,
+                    )
+                else:
+                    raise
 
             # 文本补丁处理
             if isinstance(response, AIMessage) and not response.tool_calls and self._tools:
@@ -396,6 +418,7 @@ def _ensure_tools_loaded() -> None:
         "app.tools.web_fetcher",
         "app.tools.duckduckgo_search",
         "app.tools.document_executor",
+        "app.tools.spark_image_generation",
     ]
     for mod_name in _tool_modules:
         try:

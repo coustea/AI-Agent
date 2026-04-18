@@ -12,16 +12,16 @@ if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
 import uvicorn
-from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-load_dotenv()
 
 from app.infra.logging import get_logger, setup_logging
 from app.infra.database import init_db
 from app.shared.storage import local_file_store
+from app.auth.security import decode_token
+from app.avatar.bridge.manager import avatar_bridge_manager
+from app.config import SERVER_HOST, SERVER_PORT
 
 logger = get_logger(__name__)
 
@@ -80,7 +80,37 @@ async def root():
     return {"message": "AI Learning Platform is running"}
 
 
+@app.websocket("/ws/avatar")
+async def avatar_websocket(
+    ws: WebSocket,
+    token: str = Query(..., description="JWT token"),
+):
+    """Avatar WebSocket 端点（统一挂到主服务入口）。"""
+    try:
+        user_id = decode_token(token)
+    except Exception:
+        await ws.close(code=4001, reason="认证失败")
+        return
+
+    await ws.accept()
+    logger.info("[AvatarBridge] 用户 %d 已连接", user_id)
+
+    bridge = await avatar_bridge_manager.get_or_create_bridge(user_id)
+    try:
+        await bridge.handle_frontend(ws)
+    except WebSocketDisconnect:
+        logger.info("[AvatarBridge] 用户 %d 已断开", user_id)
+    except Exception as exc:
+        logger.error("[AvatarBridge] 连接异常: %s", exc, exc_info=exc)
+
+
+def main() -> None:
+    """统一后端启动入口函数。"""
+    host = SERVER_HOST
+    port = SERVER_PORT
+    # 使用我们自己的 Loguru 配置，避免 uvicorn 覆盖 logging 配置导致重复输出
+    uvicorn.run(app, host=host, port=port, log_config=None)
+
+
 if __name__ == "__main__":
-    host = __import__("os").getenv("SERVER_HOST", "0.0.0.0")
-    port = int(__import__("os").getenv("SERVER_PORT", "9999"))
-    uvicorn.run(app, host=host, port=port)
+    main()

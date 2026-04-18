@@ -13,11 +13,17 @@ FileOperator 类封装所有文件操作：
 import os
 import re
 import time
+import base64
+import csv
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Literal
 
 from langchain.tools import tool
+from langchain_core.messages import HumanMessage
 
+from app.config import GLM_API_KEY, MULTIMODAL_DOC_ENABLED
+from app.infra.llm import get_glm_vision_llm
 from app.shared.paths import SERVER_DIR, WORKPLACE_DIR
 from app.tools.registry import register
 
@@ -37,7 +43,7 @@ class FileOperator:
 
     # 允许安全读取的文件类型
     SAFE_READ_EXTENSIONS = {
-        ".docx", ".pdf", ".html", ".md", ".log",
+        ".docx", ".pdf", ".html", ".md", ".log", ".xlsx", ".xls", ".csv", ".tsv",
     }
 
     # 目录浏览限制
@@ -48,6 +54,14 @@ class FileOperator:
     # 上传文件限制
     UPLOAD_DIR = WORKPLACE_DIR / "chat-uploads"
     MAX_UPLOAD_CONTENT_CHARS = 15000
+    MAX_UPLOAD_PDF_PAGES = 80
+    MAX_UPLOAD_DOCX_PARAGRAPHS = 1200
+    MAX_MULTIMODAL_PDF_PAGES = 8
+    MULTIMODAL_DOC_ENABLED = MULTIMODAL_DOC_ENABLED
+    MAX_MULTIMODAL_INPUT_CHARS = 6000
+    MAX_EXCEL_SHEETS = 5
+    MAX_EXCEL_ROWS_PER_SHEET = 120
+    MAX_EXCEL_COLS = 20
 
     MAX_SAFE_READ_SIZE = 1 * 1024 * 1024  # 1MB
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
@@ -114,23 +128,229 @@ class FileOperator:
             return f.read()
 
     @staticmethod
-    def _read_pdf(path: Path) -> str:
+    def _looks_like_text_bytes(raw: bytes) -> bool:
+        if not raw:
+            return True
+        if b"\x00" in raw:
+            return False
+        sample = raw[:4096]
+        try:
+            decoded = sample.decode("utf-8", errors="replace")
+        except Exception:
+            return False
+        if not decoded:
+            return False
+        printable = sum(1 for ch in decoded if ch.isprintable() or ch in "\r\n\t")
+        ratio = printable / max(len(decoded), 1)
+        return ratio >= 0.8
+
+    @classmethod
+    def _read_pdf(cls, path: Path) -> str:
         """读取 PDF 文件，提取文本内容。"""
         from pymupdf import open as pdf_open
 
         text_parts = []
         with pdf_open(str(path)) as doc:
-            for page in doc:
-                text_parts.append(page.get_text())
+            total_pages = len(doc)
+            pages_to_read = min(total_pages, cls.MAX_UPLOAD_PDF_PAGES)
+            for idx in range(pages_to_read):
+                text_parts.append(doc[idx].get_text())
+            if total_pages > cls.MAX_UPLOAD_PDF_PAGES:
+                text_parts.append(
+                    f"\n[...PDF共{total_pages}页，为保护性能仅提取前{cls.MAX_UPLOAD_PDF_PAGES}页...]"
+                )
         return "\n".join(text_parts)
 
-    @staticmethod
-    def _read_docx(path: Path) -> str:
+    @classmethod
+    def _read_docx(cls, path: Path) -> str:
         """读取 Word 文档，提取段落文本。"""
         from docx import Document
 
         doc = Document(str(path))
-        return "\n".join(para.text for para in doc.paragraphs if para.text.strip())
+        paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+        total_paragraphs = len(paragraphs)
+        content = "\n".join(paragraphs[: cls.MAX_UPLOAD_DOCX_PARAGRAPHS])
+        if total_paragraphs > cls.MAX_UPLOAD_DOCX_PARAGRAPHS:
+            content += (
+                f"\n\n[...DOCX共{total_paragraphs}段，为保护性能仅提取前{cls.MAX_UPLOAD_DOCX_PARAGRAPHS}段...]"
+            )
+        return content
+
+    @classmethod
+    def _read_excel(cls, path: Path) -> str:
+        """读取 Excel/CSV/TSV 文件，提取结构化表格文本。"""
+        suffix = path.suffix.lower()
+        if suffix in {".csv", ".tsv"}:
+            delimiter = "\t" if suffix == ".tsv" else ","
+            lines: list[str] = []
+            with open(path, "r", encoding="utf-8", errors="replace", newline="") as f:
+                reader = csv.reader(f, delimiter=delimiter)
+                for i, row in enumerate(reader):
+                    if i >= cls.MAX_EXCEL_ROWS_PER_SHEET:
+                        lines.append(f"... (已截断，仅显示前 {cls.MAX_EXCEL_ROWS_PER_SHEET} 行)")
+                        break
+                    cells = [str(v).strip() for v in row[: cls.MAX_EXCEL_COLS]]
+                    lines.append(" | ".join(cells))
+            return "\n".join(lines).strip()
+
+        if suffix == ".xlsx":
+            from openpyxl import load_workbook
+
+            wb = load_workbook(filename=str(path), read_only=True, data_only=True)
+            output: list[str] = []
+            for sheet_idx, ws in enumerate(wb.worksheets[: cls.MAX_EXCEL_SHEETS], start=1):
+                output.append(f"[Sheet {sheet_idx}] {ws.title}")
+                for row_idx, row in enumerate(
+                    ws.iter_rows(min_row=1, max_row=cls.MAX_EXCEL_ROWS_PER_SHEET, values_only=True),
+                    start=1,
+                ):
+                    cells = ["" if v is None else str(v).strip() for v in list(row)[: cls.MAX_EXCEL_COLS]]
+                    if any(cells):
+                        output.append(" | ".join(cells))
+                output.append("")
+            if len(wb.worksheets) > cls.MAX_EXCEL_SHEETS:
+                output.append(f"... (已截断，仅分析前 {cls.MAX_EXCEL_SHEETS} 个工作表)")
+            return "\n".join(output).strip()
+
+        if suffix == ".xls":
+            try:
+                import pandas as pd
+            except Exception as exc:
+                return f".xls 解析依赖缺失：{exc}"
+
+            sheets = pd.read_excel(str(path), sheet_name=None, dtype=str)
+            output: list[str] = []
+            for idx, (sheet_name, df) in enumerate(list(sheets.items())[: cls.MAX_EXCEL_SHEETS], start=1):
+                output.append(f"[Sheet {idx}] {sheet_name}")
+                df = df.fillna("").astype(str).head(cls.MAX_EXCEL_ROWS_PER_SHEET)
+                cols = list(df.columns.astype(str))[: cls.MAX_EXCEL_COLS]
+                if cols:
+                    output.append(" | ".join(cols))
+                for _, row in df.iterrows():
+                    values = [str(row[c]).strip() for c in cols]
+                    output.append(" | ".join(values))
+                output.append("")
+            if len(sheets) > cls.MAX_EXCEL_SHEETS:
+                output.append(f"... (已截断，仅分析前 {cls.MAX_EXCEL_SHEETS} 个工作表)")
+            return "\n".join(output).strip()
+
+        return ""
+
+    def _read_by_suffix(self, path: Path) -> str | None:
+        suffix = path.suffix.lower()
+        if suffix == ".pdf":
+            return self._read_pdf(path)
+        if suffix == ".docx":
+            return self._read_docx(path)
+        if suffix in {".xlsx", ".xls", ".csv", ".tsv"}:
+            return self._read_excel(path)
+        if suffix in {".txt", ".md", ".log", ".html"}:
+            return path.read_text(encoding="utf-8", errors="replace")
+        return None
+
+    def _analyze_with_multimodal(self, path: Path) -> str | None:
+        """统一多模态分析入口：先尝试视觉/多模态总结。"""
+        if not self.MULTIMODAL_DOC_ENABLED:
+            return None
+        if not GLM_API_KEY:
+            return None
+
+        suffix = path.suffix.lower()
+        if suffix == ".pdf":
+            return self._read_pdf_with_multimodal(path)
+
+        base_content = self._read_by_suffix(path)
+        if not base_content:
+            return None
+        snippet = base_content[: self.MAX_MULTIMODAL_INPUT_CHARS]
+        if not snippet.strip():
+            return None
+
+        try:
+            llm = get_glm_vision_llm(temperature=0.2)
+            prompt = (
+                "你是文档分析助手。请基于以下文档提取内容给出结构化分析：\n"
+                "1) 文档主题与摘要\n"
+                "2) 关键数据/条款/结论\n"
+                "3) 风险点或待确认项\n"
+                "4) 建议的后续问题\n\n"
+                f"文档内容片段：\n{snippet}"
+            )
+            resp = llm.invoke([HumanMessage(content=prompt)])
+            text = resp.content if isinstance(resp.content, str) else str(resp.content)
+            text = (text or "").strip()
+            return text or None
+        except Exception:
+            return None
+
+    def _read_pdf_with_multimodal(self, path: Path) -> str | None:
+        """使用多模态模型解析 PDF（优先版式识别），失败返回 None。"""
+        if not self.MULTIMODAL_DOC_ENABLED:
+            return None
+        if not GLM_API_KEY:
+            return None
+        try:
+            from pymupdf import open as pdf_open
+        except Exception:
+            return None
+
+        try:
+            content_blocks: list[dict] = [{
+                "type": "text",
+                "text": (
+                    "请逐页识别并结构化提取该文档，输出中文："
+                    "1) 关键主题；2) 章节与要点；3) 表格/数字信息；4) 需要注意的上下文与限制。"
+                ),
+            }]
+
+            with pdf_open(str(path)) as doc:
+                if len(doc) <= 0:
+                    return None
+                pages_to_read = min(len(doc), self.MAX_MULTIMODAL_PDF_PAGES)
+                for idx in range(pages_to_read):
+                    pix = doc[idx].get_pixmap(dpi=110, alpha=False)
+                    png_bytes = pix.tobytes("png")
+                    b64 = base64.b64encode(png_bytes).decode("ascii")
+                    content_blocks.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{b64}"},
+                    })
+
+            llm = get_glm_vision_llm(temperature=0.2)
+            resp = llm.invoke([HumanMessage(content=content_blocks)])
+            text = resp.content if isinstance(resp.content, str) else str(resp.content)
+            text = (text or "").strip()
+            if not text:
+                return None
+            if len(text) > self.MAX_UPLOAD_CONTENT_CHARS:
+                text = text[:self.MAX_UPLOAD_CONTENT_CHARS] + "\n\n[...多模态解析结果过长，已截断...]"
+            return text
+        except Exception:
+            return None
+
+    def _try_read_text(self, path: Path) -> str | None:
+        try:
+            raw = path.read_bytes()
+            if not self._looks_like_text_bytes(raw):
+                return None
+            text = raw.decode("utf-8", errors="replace")
+            return text if text.strip() else None
+        except Exception:
+            return None
+
+    def _try_read_pdf(self, path: Path) -> str | None:
+        try:
+            text = self._read_pdf(path)
+            return text if text.strip() else None
+        except Exception:
+            return None
+
+    def _try_read_docx(self, path: Path) -> str | None:
+        try:
+            text = self._read_docx(path)
+            return text if text.strip() else None
+        except Exception:
+            return None
 
     # ── 辅助函数 ────────────────────────────────────────────────
 
@@ -384,23 +604,43 @@ class FileOperator:
             return f"文件不存在: {path}"
         if not path.is_file():
             return f"路径不是文件: {path}"
-        suffix = path.suffix.lower()
-        if suffix == ".pdf":
-            content = self._read_pdf(path)
-        elif suffix == ".docx":
-            content = self._read_docx(path)
-        elif suffix in {".txt", ".md", ".log"}:
-            content = path.read_text(encoding="utf-8", errors="replace")
-        else:
-            return f"不支持的文件类型: {suffix}（支持: .pdf, .docx, .txt, .md, .log）"
-        if not content or not content.strip():
-            return "文件内容为空"
+
+        # 统一文档读取：并行执行「多模态分析」与「后缀解析」并合并结果。
+        mm_text: str | None = None
+        suffix_text: str | None = None
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                mm_future = pool.submit(self._analyze_with_multimodal, path)
+                suffix_future = pool.submit(self._read_by_suffix, path)
+                mm_text = mm_future.result()
+                suffix_text = suffix_future.result()
+        except Exception:
+            mm_text = None
+            suffix_text = None
+
+        if not suffix_text:
+            parsers = (self._try_read_text, self._try_read_pdf, self._try_read_docx)
+            for parser in parsers:
+                suffix_text = parser(path)
+                if suffix_text:
+                    break
+
+        sections: list[str] = []
+        if mm_text and mm_text.strip():
+            sections.append(f"【多模态分析】\n{mm_text.strip()}")
+        if suffix_text and suffix_text.strip():
+            sections.append(f"【后缀结构提取】\n{suffix_text.strip()}")
+
+        if not sections:
+            return "无法识别该文档内容（可能是加密文件、损坏文件或不支持格式）。"
+
+        content = "\n\n".join(sections)
         if len(content) > self.MAX_UPLOAD_CONTENT_CHARS:
             content = content[:self.MAX_UPLOAD_CONTENT_CHARS] + "\n\n[...文档内容过长，已截断...]"
         return content
 
     def read_uploaded_file(self, file_url: str) -> str:
-        from app.chat.context import get_current_user_id
+        from app.shared.request_context import get_current_user_id
         current_user_id = get_current_user_id()
         if current_user_id is None:
             return "读取失败：缺少用户上下文。"
@@ -413,7 +653,7 @@ class FileOperator:
         return self._read_uploaded_file_impl(absolute_path)
 
     def list_uploaded_files(self) -> str:
-        from app.chat.context import get_current_user_id
+        from app.shared.request_context import get_current_user_id
         current_user_id = get_current_user_id()
         if current_user_id is None:
             return "读取失败：缺少用户上下文。"
@@ -612,7 +852,7 @@ def read_file_lines(filepath: str, start_line: int = 1, end_line: int = 0, show_
 
 @tool("read_uploaded_file")
 def read_uploaded_file(file_url: str) -> str:
-    """读取当前用户上传的文档内容（PDF、DOCX、TXT、MD、LOG）。"""
+    """统一读取并分析当前用户上传文档（Word/PDF/Excel 等）：多模态优先 + 后缀并行解析。"""
     return _file_op.read_uploaded_file(file_url)
 
 
