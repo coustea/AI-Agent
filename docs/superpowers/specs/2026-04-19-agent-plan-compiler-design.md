@@ -66,7 +66,7 @@ START
 1. `planner` 只负责生成“候选计划”。
 2. `compile_plan` 负责强校验和编译，失败不进入执行。
 3. `execute_step` 内部完成流程决策（`next_step | replan_once | final_summarize | end`）。
-4. `replan_once` 仅可触发一次，用于执行失败兜底。
+4. `replan_once` 仅可触发一次，用于编译/执行失败兜底。
 
 ## 5. Planner-Executor 契约
 
@@ -191,7 +191,7 @@ Planner 约束：
 
 ## 12. 风险与缓解
 
-1. 风险：编译失败直接收口可能降低一次性成功率。
+1. 风险：单次重规划预算可能仍不足以覆盖少数复杂失败场景。
 - 缓解：提高 planner 输入约束质量（能力白名单、必填参数、模板兜底）并强化编译器提示。
 
 2. 风险：单次 replan 仍增加等待时间。
