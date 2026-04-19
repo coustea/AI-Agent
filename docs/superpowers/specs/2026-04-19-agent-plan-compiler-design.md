@@ -33,7 +33,7 @@
 
 - Planner 基于能力白名单生成计划。
 - 新增 `compile_plan` 将计划编译为可执行计划。
-- 编译失败直接收口；执行失败允许一次 `replan`。
+- 编译失败或执行失败都允许一次 `replan` 兜底。
 - 常见任务可用轻量模板缩短首轮规划时间。
 
 ### 方案 B：纯 Prompt 约束
@@ -119,15 +119,15 @@ Planner 约束：
 
 1. 仅执行 `compiled_plan`。
 2. 执行器不自动猜测修复参数。
-3. `compile_ok=false` 时直接进入 `final_summarize`。
+3. `compile_ok=false` 时触发 `replan_once`（若尚未使用）。
 4. 工具运行时错误（timeout/exception）触发 `replan_once`（若尚未使用）。
-5. `replan_once` 后再次失败，直接 `final_summarize`。
+5. `replan_once` 后再次失败（无论编译或执行），直接 `final_summarize`。
 6. 失败上下文（错误码、失败步骤、已完成摘要）回传下一轮 planner（仅一次）。
 
 ## 8. 防循环 Replan 硬约束
 
 1. 状态中增加 `replan_used: bool`，默认 `false`。
-2. 仅当 `replan_used=false` 且失败类型为 `EXECUTION_FAILED` 时允许 `replan_once`。
+2. 仅当 `replan_used=false` 且失败类型为 `COMPILE_FAILED` 或 `EXECUTION_FAILED` 时允许 `replan_once`。
 3. 触发一次后立刻置 `replan_used=true`，后续任何失败都禁止 replan。
 4. 启动期自检：若路由决策出现 `replan` 且 `replan_used=true`，强制改写为 `final_summarize`。
 5. 监控指标要求 `replan_count_per_request <= 1`。
@@ -177,9 +177,10 @@ Planner 约束：
 ### 11.2 集成测试
 
 1. 文档问答正常链路。
-2. 编译失败 -> `final_summarize` 收口链路。
-3. 执行失败 -> `replan_once` -> 成功链路。
-4. 执行失败 -> `replan_once` -> 再失败 -> `final_summarize` 收口链路。
+2. 编译失败 -> `replan_once` -> 成功链路。
+3. 编译失败 -> `replan_once` -> 再失败 -> `final_summarize` 收口链路。
+4. 执行失败 -> `replan_once` -> 成功链路。
+5. 执行失败 -> `replan_once` -> 再失败 -> `final_summarize` 收口链路。
 
 ### 11.3 验收指标
 
@@ -206,4 +207,3 @@ Planner 约束：
 3. 切换 execute 使用 `compiled_plan`，并内聚决策为 `next_step | replan_once | final_summarize | end`。
 4. 增加 `replan_used` 闸门并删除多轮重规划相关字段。
 5. 增加测试与指标埋点。
-
