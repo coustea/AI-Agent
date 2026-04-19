@@ -54,8 +54,8 @@ START
   -> classify
     -> direct_answer -> END
     -> vision_answer -> END
-    -> planner -> compile_plan -> execute_step -> step_guard
-         -> next_step -> execute_step
+    -> planner -> compile_plan -> execute_step
+         -> execute_step (next_step)
          -> replan -> planner
          -> final_summarize -> END
          -> end -> END
@@ -65,7 +65,7 @@ START
 
 1. `planner` 只负责生成“候选计划”。
 2. `compile_plan` 负责强校验和编译，失败不允许进入执行。
-3. `step_guard` 只做流程决策，不做参数修补。
+3. `execute_step` 内部完成流程决策（next/replan/final），不再单独设置 `step_guard`。
 4. `replan` 仅负责重规划触发和预算控制。
 
 ## 5. Planner-Executor 契约
@@ -120,7 +120,8 @@ Planner 约束：
 1. 仅执行 `compiled_plan`。
 2. 执行器不自动猜测修复参数。
 3. 工具运行时错误（timeout/exception）直接标记失败并进入 `replan`。
-4. 失败上下文（错误码、失败步骤、已完成摘要）回传下一轮 planner。
+4. `execute_step` 直接输出下一跳决策（`next_step | replan | final_summarize | end`）。
+5. 失败上下文（错误码、失败步骤、已完成摘要）回传下一轮 planner。
 
 ## 8. 防无限 Replan 机制（硬约束）
 
@@ -209,7 +210,6 @@ Planner 约束：
 
 1. 定义 `available_capabilities` 数据结构并注入 planner。
 2. 实现 `compile_plan` 节点与错误码。
-3. 切换 execute 使用 `compiled_plan`。
+3. 切换 execute 使用 `compiled_plan`，并将原 guard 决策内聚到 execute 节点。
 4. 接入三层防无限重规划机制。
 5. 增加测试与指标埋点。
-
