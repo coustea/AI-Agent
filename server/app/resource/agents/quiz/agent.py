@@ -96,13 +96,10 @@ class QuizAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成一套分层练习题。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from app.tools.file_operator import save_to_workplace
+        from app.tools.registry import get as get_tool
         # 题目最终以 json 保存，方便前端直接渲染成练习卡片或测验页面。
-        return save_to_workplace(
-            sub_dir=sub_dir,
-            topic=topic,
-            content=content,
-            ext=ext,
+        return get_tool("save_to_workplace").invoke(
+            {"sub_dir": sub_dir, "topic": topic, "content": content, "ext": ext}
         )
 
     async def _validate_node(self, state: Any) -> dict:

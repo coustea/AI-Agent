@@ -144,13 +144,10 @@ class CodeAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成一个完整的可运行代码案例。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from app.tools.file_operator import save_to_workplace
+        from app.tools.registry import get as get_tool
         # 代码案例统一保存成 markdown，便于同时承载代码、说明和运行结果。
-        return save_to_workplace(
-            sub_dir=sub_dir,
-            topic=topic,
-            content=content,
-            ext=ext,
+        return get_tool("save_to_workplace").invoke(
+            {"sub_dir": sub_dir, "topic": topic, "content": content, "ext": ext}
         )
 
     def _failure_result(self, state: Any, feedback: str, **fields: Any) -> dict[str, Any]:

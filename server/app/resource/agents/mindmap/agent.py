@@ -14,7 +14,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from app.infra.llm import get_spark_x_llm
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.tools.markdown_to_mindmap import markdown_to_mindmap
+from app.tools.registry import get as get_tool
 
 logger = get_logger(__name__)
 
@@ -126,7 +126,6 @@ class MindmapGenerator(BaseResourceAgent):
         "list_directory", "file_tree", "find_files", "get_file_info",
         "markdown_to_mindmap",
     ]
-    skill_names = ["create-mindmap"]
     def __init__(self) -> None:
         super().__init__(
             name="MindmapAgent",
@@ -135,46 +134,6 @@ class MindmapGenerator(BaseResourceAgent):
             temperature=0.1,
         )
         self.llm = get_spark_x_llm(temperature=0.1)
-        self._mindmap_skill_tool_name: str | None = None
-        self._mindmap_skill_description: str = ""
-        self._mindmap_skill_instructions: str = ""
-
-    async def _load_tools(self) -> None:
-        """加载工具和技能，并缓存 create-mindmap 技能。"""
-        await super()._load_tools()
-
-        logger.info(f"[MindmapAgent] 已加载工具: {[t.name for t in (self._tools or [])]}")
-        self._cache_mindmap_skill()
-
-    def _cache_mindmap_skill(self) -> None:
-        """缓存 create-mindmap 技能的元数据与正文。"""
-        from app.skills.manager import SkillManager
-
-        self._mindmap_skill_tool_name = None
-        self._mindmap_skill_description = ""
-        self._mindmap_skill_instructions = ""
-
-        sm = SkillManager()
-        # 同步调用 _load_skills（已在 load_all 中完成初始化）
-        sm._load_skills()
-        for skill in sm.list_skills():
-            if skill.get("name") != "create-mindmap":
-                continue
-
-            self._mindmap_skill_tool_name = skill.get("tool_name")
-            self._mindmap_skill_description = skill.get("description", "")
-
-            instructions = sm.read_skill_instructions("create-mindmap")
-            if instructions:
-                self._mindmap_skill_instructions = instructions
-
-            logger.info(
-                "[MindmapAgent] 已缓存 create-mindmap 技能: "
-                f"tool={self._mindmap_skill_tool_name or 'N/A'}"
-            )
-            return
-
-        logger.warning("[MindmapAgent] 未找到 create-mindmap 技能，导图生成将退回 prompt 驱动模式")
 
     def _build_system_message(self, state: Any) -> str:
         need_key = state.get("need", "review")
@@ -191,28 +150,11 @@ class MindmapGenerator(BaseResourceAgent):
 
         prompt += (
             "\n\n【执行指南】\n"
-            "1. 先按 create-mindmap 技能的规则组织 Markdown 思维导图。\n"
-            "2. 再使用 `markdown_to_mindmap` 工具生成 HTML 思维导图。\n"
+            "1. 先设计 Markdown 思维导图结构。\n"
+            "2. 使用 `markdown_to_mindmap` 工具生成 HTML 思维导图。\n"
             "3. 生成成功后，向用户反馈生成的 HTML 文件路径即可。\n"
             "注意：不要直接输出 Markdown 源码，必须调用工具生成 HTML。"
         )
-
-        if self._mindmap_skill_description:
-            prompt += (
-                "\n\n【可用技能】\n"
-                f"- create-mindmap: {self._mindmap_skill_description}\n"
-            )
-            if self._mindmap_skill_tool_name:
-                prompt += (
-                    f"如需查看技能原文，可调用 `{self._mindmap_skill_tool_name}`；"
-                    "但即使不显式调用，也必须遵循下方已加载的技能规则。\n"
-                )
-
-        if self._mindmap_skill_instructions:
-            prompt += (
-                "\n\n## [create-mindmap 技能指令]\n"
-                f"{self._mindmap_skill_instructions}"
-            )
 
         return self._append_context_to_prompt(prompt, state)
 
@@ -222,7 +164,7 @@ class MindmapGenerator(BaseResourceAgent):
         need = state.get("need", "review")
         extra = state.get("extra", "")
 
-        msg = f"请为知识点 '{topic}' 生成思维导图，并严格遵循 create-mindmap 技能的结构与格式要求。"
+        msg = f"请为知识点 '{topic}' 生成思维导图。"
         if gap and gap != "无":
             msg += f" 特别注意学生在 '{gap}' 方面存在薄弱环节，请在图中重点体现。"
         if need:
@@ -259,7 +201,7 @@ class MindmapGenerator(BaseResourceAgent):
             if quality_ok:
                 logger.info("[MindmapAgent] 未检测到工具结果，尝试用 Markdown 自动补生成 HTML")
                 try:
-                    tool_result = markdown_to_mindmap.invoke({"markdown_text": markdown_content})
+                    tool_result = get_tool("markdown_to_mindmap").invoke({"markdown_text": markdown_content})
                     file_path = _extract_file_path_from_tool_payload(tool_result)
                 except Exception as exc:
                     logger.error("[MindmapAgent] 自动补生成 HTML 失败: %s", exc, exc_info=exc)

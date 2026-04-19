@@ -61,10 +61,10 @@ from app.shared.vision import build_vision_service
 from app.shared.agent_context import AgentContextService
 from app.infra.llm import get_deepseek_chat_llm, get_deepseek_llm, get_deepseek_reasoner_llm, get_glm_vision_llm, get_spark_x_llm
 from app.infra.logging import get_logger
-from app.resource.base_agent import _ensure_tools_loaded
+from app.tools import registry
 from app.shared.sanitizers import sanitize_tool_messages
 from app.shared.json_utils import parse_first_json_object
-from app.tools import registry
+from app.skills.manager import SkillManager
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.tools import BaseTool
@@ -94,6 +94,25 @@ GRAPH_NODE_NAMES = {
     "full_replan",         # 全局重规划：完全丢弃当前计划重新开始
     "final_summarize",     # 最终总结：整合所有步骤结果生成最终回答
 }
+
+
+def _read_int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
+# 工具调用稳定性参数（支持环境变量覆盖）
+TOOL_CALL_TIMEOUT_SEC = _read_int_env("TUTOR_TOOL_TIMEOUT_SEC", 30, minimum=5, maximum=180)
+TOOL_CALL_MAX_ATTEMPTS = _read_int_env("TUTOR_TOOL_MAX_ATTEMPTS", 2, minimum=1, maximum=3)
+MAX_REPLAN_ATTEMPTS = _read_int_env("TUTOR_MAX_REPLAN_ATTEMPTS", 6, minimum=2, maximum=20)
+MAX_REPAIR_RETRIES_PER_STEP = _read_int_env("TUTOR_MAX_REPAIR_RETRIES_PER_STEP", 1, minimum=0, maximum=3)
+URL_PATTERN = re.compile(r"https?://\S+")
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +159,14 @@ class TutorAgent:
         ]
         self._tools: list[BaseTool] = []                             # 已加载的 LangChain 工具实例
         self._tool_map: dict[str, BaseTool] = {}                     # 工具名 → 实例的映射
+        self._tool_refresh_lock = asyncio.Lock()                     # 工具/技能刷新锁
+        self._available_registered_tools: set[str] = set()           # 当前已加载的注册工具集合
+
+        # ---- 技能自动触发 ----
+        self._skill_manager = SkillManager()                          # 技能发现与加载管理器
+        self._skill_catalog: str = ""                                 # 技能目录摘要（注入到系统提示词）
+        self._available_skill_names: set[str] = set()                 # 已发现技能名集合
+        self._skill_alias_map: dict[str, str] = {}                    # 归一化技能名 → 原技能名
 
         logger.info("[TutorAgent] 初始化完成")
 
@@ -163,19 +190,30 @@ class TutorAgent:
 
         steps: list[PlanStep] = []
 
+        read_file_tool_available = self._tool_available("read_uploaded_file")
+        search_tool_available = self._tool_available("duckduckgo_search")
+
         # 如果有文件附件，优先安排文件读取步骤
         # 因为文件内容通常是用户问题的核心上下文，必须先读取
-        for url in file_urls:
+        if read_file_tool_available:
+            for url in file_urls:
+                steps.append({
+                    "kind": "tool",
+                    "name": "read_uploaded_file",
+                    "goal": "读取用户上传文件内容",
+                    "args_hint": {"file_url": url},
+                })
+        elif file_urls:
             steps.append({
-                "kind": "tool",
-                "name": "read_uploaded_file",
-                "goal": "读取用户上传文件内容",
-                "args_hint": {"file_url": url},
+                "kind": "llm",
+                "name": "intermediate_analysis",
+                "goal": "文件读取工具当前不可用，先给出可执行的补救建议",
+                "args_hint": {"reason": "read_uploaded_file_unavailable", "fallback": True},
             })
 
         # 没有文件且问题可能需要外部信息时，安排一次搜索
         # _likely_requires_lookup 通过关键词（"最新""新闻""价格"等）判断是否需要联网
-        if not file_urls and likely_requires_lookup(question):
+        if not file_urls and likely_requires_lookup(question) and search_tool_available:
             steps.append({
                 "kind": "tool",
                 "name": "duckduckgo_search",
@@ -275,7 +313,7 @@ class TutorAgent:
                     continue
                 text = str(item.get("output", ""))
                 # 用正则从工具输出文本中提取 http/https 链接
-                url_match = re.search(r"https?://\\S+", text)
+                url_match = URL_PATTERN.search(text)
                 if url_match:
                     args["url"] = url_match.group(0)
                     break
@@ -308,7 +346,7 @@ class TutorAgent:
         completed_summary = summarize_step_results(completed_steps or [], max_items=8)
         current_step_text = json.dumps(current_step, ensure_ascii=False) if current_step else ""
 
-        return (
+        prompt = (
             "你是 TutorAgent 的执行规划器。只负责生成可执行计划，不直接回答用户。\n"
             "请输出 JSON 对象，格式为:\n"
             "{\n"
@@ -335,6 +373,15 @@ class TutorAgent:
             f"completed_steps={completed_summary}\n"
             f"available_tools={json.dumps(tools, ensure_ascii=False)}\n"
         )
+
+        if self._skill_catalog:
+            prompt += (
+                f"\n可用技能目录（可通过 kind=skill 步骤调用）:\n"
+                f"{self._skill_catalog}\n"
+                '调用方式: {"kind":"skill","name":"技能名","goal":"...","args_hint":{}}\n'
+            )
+
+        return prompt
 
     async def _generate_plan(
         self,
@@ -439,6 +486,110 @@ class TutorAgent:
             state.get("user_id"), decision, truncate(reason, 120),
         )
 
+    @staticmethod
+    def _normalize_skill_key(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", (value or "").strip().lower())
+
+    def _tool_available(self, name: str) -> bool:
+        return name in self._tool_map
+
+    def _resolve_skill_name(self, requested_name: str) -> str:
+        raw = (requested_name or "").strip()
+        if not raw:
+            return ""
+        if raw in self._available_skill_names:
+            return raw
+        return self._skill_alias_map.get(self._normalize_skill_key(raw), raw)
+
+    def _build_skill_catalog(self, skills: list[dict[str, Any]] | None = None) -> None:
+        """构建技能目录摘要，用于注入系统提示词让 LLM 自动触发技能。"""
+        items = skills if skills is not None else self._skill_manager.list_skills()
+        if not items:
+            self._skill_catalog = ""
+            self._available_skill_names = set()
+            self._skill_alias_map = {}
+            return
+
+        lines = []
+        available_names: set[str] = set()
+        alias_map: dict[str, str] = {}
+        for skill in items:
+            name = str(skill.get("name", "")).strip()
+            if not name:
+                continue
+            available_names.add(name)
+            alias_map[self._normalize_skill_key(name)] = name
+
+            keywords = [str(k).strip() for k in (skill.get("keywords") or []) if str(k).strip()]
+            for keyword in keywords:
+                alias_map.setdefault(self._normalize_skill_key(keyword), name)
+
+            desc = str(skill.get("description", ""))[:150]
+            entry = f"- **{name}**: {desc}"
+            if keywords:
+                entry += f" (关键词: {', '.join(keywords[:5])})"
+            lines.append(entry)
+
+        self._available_skill_names = available_names
+        self._skill_alias_map = alias_map
+        self._skill_catalog = "\n".join(lines)
+        logger.info("[TutorAgent] 技能目录构建完成 数量=%d", len(available_names))
+
+    @staticmethod
+    def _dedupe_tools(tools: list[BaseTool]) -> list[BaseTool]:
+        deduped: dict[str, BaseTool] = {}
+        for tool in tools:
+            deduped[tool.name] = tool
+        return list(deduped.values())
+
+    async def _refresh_tool_inventory(self, *, reason: str) -> None:
+        async with self._tool_refresh_lock:
+            registered_tools: list[BaseTool] = []
+            available_registered: set[str] = set()
+
+            try:
+                registry.ensure_loaded()
+                logger.debug("[TutorAgent] 工具模块已导入 reason=%s", reason)
+            except Exception:
+                logger.exception("[TutorAgent] 工具模块导入失败 reason=%s", reason)
+
+            for tool_name in self.tool_names:
+                try:
+                    tool = registry.get(tool_name)
+                    registered_tools.append(tool)
+                    available_registered.add(tool.name)
+                except Exception:
+                    logger.warning("[TutorAgent] 注册工具缺失 tool=%s reason=%s", tool_name, reason)
+
+            logger.debug(
+                "[TutorAgent] 注册工具刷新完成 reason=%s 数量=%d 名称=%s",
+                reason,
+                len(registered_tools),
+                [tool.name for tool in registered_tools],
+            )
+
+            skill_tools: list[BaseTool] = []
+            skills: list[dict[str, Any]] = []
+            try:
+                await self._skill_manager.load_all()
+                skill_tools = await self._skill_manager.get_tools()
+                skills = self._skill_manager.list_skills()
+                self._build_skill_catalog(skills)
+                logger.debug(
+                    "[TutorAgent] 技能工具刷新完成 reason=%s 数量=%d",
+                    reason,
+                    len(skill_tools),
+                )
+            except Exception:
+                # 技能加载失败时不影响主流程：保留普通工具能力
+                self._build_skill_catalog([])
+                logger.exception("[TutorAgent] 技能工具刷新失败 reason=%s", reason)
+
+            merged_tools = self._dedupe_tools(registered_tools + skill_tools)
+            self._tools = merged_tools
+            self._tool_map = {tool.name: tool for tool in merged_tools}
+            self._available_registered_tools = available_registered
+
     # ------------------------------------------------------------------
     # 图构建
     # ------------------------------------------------------------------
@@ -453,18 +604,7 @@ class TutorAgent:
             logger.info("[TutorAgent] 图构建开始")
 
             try:
-                _ensure_tools_loaded()
-                logger.debug("[TutorAgent] 工具模块已导入")
-
-                registered_tools = registry.get_many(self.tool_names) if self.tool_names else []
-                logger.debug(
-                    "[TutorAgent] 注册工具加载完成 数量=%d 名称=%s",
-                    len(registered_tools),
-                    [t.name for t in registered_tools],
-                )
-
-                self._tools = registered_tools
-                self._tool_map = {tool.name: tool for tool in self._tools}
+                await self._refresh_tool_inventory(reason="ensure_graph")
 
                 graph = StateGraph(TutorState)
                 graph.add_node("classify", self._classify_node)
@@ -934,11 +1074,15 @@ class TutorAgent:
                     tool_call_records.append(record)
                     budget = update_budget_after_call(budget, logical_name)
 
-                    success = not looks_like_error_output(output_text)
+                    success = not self._is_failed_tool_output(output_text, record)
+                    failure_reason = ""
+                    if not success:
+                        record_error = str(record.get("error", "")).strip()
+                        failure_reason = record_error or f"tool_output_invalid: {truncate(output_text, 180)}"
                     result = build_result(
                         success=success,
                         output=output_text,
-                        failure_reason="" if success else f"tool_output_invalid: {truncate(output_text, 180)}",
+                        failure_reason=failure_reason,
                     )
 
                     step_results.append(result)
@@ -1025,7 +1169,59 @@ class TutorAgent:
 
     def _resolve_tool_call_for_step(self, step_kind: str, step_name: str, execution_args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         """将步骤映射为可执行工具调用。"""
+        if step_kind == "skill":
+            # skill 步骤：映射到统一的 skill 工具，并兼容别名/大小写/下划线差异
+            raw_skill_name = str(
+                execution_args.get("name")
+                or execution_args.get("skill_name")
+                or execution_args.get("skill")
+                or step_name
+            ).strip()
+            resolved_name = self._resolve_skill_name(raw_skill_name)
+            include_resources = execution_args.get("include_resources")
+            include_flag = bool(include_resources) if isinstance(include_resources, bool) else True
+            return "skill", {"name": resolved_name, "include_resources": include_flag}
         return step_name, execution_args
+
+    @staticmethod
+    def _is_failed_tool_output(output_text: str, record: ToolCallDetail) -> bool:
+        if str(record.get("status", "")) == "error":
+            return True
+        lower = (output_text or "").lower()
+        if any(marker in lower for marker in ("tool_exception", "tool_timeout", "tool_not_found", "permission denied", "not found", "error:")):
+            return True
+        if any(marker in output_text for marker in ("技能不存在", "脚本执行超时", "路径不在", "不支持的", "错误", "失败", "异常")):
+            return True
+        return looks_like_error_output(output_text)
+
+    @staticmethod
+    def _should_retry_tool_error(
+        *,
+        logical_tool_name: str,
+        attempt: int,
+        max_attempts: int,
+        error_text: str,
+    ) -> bool:
+        if attempt >= max_attempts:
+            return False
+        lower = (error_text or "").lower()
+        transient_markers = [
+            "timeout",
+            "temporarily",
+            "temporary",
+            "connection reset",
+            "connection aborted",
+            "connection refused",
+            "rate limit",
+            "too many requests",
+            "429",
+            "503",
+            "service unavailable",
+            "network",
+        ]
+        if any(marker in lower for marker in transient_markers):
+            return True
+        return is_search_fetch_tool(logical_tool_name)
 
     def _build_llm_step_prompt(self, *, state: TutorState, step: PlanStep, execution_args: dict[str, Any]) -> str:
         question = extract_question(state.get("messages") or [])
@@ -1051,7 +1247,6 @@ class TutorAgent:
         step_name: str,
     ) -> tuple[str, ToolCallDetail]:
         user_id = state.get("user_id")
-        session_id = state.get("session_id")
 
         logger.debug(
             "[TutorAgent] 工具调用 user=%s tool=%s 参数=%s",
@@ -1062,6 +1257,12 @@ class TutorAgent:
         is_search_fetch = is_search_fetch_tool(logical_tool_name)
         query = extract_query_from_args(tool_args)
         url = extract_url_from_args(tool_args)
+
+        if tool_name not in self._tool_map:
+            try:
+                await self._refresh_tool_inventory(reason=f"tool_not_found:{tool_name}")
+            except Exception:
+                logger.exception("[TutorAgent] 工具刷新失败 tool=%s", tool_name)
 
         if tool_name not in self._tool_map:
             error = f"tool_not_found: {tool_name}"
@@ -1085,56 +1286,99 @@ class TutorAgent:
             }
             return error, record
 
-        try:
-            tool = self._tool_map[tool_name]
-            result = await tool.ainvoke(tool_args)
-            output = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
-            elapsed = int((time.monotonic() - started) * 1000)
+        tool = self._tool_map[tool_name]
+        last_error = "tool_exception"
+        last_stack = ""
+        max_attempts = TOOL_CALL_MAX_ATTEMPTS
 
-            logger.info(
-                "[TutorAgent] 工具完成 user=%s tool=%s %dms",
-                user_id, tool_name, elapsed,
-            )
+        for attempt in range(1, max_attempts + 1):
+            try:
+                result = await asyncio.wait_for(
+                    tool.ainvoke(tool_args),
+                    timeout=TOOL_CALL_TIMEOUT_SEC,
+                )
+                output = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
+                elapsed = int((time.monotonic() - started) * 1000)
 
-            record = {
-                "tool": tool_name,
-                "args": tool_args,
-                "result": truncate(output, 4000),
-                "status": "success",
-                "plan_version": plan_version,
-                "step_index": step_index,
-                "step_name": step_name,
-                "is_search_fetch": is_search_fetch,
-                "query": query,
-                "url": url,
-                "error": "",
-                "error_stack": "",
-            }
-            return output, record
+                logger.info(
+                    "[TutorAgent] 工具完成 user=%s tool=%s attempt=%s/%s %dms",
+                    user_id,
+                    tool_name,
+                    attempt,
+                    max_attempts,
+                    elapsed,
+                )
 
-        except Exception:
-            stack = traceback.format_exc()
-            elapsed = int((time.monotonic() - started) * 1000)
-            logger.exception(
-                "[TutorAgent] 工具调用异常 tool=%s 耗时=%sms",
-                tool_name,
-                elapsed,
-            )
-            record = {
-                "tool": tool_name,
-                "args": tool_args,
-                "result": "",
-                "status": "error",
-                "plan_version": plan_version,
-                "step_index": step_index,
-                "step_name": step_name,
-                "is_search_fetch": is_search_fetch,
-                "query": query,
-                "url": url,
-                "error": "tool_exception",
-                "error_stack": stack,
-            }
-            return "tool_exception", record
+                record = {
+                    "tool": tool_name,
+                    "args": tool_args,
+                    "result": truncate(output, 4000),
+                    "status": "success",
+                    "plan_version": plan_version,
+                    "step_index": step_index,
+                    "step_name": step_name,
+                    "is_search_fetch": is_search_fetch,
+                    "query": query,
+                    "url": url,
+                    "error": "",
+                    "error_stack": "",
+                }
+                return output, record
+
+            except asyncio.TimeoutError:
+                last_error = f"tool_timeout:{TOOL_CALL_TIMEOUT_SEC}s"
+                last_stack = traceback.format_exc()
+                elapsed = int((time.monotonic() - started) * 1000)
+                logger.warning(
+                    "[TutorAgent] 工具调用超时 tool=%s attempt=%s/%s timeout=%ss elapsed=%sms",
+                    tool_name,
+                    attempt,
+                    max_attempts,
+                    TOOL_CALL_TIMEOUT_SEC,
+                    elapsed,
+                )
+                if not self._should_retry_tool_error(
+                    logical_tool_name=logical_tool_name,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error_text=last_error,
+                ):
+                    break
+
+            except Exception as exc:
+                last_stack = traceback.format_exc()
+                last_error = "tool_exception"
+                elapsed = int((time.monotonic() - started) * 1000)
+                logger.exception(
+                    "[TutorAgent] 工具调用异常 tool=%s attempt=%s/%s 耗时=%sms",
+                    tool_name,
+                    attempt,
+                    max_attempts,
+                    elapsed,
+                )
+                if not self._should_retry_tool_error(
+                    logical_tool_name=logical_tool_name,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error_text=str(exc),
+                ):
+                    break
+
+        record = {
+            "tool": tool_name,
+            "args": tool_args,
+            "result": "",
+            "status": "error",
+            "plan_version": plan_version,
+            "step_index": step_index,
+            "step_name": step_name,
+            "is_search_fetch": is_search_fetch,
+            "query": query,
+            "url": url,
+            "error": last_error,
+            "error_stack": last_stack,
+        }
+        return last_error, record
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
@@ -1188,9 +1432,13 @@ class TutorAgent:
                     retry_count = int(state.get("current_step_retry_count", 0))
                     partial_count = int(state.get("partial_replan_count", 0))
                     full_count = int(state.get("full_replan_count", 0))
+                    total_replan_count = partial_count + full_count
 
-                    # 不再按固定次数封顶；失败时先尝试一次修复，再在局部/全局重规划间交替推进。
-                    if is_repairable_failure(failure_reason, current_step) and retry_count == 0:
+                    if total_replan_count >= MAX_REPLAN_ATTEMPTS:
+                        decision = "final_summarize"
+                        reason = "replan_budget_exhausted"
+                    # 失败时优先修复当前步骤（最多 MAX_REPAIR_RETRIES_PER_STEP 次）
+                    elif is_repairable_failure(failure_reason, current_step) and retry_count < MAX_REPAIR_RETRIES_PER_STEP:
                         decision = "repair_step"
                         reason = "repair_current_step_first"
                     elif partial_count <= full_count:
@@ -1222,6 +1470,17 @@ class TutorAgent:
         retry_count = int(state.get("current_step_retry_count", 0)) + 1
 
         with node_timer("repair_step", user=user_id, session=session_id, step_index=idx):
+            if retry_count > MAX_REPAIR_RETRIES_PER_STEP:
+                logger.warning(
+                    "[TutorAgent] 步骤修复跳过 原因=超过重试上限 retry=%s max=%s",
+                    retry_count,
+                    MAX_REPAIR_RETRIES_PER_STEP,
+                )
+                return {
+                    "current_step_retry_count": retry_count,
+                    "last_failure_reason": "repair_budget_exhausted",
+                }
+
             if not plan or idx >= len(plan):
                 logger.warning(
                     "[TutorAgent] 步骤修复跳过 原因=计划缺失",
@@ -1272,7 +1531,7 @@ class TutorAgent:
                 for item in reversed(state.get("step_results") or []):
                     if not item.get("success"):
                         continue
-                    match = re.search(r"https?://\\S+", str(item.get("output", "")))
+                    match = URL_PATTERN.search(str(item.get("output", "")))
                     if match:
                         args["url"] = match.group(0)
                         break
@@ -1544,17 +1803,27 @@ class TutorAgent:
         else:
             analysis_hint = ""
 
+        # 技能自动触发：将可用技能目录注入系统提示词
+        skill_catalog_section = ""
+        if self._skill_catalog:
+            skill_catalog_section = (
+                "\n\n## 【可用技能目录】\n"
+                "以下是你当前可以调用的技能。当你认为某个技能与用户请求相关时"
+                "（哪怕只有很小的可能性），请在规划中生成 kind=skill 的步骤来调用它。\n"
+                f"{self._skill_catalog}\n"
+            )
+
         direct_prompt = PROMPTS["direct_system"].format(
             profile_context=profile_str,
             fact_context=fact_str,
             recent_chat_context=recent_chat_context,
-        ) + analysis_hint
+        ) + analysis_hint + skill_catalog_section
         tool_prompt = PROMPTS["tool_system"].format(
             profile_context=profile_str,
             fact_context=fact_str,
             recent_chat_context=recent_chat_context,
             file_info_context=file_info_str,
-        ) + analysis_hint
+        ) + analysis_hint + skill_catalog_section
 
         initial_state: TutorState = {
             "user_id": user_id,

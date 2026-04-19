@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.tools.file_operator import save_ppt_file
+from app.tools.registry import get as get_tool
 
 logger = get_logger(__name__)
 
@@ -206,7 +206,7 @@ class PptAgent(BaseResourceAgent):
             if quality_ok:
                 logger.info("[PptAgent] 未检测到工具结果，尝试根据 Markdown 大纲自动保存 PPT")
                 try:
-                    payload = save_ppt_file.invoke(
+                    payload = get_tool("save_ppt_file").invoke(
                         {
                             "topic": state.get("topic", "教学演示"),
                             "outline_markdown": outline_markdown,

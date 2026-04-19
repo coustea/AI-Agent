@@ -20,7 +20,7 @@ from app.infra.logging import get_logger
 from app.config import CONTENT_AGENT_TIMEOUT_SECONDS, CONTENT_LLM_TIMEOUT
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
 from app.shared.json_utils import parse_first_json_object
-from app.tools.file_operator import save_to_workplace
+from app.tools.registry import get as get_tool
 
 logger = get_logger(__name__)
 
@@ -189,7 +189,7 @@ class ContentWriter(BaseResourceAgent):
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
         # 统一走共享 save_to_workplace，保持所有资源文件的命名和保存位置一致。
-        result = save_to_workplace.invoke(
+        result = get_tool("save_to_workplace").invoke(
             {
                 "sub_dir": sub_dir,
                 "topic": topic,
@@ -737,16 +737,14 @@ class ContentWriter(BaseResourceAgent):
 
             # 额外生成 DOCX 和 PDF 格式
             try:
-                from app.tools.document_executor import save_docx_file
-                docx_result = json.loads(save_docx_file.invoke({"title": topic, "content": content}))
+                docx_result = json.loads(get_tool("save_docx_file").invoke({"title": topic, "content": content}))
                 docx_path = docx_result.get("file_path")
                 logger.info("[ContentAgent] DOCX 已生成: %s", docx_path)
             except Exception:
                 logger.exception("[ContentAgent] DOCX 生成失败")
 
             try:
-                from app.tools.document_executor import save_pdf_file
-                pdf_result = json.loads(save_pdf_file.invoke({"title": topic, "content": content}))
+                pdf_result = json.loads(get_tool("save_pdf_file").invoke({"title": topic, "content": content}))
                 pdf_path = pdf_result.get("file_path")
                 logger.info("[ContentAgent] PDF 已生成: %s", pdf_path)
             except Exception:

@@ -124,9 +124,8 @@ AVATAR_CLASSIFIER_PROMPT = """判断以下用户消息需要直接回答还是�
 
 def _lazy_import_tools():
     """延迟导入工具注册表，避免循环导入"""
-    from app.tools.registry import get_many
-    from app.tools import _ensure_tools_loaded  # type: ignore
-    _ensure_tools_loaded()
+    from app.tools.registry import get_many, ensure_loaded
+    ensure_loaded()
     return get_many(AVATAR_TOOL_NAMES)
 
 

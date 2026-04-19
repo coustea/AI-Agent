@@ -94,13 +94,10 @@ class ReadingAgent(BaseResourceAgent):
         return f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
 
     def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from app.tools.file_operator import save_to_workplace
+        from app.tools.registry import get as get_tool
         # 阅读推荐同样落成 JSON，后续前端更容易做卡片列表和外链跳转。
-        return save_to_workplace(
-            sub_dir=sub_dir,
-            topic=topic,
-            content=content,
-            ext=ext,
+        return get_tool("save_to_workplace").invoke(
+            {"sub_dir": sub_dir, "topic": topic, "content": content, "ext": ext}
         )
 
     def _failure_result(
