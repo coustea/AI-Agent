@@ -10,13 +10,10 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+from app.infra.llm import get_deepseek_chat_llm
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.resource.validation import (
-    extract_last_ai_content,
-    validate_json_response,
-    make_validation_result,
-)
+from app.resource.validation import make_validation_result
 
 logger = get_logger(__name__)
 
@@ -41,8 +38,8 @@ class ReadingState(BaseAgentState):
 class ReadingAgent(BaseResourceAgent):
     """拓展阅读推荐 Agent。"""
 
-    # 推荐列表输出必须是 JSON，启用 JSON Mode 让模型直接输出结构化对象（不依赖正则提取）。
-    force_json_mode = True
+    # 使用 DeepSeek + with_structured_output 进行结构化输出
+    structured_output_schema = ReadingOutput
 
     tool_names = [
         "save_to_workplace", "read_file_safe",
@@ -59,6 +56,7 @@ class ReadingAgent(BaseResourceAgent):
             state_schema=ReadingState,
             temperature=0.3,
         )
+        self.llm = get_deepseek_chat_llm(temperature=0.3)
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         ctx = ""
@@ -114,32 +112,42 @@ class ReadingAgent(BaseResourceAgent):
         return result
 
     async def _validate_node(self, state: Any) -> dict:
-        messages = state.get("messages", [])
         retry_count = state.get("retry_count", 0)
-        # 只验证最后产出的 JSON 主体，不把中间解释文字一起带进解析器。
-        raw = extract_last_ai_content(messages)
 
         error = state.get("error")
-        if error or not raw:
+        if error:
             return self._failure_result(
                 state,
-                error or "未生成推荐内容",
-                recommendations_json=raw,
+                error,
+                recommendations_json="",
+                parsed_recommendations=[],
+            )
+
+        # 优先从结构化输出读取（with_structured_output 直接返回 Pydantic 对象）
+        structured = state.get("_structured_output")
+        if structured:
+            try:
+                validated = ReadingOutput.model_validate(structured)
+            except Exception as e:
+                return self._failure_result(
+                    state,
+                    f"结构化输出校验失败: {e}",
+                    recommendations_json="",
+                    parsed_recommendations=[],
+                )
+            items = validated.recommendations
+            raw = json.dumps({"recommendations": [item.model_dump() for item in items]}, ensure_ascii=False)
+        else:
+            return self._failure_result(
+                state,
+                "未生成推荐内容",
+                recommendations_json="",
                 parsed_recommendations=[],
             )
 
         logger.info("[ReadingAgent] _validate_node: 评审推荐质量")
 
-        is_valid, feedback, validated, extra = validate_json_response(
-            raw, ReadingOutput, retry_count, "推荐结构"
-        )
-        if not is_valid:
-            failure = {**extra, "recommendations_json": raw, "parsed_recommendations": []}
-            failure["error"] = failure.get("validation_feedback") or feedback
-            return failure
-
-        items = validated.recommendations
-        # 至少保证有一个“小列表”，否则阅读推荐对用户帮助太弱。
+        # 至少保证有一个"小列表"，否则阅读推荐对用户帮助太弱。
         if len(items) < 3:
             return self._failure_result(
                 state,
@@ -159,7 +167,7 @@ class ReadingAgent(BaseResourceAgent):
                 )
 
         types = {item.type for item in items}
-        # 这里要求资源类型至少有两种，避免全是“书籍”或全是“论文”。
+        # 这里要求资源类型至少有两种，避免全是"书籍"或全是"论文"。
         if len(types) < 2:
             return self._failure_result(
                 state,

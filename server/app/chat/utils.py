@@ -15,7 +15,6 @@ from typing import Any, Generator, Optional
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 
 from app.infra.logging import get_logger
-from app.shared.json_utils import parse_first_json_object
 
 logger = get_logger(__name__)
 
@@ -159,12 +158,12 @@ def inject_images(messages: list[AnyMessage], image_urls: Optional[list[str]]) -
 # ---------------------------------------------------------------------------
 
 def classify_route(state: dict) -> str:
-    """LangGraph 条件路由：根据 classify 节点的结果选择 direct/vision/planner 路径。"""
+    """LangGraph 条件路由：根据 classify 节点的结果选择 direct/attachment/planner 路径。"""
     return state.get("route", "direct")
 
 
 def guard_route(state: dict) -> str:
-    """LangGraph 条件路由：根据 step_guard 的决策选择下一步节点。"""
+    """LangGraph 条件路由：根据节点写入的 last_guard_decision 选择下一步节点。"""
     return state.get("last_guard_decision", "final_summarize")
 
 
@@ -175,21 +174,6 @@ def guard_route(state: dict) -> str:
 def stream_event(event: str, data: Any) -> dict[str, Any]:
     """构造 SSE 事件对象，统一事件格式为 {event, data}。"""
     return {"event": event, "data": data}
-
-
-# ---------------------------------------------------------------------------
-# JSON 解析
-# ---------------------------------------------------------------------------
-
-def extract_json_payload(raw_text: str) -> dict[str, Any] | None:
-    """从 LLM 输出文本中提取第一个 JSON 对象，兼容 code fence 和前后说明文字。"""
-    text = (raw_text or "").strip()
-    if not text:
-        return None
-    try:
-        return parse_first_json_object(text)
-    except Exception:
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -234,20 +218,6 @@ def likely_requires_lookup(question: str) -> bool:
         return False
     markers = ["最新", "今年", "今天", "新闻", "官网", "检索", "搜索", "查一下", "查找", "价格", "数据"]
     return any(m in text for m in markers)
-
-
-def is_repairable_failure(reason: str, step: dict | None) -> bool:
-    """判断步骤失败是否可以通过"修复参数后重试"来恢复。"""
-    if not step:
-        return False
-    text = (reason or "").lower()
-    repairable_markers = [
-        "参数", "invalid", "超时", "timeout", "empty", "为空",
-        "path", "url", "query", "permission",
-    ]
-    if any(m in text for m in repairable_markers):
-        return True
-    return str(step.get("kind", "")) in {"tool", "skill"}
 
 
 # ---------------------------------------------------------------------------

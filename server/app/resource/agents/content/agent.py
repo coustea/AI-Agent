@@ -13,16 +13,22 @@ from typing import Any, Optional
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
+from pydantic import BaseModel, Field
 
 
 from app.infra.llm import get_deepseek_chat_llm
 from app.infra.logging import get_logger
 from app.config import CONTENT_AGENT_TIMEOUT_SECONDS, CONTENT_LLM_TIMEOUT
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.shared.json_utils import parse_first_json_object
 from app.tools.registry import get as get_tool
 
 logger = get_logger(__name__)
+
+
+class ReviewResult(BaseModel):
+    """文档审查结果结构化输出。"""
+    passed: bool = Field(description="是否通过审查")
+    feedback: str = Field(default="", description="如果不通过，说明具体原因和改进建议")
 
 
 class ContentState(BaseAgentState):
@@ -30,15 +36,6 @@ class ContentState(BaseAgentState):
     outline: str
     content: str
     skill_context: str
-
-
-def _extract_json(text: str) -> dict:
-    try:
-        return parse_first_json_object(text)
-    except Exception:
-        # 审查失败时允许走降级：上游会把它当作“不通过”并重试或放行
-        # 这里不使用正则抽取 JSON，避免通过 regex “抠 JSON”。
-        return {"passed": False, "feedback": "无法解析审查结果"}
 
 
 _REVIEW_PROMPT = (
@@ -53,9 +50,6 @@ _REVIEW_PROMPT = (
     "{content}\n\n"
     "## 大纲\n"
     "{outline}\n\n"
-    "## 输出要求\n"
-    "请严格按以下 JSON 格式输出审查结论，不要包含代码围栏：\n"
-    '{{"passed": true/false, "feedback": "如果不通过，说明具体原因和改进建议"}}'
 )
 
 
@@ -78,11 +72,12 @@ class ContentWriter(BaseResourceAgent):
             temperature=0.3,
         )
         self.llm = get_deepseek_chat_llm(temperature=0.3)
+        self._review_llm = self.llm.with_structured_output(ReviewResult)
 
     @staticmethod
     def _workflow_timeout_seconds() -> int:
         """Allow enough time for outline + content + review, while staying configurable."""
-        # 内容 Agent 需要经历“大纲 -> 正文 -> 审查”三轮，因此超时阈值单独拉高。
+        # 内容 Agent 需要经历"大纲 -> 正文 -> 审查"三轮，因此超时阈值单独拉高。
         return CONTENT_AGENT_TIMEOUT_SECONDS
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
@@ -98,7 +93,7 @@ class ContentWriter(BaseResourceAgent):
         # self._tools 已由 _load_tools() 填充，无需重复初始化
         graph = StateGraph(self.state_schema)
 
-        # agent 负责与 LLM 交互，tools 执行工具，step_router 在“大纲/正文”之间切换，
+        # agent 负责与 LLM 交互，tools 执行工具，step_router 在"大纲/正文"之间切换，
         # validate 做最终质量审查。
         graph.add_node("agent", self._agent_node)
         graph.add_node("tools", self._tools_node)
@@ -464,7 +459,7 @@ class ContentWriter(BaseResourceAgent):
                 )
             ))
         elif current_step == "content" and not any("撰写完整的专业讲解文档" in str(m.content) for m in messages):
-            # 第一次进入正文阶段时，补一条“按大纲扩写”的 HumanMessage。
+            # 第一次进入正文阶段时，补一条"按大纲扩写"的 HumanMessage。
             messages.append(HumanMessage(content=self._build_content_request(outline)))
 
         llm_with_tools = self.llm.bind_tools(self._tools) if self._tools else self.llm
@@ -564,16 +559,13 @@ class ContentWriter(BaseResourceAgent):
         )
 
         try:
-            # 审查输出必须是 JSON：优先启用 JSON Mode（OpenAI 兼容 response_format）。
-            try:
-                review_llm = self.llm.bind(response_format={"type": "json_object"})
-                response = await review_llm.ainvoke([HumanMessage(content=prompt)])
-            except Exception as exc:
-                logger.warning("[ContentAgent] 审查 JSON Mode 不支持，fallback=plain error=%s", exc, exc_info=exc)
-                response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-            review = _extract_json(response.content)
-            passed = review.get("passed", False)
-            feedback = review.get("feedback", "")
+            review = await self._review_llm.ainvoke([HumanMessage(content=prompt)])
+            if isinstance(review, ReviewResult):
+                passed = review.passed
+                feedback = review.feedback
+            else:
+                passed = False
+                feedback = "审查结果格式异常"
 
             logger.info(f"[ContentAgent] 审查结果: passed={passed}, feedback={feedback}")
             return {

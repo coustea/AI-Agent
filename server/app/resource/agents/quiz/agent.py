@@ -10,13 +10,10 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+from app.infra.llm import get_deepseek_chat_llm
 from app.infra.logging import get_logger
 from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.resource.validation import (
-    extract_last_ai_content,
-    validate_json_response,
-    make_validation_result,
-)
+from app.resource.validation import make_validation_result
 
 logger = get_logger(__name__)
 
@@ -42,8 +39,8 @@ class QuizState(BaseAgentState):
 class QuizAgent(BaseResourceAgent):
     """分层练习题生成 Agent。"""
 
-    # 题目输出必须是 JSON，启用 JSON Mode 让模型直接输出结构化对象（不依赖正则提取）。
-    force_json_mode = True
+    # 使用 DeepSeek + with_structured_output 进行结构化输出
+    structured_output_schema = QuizOutput
 
     tool_names = [
         "save_to_workplace", "read_file_safe",
@@ -60,6 +57,7 @@ class QuizAgent(BaseResourceAgent):
             state_schema=QuizState,
             temperature=0.3,
         )
+        self.llm = get_deepseek_chat_llm(temperature=0.3)
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         ctx = ""
@@ -71,7 +69,7 @@ class QuizAgent(BaseResourceAgent):
         return ctx
 
     def _format_user_profile(self, profile: dict[str, Any]) -> str:
-        # 这里只选择“知识水平”和“易错模式”两个最直接影响题目设计的字段。
+        # 这里只选择"知识水平"和"易错模式"两个最直接影响题目设计的字段。
         if not profile: return ""
         parts = []
         if profile.get("error_pattern"):
@@ -103,27 +101,35 @@ class QuizAgent(BaseResourceAgent):
         )
 
     async def _validate_node(self, state: Any) -> dict:
-        messages = state.get("messages", [])
         retry_count = state.get("retry_count", 0)
-        # 校验时只取最后一条 AI 文本，避免系统提示或工具输出干扰 JSON 解析。
-        raw = extract_last_ai_content(messages)
 
         error = state.get("error")
-        if error or not raw:
+        if error:
             return make_validation_result(
-                False, retry_count, error or "未生成题目内容",
-                questions_json=raw, parsed_questions=[],
+                False, retry_count, error,
+                questions_json="", parsed_questions=[],
+            )
+
+        # 优先从结构化输出读取（with_structured_output 直接返回 Pydantic 对象）
+        structured = state.get("_structured_output")
+        if structured:
+            try:
+                validated = QuizOutput.model_validate(structured)
+            except Exception as e:
+                return make_validation_result(
+                    False, retry_count, f"结构化输出校验失败: {e}",
+                    questions_json="", parsed_questions=[],
+                )
+            questions = validated.questions
+            raw = json.dumps({"questions": [q.model_dump() for q in questions]}, ensure_ascii=False)
+        else:
+            return make_validation_result(
+                False, retry_count, "未生成题目内容",
+                questions_json="", parsed_questions=[],
             )
 
         logger.info("[QuizAgent] _validate_node: 校验题目结构")
 
-        is_valid, feedback, validated, extra = validate_json_response(
-            raw, QuizOutput, retry_count, "题目结构"
-        )
-        if not is_valid:
-            return {**extra, "questions_json": raw, "parsed_questions": []}
-
-        questions = validated.questions
         # 先校验最小题量，避免生成出来只有一两道题就直接当成功。
         if len(questions) < 3:
             return make_validation_result(
@@ -133,7 +139,7 @@ class QuizAgent(BaseResourceAgent):
             )
 
         difficulties = {q.difficulty for q in questions}
-        # 再校验难度分层是否真的生效，确保“分层练习题”不是名义上的。
+        # 再校验难度分层是否真的生效，确保"分层练习题"不是名义上的。
         if len(difficulties) < 2:
             return make_validation_result(
                 False, retry_count,

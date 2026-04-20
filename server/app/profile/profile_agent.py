@@ -1,7 +1,6 @@
 from typing import Optional, Annotated
 from pydantic import BaseModel, Field, ConfigDict
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
 from app.memory.service import memory_service
 from app.infra.logging import get_logger
 from app.infra.llm import get_deepseek_llm
@@ -79,9 +78,6 @@ PROFILE_BUILDER_PROMPT = """
    - 81-100: 优秀（深入掌握，能举一反三，有系统性思考）
 10. **评分依据**：评分应基于对话中展现的实际水平，而非主观臆测。如果某维度信息不足，请输出 null 而非猜测分数。
 11. **合并评分**：如果原有评分存在且对话中没有新的相关证据，保留原有评分。如有新证据，合理调整。
-
-# 输出格式要求（必须严格遵守）：
-{format_instructions}
 """
 
 
@@ -90,7 +86,7 @@ class ProfileBuilderAgent:
         self.memory = memory
         self.module_name = "mentor"
         self.llm = get_deepseek_llm(temperature=0.1, streaming=False)
-        self.output_parser = PydanticOutputParser(pydantic_object=ProfileExtraction)
+        self._structured_llm = self.llm.with_structured_output(ProfileExtraction)
 
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("human", PROFILE_BUILDER_PROMPT)
@@ -106,9 +102,8 @@ class ProfileBuilderAgent:
         )
 
     async def _invoke_structured(self, prompt) -> ProfileExtraction:
-        resp = await self.llm.ainvoke(prompt.to_messages())
-        raw_text = resp.content if isinstance(resp.content, str) else str(resp.content)
-        return self.output_parser.parse(raw_text)
+        messages = prompt.to_messages()
+        return await self._structured_llm.ainvoke(messages)
 
     @staticmethod
     def _select_dialogue_messages(recent_msgs: list) -> list:
@@ -189,7 +184,6 @@ class ProfileBuilderAgent:
                 "current_profile": current_profile_str,
                 "memory_context": memory_context,
                 "chat_history": chat_history_str,
-                "format_instructions": self.output_parser.get_format_instructions(),
             })
             updated_data = await self._invoke_structured(prompt)
             logger.info(f"[ProfileBuilder] LLM 提取成功 (user_id={user_id})")

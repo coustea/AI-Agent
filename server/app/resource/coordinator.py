@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.infra.llm import get_deepseek_reasoner_llm
 
@@ -31,6 +32,25 @@ logger = get_logger(__name__)
 
 PROMPT_DIR = Path(__file__).parent / "prompts"
 PLANNER_PROMPT_PATH = PROMPT_DIR / "planner.md"
+
+
+class PlannerTaskParameterSchema(BaseModel):
+    topic: str = ""
+    major: str = ""
+    course: str = ""
+    gap: str = ""
+    need: str = ""
+    extra: str = ""
+
+
+class PlannerTaskSchema(BaseModel):
+    agent: str
+    description: str = ""
+    parameters: PlannerTaskParameterSchema = Field(default_factory=PlannerTaskParameterSchema)
+
+
+class PlannerPlanOutput(BaseModel):
+    tasks: list[PlannerTaskSchema] = Field(default_factory=list)
 
 
 @dataclass
@@ -149,6 +169,7 @@ class CoordinatorAgent:
         self.emitter = emitter
         self.profile_loader = profile_loader or ProfileSnapshotLoader()
         self.llm = get_deepseek_reasoner_llm(streaming=False)
+        self._planner_llm = self.llm.with_structured_output(PlannerPlanOutput)
         logger.info("[Coordinator] 初始化完成: planner_model=%s", DEEPSEEK_REASONER_MODEL)
 
     async def run(
@@ -381,31 +402,16 @@ class CoordinatorAgent:
             HumanMessage(content="请根据以上信息生成资源任务规划。"),
         ]
         logger.info(
-            "[Coordinator] 正在调用 Planner: course=%r allowed_agents=%s prompt_path=%s",
+            "[Coordinator] 正在调用 Planner (structured_output): course=%r allowed_agents=%s prompt_path=%s",
             task.get("course", ""),
             allowed_agents or "ALL",
             PLANNER_PROMPT_PATH,
         )
-        # Planner 输出要求是 JSON：优先启用 JSON Mode，减少 code fence/解释性文字导致的解析失败。
-        # 若后端不支持 response_format，则回退到普通调用（仍要求 prompt 输出 JSON）。
-        try:
-            planner_llm = self.llm.bind(response_format={"type": "json_object"})
-            response = await planner_llm.ainvoke(messages)
-        except Exception as exc:
-            logger.warning("[Coordinator] Planner JSON Mode 不支持，fallback=plain error=%s", exc, exc_info=exc)
-            response = await self.llm.ainvoke(messages)
-        content = response.content.strip()
-        if content.lstrip().startswith("```"):
-            lines = [line for line in content.splitlines() if not line.strip().startswith("```")]
-            content = "\n".join(lines).strip()
-        try:
-            plan_payload = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise PlanningError(f"Planner 输出不是合法 JSON: {exc}") from exc
+        response = await self._planner_llm.ainvoke(messages)
+        if not isinstance(response, PlannerPlanOutput):
+            raise PlanningError(f"Planner 返回类型异常: {type(response).__name__}")
 
-        tasks = plan_payload.get("tasks", [])
-        if not isinstance(tasks, list):
-            raise PlanningError("Planner 输出缺少 tasks 列表")
+        tasks = [t.model_dump() for t in response.tasks]
 
         logger.info("[Coordinator] Planner 返回 %s 个任务", len(tasks))
         return self._filter_tasks_by_selection(tasks, allowed_agents)

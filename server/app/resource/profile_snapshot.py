@@ -18,10 +18,7 @@ class ProfileSnapshotLoader:
         profile_data = await self._load_profile(user_id)
         snapshot = LearnerProfileSnapshot.from_sources(user_data=user_data, profile_data=profile_data)
         logger.info(
-            "[ProfileSnapshot] 画像快照组装完成: user_id=%s major=%r has_profile=%s",
-            user_id,
-            snapshot.major,
-            bool(profile_data),
+            "[ProfileSnapshot] 画像快照组装完成"
         )
         return snapshot
 

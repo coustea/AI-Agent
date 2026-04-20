@@ -175,6 +175,27 @@
             </div>
           </div>
 
+          <div class="multimodal-option-bar">
+            <button
+              type="button"
+              class="option-chip"
+              :class="{ active: generateImage }"
+              @click="handleImageToggle"
+              :aria-pressed="generateImage"
+            >
+              生成图片
+            </button>
+            <button
+              type="button"
+              class="option-chip"
+              :class="{ active: generateVideo }"
+              @click="handleVideoToggle"
+              :aria-pressed="generateVideo"
+            >
+              生成视频
+            </button>
+          </div>
+
           <div class="input-wrapper" :class="{ 'pill-shape': chatMode === 'standard' }">
             <div class="toolbar-left">
               <template v-if="chatMode === 'standard'">
@@ -294,6 +315,8 @@ const isSpeaking = ref(false)
 const chatScroll = ref<HTMLElement | null>(null)
 const profileUpdated = ref(false)
 const uploadingFile = ref(false)
+const generateImage = ref(false)
+const generateVideo = ref(false)
 
 // 会话管理
 const sessions = ref<ChatSession[]>([])
@@ -517,6 +540,25 @@ const removeAttachment = (idx: number) => {
   pendingFiles.value.splice(idx, 1)
 }
 
+// 多模态选项互斥切换
+const handleImageToggle = () => {
+  if (generateImage.value) {
+    generateImage.value = false
+  } else {
+    generateImage.value = true
+    generateVideo.value = false
+  }
+}
+
+const handleVideoToggle = () => {
+  if (generateVideo.value) {
+    generateVideo.value = false
+  } else {
+    generateVideo.value = true
+    generateImage.value = false
+  }
+}
+
 // ==========================================
 // 发送消息（SSE 流式）
 // ==========================================
@@ -631,6 +673,8 @@ const handleSend = async () => {
         session_id: currentSessionId.value,
         image_urls: imageUrls.length > 0 ? imageUrls : undefined,
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
+        generate_image: generateImage.value,
+        generate_video: generateVideo.value,
       },
       // onChunk
       (chunk) => {
@@ -1277,6 +1321,37 @@ onBeforeUnmount(() => {
 .input-panel {
   padding: 1rem 2rem 1.5rem;
   background: #FFFFFF;
+}
+
+.multimodal-option-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.option-chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #CBD5E1;
+  background: #F8FAFC;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-chip:hover {
+  border-color: #94A3B8;
+  background: #F1F5F9;
+}
+
+.option-chip.active {
+  color: #0C4A6E;
+  border-color: #7DD3FC;
+  background: #E0F2FE;
 }
 
 .attachments-preview {

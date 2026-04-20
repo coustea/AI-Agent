@@ -18,6 +18,8 @@ class MentorChatRequest(BaseModel):
     session_id: Optional[str] = None
     image_urls: Optional[list[str]] = None
     file_urls: Optional[list[str]] = None
+    generate_image: Optional[bool] = False
+    generate_video: Optional[bool] = False
 
 
 class AttachmentInfo(BaseModel):
@@ -116,6 +118,10 @@ class TutorState(TypedDict, total=False):
     session_id: str                          # 当前会话 ID（UUID 字符串）
     image_urls: Optional[list[str]]          # 用户上传的图片 URL 列表
     file_urls: Optional[list[str]]           # 用户上传的文件 URL 列表
+    generate_image: bool                     # 是否生成图片（前端显式控制，默认 false）
+    generate_video: bool                     # 是否生成视频（前端显式控制，默认 false）
+    request_generate_image: bool             # 前端是否请求生成图片
+    request_generate_video: bool             # 前端是否请求生成视频
 
     # ---- 路由与执行模式 ----
     route: str                               # 分类结果: "direct" | "vision_needed" | "tool_needed"
@@ -138,21 +144,32 @@ class TutorState(TypedDict, total=False):
 
     # ---- 计划与执行 ----
     plan: list[PlanStep]                     # 当前执行计划（步骤列表）
+    compiled_plan: list[PlanStep]            # 编译验证后的可执行计划
+    compile_ok: bool                         # 计划编译是否通过
+    compile_errors: list[dict[str, Any]]     # 计划编译错误列表
+    last_compile_error_code: str             # 最近一次编译主错误码
     plan_version: int                        # 计划版本号（每次重新规划递增）
     current_step_index: int                  # 当前执行到的步骤序号
     step_results: list[StepResult]           # 所有已完成步骤的结果列表
     last_step_result: StepResult             # 最近一次步骤结果（供守卫判断）
 
-    # ---- 重试与重规划计数 ----
-    current_step_retry_count: int            # 当前步骤的修复重试次数
-    partial_replan_count: int                # 已执行的局部重规划次数
-    full_replan_count: int                   # 已执行的全局重规划次数
+    # ---- 重规划状态 ----
+    replan_count: int                        # 已执行的重规划次数（限制最多一次）
+    replan_used: bool                        # 本轮请求是否已使用过一次重规划兜底
 
     # ---- 终止与调试信息 ----
     last_failure_reason: str                 # 最近一次步骤失败的原因
     last_guard_decision: str                 # 最近一次守卫的决策结果
     guard_reason: str                        # 守卫决策的理由
     termination_reason: str                  # 图执行终止原因
+    image_generation_status: str             # 图片节点状态: skipped | done | error
+    video_generation_status: str             # 视频节点状态: skipped | done | error
+    image_generation_prompt: str             # 图片生成节点构建的上下文化提示词
+    video_generation_prompt: str             # 视频生成节点构建的上下文化提示词
+    image_generation_model: str              # 图片生成规划所用模型
+    video_generation_model: str              # 视频生成规划所用模型
+    image_generation_plan: dict[str, Any]    # 图片生成结构化规划结果
+    video_generation_plan: dict[str, Any]    # 视频生成结构化规划结果
 
     # ---- 工具调用记录 ----
     budget: BudgetState                      # 工具调用统计状态

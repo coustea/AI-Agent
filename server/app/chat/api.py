@@ -24,6 +24,8 @@ async def mentor_chat_stream(
     file: UploadFile | None = File(default=None),
     image_urls: str | None = Form(default=None),
     file_urls: str | None = Form(default=None),
+    generate_image: bool = Form(default=False),
+    generate_video: bool = Form(default=False),
     current_user: User = Depends(get_current_user),
 ):
     """SSE 流式对话主入口。兼容多种附件传参（files/file/image_urls/file_urls）。"""
@@ -65,6 +67,8 @@ async def mentor_chat_stream(
             session_id=effective_session,
             image_urls=merged_image_urls or None,
             file_urls=merged_file_urls or None,
+            generate_image=generate_image,
+            generate_video=generate_video,
         ),
         media_type="text/event-stream",
     )

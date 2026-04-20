@@ -2,14 +2,12 @@
 
 目标图结构:
     START -> classify
-      ├─ direct_answer -> END
-      ├─ vision_answer -> END
-      └─ planner -> execute_step -> step_guard
+      ├─ direct_answer -> (generate_image/video?) -> END
+      ├─ attachment_answer -> (generate_image/video?) -> END  # 图片+文档并行分析后直接回答
+      └─ planner -> compile_plan -> execute_step
                          ├─ next_step -> execute_step
-                         ├─ repair_step -> repair_step -> execute_step
-                         ├─ partial_replan -> partial_replan -> execute_step
-                         ├─ full_replan -> full_replan -> execute_step
-                         ├─ final_summarize -> END
+                         ├─ replan -> compile_plan
+                         ├─ final_summarize -> (generate_image/video?) -> END
                          └─ end -> END
 
 设计目标：稳定性、可控性、可调试性。
@@ -23,9 +21,10 @@ import os
 import re
 import time
 import traceback
-from urllib.parse import quote
 from pathlib import Path
 from typing import Any, Optional
+
+from pydantic import BaseModel, Field
 
 # 对话上下文注入
 from app.shared.request_context import runtime_context as chat_runtime_context
@@ -34,12 +33,10 @@ from app.chat.schemas import PlanStep, StepResult, ToolCallDetail, BudgetState, 
 # 工具函数：从 agent.py 中提取的辅助函数，保持核心代码简洁
 from app.chat.utils import (
     classify_route,
-    extract_json_payload,
     extract_question,
     extract_query_from_args,
     extract_url_from_args,
     guard_route,
-    is_repairable_failure,
     is_search_fetch_tool,
     is_unusable_reply_text,
     likely_requires_lookup,
@@ -54,16 +51,14 @@ from app.chat.utils import (
     truncate,
     update_budget_after_call,
     build_messages,
-    inject_images,
 )
 
 from app.shared.vision import build_vision_service
 from app.shared.agent_context import AgentContextService
-from app.infra.llm import get_deepseek_chat_llm, get_deepseek_llm, get_deepseek_reasoner_llm, get_glm_vision_llm, get_spark_x_llm
+from app.infra.llm import get_deepseek_chat_llm, get_deepseek_llm, get_glm_vision_llm, get_spark_x_llm
 from app.infra.logging import get_logger
 from app.tools import registry
 from app.shared.sanitizers import sanitize_tool_messages
-from app.shared.json_utils import parse_first_json_object
 from app.skills.manager import SkillManager
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -83,16 +78,16 @@ GRAPH_RECURSION_LIMIT = 300
 
 # 图中所有节点名称集合，用于 SSE 事件过滤（只处理这些节点的事件）
 GRAPH_NODE_NAMES = {
-    "classify",            # 入口分类：判断 direct / vision / tool_needed
+    "classify",            # 入口分类：判断 direct / attachment / tool_needed
     "direct_answer",       # 直接回答：纯文本对话，不调用工具
-    "vision_answer",       # 视觉回答：处理图片输入，使用 GLM-4V
+    "attachment_answer",   # 附件回答：并行处理图片+文档后直接回答
     "planner",             # 规划器：制定工具执行计划
+    "compile_plan",        # 计划编译：验证计划可执行性
     "execute_step",        # 执行步骤：调用工具或 LLM 中间步骤
-    "step_guard",          # 步骤守卫：评估执行结果，决定下一步动作
-    "repair_step",         # 步骤修复：调整参数后重试失败步骤
-    "partial_replan",      # 局部重规划：从失败步骤开始重新规划
-    "full_replan",         # 全局重规划：完全丢弃当前计划重新开始
+    "replan",              # 单次重规划：失败兜底并重新生成计划
     "final_summarize",     # 最终总结：整合所有步骤结果生成最终回答
+    "generate_image",      # 多模态占位节点：图片生成（当前仅日志）
+    "generate_video",      # 多模态占位节点：视频生成（当前仅日志）
 }
 
 
@@ -110,8 +105,7 @@ def _read_int_env(name: str, default: int, *, minimum: int, maximum: int) -> int
 # 工具调用稳定性参数（支持环境变量覆盖）
 TOOL_CALL_TIMEOUT_SEC = _read_int_env("TUTOR_TOOL_TIMEOUT_SEC", 30, minimum=5, maximum=180)
 TOOL_CALL_MAX_ATTEMPTS = _read_int_env("TUTOR_TOOL_MAX_ATTEMPTS", 2, minimum=1, maximum=3)
-MAX_REPLAN_ATTEMPTS = _read_int_env("TUTOR_MAX_REPLAN_ATTEMPTS", 6, minimum=2, maximum=20)
-MAX_REPAIR_RETRIES_PER_STEP = _read_int_env("TUTOR_MAX_REPAIR_RETRIES_PER_STEP", 1, minimum=0, maximum=3)
+MAX_REPLAN_ATTEMPTS = _read_int_env("TUTOR_MAX_REPLAN_ATTEMPTS", 1, minimum=1, maximum=1)
 URL_PATTERN = re.compile(r"https?://\S+")
 
 
@@ -119,6 +113,56 @@ URL_PATTERN = re.compile(r"https?://\S+")
 # Prompt 加载
 # ---------------------------------------------------------------------------
 PROMPTS: dict[str, str] = load_prompts(AGENT_DIR)
+
+
+class PlannerStepSchema(BaseModel):
+    kind: str = "llm"
+    name: str = ""
+    goal: str = "执行当前步骤"
+    args_hint: dict[str, Any] = Field(default_factory=dict)
+    context_reasoning: str = Field(
+        default="",
+        description="该步骤的设计依据：参考了用户的哪些画像/记忆/对话上下文",
+    )
+
+
+class PlannerOutputSchema(BaseModel):
+    context_used: str = Field(
+        default="",
+        description="简要说明你参考了用户的哪些上下文信息来设计此计划",
+    )
+    steps: list[PlannerStepSchema] = Field(default_factory=list)
+
+
+class ImageGenerationPlanSchema(BaseModel):
+    title: str = ""
+    visual_goal: str = ""
+    positive_prompt: str = ""
+    negative_prompt: str = ""
+    style: str = ""
+    aspect_ratio: str = "16:9"
+    key_elements: list[str] = Field(default_factory=list)
+    safety_notes: str = ""
+
+
+class VideoSceneSchema(BaseModel):
+    scene_id: int = 1
+    shot: str = ""
+    duration_sec: int = 4
+    description: str = ""
+
+
+class VideoGenerationPlanSchema(BaseModel):
+    title: str = ""
+    visual_goal: str = ""
+    positive_prompt: str = ""
+    negative_prompt: str = ""
+    style: str = ""
+    aspect_ratio: str = "16:9"
+    total_duration_sec: int = 12
+    scenes: list[VideoSceneSchema] = Field(default_factory=list)
+    audio_notes: str = ""
+    safety_notes: str = ""
 
 
 class TutorAgent:
@@ -137,8 +181,23 @@ class TutorAgent:
         self.llm = get_spark_x_llm(temperature=1.0, streaming=True)         # 聊天模型：SparkMAX（流式输出）
         self.worker_llm = get_deepseek_llm(temperature=0.2, streaming=False) # 工作模型：DeepSeek（中间步骤分析）
         self.classifier_llm = get_deepseek_chat_llm(temperature=0.0, streaming=False, max_tokens=120)   # 决策模型：DeepSeek Chat 分类
-        self.planner_llm = get_deepseek_reasoner_llm(streaming=False, max_tokens=1400)     # 规划模型：DeepSeek Reasoner (R1)
-        self.guard_llm = get_deepseek_llm(temperature=0.0, streaming=False, max_tokens=180)        # 决策模型：DeepSeek 守卫
+        # 规划模型：DeepSeek Chat 结构化 JSON 输出，避免手工解析字符串 JSON
+        self.planner_llm = get_deepseek_chat_llm(
+            temperature=0.0,
+            streaming=False,
+            max_tokens=1400,
+        ).with_structured_output(PlannerOutputSchema)
+        # 多模态规划模型：图片与视频使用不同模型，按前端开关触发
+        self.image_plan_llm = get_deepseek_chat_llm(
+            temperature=0.1,
+            streaming=False,
+            max_tokens=900,
+        ).with_structured_output(ImageGenerationPlanSchema)
+        self.video_plan_llm = get_deepseek_llm(
+            temperature=0.1,
+            streaming=False,
+            max_tokens=1200,
+        ).with_structured_output(VideoGenerationPlanSchema)
 
         # ---- 视觉模型（图片理解） ----
         self.glm_vision_llm = get_glm_vision_llm()                 # GLM-4V 视觉模型实例
@@ -156,11 +215,14 @@ class TutorAgent:
         self.tool_names = [                                          # 可用工具名称列表（plan-execute 模式使用）
             "web_fetch", "duckduckgo_search",                        # 网页抓取 + 搜索
             "read_uploaded_file", "list_uploaded_files",             # 文件读取
+            "execute_shell","execute_shell_sync","safe_shell"
         ]
         self._tools: list[BaseTool] = []                             # 已加载的 LangChain 工具实例
         self._tool_map: dict[str, BaseTool] = {}                     # 工具名 → 实例的映射
         self._tool_refresh_lock = asyncio.Lock()                     # 工具/技能刷新锁
         self._available_registered_tools: set[str] = set()           # 当前已加载的注册工具集合
+        self._tool_required_args: dict[str, set[str]] = {}           # 工具名 -> 必填参数
+        self._planner_capabilities: list[dict[str, Any]] = []        # 规划器可见能力清单
 
         # ---- 技能自动触发 ----
         self._skill_manager = SkillManager()                          # 技能发现与加载管理器
@@ -337,28 +399,39 @@ class TutorAgent:
         recent_chat_context = state.get("recent_chat_context", "")
         file_context = state.get("file_context", "")
         attachment_analysis_context = state.get("attachment_analysis_context", "")
-
-        tools = [
-            {"name": t.name, "description": truncate(getattr(t, "description", ""), 180)}
-            for t in self._tools
-        ]
+        request_generate_image = bool(state.get("generate_image", state.get("request_generate_image", False)))
+        request_generate_video = bool(state.get("generate_video", state.get("request_generate_video", False)))
 
         completed_summary = summarize_step_results(completed_steps or [], max_items=8)
         current_step_text = json.dumps(current_step, ensure_ascii=False) if current_step else ""
 
         prompt = (
-            "你是 TutorAgent 的执行规划器。只负责生成可执行计划，不直接回答用户。\n"
-            "请输出 JSON 对象，格式为:\n"
-            "{\n"
-            "  \"steps\": [\n"
-            "    {\"kind\":\"tool|skill|llm|final_answer\",\"name\":\"...\",\"goal\":\"...\",\"args_hint\":{}}\n"
-            "  ]\n"
-            "}\n"
-            "规则:\n"
-            "1) 避免重复搜索和重复抓取。\n"
-            "2) 步骤数量以解决问题为准，避免无意义冗余步骤。\n"
-            "3) 最后一步必须是 kind=final_answer。\n"
-            "4) 只输出 JSON，不要输出解释。\n\n"
+            "你是 TutorAgent 的执行规划器。只负责生成可执行计划，不直接回答用户。\n\n"
+
+            "# 上下文感知规则（最高优先级）\n"
+            "1) **画像驱动**: 根据 profile_context 中的知识基础和认知水平调整策略。\n"
+            "   - 知识基础薄弱 → 搜索入门级内容，避免复杂术语\n"
+            "   - 认知水平较高 → 可搜索进阶资料，鼓励深度分析\n"
+            "   - 认知风格偏好（如视觉/案例/推导）→ 在 goal 中体现，指导后续执行\n\n"
+
+            "2) **记忆联动**: 根据 fact_context 中的时效性事实调整优先级。\n"
+            "   - 有近期考试/截止日期 → 优先搜索相关考点或复习资料\n"
+            "   - 有明确学习目标 → 围绕目标设计步骤\n"
+            "   - 有已记录的薄弱点 → 针对性安排练习或解析步骤\n\n"
+
+            "3) **对话去重**: 根据 recent_chat_context 避免重复已讨论的内容。\n"
+            "   - 如果近期对话已详细回答过类似问题 → 不要安排相同的搜索\n"
+            "   - 如果用户在延续之前的话题 → 安排补充性而非重复性步骤\n\n"
+
+            "4) **附件优先**: 如果用户上传了文件/图片，优先安排文件读取或图片分析步骤。\n\n"
+
+            "# 结构性约束\n"
+            "5) 最后一步必须是 kind=final_answer。\n"
+            "6) 避免重复搜索和重复抓取。\n"
+            "7) 步骤数量以解决问题为准（通常 2-5 步），避免无意义冗余。\n"
+            "8) 请在 context_used 中说明你参考了哪些上下文，在每步的 context_reasoning 中说明设计依据。\n"
+            "9) 不要规划图片/视频生成步骤；多模态生成由工作流固定节点处理。\n\n"
+
             f"mode={mode}\n"
             f"user_question={question}\n"
             f"profile_context={truncate(profile_context, 1200)}\n"
@@ -368,10 +441,12 @@ class TutorAgent:
             f"file_urls={json.dumps(file_urls, ensure_ascii=False)}\n"
             f"image_urls={json.dumps(image_urls, ensure_ascii=False)}\n"
             f"attachment_analysis_context={truncate(attachment_analysis_context, 2000)}\n"
+            f"request_generate_image={request_generate_image}\n"
+            f"request_generate_video={request_generate_video}\n"
             f"failure_reason={failure_reason}\n"
             f"current_step={current_step_text}\n"
             f"completed_steps={completed_summary}\n"
-            f"available_tools={json.dumps(tools, ensure_ascii=False)}\n"
+            f"available_capabilities={json.dumps(self._planner_capabilities, ensure_ascii=False)}\n"
         )
 
         if self._skill_catalog:
@@ -403,24 +478,25 @@ class TutorAgent:
 
         raw_output = ""
         try:
-            try:
-                planner_llm = self.planner_llm.bind(response_format={"type": "json_object"})
-                response = await planner_llm.ainvoke([HumanMessage(content=planner_prompt)])
-                logger.info(f"[TutorAgent]: 计划为: {response}")
-            except Exception as exc:
-                logger.debug(
-                    "[TutorAgent] 规划器JSON模式不支持 user=%s mode=%s error=%s",
-                    state.get("user_id"), mode, exc,
-                )
-                response = await self.planner_llm.ainvoke([HumanMessage(content=planner_prompt)])
+            response = await self.planner_llm.ainvoke([HumanMessage(content=planner_prompt)])
 
-            raw_output = normalize_message_content(response.content)
+            raw_steps: list[dict[str, Any]] = []
+            if isinstance(response, PlannerOutputSchema):
+                raw_steps = [
+                    step.model_dump() if hasattr(step, "model_dump") else step.dict()  # pydantic v2/v1 兼容
+                    for step in response.steps
+                ]
+                if response.context_used:
+                    logger.info("[TutorAgent] planner 上下文使用: %s", truncate(response.context_used, 200))
+            elif isinstance(response, dict):
+                maybe_steps = response.get("steps", [])
+                if isinstance(maybe_steps, list):
+                    raw_steps = [item for item in maybe_steps if isinstance(item, dict)]
 
-            payload = extract_json_payload(raw_output)
-            raw_steps = payload.get("steps", []) if isinstance(payload, dict) else []
-            if not isinstance(raw_steps, list):
-                raw_steps = []
-            plan = self._normalize_plan_steps([s for s in raw_steps if isinstance(s, dict)], start_index=start_index)
+            raw_output = json.dumps({"steps": raw_steps}, ensure_ascii=False, default=str)
+            logger.info("[TutorAgent] 规划结构化输出=%s", truncate(raw_output, 500))
+
+            plan = self._normalize_plan_steps(raw_steps, start_index=start_index)
             if not plan:
                 raise ValueError("planner returned empty plan")
 
@@ -441,7 +517,7 @@ class TutorAgent:
 
     def _log_plan_summary(self, state: TutorState, *, plan: list[PlanStep], mode: str) -> None:
         # 记录计划摘要日志：包含每一步的类型:名称，方便排查规划问题
-        # mode 参数区分 initial / partial_replan / full_replan / fallback 等不同规划来源
+        # mode 参数区分 initial / replan / fallback 等不同规划来源
         steps_brief = [f"{s.get('kind')}:{s.get('name')}" for s in plan]
         logger.info(
             "[TutorAgent] 执行计划 mode=%s 步骤=%s",
@@ -479,7 +555,7 @@ class TutorAgent:
 
     def _log_guard_decision(self, state: TutorState, *, decision: str, reason: str) -> None:
         # 记录守卫节点的决策结果和原因，debug 级别不影响生产日志量
-        # decision 是下一步动作（next_step / repair_step / partial_replan / full_replan / final_summarize）
+        # decision 是下一步动作（next_step / replan / final_summarize）
         # reason 是决策依据的详细描述，用于回溯为什么走了某条恢复路径
         logger.debug(
             "[TutorAgent] 步骤守卫 user=%s 决策=%s 原因=%s",
@@ -536,6 +612,56 @@ class TutorAgent:
         logger.info("[TutorAgent] 技能目录构建完成 数量=%d", len(available_names))
 
     @staticmethod
+    def _extract_required_args_from_schema(args_schema: Any) -> set[str]:
+        if args_schema is None:
+            return set()
+        required: set[str] = set()
+        model_fields = getattr(args_schema, "model_fields", None)
+        if isinstance(model_fields, dict):
+            for name, field in model_fields.items():
+                try:
+                    if field.is_required():
+                        required.add(str(name))
+                except Exception:
+                    continue
+            return required
+        legacy_fields = getattr(args_schema, "__fields__", None)
+        if isinstance(legacy_fields, dict):
+            for name, field in legacy_fields.items():
+                if getattr(field, "required", False):
+                    required.add(str(name))
+        return required
+
+    def _build_planner_capabilities(self) -> None:
+        capabilities: list[dict[str, Any]] = []
+        tool_required_args: dict[str, set[str]] = {}
+
+        for tool in self._tools:
+            required_args = self._extract_required_args_from_schema(getattr(tool, "args_schema", None))
+            tool_required_args[tool.name] = required_args
+            capabilities.append(
+                {
+                    "kind": "tool",
+                    "name": tool.name,
+                    "required_args": sorted(required_args),
+                    "description": truncate(getattr(tool, "description", ""), 180),
+                }
+            )
+
+        for skill_name in sorted(self._available_skill_names):
+            capabilities.append(
+                {
+                    "kind": "skill",
+                    "name": skill_name,
+                    "required_args": [],
+                    "description": "技能能力（由 skill 工具执行）",
+                }
+            )
+
+        self._tool_required_args = tool_required_args
+        self._planner_capabilities = capabilities
+
+    @staticmethod
     def _dedupe_tools(tools: list[BaseTool]) -> list[BaseTool]:
         deduped: dict[str, BaseTool] = {}
         for tool in tools:
@@ -589,6 +715,7 @@ class TutorAgent:
             self._tools = merged_tools
             self._tool_map = {tool.name: tool for tool in merged_tools}
             self._available_registered_tools = available_registered
+            self._build_planner_capabilities()
 
     # ------------------------------------------------------------------
     # 图构建
@@ -609,14 +736,14 @@ class TutorAgent:
                 graph = StateGraph(TutorState)
                 graph.add_node("classify", self._classify_node)
                 graph.add_node("direct_answer", self._direct_answer_node)
-                graph.add_node("vision_answer", self._vision_answer_node)
+                graph.add_node("attachment_answer", self._attachment_answer_node)
                 graph.add_node("planner", self._planner_node)
+                graph.add_node("compile_plan", self._compile_plan_node)
                 graph.add_node("execute_step", self._execute_step_node)
-                graph.add_node("step_guard", self._step_guard_node)
-                graph.add_node("repair_step", self._repair_step_node)
-                graph.add_node("partial_replan", self._partial_replan_node)
-                graph.add_node("full_replan", self._full_replan_node)
+                graph.add_node("replan", self._replan_node)
                 graph.add_node("final_summarize", self._final_summarize_node)
+                graph.add_node("generate_image", self._generate_image_node)
+                graph.add_node("generate_video", self._generate_video_node)
                 logger.debug("[TutorAgent] 节点已注册")
 
                 graph.add_edge(START, "classify")
@@ -625,33 +752,61 @@ class TutorAgent:
                     classify_route,
                     {
                         "direct": "direct_answer",
-                        "vision_needed": "vision_answer",
+                        "attachment_needed": "attachment_answer",
                         "tool_needed": "planner",
                     },
                 )
-                # direct_answer 完成后直接结束
-                graph.add_edge("direct_answer", END)
-                # vision_answer 结束后直接结束
-                graph.add_edge("vision_answer", END)
-                graph.add_edge("planner", "execute_step")
-                graph.add_edge("execute_step", "step_guard")
                 graph.add_conditional_edges(
-                    "step_guard",
+                    "direct_answer",
+                    guard_route,
+                    {
+                        "generate_image": "generate_image",
+                        "generate_video": "generate_video",
+                        "end": END,
+                    },
+                )
+                graph.add_conditional_edges(
+                    "attachment_answer",
+                    guard_route,
+                    {
+                        "generate_image": "generate_image",
+                        "generate_video": "generate_video",
+                        "end": END,
+                    },
+                )
+                graph.add_edge("planner", "compile_plan")
+                graph.add_conditional_edges(
+                    "compile_plan",
                     guard_route,
                     {
                         "next_step": "execute_step",
-                        "repair_step": "repair_step",
-                        "partial_replan": "partial_replan",
-                        "full_replan": "full_replan",
+                        "replan": "replan",
                         "final_summarize": "final_summarize",
                         "end": END,
                     },
                 )
-                graph.add_edge("repair_step", "execute_step")
-                graph.add_edge("partial_replan", "execute_step")
-                graph.add_edge("full_replan", "execute_step")
-                # final_summarize 完成后结束
-                graph.add_edge("final_summarize", END)
+                graph.add_conditional_edges(
+                    "execute_step",
+                    guard_route,
+                    {
+                        "next_step": "execute_step",
+                        "replan": "replan",
+                        "final_summarize": "final_summarize",
+                        "end": END,
+                    },
+                )
+                graph.add_edge("replan", "compile_plan")
+                graph.add_conditional_edges(
+                    "final_summarize",
+                    guard_route,
+                    {
+                        "generate_image": "generate_image",
+                        "generate_video": "generate_video",
+                        "end": END,
+                    },
+                )
+                graph.add_edge("generate_image", END)
+                graph.add_edge("generate_video", END)
 
                 self.graph = graph.compile()
                 logger.info("[TutorAgent] 图构建完成")
@@ -671,67 +826,46 @@ class TutorAgent:
         messages = state.get("messages") or []
         file_urls = state.get("file_urls") or []
         image_urls = state.get("image_urls") or []
-        # 提取用户最新一条消息的纯文本，用于分类判断和截断传给 LLM
+        generate_image = bool(state.get("generate_image", state.get("request_generate_image", False)))
+        generate_video = bool(state.get("generate_video", state.get("request_generate_video", False)))
         user_message = extract_question(messages)
 
         with node_timer("classify", user=user_id, session=session_id):
-            # 快速路径1：文件 + 图片同时存在时，并行执行视觉分析，
-            # 将图片分析结果注入上下文后统一走 plan-execute 路径处理文件。
-            # 这样图片和文档的信息都能在后续步骤中被利用。
-            if file_urls and image_urls:
+            # 快速路径1：用户要求生成图片或视频 → tool_needed
+            if generate_image or generate_video:
                 logger.info(
-                    "[TutorAgent] 路由分类 route=tool_needed 原因=文件+图片并行"
-                )
-                vision_context = await self._preanalyze_images(
-                    image_urls, user_message, state,
-                )
-                return {
-                    "route": "tool_needed",
-                    "execution_mode": "plan_execute",
-                    "attachment_analysis_context": vision_context,
-                }
-
-            # 快速路径2：仅有文件附件（PDF/Word等）直接走工具路径，无需 LLM 分类
-            # 因为文件内容必须通过工具读取，无法通过纯文本对话处理
-            if file_urls:
-                logger.info(
-                    "[TutorAgent] 路由分类 route=tool_needed 原因=文件附件"
+                    "[TutorAgent] 路由分类 route=tool_needed 原因=多模态生成请求"
                 )
                 return {
                     "route": "tool_needed",
                     "execution_mode": "plan_execute",
                 }
 
-            # 快速路径3：仅有图片附件直接走视觉路径，也无需 LLM 分类
-            # 因为图片必须通过视觉模型处理，纯文本模型无法理解图片
-            if image_urls:
+            # 快速路径2：有图片或文档附件 → attachment_needed（并行分析后直接回答）
+            if file_urls or image_urls:
                 logger.info(
-                    "[TutorAgent] 路由分类 route=vision_needed 原因=图片附件"
+                    "[TutorAgent] 路由分类 route=attachment_needed 原因=附件(图片=%s,文档=%s)",
+                    len(image_urls), len(file_urls),
                 )
                 return {
-                    "route": "vision_needed",
-                    "execution_mode": "vision",
+                    "route": "attachment_needed",
+                    "execution_mode": "attachment",
                 }
 
-            # 慢速路径：无附件时使用分类 LLM 判断用户意图。
-            # classifier prompt 包含用户消息（截断到800字符防超限）和分类要求。
-            # 附加指令明确了三种路由标签的判定标准，引导 LLM 输出单一标签。
+            # 慢速路径：无附件时使用分类 LLM 判断用户意图
             classify_prompt = PROMPTS["classifier"].format(
                 user_message=user_message[:800],
                 has_attachments="无附件",
             )
 
             try:
-                # 调用快速分类模型（低温度、短输出），获取路由标签
                 response = await self.classifier_llm.ainvoke([HumanMessage(content=classify_prompt)])
                 raw = normalize_message_content(response.content)
                 raw_norm = raw.strip().lower()
 
-                # 关键词匹配判断路由：优先识别工具/视觉，其余走 direct
+                # 关键词匹配判断路由：只有 tool_needed 走规划路径
                 if "tool" in raw_norm:
                     route = "tool_needed"
-                elif "vision" in raw_norm or "image" in raw_norm:
-                    route = "vision_needed"
                 else:
                     route = "direct"
 
@@ -742,11 +876,9 @@ class TutorAgent:
 
                 return {
                     "route": route,
-                    # tool_needed 时进入 plan_execute 循环，其余路由直接作为执行模式
                     "execution_mode": "plan_execute" if route == "tool_needed" else route,
                 }
 
-            # 分类 LLM 调用失败时安全降级到 direct 模式，避免阻塞用户对话
             except Exception:
                 logger.exception(
                     "[TutorAgent] 路由分类 回退=direct",
@@ -785,6 +917,100 @@ class TutorAgent:
         except Exception:
             logger.exception("[TutorAgent] 图片预分析失败，跳过图片分析")
         return ""
+
+    @staticmethod
+    def _next_multimodal_guard_decision(state: TutorState) -> tuple[str, str]:
+        # 图片和视频互斥：优先图片，选了一个就直接执行并结束
+        if bool(state.get("generate_image", state.get("request_generate_image", False))):
+            return "generate_image", "image_requested_by_frontend"
+        if bool(state.get("generate_video", state.get("request_generate_video", False))):
+            return "generate_video", "video_requested_by_frontend"
+        return "end", "no_multimodal_requested"
+
+    def _build_multimodal_prompt(self, state: TutorState, *, modality: str) -> str:
+        question = extract_question(state.get("messages") or [])
+        profile_context = truncate(state.get("profile_context", ""), 600)
+        fact_context = truncate(state.get("fact_context", ""), 600)
+        recent_chat_context = truncate(state.get("recent_chat_context", ""), 600)
+        file_context = truncate(state.get("file_context", ""), 500)
+        attachment_analysis_context = truncate(state.get("attachment_analysis_context", ""), 900)
+        step_summary = summarize_step_results(state.get("step_results") or [], max_items=10)
+
+        latest_answer = ""
+        messages = state.get("messages") or []
+        if isinstance(messages, list):
+            for msg in reversed(messages):
+                if isinstance(msg, AIMessage):
+                    latest_answer = truncate(normalize_message_content(msg.content), 900)
+                    break
+
+        return (
+            f"你是多模态资源生成器，请基于上下文生成{modality}创作指令。\n"
+            "要求：不得脱离上下文，不得凭空创作与用户问题无关内容。\n"
+            "输出应覆盖：主题、关键内容点、风格、受众难度、禁忌项。\n"
+            f"用户问题: {question}\n"
+            f"最终回答摘要: {latest_answer}\n"
+            f"用户画像: {profile_context}\n"
+            f"用户记忆: {fact_context}\n"
+            f"近期对话: {recent_chat_context}\n"
+            f"附件信息: {file_context}\n"
+            f"附件分析: {attachment_analysis_context}\n"
+            f"执行结果摘要:\n{step_summary}\n"
+        )
+
+    async def _plan_image_generation(self, state: TutorState) -> dict[str, Any]:
+        context_prompt = self._build_multimodal_prompt(state, modality="图片")
+        plan_prompt = (
+            f"{context_prompt}\n"
+            "请输出图片生成计划，要求：\n"
+            "1) positive_prompt 可直接用于图像模型。\n"
+            "2) negative_prompt 明确避免项（低质量、错别字、畸形人物等）。\n"
+            "3) key_elements 保留 3-8 个关键视觉元素。\n"
+            "4) style 与用户学习场景一致，避免纯装饰化。\n"
+        )
+        response = await self.image_plan_llm.ainvoke([HumanMessage(content=plan_prompt)])
+        if isinstance(response, ImageGenerationPlanSchema):
+            return response.model_dump()
+        if isinstance(response, dict):
+            return response
+        return {
+            "title": "图片生成计划",
+            "visual_goal": "基于上下文生成教学图片",
+            "positive_prompt": context_prompt,
+            "negative_prompt": "低清晰度、错误文字、与主题无关",
+            "style": "educational",
+            "aspect_ratio": "16:9",
+            "key_elements": [],
+            "safety_notes": "不得生成违规内容",
+        }
+
+    async def _plan_video_generation(self, state: TutorState) -> dict[str, Any]:
+        context_prompt = self._build_multimodal_prompt(state, modality="视频")
+        plan_prompt = (
+            f"{context_prompt}\n"
+            "请输出视频生成计划，要求：\n"
+            "1) total_duration_sec 控制在 8-30 秒。\n"
+            "2) scenes 至少 2 个，含 shot、duration_sec、description。\n"
+            "3) positive_prompt 要能指导视频模型生成连贯镜头。\n"
+            "4) audio_notes 说明旁白/字幕建议。\n"
+        )
+        response = await self.video_plan_llm.ainvoke([HumanMessage(content=plan_prompt)])
+        if isinstance(response, VideoGenerationPlanSchema):
+            return response.model_dump()
+        if isinstance(response, dict):
+            return response
+        return {
+            "title": "视频生成计划",
+            "visual_goal": "基于上下文生成教学短视频",
+            "positive_prompt": context_prompt,
+            "negative_prompt": "抖动镜头、语义跳跃、错误字幕",
+            "style": "educational",
+            "aspect_ratio": "16:9",
+            "total_duration_sec": 12,
+            "scenes": [],
+            "audio_notes": "普通话旁白，术语解释清晰",
+            "safety_notes": "不得生成违规内容",
+        }
 
     # ------------------------------------------------------------------
     # 节点: direct_answer
@@ -832,10 +1058,13 @@ class TutorAgent:
                     "[TutorAgent] 直接回答完成 预览=%s",
                     truncate(response.content, 220),
                 )
+                next_decision, next_reason = self._next_multimodal_guard_decision(state)
                 return {
                     "messages": [response],
                     # 标记终止原因，用于日志追踪和后续流程判断
                     "termination_reason": "direct_answer_done",
+                    "last_guard_decision": next_decision,
+                    "guard_reason": next_reason,
                 }
 
             except Exception:
@@ -843,98 +1072,127 @@ class TutorAgent:
                 raise
 
     # ------------------------------------------------------------------
-    # 节点: vision_answer
-    # 图片理解路径：处理用户上传的图片，使用视觉模型分析后回答问题。
-    # 支持两种视觉模式：spark（星火 OCR+分析）和 glm（GLM-4V 原生视觉）。
+    # 节点: attachment_answer
+    # 附件理解路径：并行处理图片和文档，分析后直接回答问题。
     # ------------------------------------------------------------------
-    async def _vision_answer_node(self, state: TutorState) -> dict[str, Any]:
+    async def _attachment_answer_node(self, state: TutorState) -> dict[str, Any]:
         user_id = state.get("user_id")
         session_id = state.get("session_id")
+        file_urls = state.get("file_urls") or []
         image_urls = state.get("image_urls") or []
 
-        with node_timer("vision_answer", user=user_id, session=session_id, image_count=len(image_urls)):
+        with node_timer("attachment_answer", user=user_id, session=session_id, image_count=len(image_urls), file_count=len(file_urls)):
             try:
                 messages = list(state.get("messages") or [])
                 question = extract_question(messages)
                 system_prompt = state.get("system_prompt", "")
 
                 logger.info(
-                    "[TutorAgent] 视觉回答 question=%s",
+                    "[TutorAgent] 附件回答 question=%s images=%s files=%s",
                     truncate(question, 180),
+                    len(image_urls),
+                    len(file_urls),
                 )
 
-                # 若上传阶段已并行完成图片预分析，则优先复用，避免重复调用视觉模型。
-                pre_analysis = state.get("attachment_analysis") or {}
-                pre_image = pre_analysis.get("image") if isinstance(pre_analysis, dict) else None
-                if isinstance(pre_image, dict) and str(pre_image.get("analysis_text", "")).strip():
-                    result = pre_image
-                    logger.info(
-                        "[TutorAgent] 视觉回答复用上传预分析 mode=%s",
-                        str(result.get("mode", "unknown")),
-                    )
-                else:
-                    # 调用视觉服务分析图片，返回分析结果和使用的模式（spark/glm）
-                    result = await self.vision_service.analyze_images(image_urls, question)
-                mode = str(result.get("mode", "unknown"))
-                logger.info(
-                    "[TutorAgent] 视觉模式 mode=%s",
-                    mode,
+                context_parts: list[str] = []
+
+                # 并行处理图片和文档
+                async def analyze_images() -> str:
+                    """分析图片，返回文本结果"""
+                    if not image_urls:
+                        return ""
+                    # 优先复用上传阶段的预分析结果
+                    pre_analysis = state.get("attachment_analysis") or {}
+                    pre_image = pre_analysis.get("image") if isinstance(pre_analysis, dict) else None
+                    if isinstance(pre_image, dict) and str(pre_image.get("analysis_text", "")).strip():
+                        logger.info("[TutorAgent] 复用图片预分析结果")
+                        return str(pre_image.get("analysis_text", ""))
+                    try:
+                        result = await self.vision_service.analyze_images(image_urls, question)
+                        analysis = str(result.get("analysis_text", "")).strip()
+                        logger.info("[TutorAgent] 图片分析完成 mode=%s", result.get("mode", "unknown"))
+                        return analysis
+                    except Exception:
+                        logger.exception("[TutorAgent] 图片分析失败")
+                        return "[图片分析失败]"
+
+                async def read_documents() -> str:
+                    """读取文档，返回文本结果"""
+                    if not file_urls:
+                        return ""
+                    if "read_uploaded_file" not in self._tool_map:
+                        return ""
+                    doc_contents: list[str] = []
+                    tool = self._tool_map["read_uploaded_file"]
+                    for file_url in file_urls:
+                        try:
+                            result = await asyncio.wait_for(
+                                tool.ainvoke({"file_url": file_url}),
+                                timeout=TOOL_CALL_TIMEOUT_SEC,
+                            )
+                            content = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+                            doc_contents.append(f"### 文档: {file_url}\n{content}")
+                            logger.info("[TutorAgent] 文档读取完成 url=%s 长度=%s", truncate(file_url, 80), len(content))
+                        except Exception:
+                            logger.exception("[TutorAgent] 文档读取失败 url=%s", truncate(file_url, 80))
+                            doc_contents.append(f"### 文档: {file_url}\n[读取失败]")
+                    return "\n\n".join(doc_contents)
+
+                # 并行执行图片分析和文档读取
+                image_result, doc_result = await asyncio.gather(
+                    analyze_images(),
+                    read_documents(),
                 )
 
-                # 模式1：spark — 星火视觉服务先做 OCR/图片理解，再将结果传给主 LLM 回答
-                if mode == "spark":
-                    vision_prompt = (
-                        f"图片识别结果如下：\n{result.get('analysis_text', '')}\n\n"
-                        "请根据识别结果回答用户问题。"
+                if image_result:
+                    context_parts.append(f"### 图片分析结果\n{image_result}")
+                if doc_result:
+                    context_parts.append(doc_result)
+
+                full_context = "\n\n".join(context_parts)
+
+                # 构建回答提示词
+                answer_prompt = (
+                    f"用户问题: {question}\n\n"
+                    f"以下是与问题相关的附件内容：\n{full_context}\n\n"
+                    "请根据以上内容回答用户问题。如果内容不足以回答问题，请明确说明。"
+                )
+
+                full_messages = build_messages(system_prompt, [HumanMessage(content=answer_prompt)])
+                response = await self.llm.ainvoke(full_messages)
+                text = normalize_message_content(response.content)
+
+                if is_unusable_reply_text(text):
+                    logger.warning(
+                        "[TutorAgent] 附件回答重试 原因=无效回复 内容=%s",
+                        truncate(text, 120),
                     )
-                    # 构造消息：系统提示 + 历史消息（去掉最后一条用户消息）+ 视觉提示
-                    cleaned = [m for m in messages if not isinstance(m, SystemMessage)]
-                    full_messages = [SystemMessage(content=system_prompt)] + cleaned[:-1] + [
-                        HumanMessage(content=vision_prompt)
+                    retry_messages = full_messages + [
+                        HumanMessage(
+                            content=(
+                                "你上一条回复无效或过短。请重新回答用户问题，"
+                                "给出完整、可读、可执行的中文回答。"
+                            )
+                        )
                     ]
-                    response = await self.llm.ainvoke(full_messages)
-                    logger.info(
-                        "[TutorAgent] 视觉回答完成 mode=spark 预览=%s",
-                        truncate(response.content, 220),
-                    )
-                    return {
-                        "messages": [response],
-                        "termination_reason": "vision_answer_done",
-                    }
+                    retry_resp = await self.llm.ainvoke(retry_messages)
+                    if not is_unusable_reply_text(normalize_message_content(retry_resp.content)):
+                        response = retry_resp
 
-                # 模式2：glm — 直接使用 GLM-4V 原生多模态能力（图片+文本一起输入）
-                try:
-                    # 将图片 URL 注入到最后一条用户消息中，构造多模态 content blocks
-                    injected = inject_images(messages, image_urls)
-                    full_messages = build_messages(system_prompt, injected)
-                    response = await self.glm_vision_llm.ainvoke(full_messages)
-                    logger.info(
-                        "[TutorAgent] 视觉回答完成 mode=glm 预览=%s",
-                        truncate(response.content, 220),
-                    )
-                    return {
-                        "messages": [response],
-                        "termination_reason": "vision_answer_done",
-                    }
-                except Exception:
-                    # GLM 视觉调用失败时降级到纯文本回答，告知用户图片无法解析
-                    logger.exception(
-                        "[TutorAgent] GLM视觉回退失败 回退=直接回答",
-                    )
-                    fallback_prompt = (
-                        "视觉服务失败，请基于用户问题给出尽可能有帮助的回答，并明确说明图片无法完整解析。"
-                    )
-                    fallback = await self.llm.ainvoke([
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=f"用户问题: {question}\n\n{fallback_prompt}"),
-                    ])
-                    return {
-                        "messages": [fallback],
-                        "termination_reason": "vision_answer_fallback_done",
-                    }
+                logger.info(
+                    "[TutorAgent] 附件回答完成 预览=%s",
+                    truncate(response.content, 220),
+                )
+                next_decision, next_reason = self._next_multimodal_guard_decision(state)
+                return {
+                    "messages": [response],
+                    "termination_reason": "attachment_answer_done",
+                    "last_guard_decision": next_decision,
+                    "guard_reason": next_reason,
+                }
 
             except Exception:
-                logger.exception("[TutorAgent] 视觉回答异常")
+                logger.exception("[TutorAgent] 附件回答异常")
                 raise
 
     # ------------------------------------------------------------------
@@ -961,12 +1219,15 @@ class TutorAgent:
             return {
                 "execution_mode": "plan_execute",
                 "plan": plan,                                    # 新制定的步骤列表
+                "compiled_plan": [],                             # 待 compile_plan 产出
+                "compile_ok": False,
+                "compile_errors": [],
+                "last_compile_error_code": "",
                 "plan_version": plan_version,                   # 版本号
                 "current_step_index": 0,                        # 从第 0 步开始执行
                 "step_results": state.get("step_results") or [],  # 保留已有结果（用于重规划）
-                "current_step_retry_count": 0,                  # 重置重试计数
-                "partial_replan_count": state.get("partial_replan_count", 0),
-                "full_replan_count": state.get("full_replan_count", 0),
+                "replan_count": state.get("replan_count", 0),
+                "replan_used": bool(state.get("replan_used", False)),
                 "last_failure_reason": "",                      # 清空失败原因
                 "last_guard_decision": "next_step",             # 初始守卫决策
                 "guard_reason": "planner_initialized",
@@ -976,17 +1237,173 @@ class TutorAgent:
                 "_planner_raw": raw,                            # 保存 LLM 原始输出（调试用）
             }
 
+    def _compile_plan(self, state: TutorState, plan: list[PlanStep]) -> tuple[list[PlanStep], list[dict[str, Any]]]:
+        compiled: list[PlanStep] = []
+        errors: list[dict[str, Any]] = []
+        final_answer_count = 0
+
+        for idx, step in enumerate(plan):
+            kind = str(step.get("kind", "")).strip().lower()
+            name = str(step.get("name", "")).strip()
+            goal = str(step.get("goal", "")).strip()
+            args = self._resolve_step_args(state, step)
+
+            if kind not in {"tool", "skill", "llm", "final_answer"}:
+                errors.append({
+                    "step_index": idx,
+                    "code": "INVALID_STEP_KIND",
+                    "detail": f"unsupported kind: {kind}",
+                })
+                continue
+
+            if kind == "final_answer":
+                final_answer_count += 1
+                if idx != len(plan) - 1:
+                    errors.append({
+                        "step_index": idx,
+                        "code": "PLAN_TERMINATION_INVALID",
+                        "detail": "final_answer must be the last step",
+                    })
+                compiled.append(
+                    {
+                        "step_index": idx,
+                        "kind": kind,
+                        "name": "final_answer",
+                        "goal": goal or "交给 final_summarize 统一收口",
+                        "args_hint": {},
+                    }
+                )
+                continue
+
+            if kind == "llm":
+                compiled.append(
+                    {
+                        "step_index": idx,
+                        "kind": kind,
+                        "name": name or f"llm_step_{idx}",
+                        "goal": goal or "执行中间分析",
+                        "args_hint": args if isinstance(args, dict) else {},
+                    }
+                )
+                continue
+
+            if kind == "skill":
+                resolved_skill = self._resolve_skill_name(name)
+                if "skill" not in self._tool_map or not resolved_skill or resolved_skill not in self._available_skill_names:
+                    errors.append({
+                        "step_index": idx,
+                        "code": "UNKNOWN_CAPABILITY",
+                        "detail": f"unknown skill: {name}",
+                    })
+                    continue
+                compiled.append(
+                    {
+                        "step_index": idx,
+                        "kind": kind,
+                        "name": resolved_skill,
+                        "goal": goal or "执行技能步骤",
+                        "args_hint": args if isinstance(args, dict) else {},
+                    }
+                )
+                continue
+
+            if name not in self._tool_map:
+                errors.append({
+                    "step_index": idx,
+                    "code": "UNKNOWN_CAPABILITY",
+                    "detail": f"unknown tool: {name}",
+                })
+                continue
+
+            required_args = self._tool_required_args.get(name, set())
+            missing = [arg for arg in required_args if args.get(arg) in (None, "", [])]
+            if missing:
+                errors.append({
+                    "step_index": idx,
+                    "code": "MISSING_REQUIRED_ARG",
+                    "detail": f"{name} missing args: {', '.join(missing)}",
+                })
+                continue
+
+            compiled.append(
+                {
+                    "step_index": idx,
+                    "kind": kind,
+                    "name": name,
+                    "goal": goal or "执行工具步骤",
+                    "args_hint": args if isinstance(args, dict) else {},
+                }
+            )
+
+        if final_answer_count != 1:
+            errors.append({
+                "step_index": len(plan) - 1 if plan else 0,
+                "code": "PLAN_TERMINATION_INVALID",
+                "detail": f"final_answer_count={final_answer_count}",
+            })
+
+        return compiled, errors
+
+    async def _compile_plan_node(self, state: TutorState) -> dict[str, Any]:
+        user_id = state.get("user_id")
+        session_id = state.get("session_id")
+        plan = state.get("plan") or []
+        replan_used = bool(state.get("replan_used", False))
+
+        with node_timer("compile_plan", user=user_id, session=session_id):
+            compiled_plan, errors = self._compile_plan(state, plan)
+            if not errors:
+                decision = "next_step"
+                reason = "compile_passed"
+                self._log_guard_decision(state, decision=decision, reason=reason)
+                return {
+                    "compiled_plan": compiled_plan,
+                    "compile_ok": True,
+                    "compile_errors": [],
+                    "last_compile_error_code": "",
+                    "current_step_index": 0,
+                    "last_guard_decision": decision,
+                    "guard_reason": reason,
+                    "last_failure_reason": "",
+                }
+
+            first_code = str(errors[0].get("code", "COMPILE_FAILED"))
+            if not replan_used and int(state.get("replan_count", 0)) < MAX_REPLAN_ATTEMPTS:
+                decision = "replan"
+                reason = "compile_failed_replan_once"
+            else:
+                decision = "final_summarize"
+                reason = "compile_failed_after_replan"
+
+            self._log_guard_decision(state, decision=decision, reason=reason)
+            logger.warning(
+                "[TutorAgent] 计划编译失败 user=%s decision=%s errors=%s",
+                user_id,
+                decision,
+                truncate(errors, 800),
+            )
+            return {
+                "compiled_plan": [],
+                "compile_ok": False,
+                "compile_errors": errors,
+                "last_compile_error_code": first_code,
+                "last_guard_decision": decision,
+                "guard_reason": reason,
+                "last_failure_reason": first_code,
+            }
+
     # ------------------------------------------------------------------
     # 节点: execute_step
     # 执行计划中的当前步骤：根据步骤类型（tool/llm/final_answer）执行对应操作。
-    # 每次执行一个步骤，然后交由 step_guard 评估结果并决定下一步。
+    # 每次执行一个步骤，并在本节点内完成下一跳决策。
     # ------------------------------------------------------------------
     async def _execute_step_node(self, state: TutorState) -> dict[str, Any]:
         user_id = state.get("user_id")
         session_id = state.get("session_id")
-        plan = state.get("plan") or []
+        plan = state.get("compiled_plan") or []
         idx = int(state.get("current_step_index", 0))
         plan_version = int(state.get("plan_version", 0))
+        replan_used = bool(state.get("replan_used", False))
 
         with node_timer("execute_step", user=user_id, session=session_id, plan_version=plan_version, step_index=idx):
             if not plan or idx >= len(plan):
@@ -1008,6 +1425,8 @@ class TutorAgent:
                 return {
                     "last_step_result": result,
                     "last_failure_reason": "",
+                    "last_guard_decision": "final_summarize",
+                    "guard_reason": "compiled_plan_empty_or_out_of_range",
                 }
 
             step = plan[idx]
@@ -1056,7 +1475,8 @@ class TutorAgent:
                         "step_results": step_results,
                         "last_step_result": result,
                         "last_failure_reason": "",
-                        "current_step_retry_count": 0,
+                        "last_guard_decision": "final_summarize",
+                        "guard_reason": "final_answer_step_reached",
                     }
 
                 if step_kind in {"tool", "skill"}:
@@ -1097,7 +1517,17 @@ class TutorAgent:
                         "last_failure_reason": result.get("failure_reason", ""),
                         "tool_call_records": tool_call_records,
                         "budget": budget,
-                        "current_step_retry_count": 0 if success else state.get("current_step_retry_count", 0),
+                        "last_guard_decision": (
+                            "next_step"
+                            if success and idx + 1 < len(plan)
+                            else ("final_summarize" if success else ("replan" if not replan_used else "final_summarize"))
+                        ),
+                        "guard_reason": (
+                            "current_step_success"
+                            if success and idx + 1 < len(plan)
+                            else ("plan_completed" if success else ("current_step_failed_then_replan_once" if not replan_used else "current_step_failed_after_replan"))
+                        ),
+                        "current_step_index": idx + 1 if success and idx + 1 < len(plan) else idx,
                     }
 
                 if step_kind == "llm":
@@ -1120,7 +1550,17 @@ class TutorAgent:
                         "step_results": step_results,
                         "last_step_result": result,
                         "last_failure_reason": result.get("failure_reason", ""),
-                        "current_step_retry_count": 0 if success else state.get("current_step_retry_count", 0),
+                        "last_guard_decision": (
+                            "next_step"
+                            if success and idx + 1 < len(plan)
+                            else ("final_summarize" if success else ("replan" if not replan_used else "final_summarize"))
+                        ),
+                        "guard_reason": (
+                            "current_step_success"
+                            if success and idx + 1 < len(plan)
+                            else ("plan_completed" if success else ("current_step_failed_then_replan_once" if not replan_used else "current_step_failed_after_replan"))
+                        ),
+                        "current_step_index": idx + 1 if success and idx + 1 < len(plan) else idx,
                     }
 
                 result = build_result(
@@ -1134,6 +1574,8 @@ class TutorAgent:
                     "step_results": step_results,
                     "last_step_result": result,
                     "last_failure_reason": result.get("failure_reason", ""),
+                    "last_guard_decision": "replan" if not replan_used else "final_summarize",
+                    "guard_reason": "unsupported_step_kind",
                 }
 
             except Exception:
@@ -1165,6 +1607,8 @@ class TutorAgent:
                     "step_results": step_results,
                     "last_step_result": result,
                     "last_failure_reason": "step_exception",
+                    "last_guard_decision": "replan" if not replan_used else "final_summarize",
+                    "guard_reason": "step_exception",
                 }
 
     def _resolve_tool_call_for_step(self, step_kind: str, step_name: str, execution_args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -1226,13 +1670,17 @@ class TutorAgent:
     def _build_llm_step_prompt(self, *, state: TutorState, step: PlanStep, execution_args: dict[str, Any]) -> str:
         question = extract_question(state.get("messages") or [])
         step_results = summarize_step_results(state.get("step_results") or [], max_items=10)
+        profile_context = truncate(state.get("profile_context", ""), 600)
+        fact_context = truncate(state.get("fact_context", ""), 400)
         return (
             "你是执行器中的中间分析步骤。不要直接以最终口吻回答用户，只输出供后续总结使用的中间结论。\n"
             f"用户问题: {question}\n"
             f"当前步骤: {json.dumps(step, ensure_ascii=False)}\n"
             f"执行参数: {json.dumps(execution_args, ensure_ascii=False)}\n"
             f"已有步骤结果: \n{step_results}\n"
-            "请输出结构化分析，包含：关键事实、缺失信息、不确定点。"
+            f"用户画像: {profile_context}\n"
+            f"用户记忆: {fact_context}\n"
+            "请根据用户画像和记忆调整分析的深度和角度，输出结构化分析，包含：关键事实、缺失信息、不确定点。"
         )
 
     async def _invoke_tool_with_logging(
@@ -1381,266 +1829,65 @@ class TutorAgent:
         return last_error, record
 
     # ------------------------------------------------------------------
+    # 节点: replan
+    # 统一重规划：失败后丢弃当前计划并重新生成，缩短恢复路径提高稳定性。
     # ------------------------------------------------------------------
-    # 节点: step_guard
-    # 步骤守卫：评估 execute_step 的执行结果，决定下一步动作。
-    # 决策选项：next_step（继续下一步）| repair_step（修复重试）|
-    #          partial_replan（局部重规划）| full_replan（全局重规划）|
-    #          final_summarize（进入最终总结）| end（直接结束）
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    async def _step_guard_node(self, state: TutorState) -> dict[str, Any]:
+    async def _replan_node(self, state: TutorState) -> dict[str, Any]:
         user_id = state.get("user_id")
         session_id = state.get("session_id")
-        plan = state.get("plan") or []
-        idx = int(state.get("current_step_index", 0))
-        step_result = state.get("last_step_result")
-        failure_reason = state.get("last_failure_reason", "")
-
-        with node_timer("step_guard", user=user_id, session=session_id, step_index=idx):
-            decision = "final_summarize"
-            reason = "default_to_final_summarize"
-            updates: dict[str, Any] = {}
-
-            if not plan:
-                decision = "final_summarize"
-                reason = "plan_empty"
-            elif step_result is None:
-                decision = "full_replan"
-                reason = "missing_last_step_result"
-            else:
-                success = bool(step_result.get("success"))
-                current_step = plan[idx] if idx < len(plan) else None
-                current_kind = str((current_step or {}).get("kind", ""))
-
-                if success:
-                    if current_kind == "final_answer":
-                        decision = "final_summarize"
-                        reason = "final_answer_step_reached"
-                    else:
-                        next_idx = idx + 1
-                        if next_idx >= len(plan):
-                            decision = "final_summarize"
-                            reason = "plan_completed"
-                        else:
-                            decision = "next_step"
-                            reason = "current_step_success"
-                            updates["current_step_index"] = next_idx
-                            updates["current_step_retry_count"] = 0
-                else:
-                    current_step = plan[idx] if idx < len(plan) else None
-                    retry_count = int(state.get("current_step_retry_count", 0))
-                    partial_count = int(state.get("partial_replan_count", 0))
-                    full_count = int(state.get("full_replan_count", 0))
-                    total_replan_count = partial_count + full_count
-
-                    if total_replan_count >= MAX_REPLAN_ATTEMPTS:
-                        decision = "final_summarize"
-                        reason = "replan_budget_exhausted"
-                    # 失败时优先修复当前步骤（最多 MAX_REPAIR_RETRIES_PER_STEP 次）
-                    elif is_repairable_failure(failure_reason, current_step) and retry_count < MAX_REPAIR_RETRIES_PER_STEP:
-                        decision = "repair_step"
-                        reason = "repair_current_step_first"
-                    elif partial_count <= full_count:
-                        decision = "partial_replan"
-                        reason = "repair_exhausted_or_not_repairable_then_partial_replan"
-                    else:
-                        decision = "full_replan"
-                        reason = "partial_replan_then_full_replan_alternate"
-
-            self._log_guard_decision(state, decision=decision, reason=reason)
+        if bool(state.get("replan_used", False)):
             return {
-                "last_guard_decision": decision,
-                "guard_reason": reason,
-                **updates,
+                "plan": [],
+                "compiled_plan": [],
+                "compile_ok": False,
+                "compile_errors": [{"step_index": 0, "code": "REPLAN_BUDGET_EXHAUSTED", "detail": "replan already used"}],
+                "last_compile_error_code": "REPLAN_BUDGET_EXHAUSTED",
+                "last_failure_reason": "REPLAN_BUDGET_EXHAUSTED",
+                "last_guard_decision": "final_summarize",
+                "guard_reason": "replan_already_used",
             }
 
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    # 节点: repair_step
-    # 步骤修复：当步骤执行失败且 guard 判断为可修复时，调整参数后重新执行。
-    # 使用 LLM 分析失败原因并生成修正后的参数。
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    async def _repair_step_node(self, state: TutorState) -> dict[str, Any]:
-        user_id = state.get("user_id")
-        session_id = state.get("session_id")
-        plan = list(state.get("plan") or [])
+        replan_count = int(state.get("replan_count", 0)) + 1
         idx = int(state.get("current_step_index", 0))
-        retry_count = int(state.get("current_step_retry_count", 0)) + 1
-
-        with node_timer("repair_step", user=user_id, session=session_id, step_index=idx):
-            if retry_count > MAX_REPAIR_RETRIES_PER_STEP:
-                logger.warning(
-                    "[TutorAgent] 步骤修复跳过 原因=超过重试上限 retry=%s max=%s",
-                    retry_count,
-                    MAX_REPAIR_RETRIES_PER_STEP,
-                )
-                return {
-                    "current_step_retry_count": retry_count,
-                    "last_failure_reason": "repair_budget_exhausted",
-                }
-
-            if not plan or idx >= len(plan):
-                logger.warning(
-                    "[TutorAgent] 步骤修复跳过 原因=计划缺失",
-                )
-                return {
-                    "current_step_retry_count": retry_count,
-                    "last_failure_reason": "repair_skip_missing_step",
-                }
-
-            step = dict(plan[idx])
-            old_args = dict(step.get("args_hint") or {})
-            repaired_args = self._repair_step_args(state=state, step=step)
-            step["args_hint"] = repaired_args
-            plan[idx] = step
-
-            logger.info(
-                "[TutorAgent] repair_step.apply step_index=%s step_name=%s retry=%s failure_reason=%s old_args=%s new_args=%s",
-                idx,
-                step.get("name"),
-                retry_count,
-                truncate(state.get("last_failure_reason", ""), 220),
-                truncate(old_args, 300),
-                truncate(repaired_args, 300),
-            )
-
-            return {
-                "plan": plan,
-                "current_step_retry_count": retry_count,
-            }
-
-    def _repair_step_args(self, *, state: TutorState, step: PlanStep) -> dict[str, Any]:
-        args = dict(step.get("args_hint") or {})
-        name = str(step.get("name", ""))
-        reason = (state.get("last_failure_reason") or "").lower()
-        question = extract_question(state.get("messages") or [])
-        file_urls = state.get("file_urls") or []
-
-        if name == "duckduckgo_search":
-            query = str(args.get("query", "")).strip()
-            if not query or "empty" in reason or "为空" in reason:
-                args["query"] = question[:80]
-            elif len(query) > 100:
-                args["query"] = query[:100]
-
-        if name == "web_fetch":
-            url = str(args.get("url", "")).strip()
-            if (not url or "url" in reason) and state.get("step_results"):
-                for item in reversed(state.get("step_results") or []):
-                    if not item.get("success"):
-                        continue
-                    match = URL_PATTERN.search(str(item.get("output", "")))
-                    if match:
-                        args["url"] = match.group(0)
-                        break
-
-        if name == "read_uploaded_file" and not args.get("file_url") and file_urls:
-            args["file_url"] = file_urls[0]
-
-        return args
-
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    # 节点: partial_replan
-    # 局部重规划：从当前失败的步骤开始重新生成后续计划，保留已成功的步骤结果。
-    # 适用于单步失败但已有结果仍然有效的情况。
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    async def _partial_replan_node(self, state: TutorState) -> dict[str, Any]:
-        user_id = state.get("user_id")
-        session_id = state.get("session_id")
-        old_plan = state.get("plan") or []
-        idx = int(state.get("current_step_index", 0))
-        partial_count = int(state.get("partial_replan_count", 0)) + 1
+        old_plan = state.get("compiled_plan") or state.get("plan") or []
         plan_version = int(state.get("plan_version", 0)) + 1
+        current_step = old_plan[idx] if idx < len(old_plan) else None
 
-        with node_timer("partial_replan", user=user_id, session=session_id, step_index=idx):
-            completed_steps = state.get("step_results") or []
-            current_step = old_plan[idx] if idx < len(old_plan) else None
-
+        with node_timer("replan", user=user_id, session=session_id):
             logger.warning(
-                "[TutorAgent] 部分重规划 步骤=%s 原因=%s",
+                "[TutorAgent] 触发重规划 step_index=%s 原因=%s 次数=%s",
                 idx,
                 truncate(state.get("last_failure_reason", ""), 220),
-            )
-
-            preserved = list(old_plan[:idx])
-            new_remaining, raw = await self._generate_plan(
-                state=state,
-                mode="partial_replan",
-                failure_reason=state.get("last_failure_reason", ""),
-                completed_steps=completed_steps,
-                current_step=current_step,
-                start_index=idx,
-            )
-            new_plan = preserved + new_remaining
-            new_plan = self._normalize_plan_steps(new_plan)
-
-            old_remaining = [f"{s.get('kind')}:{s.get('name')}" for s in old_plan[idx:]]
-            new_remaining_names = [f"{s.get('kind')}:{s.get('name')}" for s in new_plan[idx:]]
-
-            logger.info(
-                "[TutorAgent] partial_replan.done old_remaining=%s new_remaining=%s diff=%s new_plan_version=%s raw=%s",
-                old_remaining,
-                new_remaining_names,
-                truncate({"old": old_remaining, "new": new_remaining_names}, 700),
-                plan_version,
-                truncate(raw, 400),
-            )
-
-            return {
-                "plan": new_plan,
-                "plan_version": plan_version,
-                "partial_replan_count": partial_count,
-                "current_step_retry_count": 0,
-                "current_step_index": idx if idx < len(new_plan) else max(len(new_plan) - 1, 0),
-                "last_failure_reason": "",
-            }
-
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    # 节点: full_replan
-    # 全局重规划：完全丢弃当前计划，从零开始重新制定。
-    # 适用于计划方向整体错误或多次修复/局部重规划均失败的情况。
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-    async def _full_replan_node(self, state: TutorState) -> dict[str, Any]:
-        user_id = state.get("user_id")
-        session_id = state.get("session_id")
-        full_count = int(state.get("full_replan_count", 0)) + 1
-        plan_version = int(state.get("plan_version", 0)) + 1
-
-        with node_timer("full_replan", user=user_id, session=session_id):
-            logger.warning(
-                "[TutorAgent] 全部重规划 原因=%s 次数=%s",
-                truncate(state.get("last_failure_reason", ""), 220),
-                full_count,
+                replan_count,
             )
 
             new_plan, raw = await self._generate_plan(
                 state=state,
-                mode="full_replan",
+                mode="replan_once",
                 failure_reason=state.get("last_failure_reason", ""),
                 completed_steps=state.get("step_results") or [],
-                current_step=None,
+                current_step=current_step,
                 start_index=0,
             )
 
             logger.info(
-                "[TutorAgent] full_replan.done new_plan_version=%s new_plan=%s raw=%s",
+                "[TutorAgent] replan.done new_plan_version=%s old_plan=%s new_plan=%s raw=%s",
                 plan_version,
+                truncate([f"{s.get('kind')}:{s.get('name')}" for s in old_plan], 700),
                 truncate(new_plan, 900),
                 truncate(raw, 400),
             )
 
             return {
                 "plan": new_plan,
+                "compiled_plan": [],
+                "compile_ok": False,
+                "compile_errors": [],
+                "last_compile_error_code": "",
                 "plan_version": plan_version,
-                "full_replan_count": full_count,
+                "replan_count": replan_count,
+                "replan_used": True,
                 "current_step_index": 0,
-                "current_step_retry_count": 0,
                 "last_failure_reason": "",
             }
 
@@ -1648,7 +1895,7 @@ class TutorAgent:
     # ------------------------------------------------------------------
     # 节点: final_summarize
     # 最终总结：整合所有步骤结果，生成对用户的最终回答。
-    # 由 step_guard 在所有步骤执行完毕或决定提前结束时触发。
+    # 由 compile_plan/execute_step 决策进入。
     # 使用主模型（高温度）生成自然、完整的回答，不暴露内部工具链路。
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
@@ -1659,6 +1906,7 @@ class TutorAgent:
 
         with node_timer("final_summarize", user=user_id, session=session_id):
             step_results = state.get("step_results") or []
+            compile_errors = state.get("compile_errors") or []
             question = extract_question(state.get("messages") or [])
             system_prompt = state.get("system_prompt", "")
 
@@ -1681,6 +1929,7 @@ class TutorAgent:
                 f"用户问题: {question}\n"
                 f"触发原因: {trigger_reason}\n"
                 f"步骤结果摘要:\n{summarize_step_results(step_results, max_items=12)}\n"
+                f"计划编译错误（如有）:\n{truncate(compile_errors, 900)}\n"
             )
 
             try:
@@ -1704,18 +1953,129 @@ class TutorAgent:
                     "[TutorAgent] 最终总结完成 预览=%s",
                     truncate(response.content, 280),
                 )
+                next_decision, next_reason = self._next_multimodal_guard_decision(state)
                 return {
                     "messages": [response],
                     "termination_reason": "final_summarize_done",
+                    "last_guard_decision": next_decision,
+                    "guard_reason": next_reason,
                 }
 
             except Exception:
                 logger.exception("[TutorAgent] 最终总结异常")
                 fallback = AIMessage(content="我已经完成了当前可执行步骤，但在生成最终总结时发生错误。请重试，或补充更具体的问题。")
+                next_decision, next_reason = self._next_multimodal_guard_decision(state)
                 return {
                     "messages": [fallback],
                     "termination_reason": "final_summarize_error_fallback",
+                    "last_guard_decision": next_decision,
+                    "guard_reason": next_reason,
                 }
+
+    async def _generate_image_node(self, state: TutorState) -> dict[str, Any]:
+        user_id = state.get("user_id")
+        session_id = state.get("session_id")
+
+        with node_timer("generate_image", user=user_id, session=session_id):
+            should_generate_image = bool(state.get("generate_image", state.get("request_generate_image", False)))
+            if not should_generate_image:
+                logger.info("[TutorAgent] 跳过图片生成节点 user=%s session=%s", user_id, session_id)
+                return {
+                    "image_generation_status": "skipped",
+                    "image_generation_prompt": "",
+                    "image_generation_model": "",
+                    "image_generation_plan": {},
+                    "last_guard_decision": "end",
+                    "guard_reason": "image_not_requested",
+                }
+
+            prompt = self._build_multimodal_prompt(state, modality="图片")
+            try:
+                generation_plan = await self._plan_image_generation(state)
+                model_tag = "deepseek_chat(image_plan)"
+                logger.info(
+                    "[TutorAgent] 图片规划完成 model=%s user=%s session=%s plan=%s",
+                    model_tag,
+                    user_id,
+                    session_id,
+                    truncate(generation_plan, 1500),
+                )
+                status = "done"
+            except Exception:
+                logger.exception("[TutorAgent] 图片规划失败，回退上下文prompt")
+                generation_plan = {
+                    "title": "图片生成计划(降级)",
+                    "positive_prompt": prompt,
+                }
+                model_tag = "deepseek_chat(image_plan)-fallback"
+                status = "error"
+            return {
+                "image_generation_status": status,
+                "image_generation_prompt": prompt,
+                "image_generation_model": model_tag,
+                "image_generation_plan": generation_plan,
+                "last_guard_decision": "end",
+                "guard_reason": "image_generation_plan_ready",
+            }
+
+    async def _generate_video_node(self, state: TutorState) -> dict[str, Any]:
+        user_id = state.get("user_id")
+        session_id = state.get("session_id")
+
+        with node_timer("generate_video", user=user_id, session=session_id):
+            if not bool(state.get("generate_video", state.get("request_generate_video", False))):
+                logger.info("[TutorAgent] 跳过视频生成节点 user=%s session=%s", user_id, session_id)
+                return {
+                    "video_generation_status": "skipped",
+                    "video_generation_prompt": "",
+                    "video_generation_model": "",
+                    "video_generation_plan": {},
+                    "termination_reason": "multimodal_nodes_done",
+                }
+
+            prompt = self._build_multimodal_prompt(state, modality="视频")
+            try:
+                generation_plan = await self._plan_video_generation(state)
+                model_tag = "deepseek(video_plan)"
+                logger.info(
+                    "[TutorAgent] 视频规划完成 model=%s user=%s session=%s plan=%s",
+                    model_tag,
+                    user_id,
+                    session_id,
+                    truncate(generation_plan, 1800),
+                )
+                status = "done"
+            except Exception:
+                logger.exception("[TutorAgent] 视频规划失败，回退上下文prompt")
+                generation_plan = {
+                    "title": "视频生成计划(降级)",
+                    "positive_prompt": prompt,
+                }
+                model_tag = "deepseek(video_plan)-fallback"
+                status = "error"
+            return {
+                "video_generation_status": status,
+                "video_generation_prompt": prompt,
+                "video_generation_model": model_tag,
+                "video_generation_plan": generation_plan,
+                "termination_reason": "multimodal_nodes_done",
+            }
+
+    def _spawn_background(self, coro: Any, *, task_name: str) -> None:
+        """安全启动后台任务，确保异常被记录且任务可回收。"""
+        task = asyncio.create_task(coro, name=task_name)
+        self._background_tasks.add(task)
+
+        def _done_callback(done_task: asyncio.Task) -> None:
+            self._background_tasks.discard(done_task)
+            if done_task.cancelled():
+                return
+            try:
+                done_task.result()
+            except Exception:
+                logger.exception("[TutorAgent] 后台任务异常 task=%s", task_name)
+
+        task.add_done_callback(_done_callback)
 
     # ------------------------------------------------------------------
     # 主入口：SSE 流式对话
@@ -1730,6 +2090,8 @@ class TutorAgent:
         session_id: Optional[str] = None,
         image_urls: Optional[list[str]] = None,
         file_urls: Optional[list[str]] = None,
+        generate_image: bool = False,
+        generate_video: bool = False,
         attachment_analysis: Optional[dict[str, Any]] = None,
     ):
         effective_session = session_id or f"user-{user_id}-default-mentor"
@@ -1737,10 +2099,12 @@ class TutorAgent:
         file_urls = file_urls or []
 
         logger.info(
-            "[TutorAgent] 对话开始 消息=%s 附件(图片=%s,文件=%s)",
+            "[TutorAgent] 对话开始 消息=%s 附件(图片=%s,文件=%s) 生成请求(图片=%s,视频=%s)",
             truncate(user_message, 180),
             len(image_urls),
             len(file_urls),
+            bool(generate_image),
+            bool(generate_video),
         )
         
         # 开始 构建 Langgraph 图
@@ -1830,6 +2194,10 @@ class TutorAgent:
             "session_id": effective_session,
             "image_urls": image_urls,
             "file_urls": file_urls,
+            "generate_image": bool(generate_image),
+            "generate_video": bool(generate_video),
+            "request_generate_image": bool(generate_image),
+            "request_generate_video": bool(generate_video),
             "route": "",
             "execution_mode": "",
             "profile_context": profile_str,
@@ -1842,16 +2210,27 @@ class TutorAgent:
             "tool_system_prompt": tool_prompt,
             "messages": initial_messages,
             "plan": [],
+            "compiled_plan": [],
+            "compile_ok": False,
+            "compile_errors": [],
+            "last_compile_error_code": "",
             "plan_version": 0,
             "current_step_index": 0,
             "step_results": [],
-            "current_step_retry_count": 0,
-            "partial_replan_count": 0,
-            "full_replan_count": 0,
+            "replan_count": 0,
+            "replan_used": False,
             "last_failure_reason": "",
             "last_guard_decision": "",
             "guard_reason": "",
             "termination_reason": "",
+            "image_generation_status": "pending" if bool(generate_image) else "skipped",
+            "video_generation_status": "pending" if bool(generate_video) else "skipped",
+            "image_generation_prompt": "",
+            "video_generation_prompt": "",
+            "image_generation_model": "",
+            "video_generation_model": "",
+            "image_generation_plan": {},
+            "video_generation_plan": {},
             "tool_call_records": [],
             "budget": make_budget_state(),
         }

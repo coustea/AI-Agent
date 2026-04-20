@@ -9,13 +9,11 @@
 """
 
 import asyncio
-import json
-import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, TypedDict, Optional, Annotated
 
-from app.infra.llm import get_llm, get_spark_x_llm
+from app.infra.llm import get_spark_x_llm
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, AnyMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph.message import add_messages
@@ -24,7 +22,6 @@ from langgraph.prebuilt import ToolNode
 
 from app.infra.logging import get_logger
 from app.config import MAX_MESSAGE_HISTORY, LLM_TIMEOUT
-from app.shared.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
 
@@ -103,7 +100,8 @@ class BaseResourceAgent(ABC):
     tool_names: list[str] = []
     skill_names: list[str] = []
 
-    force_json_mode: bool = False
+    # 子类可设置此字段，启用 with_structured_output 进行结构化输出
+    structured_output_schema: type | None = None
 
     def __init__(
         self,
@@ -320,61 +318,46 @@ class BaseResourceAgent(ABC):
         return sanitize_tool_messages(messages)
 
     async def _invoke_llm(self, messages: list, state: Any) -> AIMessage | dict:
-        """调用 LLM，处理工具绑定、JSON Mode、超时和异常。
+        """调用 LLM，处理工具绑定、结构化输出、超时和异常。
 
         返回 AIMessage（成功）或 dict（错误，含 error + is_valid 字段）。
         子类可覆写以自定义 LLM 调用（如使用不同的模型、温度、工具绑定策略）。
         """
         llm_plain = self.llm.bind_tools(self._tools) if self._tools else self.llm
-        llm_with_tools = llm_plain
-        if self.force_json_mode:
-            try:
-                llm_with_tools = llm_plain.bind(response_format={"type": "json_object"})
-            except Exception as exc:
-                logger.warning(f"[{self.name}] JSON Mode bind 失败，fallback=plain: {exc}")
-                llm_with_tools = llm_plain
+
+        # 结构化输出：子类设置 structured_output_schema 后自动启用
+        if self.structured_output_schema is not None:
+            llm_to_use = llm_plain.with_structured_output(self.structured_output_schema)
+        else:
+            llm_to_use = llm_plain
 
         llm_timeout = LLM_TIMEOUT
         try:
             response = await asyncio.wait_for(
-                llm_with_tools.ainvoke(messages),
+                llm_to_use.ainvoke(messages),
                 timeout=llm_timeout,
             )
             return response
         except asyncio.TimeoutError:
             logger.error(f"[{self.name}] LLM 调用超时")
             return {"error": "LLM 调用超时", "is_valid": False}
-        except Exception as exc:
-            if self.force_json_mode:
-                logger.warning(f"[{self.name}] JSON Mode 调用失败，retry=plain: {exc}")
-                try:
-                    response = await asyncio.wait_for(
-                        llm_plain.ainvoke(messages),
-                        timeout=llm_timeout,
-                    )
-                    return response
-                except Exception:
-                    raise
+        except Exception:
             raise
 
-    def _postprocess_response(self, response: AIMessage, new_messages: list, state: Any) -> dict:
-        """后处理 LLM 响应（JSON→tool_call 补丁）并返回状态更新 dict。"""
-        # 文本补丁：模型输出 JSON 工具调用但没走 tool_calls 通道时，手动补上
-        if isinstance(response, AIMessage) and not response.tool_calls and self._tools:
-            content = response.content.strip()
-            if (content.startswith("```json") and content.endswith("```")) or (content.startswith("{") and content.endswith("}")):
-                try:
-                    json_str = content[7:-3].strip() if content.startswith("```json") else content
-                    data = json.loads(json_str)
-                    if isinstance(data, dict) and "name" in data:
-                        response.tool_calls = [{
-                            "name": data["name"],
-                            "args": data.get("arguments", data.get("args", {})),
-                            "id": f"call_{int(time.time())}",
-                            "type": "tool_call"
-                        }]
-                except Exception:
-                    pass
+    def _postprocess_response(self, response: AIMessage | Any, new_messages: list, state: Any) -> dict:
+        """后处理 LLM 响应并返回状态更新 dict。
+
+        当 structured_output_schema 启用时，response 是 Pydantic 模型实例，
+        存入 _structured_output 字段供 _validate_node 使用。
+        否则 response 为 AIMessage，存入 messages。
+        """
+        from pydantic import BaseModel as PydanticBaseModel
+
+        if isinstance(response, PydanticBaseModel):
+            return {
+                "messages": new_messages,
+                "_structured_output": response.model_dump(),
+            }
 
         return {"messages": new_messages + [response]}
 
