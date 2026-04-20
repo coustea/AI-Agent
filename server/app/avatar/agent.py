@@ -12,6 +12,7 @@ AvatarAgent — 数字人独立 LangGraph 智能体
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from typing import Annotated, Any, Optional
 
@@ -20,6 +21,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
+from app.chat.utils import load_prompts
 from app.infra.logging import get_logger
 from app.infra.llm import get_llm, get_fast_llm, get_glm_vision_llm
 from app.shared.agent_context import AgentContextService
@@ -120,6 +122,14 @@ AVATAR_CLASSIFIER_PROMPT = """判断以下用户消息需要直接回答还是�
 是否有附件：{has_attachments}
 
 只回复 "direct" 或 "tool_needed"，不要回复其他内容。"""
+
+
+# Make avatar and text agents share the same goal/prompt definition.
+CHAT_AGENT_DIR = Path(__file__).resolve().parent.parent / "chat"
+PROMPTS: dict[str, str] = load_prompts(CHAT_AGENT_DIR)
+AVATAR_CLASSIFIER_PROMPT = PROMPTS["classifier"]
+AVATAR_SYSTEM_PROMPT = PROMPTS["direct_system"]
+AVATAR_TOOL_SYSTEM_PROMPT = PROMPTS["tool_system"]
 
 
 def _lazy_import_tools():
@@ -338,7 +348,7 @@ class AvatarAgent:
                 )
             )
             route = result.content.strip().strip('"').strip("'")
-            if route not in ("direct", "tool_needed"):
+            if route not in ("direct", "tool_needed", "vision_needed"):
                 route = "direct"
         except Exception:
             route = "direct"
