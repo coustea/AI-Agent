@@ -117,14 +117,14 @@ class ProfileUseCases:
         return await self.profile_svc.get_profile_history(user_id, limit)
 
 
-def _build_profile_agent():
+def _build_profile_agent(module_name: str = "mentor"):
     from app.profile.profile_agent import ProfileBuilderAgent
-    return ProfileBuilderAgent()
+    return ProfileBuilderAgent(module_name=module_name)
 
 
-def _build_fact_agent():
+def _build_fact_agent(module_name: str = "mentor"):
     from app.profile.fact_agent import MemoryExtractionAgent
-    return MemoryExtractionAgent()
+    return MemoryExtractionAgent(module_name=module_name)
 
 
 # 模块级单例

@@ -93,6 +93,7 @@ class CompressionService:
                 memory_type=MEMORY_TYPE_SUMMARY,  # 标记为摘要类型
                 source=module,
                 source_message_count=len(summarized_ids),  # 记录被总结的消息条数
+                module=module,
             )
 
             # 删除已总结的旧短期消息

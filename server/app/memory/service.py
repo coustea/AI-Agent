@@ -112,27 +112,31 @@ class MemoryService:
     async def save_user_fact(
         self, user_id: int, content: str, memory_type: str,
         session_id: Optional[str] = None, expires_at=None,
+        module: str = "mentor",
     ) -> UserMemory:
-        return await long_term_service.save_user_fact(user_id, content, memory_type, session_id, expires_at)
+        return await long_term_service.save_user_fact(user_id, content, memory_type, session_id, expires_at, module=module)
 
-    async def get_user_facts(self, user_id: int, limit: int = 50) -> List[UserMemory]:
-        return await long_term_service.get_user_facts(user_id, limit)
+    async def get_user_facts(self, user_id: int, limit: int = 50, module: str | None = None) -> List[UserMemory]:
+        return await long_term_service.get_user_facts(user_id, limit, module=module)
 
     async def get_user_context_memories(
         self, user_id: int, memory_types: Iterable[str] | None = None,
         per_type_limits: dict[str, int] | None = None, only_unexpired: bool = True,
+        module: str | None = None,
     ) -> dict[str, list[UserMemory]]:
         return await long_term_service.get_user_context_memories(
-            user_id, memory_types, per_type_limits, only_unexpired,
+            user_id, memory_types, per_type_limits, only_unexpired, module=module,
         )
 
     async def save_long_term_memory(
         self, user_id: int, session_id: str, content: str, memory_type: str,
         dimension: str | None = None, importance: float = 0.5,
         source: str = "conversation", source_message_count: int = 0,
+        module: str = "mentor",
     ) -> UserMemory:
         return await long_term_service.save_long_term_memory(
             user_id, session_id, content, memory_type, dimension, importance, source, source_message_count,
+            module=module,
         )
 
     # -- 画像服务 (延迟导入 profile_service，避免循环依赖) --

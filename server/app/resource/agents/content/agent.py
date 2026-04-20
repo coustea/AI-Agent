@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+import re
 import shlex
 import time
 from pathlib import Path
@@ -193,6 +194,97 @@ class ContentWriter(BaseResourceAgent):
             }
         )
         return result if isinstance(result, str) else str(result)
+
+    @staticmethod
+    def _strip_markdown_fence(text: str) -> str:
+        value = (text or "").strip()
+        if value.startswith("```"):
+            value = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", value)
+            value = re.sub(r"\s*```$", "", value)
+        return value.strip()
+
+    @staticmethod
+    def _looks_like_tool_error(text: str) -> bool:
+        value = (text or "").strip()
+        if not value:
+            return True
+        if value.startswith("\u2713"):  # checkmark success prefix from file tools
+            return False
+        if value.startswith("\u274c"):  # cross mark error prefix from file tools
+            return True
+        return value.startswith(("ERROR", "Error", "Traceback", "Exception"))
+
+    async def _rewrite_markdown_file(
+        self,
+        *,
+        topic: str,
+        target_md_path: str,
+        edit_instruction: str = "",
+        output_md_path: str | None = None,
+    ) -> dict[str, Any]:
+        read_result = get_tool("read_file_safe").invoke({"file_path": target_md_path})
+        current_markdown = read_result if isinstance(read_result, str) else str(read_result)
+        if self._looks_like_tool_error(current_markdown):
+            return {
+                "success": False,
+                "content": "",
+                "outline": "",
+                "file_path": None,
+                "docx_path": None,
+                "pdf_path": None,
+                "error": f"读取 Markdown 失败: {current_markdown}",
+            }
+
+        effective_instruction = (
+            edit_instruction.strip()
+            or "在不改变原主题的前提下优化结构、补充关键知识点和示例，并保持 Markdown 格式规范。"
+        )
+        prompt = (
+            "你是专业 Markdown 文档编辑器。请基于编辑要求改写文档，"
+            "仅输出最终 Markdown 正文，不要解释，不要代码块围栏。\n\n"
+            f"主题：{topic}\n"
+            f"编辑要求：{effective_instruction}\n\n"
+            "原始 Markdown：\n"
+            f"{current_markdown}"
+        )
+        response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+        rewritten = self._strip_markdown_fence(response.content if hasattr(response, "content") else str(response))
+        if not rewritten:
+            return {
+                "success": False,
+                "content": "",
+                "outline": "",
+                "file_path": None,
+                "docx_path": None,
+                "pdf_path": None,
+                "error": "Markdown 改写失败：模型未返回有效内容",
+            }
+
+        write_path = output_md_path or target_md_path
+        write_result = get_tool("write_file").invoke({"filepath": write_path, "content": rewritten, "create_dirs": True})
+        write_text = write_result if isinstance(write_result, str) else str(write_result)
+        if self._looks_like_tool_error(write_text):
+            return {
+                "success": False,
+                "content": rewritten,
+                "outline": "",
+                "file_path": None,
+                "docx_path": None,
+                "pdf_path": None,
+                "error": f"写入 Markdown 失败: {write_text}",
+            }
+
+        return {
+            "success": True,
+            "content": rewritten,
+            "outline": "",
+            "file_path": write_path,
+            "docx_path": None,
+            "pdf_path": None,
+            "skill_usage_report": {},
+            "skill_postprocess": {},
+            "error": None,
+        }
 
     @staticmethod
     def _build_content_request(outline: str) -> str:
@@ -609,9 +701,24 @@ class ContentWriter(BaseResourceAgent):
         gap: str = "",
         user_profile: dict = None,
         shared_memory: dict = None,
+        target_md_path: str | None = None,
+        edit_instruction: str = "",
+        output_md_path: str | None = None,
     ) -> dict[str, Any]:
         logger.info(f"[ContentAgent] 收到生成请求: topic={topic}")
         await self._ensure_graph()
+        if target_md_path:
+            logger.info(
+                "[ContentAgent] 进入 Markdown 操作模式: target=%s output=%s",
+                target_md_path,
+                output_md_path,
+            )
+            return await self._rewrite_markdown_file(
+                topic=topic or "Markdown 文档",
+                target_md_path=target_md_path,
+                edit_instruction=edit_instruction,
+                output_md_path=output_md_path,
+            )
         start_time = time.perf_counter()
         timeout_seconds = self._workflow_timeout_seconds()
         skill_context, skill_usage_report = await self._prepare_skill_context()

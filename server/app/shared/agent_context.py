@@ -47,8 +47,8 @@ class AgentContextService:
 
     def __init__(self, *, module_name: str) -> None:
         self.memory = memory_service
-        self.fact_agent = _build_fact_agent()
-        self.profile_agent = _build_profile_agent()
+        self.fact_agent = _build_fact_agent_for_module(module_name)
+        self.profile_agent = _build_profile_agent_for_module(module_name)
         self.module_name = module_name
 
     # ------------------------------------------------------------------
@@ -92,8 +92,8 @@ class AgentContextService:
         return "\n".join(f"- {k}: {v}" for k, v in profile_dict.items() if v)
 
     async def build_memory_ctx(self, user_id: int) -> str:
-        """构建长期记忆上下文文本。"""
-        memories_by_type = await self.memory.get_user_context_memories(user_id=user_id)
+        """构建长期记忆上下文文本（按当前模块隔离）。"""
+        memories_by_type = await self.memory.get_user_context_memories(user_id=user_id, module=self.module_name)
         titles = {
             MEMORY_TYPE_PREFERENCE: "偏好",
             MEMORY_TYPE_GOAL: "目标",
@@ -328,3 +328,13 @@ def _build_fact_agent():
 def _build_profile_agent():
     from app.profile import build_profile_agent
     return build_profile_agent()
+
+
+def _build_fact_agent_for_module(module_name: str):
+    from app.profile import build_fact_agent
+    return build_fact_agent(module_name=module_name)
+
+
+def _build_profile_agent_for_module(module_name: str):
+    from app.profile import build_profile_agent
+    return build_profile_agent(module_name=module_name)

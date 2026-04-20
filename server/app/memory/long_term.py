@@ -66,6 +66,7 @@ class LongTermMemoryService:
         memory_type: str,
         session_id: str | None = None,
         expires_at=None,
+        module: str = "mentor",
     ) -> UserMemory:
         """保存单条用户事实/偏好到 UserMemory 表（带去重/合并/计数）。
         流程：
@@ -87,11 +88,12 @@ class LongTermMemoryService:
         async with AsyncSession(self.engine) as session:
             _now = now()
 
-            # 第一步：精确重复去重 — 查找同用户、同类型、未过期的已有记忆
+            # 第一步：精确重复去重 — 查找同用户、同模块、同类型、未过期的已有记忆
             exact_stmt = (
                 select(UserMemory)
                 .where(
                     UserMemory.user_id == user_id,
+                    UserMemory.module == module,  # 按模块隔离
                     UserMemory.source == "fact_agent",  # 只比较 FactAgent 产出的记忆
                     UserMemory.memory_type == normalized_type,
                     or_(UserMemory.expires_at == None, UserMemory.expires_at > _now),  # noqa: E711 — 未过期
@@ -144,6 +146,7 @@ class LongTermMemoryService:
             memory = UserMemory(
                 user_id=user_id,
                 session_id=session_id or "",
+                module=module,
                 content=cleaned_content,
                 memory_type=normalized_type,
                 source="fact_agent",
@@ -158,11 +161,12 @@ class LongTermMemoryService:
                         user_id, normalized_type, memory.id, len(cleaned_content))
             return memory
 
-    async def get_user_facts(self, user_id: int, limit: int = 50) -> list[UserMemory]:
+    async def get_user_facts(self, user_id: int, limit: int = 50, module: str | None = None) -> list[UserMemory]:
         """兼容旧接口：获取用户长期事实。
         内部调用 get_user_context_memories 并将结果展平为单列表。"""
         memories_by_type = await self.get_user_context_memories(
             user_id=user_id,
+            module=module,
             per_type_limits={
                 MEMORY_TYPE_FACT: limit,
                 MEMORY_TYPE_PREFERENCE: limit,
@@ -187,11 +191,13 @@ class LongTermMemoryService:
         per_type_limits: dict[str, int] | None = None,
         only_unexpired: bool = True,
         source: str | None = "fact_agent",
+        module: str | None = None,
     ) -> dict[str, list[UserMemory]]:
         """按类型返回用于上下文注入的长期记忆，自动去重与限量。
         返回格式：{"preference": [...], "goal": [...], ...}
         每个类型内部按 last_seen_at 倒序排列，且经过归一化去重。
-        source 参数：按来源过滤记忆，默认 "fact_agent"。传 None 不过滤来源。"""
+        source 参数：按来源过滤记忆，默认 "fact_agent"。传 None 不过滤来源。
+        module 参数：按模块过滤记忆，默认 None 不过滤。"""
         target_types = list(memory_types) if memory_types else list(DEFAULT_MEMORY_TYPE_LIMITS.keys())
         limits = dict(DEFAULT_MEMORY_TYPE_LIMITS)  # 复制默认限制
         if per_type_limits:
@@ -202,6 +208,8 @@ class LongTermMemoryService:
             stmt = select(UserMemory).where(UserMemory.user_id == user_id)
             if source is not None:
                 stmt = stmt.where(UserMemory.source == source)
+            if module is not None:
+                stmt = stmt.where(UserMemory.module == module)
             if target_types:
                 stmt = stmt.where(UserMemory.memory_type.in_(target_types))  # 按类型过滤
             if only_unexpired:
@@ -244,11 +252,11 @@ class LongTermMemoryService:
         only_unexpired: bool = True,
     ) -> list[UserMemory]:
         """获取用户长期记忆列表（通用查询接口）。
-        module 参数用于按来源过滤（如 "conversation"），不传则不过滤。"""
+        module 参数用于按模块过滤，不传则不过滤。"""
         async with AsyncSession(self.engine) as session:
             stmt = select(UserMemory).where(UserMemory.user_id == user_id)
             if module is not None:
-                stmt = stmt.where(UserMemory.source == module)
+                stmt = stmt.where(UserMemory.module == module)
             if only_unexpired:
                 _now = now()
                 stmt = stmt.where(or_(UserMemory.expires_at == None, UserMemory.expires_at > _now))  # noqa: E711
@@ -269,6 +277,7 @@ class LongTermMemoryService:
         importance: float = 0.5,
         source: str = "conversation",
         source_message_count: int = 0,
+        module: str = "mentor",
     ) -> UserMemory:
         """将 LLM 提炼的长期记忆条目写入 user_memory 表（无去重，直接写入）。
         与 save_user_fact 不同，此方法不做去重/合并，适用于批量写入场景（如压缩服务产出摘要）。"""
@@ -276,6 +285,7 @@ class LongTermMemoryService:
             memory = UserMemory(
                 user_id=user_id,
                 session_id=session_id,
+                module=module,
                 content=content,
                 memory_type=memory_type,
                 dimension=dimension,  # 可选维度标签（如 "knowledge_level"）
