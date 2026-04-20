@@ -121,6 +121,56 @@ class RealtimeBridge:
         elif msg_type == "switch_session":
             self.session_id = data.get("session_id", "")
 
+    @staticmethod
+    def _normalize_url_list(value) -> list[str]:
+        """Normalize websocket attachment payload into url list."""
+        urls: list[str] = []
+        if isinstance(value, str):
+            urls.extend([u.strip() for u in value.split(",") if u.strip()])
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, str):
+                    text = item.strip()
+                    if text:
+                        urls.append(text)
+                    continue
+                if isinstance(item, dict):
+                    raw = item.get("url") or item.get("image_url") or item.get("file_url")
+                    if isinstance(raw, str) and raw.strip():
+                        urls.append(raw.strip())
+        return list(dict.fromkeys(urls))
+
+    def _extract_attachment_urls(self, data: dict) -> tuple[list[str], list[str]]:
+        """Extract image/file urls from websocket text_input payload."""
+        image_urls = (
+            self._normalize_url_list(data.get("image_urls"))
+            or self._normalize_url_list(data.get("imageUrls"))
+            or self._normalize_url_list(data.get("image_url"))
+            or self._normalize_url_list(data.get("imageUrl"))
+        )
+        file_urls = (
+            self._normalize_url_list(data.get("file_urls"))
+            or self._normalize_url_list(data.get("fileUrls"))
+            or self._normalize_url_list(data.get("file_url"))
+            or self._normalize_url_list(data.get("fileUrl"))
+        )
+
+        attachments = data.get("attachments")
+        if isinstance(attachments, list):
+            for item in attachments:
+                if not isinstance(item, dict):
+                    continue
+                url = item.get("url")
+                kind = str(item.get("type", "")).lower()
+                if not isinstance(url, str) or not url.strip():
+                    continue
+                if kind == "image":
+                    image_urls.append(url.strip())
+                elif kind in {"file", "document", "doc"}:
+                    file_urls.append(url.strip())
+
+        return list(dict.fromkeys(image_urls)), list(dict.fromkeys(file_urls))
+
     async def _handle_audio_chunk(self, data: dict):
         """处理音频块"""
         import base64
@@ -144,7 +194,13 @@ class RealtimeBridge:
         text = data.get("text", "")
         if not text:
             return
-        await self._handle_user_text(text, source="text")
+        image_urls, file_urls = self._extract_attachment_urls(data)
+        await self._handle_user_text(
+            text,
+            source="text",
+            image_urls=image_urls,
+            file_urls=file_urls,
+        )
 
     async def _handle_stop_speaking(self):
         """停止说话"""
@@ -308,12 +364,27 @@ class RealtimeBridge:
         if len(self._round_metrics) > 20:
             self._round_metrics = self._round_metrics[-20:]
 
-    async def _handle_user_text(self, user_text: str, source: str = "text"):
+    async def _handle_user_text(
+        self,
+        user_text: str,
+        source: str = "text",
+        image_urls: Optional[list[str]] = None,
+        file_urls: Optional[list[str]] = None,
+    ):
         """核心方法：用户文本 → AvatarAgent → 回复 → Avatar 视频"""
         from app.avatar.agent import AvatarAgent
         from app.memory.short_term import short_term_service
         from app.memory.session import session_service
         from app.chat.service import get_avatar_chat_usecases
+
+        image_urls = list(dict.fromkeys(image_urls or []))
+        file_urls = list(dict.fromkeys(file_urls or []))
+        attachments_payload = None
+        if image_urls or file_urls:
+            attachments_payload = json.dumps(
+                {"image_urls": image_urls, "file_urls": file_urls},
+                ensure_ascii=False,
+            )
 
         if not self.session_id:
             # 自动创建会话
@@ -328,6 +399,7 @@ class RealtimeBridge:
             session_id=self.session_id,
             role="user",
             content=user_text,
+            attachments=attachments_payload,
             module="avatar",
         )
 
@@ -339,6 +411,8 @@ class RealtimeBridge:
             user_id=self.user_id,
             user_message=user_text,
             session_id=self.session_id,
+            image_urls=image_urls,
+            file_urls=file_urls,
             stream_runner=agent.chat_stream,
             input_source=source,
         ):

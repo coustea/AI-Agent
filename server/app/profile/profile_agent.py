@@ -82,9 +82,9 @@ PROFILE_BUILDER_PROMPT = """
 
 
 class ProfileBuilderAgent:
-    def __init__(self, memory=memory_service):
+    def __init__(self, memory=memory_service, module_name: str = "mentor"):
         self.memory = memory
-        self.module_name = "mentor"
+        self.module_name = module_name
         self.llm = get_deepseek_llm(temperature=0.1, streaming=False)
         self._structured_llm = self.llm.with_structured_output(ProfileExtraction)
 
@@ -118,6 +118,7 @@ class ProfileBuilderAgent:
         """Provide existing memory context so profile updates stay abstract and non-duplicative."""
         memories_by_type = await self.memory.get_user_context_memories(
             user_id=user_id,
+            module=self.module_name,
             per_type_limits={"preference": 2, "goal": 2, "weakness": 2, "fact": 2, "background": 2},
         )
         lines: list[str] = []

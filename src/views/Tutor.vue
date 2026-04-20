@@ -21,9 +21,53 @@
           <div :class="['nav-item', 'new-chat', { active: !currentSessionId }]" @click="newSession" title="新对话">
             <el-icon><EditPen /></el-icon> <span class="nav-text">新对话</span>
           </div>
-          <div class="nav-item search-item" title="搜索历史">
-            <el-icon><Search /></el-icon> <span class="nav-text">搜索历史</span>
-          </div>
+
+          <el-popover
+              placement="right-start"
+              :width="280"
+              trigger="click"
+              v-model:visible="searchPopoverVisible"
+              popper-style="padding: 16px 12px 12px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);"
+              @after-leave="searchKeyword = ''"
+          >
+            <template #reference>
+              <div class="nav-item search-item" title="搜索历史">
+                <el-icon><Search /></el-icon> <span class="nav-text">搜索历史</span>
+              </div>
+            </template>
+
+            <div class="popover-search-container">
+              <el-input
+                  v-model="searchKeyword"
+                  placeholder="输入关键词搜索记录..."
+                  clearable
+                  class="search-input"
+              >
+                <template #prefix>
+                  <el-icon><Search /></el-icon>
+                </template>
+              </el-input>
+
+              <div class="popover-session-scroll search-results-scroll" v-show="searchKeyword.trim() !== ''">
+                <div
+                    v-for="s in filteredSessions"
+                    :key="s.id"
+                    :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
+                    @click="switchSession(s.id); searchPopoverVisible = false"
+                >
+                  <el-icon class="session-icon"><ChatLineSquare /></el-icon>
+                  <div class="session-info nav-text">
+                    <span class="session-title">{{ s.title || '新对话' }}</span>
+                    <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
+                  </div>
+                </div>
+
+                <div v-if="filteredSessions.length === 0" class="session-empty nav-text">
+                  未找到相关记录
+                </div>
+              </div>
+            </div>
+          </el-popover>
 
           <el-popover
               placement="right-start"
@@ -69,8 +113,10 @@
               :title="s.title || '新对话'"
           >
             <el-icon class="session-icon"><ChatLineSquare /></el-icon>
-            <span class="session-title nav-text">{{ s.title || '新对话' }}</span>
-	                <span class="session-time nav-text">{{ formatRelativeTime(s.updated_at) }}</span>
+            <div class="session-info nav-text">
+              <span class="session-title">{{ s.title || '新对话' }}</span>
+              <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
+            </div>
             <el-button link class="del-btn nav-text" @click.stop="archiveSession(s.id)">
               <el-icon><Delete /></el-icon>
             </el-button>
@@ -165,7 +211,7 @@
           </div>
         </div>
 
-        <div class="input-panel" :class="{ 'standard-input': chatMode === 'standard' }">
+        <div class="input-panel">
           <div v-if="pendingFiles.length > 0" class="attachments-preview">
             <div v-for="(f, idx) in pendingFiles" :key="idx" class="attachment-chip">
               <el-icon v-if="f.fileType === 'image'"><Picture /></el-icon>
@@ -175,66 +221,45 @@
             </div>
           </div>
 
-          <div class="multimodal-option-bar">
-            <button
-              type="button"
-              class="option-chip"
-              :class="{ active: generateImage }"
-              @click="handleImageToggle"
-              :aria-pressed="generateImage"
-            >
-              生成图片
-            </button>
-            <button
-              type="button"
-              class="option-chip"
-              :class="{ active: generateVideo }"
-              @click="handleVideoToggle"
-              :aria-pressed="generateVideo"
-            >
-              生成视频
-            </button>
-          </div>
-
-          <div class="input-wrapper" :class="{ 'pill-shape': chatMode === 'standard' }">
+          <div class="input-wrapper">
             <div class="toolbar-left">
-              <template v-if="chatMode === 'standard'">
-                <el-dropdown trigger="click" placement="top-start">
-                  <button class="standard-plus-btn" :disabled="uploadingFile"><el-icon><Plus /></el-icon></button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item @click="triggerDocUpload">上传文档</el-dropdown-item>
-                      <el-dropdown-item @click="triggerImgUpload">上传图片</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </template>
-              <template v-else>
-                <el-tooltip content="上传文档" placement="top" :show-after="500">
-                  <button class="tool-btn" @click="triggerDocUpload" :disabled="uploadingFile"><el-icon><Document /></el-icon></button>
-                </el-tooltip>
-                <el-tooltip content="上传截图" placement="top" :show-after="500">
-                  <button class="tool-btn" @click="triggerImgUpload" :disabled="uploadingFile"><el-icon><Picture /></el-icon></button>
-                </el-tooltip>
-                <el-tooltip content="语音提问" placement="top" :show-after="500">
-                  <button class="tool-btn"><el-icon><Microphone /></el-icon></button>
-                </el-tooltip>
-              </template>
+              <el-dropdown trigger="click" placement="top-start">
+                <button class="standard-plus-btn" :disabled="uploadingFile"><el-icon><Plus /></el-icon></button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="triggerDocUpload">上传文档</el-dropdown-item>
+                    <el-dropdown-item @click="triggerImgUpload">上传图片</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+
+              <el-tooltip content="生成图片帮助" placement="top" :show-after="500">
+                <button class="media-gen-btn" :class="{ active: generateImage }" @click="handleImageToggle">
+                  <el-icon><Picture /></el-icon>
+                </button>
+              </el-tooltip>
+              <el-tooltip content="生成视频帮助" placement="top" :show-after="500">
+                <button class="media-gen-btn" :class="{ active: generateVideo }" @click="handleVideoToggle">
+                  <el-icon><VideoPlay /></el-icon>
+                </button>
+              </el-tooltip>
             </div>
 
             <textarea
                 v-model="userInput"
-                :placeholder="chatMode === 'standard' ? '在此输入你的问题(Shift + Enter 换行)' : '向 AI 导师提问 (Shift + Enter 换行)...'"
+                placeholder="向 AI 导师提问 (Enter 发送，Shift + Enter 换行)..."
                 @keydown.enter.exact.prevent="handleSend"
             ></textarea>
 
             <div class="toolbar-right">
-              <button class="send-btn" :class="{ 'is-active': userInput.trim() || pendingFiles.length > 0 }" :disabled="(!userInput.trim() && pendingFiles.length === 0) || isAIThinking" @click="handleSend">
-                <el-icon><Top /></el-icon>
-              </button>
+              <el-tooltip :content="isRecording ? '结束录音' : '语音提问'" placement="top" :show-after="500">
+                <button class="voice-btn" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle">
+                  <el-icon><Microphone /></el-icon>
+                </button>
+              </el-tooltip>
             </div>
           </div>
-          <div class="input-footer" v-if="chatMode === 'digital_human'">AI 可能会产生误导性信息，请注意甄别。</div>
+          <div class="input-footer">AI 可能会产生错误信息，请注意甄别。</div>
         </div>
 
         <input ref="docInput" type="file" accept=".pdf,.doc,.docx,.txt" style="display:none" @change="onFileSelected($event, 'document')" />
@@ -280,9 +305,10 @@ import { ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
-  MagicStick, Plus, Delete, Close, Top,
-  EditPen, Search, Discount, Clock
+  MagicStick, Plus, Delete, Close,
+  EditPen, Search, Discount, Clock, VideoPlay
 } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
 import {
@@ -292,7 +318,7 @@ import {
 } from '@/api/ai'
 
 // ==========================================
-// 维度定义（8 维匹配后端 ProfileExtraction）
+// 维度定义
 // ==========================================
 const DIMENSION_MAP = [
   { key: 'knowledge_level', name: '知识基础', color: '#0891B2', defaultDesc: '自动分析中...' },
@@ -317,6 +343,16 @@ const profileUpdated = ref(false)
 const uploadingFile = ref(false)
 const generateImage = ref(false)
 const generateVideo = ref(false)
+
+// 语音录音状态
+const isRecording = ref(false)
+
+// 跟踪用户是否曾操作过媒体按钮 (用于展现“仅文本交互”提示)
+const hasToggledMedia = ref(false)
+
+// 历史搜索相关
+const searchPopoverVisible = ref(false)
+const searchKeyword = ref('')
 
 // 会话管理
 const sessions = ref<ChatSession[]>([])
@@ -354,11 +390,22 @@ const activeProfileTags = computed(() => {
   return extractedTags.value
 })
 
-// 流式控制器
 let abortController: AbortController | null = null
 const streamingMsgId = ref<number | null>(null)
-// 画像轮询计时器
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
+
+// ==========================================
+// 计算属性 (历史记录搜索过滤逻辑)
+// ==========================================
+const filteredSessions = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return []
+
+  return sessions.value.filter(s => {
+    const title = s.title || '新对话'
+    return title.toLowerCase().includes(keyword)
+  })
+})
 
 // ==========================================
 // 工具函数
@@ -432,7 +479,6 @@ const fetchProfile = async () => {
       tutorStrategy.value = data.profile_summary
     }
 
-    // 从非空维度描述中提取标签
     const tags = profileDimensions.value
         .filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
         .map(d => d.name)
@@ -445,12 +491,10 @@ const fetchProfile = async () => {
       setTimeout(() => { profileUpdated.value = false }, 4000)
     }
   } catch {
-    // 静默处理，画像轮询失败不影响聊天
   }
 }
 
 const scheduleProfilePoll = () => {
-  // 清除之前的计时器
   profilePollTimers.forEach(t => clearTimeout(t))
   profilePollTimers = []
 
@@ -495,7 +539,6 @@ const switchSession = async (sessionId: string) => {
       illustrations: [],
     }))
   } catch {
-    // 加载历史失败时保持空消息
   }
   scrollToBottom()
 }
@@ -512,7 +555,6 @@ const archiveSession = async (sessionId: string) => {
       }
     }
   } catch {
-    // 静默处理
   }
 }
 
@@ -533,41 +575,62 @@ const onFileSelected = async (event: Event, expectedType: string) => {
     fileType,
     name: file.name,
   })
-  input.value = '' // 重置以允许重复选择同一文件
+  input.value = ''
 }
 
 const removeAttachment = (idx: number) => {
   pendingFiles.value.splice(idx, 1)
 }
 
-// 多模态选项互斥切换
+// ==========================================
+// 媒体生成开关逻辑 (互斥 + 提示)
+// ==========================================
 const handleImageToggle = () => {
+  hasToggledMedia.value = true // 标记已交互
   if (generateImage.value) {
     generateImage.value = false
+    ElMessage.info({ message: '已取消生成图片帮助，当前为仅文本交互', plain: true })
   } else {
     generateImage.value = true
-    generateVideo.value = false
+    generateVideo.value = false // 互斥
+    ElMessage.success({ message: '已经选择生成图片帮助 (二者不可同时选择)', plain: true })
   }
 }
 
 const handleVideoToggle = () => {
+  hasToggledMedia.value = true // 标记已交互
   if (generateVideo.value) {
     generateVideo.value = false
+    ElMessage.info({ message: '已取消生成视频帮助，当前为仅文本交互', plain: true })
   } else {
     generateVideo.value = true
-    generateImage.value = false
+    generateImage.value = false // 互斥
+    ElMessage.success({ message: '已经选择生成视频帮助 (二者不可同时选择)', plain: true })
   }
 }
 
 // ==========================================
-// 发送消息（SSE 流式）
+// 语音交互逻辑
+// ==========================================
+const handleVoiceToggle = () => {
+  isRecording.value = !isRecording.value
+  if (isRecording.value) {
+    ElMessage.success({ message: '开始录音，请说话...', plain: true })
+    // TODO: 调用真实的录音开始 API
+  } else {
+    ElMessage.info({ message: '录音结束，正在发送...', plain: true })
+    // TODO: 调用真实的录音结束并发送 API
+  }
+}
+
+// ==========================================
+// 发送消息
 // ==========================================
 const handleSend = async () => {
   const text = userInput.value.trim()
   const hasFiles = pendingFiles.value.length > 0
   if ((!text && !hasFiles) || isAIThinking.value) return
 
-  // 确保有活跃会话
   if (!currentSessionId.value) {
     try {
       const res = await createSession()
@@ -575,11 +638,9 @@ const handleSend = async () => {
       currentSessionId.value = session.id
       sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
     } catch {
-      // 如果创建失败，使用 undefined
     }
   }
 
-  // 首条消息自动更新会话标题
   if (currentSessionId.value && text) {
     const session = sessions.value.find(s => s.id === currentSessionId.value)
     if (session && (!session.title || session.title === '新对话')) {
@@ -588,9 +649,8 @@ const handleSend = async () => {
   }
 
   const userMsgId = Date.now()
-
-  // 用户消息（附件先占位，上传成功后回填真实链接）
   const displayText = text || (hasFiles ? `[附件分析] ${pendingFiles.value.map(f => f.name).join(', ')}` : '')
+
   if (displayText) {
     messages.value.push({
       id: userMsgId,
@@ -606,7 +666,6 @@ const handleSend = async () => {
   profileUpdated.value = false
   scrollToBottom()
 
-  // 上传未持久化附件（绑定当前会话）
   const currentPending = [...pendingFiles.value]
   const uploadedAttachments: Attachment[] = []
 
@@ -661,12 +720,10 @@ const handleSend = async () => {
     userMsg.attachments = uploadedAttachments.length > 0 ? uploadedAttachments : null
   }
 
-  // AI 消息占位
   const aiMsgId = Date.now() + 1
   messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
   streamingMsgId.value = aiMsgId
 
-  // 发起 SSE 流式请求
   abortController = streamChat(
       {
         message: text || '请分析附件',
@@ -676,7 +733,6 @@ const handleSend = async () => {
         generate_image: generateImage.value,
         generate_video: generateVideo.value,
       },
-      // onChunk
       (chunk) => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
@@ -684,7 +740,6 @@ const handleSend = async () => {
           scrollToBottom()
         }
       },
-      // onDone
       () => {
         isAIThinking.value = false
         streamingMsgId.value = null
@@ -695,7 +750,6 @@ const handleSend = async () => {
         scheduleProfilePoll()
         abortController = null
       },
-      // onError
       (err) => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg && !aiMsg.content) {
@@ -705,7 +759,6 @@ const handleSend = async () => {
         streamingMsgId.value = null
         abortController = null
       },
-      // onEvent
       (evt) => {
         if (evt.event !== 'illustration') return
         const payload = evt.data as { path?: string }
@@ -768,38 +821,40 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-/* 折叠状态的侧边栏样式 */
 .session-sidebar.collapsed {
   width: 64px;
 }
 
-/* 折叠时隐藏所有带有 nav-text 的文字标签 */
 .session-sidebar.collapsed .nav-text {
   display: none;
 }
 
-/* 折叠时调整各个导航项居中并固定为方形 */
 .session-sidebar.collapsed .nav-item {
   justify-content: center;
   padding: 10px 0;
   width: 42px;
+  height: 42px; /* 显式高度保证成正圆 */
   margin-left: auto;
   margin-right: auto;
+  border-radius: 50%; /* 折叠后变圆 */
 }
 
 .session-sidebar.collapsed .session-item {
   justify-content: center;
   padding: 10px 0;
   width: 42px;
+  height: 42px;
   margin-left: auto;
   margin-right: auto;
+  border-radius: 50%;
 }
 
 .session-sidebar.collapsed .standard-sidebar-nav {
-  align-items: stretch;
+  padding-left: 0;
+  padding-right: 0;
+  align-items: center;
 }
 
-/* 侧边栏顶部 Header */
 .sidebar-top-header {
   display: flex;
   align-items: center;
@@ -809,6 +864,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   flex-shrink: 0;
 }
+
 .sidebar-brand {
   display: flex;
   align-items: center;
@@ -817,12 +873,12 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 1.05rem;
 }
+
 .brand-icon {
   color: #4F46E5;
   font-size: 1.25rem;
 }
 
-/* 侧栏折叠控制按钮 - 定制化 SVG 样式 */
 .collapse-toggle-btn {
   background: transparent;
   border: none;
@@ -838,20 +894,22 @@ onBeforeUnmount(() => {
   padding: 0;
   margin: 0;
 }
+
 .collapse-toggle-btn:hover {
   background: #E2E8F0;
   color: #0F172A;
 }
+
 .collapse-toggle-btn svg {
   width: 1.3rem;
   height: 1.3rem;
 }
 
-/* ★ 关键对齐：折叠状态下，控制按钮宽度与下方导航项完美统一（均为 42px），确保绝对居中上下对齐 ★ */
 .session-sidebar.collapsed .sidebar-top-header {
   justify-content: center;
   padding: 16px 0 8px;
 }
+
 .session-sidebar.collapsed .collapse-toggle-btn {
   width: 42px;
   height: 42px;
@@ -864,17 +922,17 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-/* 通用统一导航项/按钮微卡片样式 */
+/* ================== 修改处: 导航项及列表全部设为胶囊形式，且默认透明悬浮高亮 ================== */
 .nav-item {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
   margin-bottom: 8px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 10px 16px;
+  border-radius: 999px; /* 改为胶囊形 */
   cursor: pointer;
   color: #475569;
   font-size: 0.95rem;
@@ -882,30 +940,56 @@ onBeforeUnmount(() => {
 }
 
 .nav-item:hover {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
+  background: #FFFFFF;
+  border-color: #E2E8F0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   color: #334155;
 }
 
 .nav-item.active {
-  background: #EEF2FF;
+  background: transparent;
   color: #4F46E5;
-  border-color: #C7D2FE;
+  border-color: transparent;
   font-weight: 600;
-}
-
-/* 不可点击状态的静默历史记录按钮（侧边栏展开时使用） */
-.history-toggle-btn.inactive-click {
-  cursor: default;
   box-shadow: none;
 }
-.history-toggle-btn.inactive-click:hover {
-  background: #FFFFFF;
-  border-color: #E2E8F0;
-  color: #475569;
+
+.nav-item.active:hover {
+  background: #EEF2FF;
+  border-color: #C7D2FE;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
-/* 折叠悬浮窗内的历史记录滚动区域 */
+.history-toggle-btn.inactive-click {
+  cursor: default;
+}
+
+.history-toggle-btn.inactive-click:hover {
+  background: transparent;
+  border-color: transparent;
+  color: #475569;
+  box-shadow: none;
+}
+
+/* 弹窗通用基础样式 */
+.popover-search-container {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.el-input__wrapper) {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px #E2E8F0 inset;
+}
+
+:deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #CBD5E1 inset;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #0891B2 inset !important;
+}
+
 .popover-session-scroll {
   max-height: 40vh;
   overflow-y: auto;
@@ -913,6 +997,19 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 4px;
 }
+
+.search-results-scroll {
+  margin-top: 12px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.search-results-scroll .session-empty {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
 .popover-title {
   font-size: 0.8rem;
   font-weight: 600;
@@ -921,24 +1018,12 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #E2E8F0;
   margin-bottom: 8px;
 }
+
 .popover-session-scroll .session-item {
-  background: transparent;
-  border: 1px solid transparent;
-  box-shadow: none;
   margin: 0;
-  padding: 8px;
-}
-.popover-session-scroll .session-item:hover {
-  background: #F8FAFC;
-  border-color: #E2E8F0;
-}
-.popover-session-scroll .session-item.active {
-  background: #EEF2FF;
-  color: #4F46E5;
-  font-weight: 600;
+  padding: 8px 16px;
 }
 
-/* 下方实际展现的历史记录列表 */
 .session-list {
   flex: 1;
   overflow-y: auto;
@@ -947,24 +1032,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-/* 历史记录平时透明，Hover 或 Active 时呈现卡片样式 */
 .session-item {
   margin-bottom: 4px;
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-.session-item:hover {
-  background: #FFFFFF;
-  border-color: #E2E8F0;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-}
-.session-item.active {
-  background: #EEF2FF;
-  color: #4F46E5;
-  border-color: #C7D2FE;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }
 
 .session-icon {
@@ -972,20 +1041,41 @@ onBeforeUnmount(() => {
   color: #94A3B8;
   transition: color 0.2s;
 }
+
 .session-item.active .session-icon {
   color: #4F46E5;
 }
 
-.session-info { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
-.session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-time { font-size: 0.7rem; color: #94A3B8; white-space: nowrap; }
+.session-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.session-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-time {
+  font-size: 0.7rem;
+  color: #94A3B8;
+  white-space: nowrap;
+}
 
 .del-btn {
   opacity: 0;
   color: #EF4444;
   padding: 4px;
 }
-.session-item:hover .del-btn { opacity: 1; }
+
+.session-item:hover .del-btn {
+  opacity: 1;
+}
 
 .msg-illustrations {
   margin-top: 10px;
@@ -1008,7 +1098,7 @@ onBeforeUnmount(() => {
   margin-top: 2rem;
 }
 
-/* ================= 模式切换底部区域 ================= */
+/* ================= 左下角模式切换区域 ================= */
 .sidebar-footer {
   padding: 1rem;
   border-top: 1px solid #E2E8F0;
@@ -1017,80 +1107,72 @@ onBeforeUnmount(() => {
   transition: padding 0.3s ease;
 }
 
-/* 折叠时，极限缩减水平 padding，让 48px 的大按钮能在 64px 宽度的侧边栏内居中且不溢出 */
 .session-sidebar.collapsed .sidebar-footer {
   padding: 16px 4px;
 }
 
+/* 移除原有的内框背景和阴影，实现清爽布局 */
 .mode-toggle-group {
   display: flex;
   flex-direction: column;
-  background: #F1F5F9;
-  padding: 6px;
-  border-radius: 12px;
-  gap: 6px;
-  border: 1px solid #E2E8F0;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+  background: transparent;
+  padding: 0;
+  gap: 8px;
+  border: none;
+  box-shadow: none;
 }
 
+/* 按钮自身带有白底且呈胶囊状 */
 .mode-btn {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 16px; /* 展开时按钮正常大小 */
-  border: 1px solid transparent;
-  background: transparent;
-  border-radius: 8px;
+  justify-content: flex-start; /* 居左对齐 */
+  gap: 12px;
+  padding: 10px 20px; /* 调整内边距 */
+  border: 1px solid #E2E8F0; /* 给白底按钮增加一个浅色边框以体现轮廓 */
+  background: #FFFFFF; /* 背景改为纯白 */
+  border-radius: 999px; /* 胶囊形 */
   font-size: 0.95rem;
   font-weight: 600;
   color: #64748B;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .mode-btn:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.6);
+  background: #F8FAFC;
   color: #334155;
+  border-color: #CBD5E1;
 }
 
+/* ★ 新增：统一的激活状态样式（浅蓝底色 + 蓝字） ★ */
 .mode-btn.active {
-  background: #FFFFFF;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-/* 图文交互激活色 */
-.mode-btn.active:nth-child(1) {
-  color: #0284C7;
-  border-color: #E0F2FE;
-  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
-}
-.mode-btn.active:nth-child(1) .el-icon {
-  color: #0EA5E9;
-}
-
-/* 数字人互动激活色 */
-.mode-btn.active:nth-child(2) {
-  color: #6D28D9;
-  border-color: #EDE9FE;
-  background: linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%);
-}
-.mode-btn.active:nth-child(2) .el-icon {
-  color: #8B5CF6;
+  background: #EAF2FF; /* 浅蓝色背景 */
+  color: #1677FF; /* 蓝色文字 */
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .mode-btn .el-icon {
-  font-size: 1.25rem; /* 展开时的基础图标尺寸 */
-  transition: color 0.3s ease, transform 0.3s ease;
+  font-size: 1.2rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s ease;
 }
 
+/* ★ 激活时图标变为蓝底白标 ★ */
 .mode-btn.active .el-icon {
-  transform: scale(1.1);
+  background: #1677FF;
+  color: #FFFFFF;
 }
 
-/* ================= 折叠时模式切换按钮专属样式（放大版） ================= */
 .session-sidebar.collapsed .mode-toggle-group {
   padding: 4px;
   gap: 10px;
@@ -1099,14 +1181,16 @@ onBeforeUnmount(() => {
 .session-sidebar.collapsed .mode-btn {
   justify-content: center;
   padding: 0;
-  width: 48px;  /* 增加至 48px，让按钮更加庞大饱满 */
-  height: 48px; /* 增加至 48px */
+  width: 48px;
+  height: 48px;
   margin: 0 auto;
-  border-radius: 12px; /* 按钮变大，对应圆角也变得更平滑 */
+  border-radius: 50%; /* 侧边收起时，变成正圆 */
 }
 
 .session-sidebar.collapsed .mode-btn .el-icon {
-  font-size: 1.65rem; /* 大幅增加图标字号，提升视觉分量与操作手感 */
+  font-size: 1.5rem;
+  width: 36px;
+  height: 36px;
 }
 
 /* --- 中央：聊天容器 --- */
@@ -1159,9 +1243,15 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulse-ring {
-  0% { transform: scale(0.98); }
-  50% { transform: scale(1.02); }
-  100% { transform: scale(0.98); }
+  0% {
+    transform: scale(0.98);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(0.98);
+  }
 }
 
 .speech-wave {
@@ -1179,12 +1269,22 @@ onBeforeUnmount(() => {
   border-radius: 2px;
   animation: wave-anim 1s infinite ease-in-out;
 }
-.speech-wave span:nth-child(2) { animation-delay: 0.1s; }
-.speech-wave span:nth-child(3) { animation-delay: 0.2s; }
+
+.speech-wave span:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.speech-wave span:nth-child(3) {
+  animation-delay: 0.2s;
+}
 
 @keyframes wave-anim {
-  0%, 100% { height: 8px; }
-  50% { height: 16px; }
+  0%, 100% {
+    height: 8px;
+  }
+  50% {
+    height: 16px;
+  }
 }
 
 .status-badge {
@@ -1210,9 +1310,24 @@ onBeforeUnmount(() => {
   margin: auto 0;
   color: #475569;
 }
-.welcome-icon { font-size: 2.5rem; color: #E2E8F0; margin-bottom: 1rem; }
-.welcome-banner h3 { font-size: 1.2rem; color: #0F172A; margin: 0 0 0.5rem; }
-.welcome-banner p { font-size: 0.9rem; line-height: 1.6; margin: 0; }
+
+.welcome-icon {
+  font-size: 2.5rem;
+  color: #E2E8F0;
+  margin-bottom: 1rem;
+}
+
+.welcome-banner h3 {
+  font-size: 1.2rem;
+  color: #0F172A;
+  margin: 0 0 0.5rem;
+}
+
+.welcome-banner p {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0;
+}
 
 .message-row {
   display: flex;
@@ -1222,8 +1337,14 @@ onBeforeUnmount(() => {
 }
 
 @keyframes msg-appear {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .message-row.user {
@@ -1231,7 +1352,10 @@ onBeforeUnmount(() => {
   flex-direction: row-reverse;
 }
 
-.msg-avatar { flex-shrink: 0; }
+.msg-avatar {
+  flex-shrink: 0;
+}
+
 .avatar-circle {
   width: 32px;
   height: 32px;
@@ -1241,8 +1365,16 @@ onBeforeUnmount(() => {
   justify-content: center;
   font-size: 1rem;
 }
-.ai-av { background: #0F172A; color: #FFF; }
-.user-av { background: #0891B2; color: #FFF; }
+
+.ai-av {
+  background: #0F172A;
+  color: #FFF;
+}
+
+.user-av {
+  background: #0891B2;
+  color: #FFF;
+}
 
 .bubble-wrapper {
   display: flex;
@@ -1250,7 +1382,9 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
-.message-row.user .bubble-wrapper { align-items: flex-end; }
+.message-row.user .bubble-wrapper {
+  align-items: flex-end;
+}
 
 .msg-meta {
   font-size: 0.75rem;
@@ -1258,8 +1392,15 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
 }
-.message-row.user .msg-meta { flex-direction: row-reverse; }
-.sender { font-weight: 600; color: #475569; }
+
+.message-row.user .msg-meta {
+  flex-direction: row-reverse;
+}
+
+.sender {
+  font-weight: 600;
+  color: #475569;
+}
 
 .bubble {
   padding: 0.75rem 1.25rem;
@@ -1283,14 +1424,30 @@ onBeforeUnmount(() => {
 }
 
 /* 附件与工具展示 */
-.msg-attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.attachment-link {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 8px; background: #FFFFFF; border: 1px solid #E2E8F0;
-  border-radius: 6px; font-size: 0.8rem; color: #0891B2;
-  text-decoration: none; transition: border-color 0.2s;
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
 }
-.attachment-link:hover { border-color: #0891B2; }
+
+.attachment-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #0891B2;
+  text-decoration: none;
+  transition: border-color 0.2s;
+}
+
+.attachment-link:hover {
+  border-color: #0891B2;
+}
 
 /* Typing indicator */
 .thinking-bubble {
@@ -1302,129 +1459,222 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
 }
+
 .dot-typing {
   position: relative;
-  width: 6px; height: 6px; border-radius: 50%;
-  background-color: #94A3B8; color: #94A3B8;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #94A3B8;
+  color: #94A3B8;
   animation: dotTyping 1.5s infinite linear;
   box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
   margin-right: 24px;
 }
+
 @keyframes dotTyping {
-  0% { box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
-  33% { background-color: #0F172A; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
-  66% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #0F172A, 24px 0 0 0 #94A3B8; }
-  100% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #0F172A; }
+  0% {
+    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
+  }
+  33% {
+    background-color: #0F172A;
+    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
+  }
+  66% {
+    background-color: #94A3B8;
+    box-shadow: 12px 0 0 0 #0F172A, 24px 0 0 0 #94A3B8;
+  }
+  100% {
+    background-color: #94A3B8;
+    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #0F172A;
+  }
 }
 
-/* 输入面板 */
+/* ================= 核心胶囊输入框全局统一样式 ================= */
 .input-panel {
-  padding: 1rem 2rem 1.5rem;
-  background: #FFFFFF;
-}
-
-.multimodal-option-bar {
+  padding: 0 0 2.5rem 0;
   display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
-.option-chip {
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid #CBD5E1;
-  background: #F8FAFC;
-  color: #334155;
-  font-size: 0.84rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.option-chip:hover {
-  border-color: #94A3B8;
-  background: #F1F5F9;
-}
-
-.option-chip.active {
-  color: #0C4A6E;
-  border-color: #7DD3FC;
-  background: #E0F2FE;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
 }
 
 .attachments-preview {
-  display: flex; gap: 8px; margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  width: 65%;
+  max-width: 800px;
+  min-width: 400px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
+
 .attachment-chip {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 8px; background: #F1F5F9;
-  border: 1px solid #E2E8F0; border-radius: 6px;
-  font-size: 0.75rem; color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #475569;
 }
-.close-icon { cursor: pointer; color: #94A3B8; }
-.close-icon:hover { color: #EF4444; }
+
+.close-icon {
+  cursor: pointer;
+  color: #94A3B8;
+}
+
+.close-icon:hover {
+  color: #EF4444;
+}
 
 .input-wrapper {
+  width: 65%;
+  max-width: 800px;
+  min-width: 400px;
+  background: #F9F9F9;
+  border: 1px solid #E5E5E5;
+  border-radius: 32px;
+  padding: 10px 16px;
   display: flex;
-  align-items: flex-end;
-  background: #FAFAFA;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
-  padding: 8px;
-  transition: border-color 0.2s;
+  align-items: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
 }
-.input-wrapper:focus-within { border-color: #0891B2; background: #FFFFFF; }
+
+.input-wrapper:focus-within {
+  background: #FFFFFF;
+  border-color: #D1D5DB;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+}
 
 .toolbar-left {
   display: flex;
+  align-items: center;
   gap: 4px;
-  margin-right: 8px;
-  padding-bottom: 4px;
+  margin-right: 12px;
 }
 
-.tool-btn {
-  background: transparent;
+.standard-plus-btn {
+  font-size: 1.2rem;
+  color: #666;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   border: none;
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  color: #64748B;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  padding: 0;
+  transition: background 0.2s;
 }
-.tool-btn:hover { background: #E2E8F0; color: #0F172A; }
-.mic-active { color: #EF4444; }
+
+.standard-plus-btn:hover {
+  background: #E5E5E5;
+}
+
+/* 🌟 多模态图片、视频生成按钮样式 */
+.media-gen-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  color: #94A3B8;
+  font-size: 1.15rem;
+  transition: all 0.2s;
+  margin-left: 2px;
+  padding: 0;
+}
+
+.media-gen-btn:hover {
+  background: #E2E8F0;
+  color: #475569;
+}
+
+.media-gen-btn.active {
+  background: #6D93C8; /* 匹配截图中的柔和蓝色 */
+  color: #FFFFFF;
+}
+
+.media-gen-btn.active:hover {
+  background: #5B7FAE;
+}
 
 .input-wrapper textarea {
   flex: 1;
   border: none;
   background: transparent;
   resize: none;
-  height: 36px;
+  height: 24px;
   max-height: 160px;
   outline: none;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: #0F172A;
   line-height: 1.5;
-  padding: 6px 0;
+  padding: 0;
+  align-self: center;
 }
-.input-wrapper textarea::placeholder { color: #94A3B8; }
 
-.send-btn {
-  width: 36px; height: 36px;
-  border-radius: 8px;
-  background: #E2E8F0;
+.input-wrapper textarea::placeholder {
   color: #94A3B8;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+}
+
+/* 🌟 右侧点击语音提问按钮样式 (含呼吸灯动画) - 现已全模式通用 */
+.voice-btn {
+  background: transparent;
   border: none;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.2rem; cursor: not-allowed;
-  margin-left: 8px; margin-bottom: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  margin: 0;
   transition: all 0.2s;
 }
-.send-btn.is-active { background: #0F172A; color: #FFFFFF; cursor: pointer; }
-.send-btn.is-active:hover { background: #1E293B; transform: translateY(-1px); }
+
+.voice-btn:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+.voice-btn.is-recording {
+  background: #EF4444; /* 红色表示正在录音 */
+  color: #FFFFFF;
+  animation: pulse-record 1.5s infinite;
+}
+
+@keyframes pulse-record {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
 
 .input-footer {
   text-align: center;
@@ -1444,7 +1694,7 @@ onBeforeUnmount(() => {
   gap: 1.5rem;
   overflow-y: auto;
   flex-shrink: 0;
-  align-items: center; /* 整体侧边栏内容水平居中 */
+  align-items: center;
   text-align: center;
 }
 
@@ -1455,25 +1705,59 @@ onBeforeUnmount(() => {
   align-items: center;
   width: 100%;
 }
+
 .header-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
 }
-.sidebar-header h3 { margin: 0; font-size: 1.1rem; color: #0F172A; font-weight: 600; text-align: left; }
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #0F172A;
+  font-weight: 600;
+  text-align: left;
+}
 
 .sync-badge {
-  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  font-size: 0.7rem; font-family: 'Space Grotesk', monospace;
-  color: #64748B; background: #E2E8F0; padding: 2px 8px; border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  font-family: 'Space Grotesk', monospace;
+  color: #64748B;
+  background: #E2E8F0;
+  padding: 2px 8px;
+  border-radius: 12px;
   transition: all 0.3s ease;
 }
-.sync-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: #94A3B8; }
-.sync-badge.is-syncing { background: #ECFEFF; color: #0891B2; }
-.sync-badge.is-syncing .dot { background: #0891B2; box-shadow: 0 0 6px rgba(8,145,178,0.5); }
 
-.sidebar-desc { margin: 0; font-size: 0.8rem; color: #64748B; text-align: center; }
+.sync-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94A3B8;
+}
+
+.sync-badge.is-syncing {
+  background: #ECFEFF;
+  color: #0891B2;
+}
+
+.sync-badge.is-syncing .dot {
+  background: #0891B2;
+  box-shadow: 0 0 6px rgba(8, 145, 178, 0.5);
+}
+
+.sidebar-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748B;
+  text-align: center;
+}
 
 .tags-section {
   display: flex;
@@ -1483,8 +1767,9 @@ onBeforeUnmount(() => {
   width: 100%;
   overflow-y: auto;
   padding: 8px 0;
-  align-items: center; /* 子容器对齐 */
+  align-items: center;
 }
+
 .tags-container {
   display: flex;
   flex-wrap: wrap;
@@ -1492,6 +1777,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   padding: 4px 0;
 }
+
 .feature-tag {
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
@@ -1505,15 +1791,18 @@ onBeforeUnmount(() => {
   font-weight: 500;
   transition: all 0.2s ease;
 }
+
 .feature-tag:hover {
   background: #F8FAFC;
   border-color: #CBD5E1;
   transform: translateY(-1px);
 }
+
 .tag-icon {
   color: #0891B2;
   font-size: 1rem;
 }
+
 .empty-tags {
   color: #94A3B8;
   font-size: 0.85rem;
@@ -1537,14 +1826,44 @@ onBeforeUnmount(() => {
   text-align: center;
   box-sizing: border-box;
 }
-.insight-header { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; color: #38BDF8; }
-.insight-content { font-size: 0.85rem; line-height: 1.6; color: #CBD5E1; }
+
+.insight-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #38BDF8;
+}
+
+.insight-content {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #CBD5E1;
+}
 
 /* Markdown 内容样式补丁 */
-:deep(.markdown-body) { font-family: 'Inter', sans-serif; font-size: 0.95rem !important; background: transparent !important; }
-:deep(.markdown-body p) { margin-bottom: 0.5rem; }
-:deep(.markdown-body p:last-child) { margin-bottom: 0; }
-:deep(.markdown-body pre) { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; }
+:deep(.markdown-body) {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.95rem !important;
+  background: transparent !important;
+}
+
+:deep(.markdown-body p) {
+  margin-bottom: 0.5rem;
+}
+
+:deep(.markdown-body p:last-child) {
+  margin-bottom: 0;
+}
+
+:deep(.markdown-body pre) {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
 
 /* 流式输出光标 */
 .bubble.streaming::after {
@@ -1555,17 +1874,30 @@ onBeforeUnmount(() => {
 }
 
 @keyframes cursor-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 /* 滚动条 */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 2px;
+}
 
 /* ============================================== */
-/* Standard Mode (图文交互) 极简 UI 定制样式         */
+/* 图文交互独有样式（保留针对左侧背景等的定制） */
 /* ============================================== */
 .mode-standard .session-sidebar {
   background: #F9F9F9;
@@ -1574,79 +1906,22 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
 }
+
 .mode-standard .chat-viewport {
   background: #FFFFFF;
 }
+
 .standard-welcome {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 .standard-welcome h2 {
   font-size: 1.8rem;
   font-weight: 500;
   color: #111;
-  margin-top: -10vh; /* 微微上移，更居中视觉 */
-}
-.mode-standard .input-panel {
-  padding: 0 0 2.5rem 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: transparent;
-}
-.mode-standard .input-wrapper.pill-shape {
-  width: 65%;
-  max-width: 800px;
-  min-width: 400px;
-  background: #F9F9F9;
-  border: 1px solid #E5E5E5;
-  border-radius: 32px;
-  padding: 10px 16px;
-  align-items: center;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
-}
-.mode-standard .input-wrapper.pill-shape:focus-within {
-  background: #FFFFFF;
-  border-color: #D1D5DB;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.05);
-}
-.mode-standard .toolbar-left {
-  padding-bottom: 0;
-  margin-right: 12px;
-}
-.standard-plus-btn {
-  font-size: 1.2rem;
-  color: #666;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background: transparent;
-  padding: 0;
-  transition: background 0.2s;
-}
-.standard-plus-btn:hover {
-  background: #E5E5E5;
-}
-.mode-standard textarea {
-  height: 24px;
-  padding: 0;
-  align-self: center;
-  font-size: 1rem;
-}
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  margin-left: 12px;
-}
-.mode-standard .send-btn {
-  margin: 0;
+  margin-top: -10vh;
 }
 </style>

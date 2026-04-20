@@ -104,6 +104,7 @@ class UserMemory(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     session_id: str = Field(default="", index=True)  # 来源会话
+    module: str = Field(default="mentor", index=True)  # 所属功能模块（"mentor" | "avatar"），用于长期记忆隔离
     content: str = Field(sa_column=Column(Text))  # 记忆正文
     memory_type: str = Field(index=True)  # 类型：preference | goal | weakness | fact | background | summary
     dimension: str | None = None  # 可选维度标签（画像维度关联）

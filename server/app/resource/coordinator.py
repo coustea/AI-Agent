@@ -41,6 +41,9 @@ class PlannerTaskParameterSchema(BaseModel):
     gap: str = ""
     need: str = ""
     extra: str = ""
+    target_md_path: str = ""
+    edit_instruction: str = ""
+    output_md_path: str = ""
 
 
 class PlannerTaskSchema(BaseModel):
@@ -459,6 +462,9 @@ class CoordinatorAgent:
             "shared_memory": shared_memory,
             **entry.extra_kwargs,
         }
+        for key in ("target_md_path", "edit_instruction", "output_md_path"):
+            if key in params:
+                kwargs[key] = params.get(key)
         if agent_name == "mindmap":
             # 导图 Agent 需要额外的学习目标和补充说明来调整导图粒度。
             kwargs["need"] = params.get("need", "review")

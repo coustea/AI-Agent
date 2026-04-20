@@ -66,9 +66,9 @@ FACT_BUILDER_PROMPT = """
 
 
 class MemoryExtractionAgent:
-    def __init__(self, memory=memory_service):
+    def __init__(self, memory=memory_service, module_name: str = "mentor"):
         self.memory = memory
-        self.module_name = "mentor"
+        self.module_name = module_name
         self.llm = get_deepseek_llm(temperature=0.1, streaming=False)
         self._structured_llm = self.llm.with_structured_output(FactExtraction)
         self.prompt_template = ChatPromptTemplate.from_messages([
@@ -123,6 +123,7 @@ class MemoryExtractionAgent:
         """Summarize existing memories so the extractor can avoid redundant output."""
         memories_by_type = await self.memory.get_user_context_memories(
             user_id=user_id,
+            module=self.module_name,
             per_type_limits={"preference": 2, "goal": 2, "weakness": 2, "fact": 2, "background": 2},
         )
         lines: list[str] = []
@@ -192,6 +193,7 @@ class MemoryExtractionAgent:
                             memory_type=item.memory_type,
                             session_id=session_id,
                             expires_at=expires_at,
+                            module=self.module_name,
                         )
                     except ValueError as exc:
                         logger.info(
