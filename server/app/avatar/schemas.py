@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 
 class StopRequest(BaseModel):
-    pass  # user_id 从 JWT 获取
+    """Stop request body (reserved). user_id comes from JWT."""
 
 
 class SwitchSessionRequest(BaseModel):

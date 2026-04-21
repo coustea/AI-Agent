@@ -32,6 +32,7 @@ class MessageType:
     ASSISTANT_CHUNK = "assistant_chunk"
     ASSISTANT_COMPLETE = "assistant_complete"
     AVATAR_STOPPED = "avatar_stopped"
+    HISTORY_CLEARED = "history_cleared"
     ERROR = "error"
 
     # Additional message types

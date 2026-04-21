@@ -113,7 +113,7 @@ class RealtimeBridge:
         elif msg_type == MessageType.STOP_SPEAKING:
             await self._handle_stop_speaking()
         elif msg_type == MessageType.CLEAR_HISTORY:
-            pass  # TODO
+            await self._handle_clear_history()
         elif msg_type == "start_vad":
             await self._handle_start_vad()
         elif msg_type == "stop_vad":
@@ -206,6 +206,54 @@ class RealtimeBridge:
         """停止说话"""
         if self._avatar_controller:
             await self._avatar_controller.stop()
+
+    async def _handle_clear_history(self):
+        """清空当前会话历史消息。"""
+        from app.avatar.bridge.state import MessageType
+        from app.memory.session import session_service
+        from app.memory.short_term import short_term_service
+
+        if not self.session_id:
+            await self._send_to_frontend(
+                {
+                    "type": MessageType.HISTORY_CLEARED,
+                    "data": {"session_id": "", "deleted_count": 0},
+                }
+            )
+            return
+
+        deleted_count = await short_term_service.clear_session_messages(
+            user_id=self.user_id,
+            session_id=self.session_id,
+            module="avatar",
+        )
+        await asyncio.gather(
+            session_service.reset_memory_extraction_counter(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                module="avatar",
+            ),
+            session_service.reset_profile_update_counter(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                module="avatar",
+            ),
+        )
+        logger.info(
+            "[Bridge] 会话历史已清空: user=%s session=%s deleted=%s",
+            self.user_id,
+            self.session_id,
+            deleted_count,
+        )
+        await self._send_to_frontend(
+            {
+                "type": MessageType.HISTORY_CLEARED,
+                "data": {
+                    "session_id": self.session_id,
+                    "deleted_count": deleted_count,
+                },
+            }
+        )
 
     async def _handle_start_vad(self):
         """开始语音活动检测"""
@@ -453,24 +501,18 @@ class RealtimeBridge:
 
     async def _post_avatar_pipeline(self, user_msg: str, assistant_msg: str):
         """后台：记忆提取 + 画像更新"""
-        from app.memory.session import session_service
-        from app.memory.helpers import estimate_token_count
+        from app.shared.agent_context import AgentContextService
 
         if not self.session_id:
             return
 
         try:
-            # Token 累加
-            combined = f"{user_msg}\n{assistant_msg}"
-            token_count = estimate_token_count(combined)
-            await session_service.accumulate_session_tokens(
-                session_id=self.session_id,
+            await AgentContextService(module_name="avatar").post_chat_pipeline(
                 user_id=self.user_id,
-                module="avatar",
-                content=combined,
+                session_id=self.session_id,
+                user_message=user_msg,
+                assistant_reply=assistant_msg,
             )
-
-            # TODO: 触发记忆提取和画像更新（使用与 TutorAgent 相同的阈值逻辑）
         except Exception as e:
             logger.error("[Bridge] 后台管道失败: %s", e)
 
@@ -535,8 +577,31 @@ class AvatarBridgeManager:
 
     async def cleanup(self, user_id: int):
         bridge = self._bridges.pop(user_id, None)
+        self._locks.pop(user_id, None)
         if bridge:
             await bridge.close()
+
+    async def cleanup_all(self) -> int:
+        """清理所有用户桥接资源，返回清理数量。"""
+        bridges = list(self._bridges.values())
+        self._bridges.clear()
+        self._locks.clear()
+
+        if not bridges:
+            return 0
+
+        results = await asyncio.gather(
+            *(bridge.close() for bridge in bridges),
+            return_exceptions=True,
+        )
+        failed = 0
+        for err in results:
+            if isinstance(err, Exception):
+                failed += 1
+                logger.error("[Bridge] cleanup_all 关闭失败: %s", err)
+        cleaned = len(bridges) - failed
+        logger.info("[Bridge] cleanup_all 完成: total=%s cleaned=%s failed=%s", len(bridges), cleaned, failed)
+        return cleaned
 
 
 # 模块级单例

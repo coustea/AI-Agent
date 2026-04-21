@@ -244,6 +244,34 @@ class ShortTermMemoryService:
                         user_id, session_id, len(expired_msgs), cutoff.isoformat())
             return len(expired_msgs)
 
+    async def clear_session_messages(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str,
+    ) -> int:
+        """清空指定会话的全部短期消息。"""
+        async with AsyncSession(self.engine) as session:
+            stmt = select(ChatMessage).where(
+                ChatMessage.user_id == user_id,
+                ChatMessage.session_id == session_id,
+                ChatMessage.module == module,
+            )
+            result = await session.exec(stmt)
+            messages = list(result.all())
+            deleted = len(messages)
+            for msg in messages:
+                await session.delete(msg)
+            if deleted:
+                await session.commit()
+            logger.info(
+                "[ShortTermMemory] 会话消息已清空: user=%d, session_id=%s, deleted=%d",
+                user_id,
+                session_id,
+                deleted,
+            )
+            return deleted
+
     async def should_summarize(
         self, user_id: int, session_id: str, module: str, threshold: int = 800
     ) -> bool:

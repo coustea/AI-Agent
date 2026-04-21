@@ -32,8 +32,14 @@ async def app_lifespan(app: FastAPI):
     logger.info("Application starting up")
     await init_db()
     local_file_store.ensure_roots()
-    yield
-    logger.info("Application shutting down")
+    try:
+        yield
+    finally:
+        logger.info("Application shutting down")
+        try:
+            await avatar_bridge_manager.cleanup_all()
+        except Exception:
+            logger.exception("Avatar bridge cleanup failed during shutdown")
 
 
 app = FastAPI(title="AI Learning Platform", lifespan=app_lifespan)
