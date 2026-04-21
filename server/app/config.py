@@ -93,9 +93,15 @@ APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
 LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
 
 # Spark Vision (星火图片理解)
-SPARK_VISION_APPID: str = _env("SPARK_IMAGE_APPID", "")
-SPARK_VISION_API_KEY: str = _env("SPARK_IMAGE_API_KEY", "")
-SPARK_VISION_API_SECRET: str = _env("SPARK_IMAGE_API_SECRET", "")
+SPARK_VISION_APPID: str = _env("APPID", "")
+SPARK_VISION_API_KEY: str = _env("APIKey", "")
+SPARK_VISION_API_SECRET: str = _env("APISecret", "")
+
+# Spark Image Generation (星火图片生成) - 复用相同凭证
+SPARK_IMAGE_APPID: str = _env("APPID", "")
+SPARK_IMAGE_API_KEY: str = _env("APIKey", "")
+SPARK_IMAGE_API_SECRET: str = _env("APISecret", "")
+SPARK_IMAGE_PATCH_ID: str = _env("SPARK_IMAGE_PATCH_ID", "")
 
 # Avatar (数字人)
 AVATAR_ASR_APP_ID: str = _env("AVATAR_ASR_APP_ID", "")
@@ -126,3 +132,4 @@ CHATDOC_API_SECRET: str = _env("CHATDOC_API_SECRET", SPARK_VISION_API_SECRET)
 CHATDOC_ENABLED: bool = _env_bool("CHATDOC_ENABLED", False)
 
 TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
+

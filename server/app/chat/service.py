@@ -29,7 +29,7 @@ from app.shared.request_context import (
     set_session_id,
 )
 from app.shared.agent_context import AgentContextService
-from app.shared.vision import build_vision_service
+from app.shared.image_analyze import build_vision_service
 from app.shared.file_service import (
     resolve_uploaded_path,
     resolve_uploaded_image_path,
