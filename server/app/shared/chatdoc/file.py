@@ -1,5 +1,7 @@
 """ChatDoc 文档操作客户端。"""
 
+from __future__ import annotations
+
 from typing import Any, BinaryIO
 
 import httpx
@@ -7,9 +9,9 @@ import httpx
 from .auth import ChatDocAuth
 from .exceptions import ChatDocAPIError
 from .models import (
-    ChunksResult,
     DeleteResult,
     EmbeddingResult,
+    FileChunk,
     FileInfo,
     FileStatus,
     FileUploadResult,

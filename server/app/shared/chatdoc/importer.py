@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from app.infra.logging import get_logger
-from app.shared.chatdoc import ChatDocClient, ChatDocService
+from app.shared.chatdoc.client import ChatDocClient
+from app.shared.chatdoc.service import ChatDocService
 
 logger = get_logger(__name__)
 

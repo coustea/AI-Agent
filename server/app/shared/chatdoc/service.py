@@ -13,14 +13,15 @@ from typing import Any, BinaryIO
 
 from app.config import CHATDOC_API_SECRET, CHATDOC_APP_ID, CHATDOC_ENABLED
 from app.infra.logging import get_logger
-from app.shared.chatdoc import (
-    ChatDocClient,
-    ChatDocError,
-    FileInfo,
-    Repo,
-)
+from app.shared.chatdoc.client import ChatDocClient
+from app.shared.chatdoc.exceptions import ChatDocError
+from app.shared.chatdoc.models import FileInfo, Repo
 
 logger = get_logger(__name__)
+
+GLOBAL_REPO_NAME = "global_cs_ai_knowledge_base"
+GLOBAL_REPO_DESC = "计算机科学与人工智能全局学习知识库"
+GLOBAL_REPO_TAGS = ["computer-science", "artificial-intelligence", "global"]
 
 
 class ChatDocService:
@@ -53,6 +54,7 @@ class ChatDocService:
         self._client: ChatDocClient | None = None
         self._user_repos: dict[int, str] = {}  # user_id -> repo_id
         self._user_files: dict[int, list[str]] = {}  # user_id -> [file_ids]
+        self._global_repo_id: str | None = None
         self._initialized = False
 
     @classmethod
@@ -94,6 +96,35 @@ class ChatDocService:
     # ------------------------------------------------------------------
     # 知识库管理
     # ------------------------------------------------------------------
+    async def get_or_create_global_repo(self) -> str:
+        """获取或创建全局计算机/AI 学习知识库。"""
+        if self._global_repo_id:
+            return self._global_repo_id
+
+        client = await self._ensure_client()
+        repos = await client.repo.list(name=GLOBAL_REPO_NAME)
+        for repo in repos:
+            if repo.repo_name == GLOBAL_REPO_NAME:
+                self._global_repo_id = repo.repo_id
+                logger.info("[ChatDocService] 复用全局知识库 repo_id=%s", repo.repo_id)
+                return repo.repo_id
+
+        repo = await client.repo.create(
+            name=GLOBAL_REPO_NAME,
+            desc=GLOBAL_REPO_DESC,
+            tags=GLOBAL_REPO_TAGS,
+        )
+        self._global_repo_id = repo.repo_id
+        logger.info("[ChatDocService] 创建全局知识库 repo_id=%s", repo.repo_id)
+        return repo.repo_id
+
+    async def get_global_repo_file_ids(self, repo_id: str | None = None) -> list[str]:
+        """返回全局知识库中的文件 ID 列表。"""
+        client = await self._ensure_client()
+        effective_repo_id = repo_id or await self.get_or_create_global_repo()
+        files = await client.repo.list_files(effective_repo_id, page_size=100)
+        return [item.file_id for item in files if item.file_id]
+
     async def get_or_create_user_repo(self, user_id: int) -> str:
         """获取或创建用户专属知识库。
 
@@ -263,6 +294,37 @@ class ChatDocService:
     # ------------------------------------------------------------------
     # 检索与问答
     # ------------------------------------------------------------------
+    async def search_global(
+        self,
+        query: str,
+        *,
+        top_k: int = 5,
+        filter_score: float = 0.82,
+    ) -> list[dict[str, Any]]:
+        """在全局计算机/AI 学习知识库中检索相关内容。"""
+        client = await self._ensure_client()
+        repo_id = await self.get_or_create_global_repo()
+        file_ids = await self.get_global_repo_file_ids(repo_id)
+        if not file_ids:
+            logger.info("[ChatDocService] 全局知识库暂无文档 query=%s", query[:50])
+            return []
+
+        result = await client.file.search(
+            file_ids=file_ids,
+            content=query,
+            wiki_filter_score=filter_score,
+        )
+        logger.info("[ChatDocService] 全局检索完成 query=%s hits=%d", query[:50], len(result.chunks))
+
+        return [
+            {
+                "chunk_id": chunk.chunk_id,
+                "content": chunk.content,
+                "score": chunk.score,
+            }
+            for chunk in result.chunks[:top_k]
+        ]
+
     async def search(
         self,
         user_id: int,

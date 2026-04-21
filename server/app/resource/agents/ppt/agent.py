@@ -621,31 +621,55 @@ if __name__ == "__main__":
         await agent._ensure_graph()
 
         result = await agent.generate_ppt(
-            topic="操作系统进程管理",
+            topic="进程调度算法详解",
             course="操作系统",
             major="计算机科学",
-            gap="对进程调度算法理解不清晰",
+            gap="对FCFS、SJF、RR三种调度算法的原理和区别理解不清晰",
             user_profile={"cognitive_style": "偏逻辑推理"},
             shared_memory={
                 "content": {
-                    "outline": "进程定义、PCB、调度算法（FCFS、SJF、RR）、同步与互斥"
+                    "outline": """
+一、进程调度基础
+  - 调度的必要性：多进程竞争CPU
+  - 调度目标：公平性、吞吐量、响应时间
+  - 调度时机：创建、终止、阻塞、时间片用完
+
+二、先来先服务 FCFS
+  - 原理：按到达顺序执行
+  - 特点：非抢占、简单
+  - 缺点：护航效应
+
+三、短作业优先 SJF
+  - 原理：选择预估时间最短的进程
+  - 特点：平均等待时间最优
+  - 缺点：长进程饥饿、需预知时间
+
+四、时间片轮转 RR
+  - 原理：为每个进程分配时间片
+  - 特点：抢占式、公平
+  - 时间片大小的权衡
+
+五、算法对比与选择
+  - 批处理系统 vs 分时系统
+  - 性能指标对比
+"""
                 },
-                "mindmap": {"file_path": "/tmp/mindmap.png"},
             },
             template_id="cn_ink_education"
         )
 
-        print("=" * 50)
+        print("=" * 60)
         print("[PPT 生成结果]")
-        print("=" * 50)
-        print(f"success: {result['success']}")
-        print(f"file_path: {result['file_path']}")
-        print(f"slide_count: {result['slide_count']}")
-        print("\n[PPT JSON 计划]\n")
-        print(result["ppt_plan_json"])
+        print("=" * 60)
+        print(f"成功: {result['success']}")
+        print(f"文件路径: {result['file_path']}")
+        print(f"幻灯片数量: {result['slide_count']}")
+        print(f"幻灯片标题: {result['slide_titles']}")
 
         if result.get("error"):
             print("\n[错误信息]")
             print(result["error"])
+        else:
+            print("\n[生成完成，请打开 PPT 文件查看]")
 
     asyncio.run(main())

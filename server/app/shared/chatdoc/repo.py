@@ -1,5 +1,7 @@
 """ChatDoc 知识库操作客户端。"""
 
+from __future__ import annotations
+
 from typing import Any
 
 import httpx

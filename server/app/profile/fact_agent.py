@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.memory.service import memory_service
@@ -62,6 +63,9 @@ FACT_BUILDER_PROMPT = """
 
 # 最新对话记录：
 {chat_history}
+
+# 输出格式要求
+{format_instructions}
 """
 
 
@@ -70,7 +74,7 @@ class MemoryExtractionAgent:
         self.memory = memory
         self.module_name = module_name
         self.llm = get_deepseek_llm(temperature=0.1, streaming=False)
-        self._structured_llm = self.llm.with_structured_output(FactExtraction)
+        self.output_parser = PydanticOutputParser(pydantic_object=FactExtraction)
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("human", FACT_BUILDER_PROMPT)
         ])
@@ -81,7 +85,9 @@ class MemoryExtractionAgent:
 
     async def _invoke_structured(self, prompt) -> FactExtraction:
         messages = prompt.to_messages()
-        return await self._structured_llm.ainvoke(messages)
+        response = await self.llm.ainvoke(messages)
+        content = response.content if isinstance(response.content, str) else str(response.content)
+        return self.output_parser.parse(content)
 
     @staticmethod
     def _select_dialogue_messages(recent_msgs: list) -> list:
@@ -173,6 +179,7 @@ class MemoryExtractionAgent:
                 "profile_context": profile_context,
                 "memory_context": memory_context,
                 "chat_history": chat_history_str,
+                "format_instructions": self.output_parser.get_format_instructions(),
             })
             extracted = await self._invoke_structured(prompt)
 

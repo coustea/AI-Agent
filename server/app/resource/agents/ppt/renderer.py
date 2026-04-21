@@ -1,13 +1,14 @@
 """
 PPT 模板渲染器。
 
-基于 .pptx 模板文件生成演示文稿，在模板幻灯片上添加文本内容。
+基于 .pptx 模板文件生成演示文稿，复制模板幻灯片并填充内容。
 """
 
 from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,8 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
+from pptx.oxml.ns import qn
+from pptx.oxml import parse_xml
 
 from app.infra.logging import get_logger
 from app.shared.paths import WORKPLACE_DIR
@@ -90,6 +93,46 @@ def _get_slide_index_for_role(config: dict, page_role: str) -> int:
     return 0
 
 
+def _copy_slide(prs: Presentation, slide_idx: int) -> Any:
+    """复制模板中的幻灯片。"""
+    if slide_idx >= len(prs.slides):
+        # 使用空白布局
+        try:
+            slide_layout = prs.slide_layouts[6]
+        except IndexError:
+            slide_layout = prs.slide_layouts[0]
+        return prs.slides.add_slide(slide_layout)
+
+    template_slide = prs.slides[slide_idx]
+    slide_layout = template_slide.slide_layout
+
+    # 创建新幻灯片
+    new_slide = prs.slides.add_slide(slide_layout)
+
+    return new_slide
+
+
+def _clear_text_frames(slide) -> None:
+    """清除幻灯片中的文本框（保留图形元素）。"""
+    shapes_to_remove = []
+    for shape in slide.shapes:
+        if shape.has_text_frame:
+            # 检查是否是占位符（标题、正文等）
+            if hasattr(shape, 'is_placeholder') and shape.is_placeholder:
+                # 清空占位符文本
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        run.text = ""
+            else:
+                # 标记非占位符文本框待删除
+                shapes_to_remove.append(shape)
+
+    # 删除非占位符文本框
+    for shape in shapes_to_remove:
+        sp = shape._element
+        sp.getparent().remove(sp)
+
+
 def _add_text_box(slide, left: float, top: float, width: float, height: float,
                   text: str, font_size: int = 18, bold: bool = False,
                   color: str = "333333", align: PP_ALIGN = PP_ALIGN.LEFT) -> None:
@@ -108,7 +151,7 @@ def _add_text_box(slide, left: float, top: float, width: float, height: float,
     p.alignment = align
 
 
-def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
+def _render_slide_content(slide, slide_data: dict) -> None:
     """在幻灯片上渲染内容。"""
     title = slide_data.get("title", "")
     slots = slide_data.get("slots", {})
@@ -116,7 +159,6 @@ def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
 
     # 根据页面类型布局内容
     if page_role == "cover":
-        # 封面页：标题居中大字
         _add_text_box(slide, 1, 2.5, 11.3, 1.2, title, font_size=44, bold=True,
                       color="2E4057", align=PP_ALIGN.CENTER)
         if slots.get("subtitle"):
@@ -127,7 +169,6 @@ def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
                           color="888888", align=PP_ALIGN.CENTER)
 
     elif page_role == "table_of_contents":
-        # 目录页
         _add_text_box(slide, 0.5, 0.3, 12, 0.8, title, font_size=32, bold=True, color="2E4057")
         top = 1.5
         for i in range(1, 5):
@@ -141,7 +182,6 @@ def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
                 top += 0.8
 
     elif page_role == "three_columns":
-        # 三栏布局
         _add_text_box(slide, 0.5, 0.3, 12, 0.8, title, font_size=32, bold=True, color="2E4057")
         col_width = 3.8
         for i in range(1, 4):
@@ -156,7 +196,6 @@ def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
                               font_size=16, color="333333")
 
     elif page_role == "four_cards":
-        # 四卡片布局
         _add_text_box(slide, 0.5, 0.3, 12, 0.8, title, font_size=32, bold=True, color="2E4057")
         for i in range(1, 5):
             item_title = slots.get(f"item{i}_title", "")
@@ -173,7 +212,6 @@ def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
                               font_size=14, color="333333")
 
     elif page_role == "three_steps":
-        # 三步骤布局
         _add_text_box(slide, 0.5, 0.3, 12, 0.8, title, font_size=32, bold=True, color="2E4057")
         for i in range(1, 4):
             step_title = slots.get(f"step{i}_title", "")
@@ -187,7 +225,6 @@ def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
                               font_size=14, color="333333")
 
     elif page_role == "three_bullets":
-        # 三要点布局
         _add_text_box(slide, 0.5, 0.3, 12, 0.8, title, font_size=32, bold=True, color="2E4057")
         top = 1.8
         for i in range(1, 4):
@@ -198,7 +235,6 @@ def _render_slide_content(slide, slide_data: dict, slide_idx: int) -> None:
                 top += 1.2
 
     elif page_role == "two_cards":
-        # 双卡片布局
         _add_text_box(slide, 0.5, 0.3, 12, 0.8, title, font_size=32, bold=True, color="2E4057")
         for i in range(1, 3):
             item_title = slots.get(f"item{i}_title", "")
@@ -287,17 +323,15 @@ def render_ppt_plan_to_file(
 
     slide_titles: list[str] = []
 
-    # 收集模板幻灯片布局
-    template_layouts = []
-    for slide in prs.slides:
-        template_layouts.append(slide.slide_layout)
+    # 记录需要保留的幻灯片索引
+    slides_to_keep = []
+    for slide_data in slides:
+        page_role = slide_data.get("page_role", "")
+        template_idx = _get_slide_index_for_role(config, page_role)
+        if template_idx < len(prs.slides):
+            slides_to_keep.append(template_idx)
 
-    # 清空所有幻灯片，只保留布局
-    while len(prs.slides) > 0:
-        rId = prs.slides._sldIdLst[0].rId
-        prs.part.drop_rel(rId)
-        del prs.slides._sldIdLst[0]
-
+    # 为每个内容创建新幻灯片（基于模板布局）
     for slide_data in slides:
         slide_title = slide_data["title"]
         slide_titles.append(slide_title)
@@ -307,24 +341,22 @@ def render_ppt_plan_to_file(
         # 获取模板幻灯片索引
         template_idx = _get_slide_index_for_role(config, page_role)
 
-        # 使用对应的布局
-        if template_idx < len(template_layouts):
-            slide_layout = template_layouts[template_idx]
-        else:
-            try:
-                slide_layout = template_layouts[6] if len(template_layouts) > 6 else template_layouts[0]
-            except IndexError:
-                slide_layout = template_layouts[0]
-
-        slide = prs.slides.add_slide(slide_layout)
+        # 复制模板幻灯片
+        slide = _copy_slide(prs, template_idx)
 
         # 渲染内容
-        _render_slide_content(slide, slide_data, len(slide_titles))
+        _render_slide_content(slide, slide_data)
 
         # 添加讲者备注
         if note_text:
             notes_slide = slide.notes_slide
             notes_slide.notes_text_frame.text = note_text
+
+    # 删除原始模板幻灯片（从后往前删除）
+    for idx in sorted(range(len(prs.slides) - len(slide_titles)), reverse=True):
+        rId = prs.slides._sldIdLst[idx].rId
+        prs.part.drop_rel(rId)
+        del prs.slides._sldIdLst[idx]
 
     # 保存文件
     PPT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

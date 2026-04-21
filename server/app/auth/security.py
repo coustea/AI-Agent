@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.database import get_session
+from app.infra.database import get_session, session_scope
 from app.config import JWT_ALGORITHM, JWT_EXPIRE_DAYS, JWT_SECRET_KEY
 from app.infra.models import ActiveToken
 from app.infra.models import User
@@ -70,14 +70,14 @@ async def revoke_token(token: str, session: AsyncSession) -> None:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    session: AsyncSession = Depends(get_session),
 ) -> User:
     token = credentials.credentials
-    if not await is_token_valid(token, session):
-        raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
-    user_id = decode_token(token)
-    user = await session.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=401, detail="用户不存在")
-    await session.refresh(user)
-    return user
+    async with session_scope() as session:
+        if not await is_token_valid(token, session):
+            raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
+        user_id = decode_token(token)
+        user = await session.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+        await session.refresh(user)
+        return user

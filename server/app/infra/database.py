@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from urllib.parse import quote_plus
 
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -174,5 +175,18 @@ async def init_db() -> None:
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI 依赖注入用的会话工厂（async generator 形式）。
     expire_on_commit=False 防止 commit 后访问属性触发懒加载报错。"""
-    async with AsyncSession(engine, expire_on_commit=False) as session:
-        yield session
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            yield session
+    except OperationalError as exc:
+        logger.warning("[Database] 会话关闭时检测到连接断开，已忽略清理异常: %s", exc)
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncGenerator[AsyncSession, None]:
+    """供非 DI 场景显式创建短生命周期会话。"""
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            yield session
+    except OperationalError as exc:
+        logger.warning("[Database] 显式会话关闭时检测到连接断开，已忽略清理异常: %s", exc)

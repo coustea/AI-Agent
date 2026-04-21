@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -23,7 +24,11 @@ class UserAccountStore:
             email=data.email,
         )
         session.add(user)
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            return None
         await session.refresh(user)
         return {"user": UserRead.model_validate(user)}
 

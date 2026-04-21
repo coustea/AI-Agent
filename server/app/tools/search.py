@@ -34,6 +34,7 @@ def duckduckgo_search(query: str) -> str:
 
 @tool('tavily_search')
 def tavily_search(query: str) -> str:
+    """使用 Tavily 搜索网页，返回结构化搜索结果摘要。"""
     try:
         search_tool = TavilySearchResults(tavily_api_key=TAVILY_API_KEY,max_results=3)
         result = search_tool.run(query)
