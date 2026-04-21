@@ -20,6 +20,7 @@ class MentorChatRequest(BaseModel):
     file_urls: Optional[list[str]] = None
     generate_image: Optional[bool] = False
     generate_video: Optional[bool] = False
+    enable_search: Optional[bool] = False
 
 
 class AttachmentInfo(BaseModel):
@@ -82,10 +83,11 @@ class TutorState(TypedDict, total=False):
     generate_video: bool
     request_generate_image: bool
     request_generate_video: bool
+    enable_search: bool
 
     # ---- 路由与执行模式 ----
-    route: str                               # "direct" | "attachment_needed" | "search_needed"
-    execution_mode: str                      # "direct" | "attachment" | "search"
+    route: str                               # "direct" | "attachment_needed"
+    execution_mode: str                      # "direct" | "attachment"
 
     # ---- 上下文信息 ----
     profile_context: str

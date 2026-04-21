@@ -493,6 +493,7 @@ class ChatUseCases:
         file_urls: list[str] | None = None,
         generate_image: bool = False,
         generate_video: bool = False,
+        enable_search: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
@@ -521,6 +522,8 @@ class ChatUseCases:
             "generate_video": bool(generate_video),
             "attachment_analysis": prepared_attachment_analysis,
         }
+        if enable_search:
+            kwargs["enable_search"] = True
         if input_source is not None:
             kwargs["input_source"] = input_source
 
@@ -635,6 +638,7 @@ class ChatUseCases:
         file_urls: list[str] | None = None,
         generate_image: bool = False,
         generate_video: bool = False,
+        enable_search: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
@@ -647,6 +651,7 @@ class ChatUseCases:
             file_urls=file_urls,
             generate_image=generate_image,
             generate_video=generate_video,
+            enable_search=enable_search,
             attachment_analysis=attachment_analysis,
             stream_runner=stream_runner,
             input_source=input_source,
