@@ -25,7 +25,7 @@ from app.chat.utils import load_prompts
 from app.infra.logging import get_logger
 from app.infra.llm import get_llm, get_fast_llm, get_glm_vision_llm
 from app.shared.agent_context import AgentContextService
-from app.shared.vision import build_vision_service
+from app.shared.image_analyze import build_vision_service
 
 logger = get_logger(__name__)
 
