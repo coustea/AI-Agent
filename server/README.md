@@ -201,10 +201,10 @@ FAST_LLM_MODEL=general
 GLM_API_KEY=your_key
 GLM_VISION_MODEL=glm-4v-flash
 
-# Optional: Spark image understanding
-SPARK_IMAGE_APPID=your_appid
-SPARK_IMAGE_API_KEY=your_key
-SPARK_IMAGE_API_SECRET=your_secret
+# Spark image understanding
+APPID=your_appid
+APIKey=your_key
+APISecret=your_secret
 ```
 
 说明：

@@ -17,10 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
-from zoneinfo import ZoneInfo
 
 from deepagents import create_deep_agent
 from deepagents.middleware._tool_exclusion import _ToolExclusionMiddleware
@@ -113,115 +111,6 @@ RESEARCHER_DEEPAGENT_SYSTEM_PROMPT = """你是 TutorAgent 的 researcher 子智�
 # Prompt 加载
 # ---------------------------------------------------------------------------
 PROMPTS: dict[str, str] = load_prompts(AGENT_DIR)
-WEEKDAY_CN = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
-CURRENT_TIME_KEYWORDS = (
-    "今天星期几",
-    "今天周几",
-    "今天礼拜几",
-    "现在星期几",
-    "现在周几",
-    "现在礼拜几",
-    "今天几号",
-    "今天日期",
-    "当前日期",
-    "现在日期",
-    "今天是什么日期",
-    "今天是什么日子",
-    "今天是哪天",
-    "现在几点",
-    "当前时间",
-    "现在时间",
-    "今天几几年",
-    "今年几几年",
-    "今年是哪年",
-    "当前年份",
-    "现在是哪一年",
-)
-CURRENT_TIME_REQUIRED_TERMS = (
-    "星期",
-    "周几",
-    "礼拜",
-    "几号",
-    "日期",
-    "几点",
-    "时间",
-    "年份",
-    "哪一年",
-    "几几年",
-)
-CURRENT_TIME_CONTEXT_TERMS = ("今天", "现在", "当前", "今年")
-EXTERNAL_REALTIME_KEYWORDS = (
-    "天气",
-    "气温",
-    "温度",
-    "下雨",
-    "降雨",
-    "下雪",
-    "空气质量",
-    "aqi",
-    "湿度",
-    "风力",
-    "预报",
-    "台风",
-    "紫外线",
-)
-
-
-def _build_current_time_context(now: datetime | None = None) -> str:
-    """构建供 Agent 直接回答当前日期/星期问题的时间上下文。"""
-    current = now or datetime.now(ZoneInfo("Asia/Shanghai"))
-    return (
-        "\n\n## 【服务器当前时间】\n"
-        f"{current.strftime('%Y-%m-%d %H:%M:%S')} Asia/Shanghai，{WEEKDAY_CN[current.weekday()]}。\n"
-        "用户询问今天星期几、当前日期、当前年份或当前时间时，直接依据本节回答，不要联网搜索。\n"
-    )
-
-
-def _compact_question_text(question: str) -> str:
-    """压缩常见空白和标点，便于识别极窄的当前时间快答意图。"""
-    removable = " \t\r\n，。！？；：,.!?;:、"
-    return "".join(ch for ch in question.lower() if ch not in removable)
-
-
-def _is_current_time_question(question: str) -> bool:
-    """判断是否是只需要服务器时间即可回答的日期/星期/时间问题。"""
-    text = _compact_question_text(question)
-    if not text:
-        return False
-
-    if any(keyword in text for keyword in EXTERNAL_REALTIME_KEYWORDS):
-        return False
-
-    if any(keyword in text for keyword in CURRENT_TIME_KEYWORDS):
-        return True
-
-    has_context = any(term in text for term in CURRENT_TIME_CONTEXT_TERMS)
-    has_time_term = any(term in text for term in CURRENT_TIME_REQUIRED_TERMS)
-    return has_context and has_time_term
-
-
-def _answer_current_time_question(question: str, now: datetime | None = None) -> str:
-    """用服务器时间直接回答日期/星期问题，避免模型误触发联网搜索。"""
-    current = now or datetime.now(ZoneInfo("Asia/Shanghai"))
-    weekday = WEEKDAY_CN[current.weekday()]
-    text = _compact_question_text(question)
-
-    if "星期" in text or "周几" in text or "礼拜" in text:
-        return (
-            f"今天是 {current.year}年{current.month}月{current.day}日，"
-            f"{weekday}。"
-        )
-
-    if "几点" in text or "时间" in text:
-        return (
-            f"现在是 {current.year}年{current.month}月{current.day}日 "
-            f"{current.strftime('%H:%M:%S')}（Asia/Shanghai），{weekday}。"
-        )
-
-    if "年份" in text or "哪一年" in text or "几几年" in text:
-        return f"今年是 {current.year} 年。"
-
-    return f"今天是 {current.year}年{current.month}月{current.day}日，{weekday}。"
 
 
 class TutorAgent:
@@ -479,14 +368,6 @@ class TutorAgent:
         messages = state.get("messages") or []
         question = extract_question(messages)
         logger.info("[TutorAgent] 直接回答 route=direct_answer question=%s", truncate(question, 180))
-        if _is_current_time_question(question):
-            text = _answer_current_time_question(question)
-            logger.info("[TutorAgent] 服务器时间快答 question=%s answer=%s", truncate(question, 120), text)
-            return {
-                "messages": [AIMessage(content=text)],
-                "answer_text": text,
-                "termination_reason": "direct_answer_done",
-            }
 
         return await self._run_answer_model(
             state=state,
@@ -664,7 +545,7 @@ class TutorAgent:
             profile_context=profile_str,
             fact_context=fact_str,
             recent_chat_context=recent_chat_context,
-        ) + _build_current_time_context() + analysis_hint
+        ) + analysis_hint
 
         initial_state: TutorState = {
             "user_id": user_id,
