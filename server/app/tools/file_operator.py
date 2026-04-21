@@ -7,7 +7,7 @@ FileOperator 类封装所有文件操作：
 - read_uploaded_file / list_uploaded_files: 上传文件处理
 - list_dir / file_tree / find_files / get_file_info: 文件系统浏览
 
-文档生成工具（create_document_file, save_ppt_file）在 document_generator.py 中。
+文档生成相关能力在独立模块中维护；PPT 生成现已由专属 Agent 直接调用本地渲染函数。
 """
 
 import os

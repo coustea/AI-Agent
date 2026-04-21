@@ -1,20 +1,18 @@
 """
 拓展阅读推荐 Agent。
-基于 BaseResourceAgent 实现，并使用黑板模式与用户画像。
+轻量实现：直接生成结构化推荐列表，并支持 Markdown 文件追加阅读章节。
 """
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel
 
 from app.infra.llm import get_deepseek_chat_llm
 from app.infra.logging import get_logger
-from app.resource.base_agent import BaseResourceAgent, BaseAgentState
-from app.resource.validation import make_validation_result
+from app.resource.agent_support import append_context, format_profile_fields, load_prompt, save_to_workplace
 
 logger = get_logger(__name__)
 
@@ -31,54 +29,29 @@ class ReadingOutput(BaseModel):
     recommendations: list[ReadingItem]
 
 
-class ReadingState(BaseAgentState):
-    recommendations_json: str
-    parsed_recommendations: list
-
-
-class ReadingAgent(BaseResourceAgent):
-    """拓展阅读推荐 Agent。"""
-
-    # 使用 DeepSeek + with_structured_output 进行结构化输出
-    structured_output_schema = ReadingOutput
-
-    tool_names = [
-        "save_to_workplace", "read_file_safe",
-        "write_file", "edit_file", "append_file", "read_file_lines",
-        "list_directory", "file_tree", "find_files", "get_file_info",
-    ]
-    skill_names = []
-
-
+class ReadingAgent:
     def __init__(self) -> None:
-        super().__init__(
-            name="ReadingAgent",
-            agent_dir=Path(__file__).parent,
-            state_schema=ReadingState,
-            temperature=0.3,
-        )
+        self.name = "ReadingAgent"
+        self.agent_dir = Path(__file__).parent
+        self.prompt_template = load_prompt(self.agent_dir)
         self.llm = get_deepseek_chat_llm(temperature=0.3)
 
-    def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
-        ctx = ""
-        # 拓展阅读会参考正文大纲，尽量让推荐内容和当前学习主题保持同一上下文。
-        if "content" in shared_memory:
-            outline = shared_memory["content"].get("outline", "")
-            if outline:
-                ctx += f"【内容大纲】\n{outline}\n"
-        return ctx
+    @staticmethod
+    def _extract_memory(shared_memory: dict[str, Any]) -> str:
+        outline = ((shared_memory or {}).get("content") or {}).get("outline", "")
+        return f"【内容大纲】\n{outline}\n" if outline else ""
 
-    def _format_user_profile(self, profile: dict[str, Any]) -> str:
-        # 兴趣偏好影响推荐方向，认知风格影响推荐材料的表达形式。
-        if not profile: return ""
-        parts = []
-        if profile.get("interest_preference"):
-            parts.append(f"- 兴趣偏好: {profile['interest_preference']}")
-        if profile.get("cognitive_style"):
-            parts.append(f"- 认知风格: {profile['cognitive_style']}")
-        return "\n".join(parts)
+    @staticmethod
+    def _format_user_profile(profile: dict[str, Any]) -> str:
+        return format_profile_fields(
+            profile,
+            [
+                ("interest_preference", "兴趣偏好"),
+                ("cognitive_style", "认知风格"),
+            ],
+        )
 
-    def _build_system_message(self, state: Any) -> str:
+    def _build_system_message(self, state: dict[str, Any]) -> str:
         user_profile = state.get("user_profile", {})
         system_prompt = self.prompt_template.format(
             major=state.get("major", "通用"),
@@ -87,15 +60,11 @@ class ReadingAgent(BaseResourceAgent):
             interest_preference=user_profile.get("interest_preference", ""),
             cognitive_style=user_profile.get("cognitive_style", ""),
         )
-        return self._append_context_to_prompt(system_prompt, state)
-
-    def _build_initial_human_message(self, state: Any) -> str:
-        return f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
-
-    def _save_to_workplace(self, sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-        from app.tools.registry import get as get_tool
-        return get_tool("save_to_workplace").invoke(
-            {"sub_dir": sub_dir, "topic": topic, "content": content, "ext": ext}
+        return append_context(
+            system_prompt,
+            state=state,
+            format_user_profile=self._format_user_profile,
+            extract_memory=self._extract_memory,
         )
 
     @staticmethod
@@ -103,9 +72,9 @@ class ReadingAgent(BaseResourceAgent):
         value = (text or "").strip()
         if not value:
             return True
-        if value.startswith("\u2713"):  # checkmark success prefix from file tools
+        if value.startswith("\u2713"):
             return False
-        if value.startswith("\u274c"):  # cross mark error prefix from file tools
+        if value.startswith("\u274c"):
             return True
         return value.startswith(("ERROR", "Error", "Traceback", "Exception"))
 
@@ -113,15 +82,23 @@ class ReadingAgent(BaseResourceAgent):
     def _render_reading_section(items: list[dict[str, Any]]) -> str:
         lines: list[str] = ["## Suggested Reading", ""]
         for idx, item in enumerate(items, start=1):
-            lines.extend([
-                f"### {idx}. {item.get('title', 'Untitled Resource')}",
-                f"- Source: {item.get('author_or_source', 'Unknown')}",
-                f"- Type: {item.get('type', 'Unknown')}",
-                f"- Relevance: {item.get('relevance', 'Not specified')}",
-                f"- Abstract: {item.get('abstract', '').strip()}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {idx}. {item.get('title', 'Untitled Resource')}",
+                    f"- Source: {item.get('author_or_source', 'Unknown')}",
+                    f"- Type: {item.get('type', 'Unknown')}",
+                    f"- Relevance: {item.get('relevance', 'Not specified')}",
+                    f"- Abstract: {item.get('abstract', '').strip()}",
+                    "",
+                ]
+            )
         return "\n".join(lines).strip()
+
+    async def _generate_recommendations(self, state: dict[str, Any]) -> ReadingOutput:
+        prompt = self._build_system_message(state)
+        human = f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
+        structured_llm = self.llm.with_structured_output(ReadingOutput)
+        return ReadingOutput.model_validate(await structured_llm.ainvoke([HumanMessage(content=prompt), HumanMessage(content=human)]))
 
     async def _operate_markdown_file(
         self,
@@ -144,10 +121,7 @@ class ReadingAgent(BaseResourceAgent):
                 "error": f"Failed to read Markdown: {markdown_text}",
             }
 
-        effective_instruction = (
-            edit_instruction.strip()
-            or "Add high-quality reading recommendations grounded in the current document."
-        )
+        effective_instruction = edit_instruction.strip() or "Add high-quality reading recommendations grounded in the current document."
         prompt = (
             "You are a reading recommendation assistant. Generate structured recommendations from the Markdown document.\n"
             f"Topic: {topic}\n"
@@ -156,10 +130,8 @@ class ReadingAgent(BaseResourceAgent):
             "Markdown content:\n"
             f"{markdown_text}"
         )
-
         structured_llm = self.llm.with_structured_output(ReadingOutput)
-        structured = await structured_llm.ainvoke([HumanMessage(content=prompt)])
-        validated = ReadingOutput.model_validate(structured)
+        validated = ReadingOutput.model_validate(await structured_llm.ainvoke([HumanMessage(content=prompt)]))
         items = [item.model_dump() for item in validated.recommendations]
         if len(items) < 3:
             return {
@@ -174,9 +146,7 @@ class ReadingAgent(BaseResourceAgent):
         separator = "\n\n" if markdown_text.strip() else ""
         merged_markdown = f"{markdown_text.rstrip()}{separator}{section}\n"
         write_path = output_md_path or target_md_path
-        write_result = get_tool("write_file").invoke(
-            {"filepath": write_path, "content": merged_markdown, "create_dirs": True}
-        )
+        write_result = get_tool("write_file").invoke({"filepath": write_path, "content": merged_markdown, "create_dirs": True})
         write_text = write_result if isinstance(write_result, str) else str(write_result)
         if self._looks_like_tool_error(write_text):
             return {
@@ -196,113 +166,20 @@ class ReadingAgent(BaseResourceAgent):
             "error": None,
         }
 
-    def _failure_result(
-        self,
-        state: Any,
-        feedback: str,
-        **fields: Any,
-    ) -> dict[str, Any]:
-        """构建可终止的失败返回，避免校验失败后继续空转。"""
-        retry_count = state.get("retry_count", 0)
-        result = make_validation_result(False, retry_count, feedback, **fields)
-        if result["retry_count"] >= state.get("max_retries", 2):
-            result["error"] = feedback
-        return result
-
-    async def _validate_node(self, state: Any) -> dict:
-        retry_count = state.get("retry_count", 0)
-
-        error = state.get("error")
-        if error:
-            return self._failure_result(
-                state,
-                error,
-                recommendations_json="",
-                parsed_recommendations=[],
-            )
-
-        # 优先从结构化输出读取（with_structured_output 直接返回 Pydantic 对象）
-        structured = state.get("_structured_output")
-        if structured:
-            try:
-                validated = ReadingOutput.model_validate(structured)
-            except Exception as e:
-                return self._failure_result(
-                    state,
-                    f"结构化输出校验失败: {e}",
-                    recommendations_json="",
-                    parsed_recommendations=[],
-                )
-            items = validated.recommendations
-            raw = json.dumps({"recommendations": [item.model_dump() for item in items]}, ensure_ascii=False)
-        else:
-            return self._failure_result(
-                state,
-                "未生成推荐内容",
-                recommendations_json="",
-                parsed_recommendations=[],
-            )
-
-        logger.info("[ReadingAgent] _validate_node: 评审推荐质量")
-
-        # 至少保证有一个"小列表"，否则阅读推荐对用户帮助太弱。
-        if len(items) < 3:
-            return self._failure_result(
-                state,
-                f"推荐数量不足（{len(items)} 条），至少需要 5 条。",
-                recommendations_json=raw,
-                parsed_recommendations=[],
-            )
-
-        for i, item in enumerate(items):
-            # 摘要过短通常意味着模型只是罗列标题，没有给出为什么值得读。
-            if len(item.abstract) < 20:
-                return self._failure_result(
-                    state,
-                    f"第 {i + 1} 条推荐摘要过短（'{item.title}'），请补充实质性内容。",
-                    recommendations_json=raw,
-                    parsed_recommendations=[],
-                )
-
-        types = {item.type for item in items}
-        # 这里要求资源类型至少有两种，避免全是"书籍"或全是"论文"。
-        if len(types) < 2:
-            return self._failure_result(
-                state,
-                f"推荐类型单一（仅 {types}），请混合不同类型的资源。",
-                recommendations_json=raw,
-                parsed_recommendations=[],
-            )
-
-        logger.info(f"[ReadingAgent] 评审通过: {len(items)} 条推荐, 类型={types}")
-        return {
-            "recommendations_json": raw,
-            "is_valid": True,
-            "validation_feedback": "",
-            "parsed_recommendations": [item.model_dump() for item in items],
-            "error": None,
-        }
-
     async def generate_reading(
         self,
         topic: str,
         course: str = "",
         major: str = "general",
         gap: str = "",
-        user_profile: dict = None,
-        shared_memory: dict = None,
+        user_profile: dict | None = None,
+        shared_memory: dict | None = None,
         target_md_path: str | None = None,
         edit_instruction: str = "",
         output_md_path: str | None = None,
     ) -> dict[str, Any]:
-        logger.info(f"[ReadingAgent] Request received: topic={topic}")
-        await self._ensure_graph()
+        logger.info("[ReadingAgent] Request received: topic=%s", topic)
         if target_md_path:
-            logger.info(
-                "[ReadingAgent] Markdown mode enabled: target=%s output=%s",
-                target_md_path,
-                output_md_path,
-            )
             return await self._operate_markdown_file(
                 topic=topic or "Markdown Document",
                 target_md_path=target_md_path,
@@ -310,51 +187,27 @@ class ReadingAgent(BaseResourceAgent):
                 output_md_path=output_md_path,
             )
 
-        initial_state: ReadingState = {
+        state = {
             "major": major,
             "course": course,
             "topic": topic,
             "gap": gap,
             "user_profile": user_profile or {},
             "shared_memory": shared_memory or {},
-            "messages": [],
-            "recommendations_json": "",
-            "is_valid": False,
-            "validation_feedback": "",
-            "parsed_recommendations": [],
-            "retry_count": 0,
-            "max_retries": 2,
-            "error": None,
         }
-
         try:
-            logger.info("[ReadingAgent] Start reading-recommendation workflow")
-            result = await self.graph.ainvoke(initial_state, {"recursion_limit": 15})
-            logger.info(
-                "[ReadingAgent] Workflow finished: is_valid=%s recommendation_count=%d",
-                result.get("is_valid"),
-                len(result.get("parsed_recommendations", []) or []),
-            )
-        except Exception as e:
-            logger.error(f"[ReadingAgent] Workflow execution failed: {e}")
-            return {"success": False, "recommendations": [], "raw_json": "", "error": str(e)}
+            output = await self._generate_recommendations(state)
+        except Exception as exc:
+            logger.error("[ReadingAgent] Workflow execution failed: %s", exc)
+            return {"success": False, "recommendations": [], "raw_json": "", "error": str(exc)}
 
-        parsed = result.get("parsed_recommendations", [])
-        raw_json = result.get("recommendations_json", "")
-        file_path = None
-        if parsed:
-            file_path = self._save_to_workplace(
-                "reading",
-                topic,
-                json.dumps(parsed, ensure_ascii=False, indent=2),
-                "json",
-            )
-            logger.info("[ReadingAgent] Recommendation list saved: file_path=%s item_count=%d", file_path, len(parsed))
-
+        parsed = [item.model_dump() for item in output.recommendations]
+        raw_json = json.dumps({"recommendations": parsed}, ensure_ascii=False)
+        file_path = save_to_workplace("reading", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
         return {
             "success": bool(parsed),
             "recommendations": parsed,
             "file_path": file_path,
             "raw_json": raw_json,
-            "error": result.get("error") if not parsed else None,
+            "error": None if parsed else "empty recommendations",
         }
