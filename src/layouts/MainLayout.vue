@@ -21,16 +21,16 @@
             <span class="nav-label">{{ item.label }}</span>
           </div>
 
-          <div class="nav-divider"></div>
+<!--          <div class="nav-divider"></div>-->
 
-          <div
-            :class="['nav-item action-item', { active: activePath === '/tutor' }]"
-            @click="router.push('/tutor')"
-          >
-            <el-icon class="nav-icon"><ChatDotRound /></el-icon>
-            <span class="nav-label">智能辅导</span>
-            <div class="pulse-indicator" v-if="activePath !== '/tutor'"></div>
-          </div>
+<!--          <div-->
+<!--            :class="['nav-item action-item', { active: activePath === '/tutor' }]"-->
+<!--            @click="router.push('/tutor')"-->
+<!--          >-->
+<!--            <el-icon class="nav-icon"><ChatDotRound /></el-icon>-->
+<!--            <span class="nav-label">智能辅导</span>-->
+<!--            <div class="pulse-indicator" v-if="activePath !== '/tutor'"></div>-->
+<!--          </div>-->
         </nav>
       </div>
 
@@ -101,6 +101,7 @@ const navItems = [
   { path: '/path-planner', label: '路径规划', icon: Connection },
   { path: '/resource-generator', label: '资源引擎', icon: Cpu },
   { path: '/evaluation', label: '多维评估', icon: DataLine },
+  { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
 ]
 
 const activePath = computed(() => route.path)
