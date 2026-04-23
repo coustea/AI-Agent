@@ -17,7 +17,13 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.infra.llm import get_deepseek_chat_llm
 from app.infra.logging import get_logger
-from app.resource.agents.ppt.renderer import render_ppt_plan_to_file
+from app.resource.agents.ppt.renderer import ensure_template_available, render_ppt_plan_to_file
+from app.resource.agents.ppt.template_catalog import (
+    DEFAULT_TEMPLATE_ID,
+    get_builtin_template_spec,
+    merge_template_config,
+    recommend_template_id,
+)
 from app.shared.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
@@ -26,6 +32,8 @@ _VISUAL_KEYWORDS = ("视觉", "图解", "图像", "示意", "案例驱动")
 _SEQUENTIAL_KEYWORDS = ("顺序", "逻辑", "步骤", "推理", "序列")
 _GLOBAL_KEYWORDS = ("整体", "全局", "宏观", "综合", "框架")
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
+_MIN_SLIDES = 6
+_MAX_SLIDES = 10
 
 
 class PptSlidePlan(BaseModel):
@@ -60,7 +68,7 @@ class PptPlanOutput(BaseModel):
     """模板友好的 PPT JSON 输出。"""
 
     presentation_title: str = Field(description="整份演示文稿标题")
-    template_id: str = Field(default="cn_ink_education", description="模板标识")
+    template_id: str = Field(default=DEFAULT_TEMPLATE_ID, description="模板标识")
     slides: list[PptSlidePlan] = Field(description="按渲染顺序排列的幻灯片列表")
 
     @model_validator(mode="after")
@@ -68,8 +76,10 @@ class PptPlanOutput(BaseModel):
         self.presentation_title = self.presentation_title.strip()
         if not self.presentation_title:
             raise ValueError("presentation_title 不能为空")
-        if len(self.slides) < 6:
-            raise ValueError("至少需要 6 页")
+        if len(self.slides) < _MIN_SLIDES:
+            raise ValueError(f"至少需要 {_MIN_SLIDES} 页")
+        if len(self.slides) > _MAX_SLIDES:
+            raise ValueError(f"页数不能超过 {_MAX_SLIDES} 页")
         return self
 
 
@@ -94,6 +104,8 @@ class PptState(TypedDict, total=False):
     slide_titles: list[str]
     style: str
     template_id: str
+    template_source_url: str
+    template_config_url: str
     ppt_plan: dict[str, Any]
     ppt_plan_json: str
     render_ready: bool
@@ -122,14 +134,18 @@ def _check_slide_plan_quality(plan: dict[str, Any]) -> tuple[bool, str, int]:
         validated = PptPlanOutput.model_validate(plan)
     except Exception as exc:
         message = str(exc)
-        if "至少需要 6 页" in message:
-            return False, "PPT 页数不足，至少需要 6 页。", raw_slide_count
+        if f"至少需要 {_MIN_SLIDES} 页" in message:
+            return False, f"PPT 页数不足，至少需要 {_MIN_SLIDES} 页。", raw_slide_count
+        if f"页数不能超过 {_MAX_SLIDES} 页" in message:
+            return False, f"PPT 页数过多，最多允许 {_MAX_SLIDES} 页。", raw_slide_count
         return False, f"PPT JSON 计划校验失败：{exc}", raw_slide_count
 
     slides = validated.slides
     slide_count = len(slides)
-    if slide_count < 6:
-        return False, "PPT 页数不足，至少需要 6 页。", slide_count
+    if slide_count < _MIN_SLIDES:
+        return False, f"PPT 页数不足，至少需要 {_MIN_SLIDES} 页。", slide_count
+    if slide_count > _MAX_SLIDES:
+        return False, f"PPT 页数过多，最多允许 {_MAX_SLIDES} 页。", slide_count
 
     for slide in slides:
         if len(slide.speaker_notes.strip()) < 6:
@@ -190,6 +206,17 @@ def _default_title_for_role(page_role: str) -> str:
     mapping = {
         "cover": "封面",
         "table_of_contents": "目录",
+        "hero_image_split": "图文概览",
+        "icon_process_row": "流程拆解",
+        "hex_cycle": "要素关系",
+        "target_illustration": "目标推进",
+        "road_timeline": "学习路径",
+        "concentric_focus": "重点聚焦",
+        "three_columns": "三要点",
+        "four_cards": "核心模块",
+        "three_steps": "步骤说明",
+        "three_bullets": "关键结论",
+        "two_cards": "对比分析",
         "single_text": "知识讲解",
     }
     return mapping.get(page_role, "未命名页面")
@@ -267,15 +294,17 @@ class PptAgent:
 
     def _load_template_config(self, template_id: str) -> dict:
         """加载本地的模板配置文件。"""
-        config_path = WORKPLACE_DIR / f"{template_id}.config.json"
-        if not config_path.exists():
-            config_path = self.agent_dir / f"{template_id}.config.json"
-
-        if not config_path.exists():
-            raise FileNotFoundError(f"未找到模板配置文件: {template_id}.config.json")
-
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        candidate_paths = [
+            WORKPLACE_DIR / "templates" / template_id / f"{template_id}.config.json",
+            WORKPLACE_DIR / "templates" / template_id / "template.config.json",
+            WORKPLACE_DIR / f"{template_id}.config.json",
+            self.agent_dir / f"{template_id}.config.json",
+        ]
+        for path in candidate_paths:
+            if path.exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    return merge_template_config(template_id, json.load(f))
+        raise FileNotFoundError(f"未找到模板配置文件: {template_id}.config.json")
 
     def _build_dynamic_prompt_parts(self, config: dict) -> dict[str, str]:
         """将 JSON 配置转换为注入 Prompt 的字符串。"""
@@ -300,6 +329,22 @@ class PptAgent:
             "template_roles_definition": "\n".join(unique_roles),
             "template_slot_rules": "\n".join(unique_rules)
         }
+
+    @staticmethod
+    def _resolve_template_selection(
+        *,
+        requested_template_id: str,
+        template_source_url: str,
+        user_profile: dict[str, Any],
+        style: str,
+    ) -> str:
+        normalized = str(requested_template_id or "").strip()
+        has_custom_source = bool(str(template_source_url or "").strip())
+        if has_custom_source:
+            return normalized or "custom_online_template"
+        if normalized and normalized not in {"cn_ink_education", "auto"}:
+            return normalized
+        return recommend_template_id(user_profile, style) or DEFAULT_TEMPLATE_ID
 
     async def _ensure_graph(self) -> None:
         """确保图已构建。"""
@@ -345,7 +390,7 @@ class PptAgent:
                 structured_llm.ainvoke(messages),
                 timeout=LLM_TIMEOUT,
             )
-            return {"ppt_plan": result.model_dump()}
+            return {"ppt_plan": result.model_dump(), "error": None}
         except asyncio.TimeoutError:
             logger.error("[%s] LLM 调用超时", self.name)
             return {"error": "LLM 调用超时", "is_valid": False}
@@ -367,7 +412,7 @@ class PptAgent:
                         "JSON 必须满足以下结构：\n"
                         "{\n"
                         '  "presentation_title": "演示文稿标题",\n'
-                        '  "template_id": "cn_ink_education",\n'
+                        f'  "template_id": "{DEFAULT_TEMPLATE_ID}",\n'
                         '  "slides": [\n'
                         "    {\n"
                         '      "title": "页面标题",\n'
@@ -391,7 +436,7 @@ class PptAgent:
             try:
                 plan = _normalize_plan_dict(_extract_json_object(raw_content))
                 validated = self.structured_output_schema.model_validate(plan)
-                return {"ppt_plan": validated.model_dump()}
+                return {"ppt_plan": validated.model_dump(), "error": None}
             except Exception as parse_exc:
                 logger.error("[%s] JSON 解析或验证失败: %s", self.name, parse_exc)
                 return {"error": str(parse_exc), "is_valid": False, "ppt_plan": {}}
@@ -410,10 +455,14 @@ class PptAgent:
     async def _validate_node(self, state: Any) -> dict:
         """校验节点：仅验证结构化计划质量，不做渲染。"""
         ppt_plan = state.get("ppt_plan") or {}
+        retry_count = int(state.get("retry_count", 0))
+        max_retries = int(state.get("max_retries", 2))
 
         quality_ok, quality_feedback, inferred_slide_count = _check_slide_plan_quality(ppt_plan)
         if not quality_ok:
             logger.warning("[PptAgent] PPT JSON 计划质量不足: %s", quality_feedback)
+            next_retry_count = retry_count + 1
+            exhausted = next_retry_count >= max_retries
             return {
                 "is_valid": False,
                 "validation_feedback": quality_feedback,
@@ -423,6 +472,8 @@ class PptAgent:
                 "ppt_plan": ppt_plan or {},
                 "ppt_plan_json": json.dumps(ppt_plan or {}, ensure_ascii=False),
                 "render_ready": False,
+                "retry_count": next_retry_count,
+                "error": quality_feedback if exhausted else None,
             }
 
         ppt_plan_json = json.dumps(ppt_plan, ensure_ascii=False, indent=2)
@@ -435,18 +486,24 @@ class PptAgent:
             "ppt_plan": ppt_plan,
             "ppt_plan_json": ppt_plan_json,
             "render_ready": True,
+            "error": None,
         }
 
     async def _render_node(self, state: Any) -> dict:
         """渲染节点：把已校验的 JSON 计划落盘为 PPT。"""
         ppt_plan_json = state.get("ppt_plan_json", "")
-        template_id = state.get("template_id", "cn_ink_education")
+        template_id = state.get("template_id", DEFAULT_TEMPLATE_ID)
+        template_source_url = state.get("template_source_url", "")
+        template_config_url = state.get("template_config_url", "")
         style = state.get("style", "modern_minimal")
         logger.info("[PptAgent] 开始基于模板 [%s] 直接渲染 PPT", template_id)
         try:
             data = render_ppt_plan_to_file(
                 topic=state.get("topic", "教学演示"),
                 ppt_plan_json=ppt_plan_json,
+                template_id=template_id,
+                template_source_url=template_source_url,
+                template_config_url=template_config_url,
                 style=style,
             )
         except Exception as exc:
@@ -455,6 +512,16 @@ class PptAgent:
                 "error": f"PPT 计划已生成，但保存 PPT 失败：{exc}",
                 "is_valid": False,
                 "render_ready": False,
+            }
+
+        if data.get("error"):
+            message = str(data["error"])
+            logger.error("[PptAgent] 渲染器返回错误: %s", message)
+            return {
+                "error": message,
+                "is_valid": False,
+                "render_ready": False,
+                "validation_feedback": message,
             }
 
         file_path = data.get("file_path")
@@ -468,6 +535,7 @@ class PptAgent:
             "render_ready": False,
             "is_valid": bool(file_path),
             "validation_feedback": "" if file_path else "未检测到 PPT 文件路径。",
+            "error": None if file_path else "未检测到 PPT 文件路径。",
         }
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
@@ -495,19 +563,32 @@ class PptAgent:
 
     def _build_system_message(self, state: Any) -> str:
         user_profile = state.get("user_profile", {})
-        template_id = state.get("template_id", "cn_ink_education")
+        template_id = state.get("template_id", DEFAULT_TEMPLATE_ID)
+        template_source_url = str(state.get("template_source_url") or "").strip()
+        template_config_url = str(state.get("template_config_url") or "").strip()
 
         try:
+            ensure_template_available(
+                template_id=template_id,
+                template_source_url=template_source_url,
+                template_config_url=template_config_url,
+            )
             config = self._load_template_config(template_id)
             dynamic_parts = self._build_dynamic_prompt_parts(config)
         except Exception as e:
-            logger.error(f"加载模板配置失败: {e}")
-            dynamic_parts = {
-                "template_name": template_id,
-                "template_description": "通用教育模板",
-                "template_roles_definition": "- cover: 封面\n- table_of_contents: 目录\n- single_text: 单正文",
-                "template_slot_rules": "- cover: 必须包含 title\n- single_text: 必须包含 title, body"
-            }
+            spec = get_builtin_template_spec(template_id) or {}
+            builtin_config = spec.get("config") if isinstance(spec.get("config"), dict) else {}
+            if builtin_config:
+                logger.warning("模板文件未就绪，使用内置模板目录配置构建提示词: %s", template_id)
+                dynamic_parts = self._build_dynamic_prompt_parts(builtin_config)
+            else:
+                logger.error(f"加载模板配置失败: {e}")
+                dynamic_parts = {
+                    "template_name": template_id,
+                    "template_description": "通用教育模板",
+                    "template_roles_definition": "- cover: 封面\n- table_of_contents: 目录\n- single_text: 单正文",
+                    "template_slot_rules": "- cover: 必须包含 title\n- single_text: 必须包含 title, body"
+                }
 
         system_prompt = self.prompt_template.format(
             major=state.get("major", "通用"),
@@ -530,9 +611,21 @@ class PptAgent:
 
     def _build_initial_human_message(self, state: Any) -> str:
         topic = state.get("topic", "")
+        template_id = state.get("template_id", DEFAULT_TEMPLATE_ID)
+        retry_count = int(state.get("retry_count", 0))
+        validation_feedback = str(state.get("validation_feedback", "")).strip()
+        retry_hint = ""
+        if retry_count > 0 and validation_feedback:
+            retry_hint = (
+                f"\n上一次输出未通过校验：{validation_feedback}"
+                "\n请修正后重新生成完整 JSON。"
+            )
         return (
             f"请为主题 '{topic}' 生成与动态教育模板匹配的 PPT JSON 计划。"
+            f" 当前模板标识为 '{template_id}'。"
+            f" 整份 PPT 必须保持 {_MIN_SLIDES}-{_MAX_SLIDES} 页。"
             " 不要输出 Markdown，也不要自己声明 file_path。"
+            f"{retry_hint}"
         )
 
     async def generate_ppt(
@@ -543,20 +636,38 @@ class PptAgent:
         gap: str = "",
         user_profile: dict = None,
         shared_memory: dict = None,
-        template_id: str = "cn_ink_education",
+        template_id: str = "auto",
+        template_source_url: str = "",
+        template_config_url: str = "",
     ) -> dict[str, Any]:
-        logger.info("[PptAgent] 收到生成请求: topic=%s, template_id=%s", topic, template_id)
+        profile_data = user_profile or {}
+        preferred_style = _select_ppt_style(profile_data.get("cognitive_style"))
+        resolved_template_id = self._resolve_template_selection(
+            requested_template_id=template_id,
+            template_source_url=template_source_url,
+            user_profile=profile_data,
+            style=preferred_style,
+        )
+        template_spec = get_builtin_template_spec(resolved_template_id) or {}
+        resolved_style = str(template_spec.get("style") or preferred_style).strip() or preferred_style
+        logger.info(
+            "[PptAgent] 收到生成请求: topic=%s requested_template=%s resolved_template=%s",
+            topic,
+            template_id,
+            resolved_template_id,
+        )
         await self._ensure_graph()
-        resolved_style = _select_ppt_style((user_profile or {}).get("cognitive_style"))
 
         initial_state: PptState = {
             "major": major,
             "course": course,
             "topic": topic,
             "gap": gap,
-            "user_profile": user_profile or {},
+            "user_profile": profile_data,
             "shared_memory": shared_memory or {},
-            "template_id": template_id,
+            "template_id": resolved_template_id,
+            "template_source_url": template_source_url or "",
+            "template_config_url": template_config_url or "",
             "messages": [],
             "slide_titles": [],
             "style": resolved_style,
@@ -605,12 +716,13 @@ class PptAgent:
             "ppt_plan_json": result.get("ppt_plan_json") or json.dumps(ppt_plan, ensure_ascii=False, indent=2),
             "slide_titles": result.get("slide_titles", []),
             "style": resolved_style,
+            "template_id": resolved_template_id,
             "speaker_notes": "\n\n".join(
                 slide.get("speaker_notes", "")
                 for slide in ppt_plan.get("slides", [])
                 if isinstance(slide, dict) and slide.get("speaker_notes")
             ) if isinstance(ppt_plan, dict) else "",
-            "error": result.get("error") if file_path else result.get("error"),
+            "error": result.get("error") or (None if file_path else result.get("validation_feedback")),
         }
 
 

@@ -85,6 +85,9 @@ def build_default_resource_plan(
             "gap": task.get("gap", ""),
             "need": task.get("need", "review"),
             "extra": task.get("extra", ""),
+            "template_id": task.get("template_id", "auto"),
+            "template_source_url": task.get("template_source_url") or "",
+            "template_config_url": task.get("template_config_url") or "",
         }
 
     return ResourcePlan(

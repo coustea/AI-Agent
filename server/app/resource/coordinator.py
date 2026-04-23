@@ -462,7 +462,14 @@ class CoordinatorAgent:
             "shared_memory": shared_memory,
             **entry.extra_kwargs,
         }
-        for key in ("target_md_path", "edit_instruction", "output_md_path"):
+        for key in (
+            "target_md_path",
+            "edit_instruction",
+            "output_md_path",
+            "template_id",
+            "template_source_url",
+            "template_config_url",
+        ):
             if key in params:
                 kwargs[key] = params.get(key)
         if agent_name == "mindmap":
