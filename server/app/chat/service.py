@@ -6,9 +6,9 @@
 - ChatUseCases: 路由入口与 agent 调用
 - get_chat_usecases: 模块装配
 
-通用服务已提取到 app/shared/：
+通用服务已提取到 app/shared/ 与 app/memory/：
 - request_context: ContextVar 请求上下文
-- agent_context: AgentContextService（记忆/画像/上下文构建）
+- memory facade: MemoryLayer（记忆/画像/上下文构建）
 - vision: VisionService（图片分析）
 - file_service: 文件路径解析、内容读取
 """
@@ -28,7 +28,7 @@ from app.shared.request_context import (
     set_user_id,
     set_session_id,
 )
-from app.shared.agent_context import AgentContextService
+from app.memory import MemoryLayer
 from app.shared.image_analyze import build_vision_service
 from app.shared.file_service import (
     resolve_uploaded_path,
@@ -39,8 +39,6 @@ from app.shared.file_service import (
 from app.chat.utils import truncate
 from app.infra.llm import get_glm_vision_llm
 from app.infra.logging import get_logger
-from app.memory.short_term import short_term_service
-from app.memory.session import session_service
 from app.shared.storage import local_file_store
 
 from app.chat.schemas import AttachmentInfo, ChatMessageItem, ToolCallRecord
@@ -56,17 +54,6 @@ MAX_DOCX_PARAGRAPHS_TO_READ = 1200
 MAX_IMAGE_ANALYZE_COUNT = 8
 MAX_UPLOAD_FILES_PER_REQUEST = 12
 AVATAR_MODULE_NAME = "avatar"
-
-
-# ---------------------------------------------------------------------------
-# ChatContextService: AgentContextService 的 chat 模块特化
-# ---------------------------------------------------------------------------
-
-class ChatContextService(AgentContextService):
-    """Chat 模块上下文服务，继承通用 AgentContextService，固定 module_name="mentor"。"""
-
-    def __init__(self) -> None:
-        super().__init__(module_name=CHAT_MODULE_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -328,11 +315,8 @@ class ConversationStore:
     """对话会话与历史持久化。"""
 
     async def list_sessions(self, user_id: int, limit: int = 30, module_name: str = CHAT_MODULE_NAME) -> list[dict]:
-        sessions = await session_service.get_user_chat_sessions(
-            user_id=user_id,
-            module=module_name,
-            limit=limit,
-        )
+        memory_layer = MemoryLayer(module_name=module_name)
+        sessions = await memory_layer.list_sessions(user_id=user_id, limit=limit)
         return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in sessions]
 
     async def create_session(
@@ -341,16 +325,13 @@ class ConversationStore:
         title: str = "新对话",
         module_name: str = CHAT_MODULE_NAME,
     ) -> dict:
-        session = await session_service.create_chat_session(
-            user_id=user_id,
-            module=module_name,
-            title=title,
-        )
+        memory_layer = MemoryLayer(module_name=module_name)
+        session = await memory_layer.create_session(user_id=user_id, title=title)
         return {"id": session.id, "title": session.title}
 
     async def archive_session(self, user_id: int, session_id: str, module_name: str = CHAT_MODULE_NAME) -> bool:
-        del module_name
-        return await session_service.archive_chat_session(session_id, user_id)
+        memory_layer = MemoryLayer(module_name=module_name)
+        return await memory_layer.archive_session(user_id=user_id, session_id=session_id)
 
     async def get_history(
         self,
@@ -360,21 +341,17 @@ class ConversationStore:
         limit: int = 50,
         module_name: str = CHAT_MODULE_NAME,
     ) -> list[ChatMessageItem]:
+        memory_layer = MemoryLayer(module_name=module_name)
         target_session = session_id
         if not target_session:
-            sessions = await session_service.get_user_chat_sessions(
-                user_id=user_id,
-                module=module_name,
-                limit=1,
-            )
+            sessions = await memory_layer.list_sessions(user_id=user_id, limit=1)
             if not sessions:
                 return []
             target_session = sessions[0].id
 
-        messages = await short_term_service.get_recent_messages(
+        messages = await memory_layer.list_short_term_messages(
             user_id=user_id,
             session_id=target_session,
-            module=module_name,
             limit=limit,
         )
 

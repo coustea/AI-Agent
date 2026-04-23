@@ -35,10 +35,10 @@ from app.chat.utils import (
     truncate,
     build_messages,
 )
-from app.shared.agent_context import AgentContextService
+from app.memory import MemoryLayer
 from app.infra.llm import get_deepseek_chat_llm, get_spark_max_llm
 from app.infra.logging import get_logger
-from app.tools.chatdoc_rag import chatdoc_rag_search
+from app.knowledge_base.rag_tool import chatdoc_rag_search
 from app.tools.search import duckduckgo_search, tavily_search
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -148,7 +148,7 @@ class TutorAgent:
             max_tokens=1200,
         )
         # 上下文服务
-        self.ctx_service = AgentContextService(module_name="mentor")
+        self.memory_layer = MemoryLayer(module_name="mentor")
 
         # 图与工具
         self.graph = None
@@ -518,7 +518,7 @@ class TutorAgent:
 
         # 保存用户消息
         try:
-            await self.ctx_service.save_message(
+            await self.memory_layer.save_message(
                 user_id=user_id,
                 session_id=effective_session,
                 role="user",
@@ -531,7 +531,7 @@ class TutorAgent:
             return
 
         prepared_turn = await prepare_tutor_turn(
-            ctx_service=self.ctx_service,
+            ctx_service=self.memory_layer,
             prompts=PROMPTS,
             user_id=user_id,
             user_message=user_message,
@@ -620,7 +620,7 @@ class TutorAgent:
 
         # 保存回复
         try:
-            await self.ctx_service.save_message(
+            await self.memory_layer.save_message(
                 user_id=user_id,
                 session_id=effective_session,
                 role="assistant",
@@ -628,7 +628,7 @@ class TutorAgent:
             )
 
             self._spawn_background(
-                self.ctx_service.post_chat_pipeline(
+                self.memory_layer.post_turn_pipeline(
                     user_id=user_id,
                     session_id=effective_session,
                     user_message=user_message,

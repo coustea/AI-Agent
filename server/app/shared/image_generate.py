@@ -47,7 +47,7 @@ Return ONLY the prompt.
 
 class ImageGeneratorAsync:
 
-    def __init__(self, domain="xopqwentti20b", image_dir="./images", max_concurrency=5):
+    def __init__(self, domain="xopzimageturbo", image_dir="./images", max_concurrency=5):
         self.app_id = SPARK_IMAGE_APPID
         self.api_key = SPARK_IMAGE_API_KEY
         self.api_secret = SPARK_IMAGE_API_SECRET

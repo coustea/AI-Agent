@@ -3,7 +3,7 @@
 提供文档管理、知识库管理、文档问答等功能。
 
 Example:
-    from app.shared.chatdoc import ChatDocClient
+    from app.knowledge_base.chatdoc import ChatDocClient
 
     async with ChatDocClient(app_id, api_secret) as client:
         # 上传文档
@@ -18,13 +18,13 @@ Example:
             print(chunk, end="")
 """
 
-from .auth import ChatDocAuth
-from .chat import ChatClient
-from .client import ChatDocClient
-from .exceptions import ChatDocAPIError, ChatDocAuthError, ChatDocError, ChatDocWebSocketError
-from .file import FileClient
-from .importer import KnowledgeImporter
-from .models import (
+from app.knowledge_base.auth import ChatDocAuth
+from app.knowledge_base.chat import ChatClient
+from app.knowledge_base.client import ChatDocClient
+from app.knowledge_base.exceptions import ChatDocAPIError, ChatDocAuthError, ChatDocError, ChatDocWebSocketError
+from app.knowledge_base.file import FileClient
+from app.knowledge_base.importer import KnowledgeImporter
+from app.knowledge_base.models import (
     AddFilesResult,
     ChatExtends,
     ChatMessage,
@@ -42,8 +42,8 @@ from .models import (
     SplitResult,
     SummaryResult,
 )
-from .repo import RepoClient
-from .service import ChatDocService, get_chatdoc_service
+from app.knowledge_base.repo import RepoClient
+from app.knowledge_base.service import ChatDocService, get_chatdoc_service
 
 __all__ = [
     # 主客户端

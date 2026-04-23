@@ -5,10 +5,10 @@
 
 使用方式：
     # 命令行
-    python -m app.shared.chatdoc.importer /path/to/knowledge
+    python -m app.knowledge_base.chatdoc.importer /path/to/knowledge
 
     # 代码调用
-    from app.shared.chatdoc.importer import KnowledgeImporter
+    from app.knowledge_base.chatdoc.importer import KnowledgeImporter
 
     importer = KnowledgeImporter()
     result = await importer.import_from_directory("/path/to/knowledge")
@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from app.infra.logging import get_logger
-from app.shared.chatdoc.client import ChatDocClient
-from app.shared.chatdoc.service import ChatDocService
+from app.knowledge_base.client import ChatDocClient
+from app.knowledge_base.service import ChatDocService
 
 logger = get_logger(__name__)
 
@@ -351,7 +351,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("用法: python -m app.shared.chatdoc.importer <目录路径>")
+        print("用法: python -m app.knowledge_base.chatdoc.importer <目录路径>")
         sys.exit(1)
 
     asyncio.run(main(sys.argv[1]))

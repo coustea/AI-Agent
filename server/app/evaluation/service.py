@@ -16,7 +16,7 @@ from app.evaluation.schemas import (
 )
 from app.infra.logging import get_logger
 from app.infra.models import LearningEvent
-from app.memory.long_term import long_term_service
+from app.memory import MemoryLayer
 from app.memory.memory_types import MEMORY_TYPE_PREFERENCE, MEMORY_TYPE_WEAKNESS
 
 logger = get_logger(__name__)
@@ -167,14 +167,14 @@ class EvaluationService:
         event: LearningEvent,
         payload: LearningEventCreate,
     ) -> None:
+        memory_layer = MemoryLayer(module_name="mentor")
         for candidate in derive_memory_candidates(payload):
             try:
-                await long_term_service.save_user_fact(
+                await memory_layer.upsert_long_term_fact(
                     user_id=user_id,
                     content=candidate.content,
                     memory_type=candidate.memory_type,
                     session_id=event.session_id,
-                    module="mentor",
                 )
             except Exception:
                 logger.exception("[Evaluation] 学习事件写入长期记忆失败: event_id=%s", event.id)
@@ -194,4 +194,3 @@ def _to_item(event: LearningEvent) -> LearningEventItem:
 
 
 evaluation_service = EvaluationService()
-

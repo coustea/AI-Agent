@@ -15,14 +15,15 @@ IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 
 class TutorContextService(Protocol):
-    async def build_profile_ctx(self, user_id: int) -> str:
+    async def build_profile_context(self, user_id: int) -> str:
         ...
 
-    async def build_memory_ctx(self, user_id: int) -> str:
+    async def build_long_term_memory_context(self, user_id: int) -> str:
         ...
 
-    async def build_chat_ctx(
+    async def build_recent_chat_context(
         self,
+        *,
         user_id: int,
         session_id: str,
         user_message: str,
@@ -32,7 +33,7 @@ class TutorContextService(Protocol):
         ...
 
     @staticmethod
-    def build_file_ctx(image_urls: list[str], file_urls: list[str]) -> str:
+    def build_file_context(image_urls: list[str], file_urls: list[str]) -> str:
         ...
 
 
@@ -108,17 +109,17 @@ async def prepare_tutor_turn(
     )
 
     profile_str, fact_str = await asyncio.gather(
-        ctx_service.build_profile_ctx(user_id),
-        ctx_service.build_memory_ctx(user_id),
+        ctx_service.build_profile_context(user_id),
+        ctx_service.build_long_term_memory_context(user_id),
     )
-    file_info_str = ctx_service.build_file_ctx(normalized_image_urls, normalized_file_urls)
+    file_info_str = ctx_service.build_file_context(normalized_image_urls, normalized_file_urls)
     attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
-    initial_messages, recent_chat_context = await ctx_service.build_chat_ctx(
-        user_id,
-        effective_session,
-        user_message,
-        normalized_image_urls,
-        normalized_file_urls,
+    initial_messages, recent_chat_context = await ctx_service.build_recent_chat_context(
+        user_id=user_id,
+        session_id=effective_session,
+        user_message=user_message,
+        image_urls=normalized_image_urls,
+        file_urls=normalized_file_urls,
     )
 
     analysis_hint = (

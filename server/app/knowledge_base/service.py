@@ -13,9 +13,9 @@ from typing import Any, BinaryIO
 
 from app.config import CHATDOC_API_SECRET, CHATDOC_APP_ID, CHATDOC_ENABLED
 from app.infra.logging import get_logger
-from app.shared.chatdoc.client import ChatDocClient
-from app.shared.chatdoc.exceptions import ChatDocError
-from app.shared.chatdoc.models import FileInfo, Repo
+from app.knowledge_base.client import ChatDocClient
+from app.knowledge_base.exceptions import ChatDocError
+from app.knowledge_base.models import FileInfo, Repo
 
 logger = get_logger(__name__)
 
