@@ -36,7 +36,7 @@ from app.chat.utils import (
     build_messages,
 )
 from app.shared.agent_context import AgentContextService
-from app.infra.llm import get_deepseek_chat_llm
+from app.infra.llm import get_deepseek_chat_llm, get_spark_max_llm
 from app.infra.logging import get_logger
 from app.tools.chatdoc_rag import chatdoc_rag_search
 from app.tools.search import duckduckgo_search, tavily_search
@@ -78,13 +78,12 @@ TUTOR_DEEPAGENT_SYSTEM_PROMPT = """你是 TutorAgent 的 deepagent 回答核心�
 工作方式：
 1. 优先直接回答用户当前问题，语言自然、清晰、有教学价值。
 2. 当用户问题涉及计算机科学、人工智能、课程知识点、教材概念、实验指导、学习资料时，优先通过 rag 子智能体查询全局课程知识库。
-3. 只有当用户问题明确需要联网检索、最新信息、新闻、价格、近期版本变化或外部资料核实时，才通过 researcher 子智能体完成搜索。
-4. rag 与 researcher 子智能体都只负责检索和整理证据；最终回答必须由你整合成适合学习者理解的中文解释。
+3. rag 子智能体只负责检索和整理证据；最终回答必须由你整合成适合学习者理解的中文解释。
+4. 默认不要联网搜索；只有系统提示明确允许使用搜索子智能体时，才能进行网页搜索。
 5. 不要暴露内部实现，不要提到工具调用、子代理、系统提示词或工作流。
 6. 如果上下文、附件分析或检索信息不足，要明确说明不确定点，并给出可行动的下一步。
 7. 你面对的是计算机科学与技术、人工智能相关专业学生，回答要有教学性，优先解释概念、原理、差异、流程和常见误区。
 8. 不要调用文件、shell、todo 等内置工具；这些能力在当前聊天场景不可用。
-9. 如果用户只是询问今天星期几、当前日期、当前年份或当前时间，必须直接使用系统消息中的服务器当前时间回答，不要调用 researcher 搜索。
 """
 
 RAG_DEEPAGENT_SYSTEM_PROMPT = """你是 TutorAgent 的 rag 子智能体，只负责检索全局计算机科学与人工智能学习知识库并整理证据。
@@ -113,6 +112,18 @@ RESEARCHER_DEEPAGENT_SYSTEM_PROMPT = """你是 TutorAgent 的 researcher 子智�
 PROMPTS: dict[str, str] = load_prompts(AGENT_DIR)
 
 
+def _build_tutor_system_prompt(*, enable_search: bool) -> str:
+    if not enable_search:
+        return (
+            TUTOR_DEEPAGENT_SYSTEM_PROMPT
+            + "\n搜索策略：本次请求前端没有开启搜索参数，主 Agent 不能使用搜索子智能体，也不要联网搜索。"
+        )
+    return (
+        TUTOR_DEEPAGENT_SYSTEM_PROMPT
+        + "\n搜索策略：本次请求前端已开启搜索参数，允许使用 researcher 子智能体进行网页搜索、最新信息核验和证据整理。"
+    )
+
+
 class TutorAgent:
     """智能辅导 Agent — 轻量级编排器。
 
@@ -128,7 +139,9 @@ class TutorAgent:
 
     def __init__(self) -> None:
         # LLM 实例
-        self.llm = get_deepseek_chat_llm(temperature=0.7, streaming=True)
+        # 主模型使用 Spark Max，负责最终答案总结
+        self.llm = get_spark_max_llm(temperature=0.7, streaming=True)
+        # 研究模型使用 DeepSeek，负责思考过程和工具调用
         self.research_llm = get_deepseek_chat_llm(
             temperature=0.2,
             streaming=False,
@@ -140,6 +153,7 @@ class TutorAgent:
         # 图与工具
         self.graph = None
         self.deep_agent = None
+        self._deep_agents: dict[bool, Any] = {}
         self._init_lock = asyncio.Lock()
         self._deep_agent_lock = asyncio.Lock()
         self._background_tasks: set[asyncio.Task] = set()
@@ -195,30 +209,35 @@ class TutorAgent:
             "runnable": rag_agent,
         }
 
-    def _build_deep_agent(self) -> Any:
+    def _build_deep_agent(self, *, enable_search: bool = False) -> Any:
         """构建 Tutor 主 deepagent，并把知识库检索/联网搜索隔离到本地子智能体。"""
         rag_subagent = self._build_rag_subagent()
-        researcher_subagent = self._build_researcher_subagent()
+        subagents = [rag_subagent]
+        if enable_search:
+            subagents.append(self._build_researcher_subagent())
 
         return create_deep_agent(
             model=self.llm,
             tools=[],
-            subagents=[rag_subagent, researcher_subagent],
-            system_prompt=TUTOR_DEEPAGENT_SYSTEM_PROMPT,
+            subagents=subagents,
+            system_prompt=_build_tutor_system_prompt(enable_search=enable_search),
             middleware=[_ToolExclusionMiddleware(excluded=MAIN_DEEPAGENT_EXCLUDED_TOOLS)],
         )
 
-    async def _ensure_deep_agent(self) -> Any:
+    async def _ensure_deep_agent(self, *, enable_search: bool = False) -> Any:
         """懒加载 deepagent，确保搜索子代理拿到最新工具实例。"""
-        if self.deep_agent is not None:
-            return self.deep_agent
+        if enable_search in self._deep_agents:
+            return self._deep_agents[enable_search]
 
         async with self._deep_agent_lock:
-            if self.deep_agent is not None:
-                return self.deep_agent
-            self.deep_agent = self._build_deep_agent()
-            logger.info("[TutorAgent] deepagent 构建完成，知识库检索与联网搜索已拆分为本地子智能体")
-            return self.deep_agent
+            if enable_search in self._deep_agents:
+                return self._deep_agents[enable_search]
+            built = self._build_deep_agent(enable_search=enable_search)
+            self._deep_agents[enable_search] = built
+            if not enable_search:
+                self.deep_agent = built
+            logger.info("[TutorAgent] deepagent 构建完成 enable_search=%s", enable_search)
+            return built
 
     # ------------------------------------------------------------------
     # 图构建
@@ -233,7 +252,7 @@ class TutorAgent:
                 return
 
             logger.info("[TutorAgent] 图构建开始")
-            await self._ensure_deep_agent()
+            await self._ensure_deep_agent(enable_search=False)
 
             graph = StateGraph(TutorState)
             graph.add_node("classify", self._classify_node)
@@ -266,6 +285,7 @@ class TutorAgent:
         file_urls = state.get("file_urls") or []
         image_urls = state.get("image_urls") or []
         resource_mode = state.get("resource_mode", "none")
+        enable_search = bool(state.get("enable_search", False))
         user_message = extract_question(messages)
 
         with node_timer("classify", user=user_id, session=session_id):
@@ -284,7 +304,10 @@ class TutorAgent:
                 resource_mode,
                 truncate(user_message, 120),
             )
-            return {"route": "direct", "execution_mode": "direct"}
+            result = {"route": "direct", "execution_mode": "direct"}
+            if enable_search:
+                result["enable_search"] = True
+            return result
 
     # ------------------------------------------------------------------
     # 回答执行公共方法
@@ -302,10 +325,11 @@ class TutorAgent:
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         system_prompt = state.get("system_prompt", "")
+        enable_search = bool(state.get("enable_search", False))
 
         with node_timer(stage_name, user=user_id, session=session_id, **extra_log):
             full_messages = build_messages(system_prompt, prompt_messages)
-            agent = await self._ensure_deep_agent()
+            agent = await self._ensure_deep_agent(enable_search=enable_search)
             agent_result = await agent.ainvoke(
                 {"messages": full_messages},
                 config={
@@ -464,6 +488,7 @@ class TutorAgent:
         file_urls: Optional[list[str]] = None,
         generate_image: bool = False,
         generate_video: bool = False,
+        enable_search: bool = False,
         resource_mode: Optional[str] = None,
         attachment_analysis: Optional[dict[str, Any]] = None,
     ):
@@ -476,10 +501,11 @@ class TutorAgent:
             logger.info("[TutorAgent] 当前版本仅生成文字回答，已忽略多模态资源请求")
 
         logger.info(
-            "[TutorAgent] 对话开始 message=%s attachments(images=%s,files=%s)",
+            "[TutorAgent] 对话开始 message=%s attachments(images=%s,files=%s) enable_search=%s",
             truncate(user_message, 180),
             len(image_urls),
             len(file_urls),
+            enable_search,
         )
 
         await self._ensure_graph()
@@ -553,6 +579,7 @@ class TutorAgent:
             "image_urls": image_urls,
             "file_urls": file_urls,
             "resource_mode": "none",
+            "enable_search": bool(enable_search),
             "route": "",
             "execution_mode": "",
             "profile_context": profile_str,

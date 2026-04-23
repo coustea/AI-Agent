@@ -27,6 +27,9 @@ from app.config import (
     SPARK_X_API_BASE,
     SPARK_X_API_KEY,
     SPARK_X_MODEL,
+    SPARK_MAX_API_BASE,
+    SPARK_MAX_API_KEY,
+    SPARK_MAX_MODEL,
 )
 from app.infra.logging import get_logger
 
@@ -125,6 +128,29 @@ def get_spark_x_llm(
         model=resolved_model,
         api_key=SPARK_X_API_KEY or OPENAI_API_KEY,
         base_url=SPARK_X_API_BASE or OPENAI_API_BASE,
+        temperature=temperature,
+        streaming=streaming,
+        max_tokens=max_tokens,
+    )
+
+
+@lru_cache(maxsize=2)
+def get_spark_max_llm(
+    model: str | None = None,
+    temperature: float = 0.3,
+    streaming: bool = False,
+    max_tokens: int | None = None,
+) -> ChatOpenAI:
+    """创建或返回缓存的 Spark Max 文本 LLM 实例。"""
+    resolved_model = model or SPARK_MAX_MODEL
+    logger.debug(
+        "[LLM] 创建 Spark Max LLM 实例: model=%s, temp=%.2f, streaming=%s, max_tokens=%s",
+        resolved_model, temperature, streaming, max_tokens,
+    )
+    return ChatOpenAI(
+        model=resolved_model,
+        api_key=SPARK_MAX_API_KEY or OPENAI_API_KEY,
+        base_url=SPARK_MAX_API_BASE or OPENAI_API_BASE,
         temperature=temperature,
         streaming=streaming,
         max_tokens=max_tokens,
