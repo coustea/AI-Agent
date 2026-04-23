@@ -10,10 +10,10 @@
             <span class="brand-text">智能辅导</span>
           </div>
           <button
+              v-if="chatMode !== 'digital_human'"
               class="collapse-toggle-btn"
-              :disabled="chatMode === 'digital_human'"
               @click="sessionSidebarCollapsed = !sessionSidebarCollapsed"
-              :title="chatMode === 'digital_human' ? '数字人模式下固定折叠' : (sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏')"
+              :title="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="4" y="4" width="16" height="16" rx="4" ry="4"></rect>
@@ -1144,24 +1144,33 @@ onBeforeUnmount(() => {
   transition: all 0.2s ease;
 }
 
-/* ================= 统一样式：新建对话 与 搜索历史 ================= */
-.nav-item.new-chat-btn,
+/* ================= 统一样式：搜索历史 ================= */
 .nav-item.search-item {
   color: #475569;
   font-weight: 400 !important;
 }
-
-.nav-item.new-chat-btn:hover,
 .nav-item.search-item:hover {
   background: #EBF0F5;
   color: #475569;
 }
 
+/* ================= 新建对话：幽灵按钮 ================= */
+.nav-item.new-chat-btn {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #4F46E5 !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease;
+}
+.nav-item.new-chat-btn:hover {
+  background: transparent !important;
+  border: 1px solid #4F46E5 !important; /* 悬停显示轮廓 */
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
+}
 .nav-item.new-chat-btn.active {
-  background: transparent;
-  border-color: transparent;
-  color: #475569;
-  font-weight: 400 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
 }
 
 .nav-item.history-collapsed-btn {
@@ -2325,10 +2334,11 @@ onBeforeUnmount(() => {
   margin: 2px 6px;
   color: #374151 !important;
   font-size: 0.95rem !important;
-  padding: 10px 16px !important;
+  padding: 10px 20px !important;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center; /* 让文字和图标居中 */
+  gap: 12px;
   font-weight: 500;
 }
 
