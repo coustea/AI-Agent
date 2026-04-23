@@ -1,135 +1,253 @@
 <template>
   <div class="page-container">
-    <div class="eval-content">
-      <div class="eval-header">
-        <h2 class="title">学习效果多维度评估</h2>
-        <p class="subtitle">基于大模型的行为分析与能力建模，实时为您反馈学习状态</p>
+    <section class="eval-header">
+      <div>
+        <p class="eyebrow">学习效果评估</p>
+        <h2 class="title">多维学习状态报告</h2>
+        <p class="subtitle">结合练习表现、资源完成度和学习反馈，持续校准后续计划。</p>
       </div>
+      <el-button :icon="RefreshRight" :loading="loading" type="primary" @click="loadSummary">
+        刷新评估
+      </el-button>
+    </section>
 
+    <el-alert
+      v-if="error"
+      class="state-alert"
+      :title="error"
+      type="error"
+      show-icon
+      :closable="false"
+    />
+
+    <el-skeleton v-if="loading && !summary" animated :rows="8" />
+
+    <template v-else>
       <el-row :gutter="24">
-        <el-col :span="8">
-          <div class="score-card">
-            <div class="score-main">
-              <el-progress 
-                type="dashboard" 
-                :percentage="score" 
-                :stroke-width="12"
-                :color="[
-                  { color: '#f56c6c', percentage: 20 },
-                  { color: '#e6a23c', percentage: 40 },
-                  { color: '#5cb87a', percentage: 60 },
-                  { color: '#1989fa', percentage: 80 },
-                  { color: '#6f7ad3', percentage: 100 },
-                ]"
-              >
-                <template #default="{ percentage }">
-                  <div class="score-text">
-                    <span class="score-num">{{ percentage }}</span>
-                    <span class="score-unit">综合评分</span>
-                  </div>
-                </template>
-              </el-progress>
-            </div>
-            <div class="score-footer">
-              <el-tag type="success" effect="dark" round>学习状态：极佳</el-tag>
-            </div>
-          </div>
+        <el-col :xs="24" :lg="8">
+          <section class="score-card">
+            <el-progress
+              type="dashboard"
+              :percentage="score"
+              :stroke-width="12"
+              :color="scoreColors"
+            >
+              <template #default="{ percentage }">
+                <div class="score-text">
+                  <span class="score-num">{{ percentage }}</span>
+                  <span class="score-unit">综合评分</span>
+                </div>
+              </template>
+            </el-progress>
+            <el-tag :type="scoreTagType" effect="dark" round>{{ scoreLabel }}</el-tag>
+          </section>
         </el-col>
 
-        <el-col :span="16">
-          <div class="metrics-grid">
-            <el-card v-for="m in metrics" :key="m.label" shadow="never" class="metric-card">
+        <el-col :xs="24" :lg="16">
+          <section class="metrics-grid">
+            <el-card v-for="metric in displayMetrics" :key="metric.label" shadow="never" class="metric-card">
               <template #header>
                 <div class="metric-header">
-                  <span>{{ m.label }}</span>
+                  <span>{{ metric.label }}</span>
                   <el-icon><DataAnalysis /></el-icon>
                 </div>
               </template>
               <div class="metric-body">
-                <span class="m-val">{{ m.value }}%</span>
-                <el-progress :percentage="m.value" :status="m.status" :show-text="false" />
+                <strong>{{ metric.value }}</strong>
+                <span>{{ trendLabel(metric.trend) }}</span>
               </div>
             </el-card>
-          </div>
+          </section>
         </el-col>
       </el-row>
 
-      <div class="eval-sections">
+      <section class="eval-sections">
         <div class="section-box">
-          <h3 class="section-title"><el-icon><Calendar /></el-icon> 近期测评记录</h3>
-          <el-table :data="recentTests" style="width: 100%" border>
-            <el-table-column prop="date" label="测试日期" width="150" />
-            <el-table-column prop="name" label="测试主题" />
+          <div class="section-header">
+            <h3 class="section-title"><el-icon><Calendar /></el-icon> 近期学习记录</h3>
+            <el-tag size="small" type="info">{{ summary?.event_count || 0 }} 条信号</el-tag>
+          </div>
+
+          <el-empty v-if="!recentEvents.length" description="暂无学习记录" />
+          <el-table v-else :data="recentEvents" style="width: 100%" border>
+            <el-table-column prop="created_at" label="时间" width="170">
+              <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column prop="event_type" label="类型" width="140">
+              <template #default="{ row }">{{ eventLabel(row.event_type) }}</template>
+            </el-table-column>
+            <el-table-column label="主题">
+              <template #default="{ row }">{{ row.topic || row.course || '未标注' }}</template>
+            </el-table-column>
             <el-table-column prop="score" label="得分" width="100">
-              <template #default="scope">
-                <span :class="scope.row.score >= 90 ? 'text-success' : ''" style="font-weight: 700">
-                  {{ scope.row.score }}
+              <template #default="{ row }">
+                <span class="score-cell" :class="{ weak: row.score !== null && row.score < 65 }">
+                  {{ row.score ?? '-' }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column prop="result" label="等级评价" width="120" />
+            <el-table-column prop="feedback" label="反馈" min-width="180" show-overflow-tooltip />
           </el-table>
         </div>
 
-        <div class="section-box highlight">
-          <h3 class="section-title"><el-icon><Medal /></el-icon> AI 评估总结与建议</h3>
-          <div class="ai-report">
-            <p><strong>学习趋势：</strong> 过去 7 天内，你的逻辑思维能力有明显提升（+12%），但知识点的记忆持久度略有下降。</p>
-            <p><strong>策略调整：</strong> 系统已自动在你的学习路径中增加了“遗忘曲线复习”环节，并为您准备了 3 组 CNN 易错题。建议在今天下午 4 点前完成。</p>
-            <el-button type="primary" class="mt-4">接受 AI 优化建议并调整计划</el-button>
-          </div>
+        <div class="insight-grid">
+          <section class="section-box highlight">
+            <h3 class="section-title"><el-icon><Medal /></el-icon> 优化建议</h3>
+            <div class="ai-report">
+              <p v-for="item in recommendations" :key="item">{{ item }}</p>
+            </div>
+          </section>
+
+          <section class="section-box">
+            <h3 class="section-title"><el-icon><TrendCharts /></el-icon> 关注重点</h3>
+            <div class="tag-group">
+              <el-tag v-for="topic in weakTopics" :key="topic" type="warning">{{ topic }}</el-tag>
+              <el-tag v-if="!weakTopics.length" type="info">等待更多测评数据</el-tag>
+            </div>
+            <div class="tag-group mt-4">
+              <el-tag v-for="resource in preferredResources" :key="resource" type="success">{{ resource }}</el-tag>
+              <el-tag v-if="!preferredResources.length" type="info">偏好尚未稳定</el-tag>
+            </div>
+          </section>
         </div>
-      </div>
-    </div>
+      </section>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { 
-  DataAnalysis, 
+import { computed, onMounted, ref } from 'vue'
+import {
+  Calendar,
+  DataAnalysis,
   Medal,
-  Calendar
+  RefreshRight,
+  TrendCharts,
 } from '@element-plus/icons-vue'
+import { getEvaluationSummary, type EvaluationSummary, type LearningEventItem } from '@/api/ai'
 
-const score = ref(85)
-const metrics = [
-  { label: '知识掌握度', value: 92, status: 'success' },
-  { label: '思维活跃度', value: 78, status: 'primary' },
-  { label: '实践完成率', value: 85, status: 'warning' },
-  { label: '问题解决速度', value: 64, status: 'primary' }
+const loading = ref(false)
+const error = ref('')
+const summary = ref<EvaluationSummary | null>(null)
+
+const scoreColors = [
+  { color: '#f56c6c', percentage: 40 },
+  { color: '#e6a23c', percentage: 65 },
+  { color: '#5cb87a', percentage: 80 },
+  { color: '#1989fa', percentage: 100 },
 ]
 
-const recentTests = [
-  { name: 'CNN 架构基础', score: 95, date: '2026-04-01', result: '优秀' },
-  { name: '反向传播算法', score: 72, date: '2026-03-28', result: '良好' },
-  { name: 'Python 环境搭建', score: 100, date: '2026-03-25', result: '满分' }
-]
+const loadSummary = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const res = await getEvaluationSummary()
+    summary.value = res.data.data
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '评估数据加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+const score = computed(() => {
+  if (!summary.value) return 0
+  if (summary.value.average_score !== null) return Math.round(summary.value.average_score)
+  if (summary.value.event_count > 0) return Math.min(100, 55 + summary.value.completed_resources * 8)
+  return 0
+})
+
+const scoreLabel = computed(() => {
+  if (summary.value?.event_count === 0) return '等待学习数据'
+  if (score.value >= 85) return '学习状态：优秀'
+  if (score.value >= 70) return '学习状态：稳定'
+  if (score.value >= 50) return '学习状态：需巩固'
+  return '学习状态：待启动'
+})
+
+const scoreTagType = computed(() => {
+  if (score.value >= 85) return 'success'
+  if (score.value >= 60) return 'warning'
+  return 'info'
+})
+
+const displayMetrics = computed(() => summary.value?.metrics ?? [
+  { label: '平均测验分', value: '暂无', trend: 'stable' },
+  { label: '完成资源', value: '0', trend: 'stable' },
+  { label: '活跃学习', value: '0 分钟', trend: 'stable' },
+])
+
+const recentEvents = computed<LearningEventItem[]>(() => summary.value?.recent_events ?? [])
+const weakTopics = computed(() => summary.value?.weak_topics ?? [])
+const preferredResources = computed(() => summary.value?.preferred_resources ?? [])
+const recommendations = computed(() => summary.value?.recommendations ?? ['完成一次练习或资源学习后，这里会生成更具体的建议。'])
+
+const trendLabel = (trend: string) => {
+  if (trend === 'up') return '提升中'
+  if (trend === 'down') return '需关注'
+  return '稳定'
+}
+
+const eventLabel = (eventType: string) => {
+  const labels: Record<string, string> = {
+    resource_viewed: '查看资源',
+    resource_completed: '完成资源',
+    quiz_submitted: '提交练习',
+    path_feedback: '路径反馈',
+    tutor_helpful: '辅导反馈',
+    resource_feedback: '资源反馈',
+  }
+  return labels[eventType] || eventType
+}
+
+const formatDate = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+onMounted(loadSummary)
 </script>
 
 <style scoped>
-.page-container { min-height: 100vh; background: #F8FAFC; padding: 3rem; }
-.eval-content { max-width: 1100px; margin: 0 auto; }
-.eval-header { text-align: center; margin-bottom: 3rem; }
-.title { font-size: 2rem; color: #0F172A; margin-bottom: 0.5rem; }
-.subtitle { color: #64748B; }
-
-.score-card { background: white; padding: 2.5rem; border-radius: 24px; text-align: center; border: 1px solid rgba(0,0,0,0.05); }
+.page-container { min-height: 100vh; background: #F8FAFC; padding: 32px; }
+.eval-header { max-width: 1120px; margin: 0 auto 24px; display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+.eyebrow { margin: 0 0 8px; font-size: 0.78rem; font-weight: 800; color: #2563EB; text-transform: uppercase; letter-spacing: 0.08em; }
+.title { font-size: 1.9rem; color: #0F172A; margin: 0 0 8px; }
+.subtitle { color: #64748B; margin: 0; }
+.state-alert { max-width: 1120px; margin: 0 auto 20px; }
+.score-card { background: white; padding: 28px; border-radius: 12px; text-align: center; border: 1px solid #E2E8F0; display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .score-text { display: flex; flex-direction: column; }
-.score-num { font-size: 3rem; font-weight: 800; color: #0F172A; }
+.score-num { font-size: 2.8rem; font-weight: 800; color: #0F172A; }
 .score-unit { font-size: 0.875rem; color: #64748B; margin-top: -5px; }
-
-.metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
-.metric-card { border-radius: 16px; border: 1px solid rgba(0,0,0,0.05); }
-.metric-header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.9rem; }
-.m-val { font-size: 1.5rem; font-weight: 700; display: block; margin-bottom: 0.5rem; }
-
-.eval-sections { margin-top: 2.5rem; display: flex; flex-direction: column; gap: 2rem; }
-.section-box { background: white; padding: 2rem; border-radius: 20px; border: 1px solid rgba(0,0,0,0.05); }
+.metrics-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.metric-card { border-radius: 12px; border: 1px solid #E2E8F0; }
+.metric-header { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 0.9rem; }
+.metric-body { display: flex; flex-direction: column; gap: 8px; }
+.metric-body strong { font-size: 1.5rem; color: #0F172A; }
+.metric-body span { color: #64748B; font-size: 0.86rem; }
+.eval-sections { max-width: 1120px; margin: 24px auto 0; display: flex; flex-direction: column; gap: 20px; }
+.section-box { background: white; padding: 24px; border-radius: 12px; border: 1px solid #E2E8F0; }
 .section-box.highlight { background: #EEF2FF; border-color: #C7D2FE; }
-.section-title { font-size: 1.15rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem; }
-
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.section-title { font-size: 1.05rem; margin: 0 0 16px; display: flex; align-items: center; gap: 8px; color: #0F172A; }
+.section-header .section-title { margin: 0; }
+.insight-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 20px; }
 .ai-report { line-height: 1.8; color: #374151; font-size: 0.95rem; }
-.text-success { color: #10B981; }
-.mt-4 { margin-top: 1rem; }
+.ai-report p { margin: 0 0 10px; }
+.tag-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.mt-4 { margin-top: 16px; }
+.score-cell { font-weight: 800; color: #0F172A; }
+.score-cell.weak { color: #DC2626; }
+
+@media (max-width: 960px) {
+  .page-container { padding: 20px; }
+  .eval-header { align-items: flex-start; flex-direction: column; }
+  .metrics-grid, .insight-grid { grid-template-columns: 1fr; }
+}
 </style>

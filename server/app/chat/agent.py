@@ -16,13 +16,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any, Optional
 
 from deepagents import create_deep_agent
 from deepagents.middleware._tool_exclusion import _ToolExclusionMiddleware
 from app.shared.request_context import runtime_context as chat_runtime_context
+from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
 from app.chat.schemas import TutorState
 from app.chat.utils import (
     classify_route,
@@ -493,9 +493,8 @@ class TutorAgent:
         attachment_analysis: Optional[dict[str, Any]] = None,
     ):
         """流式生成对话响应。"""
-        effective_session = session_id or f"user-{user_id}-default-mentor"
-        image_urls = image_urls or []
-        file_urls = file_urls or []
+        requested_image_urls = image_urls or []
+        requested_file_urls = file_urls or []
         resource_requested = bool(resource_mode and resource_mode != "none") or generate_image or generate_video
         if resource_requested:
             logger.info("[TutorAgent] 当前版本仅生成文字回答，已忽略多模态资源请求")
@@ -503,97 +502,46 @@ class TutorAgent:
         logger.info(
             "[TutorAgent] 对话开始 message=%s attachments(images=%s,files=%s) enable_search=%s",
             truncate(user_message, 180),
-            len(image_urls),
-            len(file_urls),
+            len(requested_image_urls),
+            len(requested_file_urls),
             enable_search,
+        )
+
+        effective_session = resolve_session_id(user_id, session_id)
+        user_record = build_user_message_record(
+            user_message,
+            image_urls=requested_image_urls,
+            file_urls=requested_file_urls,
         )
 
         await self._ensure_graph()
 
         # 保存用户消息
         try:
-            msg_content = user_message
-            if image_urls:
-                msg_content += f" [Attached Images: {', '.join(image_urls)}]"
-            if file_urls:
-                msg_content += f" [Attached Files: {', '.join(file_urls)}]"
-
-            attachments_json = (
-                json.dumps(
-                    [
-                        {
-                            "url": u,
-                            "type": "image" if u.split(".")[-1].lower() in {"png", "jpg", "jpeg", "gif", "webp"} else "document",
-                            "name": u.split("/")[-1],
-                        }
-                        for u in image_urls + file_urls
-                    ],
-                    ensure_ascii=False,
-                )
-                if (image_urls or file_urls)
-                else None
-            )
-
             await self.ctx_service.save_message(
                 user_id=user_id,
                 session_id=effective_session,
                 role="user",
-                content=msg_content,
-                attachments=attachments_json,
+                content=user_record.content,
+                attachments=user_record.attachments_json,
             )
         except Exception as exc:
             logger.exception("[TutorAgent] 用户消息保存失败")
             yield stream_event("error", f"保存消息失败: {exc}")
             return
 
-        # 构建上下文
-        profile_str, fact_str = await asyncio.gather(
-            self.ctx_service.build_profile_ctx(user_id),
-            self.ctx_service.build_memory_ctx(user_id),
+        prepared_turn = await prepare_tutor_turn(
+            ctx_service=self.ctx_service,
+            prompts=PROMPTS,
+            user_id=user_id,
+            user_message=user_message,
+            session_id=effective_session,
+            image_urls=requested_image_urls,
+            file_urls=requested_file_urls,
+            enable_search=enable_search,
+            attachment_analysis=attachment_analysis,
         )
-        file_info_str = self.ctx_service.build_file_ctx(image_urls, file_urls)
-        attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
-        initial_messages, recent_chat_context = await self.ctx_service.build_chat_ctx(
-            user_id,
-            effective_session,
-            user_message,
-            image_urls,
-            file_urls,
-        )
-
-        analysis_hint = (
-            f"\n\n### 附件并行预分析结果\n{attachment_analysis_context}\n"
-            if attachment_analysis_context
-            else ""
-        )
-
-        direct_prompt = PROMPTS["direct_system"].format(
-            profile_context=profile_str,
-            fact_context=fact_str,
-            recent_chat_context=recent_chat_context,
-        ) + analysis_hint
-
-        initial_state: TutorState = {
-            "user_id": user_id,
-            "session_id": effective_session,
-            "image_urls": image_urls,
-            "file_urls": file_urls,
-            "resource_mode": "none",
-            "enable_search": bool(enable_search),
-            "route": "",
-            "execution_mode": "",
-            "profile_context": profile_str,
-            "fact_context": fact_str,
-            "recent_chat_context": recent_chat_context,
-            "file_context": file_info_str,
-            "attachment_analysis_context": attachment_analysis_context,
-            "attachment_analysis": attachment_analysis or {},
-            "system_prompt": direct_prompt,
-            "messages": initial_messages,
-            "answer_text": "",
-            "retrieved_docs": [],
-            "termination_reason": "",
-        }
+        initial_state = prepared_turn.initial_state
 
         full_reply = ""
         runtime_state: dict[str, Any] = dict(initial_state)

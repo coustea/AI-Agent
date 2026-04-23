@@ -218,6 +218,28 @@ class GeneratedResource(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
+# Evaluation — 学习行为与效果评估
+# ---------------------------------------------------------------------------
+
+class LearningEvent(SQLModel, table=True):
+    """学习行为事件表 — 记录资源使用、练习结果、路径反馈等评估信号。"""
+    __tablename__ = "learning_events"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    session_id: str | None = Field(default=None, max_length=100, index=True)
+    resource_id: int | None = Field(default=None, index=True)
+    event_type: str = Field(max_length=50, index=True)
+    course: str | None = Field(default=None, max_length=200)
+    topic: str | None = Field(default=None, max_length=200)
+    score: float | None = Field(default=None)
+    duration_seconds: int | None = Field(default=None)
+    feedback: str | None = Field(default=None, sa_column=Column(Text))
+    metadata_json: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
+
+
+# ---------------------------------------------------------------------------
 # Model registration — init_db() 通过此元组获取所有需要建表的模型类
 # ---------------------------------------------------------------------------
 
@@ -229,6 +251,7 @@ REGISTERED_MODELS = (
     UserProfile,
     UserProfileHistory,
     GeneratedResource,
+    LearningEvent,
     User,
 )
 

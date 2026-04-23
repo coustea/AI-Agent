@@ -16,6 +16,14 @@ from app.infra.database import engine
 from app.infra.logging import get_logger
 from app.infra.models import UserMemory
 from app.memory.helpers import normalize_text, now
+from app.memory.policy import (
+    bump_importance,
+    choose_more_informative_content,
+    clamp_importance,
+    initial_fact_importance,
+    rank_context_memory,
+    rank_merge_candidates,
+)
 from app.memory.memory_types import (
     FACT_AGENT_MEMORY_TYPES,
     MEMORY_TYPE_BACKGROUND,
@@ -42,22 +50,6 @@ class LongTermMemoryService:
 
     def __init__(self) -> None:
         self.engine = engine  # 复用全局数据库引擎
-
-    @staticmethod
-    def _should_merge_fact(memory_type: str, new_text: str, existing_text: str) -> bool:
-        """同类长期记忆的轻量合并策略（基于子串包含关系），避免重复堆叠。
-        仅对 goal/preference/weakness 三类进行合并判断，fact 和 background 不合并。
-        合并条件：归一化后的新文本是旧文本的子串，或反之。"""
-        if memory_type not in {MEMORY_TYPE_GOAL, MEMORY_TYPE_PREFERENCE, MEMORY_TYPE_WEAKNESS}:
-            return False
-        if not existing_text:
-            return False
-        normalized_new = normalize_text(new_text)
-        normalized_existing = normalize_text(existing_text)
-        if not normalized_new or not normalized_existing:
-            return False
-        # 子串包含关系判断：如果新内容已被旧内容包含，或旧内容被新内容包含，则视为重复
-        return normalized_new in normalized_existing or normalized_existing in normalized_new
 
     async def save_user_fact(
         self,
@@ -112,6 +104,12 @@ class LongTermMemoryService:
                     duplicate.session_id = session_id or duplicate.session_id
                     if expires_at:
                         duplicate.expires_at = expires_at
+                    duplicate.importance = bump_importance(
+                        duplicate.importance,
+                        source=duplicate.source,
+                        evidence_count=duplicate.evidence_count,
+                        match_score=1.0,
+                    )
                     session.add(duplicate)
                     await session.commit()
                     await session.refresh(duplicate)
@@ -120,27 +118,37 @@ class LongTermMemoryService:
                                 user_id, normalized_type, duplicate.evidence_count, duplicate.id)
                     return duplicate
 
-            # 第二步：同类型语义近似合并（基于子串包含规则）
-            for candidate in candidates:
-                if self._should_merge_fact(normalized_type, cleaned_content, candidate.content):
-                    # 保留较长的内容（信息量更大）
-                    merged_content = candidate.content
-                    if len(cleaned_content) > len(candidate.content):
-                        merged_content = cleaned_content
-                    candidate.content = merged_content
-                    candidate.evidence_count = max(1, candidate.evidence_count) + 1
-                    candidate.last_seen_at = _now
-                    candidate.session_id = session_id or candidate.session_id
-                    if expires_at:
-                        candidate.expires_at = expires_at
-                    session.add(candidate)
-                    await session.commit()
-                    await session.refresh(candidate)
-                    logger.info("[LongTermMemory] 近似合并命中: user=%d, type=%s, "
-                                "merged_len=%d, evidence_count=%d, memory_id=%d",
-                                user_id, normalized_type, len(merged_content),
-                                candidate.evidence_count, candidate.id)
-                    return candidate
+            # 第二步：同类型语义近似合并（基于包含关系与关键词重叠）
+            ranked_candidates = rank_merge_candidates(normalized_type, cleaned_content, candidates)
+            if ranked_candidates:
+                best_match = ranked_candidates[0]
+                candidate = best_match.candidate
+                merged_content = choose_more_informative_content(candidate.content, cleaned_content)
+                candidate.content = merged_content
+                candidate.evidence_count = max(1, candidate.evidence_count) + 1
+                candidate.last_seen_at = _now
+                candidate.session_id = session_id or candidate.session_id
+                if expires_at:
+                    candidate.expires_at = expires_at
+                candidate.importance = bump_importance(
+                    candidate.importance,
+                    source=candidate.source,
+                    evidence_count=candidate.evidence_count,
+                    match_score=best_match.match_score,
+                )
+                session.add(candidate)
+                await session.commit()
+                await session.refresh(candidate)
+                logger.info(
+                    "[LongTermMemory] 近似合并命中: user=%d, type=%s, relation=%s, merged_len=%d, evidence_count=%d, memory_id=%d",
+                    user_id,
+                    normalized_type,
+                    best_match.relation,
+                    len(merged_content),
+                    candidate.evidence_count,
+                    candidate.id,
+                )
+                return candidate
 
             # 第三步：无重复，创建新记录
             memory = UserMemory(
@@ -153,6 +161,7 @@ class LongTermMemoryService:
                 expires_at=expires_at,
                 evidence_count=1,  # 首次出现的证据计数为 1
                 last_seen_at=_now,
+                importance=initial_fact_importance(normalized_type, source="fact_agent"),
             )
             session.add(memory)
             await session.commit()
@@ -178,8 +187,8 @@ class LongTermMemoryService:
         flat: list[UserMemory] = []
         for _, items in memories_by_type.items():
             flat.extend(items)
-        # 按 last_seen_at 倒序排列（最近出现的优先），回退到 created_at
-        flat.sort(key=lambda x: x.last_seen_at or x.created_at, reverse=True)
+        # 综合重要性、证据量和最近出现时间排序
+        flat.sort(key=rank_context_memory, reverse=True)
         logger.debug("[LongTermMemory] 获取用户事实: user=%d, total_types=%d, total_items=%d, limit=%d",
                      user_id, len(memories_by_type), len(flat), limit)
         return flat[:limit]
@@ -195,7 +204,7 @@ class LongTermMemoryService:
     ) -> dict[str, list[UserMemory]]:
         """按类型返回用于上下文注入的长期记忆，自动去重与限量。
         返回格式：{"preference": [...], "goal": [...], ...}
-        每个类型内部按 last_seen_at 倒序排列，且经过归一化去重。
+        每个类型内部按重要性、证据量、last_seen_at 综合排序，且经过归一化去重。
         source 参数：按来源过滤记忆，默认 "fact_agent"。传 None 不过滤来源。
         module 参数：按模块过滤记忆，默认 None 不过滤。"""
         target_types = list(memory_types) if memory_types else list(DEFAULT_MEMORY_TYPE_LIMITS.keys())
@@ -230,11 +239,13 @@ class LongTermMemoryService:
             normalized = normalize_text(item.content)
             if not normalized or normalized in seen_by_type[m_type]:
                 continue  # 跳过空内容或重复内容
-            limit = max(0, limits.get(m_type, 2))
-            if len(grouped[m_type]) >= limit:
-                continue  # 该类型已达上限
             seen_by_type[m_type].add(normalized)
             grouped[m_type].append(item)
+
+        for m_type, items in grouped.items():
+            items.sort(key=rank_context_memory, reverse=True)
+            limit = max(0, limits.get(m_type, 2))
+            grouped[m_type] = items[:limit]
 
         result_dict = {m_type: grouped.get(m_type, []) for m_type in target_types}
         total_items = sum(len(v) for v in result_dict.values())
@@ -289,7 +300,7 @@ class LongTermMemoryService:
                 content=content,
                 memory_type=memory_type,
                 dimension=dimension,  # 可选维度标签（如 "knowledge_level"）
-                importance=importance,  # 重要性评分 0.0~1.0
+                importance=clamp_importance(importance),  # 重要性评分 0.0~1.0
                 source=source,  # 来源标识："conversation" | "fact_agent" | module名
                 source_message_count=source_message_count,  # 来源消息条数
                 evidence_count=1,

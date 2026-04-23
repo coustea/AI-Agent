@@ -94,14 +94,16 @@ class LearnerProfileRuntime:
 
     async def build_profile(self, user_id: int, session_id: str | None = None) -> bool:
         from app.shared.request_context import set_user_id
+        from app.profile import build_profile_building_service
         set_user_id(user_id)
-        agent = _build_profile_agent()
-        success, _ = await agent.build_profile(user_id=user_id, session_id=session_id)
+        service = build_profile_building_service()
+        success, _ = await service.build_profile(user_id=user_id, session_id=session_id)
         return success
 
     async def extract_facts(self, user_id: int, session_id: str) -> bool:
-        agent = _build_fact_agent()
-        return await agent.extract_and_save_fact(user_id=user_id, session_id=session_id)
+        from app.profile import build_fact_extraction_service
+        service = build_fact_extraction_service()
+        return await service.extract_and_save(user_id=user_id, session_id=session_id)
 
 
 class ProfileUseCases:
@@ -115,16 +117,6 @@ class ProfileUseCases:
 
     async def get_profile_history(self, user_id: int, limit: int = 20):
         return await self.profile_svc.get_profile_history(user_id, limit)
-
-
-def _build_profile_agent(module_name: str = "mentor"):
-    from app.profile.profile_agent import ProfileBuilderAgent
-    return ProfileBuilderAgent(module_name=module_name)
-
-
-def _build_fact_agent(module_name: str = "mentor"):
-    from app.profile.fact_agent import MemoryExtractionAgent
-    return MemoryExtractionAgent(module_name=module_name)
 
 
 # 模块级单例

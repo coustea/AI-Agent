@@ -1,5 +1,30 @@
 import axios from 'axios'
 
+export function getErrorMessage(error: any, fallback = '请求失败，请稍后重试') {
+  const data = error?.response?.data
+  if (!data) return error?.message || fallback
+
+  if (typeof data.message === 'string' && data.message) {
+    return data.message
+  }
+
+  if (typeof data.detail === 'string' && data.detail) {
+    return data.detail
+  }
+
+  if (Array.isArray(data.detail) && data.detail.length > 0) {
+    return data.detail
+      .map((item: any) => {
+        const field = Array.isArray(item?.loc) ? item.loc.slice(1).join('.') : ''
+        const message = item?.msg || String(item)
+        return field ? `${field}: ${message}` : message
+      })
+      .join('；')
+  }
+
+  return fallback
+}
+
 const http = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,

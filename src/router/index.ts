@@ -31,13 +31,18 @@ const router = createRouter({
 })
 
 // 路由守卫（无 token 跳转到登录页）
-// router.beforeEach((to, _from, next) => {
-//   const token = localStorage.getItem('token')
-//   if (to.path !== '/login' && to.path !== '/register' && !token) {
-//     next('/login')
-//   } else {
-//     next()
-//   }
-// })
+router.beforeEach((to, _from, next) => {
+  const token = localStorage.getItem('token')
+  const isPublicPage = to.path === '/login' || to.path === '/register'
+  if (!isPublicPage && !token) {
+    next('/login')
+    return
+  }
+  if (isPublicPage && token) {
+    next('/dashboard')
+    return
+  }
+  next()
+})
 
 export default router

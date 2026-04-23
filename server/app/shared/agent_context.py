@@ -7,20 +7,15 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any, Optional
 
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
 
-from app.chat.utils import normalize_message_content, truncate
+from app.chat.utils import truncate
 from app.chat.schemas import ToolCallDetail
-from app.config import PROFILE_GATE_EVERY_N_ASSISTANT_TURNS
 from app.infra.logging import get_logger
-from app.memory.service import (
-    MEMORY_COMPRESSION_TOKEN_THRESHOLD,
-    MEMORY_EXTRACTION_TOKEN_THRESHOLD,
-    memory_service,
-)
+from app.memory.orchestrator import PostChatMemoryOrchestrator
+from app.memory.service import memory_service
 from app.memory.memory_types import (
     MEMORY_TYPE_BACKGROUND,
     MEMORY_TYPE_FACT,
@@ -47,8 +42,7 @@ class AgentContextService:
 
     def __init__(self, *, module_name: str) -> None:
         self.memory = memory_service
-        self.fact_agent = _build_fact_agent_for_module(module_name)
-        self.profile_agent = _build_profile_agent_for_module(module_name)
+        self.orchestrator = PostChatMemoryOrchestrator(module_name=module_name, memory=self.memory)
         self.module_name = module_name
 
     # ------------------------------------------------------------------
@@ -180,101 +174,18 @@ class AgentContextService:
             return "用户未上传文件。"
         return "用户上传了以下附件:\n" + "\n".join(lines)
 
-    # ------------------------------------------------------------------
-    # 后台记忆管道
-    # ------------------------------------------------------------------
-    async def try_extract_memory(self, user_id: int, session_id: str) -> None:
-        """尝试从对话中提取长期记忆事实。当 token 累积超过阈值时触发 FactAgent。"""
-        should_trigger = await self.memory.should_trigger_memory_extraction(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module_name,
-            threshold=MEMORY_EXTRACTION_TOKEN_THRESHOLD,
-        )
-        logger.info(
-            "[%s] 记忆提取检查 user=%s session=%s 触发=%s",
-            self.module_name, user_id, session_id, should_trigger,
-        )
-        if not should_trigger:
-            return
-
-        success = await self.fact_agent.extract_and_save_fact(user_id=user_id, session_id=session_id)
-        if success:
-            await self.memory.reset_memory_extraction_counter(
-                user_id=user_id, session_id=session_id, module=self.module_name,
-            )
-            logger.debug("[%s] 记忆提取成功 user=%s session=%s", self.module_name, user_id, session_id)
-        else:
-            logger.warning("[%s] 记忆提取无更新 user=%s session=%s", self.module_name, user_id, session_id)
-
-    async def try_update_profile(self, user_id: int, session_id: str) -> None:
-        """尝试更新用户学习画像。每隔 N 轮 assistant 回复触发一次画像构建。"""
-        recent_msgs = await self.memory.get_recent_messages(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module_name,
-            limit=80,
-        )
-        assistant_turns = sum(1 for m in recent_msgs if getattr(m, "role", "") == "assistant")
-        if assistant_turns == 0 or assistant_turns % PROFILE_GATE_EVERY_N_ASSISTANT_TURNS != 0:
-            logger.debug(
-                "[%s] 画像更新跳过 user=%s session=%s 原因=轮次未到 turns=%s",
-                self.module_name, user_id, session_id, assistant_turns,
-            )
-            return
-
-        dialogue_msgs = [
-            m for m in recent_msgs
-            if getattr(m, "role", "") in {"user", "assistant"}
-            and getattr(m, "content", "").strip()
-        ]
-        if not dialogue_msgs:
-            logger.debug(
-                "[%s] 画像更新跳过 user=%s session=%s 原因=无对话",
-                self.module_name, user_id, session_id,
-            )
-            return
-
-        success, updated = await self.profile_agent.build_profile(user_id=user_id, session_id=session_id)
-        if success:
-            await self.memory.reset_profile_update_counter(
-                user_id=user_id, session_id=session_id, module=self.module_name,
-            )
-            logger.debug(
-                "[%s] 画像流程完成 user=%s session=%s updated=%s",
-                self.module_name, user_id, session_id, updated,
-            )
-        else:
-            logger.warning(
-                "[%s] 画像更新失败 user=%s session=%s",
-                self.module_name, user_id, session_id,
-            )
-
-    async def try_compress_memory(self, user_id: int, session_id: str) -> None:
-        """尝试压缩短期记忆。当 token 累积超过阈值时，将旧消息压缩为摘要存入长期记忆。"""
-        await self.memory.summarize_and_compress(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module_name,
-            threshold=MEMORY_COMPRESSION_TOKEN_THRESHOLD,
-        )
-        logger.debug("[%s] 记忆压缩 user=%s session=%s", self.module_name, user_id, session_id)
-
     async def post_chat_pipeline(
         self, user_id: int, session_id: str, user_message: str, assistant_reply: str,
     ) -> None:
-        """对话完成后的后台处理管道：依次执行记忆提取 → 画像更新 → 记忆压缩。"""
+        """对话完成后的后台处理管道。"""
         logger.debug("[%s] 后台流程开始 user=%s session=%s", self.module_name, user_id, session_id)
         try:
-            await self.memory.accumulate_session_tokens(
+            await self.orchestrator.run(
                 user_id=user_id,
                 session_id=session_id,
-                module=self.module_name,
-                content=f"{user_message}\n{assistant_reply}",
+                user_message=user_message,
+                assistant_reply=assistant_reply,
             )
-            await self.try_extract_memory(user_id, session_id)
-            await self.try_update_profile(user_id, session_id)
-            await self.try_compress_memory(user_id, session_id)
             logger.debug("[%s] 后台流程完成 user=%s session=%s", self.module_name, user_id, session_id)
         except Exception:
             logger.exception("[%s] 后台流程失败 user=%s session=%s", self.module_name, user_id, session_id)
@@ -318,23 +229,3 @@ class AgentContextService:
                     "[%s] persistence.tool_record.failed user=%s session=%s record=%s",
                     self.module_name, user_id, session_id, truncate(record, 300),
                 )
-
-
-def _build_fact_agent():
-    from app.profile import build_fact_agent
-    return build_fact_agent()
-
-
-def _build_profile_agent():
-    from app.profile import build_profile_agent
-    return build_profile_agent()
-
-
-def _build_fact_agent_for_module(module_name: str):
-    from app.profile import build_fact_agent
-    return build_fact_agent(module_name=module_name)
-
-
-def _build_profile_agent_for_module(module_name: str):
-    from app.profile import build_profile_agent
-    return build_profile_agent(module_name=module_name)
