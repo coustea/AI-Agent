@@ -126,6 +126,7 @@ import { useRouter } from 'vue-router'
 import { User, Message, Lock, Check, Connection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { register } from '@/api/auth'
+import { getErrorMessage } from '@/utils/http'
 import type { FormInstance } from 'element-plus'
 
 const router = useRouter()
@@ -181,8 +182,7 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
         ElMessage.success('注册成功，欢迎加入！')
         router.push('/login')
       } catch (err: any) {
-        const msg = err.response?.data?.message || '注册失败，请稍后重试'
-        ElMessage.error(msg)
+        ElMessage.error(getErrorMessage(err, '注册失败，请稍后重试'))
         showLog.value = false
       } finally {
         isDeploying.value = false

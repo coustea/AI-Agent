@@ -46,7 +46,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <button class="magic-submit-btn" :disabled="!canGenerate || isGenerating" @click="startSimulatedWorkflow">
+        <button class="magic-submit-btn" :disabled="!canGenerate || isGenerating" @click="startResourceGeneration">
           <span class="btn-text">
             <el-icon v-if="!isGenerating" class="mr-2"><VideoPlay /></el-icon>
             <el-icon v-else class="mr-2 is-loading"><Loading /></el-icon>
@@ -81,7 +81,7 @@
                   <el-tag size="small" :type="getStatusTagType(coordinatorState.status)" effect="dark">{{ getStatusText(coordinatorState.status) }}</el-tag>
                 </div>
                 
-                <div class="node-animation-window" v-if="coordinatorState.status === 'running'">
+                <div class="node-animation-window" v-if="isCoordinatorBusy">
                   <div class="human-action-text text-primary">
                     <el-icon class="is-loading"><Loading /></el-icon><span>{{ coordinatorState.currentAction }}</span>
                   </div>
@@ -95,7 +95,7 @@
             </div>
 
             <div class="tree-trunk" v-if="dynamicExecutionQueue.length > 0">
-               <div class="trunk-flow" :class="{'is-flowing': isGenerating && coordinatorState.status === 'done'}"></div>
+               <div class="trunk-flow" :class="{'is-flowing': isGenerating && isCoordinatorBusy}"></div>
             </div>
 
             <div class="execution-zone">
@@ -121,7 +121,7 @@
                       <div class="skeleton-builder"><div class="sk-line w-full"></div><div class="sk-line w-60"></div></div>
                     </div>
 
-                    <div class="node-summary" v-if="nodesState[agentId]?.status === 'done'">
+                    <div class="node-summary" v-if="['success', 'done'].includes(nodesState[agentId]?.status || '')">
                       <el-icon class="text-success" style="font-size: 1.2rem;"><CircleCheckFilled /></el-icon><span>资源构建成功</span>
                     </div>
                   </div>
@@ -207,7 +207,7 @@
           
           <div v-else-if="previewData.agentId === 'quiz'" class="quiz-view">
             <div class="quiz-item" v-for="(q, i) in (previewData.resultData?.questions || [])" :key="i">
-              <div class="q-stem"><strong>Q{{ i+1 }}:</strong> {{ q.stem }}</div>
+              <div class="q-stem"><strong>Q{{ displayIndex(i) }}:</strong> {{ q.stem }}</div>
               <div class="q-options" v-if="q.options">
                 <div v-for="(opt, oi) in q.options" :key="oi" class="q-opt">{{ opt }}</div>
               </div>
@@ -236,6 +236,7 @@ import {
 } from '@element-plus/icons-vue'
 
 import ResourceCard from '@/components/ResourceCard.vue'
+import { generateResources, recordLearningEvent, type GenerateParams, type ResourceGenerateEvent } from '@/api/ai'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
 
@@ -243,7 +244,8 @@ import 'github-markdown-css/github-markdown-light.css'
 const isSidebarCollapsed = ref(false)
 const isGenerating = ref(false)
 const progress = ref(0)
-const results = ref<Record<string, any>>({}) 
+const results = ref<Record<string, any>>({})
+const workflowController = ref<AbortController | null>(null)
 
 const form = reactive({
   topic: 'TCP/IP 三次握手',
@@ -277,14 +279,19 @@ const friendlyActions: Record<string, string[]> = {
   ppt:     ['拆分演示切片...', '生成演讲备注...'],
   video:   ['转化多模态解说...', '编排分镜时间...']
 }
+const coordinatorActions = friendlyActions.coordinator ?? []
 
-interface NodeState { status: 'idle' | 'running' | 'done'; currentAction: string; }
+type CoordinatorStatus = 'idle' | 'profile_loading' | 'planning' | 'core_generating' | 'persisting' | 'done'
+type WorkerStatus = 'idle' | 'queued' | 'running' | 'success' | 'failed'
+type NodeStatus = CoordinatorStatus | WorkerStatus
+
+interface NodeState { status: NodeStatus; currentAction: string; }
 const coordinatorState = ref<NodeState>({ status: 'idle', currentAction: '' })
 const nodesState = ref<Record<string, NodeState>>({})
 
 // ================= 计算属性 =================
 const canGenerate = computed(() => form.topic.trim() !== '' && form.selected.length > 0)
-const getAgentMeta = (id: string) => agentConfig.find(a => a.id === id)!
+const getAgentMeta = (id: string) => agentConfig.find(a => a.id === id) || { id, name: id, icon: Document }
 
 // 🌟 核心：计算每列 4 个元素的二维数组
 const chunkedExecutionQueue = computed(() => {
@@ -295,19 +302,203 @@ const chunkedExecutionQueue = computed(() => {
   }
   return chunks
 })
+const isCoordinatorBusy = computed(() => coordinatorState.value.status !== 'idle' && coordinatorState.value.status !== 'done')
 
 const selectAll = () => { form.selected = agentConfig.map(a => a.id) }
 const getStatusTagType = (status?: string) => {
-  if (status === 'running') return 'primary'
-  if (status === 'done') return 'success'
+  if (status === 'running' || status === 'planning' || status === 'profile_loading' || status === 'core_generating' || status === 'persisting') return 'primary'
+  if (status === 'success' || status === 'done') return 'success'
+  if (status === 'failed') return 'danger'
   return 'info'
 }
 const getStatusText = (status?: string) => {
+  if (status === 'profile_loading') return 'profile_loading'
+  if (status === 'planning') return 'planning'
+  if (status === 'core_generating') return 'core_generating'
+  if (status === 'persisting') return 'persisting'
   if (status === 'running') return 'AI 处理中'
-  if (status === 'done') return '已产出'
+  if (status === 'queued') return 'queued'
+  if (status === 'success' || status === 'done') return '已产出'
+  if (status === 'failed') return 'failed'
   return '等待调度'
 }
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+const workflowStageFallback: Record<string, string> = {
+  profile_loading: coordinatorActions[0] || '正在读取学习者画像...',
+  planning: coordinatorActions[1] || '正在生成资源计划...',
+  core_generating: coordinatorActions[2] || '正在编排核心资源...',
+  persisting: '正在保存本次资源包...',
+  done: '资源包构建完成'
+}
+
+const agentStatusFallback: Record<string, string> = {
+  queued: '等待进入执行队列...',
+  running: '正在构建资源...',
+  success: '资源已生成完成',
+  failed: '资源生成失败'
+}
+
+const ensureNodeState = (agentId: string) => {
+  if (!nodesState.value[agentId]) {
+    nodesState.value[agentId] = { status: 'idle', currentAction: '' }
+  }
+  return nodesState.value[agentId]
+}
+
+const clearWorkflowState = () => {
+  results.value = {}
+  progress.value = 0
+  dynamicExecutionQueue.value = []
+  completedAgentsQueue.value = []
+  coordinatorState.value = { status: 'idle', currentAction: '' }
+  Object.keys(nodesState.value).forEach((key) => {
+    delete nodesState.value[key]
+  })
+}
+
+const getWorkflowActionText = (status: string, message?: string) => {
+  return message || workflowStageFallback[status] || coordinatorActions[0] || '正在协调任务...'
+}
+
+const getAgentActionText = (agentId: string, status: string, message?: string) => {
+  const fallbackList = friendlyActions[agentId] || []
+  return message || agentStatusFallback[status] || fallbackList[0] || '正在构建资源...'
+}
+
+const getEventString = (event: ResourceGenerateEvent, key: string) => {
+  const value = event[key]
+  return typeof value === 'string' ? value : ''
+}
+
+const getEventNumber = (event: ResourceGenerateEvent, key: string) => {
+  const value = event[key]
+  return typeof value === 'number' ? value : undefined
+}
+
+const displayIndex = (index: string | number) => Number(index) + 1
+
+const applyWorkflowEvent = (event: ResourceGenerateEvent) => {
+  const stage = getEventString(event, 'stage')
+  const message = getEventString(event, 'message')
+  coordinatorState.value.status = (stage || 'planning') as CoordinatorStatus
+  coordinatorState.value.currentAction = getWorkflowActionText(stage, message)
+}
+
+const applyAgentStatusEvent = (event: ResourceGenerateEvent) => {
+  const agentId = getEventString(event, 'agent')
+  const status = getEventString(event, 'status') as WorkerStatus
+  if (!agentId || !status) return
+
+  if (!dynamicExecutionQueue.value.includes(agentId)) {
+    dynamicExecutionQueue.value.push(agentId)
+  }
+
+  const node = ensureNodeState(agentId)
+  node.status = status
+  node.currentAction = getAgentActionText(agentId, status, getEventString(event, 'message'))
+}
+
+const applyAgentLogEvent = (event: ResourceGenerateEvent) => {
+  const agentId = getEventString(event, 'agent')
+  const logText = getEventString(event, 'log')
+  if (!agentId || !logText) return
+
+  if (agentId === 'coordinator') {
+    coordinatorState.value.currentAction = logText
+    return
+  }
+
+  const node = ensureNodeState(agentId)
+  node.currentAction = logText
+}
+
+const applyArtifactReadyEvent = (event: ResourceGenerateEvent) => {
+  const agentId = getEventString(event, 'agent')
+  if (!agentId) return
+
+  const artifact = event.artifact ?? event.data ?? event.result ?? null
+  if (artifact != null) {
+    results.value[agentId] = artifact
+  }
+
+  if (!dynamicExecutionQueue.value.includes(agentId)) {
+    dynamicExecutionQueue.value.push(agentId)
+  }
+
+  const node = ensureNodeState(agentId)
+  node.status = 'success'
+  node.currentAction = getAgentActionText(agentId, 'success', getEventString(event, 'message'))
+
+  if (!completedAgentsQueue.value.includes(agentId)) {
+    completedAgentsQueue.value.push(agentId)
+  }
+
+  recordLearningEvent({
+    event_type: 'resource_completed',
+    course: form.topic.trim(),
+    topic: getAgentMeta(agentId).name,
+    metadata: { agent: agentId },
+  }).catch((err) => {
+    console.warn('[ResourceGenerator] record learning event failed:', err)
+  })
+}
+
+const applyBundleUpdateEvent = (event: ResourceGenerateEvent) => {
+  const completed = getEventNumber(event, 'completed')
+  const total = getEventNumber(event, 'total')
+  if (typeof completed === 'number' && typeof total === 'number' && total > 0) {
+    progress.value = Math.min(100, Math.round((completed / total) * 100))
+  }
+
+  const latestAgent = getEventString(event, 'latest_agent')
+  if (latestAgent) {
+    if (!dynamicExecutionQueue.value.includes(latestAgent)) {
+      dynamicExecutionQueue.value.push(latestAgent)
+    }
+    const node = ensureNodeState(latestAgent)
+    if (node.status === 'queued') {
+      node.status = 'running'
+    }
+  }
+}
+
+const handleGenerateEvent = (event: ResourceGenerateEvent) => {
+  if (!event || typeof event.type !== 'string') return
+
+  switch (event.type) {
+    case 'workflow':
+      applyWorkflowEvent(event)
+      break
+    case 'agent_status':
+      applyAgentStatusEvent(event)
+      break
+    case 'agent_log':
+      applyAgentLogEvent(event)
+      break
+    case 'artifact_ready':
+      applyArtifactReadyEvent(event)
+      break
+    case 'bundle_update':
+      applyBundleUpdateEvent(event)
+      break
+    case 'done':
+      coordinatorState.value.status = 'done'
+      coordinatorState.value.currentAction = getWorkflowActionText('done', getEventString(event, 'message'))
+      progress.value = 100
+      isGenerating.value = false
+      workflowController.value = null
+      break
+  }
+}
+
+const buildGenerateParams = (): GenerateParams => ({
+  learning_task: {
+    course: form.topic.trim(),
+    gap: form.gap.trim(),
+    need: 'review',
+    extra: '',
+  },
+  selected_resources: [...form.selected],
+})
 
 // ================= 预览功能 =================
 const previewDialogVisible = ref(false)
@@ -346,69 +537,39 @@ const downloadUrl = (url: string, title: string) => {
   document.body.removeChild(link)
 }
 
-// ================= 动画流模拟 (乱序发车) =================
-const startSimulatedWorkflow = async () => {
-
+// ================= 动画流真实接入 (SSE) =================
+const startResourceGeneration = () => {
+  workflowController.value?.abort()
+  workflowController.value = null
   isSidebarCollapsed.value = true
   isGenerating.value = true
-  progress.value = 0
-  
-  // 清空队列，准备迎接新任务
-  dynamicExecutionQueue.value = []
-  completedAgentsQueue.value = []
-  coordinatorState.value = { status: 'idle', currentAction: '' }
-  
-  form.selected.forEach(id => { nodesState.value[id] = { status: 'idle', currentAction: '' } })
-
-  const totalTasks = form.selected.length + 1
-  let completedCount = 0
-
-  // 1. 大脑首先启动
-  coordinatorState.value.status = 'running'
-  const coordinatorActions = friendlyActions.coordinator || ['应用全局编排指令...']
-  for (const action of coordinatorActions) {
-    coordinatorState.value.currentAction = action
-    await sleep(600 + Math.random() * 400)
-  }
-  coordinatorState.value.status = 'done'
-  completedCount++
-  progress.value = Math.floor((completedCount / totalTasks) * 100)
-
-  // 2. 模拟后端随机发送启动信号
-  const workerPromises = form.selected.map(async (agentId) => {
-    // 随机延迟 0.5s ~ 2.5s 启动，模拟网络先后顺序
-    await sleep(500 + Math.random() * 2000) 
-
-    // 后端信号到达！将它 push 到动态展示队列，前端会立即在一列中渲染出它
-    if (!dynamicExecutionQueue.value.includes(agentId)) {
-      dynamicExecutionQueue.value.push(agentId)
-    }
-    
-    if (!nodesState.value[agentId]) {
-      nodesState.value[agentId] = { status: 'idle', currentAction: '' }
-    }
-    const currentNode = nodesState.value[agentId]
-    currentNode.status = 'running'
-    const actions = friendlyActions[agentId] || ['正在构建资源...']
-    
-    for (const actionText of actions) {
-      currentNode.currentAction = actionText
-      await sleep(1000 + Math.random() * 600) 
-    }
-    
-    currentNode.status = 'done'
-    
-    // 干完活了，进入完成队列，底部的卡片瀑布流会立即呈现
-    if (!completedAgentsQueue.value.includes(agentId)) {
-      completedAgentsQueue.value.push(agentId)
-    }
-
-    completedCount++
-    progress.value = Math.floor((completedCount / totalTasks) * 100)
+  clearWorkflowState()
+  form.selected.forEach((id) => {
+    ensureNodeState(id)
   })
+  coordinatorState.value = {
+    status: 'profile_loading',
+    currentAction: workflowStageFallback.profile_loading || '正在读取学习者画像...',
+  }
 
-  await Promise.all(workerPromises)
-  isGenerating.value = false
+  workflowController.value = generateResources(
+    buildGenerateParams(),
+    handleGenerateEvent,
+    () => {
+      coordinatorState.value.status = 'done'
+      coordinatorState.value.currentAction = workflowStageFallback.done || '资源包构建完成'
+      progress.value = 100
+      isGenerating.value = false
+      workflowController.value = null
+    },
+    (err) => {
+      coordinatorState.value.status = 'done'
+      coordinatorState.value.currentAction = err.message || '资源包生成失败'
+      isGenerating.value = false
+      workflowController.value = null
+      console.error('[ResourceGenerator] generateResources failed:', err)
+    },
+  )
 }
 </script>
 
@@ -488,20 +649,46 @@ const startSimulatedWorkflow = async () => {
 .agent-workflow-node { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; position: relative; z-index: 2; }
 .worker-node { width: 320px; }
 .brain-node { border-width: 2px; }
-.brain-node.running { border-color: #6366F1; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2); transform: scale(1.02); }
+.brain-node.running,
+.brain-node.profile_loading,
+.brain-node.planning,
+.brain-node.core_generating,
+.brain-node.persisting { border-color: #6366F1; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2); transform: scale(1.02); }
 .brain-node.done { border-color: #8B5CF6; }
 .worker-node.running { border-color: #3B82F6; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15); transform: translateY(-4px); }
+.worker-node.success,
 .worker-node.done { border-color: #10B981; }
+.worker-node.failed { border-color: #EF4444; }
 
 .node-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; background: #F8FAFC; border-bottom: 1px solid #F1F5F9; }
-.brain-node .node-header { background: #EEF2FF; border-bottom-color: #E0E7FF; }
+.brain-node .node-header,
+.brain-node.profile_loading .node-header,
+.brain-node.planning .node-header,
+.brain-node.core_generating .node-header,
+.brain-node.persisting .node-header { background: #EEF2FF; border-bottom-color: #E0E7FF; }
 .brain-node.done .node-header { background: #F5F3FF; border-bottom-color: #EDE9FE; }
 .worker-node.running .node-header { background: #EFF6FF; border-bottom-color: #DBEAFE; }
+.worker-node.success .node-header,
+.worker-node.done .node-header { background: #ECFDF5; border-bottom-color: #D1FAE5; }
+.worker-node.failed .node-header { background: #FEF2F2; border-bottom-color: #FEE2E2; }
 
 .n-title { font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 8px; font-size: 0.95rem;}
-.brain-node .n-title { color: #4338CA; font-size: 1.05rem; }
+.brain-node .n-title,
+.brain-node.profile_loading .n-title,
+.brain-node.planning .n-title,
+.brain-node.core_generating .n-title,
+.brain-node.persisting .n-title { color: #4338CA; font-size: 1.05rem; }
 .n-icon { font-size: 1.1rem; color: #64748B; }
-.brain-node.running .n-icon { color: #6366F1; } .worker-node.running .n-icon { color: #3B82F6; } .done .n-icon { color: #10B981; } .brain-node.done .n-icon { color: #8B5CF6; }
+.brain-node.running .n-icon,
+.brain-node.profile_loading .n-icon,
+.brain-node.planning .n-icon,
+.brain-node.core_generating .n-icon,
+.brain-node.persisting .n-icon { color: #6366F1; }
+.worker-node.running .n-icon { color: #3B82F6; }
+.worker-node.success .n-icon,
+.worker-node.done .n-icon { color: #10B981; }
+.worker-node.failed .n-icon { color: #EF4444; }
+.brain-node.done .n-icon { color: #8B5CF6; }
 
 .node-animation-window { padding: 16px; background: #FFFFFF; }
 .human-action-text { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; color: #3B82F6; margin-bottom: 16px; }

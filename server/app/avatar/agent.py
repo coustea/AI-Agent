@@ -24,7 +24,7 @@ from typing_extensions import TypedDict
 from app.chat.utils import load_prompts
 from app.infra.logging import get_logger
 from app.infra.llm import get_llm, get_fast_llm, get_glm_vision_llm
-from app.shared.agent_context import AgentContextService
+from app.memory import MemoryLayer
 from app.shared.image_analyze import build_vision_service
 
 logger = get_logger(__name__)
@@ -145,7 +145,7 @@ class AvatarAgent:
     def __init__(self) -> None:
         self.llm = get_llm(temperature=0.7, streaming=True)
         self.classifier_llm = get_fast_llm(temperature=0.0, max_tokens=100)
-        self.ctx_service = AgentContextService(module_name="avatar")
+        self.memory_layer = MemoryLayer(module_name="avatar")
         self.vision_service = build_vision_service(get_glm_vision_llm())
         self._graph = self._build_graph()
 
@@ -209,7 +209,7 @@ class AvatarAgent:
         attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
 
         if chat_ctx is None:
-            _, recent_chat_context = await self.ctx_service.build_chat_ctx(
+            _, recent_chat_context = await self.memory_layer.build_recent_chat_context(
                 user_id=user_id,
                 session_id=session_id,
                 user_message=text,
@@ -222,8 +222,8 @@ class AvatarAgent:
 
         if profile_ctx is None or memory_ctx is None:
             built_profile_ctx, built_memory_ctx = await asyncio.gather(
-                self.ctx_service.build_profile_ctx(user_id),
-                self.ctx_service.build_memory_ctx(user_id),
+                self.memory_layer.build_profile_context(user_id),
+                self.memory_layer.build_long_term_memory_context(user_id),
             )
             profile_ctx = profile_ctx if profile_ctx is not None else built_profile_ctx
             memory_ctx = memory_ctx if memory_ctx is not None else built_memory_ctx
@@ -248,7 +248,7 @@ class AvatarAgent:
             fact_context=memory_ctx or "暂无",
             recent_chat_context=recent_chat_context,
             skills_context=skills_ctx,
-            file_info_context=self._build_file_ctx(image_urls, file_urls),
+            file_info_context=self.memory_layer.build_file_context(image_urls, file_urls),
         ) + analysis_hint
 
         initial_state = AvatarState(

@@ -12,6 +12,7 @@ from fastapi import File, Form, UploadFile
 from app.auth.security import get_current_user
 from app.infra.models import User
 from app.chat.service import get_avatar_chat_usecases
+from app.memory import MemoryLayer
 from app.shared.response import HttpResponse
 
 router = APIRouter()
@@ -66,39 +67,24 @@ async def clear_avatar_history(
 ):
     """清空数字人会话历史消息（默认清空当前会话）。"""
     from app.avatar.bridge.manager import avatar_bridge_manager
-    from app.memory.session import session_service
-    from app.memory.short_term import short_term_service
+    memory_layer = MemoryLayer(module_name="avatar")
 
     target_session_id = (session_id or "").strip()
     if not target_session_id:
         status = await avatar_bridge_manager.get_status(user.id)
         target_session_id = str(status.get("session_id") or "").strip()
     if not target_session_id:
-        sessions = await session_service.get_user_chat_sessions(
-            user_id=user.id,
-            module="avatar",
-            limit=1,
-        )
+        sessions = await memory_layer.list_sessions(user_id=user.id, limit=1)
         if sessions:
             target_session_id = sessions[0].id
     if not target_session_id:
         return HttpResponse.success(data={"session_id": "", "deleted_count": 0})
 
-    deleted_count = await short_term_service.clear_session_messages(
+    deleted_count = await memory_layer.delete_short_term_messages(
         user_id=user.id,
         session_id=target_session_id,
-        module="avatar",
     )
-    await session_service.reset_memory_extraction_counter(
-        user_id=user.id,
-        session_id=target_session_id,
-        module="avatar",
-    )
-    await session_service.reset_profile_update_counter(
-        user_id=user.id,
-        session_id=target_session_id,
-        module="avatar",
-    )
+    await memory_layer.reset_session_counters(user_id=user.id, session_id=target_session_id)
     return HttpResponse.success(data={"session_id": target_session_id, "deleted_count": deleted_count})
 
 

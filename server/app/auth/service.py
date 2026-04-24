@@ -76,9 +76,10 @@ class AuthUseCases:
         await revoke_token(token, session)
 
     async def build_profile_on_logout(self, user_id: int) -> None:
-        """登出后触发画像构建（懒加载 profile runtime）。"""
-        from app.profile.service import learner_profile_runtime
-        await learner_profile_runtime.build_profile(user_id=user_id)
+        """登出后触发画像构建（懒加载 memory runtime）。"""
+        from app.memory import MemoryLayer
+
+        await MemoryLayer(module_name="mentor").build_profile(user_id=user_id)
 
 
 # 模块级单例

@@ -210,8 +210,9 @@ class RealtimeBridge:
     async def _handle_clear_history(self):
         """清空当前会话历史消息。"""
         from app.avatar.bridge.state import MessageType
-        from app.memory.session import session_service
-        from app.memory.short_term import short_term_service
+        from app.memory import MemoryLayer
+
+        memory_layer = MemoryLayer(module_name="avatar")
 
         if not self.session_id:
             await self._send_to_frontend(
@@ -222,23 +223,11 @@ class RealtimeBridge:
             )
             return
 
-        deleted_count = await short_term_service.clear_session_messages(
+        deleted_count = await memory_layer.delete_short_term_messages(
             user_id=self.user_id,
             session_id=self.session_id,
-            module="avatar",
         )
-        await asyncio.gather(
-            session_service.reset_memory_extraction_counter(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                module="avatar",
-            ),
-            session_service.reset_profile_update_counter(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                module="avatar",
-            ),
-        )
+        await memory_layer.reset_session_counters(user_id=self.user_id, session_id=self.session_id)
         logger.info(
             "[Bridge] 会话历史已清空: user=%s session=%s deleted=%s",
             self.user_id,
@@ -421,12 +410,12 @@ class RealtimeBridge:
     ):
         """核心方法：用户文本 → AvatarAgent → 回复 → Avatar 视频"""
         from app.avatar.agent import AvatarAgent
-        from app.memory.short_term import short_term_service
-        from app.memory.session import session_service
         from app.chat.service import get_avatar_chat_usecases
+        from app.memory import MemoryLayer
 
         image_urls = list(dict.fromkeys(image_urls or []))
         file_urls = list(dict.fromkeys(file_urls or []))
+        memory_layer = MemoryLayer(module_name="avatar")
         attachments_payload = None
         if image_urls or file_urls:
             attachments_payload = json.dumps(
@@ -436,19 +425,16 @@ class RealtimeBridge:
 
         if not self.session_id:
             # 自动创建会话
-            session = await session_service.create_chat_session(
-                user_id=self.user_id, module="avatar",
-            )
+            session = await memory_layer.create_session(user_id=self.user_id)
             self.session_id = session.id
 
         # 1. 保存用户消息
-        await short_term_service.save_message(
+        await memory_layer.create_short_term_message(
             user_id=self.user_id,
             session_id=self.session_id,
             role="user",
             content=user_text,
             attachments=attachments_payload,
-            module="avatar",
         )
 
         # 2. 通过通用 ChatUseCases 复用附件分析与运行时上下文编排
@@ -488,12 +474,11 @@ class RealtimeBridge:
 
         # 4. 保存助手回复
         if full_response:
-            await short_term_service.save_message(
+            await memory_layer.create_short_term_message(
                 user_id=self.user_id,
                 session_id=self.session_id,
                 role="assistant",
                 content=full_response,
-                module="avatar",
             )
 
         # 5. 后台管道（记忆提取 + 画像更新）
@@ -501,13 +486,13 @@ class RealtimeBridge:
 
     async def _post_avatar_pipeline(self, user_msg: str, assistant_msg: str):
         """后台：记忆提取 + 画像更新"""
-        from app.shared.agent_context import AgentContextService
+        from app.memory import MemoryLayer
 
         if not self.session_id:
             return
 
         try:
-            await AgentContextService(module_name="avatar").post_chat_pipeline(
+            await MemoryLayer(module_name="avatar").post_turn_pipeline(
                 user_id=self.user_id,
                 session_id=self.session_id,
                 user_message=user_msg,

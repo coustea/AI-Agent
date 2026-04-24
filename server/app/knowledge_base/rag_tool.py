@@ -7,8 +7,8 @@ import asyncio
 from langchain_core.tools import tool
 
 from app.infra.logging import get_logger
-from app.shared.chatdoc.exceptions import ChatDocError
-from app.shared.chatdoc.service import get_chatdoc_service
+from app.knowledge_base.exceptions import ChatDocError
+from app.knowledge_base.service import get_chatdoc_service
 from app.tools.registry import register
 
 logger = get_logger(__name__)

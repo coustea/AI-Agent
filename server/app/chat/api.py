@@ -29,7 +29,9 @@ async def mentor_chat_stream(
     enable_search: bool = Form(default=False),
     current_user: User = Depends(get_current_user),
 ):
-    """SSE 流式对话主入口。兼容多种附件传参（files/file/image_urls/file_urls）。"""
+    """SSE 流式对话主入口。兼容多种附件传参（files/file/image_urls/fil
+
+    e_urls）。"""
     uc = get_chat_usecases()
     upload_payloads: list[tuple[str, bytes]] = []
     all_uploads = list(files)

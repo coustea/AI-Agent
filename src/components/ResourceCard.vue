@@ -71,7 +71,7 @@
         
         <div v-else-if="agentId === 'quiz'" class="quiz-preview">
           <div class="q-item" v-for="(q, i) in (resultData.questions || []).slice(0, 2)" :key="i">
-            <strong>Q{{ i+1 }}:</strong> {{ q.stem }}
+            <strong>Q{{ Number(i) + 1 }}:</strong> {{ q.stem }}
           </div>
           <div class="q-more" v-if="resultData.questions?.length > 2">
             ...等共 {{ resultData.questions.length }} 道专项练习
@@ -114,6 +114,7 @@ import { computed } from 'vue'
 import { Check, DataBoard, Document } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
+import { recordLearningEvent } from '@/api/ai'
 
 // ================= 定义外部传入的 Props =================
 const props = defineProps({
@@ -199,6 +200,14 @@ const extractCode = (text: string) => {
 
 // ================= 3. 操作事件 =================
 const handlePreview = () => {
+  recordLearningEvent({
+    event_type: 'resource_viewed',
+    course: props.topic,
+    topic: props.meta.name,
+    metadata: { agent: props.agentId },
+  }).catch((err) => {
+    console.warn('[ResourceCard] record learning event failed:', err)
+  })
   emit('preview', {
     agentId: props.agentId,
     title: props.meta.name,

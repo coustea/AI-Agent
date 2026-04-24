@@ -5,13 +5,16 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.database import engine
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.memory.service import memory_service
+from app.memory import MemoryLayer
 from app.resource.schemas import LearnerProfileSnapshot, PersonalizedTaskContext
 
 logger = get_logger(__name__)
 
 
 class ProfileSnapshotLoader:
+    def __init__(self) -> None:
+        self.memory_layer = MemoryLayer(module_name="mentor")
+
     async def load(self, user_id: int) -> LearnerProfileSnapshot:
         logger.info("[ProfileSnapshot] 开始组装画像快照: user_id=%s", user_id)
         user_data = await self._load_user(user_id)
@@ -38,7 +41,7 @@ class ProfileSnapshotLoader:
             }
 
     async def _load_profile(self, user_id: int) -> dict:
-        profile = await memory_service.get_user_profile(user_id)
+        profile = await self.memory_layer.get_profile(user_id=user_id)
         if profile is None:
             logger.warning("[ProfileSnapshot] 未找到用户画像记录: user_id=%s", user_id)
             return {}

@@ -55,17 +55,17 @@ app.add_middleware(
 # Mount feature module routers
 from app.auth.api import router as auth_router
 from app.chat.api import router as chat_router
-from app.profile.api import router as profile_router
 from app.resource.api import router as resource_router
 from app.path.api import router as path_router
 from app.avatar.api import router as avatar_router
+from app.evaluation.api import router as evaluation_router
 
 app.include_router(auth_router, prefix="/api/v1/users", tags=["auth"])
 app.include_router(chat_router, prefix="/api/v1/ai", tags=["chat"])
-app.include_router(profile_router, prefix="/api/v1/ai", tags=["profile"])
 app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 app.include_router(path_router, prefix="/api/v1/ai", tags=["path"])
 app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
+app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
 
 
 @app.exception_handler(Exception)

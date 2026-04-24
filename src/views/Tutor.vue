@@ -10,10 +10,10 @@
             <span class="brand-text">智能辅导</span>
           </div>
           <button
+              v-if="chatMode !== 'digital_human'"
               class="collapse-toggle-btn"
-              :disabled="chatMode === 'digital_human'"
               @click="sessionSidebarCollapsed = !sessionSidebarCollapsed"
-              :title="chatMode === 'digital_human' ? '数字人模式下固定折叠' : (sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏')"
+              :title="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="4" y="4" width="16" height="16" rx="4" ry="4"></rect>
@@ -83,7 +83,7 @@
           >
             <template #reference>
               <div class="nav-item history-collapsed-btn" title="历史记录">
-                <el-icon><Clock /></el-icon>
+                <el-icon><Timer /></el-icon>
               </div>
             </template>
 
@@ -110,7 +110,7 @@
         </div>
 
         <div class="history-section-header" v-if="!sessionSidebarCollapsed">
-          <el-icon><Clock /></el-icon> <span>历史记录</span>
+          <el-icon><Timer /></el-icon> <span>历史记录</span>
         </div>
 
         <div class="session-list" v-show="!sessionSidebarCollapsed">
@@ -131,25 +131,6 @@
             </el-button>
           </div>
           <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
-        </div>
-
-        <div class="sidebar-footer">
-          <div class="mode-toggle-group">
-            <button
-                :class="['mode-btn', { active: chatMode === 'standard' }]"
-                @click="chatMode = 'standard'"
-                title="图文交互"
-            >
-              <el-icon><ChatLineRound /></el-icon> <span class="nav-text">图文交互</span>
-            </button>
-            <button
-                :class="['mode-btn', { active: chatMode === 'digital_human' }]"
-                @click="chatMode = 'digital_human'"
-                title="数字人互动"
-            >
-              <el-icon><Avatar /></el-icon> <span class="nav-text">数字人互动</span>
-            </button>
-          </div>
         </div>
       </aside>
 
@@ -250,10 +231,10 @@
                       </el-dropdown-item>
 
                       <el-dropdown-item divided @click="handleImageToggle">
-                        <el-icon><Picture /></el-icon> {{ generateImage ? '取消生成图片' : '生成图片帮助' }}
+                        <el-icon><Picture /></el-icon> {{ generateImage ? '取消生成图片' : '生成图片' }}
                       </el-dropdown-item>
                       <el-dropdown-item @click="handleVideoToggle">
-                        <el-icon><VideoPlay /></el-icon> {{ generateVideo ? '取消生成视频' : '生成视频帮助' }}
+                        <el-icon><VideoPlay /></el-icon> {{ generateVideo ? '取消生成视频' : '生成视频' }}
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
@@ -292,7 +273,7 @@
               <textarea
                   ref="textareaRef"
                   v-model="userInput"
-                  placeholder="向 AI 导师提问 (Enter 发送，Shift + Enter 换行)..."
+                  placeholder="向 AI 导师提问（Enter 发送，Shift Enter换行）"
                   @keydown.enter.exact.prevent="handleSend"
                   @input="autoResize"
               ></textarea>
@@ -324,7 +305,7 @@
                   </button>
                 </el-tooltip>
 
-                <el-tooltip content="发送消息" placement="top" :show-after="500">
+                <el-tooltip content="请输入您的问题" placement="top" :show-after="500">
                   <button class="send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend">
                     <el-icon><Top /></el-icon>
                   </button>
@@ -371,6 +352,40 @@
         </div>
       </aside>
     </main>
+
+    <div
+        class="fab-container"
+        :class="{ 'is-dragging': isDragging, 'is-dimmed': isDimmed, 'stick-right': isStickRight }"
+        :style="{ left: fabPos.x + 'px', top: fabPos.y + 'px' }"
+        @mousedown="startDrag"
+        @touchstart="startDrag"
+        @mouseenter="resetDimTimer"
+    >
+      <div class="fab-button">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M11 2L13.2 8.8L20 11L13.2 13.2L11 20L8.8 13.2L2 11L8.8 8.8L11 2ZM18.5 15.5L19.5 18.5L22.5 19.5L19.5 20.5L18.5 23.5L17.5 20.5L14.5 19.5L17.5 18.5L18.5 15.5Z"/>
+        </svg>
+      </div>
+
+      <transition name="fab-menu-fade">
+        <div v-if="showFabMenu" class="fab-menu" @mousedown.stop @touchstart.stop>
+          <div
+              class="fab-menu-item"
+              :class="{ active: chatMode === 'standard' }"
+              @click="setChatMode('standard')"
+          >
+            <el-icon><ChatLineRound /></el-icon> 图文交互
+          </div>
+          <div
+              class="fab-menu-item"
+              :class="{ active: chatMode === 'digital_human' }"
+              @click="setChatMode('digital_human')"
+          >
+            <el-icon><Avatar /></el-icon> 数字人互动
+          </div>
+        </div>
+      </transition>
+    </div>
   </div>
 </template>
 
@@ -380,7 +395,7 @@ import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
   MagicStick, Plus, Delete, Close, Top,
-  EditPen, Search, Discount, Clock, VideoPlay,
+  EditPen, Search, Discount, Timer, VideoPlay,
   Paperclip
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -391,6 +406,123 @@ import {
   getSessions, createSession, deleteSession, getChatHistory,
   type ProfileData, type ChatSession
 } from '@/api/ai'
+
+// ==========================================
+// 悬浮按钮 (FAB) 状态与拖拽逻辑
+// ==========================================
+const fabPos = ref({ x: 16, y: 0 })
+const isDragging = ref(false)
+const showFabMenu = ref(false)
+const isDimmed = ref(false)
+const isStickRight = computed(() => fabPos.value.x > window.innerWidth / 2)
+
+let dragStartX = 0
+let dragStartY = 0
+let dragInitialX = 0
+let dragInitialY = 0
+let dragDistance = 0
+let dimTimer: number | null = null
+
+const resetDimTimer = () => {
+  isDimmed.value = false
+  if (dimTimer) clearTimeout(dimTimer)
+  dimTimer = window.setTimeout(() => {
+    if (!showFabMenu.value && !isDragging.value) {
+      isDimmed.value = true
+    }
+  }, 3000)
+}
+
+const startDrag = (e: MouseEvent | TouchEvent) => {
+  if (showFabMenu.value) {
+    showFabMenu.value = false
+    return
+  }
+  isDragging.value = true
+  dragDistance = 0
+  resetDimTimer()
+
+  const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX
+  const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY
+
+  dragStartX = clientX
+  dragStartY = clientY
+  dragInitialX = fabPos.value.x
+  dragInitialY = fabPos.value.y
+
+  document.addEventListener('mousemove', onDrag)
+  document.addEventListener('mouseup', endDrag)
+  document.addEventListener('touchmove', onDrag, { passive: false })
+  document.addEventListener('touchend', endDrag)
+}
+
+const onDrag = (e: MouseEvent | TouchEvent) => {
+  if (!isDragging.value) return
+  e.preventDefault()
+  const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX
+  const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY
+
+  const dx = clientX - dragStartX
+  const dy = clientY - dragStartY
+  dragDistance = Math.abs(dx) + Math.abs(dy)
+
+  fabPos.value = {
+    x: dragInitialX + dx,
+    y: dragInitialY + dy
+  }
+}
+
+const endDrag = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', endDrag)
+  document.removeEventListener('touchmove', onDrag)
+  document.removeEventListener('touchend', endDrag)
+
+  if (dragDistance < 5) {
+    showFabMenu.value = !showFabMenu.value
+  }
+
+  snapToEdge()
+  resetDimTimer()
+}
+
+const snapToEdge = () => {
+  const screenW = window.innerWidth
+  const screenH = window.innerHeight
+  const fabSize = 48
+  const margin = 16
+
+  let targetX = fabPos.value.x
+  let targetY = fabPos.value.y
+
+  // 1. 左右自动磁吸
+  if (targetX + fabSize / 2 > screenW / 2) {
+    targetX = screenW - fabSize - margin
+  } else {
+    targetX = margin
+  }
+
+  // 2. 避免被底部输入框/其他元素过度遮挡
+  const bottomBoundary = screenH - fabSize - 120
+  if (targetY < margin) targetY = margin
+  if (targetY > bottomBoundary) targetY = bottomBoundary
+
+  fabPos.value = { x: targetX, y: targetY }
+}
+
+const setChatMode = (mode: string) => {
+  chatMode.value = mode
+  showFabMenu.value = false
+  resetDimTimer()
+}
+
+const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
+  const target = e.target as HTMLElement
+  if (showFabMenu.value && !target.closest('.fab-container')) {
+    showFabMenu.value = false
+  }
+}
 
 // ==========================================
 // 维度定义
@@ -486,15 +618,13 @@ const isExpandedInput = ref(false)
 const autoResize = () => {
   const el = textareaRef.value
   if (!el) return
-  el.style.height = '24px' // 先重置回单行高度
+  el.style.height = '24px'
   const currentHeight = el.scrollHeight
 
   if (currentHeight > 30) {
-    // 超过一行高度，切换为展开模式
     isExpandedInput.value = true
-    el.style.height = `${Math.min(currentHeight, 72)}px` // 最高限制3行 (约72px)
+    el.style.height = `${Math.min(currentHeight, 72)}px`
   } else {
-    // 空行或者单行，恢复默认水平布局
     isExpandedInput.value = false
     el.style.height = '24px'
   }
@@ -761,7 +891,7 @@ const handleSend = async () => {
   }
 
   userInput.value = ''
-  isExpandedInput.value = false // 重置输入框形态
+  isExpandedInput.value = false
   nextTick(() => {
     if (textareaRef.value) {
       textareaRef.value.style.height = '24px'
@@ -881,6 +1011,12 @@ const handleSend = async () => {
 }
 
 onMounted(async () => {
+  // 挂载时初始化 FAB 默认位置到左下角，并启动半透明定时器
+  fabPos.value = { x: 16, y: window.innerHeight - 150 }
+  resetDimTimer()
+  document.addEventListener('mousedown', handleGlobalClick)
+  document.addEventListener('touchstart', handleGlobalClick, { passive: true })
+
   await loadSessions()
   if (sessions.value.length > 0) {
     await switchSession(sessions.value[0]!.id)
@@ -891,6 +1027,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   abortController?.abort()
   profilePollTimers.forEach(t => clearTimeout(t))
+  if (dimTimer) clearTimeout(dimTimer)
+  document.removeEventListener('mousedown', handleGlobalClick)
+  document.removeEventListener('touchstart', handleGlobalClick)
 })
 </script>
 
@@ -1005,23 +1144,33 @@ onBeforeUnmount(() => {
   transition: all 0.2s ease;
 }
 
-/* 恢复默认的深灰色文本，彻底对齐 */
-.nav-item.new-chat-btn,
+/* ================= 统一样式：搜索历史 ================= */
 .nav-item.search-item {
+  color: #475569;
+  font-weight: 400 !important;
+}
+.nav-item.search-item:hover {
+  background: #EBF0F5;
   color: #475569;
 }
 
-/* 将悬停背景色加深，轮廓更清晰 */
-.nav-item.new-chat-btn:hover,
-.nav-item.search-item:hover {
-  background: #E2E8F0;
-  color: #0F172A;
+/* ================= 新建对话：幽灵按钮 ================= */
+.nav-item.new-chat-btn {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #4F46E5 !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease;
 }
-
-/* 🌟 新建对话：完全不加粗不加深，彻底成为普通的按钮样式 */
+.nav-item.new-chat-btn:hover {
+  background: transparent !important;
+  border: 1px solid #4F46E5 !important; /* 悬停显示轮廓 */
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
+}
 .nav-item.new-chat-btn.active {
-  background: transparent;
-  border-color: transparent;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
 }
 
 .nav-item.history-collapsed-btn {
@@ -1185,72 +1334,6 @@ onBeforeUnmount(() => {
   margin-top: 2rem;
 }
 
-.sidebar-footer {
-  padding: 1rem;
-  border-top: 1px solid #E2E8F0;
-  margin-top: auto;
-  background: #FAFAFA;
-  transition: padding 0.3s ease;
-}
-
-.mode-toggle-group {
-  display: flex;
-  flex-direction: column;
-  background: transparent;
-  padding: 0;
-  gap: 8px;
-  border: none;
-  box-shadow: none;
-}
-
-.mode-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  padding: 10px 20px;
-  border: 1px solid #E2E8F0;
-  background: #FFFFFF;
-  border-radius: 999px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #64748B;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-.mode-btn:hover:not(.active) {
-  background: #F8FAFC;
-  color: #334155;
-  border-color: #CBD5E1;
-}
-
-.mode-btn.active {
-  background: #EAF2FF;
-  color: #1677FF;
-  border-color: transparent;
-  box-shadow: none;
-}
-
-.mode-btn .el-icon {
-  font-size: 1.2rem;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  transition: all 0.3s ease;
-}
-
-.mode-btn.active .el-icon {
-  background: #1677FF;
-  color: #FFFFFF;
-}
-
 .session-sidebar.collapsed {
   width: 64px;
 }
@@ -1261,8 +1344,7 @@ onBeforeUnmount(() => {
 }
 
 .session-sidebar.collapsed .sidebar-top-header,
-.session-sidebar.collapsed .standard-sidebar-nav,
-.session-sidebar.collapsed .sidebar-footer {
+.session-sidebar.collapsed .standard-sidebar-nav {
   width: 100%;
   padding-left: 0;
   padding-right: 0;
@@ -1281,14 +1363,9 @@ onBeforeUnmount(() => {
   padding-bottom: 16px;
 }
 
-.session-sidebar.collapsed .sidebar-footer {
-  padding: 16px 0;
-}
-
 .session-sidebar.collapsed .collapse-toggle-btn,
 .session-sidebar.collapsed .nav-item,
-.session-sidebar.collapsed .session-item,
-.session-sidebar.collapsed .mode-btn {
+.session-sidebar.collapsed .session-item {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1306,25 +1383,6 @@ onBeforeUnmount(() => {
 
 .session-sidebar.collapsed .sidebar-top-header .collapse-toggle-btn {
   margin-bottom: 0;
-}
-
-.session-sidebar.collapsed .mode-toggle-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  padding: 0;
-  gap: 10px;
-}
-
-.session-sidebar.collapsed .mode-toggle-group .mode-btn {
-  margin-bottom: 0;
-}
-
-.session-sidebar.collapsed .mode-btn .el-icon {
-  font-size: 1.25rem;
-  width: 28px;
-  height: 28px;
 }
 
 .chat-container {
@@ -1630,7 +1688,6 @@ onBeforeUnmount(() => {
   color: #EF4444;
 }
 
-/* 🌟 Grid 响应式布局：单行和多行自动平滑切换 */
 .input-wrapper {
   width: 80%;
   max-width: 800px;
@@ -1688,7 +1745,6 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-/* 🌟 多行展开状态时的 Grid 位置复写 */
 .input-wrapper.is-expanded {
   border-radius: 20px;
   padding: 12px 16px;
@@ -1736,7 +1792,6 @@ onBeforeUnmount(() => {
   background: #E5E5E5;
 }
 
-/* 联网搜索图标：彻底去除背景色，匹配纯线框风格 */
 .media-gen-btn {
   width: 32px;
   height: 32px;
@@ -1754,11 +1809,11 @@ onBeforeUnmount(() => {
 }
 
 .media-gen-btn.btn-web {
-  color: #666;
+  color: #374151;
 }
 .media-gen-btn.btn-web:hover {
   background: #E5E5E5;
-  color: #333;
+  color: #111827;
 }
 .media-gen-btn.btn-web.active {
   color: #0EA5E9;
@@ -1824,7 +1879,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  color: #94A3B8;
+  color: #374151;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1836,7 +1891,7 @@ onBeforeUnmount(() => {
 
 .voice-btn:hover {
   background: #E2E8F0;
-  color: #0F172A;
+  color: #111827;
 }
 
 .voice-btn.is-recording {
@@ -1909,7 +1964,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: not-allowed;
+  cursor: default;
   transition: all 0.3s ease;
   font-size: 1.2rem;
 }
@@ -2170,6 +2225,100 @@ onBeforeUnmount(() => {
   color: #111;
   margin-top: -10vh;
 }
+
+/* ================= 悬浮按钮 (FAB) 相关样式 ================= */
+
+.fab-container {
+  position: fixed;
+  z-index: 1000;
+  touch-action: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.fab-container.is-dragging {
+  transition: none !important;
+}
+.fab-container.is-dimmed {
+  opacity: 0.6;
+}
+.fab-container.is-dimmed:hover {
+  opacity: 1;
+}
+
+.fab-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5B8CFF, #7A5CFF);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(91,140,255,0.25);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.fab-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(91,140,255,0.35);
+}
+.fab-button:active {
+  transform: scale(0.95);
+}
+
+.fab-menu {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  width: 150px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform-origin: bottom left;
+}
+.fab-container.stick-right .fab-menu {
+  left: auto;
+  right: 0;
+  transform-origin: bottom right;
+}
+
+.fab-menu-item {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.fab-menu-item:hover {
+  background: #F1F5F9;
+  color: #1E293B;
+}
+.fab-menu-item.active {
+  color: #4F46E5;
+  background: #EEF2FF;
+}
+.fab-menu-item .el-icon {
+  font-size: 1.2rem;
+}
+
+/* 菜单淡入淡出动画 */
+.fab-menu-fade-enter-active,
+.fab-menu-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.fab-menu-fade-enter-from,
+.fab-menu-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(10px);
+}
 </style>
 
 <style>
@@ -2185,10 +2334,11 @@ onBeforeUnmount(() => {
   margin: 2px 6px;
   color: #374151 !important;
   font-size: 0.95rem !important;
-  padding: 10px 16px !important;
+  padding: 10px 20px !important;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center; /* 让文字和图标居中 */
+  gap: 12px;
   font-weight: 500;
 }
 
