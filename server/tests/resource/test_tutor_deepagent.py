@@ -130,6 +130,9 @@ def test_diagram_generate_node_generates_sequence_when_requested():
     assert tutor.diagram_llm.models[1] is SequenceDiagram
     assert result["diagram"]["type"] == "sequence"
     assert result["diagram"]["spec"]["messages"][0]["from"] == "client"
+    assert result["diagram"]["render"]["engine"] == "mermaid"
+    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
+    assert "client->>server: SYN" in result["diagram"]["render"]["source"]
 
 
 def test_diagram_generate_node_failure_does_not_raise():
@@ -162,6 +165,11 @@ def test_chat_stream_done_event_includes_diagram_resource(monkeypatch):
                 {"label": "线程", "description": "CPU调度单位", "points": ["共享进程资源"]},
             ],
             "dimensions": ["资源", "调度"],
+        },
+        "render": {
+            "engine": "mermaid",
+            "format": "text",
+            "source": "flowchart LR\n    item_1[\"进程\"]\n    item_2[\"线程\"]",
         },
     }
 
@@ -217,8 +225,11 @@ def test_chat_stream_done_event_includes_diagram_resource(monkeypatch):
     asyncio.run(collect())
 
     token_events = [event for event in events if event["event"] == "token"]
+    status_events = [event for event in events if event["event"] == "status"]
     done_events = [event for event in events if event["event"] == "done"]
 
     assert token_events == [{"event": "token", "data": "这是最终整合后的回答"}]
+    assert status_events[-1]["data"]["stage"] == "diagram_generate"
     assert done_events[0]["data"]["resources"]["diagram"]["type"] == "compare"
+    assert done_events[0]["data"]["resources"]["diagram"]["render"]["engine"] == "mermaid"
     assert done_events[0]["data"]["resources"]["video"] is None

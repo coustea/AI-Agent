@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.chat.diagram_schemas import (
     DIAGRAM_MODEL_MAP,
+    DiagramRender,
     FlowDiagram,
     HierarchyDiagram,
     RelationDiagram,
@@ -27,6 +28,18 @@ def test_diagram_model_map_exports_all_supported_types() -> None:
         "sequence",
         "state",
     }
+
+
+def test_diagram_render_schema_accepts_mermaid_text_only() -> None:
+    render = DiagramRender.model_validate(
+        {
+            "engine": "mermaid",
+            "format": "text",
+            "source": "flowchart TD\n  a-->b",
+        }
+    )
+
+    assert render.engine == "mermaid"
 
 
 def test_flow_rejects_edge_referencing_unknown_step() -> None:

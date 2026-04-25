@@ -173,6 +173,12 @@ class StateDiagram(BaseDiagramModel):
     spec: StateSpec
 
 
+class DiagramRender(BaseDiagramModel):
+    engine: Literal["mermaid"]
+    format: Literal["text"]
+    source: str = Field(min_length=1)
+
+
 EnabledDiagram = Annotated[
     Union[
         HierarchyDiagram,

@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 from deepagents import create_deep_agent
 from deepagents.middleware._tool_exclusion import _ToolExclusionMiddleware
+from app.chat.diagram_render import build_diagram_render
 from app.chat.diagram_schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 from app.shared.request_context import runtime_context as chat_runtime_context
 from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
@@ -721,7 +722,9 @@ class TutorAgent:
                 ]
             )
             validated = model_cls.model_validate(diagram)
-            return validated.model_dump(by_alias=True)
+            rendered = validated.model_dump(by_alias=True)
+            rendered["render"] = build_diagram_render(rendered)
+            return rendered
         except Exception as exc:
             logger.warning("[TutorAgent] 图解生成失败 type=%s error=%s", diagram_type, exc)
             return None
@@ -875,6 +878,14 @@ class TutorAgent:
                                 {
                                     "stage": name,
                                     "message": "正在检索和组织答案，请稍候...",
+                                },
+                            )
+                        elif name == "diagram_generate":
+                            yield stream_event(
+                                "status",
+                                {
+                                    "stage": name,
+                                    "message": "正在生成图解说明...",
                                 },
                             )
 
