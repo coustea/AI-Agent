@@ -326,54 +326,47 @@
           <div class="header-title-row">
             <h3>动态学习画像</h3>
             <span class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
-              <span class="dot"></span> {{ profileUpdated ? 'Synced' : 'Live' }}
+              <span class="dot"></span> Live
             </span>
           </div>
-        </div>
-        <p class="sidebar-desc">基于您的对话实时提取的关键特征</p>
-
-        <div class="tags-section">
-          <div class="tags-container" v-if="activeProfileTags.length > 0">
-            <span v-for="(tag, idx) in activeProfileTags" :key="idx" class="feature-tag shadow-sm">
-              <el-icon class="tag-icon"><Discount /></el-icon>
-              {{ tag }}
-            </span>
-          </div>
-          <div v-else class="empty-tags">
-            对话太少啦，多聊两句让我更了解你～
-          </div>
+          <p class="sidebar-desc">基于对话内容为你生成的学习画像</p>
         </div>
 
-        <div class="ai-insight">
-          <div class="insight-header">
-            <el-icon><MagicStick /></el-icon> 辅导策略
+        <div class="profile-feature-card">
+          <div class="feature-card-header">
+            <div class="header-icon"><el-icon><User /></el-icon></div>
+            <span class="header-title">学习特征总结</span>
           </div>
-          <div class="insight-content">{{ tutorStrategy }}</div>
-        </div>
 
-        <div class="recent-memory">
-          <div class="recent-memory-header">
-            <span>近期聊天记忆</span>
-            <button
-                class="memory-refresh-btn"
-                :disabled="!currentSessionId || recentMemoryLoading"
-                title="刷新近期记忆"
-                @click="fetchRecentChatMemory()"
-            >
-              <el-icon><Timer /></el-icon>
-            </button>
-          </div>
-          <div v-if="recentMemoryLoading" class="recent-memory-empty">正在同步...</div>
-          <div v-else-if="recentMemories.length === 0" class="recent-memory-empty">当前会话暂无近期记忆</div>
-          <div v-else class="recent-memory-list">
-            <div v-for="(item, idx) in recentMemories" :key="item.id ?? `${item.role}-${idx}`" class="recent-memory-item">
-              <div class="memory-item-meta">
-                <span>{{ item.role === 'assistant' ? '导师' : '我' }}</span>
-                <span>{{ formatMemoryTime(item.created_at) }}</span>
+          <div class="feature-list" v-if="activeProfileDimensions.length > 0">
+            <div class="feature-item" v-for="dim in activeProfileDimensions" :key="dim.key">
+              <div class="item-icon-box">
+                <el-icon><component :is="getIcon(dim.key)" /></el-icon>
               </div>
-              <p>{{ item.content }}</p>
+              <div class="item-text-box">
+                <div class="item-title">{{ dim.name }}</div>
+                <div class="item-desc">{{ dim.desc }}</div>
+              </div>
             </div>
           </div>
+
+          <div class="feature-list empty-state" v-else>
+            <div class="empty-text">对话太少啦，多聊两句让我更了解你～</div>
+          </div>
+        </div>
+
+        <div class="long-term-memory-section">
+          <div class="memory-header-row">
+            <div class="memory-title-wrap">
+              <span class="memory-title">长期记忆</span>
+              <el-icon class="info-icon"><InfoFilled /></el-icon>
+            </div>
+            <div class="memory-switch-wrap">
+              <span class="switch-status">{{ memoryEnabled ? '已启用' : '未使用' }}</span>
+              <el-switch v-model="memoryEnabled" size="small" />
+            </div>
+          </div>
+          <p class="memory-desc">将重要信息存入长期记忆，以提供更个性化的辅导服务。</p>
         </div>
       </aside>
     </main>
@@ -399,14 +392,32 @@
               :class="{ active: chatMode === 'standard' }"
               @click="setChatMode('standard')"
           >
-            <el-icon><ChatLineRound /></el-icon> 图文交互
+            <div class="menu-icon-box">
+              <el-icon><ChatLineRound /></el-icon>
+            </div>
+            <div class="menu-text-content">
+              <div class="menu-title">图文交互</div>
+              <div class="menu-desc">文字、图片多模态交流</div>
+            </div>
+            <div class="check-icon" v-if="chatMode === 'standard'">
+              <el-icon><CircleCheckFilled /></el-icon>
+            </div>
           </div>
           <div
               class="fab-menu-item"
               :class="{ active: chatMode === 'digital_human' }"
               @click="setChatMode('digital_human')"
           >
-            <el-icon><Avatar /></el-icon> 数字人互动
+            <div class="menu-icon-box">
+              <el-icon><Avatar /></el-icon>
+            </div>
+            <div class="menu-text-content">
+              <div class="menu-title">数字人互动</div>
+              <div class="menu-desc">与数字人进行语音对话</div>
+            </div>
+            <div class="check-icon" v-if="chatMode === 'digital_human'">
+              <el-icon><CircleCheckFilled /></el-icon>
+            </div>
           </div>
         </div>
       </transition>
@@ -421,15 +432,16 @@ import {
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
   MagicStick, Plus, Delete, Close, Top,
   EditPen, Search, Discount, Timer, VideoPlay,
-  Paperclip
+  Paperclip, CircleCheckFilled,
+  User, InfoFilled, Medal, Aim, Setting
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
 import {
   streamChat, getProfile, uploadFile,
-  getSessions, createSession, deleteSession, getChatHistory, getRecentChatMemory,
-  type ProfileData, type ChatSession, type RecentChatMemoryItem
+  getSessions, createSession, deleteSession, getChatHistory,
+  type ProfileData, type ChatSession
 } from '@/api/ai'
 import { getMe } from '@/api/auth'
 
@@ -562,15 +574,29 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
 // 维度定义
 // ==========================================
 const DIMENSION_MAP = [
-  { key: 'knowledge_level', name: '知识基础', color: '#0891B2', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_style', name: '认知风格', color: '#10B981', defaultDesc: '自动分析中...' },
-  { key: 'error_pattern', name: '易错倾向', color: '#F59E0B', defaultDesc: '自动分析中...' },
-  { key: 'learning_goal', name: '学习目标', color: '#8B5CF6', defaultDesc: '自动分析中...' },
-  { key: 'learning_history', name: '学习历史', color: '#EC4899', defaultDesc: '自动分析中...' },
-  { key: 'interest_preference', name: '兴趣偏好', color: '#3B82F6', defaultDesc: '自动分析中...' },
-  { key: 'learning_pace', name: '学习节奏', color: '#14B8A6', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_level', name: '认知水平', color: '#F97316', defaultDesc: '自动分析中...' },
+  { key: 'knowledge_level', name: '擅长领域', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_style', name: '认知风格', defaultDesc: '自动分析中...' },
+  { key: 'error_pattern', name: '待提升方向', defaultDesc: '自动分析中...' },
+  { key: 'learning_goal', name: '学习目标', defaultDesc: '自动分析中...' },
+  { key: 'learning_history', name: '学习历史', defaultDesc: '自动分析中...' },
+  { key: 'interest_preference', name: '学习风格偏好', defaultDesc: '自动分析中...' },
+  { key: 'learning_pace', name: '学习节奏', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_level', name: '认知水平', defaultDesc: '自动分析中...' },
 ] as const
+
+const getIcon = (key: string) => {
+  const map: Record<string, any> = {
+    knowledge_level: Medal,
+    cognitive_style: Aim,
+    error_pattern: Aim,
+    learning_goal: Aim,
+    learning_history: Timer,
+    interest_preference: Setting,
+    learning_pace: Timer,
+    cognitive_level: Medal
+  }
+  return map[key] || Discount
+}
 
 // ==========================================
 // 状态
@@ -582,6 +608,7 @@ const isSpeaking = ref(false)
 const chatScroll = ref<HTMLElement | null>(null)
 const profileUpdated = ref(false)
 const uploadingFile = ref(false)
+const memoryEnabled = ref(false)
 
 // 媒体生成开关逻辑
 const enableWebSearch = ref(false)
@@ -602,8 +629,6 @@ const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
 const currentUserId = ref<string | number | null>(null)
-const recentMemories = ref<RecentChatMemoryItem[]>([])
-const recentMemoryLoading = ref(false)
 
 // 🌟 监听模式切换：如果是数字人互动强制折叠侧边栏；如果切换回图文交互自动展开侧边栏
 watch(chatMode, (newMode) => {
@@ -626,7 +651,6 @@ const messages = ref<ChatMsg[]>([])
 interface ProfileDimension {
   readonly key: string
   readonly name: string
-  readonly color: string
   readonly defaultDesc: string
   score: number | null
   desc: string
@@ -635,11 +659,9 @@ interface ProfileDimension {
 const profileDimensions = ref<ProfileDimension[]>(
     DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
 )
-const extractedTags = ref<string[]>([])
-const tutorStrategy = ref('开始对话后，系统将自动提取特征,为您生成专属策略，快开始您的对话吧！')
 
-const activeProfileTags = computed(() => {
-  return extractedTags.value
+const activeProfileDimensions = computed(() => {
+  return profileDimensions.value.filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
 })
 
 let abortController: AbortController | null = null
@@ -716,16 +738,6 @@ const formatRelativeTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString()
 }
 
-const formatMemoryTime = (dateStr: string | null) => {
-  if (!dateStr) return ''
-  return formatRelativeTime(dateStr)
-}
-
-const previewMemoryContent = (content: string) => {
-  const normalized = (content || '').replace(/\s+/g, ' ').trim()
-  return normalized.length > 72 ? `${normalized.slice(0, 72)}...` : normalized
-}
-
 const resolveIllustrationUrl = (path: string) => {
   if (!path) return ''
   if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
@@ -753,17 +765,6 @@ const fetchProfile = async () => {
         dim.score = score
         changed = true
       }
-    }
-
-    if (data.profile_summary) {
-      tutorStrategy.value = data.profile_summary
-    }
-
-    const tags = profileDimensions.value
-        .filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
-        .map(d => d.name)
-    if (tags.length > 0) {
-      extractedTags.value = tags
     }
 
     if (changed) {
@@ -795,31 +796,6 @@ const fetchCurrentUser = async () => {
   }
 }
 
-const fetchRecentChatMemory = async (sessionId = currentSessionId.value) => {
-  if (!sessionId || !currentUserId.value) {
-    recentMemories.value = []
-    return
-  }
-  recentMemoryLoading.value = true
-  try {
-    const res = await getRecentChatMemory({
-      userId: currentUserId.value,
-      sessionId,
-      limit: 8,
-    })
-    recentMemories.value = (res.data.data || [])
-        .filter(item => ['user', 'assistant'].includes(item.role))
-        .map(item => ({
-          ...item,
-          content: previewMemoryContent(item.content),
-        }))
-  } catch {
-    recentMemories.value = []
-  } finally {
-    recentMemoryLoading.value = false
-  }
-}
-
 // ==========================================
 // 会话管理
 // ==========================================
@@ -836,7 +812,6 @@ const newSession = () => {
   currentSessionId.value = undefined
   messages.value = []
   pendingFiles.value = []
-  recentMemories.value = []
 }
 
 const switchSession = async (sessionId: string) => {
@@ -856,7 +831,6 @@ const switchSession = async (sessionId: string) => {
     }))
   } catch {
   }
-  await fetchRecentChatMemory(sessionId)
   scrollToBottom()
 }
 
@@ -867,7 +841,6 @@ const archiveSession = async (sessionId: string) => {
     if (currentSessionId.value === sessionId) {
       currentSessionId.value = undefined
       messages.value = []
-      recentMemories.value = []
       if (sessions.value.length > 0) {
         await switchSession(sessions.value[0]!.id)
       }
@@ -1069,7 +1042,6 @@ const handleSend = async () => {
           setTimeout(() => { isSpeaking.value = false }, 3000)
         }
         scheduleProfilePoll()
-        fetchRecentChatMemory()
         abortController = null
       },
       (err) => {
@@ -1123,7 +1095,6 @@ onBeforeUnmount(() => {
 <style scoped>
 @import url('https://gs.jurieo.com/gemini/fonts-googleapis/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
-/* ================= 全局设定 ================= */
 .tutor-dashboard {
   display: flex;
   flex-direction: column;
@@ -1134,14 +1105,12 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-/* ================= 主体排版 ================= */
 .dashboard-main {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* --- 左侧：会话列表 --- */
 .session-sidebar {
   position: relative;
   width: 240px;
@@ -1229,35 +1198,20 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 0.95rem;
   transition: all 0.2s ease;
+  color: #475569;
 }
 
-/* ================= 统一样式：搜索历史 ================= */
-.nav-item.search-item {
-  color: #475569;
-  font-weight: 400 !important;
-}
-.nav-item.search-item:hover {
+.nav-item:hover {
   background: #EBF0F5;
   color: #475569;
 }
 
-/* ================= 新建对话：幽灵按钮 ================= */
+.nav-item.search-item {
+  font-weight: 400 !important;
+}
+
 .nav-item.new-chat-btn {
-  background: transparent !important;
-  border: 1px solid transparent !important;
-  color: #4F46E5 !important;
-  font-weight: 500 !important;
-  transition: all 0.2s ease;
-}
-.nav-item.new-chat-btn:hover {
-  background: transparent !important;
-  border: 1px solid #4F46E5 !important; /* 悬停显示轮廓 */
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
-}
-.nav-item.new-chat-btn.active {
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none;
+  font-weight: 400 !important;
 }
 
 .nav-item.history-collapsed-btn {
@@ -1548,12 +1502,21 @@ onBeforeUnmount(() => {
   animation: wave-anim 1s infinite ease-in-out;
 }
 
-.speech-wave span:nth-child(2) { animation-delay: 0.1s; }
-.speech-wave span:nth-child(3) { animation-delay: 0.2s; }
+.speech-wave span:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.speech-wave span:nth-child(3) {
+  animation-delay: 0.2s;
+}
 
 @keyframes wave-anim {
-  0%, 100% { height: 8px; }
-  50% { height: 16px; }
+  0%, 100% {
+    height: 8px;
+  }
+  50% {
+    height: 16px;
+  }
 }
 
 .status-badge {
@@ -1622,7 +1585,9 @@ onBeforeUnmount(() => {
   flex-direction: row-reverse;
 }
 
-.msg-avatar { flex-shrink: 0; }
+.msg-avatar {
+  flex-shrink: 0;
+}
 
 .avatar-circle {
   width: 32px;
@@ -1634,8 +1599,15 @@ onBeforeUnmount(() => {
   font-size: 1rem;
 }
 
-.ai-av { background: #0F172A; color: #FFF; }
-.user-av { background: #0891B2; color: #FFF; }
+.ai-av {
+  background: #0F172A;
+  color: #FFF;
+}
+
+.user-av {
+  background: #0891B2;
+  color: #FFF;
+}
 
 .bubble-wrapper {
   display: flex;
@@ -1658,7 +1630,10 @@ onBeforeUnmount(() => {
   flex-direction: row-reverse;
 }
 
-.sender { font-weight: 600; color: #475569; }
+.sender {
+  font-weight: 600;
+  color: #475569;
+}
 
 .bubble {
   padding: 0.75rem 1.25rem;
@@ -1729,10 +1704,21 @@ onBeforeUnmount(() => {
 }
 
 @keyframes dotTyping {
-  0% { box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
-  33% { background-color: #0F172A; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
-  66% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #0F172A, 24px 0 0 0 #94A3B8; }
-  100% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #0F172A; }
+  0% {
+    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
+  }
+  33% {
+    background-color: #0F172A;
+    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
+  }
+  66% {
+    background-color: #94A3B8;
+    box-shadow: 12px 0 0 0 #0F172A, 24px 0 0 0 #94A3B8;
+  }
+  100% {
+    background-color: #94A3B8;
+    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #0F172A;
+  }
 }
 
 .input-panel {
@@ -2022,10 +2008,21 @@ onBeforeUnmount(() => {
   transition: height 0.2s ease;
 }
 
-.voice-bars-icon .bar:nth-child(1) { height: 8px; }
-.voice-bars-icon .bar:nth-child(2) { height: 14px; }
-.voice-bars-icon .bar:nth-child(3) { height: 10px; }
-.voice-bars-icon .bar:nth-child(4) { height: 6px; }
+.voice-bars-icon .bar:nth-child(1) {
+  height: 8px;
+}
+
+.voice-bars-icon .bar:nth-child(2) {
+  height: 14px;
+}
+
+.voice-bars-icon .bar:nth-child(3) {
+  height: 10px;
+}
+
+.voice-bars-icon .bar:nth-child(4) {
+  height: 6px;
+}
 
 .direct-voice-chat-btn.is-active {
   background: #4F46E5;
@@ -2036,10 +2033,21 @@ onBeforeUnmount(() => {
   animation: bar-dance 0.8s infinite ease-in-out alternate;
 }
 
-.direct-voice-chat-btn.is-active .bar:nth-child(1) { animation-delay: 0.0s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(2) { animation-delay: 0.2s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(3) { animation-delay: 0.1s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(4) { animation-delay: 0.3s; }
+.direct-voice-chat-btn.is-active .bar:nth-child(1) {
+  animation-delay: 0.0s;
+}
+
+.direct-voice-chat-btn.is-active .bar:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.direct-voice-chat-btn.is-active .bar:nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+.direct-voice-chat-btn.is-active .bar:nth-child(4) {
+  animation-delay: 0.3s;
+}
 
 .send-btn {
   width: 32px;
@@ -2090,25 +2098,23 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 
+/* ================= 侧边栏：画像区新样式 ================= */
 .profile-sidebar {
-  width: 300px;
+  width: 320px;
   padding: 1.5rem;
   background: #FAFAFA;
   border-left: 1px solid #E2E8F0;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 20px;
   overflow-y: auto;
   flex-shrink: 0;
-  align-items: center;
-  text-align: center;
 }
 
 .sidebar-header {
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
 }
 
@@ -2119,220 +2125,174 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-.sidebar-header h3 {
+.header-title-row h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   color: #0F172A;
-  font-weight: 600;
-  text-align: left;
+  font-weight: 700;
 }
 
 .sync-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 0.7rem;
-  font-family: 'Space Grotesk', monospace;
+  gap: 6px;
+  font-size: 0.75rem;
   color: #64748B;
-  background: #E2E8F0;
-  padding: 2px 8px;
+  background: #F1F5F9;
+  padding: 4px 10px;
   border-radius: 12px;
-  transition: all 0.3s ease;
+  font-weight: 500;
 }
 
 .sync-badge .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #94A3B8;
-}
-
-.sync-badge.is-syncing {
-  background: #ECFEFF;
-  color: #0891B2;
-}
-
-.sync-badge.is-syncing .dot {
-  background: #0891B2;
-  box-shadow: 0 0 6px rgba(8, 145, 178, 0.5);
+  background: #10B981;
 }
 
 .sidebar-desc {
   margin: 0;
   font-size: 0.8rem;
   color: #64748B;
-  text-align: center;
+  text-align: center; /* 在这里进行居中 */
 }
 
-.tags-section {
+.profile-feature-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  padding: 20px;
   display: flex;
   flex-direction: column;
+  gap: 20px;
+  border: 1px solid #F1F5F9;
+}
+
+.feature-card-header {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  flex: 1;
-  width: 100%;
-  overflow-y: auto;
-  padding: 8px 0;
-  align-items: center;
 }
 
-.tags-container {
+.header-icon {
+  width: 32px;
+  height: 32px;
+  background: #EFF6FF;
+  color: #3B82F6;
+  border-radius: 50%;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
   justify-content: center;
-  padding: 4px 0;
-}
-
-.feature-tag {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  color: #0F172A;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.feature-tag:hover {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
-  transform: translateY(-1px);
-}
-
-.tag-icon {
-  color: #0891B2;
   font-size: 1rem;
 }
 
-.empty-tags {
-  color: #94A3B8;
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 2rem 0;
-  border: 1px dashed #E2E8F0;
-  border-radius: 12px;
-  background: #FAFAFA;
+.header-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1E293B;
 }
 
-.ai-insight {
-  margin-top: auto;
-  background: #0F172A;
-  border-radius: 12px;
-  padding: 1.25rem;
-  color: #F8FAFC;
-  width: 100%;
+.feature-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  box-sizing: border-box;
+  gap: 20px;
 }
 
-.insight-header {
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.item-icon-box {
+  width: 32px;
+  height: 32px;
+  background: #F1F5F9;
+  color: #3B82F6;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.item-text-box {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
+}
+
+.item-title {
   font-size: 0.9rem;
   font-weight: 600;
-  margin-bottom: 12px;
-  color: #38BDF8;
+  color: #334155;
 }
 
-.insight-content {
+.item-desc {
+  font-size: 0.8rem;
+  color: #64748B;
+  line-height: 1.5;
+}
+
+.empty-state .empty-text {
   font-size: 0.85rem;
-  line-height: 1.6;
-  color: #CBD5E1;
+  color: #94A3B8;
+  text-align: center;
+  padding: 20px 0;
 }
 
-.recent-memory {
-  width: 100%;
+/* 将长期记忆通过 margin-top: auto 自动推倒底部 */
+.long-term-memory-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  text-align: left;
+  padding: 0 4px;
+  margin-top: auto;
 }
 
-.recent-memory-header {
+.memory-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #0F172A;
-  font-size: 0.92rem;
+}
+
+.memory-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-title {
+  font-size: 1.05rem;
   font-weight: 700;
+  color: #1E293B;
 }
 
-.memory-refresh-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  background: #FFFFFF;
-  color: #64748B;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.memory-refresh-btn:hover:not([disabled]) {
-  color: #0891B2;
-  border-color: #A5F3FC;
-  background: #ECFEFF;
-}
-
-.memory-refresh-btn[disabled] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.recent-memory-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.recent-memory-item {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.memory-item-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #64748B;
-  font-size: 0.72rem;
-  margin-bottom: 6px;
-}
-
-.recent-memory-item p {
-  margin: 0;
-  color: #334155;
-  font-size: 0.82rem;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.recent-memory-empty {
-  border: 1px dashed #E2E8F0;
-  border-radius: 8px;
+.info-icon {
+  font-size: 0.9rem;
   color: #94A3B8;
-  font-size: 0.82rem;
-  padding: 14px 10px;
-  text-align: center;
-  background: #FFFFFF;
+  cursor: help;
+}
+
+.memory-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-status {
+  font-size: 0.8rem;
+  color: #64748B;
+}
+
+.memory-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748B;
+  line-height: 1.6;
 }
 
 :deep(.markdown-body) {
@@ -2417,21 +2377,21 @@ onBeforeUnmount(() => {
 }
 
 .fab-button {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #5B8CFF, #7A5CFF);
+  background: #5A52FF;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 16px rgba(91,140,255,0.25);
+  box-shadow: 0 6px 16px rgba(90, 82, 255, 0.3);
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .fab-button:hover {
   transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(91,140,255,0.35);
+  box-shadow: 0 8px 20px rgba(90, 82, 255, 0.4);
 }
 .fab-button:active {
   transform: scale(0.95);
@@ -2439,16 +2399,16 @@ onBeforeUnmount(() => {
 
 .fab-menu {
   position: absolute;
-  bottom: 60px;
+  bottom: 70px;
   left: 0;
-  width: 150px;
+  width: 240px;
   background: #FFFFFF;
   border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);
-  padding: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   transform-origin: bottom left;
 }
 .fab-container.stick-right .fab-menu {
@@ -2458,27 +2418,69 @@ onBeforeUnmount(() => {
 }
 
 .fab-menu-item {
-  padding: 12px 16px;
+  padding: 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: #475569;
+  gap: 12px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
+  background: transparent;
 }
 .fab-menu-item:hover {
-  background: #F1F5F9;
-  color: #1E293B;
+  background: #F8FAFC;
 }
 .fab-menu-item.active {
-  color: #4F46E5;
-  background: #EEF2FF;
+  background: #F4F3FF;
 }
-.fab-menu-item .el-icon {
+
+.menu-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 1.3rem;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.fab-menu-item.active .menu-icon-box {
+  background: #EBE9FF;
+  color: #5A52FF;
+}
+
+.menu-text-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.menu-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #334155;
+  transition: color 0.2s;
+}
+.fab-menu-item.active .menu-title {
+  color: #5A52FF;
+}
+.menu-desc {
+  font-size: 0.75rem;
+  color: #94A3B8;
+}
+
+.check-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #5A52FF;
   font-size: 1.2rem;
+  display: flex;
 }
 
 /* 菜单淡入淡出动画 */
@@ -2491,9 +2493,7 @@ onBeforeUnmount(() => {
   opacity: 0;
   transform: scale(0.95) translateY(10px);
 }
-</style>
 
-<style>
 .custom-plus-dropdown {
   border-radius: 16px !important;
   padding: 6px !important;

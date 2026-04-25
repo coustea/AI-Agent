@@ -270,7 +270,8 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
 
     async def _generate_session_title(self, user_message: str) -> str:  # 用轻量级 LLM 从用户首条消息提取会话标题
         from langchain_core.prompts import ChatPromptTemplate
-        llm = get_llm(model="general", temperature=0.1, max_tokens=30)  # 使用 Spark Lite 轻量模型，低温度确保稳定输出
+        from app.infra.llm import get_fast_llm
+        llm = get_fast_llm(temperature=0.1, max_tokens=30)  # 使用 Spark Lite 轻量模型，低温度确保稳定输出
         prompt = ChatPromptTemplate.from_messages([
             ("system", "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题（不超过20字）。只输出标题本身，不要有任何其他内容。"),
             ("human", "{user_message}"),
