@@ -37,6 +37,17 @@ class FakeDiagramLLM:
         return structured
 
 
+class FallbackDiagramLLM:
+    def __init__(self, raw_outputs):
+        self.raw_outputs = list(raw_outputs)
+
+    def with_structured_output(self, _model_cls):
+        return FakeStructuredLLM(RuntimeError("This response_format type is unavailable now"))
+
+    async def ainvoke(self, _messages):
+        return AIMessage(content=self.raw_outputs.pop(0))
+
+
 class FakeCtxService:
     async def save_message(self, **_kwargs):
         return None
@@ -133,6 +144,166 @@ def test_diagram_generate_node_generates_sequence_when_requested():
     assert result["diagram"]["render"]["engine"] == "mermaid"
     assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
     assert "client->>server: SYN" in result["diagram"]["render"]["source"]
+
+
+def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
+    from app.chat.agent import TutorAgent
+    from app.chat.diagram_schemas import DiagramDecision
+
+    tutor = TutorAgent.__new__(TutorAgent)
+    tutor.diagram_llm = FakeDiagramLLM(
+        [
+            DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
+            {
+                "type": "sequence",
+                "title": "TCP三次握手",
+                "summary": "展示连接建立过程",
+                "spec": {
+                    "actors": [
+                        {"id": "client", "label": "客户端", "description": "发起连接"},
+                        {"id": "server", "label": "服务器", "description": "接受连接"},
+                    ],
+                    "messages": [
+                        {
+                            "from": "client",
+                            "to": "server",
+                            "label": "SYN",
+                            "description": "请求建立连接",
+                        }
+                    ],
+                },
+            },
+        ]
+    )
+
+    state = {
+        "need_diagram": True,
+        "messages": [
+            HumanMessage(content="TCP 三次握手是什么？请配图解释"),
+            AIMessage(content="客户端发送 SYN，服务器返回 SYN-ACK，客户端发送 ACK。"),
+        ],
+        "profile_context": "",
+        "fact_context": "",
+        "recent_chat_context": "",
+        "attachment_analysis_context": "",
+    }
+
+    result = asyncio.run(tutor._diagram_generate_node(state))
+
+    assert result["diagram"]["type"] == "sequence"
+    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
+
+
+def test_decide_diagram_falls_back_to_sequence_when_user_requested_diagram_without_type():
+    from app.chat.agent import TutorAgent
+    from app.chat.diagram_schemas import DiagramDecision
+
+    tutor = TutorAgent.__new__(TutorAgent)
+    tutor.diagram_llm = FakeDiagramLLM(
+        [
+            DiagramDecision(need_diagram=False, diagram_type=None, reason="简单问题"),
+        ]
+    )
+
+    decision = asyncio.run(
+        tutor._decide_diagram(
+            question="TCP 三次握手是什么？请配图解释",
+            answer="客户端向服务器发送 SYN，服务器返回 SYN-ACK，客户端再发送 ACK。",
+            state={"need_diagram": True},
+        )
+    )
+
+    assert decision.need_diagram is True
+    assert decision.diagram_type == "sequence"
+
+
+def test_diagram_generate_node_uses_json_fallback_when_structured_output_is_unavailable():
+    from app.chat.agent import TutorAgent
+
+    tutor = TutorAgent.__new__(TutorAgent)
+    tutor.diagram_llm = FallbackDiagramLLM(
+        [
+            '{"need_diagram": true, "diagram_type": "sequence", "reason": "适合时序图"}',
+            """
+            {
+              "type": "sequence",
+              "title": "TCP三次握手",
+              "summary": "展示连接建立过程",
+              "spec": {
+                "actors": [
+                  {"id": "client", "label": "客户端", "description": "发起连接"},
+                  {"id": "server", "label": "服务器", "description": "接受连接"}
+                ],
+                "messages": [
+                  {"from": "client", "to": "server", "label": "SYN", "description": "请求连接"}
+                ]
+              }
+            }
+            """,
+        ]
+    )
+
+    state = {
+        "need_diagram": True,
+        "messages": [
+            HumanMessage(content="TCP 三次握手是什么？请配图解释"),
+            AIMessage(content="客户端发送 SYN，服务器返回 SYN-ACK，客户端发送 ACK。"),
+        ],
+        "profile_context": "",
+        "fact_context": "",
+        "recent_chat_context": "",
+        "attachment_analysis_context": "",
+    }
+
+    result = asyncio.run(tutor._diagram_generate_node(state))
+
+    assert result["diagram"]["type"] == "sequence"
+    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
+
+
+def test_diagram_json_fallback_trims_overlong_labels_before_validation():
+    from app.chat.agent import TutorAgent
+
+    tutor = TutorAgent.__new__(TutorAgent)
+    tutor.diagram_llm = FallbackDiagramLLM(
+        [
+            '{"need_diagram": true, "diagram_type": "sequence", "reason": "适合时序图"}',
+            """
+            {
+              "type": "sequence",
+              "title": "TCP三次握手",
+              "summary": "展示连接建立过程",
+              "spec": {
+                "actors": [
+                  {"id": "client", "label": "客户端", "description": "发起连接"},
+                  {"id": "server", "label": "服务器", "description": "接受连接"}
+                ],
+                "messages": [
+                  {"from": "client", "to": "server", "label": "SYN-ACK (seq=y, ack=x+1)", "description": "服务端确认请求"}
+                ]
+              }
+            }
+            """,
+        ]
+    )
+
+    state = {
+        "need_diagram": True,
+        "messages": [
+            HumanMessage(content="TCP 三次握手是什么？请配图解释"),
+            AIMessage(content="客户端发送 SYN，服务器返回 SYN-ACK，客户端发送 ACK。"),
+        ],
+        "profile_context": "",
+        "fact_context": "",
+        "recent_chat_context": "",
+        "attachment_analysis_context": "",
+    }
+
+    result = asyncio.run(tutor._diagram_generate_node(state))
+
+    label = result["diagram"]["spec"]["messages"][0]["label"]
+    assert len(label) <= 16
+    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
 
 
 def test_diagram_generate_node_failure_does_not_raise():

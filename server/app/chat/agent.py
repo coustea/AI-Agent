@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -218,6 +219,63 @@ def _build_final_answer_prompt(
     parts.append(f"DeepSeek 推理结果：\n{reasoning_answer}")
     parts.append("请输出最终答案，不要输出推理过程标题，不要暴露模型分工。")
     return "\n\n".join(parts)
+
+
+def _fallback_diagram_type(question: str, answer: str) -> str:
+    """当前端显式开启图解但决策器未给类型时，按教学语义保守兜底选型。"""
+    text = f"{question}\n{answer}".lower()
+    if any(keyword in text for keyword in ("客户端", "服务端", "服务器", "请求", "响应", "握手", "认证", "协议交互")):
+        return "sequence"
+    if any(keyword in text for keyword in ("区别", "对比", "优缺点", "不同", "比较", "vs")):
+        return "compare"
+    if any(keyword in text for keyword in ("步骤", "流程", "过程", "如何", "运行机制")):
+        return "flow"
+    if any(keyword in text for keyword in ("状态", "生命周期", "转换", "迁移")):
+        return "state"
+    if any(keyword in text for keyword in ("依赖", "因果", "关系", "模块", "调用")):
+        return "relation"
+    return "hierarchy"
+
+
+def _is_structured_output_unavailable(exc: Exception) -> bool:
+    text = str(exc)
+    return "response_format" in text and "unavailable" in text
+
+
+def _extract_json_object(text: str) -> str:
+    """从兜底模型输出中提取 JSON 对象文本。主路径仍使用 structured output。"""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`").strip()
+        if stripped.lower().startswith("json"):
+            stripped = stripped[4:].strip()
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("模型未返回 JSON 对象")
+    return stripped[start : end + 1]
+
+
+def _coerce_diagram_string_limits(value: Any) -> Any:
+    """兜底 JSON 路径的保守规范化，最终仍由 Pydantic 执行严格校验。"""
+    limits = {
+        "label": 16,
+        "description": 40,
+        "title": 20,
+        "summary": 50,
+        "reason": 80,
+    }
+    if isinstance(value, dict):
+        normalized = {}
+        for key, item in value.items():
+            item = _coerce_diagram_string_limits(item)
+            if key in limits and isinstance(item, str):
+                item = item[: limits[key]]
+            normalized[key] = item
+        return normalized
+    if isinstance(value, list):
+        return [_coerce_diagram_string_limits(item) for item in value]
+    return value
 
 
 class TutorAgent:
@@ -643,15 +701,20 @@ class TutorAgent:
         )
 
         try:
-            structured_llm = self.diagram_llm.with_structured_output(DiagramDecision)
-            decision = await structured_llm.ainvoke(
+            decision = await self._ainvoke_diagram_model(
+                DiagramDecision,
                 [
                     SystemMessage(content=DIAGRAM_DECISION_SYSTEM_PROMPT),
                     HumanMessage(content=prompt),
-                ]
+                ],
             )
-            decision = DiagramDecision.model_validate(decision)
             if decision.diagram_type not in DIAGRAM_MODEL_MAP:
+                if requested is True:
+                    return DiagramDecision(
+                        need_diagram=True,
+                        diagram_type=_fallback_diagram_type(question, answer),
+                        reason="用户开启图解生成，使用兜底类型",
+                    )
                 if not decision.need_diagram:
                     return decision
                 return DiagramDecision(
@@ -670,11 +733,52 @@ class TutorAgent:
             return decision
         except Exception as exc:
             logger.warning("[TutorAgent] 图解决策失败: %s", exc)
+            if requested is True:
+                return DiagramDecision(
+                    need_diagram=True,
+                    diagram_type=_fallback_diagram_type(question, answer),
+                    reason="图解决策失败，使用兜底类型",
+                )
             return DiagramDecision(
                 need_diagram=False,
                 diagram_type=None,
                 reason="图解决策失败",
             )
+
+    async def _ainvoke_diagram_model(
+        self,
+        model_cls: type[Any],
+        messages: list[Any],
+    ) -> Any:
+        """优先 structured output；不支持 response_format 时降级为 JSON + Pydantic 校验。"""
+        try:
+            structured_llm = self.diagram_llm.with_structured_output(model_cls)
+            result = await structured_llm.ainvoke(messages)
+            return model_cls.model_validate(result)
+        except Exception as exc:
+            if not _is_structured_output_unavailable(exc):
+                raise
+            logger.warning(
+                "[TutorAgent] structured output 不可用，降级 JSON 校验 model=%s error=%s",
+                getattr(model_cls, "__name__", str(model_cls)),
+                exc,
+            )
+
+        schema_text = json.dumps(model_cls.model_json_schema(), ensure_ascii=False)
+        fallback_messages = list(messages) + [
+            HumanMessage(
+                content=(
+                    "当前模型不支持 response_format。请只输出一个严格 JSON 对象，"
+                    "不要输出 Markdown、解释、代码块或额外文本。\n\n"
+                    f"JSON Schema:\n{schema_text}"
+                )
+            )
+        ]
+        response = await self.diagram_llm.ainvoke(fallback_messages)
+        content = normalize_message_content(getattr(response, "content", response))
+        payload = json.loads(_extract_json_object(content))
+        payload = _coerce_diagram_string_limits(payload)
+        return model_cls.model_validate(payload)
 
     async def _generate_diagram_by_type(
         self,
@@ -714,14 +818,13 @@ class TutorAgent:
         )
 
         try:
-            structured_llm = self.diagram_llm.with_structured_output(model_cls)
-            diagram = await structured_llm.ainvoke(
+            validated = await self._ainvoke_diagram_model(
+                model_cls,
                 [
                     SystemMessage(content=DIAGRAM_GENERATION_SYSTEM_PROMPT),
                     HumanMessage(content=prompt),
-                ]
+                ],
             )
-            validated = model_cls.model_validate(diagram)
             rendered = validated.model_dump(by_alias=True)
             rendered["render"] = build_diagram_render(rendered)
             return rendered
@@ -742,6 +845,16 @@ class TutorAgent:
                     if value:
                         answer = normalize_message_content(value)
                         break
+                if not answer:
+                    final_ai = next(
+                        (
+                            msg
+                            for msg in reversed(state.get("messages") or [])
+                            if isinstance(msg, AIMessage)
+                        ),
+                        None,
+                    )
+                    answer = normalize_message_content(final_ai.content if final_ai else "")
 
                 if not question or not answer:
                     state["diagram"] = None

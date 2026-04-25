@@ -108,6 +108,7 @@ class TutorState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
 
     # ---- 终止与调试信息 ----
+    answer_text: str
     last_guard_decision: str                 # "generate_image" | "generate_video" | "end"
     guard_reason: str
     termination_reason: str
