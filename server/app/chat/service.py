@@ -471,6 +471,7 @@ class ChatUseCases:
         generate_image: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
+        need_diagram: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
@@ -497,6 +498,7 @@ class ChatUseCases:
             "file_urls": merged_file_urls,
             "generate_image": bool(generate_image),
             "generate_video": bool(generate_video),
+            "need_diagram": bool(need_diagram),
             "attachment_analysis": prepared_attachment_analysis,
         }
         if enable_search:
@@ -616,6 +618,7 @@ class ChatUseCases:
         generate_image: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
+        need_diagram: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
@@ -629,6 +632,7 @@ class ChatUseCases:
             generate_image=generate_image,
             generate_video=generate_video,
             enable_search=enable_search,
+            need_diagram=need_diagram,
             attachment_analysis=attachment_analysis,
             stream_runner=stream_runner,
             input_source=input_source,

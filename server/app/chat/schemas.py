@@ -21,6 +21,7 @@ class MentorChatRequest(BaseModel):
     generate_image: Optional[bool] = False
     generate_video: Optional[bool] = False
     enable_search: Optional[bool] = False
+    need_diagram: Optional[bool] = False
 
 
 class AttachmentInfo(BaseModel):
@@ -84,6 +85,9 @@ class TutorState(TypedDict, total=False):
     request_generate_image: bool
     request_generate_video: bool
     enable_search: bool
+    need_diagram: Optional[bool]
+    diagram: Optional[dict[str, Any]]
+    diagram_error: Optional[str]
 
     # ---- 路由与执行模式 ----
     route: str                               # "direct" | "attachment_needed"

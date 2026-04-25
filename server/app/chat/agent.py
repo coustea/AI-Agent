@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 from deepagents import create_deep_agent
 from deepagents.middleware._tool_exclusion import _ToolExclusionMiddleware
+from app.chat.diagram_schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 from app.shared.request_context import runtime_context as chat_runtime_context
 from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
 from app.chat.schemas import TutorState
@@ -56,6 +57,7 @@ GRAPH_NODE_NAMES = {
     "classify",
     "direct_answer",
     "attachment_answer",
+    "diagram_generate",
 }
 ANSWER_NODE_NAMES = {"direct_answer", "attachment_answer"}
 DEEPAGENT_GRAPH_RECURSION_LIMIT = 20
@@ -112,6 +114,49 @@ RESEARCHER_DEEPAGENT_SYSTEM_PROMPT = """你是 TutorAgent 的 researcher 子智�
 3. 输出中文，简洁列出结论、依据和注意事项。
 4. 不要生成教学长文，不要替主 Agent 完成最终辅导回答。
 5. 不要调用文件、shell、todo 或其他与搜索无关的内置工具。
+"""
+
+DIAGRAM_DECISION_SYSTEM_PROMPT = """你是智能辅导系统中的图解决策器。
+
+你的任务是判断当前回答是否需要配套图解，并选择最合适的图解结构。
+
+只允许从以下 6 种图解结构中选择：
+
+1. hierarchy：层级结构，用于知识点组成、分类、结构拆解
+2. flow：顺序流程，用于步骤、过程、运行机制
+3. compare：对比结构，用于区别、优缺点、易混概念
+4. relation：关系结构，用于依赖、因果、模块关系
+5. sequence：交互时序，用于客户端/服务器、前后端、协议交互
+6. state：状态变化，用于状态机、生命周期、算法过程
+
+判断规则：
+- 简单定义类问题，不需要图解
+- 概念对比类问题，优先 compare
+- 流程步骤类问题，优先 flow
+- 组成结构类问题，优先 hierarchy
+- 模块关系、因果依赖类问题，优先 relation
+- 客户端/服务器、请求/响应、认证、握手类问题，优先 sequence
+- 状态转换、生命周期、算法执行过程类问题，优先 state
+
+如果用户显式要求图解，除非问题完全不适合图解，否则应尽量生成。
+"""
+
+DIAGRAM_GENERATION_SYSTEM_PROMPT = """你是智能辅导系统中的知识图解生成器。
+
+你的任务是根据学生问题、最终文字回答和上下文，生成适合前端渲染的结构化图解对象。
+
+重要要求：
+- 你不能生成图片
+- 你只能生成结构化图解数据
+- 图解必须服务于教学理解
+- 图解内容必须和最终回答一致
+- 不要编造最终回答中不存在的关键事实
+- title 不超过 20 个字
+- summary 不超过 50 个字
+- label 不超过 16 个字
+- description 不超过 40 个字
+- 节点数量控制在 3 到 8 个左右
+- 输出 type 必须等于指定的 diagram_type
 """
 
 # ---------------------------------------------------------------------------
@@ -196,6 +241,11 @@ class TutorAgent:
             temperature=0.2,
             streaming=False,
             max_tokens=1200,
+        )
+        self.diagram_llm = get_deepseek_chat_llm(
+            temperature=0.1,
+            streaming=False,
+            max_tokens=1600,
         )
         # 上下文服务
         self.memory_layer = MemoryLayer(module_name="mentor")
@@ -311,6 +361,7 @@ class TutorAgent:
             graph.add_node("classify", self._classify_node)
             graph.add_node("direct_answer", self._direct_answer_node)
             graph.add_node("attachment_answer", self._attachment_answer_node)
+            graph.add_node("diagram_generate", self._diagram_generate_node)
 
             graph.add_edge(START, "classify")
             graph.add_conditional_edges(
@@ -321,8 +372,9 @@ class TutorAgent:
                     "attachment_needed": "attachment_answer",
                 },
             )
-            graph.add_edge("direct_answer", END)
-            graph.add_edge("attachment_answer", END)
+            graph.add_edge("direct_answer", "diagram_generate")
+            graph.add_edge("attachment_answer", "diagram_generate")
+            graph.add_edge("diagram_generate", END)
 
             self.graph = graph.compile()
             logger.info("[TutorAgent] 图构建完成")
@@ -566,6 +618,156 @@ class TutorAgent:
             }
             return result
 
+    async def _decide_diagram(
+        self,
+        *,
+        question: str,
+        answer: str,
+        state: TutorState,
+    ) -> DiagramDecision:
+        """判断是否需要为最终回答补充结构化图解。"""
+        requested = state.get("need_diagram")
+        if requested is False:
+            return DiagramDecision(
+                need_diagram=False,
+                diagram_type=None,
+                reason="用户未开启图解生成",
+            )
+
+        prompt = (
+            f"用户问题：\n{question}\n\n"
+            f"最终回答：\n{answer}\n\n"
+            f"用户是否主动要求图解：{bool(requested)}\n\n"
+            "请判断是否需要生成图解，并选择最合适的 diagram_type。"
+        )
+
+        try:
+            structured_llm = self.diagram_llm.with_structured_output(DiagramDecision)
+            decision = await structured_llm.ainvoke(
+                [
+                    SystemMessage(content=DIAGRAM_DECISION_SYSTEM_PROMPT),
+                    HumanMessage(content=prompt),
+                ]
+            )
+            decision = DiagramDecision.model_validate(decision)
+            if decision.diagram_type not in DIAGRAM_MODEL_MAP:
+                if not decision.need_diagram:
+                    return decision
+                return DiagramDecision(
+                    need_diagram=False,
+                    diagram_type=None,
+                    reason="图解类型不受支持",
+                )
+            if requested is True and not decision.need_diagram:
+                return DiagramDecision(
+                    need_diagram=True,
+                    diagram_type=decision.diagram_type,
+                    reason=decision.reason,
+                )
+            if not decision.need_diagram:
+                return decision
+            return decision
+        except Exception as exc:
+            logger.warning("[TutorAgent] 图解决策失败: %s", exc)
+            return DiagramDecision(
+                need_diagram=False,
+                diagram_type=None,
+                reason="图解决策失败",
+            )
+
+    async def _generate_diagram_by_type(
+        self,
+        *,
+        diagram_type: str,
+        question: str,
+        answer: str,
+        state: TutorState,
+    ) -> Optional[dict[str, Any]]:
+        """按已决策的类型生成前端可渲染的结构化图解。"""
+        model_cls = DIAGRAM_MODEL_MAP.get(diagram_type)
+        if model_cls is None:
+            return None
+
+        profile_context = str(state.get("profile_context", "")).strip()
+        fact_context = str(state.get("fact_context", "")).strip()
+        recent_chat_context = str(state.get("recent_chat_context", "")).strip()
+        attachment_context = str(state.get("attachment_analysis_context", "")).strip()
+
+        context_parts = []
+        if profile_context:
+            context_parts.append(f"用户画像上下文：\n{profile_context}")
+        if fact_context:
+            context_parts.append(f"长期记忆上下文：\n{fact_context}")
+        if recent_chat_context:
+            context_parts.append(f"近期对话上下文：\n{recent_chat_context}")
+        if attachment_context:
+            context_parts.append(f"附件预分析上下文：\n{attachment_context}")
+
+        context_text = "\n\n".join(context_parts) if context_parts else "无额外上下文。"
+        prompt = (
+            f"diagram_type：{diagram_type}\n\n"
+            f"学生问题：\n{question}\n\n"
+            f"最终文字回答：\n{answer}\n\n"
+            f"上下文：\n{context_text}\n\n"
+            "请严格生成指定 diagram_type 对应的结构化图解对象。"
+        )
+
+        try:
+            structured_llm = self.diagram_llm.with_structured_output(model_cls)
+            diagram = await structured_llm.ainvoke(
+                [
+                    SystemMessage(content=DIAGRAM_GENERATION_SYSTEM_PROMPT),
+                    HumanMessage(content=prompt),
+                ]
+            )
+            validated = model_cls.model_validate(diagram)
+            return validated.model_dump(by_alias=True)
+        except Exception as exc:
+            logger.warning("[TutorAgent] 图解生成失败 type=%s error=%s", diagram_type, exc)
+            return None
+
+    async def _diagram_generate_node(self, state: TutorState) -> TutorState:
+        """回答后的可选图解生成节点；失败时降级为无图解。"""
+        user_id = state.get("user_id")
+        session_id = state.get("session_id")
+        with node_timer("diagram_generate", user=user_id, session=session_id):
+            try:
+                question = extract_question(state.get("messages") or [])
+                answer = ""
+                for key in ("final_answer", "answer_text", "answer", "response"):
+                    value = state.get(key)  # type: ignore[literal-required]
+                    if value:
+                        answer = normalize_message_content(value)
+                        break
+
+                if not question or not answer:
+                    state["diagram"] = None
+                    state["diagram_error"] = "缺少问题或回答，跳过图解生成"
+                    return state
+
+                decision = await self._decide_diagram(
+                    question=question,
+                    answer=answer,
+                    state=state,
+                )
+                if not decision.need_diagram or not decision.diagram_type:
+                    state["diagram"] = None
+                    return state
+
+                diagram = await self._generate_diagram_by_type(
+                    diagram_type=decision.diagram_type,
+                    question=question,
+                    answer=answer,
+                    state=state,
+                )
+                state["diagram"] = diagram
+                return state
+            except Exception as exc:
+                logger.warning("[TutorAgent] 图解节点失败: %s", exc)
+                state["diagram"] = None
+                state["diagram_error"] = str(exc)
+                return state
+
     # ------------------------------------------------------------------
     # 后台任务
     # ------------------------------------------------------------------
@@ -598,6 +800,7 @@ class TutorAgent:
         generate_image: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
+        need_diagram: bool = False,
         resource_mode: Optional[str] = None,
         attachment_analysis: Optional[dict[str, Any]] = None,
     ):
@@ -648,6 +851,7 @@ class TutorAgent:
             image_urls=requested_image_urls,
             file_urls=requested_file_urls,
             enable_search=enable_search,
+            need_diagram=need_diagram,
             attachment_analysis=attachment_analysis,
         )
         initial_state = prepared_turn.initial_state
@@ -752,5 +956,9 @@ class TutorAgent:
                 "session_id": effective_session,
                 "resource_mode": "none",
                 "resource": None,
+                "resources": {
+                    "diagram": runtime_state.get("diagram"),
+                    "video": None,
+                },
             },
         )
