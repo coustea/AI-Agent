@@ -99,6 +99,7 @@ export interface StreamChatParams {
   file_urls?: string[]
   generate_image?: boolean
   generate_video?: boolean
+  need_diagram?: boolean
   files?: File[]
 }
 
@@ -369,6 +370,9 @@ export function streamChat(
   }
   if (params.generate_video != null) {
     formData.append('generate_video', String(Boolean(params.generate_video)))
+  }
+  if (params.need_diagram != null) {
+    formData.append('need_diagram', String(Boolean(params.need_diagram)))
   }
   if (params.files && params.files.length > 0) {
     params.files.forEach((file) => formData.append('files', file))

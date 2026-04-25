@@ -95,6 +95,7 @@ async def prepare_tutor_turn(
     image_urls: list[str] | None,
     file_urls: list[str] | None,
     enable_search: bool,
+    need_diagram: bool | None,
     attachment_analysis: dict[str, Any] | None,
 ) -> PreparedTutorTurn:
     effective_session = resolve_session_id(user_id, session_id)
@@ -139,6 +140,9 @@ async def prepare_tutor_turn(
         "file_urls": normalized_file_urls,
         "resource_mode": "none",
         "enable_search": bool(enable_search),
+        "need_diagram": need_diagram,
+        "diagram": None,
+        "diagram_error": None,
         "route": "",
         "execution_mode": "",
         "profile_context": profile_str,
