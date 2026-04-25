@@ -14,7 +14,13 @@ from typing import Any, Optional
 
 from loguru import logger as _loguru_logger
 
-from app.config import LOG_LEVEL
+from app.config import (
+    DEEPAGENTS_DEBUG,
+    LANGCHAIN_DEBUG,
+    LANGCHAIN_VERBOSE,
+    LANGGRAPH_DEBUG,
+    LOG_LEVEL,
+)
 from app.shared.paths import LOGS_DIR as LOG_DIR
 
 
@@ -130,6 +136,39 @@ def _parse_level(raw: str) -> str:
     value = (raw or "").strip().upper()
     return value if value in {"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"
 
+
+def _debug_logging_enabled() -> bool:
+    return LANGCHAIN_DEBUG or LANGGRAPH_DEBUG or DEEPAGENTS_DEBUG
+
+
+def _configure_langchain_debug_flags() -> None:
+    try:
+        from langchain_core.globals import set_debug, set_verbose
+    except Exception:
+        _loguru_logger.bind(logger_name="root").warning(
+            "[Logging] LangChain debug flags unavailable"
+        )
+        return
+
+    set_debug(LANGCHAIN_DEBUG or LANGGRAPH_DEBUG or DEEPAGENTS_DEBUG)
+    set_verbose(LANGCHAIN_VERBOSE)
+
+
+def _configure_external_logger_levels() -> None:
+    debug_names = {
+        "langchain",
+        "langchain_core",
+        "langgraph",
+        "deepagents",
+    }
+    debug_level = logging.DEBUG if _debug_logging_enabled() else logging.WARNING
+
+    for name in debug_names:
+        ext_logger = logging.getLogger(name)
+        ext_logger.setLevel(debug_level)
+        ext_logger.handlers.clear()
+        ext_logger.propagate = True
+
 _CONFIGURED = False
 
 
@@ -144,7 +183,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    log_level = _parse_level(level or LOG_LEVEL)
+    log_level = _parse_level(level or ("DEBUG" if _debug_logging_enabled() else LOG_LEVEL))
 
     # 1) 配置 loguru sinks（enqueue=True 异步写入）
     _loguru_logger.remove()
@@ -197,17 +236,24 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
         "fastapi",
         "sqlalchemy",
         "sqlalchemy.engine",
-        "aiomysql",
+        "asyncpg",
     ):
         ext_logger = logging.getLogger(name)
         ext_logger.handlers.clear()
         ext_logger.propagate = True
 
+    _configure_langchain_debug_flags()
+    _configure_external_logger_levels()
+
     _loguru_logger.bind(logger_name="root").info(
-        "[Logging] 日志系统初始化完成: log_dir={log_dir} level={level} async_enqueue={enqueue}",
+        "[Logging] 日志系统初始化完成: log_dir={log_dir} level={level} async_enqueue={enqueue} langchain_debug={langchain_debug} langchain_verbose={langchain_verbose} langgraph_debug={langgraph_debug} deepagents_debug={deepagents_debug}",
         log_dir=str(LOG_DIR),
         level=log_level,
         enqueue=True,
+        langchain_debug=LANGCHAIN_DEBUG,
+        langchain_verbose=LANGCHAIN_VERBOSE,
+        langgraph_debug=LANGGRAPH_DEBUG,
+        deepagents_debug=DEEPAGENTS_DEBUG,
     )
 
     _CONFIGURED = True

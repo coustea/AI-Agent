@@ -6,9 +6,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import create_token, hash_password, verify_password, revoke_token
+from app.auth.security import create_token, hash_password, revoke_token, verify_password
 from app.infra.models import User
 from app.auth.schemas import UserRead
+
+
+def _read_user(user: User) -> UserRead:
+    return UserRead.model_validate(user)
 
 
 class UserAccountStore:
@@ -30,7 +34,7 @@ class UserAccountStore:
             await session.rollback()
             return None
         await session.refresh(user)
-        return {"user": UserRead.model_validate(user)}
+        return {"user": _read_user(user)}
 
     async def authenticate(self, session: AsyncSession, username: str, password: str) -> dict | None:
         user = (await session.exec(select(User).where(User.username == username))).first()
@@ -40,7 +44,7 @@ class UserAccountStore:
         if not verify_password(password, user.password):
             return None
         token = await create_token(user.id, session)
-        return {"token": token, "user": UserRead.model_validate(user)}
+        return {"token": token, "user": _read_user(user)}
 
     async def update(self, session: AsyncSession, user_id: int, data) -> User | None:
         user = await session.get(User, user_id)

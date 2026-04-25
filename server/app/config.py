@@ -33,11 +33,13 @@ SERVER_HOST: str = _env("SERVER_HOST", "0.0.0.0")
 SERVER_PORT: int = _env_int("SERVER_PORT", 9999)
 
 # Database
+DB_SCHEME: str = _env("DB_SCHEME", "postgresql+asyncpg")
 DB_HOST: str = _env("DB_HOST", "localhost")
-DB_PORT: int = _env_int("DB_PORT", 3306)
-DB_USER: str = _env("DB_USER", "root")
+DB_PORT: int = _env_int("DB_PORT", 5432)
+DB_USER: str = _env("DB_USER", "postgres")
 DB_PASSWORD: str = _env("DB_PASSWORD")
 DB_NAME: str = _env("DB_NAME", "agent")
+DATABASE_URL: str = _env("DATABASE_URL", "")
 DB_ECHO: bool = _env_bool("DB_ECHO", False)
 DB_POOL_SIZE: int = _env_int("DB_POOL_SIZE", 10)
 DB_MAX_OVERFLOW: int = _env_int("DB_MAX_OVERFLOW", 20)
@@ -96,6 +98,10 @@ MULTIMODAL_DOC_ENABLED: bool = _env_bool("MULTIMODAL_DOC_ENABLED", True)
 # Debug
 APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
 LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
+LANGCHAIN_DEBUG: bool = _env_bool("LANGCHAIN_DEBUG", False)
+LANGCHAIN_VERBOSE: bool = _env_bool("LANGCHAIN_VERBOSE", False)
+LANGGRAPH_DEBUG: bool = _env_bool("LANGGRAPH_DEBUG", False)
+DEEPAGENTS_DEBUG: bool = _env_bool("DEEPAGENTS_DEBUG", False)
 
 # Spark Vision (星火图片理解)
 SPARK_VISION_APPID: str = _env("APPID", "")
@@ -137,4 +143,3 @@ CHATDOC_API_SECRET: str = _env("CHATDOC_API_SECRET", SPARK_VISION_API_SECRET)
 CHATDOC_ENABLED: bool = _env_bool("CHATDOC_ENABLED", False)
 
 TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
-

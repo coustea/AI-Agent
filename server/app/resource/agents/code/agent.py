@@ -21,7 +21,7 @@ _LANG_KEYWORDS: dict[str, list[str]] = {
     "java": ["java"],
     "c": ["c", "clang"],
     "cpp": ["cpp", "c++", "cxx"],
-    "sql": ["sql", "mysql", "postgresql"],
+    "sql": ["sql", "postgresql"],
     "go": ["go", "golang"],
     "rust": ["rust", "rs"],
 }

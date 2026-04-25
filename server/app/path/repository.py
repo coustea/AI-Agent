@@ -3,13 +3,10 @@ from __future__ import annotations
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.models import GeneratedResource, UserProfile
+from app.infra.models import GeneratedResource
 
 
 class PathRepository:
-    async def get_profile(self, session: AsyncSession, user_id: int) -> UserProfile | None:
-        return await session.get(UserProfile, user_id)
-
     async def get_latest_resource(self, session: AsyncSession, user_id: int) -> GeneratedResource | None:
         stmt = (
             select(GeneratedResource)

@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import json
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
@@ -135,7 +133,7 @@ class EvaluationService:
             score=payload.score,
             duration_seconds=payload.duration_seconds,
             feedback=payload.feedback,
-            metadata_json=json.dumps(payload.metadata, ensure_ascii=False) if payload.metadata else None,
+            metadata_json=payload.metadata or None,
         )
         session.add(event)
         await session.commit()

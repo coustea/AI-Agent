@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -40,7 +39,7 @@ class TutorContextService(Protocol):
 @dataclass(frozen=True)
 class UserMessageRecord:
     content: str
-    attachments_json: str | None
+    attachments: list[dict[str, Any]] | None
 
 
 @dataclass(frozen=True)
@@ -70,7 +69,7 @@ def build_user_message_record(
 
     urls = image_urls + file_urls
     if not urls:
-        return UserMessageRecord(content=content, attachments_json=None)
+        return UserMessageRecord(content=content, attachments=None)
 
     attachments = [
         {
@@ -82,7 +81,7 @@ def build_user_message_record(
     ]
     return UserMessageRecord(
         content=content,
-        attachments_json=json.dumps(attachments, ensure_ascii=False),
+        attachments=attachments,
     )
 
 

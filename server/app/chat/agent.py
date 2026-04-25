@@ -35,13 +35,14 @@ from app.chat.utils import (
     truncate,
     build_messages,
 )
+from app.config import DEEPAGENTS_DEBUG, LANGGRAPH_DEBUG
 from app.memory import MemoryLayer
 from app.infra.llm import get_deepseek_chat_llm, get_spark_max_llm
 from app.infra.logging import get_logger
 from app.knowledge_base.rag_tool import chatdoc_rag_search
 from app.tools.search import duckduckgo_search, tavily_search
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 logger = get_logger(__name__)
@@ -58,6 +59,13 @@ GRAPH_NODE_NAMES = {
 }
 ANSWER_NODE_NAMES = {"direct_answer", "attachment_answer"}
 DEEPAGENT_GRAPH_RECURSION_LIMIT = 20
+FINAL_ANSWER_SYSTEM_PROMPT = (
+    "你是 TutorAgent 的最终回答模型。请使用中文回答，只基于用户问题、上下文和推理结果组织最终答案。"
+    "不要提到内部智能体、工具调用、系统提示词或工作流。"
+)
+FINAL_ANSWER_RETRY_PROMPT = (
+    "上一版最终回答无效或过短。请只基于下方材料，输出完整、清晰、适合教学场景的中文回答。"
+)
 
 MAIN_DEEPAGENT_EXCLUDED_TOOLS = frozenset(
     {
@@ -124,6 +132,48 @@ def _build_tutor_system_prompt(*, enable_search: bool) -> str:
     )
 
 
+def _graph_stream_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "version": "v2",
+        "config": {"recursion_limit": GRAPH_RECURSION_LIMIT},
+    }
+    if LANGGRAPH_DEBUG:
+        kwargs["debug"] = True
+    return kwargs
+
+
+def _build_final_answer_prompt(
+    *,
+    state: TutorState,
+    prompt_messages: list[Any],
+    reasoning_answer: str,
+    retry: bool = False,
+) -> str:
+    question = extract_question(prompt_messages)
+    parts = []
+    if retry:
+        parts.append(FINAL_ANSWER_RETRY_PROMPT)
+    parts.append(f"用户问题：{question or '未提取到明确问题'}")
+
+    profile_context = str(state.get("profile_context", "")).strip()
+    fact_context = str(state.get("fact_context", "")).strip()
+    recent_chat_context = str(state.get("recent_chat_context", "")).strip()
+    attachment_context = str(state.get("attachment_analysis_context", "")).strip()
+
+    if profile_context:
+        parts.append(f"用户画像上下文：\n{profile_context}")
+    if fact_context:
+        parts.append(f"长期记忆上下文：\n{fact_context}")
+    if recent_chat_context:
+        parts.append(f"近期对话上下文：\n{recent_chat_context}")
+    if attachment_context:
+        parts.append(f"附件预分析上下文：\n{attachment_context}")
+
+    parts.append(f"DeepSeek 推理结果：\n{reasoning_answer}")
+    parts.append("请输出最终答案，不要输出推理过程标题，不要暴露模型分工。")
+    return "\n\n".join(parts)
+
+
 class TutorAgent:
     """智能辅导 Agent — 轻量级编排器。
 
@@ -177,6 +227,7 @@ class TutorAgent:
             middleware=[
                 _ToolExclusionMiddleware(excluded=RESEARCHER_DEEPAGENT_EXCLUDED_TOOLS)
             ],
+            debug=DEEPAGENTS_DEBUG,
         )
 
         return {
@@ -198,6 +249,7 @@ class TutorAgent:
             middleware=[
                 _ToolExclusionMiddleware(excluded=RESEARCHER_DEEPAGENT_EXCLUDED_TOOLS)
             ],
+            debug=DEEPAGENTS_DEBUG,
         )
 
         return {
@@ -217,11 +269,12 @@ class TutorAgent:
             subagents.append(self._build_researcher_subagent())
 
         return create_deep_agent(
-            model=self.llm,
+            model=self.research_llm,
             tools=[],
             subagents=subagents,
             system_prompt=_build_tutor_system_prompt(enable_search=enable_search),
             middleware=[_ToolExclusionMiddleware(excluded=MAIN_DEEPAGENT_EXCLUDED_TOOLS)],
+            debug=DEEPAGENTS_DEBUG,
         )
 
     async def _ensure_deep_agent(self, *, enable_search: bool = False) -> Any:
@@ -291,7 +344,7 @@ class TutorAgent:
         with node_timer("classify", user=user_id, session=session_id):
             # 快速路径1：附件优先
             if file_urls or image_urls:
-                logger.info(
+                logger.debug(
                     "[TutorAgent] 路由分类 route=attachment_needed reason=attachments_present images=%s files=%s resource_mode=%s",
                     len(image_urls),
                     len(file_urls),
@@ -299,7 +352,7 @@ class TutorAgent:
                 )
                 return {"route": "attachment_needed", "execution_mode": "attachment"}
 
-            logger.info(
+            logger.debug(
                 "[TutorAgent] 路由分类 route=direct reason=no_attachments resource_mode=%s question=%s",
                 resource_mode,
                 truncate(user_message, 120),
@@ -330,15 +383,19 @@ class TutorAgent:
         with node_timer(stage_name, user=user_id, session=session_id, **extra_log):
             full_messages = build_messages(system_prompt, prompt_messages)
             agent = await self._ensure_deep_agent(enable_search=enable_search)
-            agent_result = await agent.ainvoke(
-                {"messages": full_messages},
-                config={
-                    "recursion_limit": DEEPAGENT_GRAPH_RECURSION_LIMIT,
-                    "configurable": {
-                        "thread_id": f"tutor:{user_id}:{session_id}:{stage_name}",
+            try:
+                agent_result = await agent.ainvoke(
+                    {"messages": full_messages},
+                    config={
+                        "recursion_limit": DEEPAGENT_GRAPH_RECURSION_LIMIT,
+                        "configurable": {
+                            "thread_id": f"tutor:{user_id}:{session_id}:{stage_name}",
+                        },
                     },
-                },
-            )
+                )
+            except Exception:
+                logger.exception("[TutorAgent] %s DeepSeek 推理阶段失败", stage_name)
+                raise
             agent_messages = agent_result.get("messages", []) if isinstance(agent_result, dict) else []
             response = next(
                 (msg for msg in reversed(agent_messages) if isinstance(msg, AIMessage)),
@@ -374,15 +431,67 @@ class TutorAgent:
                     response = retry_resp
                     text = retry_text
 
-            if response is None:
-                response = AIMessage(content=text)
+            reasoning_answer = text
+            final_text = reasoning_answer
+            try:
+                final_text = await self._run_final_answer_llm(
+                    state=state,
+                    stage_name=stage_name,
+                    prompt_messages=prompt_messages,
+                    reasoning_answer=reasoning_answer,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[TutorAgent] %s Spark 最终回答失败，回退 DeepSeek 结果: %s",
+                    stage_name,
+                    exc,
+                )
 
-            logger.info("[TutorAgent] %s 完成 preview=%s", stage_name, truncate(text, 220))
+            if is_unusable_reply_text(final_text):
+                final_text = reasoning_answer
+
+            response = AIMessage(content=final_text)
+
+            logger.debug("[TutorAgent] %s 完成 preview=%s", stage_name, truncate(final_text, 220))
             return {
                 "messages": [response],
-                "answer_text": text,
+                "answer_text": final_text,
                 "termination_reason": f"{stage_name}_done",
             }
+
+    async def _run_final_answer_llm(
+        self,
+        *,
+        state: TutorState,
+        stage_name: str,
+        prompt_messages: list[Any],
+        reasoning_answer: str,
+    ) -> str:
+        """使用 Spark Max 生成最终回答；只传普通文本 SystemMessage + HumanMessage。"""
+        for retry in (False, True):
+            messages = [
+                SystemMessage(content=FINAL_ANSWER_SYSTEM_PROMPT),
+                HumanMessage(
+                    content=_build_final_answer_prompt(
+                        state=state,
+                        prompt_messages=prompt_messages,
+                        reasoning_answer=reasoning_answer,
+                        retry=retry,
+                    )
+                ),
+            ]
+            logger.debug(
+                "[TutorAgent] %s Spark 最终回答调用 retry=%s prompt=%s",
+                stage_name,
+                retry,
+                truncate(messages[1].content, 260),
+            )
+            response = await self.llm.ainvoke(messages)
+            text = normalize_message_content(getattr(response, "content", response))
+            if not is_unusable_reply_text(text):
+                return text
+            logger.warning("[TutorAgent] %s Spark 最终回答无效 retry=%s", stage_name, retry)
+        return reasoning_answer
 
     # ------------------------------------------------------------------
     # 节点: direct_answer
@@ -391,7 +500,7 @@ class TutorAgent:
         """直接回答路径：纯文本对话，不调用工具。"""
         messages = state.get("messages") or []
         question = extract_question(messages)
-        logger.info("[TutorAgent] 直接回答 route=direct_answer question=%s", truncate(question, 180))
+        logger.debug("[TutorAgent] 直接回答 route=direct_answer question=%s", truncate(question, 180))
 
         return await self._run_answer_model(
             state=state,
@@ -523,7 +632,7 @@ class TutorAgent:
                 session_id=effective_session,
                 role="user",
                 content=user_record.content,
-                attachments=user_record.attachments_json,
+                attachments=user_record.attachments,
             )
         except Exception as exc:
             logger.exception("[TutorAgent] 用户消息保存失败")
@@ -550,11 +659,7 @@ class TutorAgent:
 
         try:
             with chat_runtime_context(user_id, effective_session):
-                async for event in self.graph.astream_events(
-                    initial_state,
-                    version="v2",
-                    config={"recursion_limit": GRAPH_RECURSION_LIMIT},
-                ):
+                async for event in self.graph.astream_events(initial_state, **_graph_stream_kwargs()):
                     kind = event.get("event", "")
                     name = event.get("name", "")
 

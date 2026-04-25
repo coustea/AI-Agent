@@ -360,15 +360,15 @@ class ConversationStore:
             attachments = None
             if msg.attachments:
                 try:
-                    attachments = [AttachmentInfo(**v) for v in json.loads(msg.attachments)]
-                except (json.JSONDecodeError, TypeError):
+                    attachments = [AttachmentInfo(**value) for value in msg.attachments]
+                except (TypeError, ValueError):
                     attachments = None
 
             tool_calls = None
             if msg.tool_calls:
                 try:
-                    tool_calls = [ToolCallRecord(**v) for v in json.loads(msg.tool_calls)]
-                except (json.JSONDecodeError, TypeError):
+                    tool_calls = [ToolCallRecord(**value) for value in msg.tool_calls]
+                except (TypeError, ValueError):
                     tool_calls = None
 
             items.append(

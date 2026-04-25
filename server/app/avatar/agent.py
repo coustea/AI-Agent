@@ -31,7 +31,6 @@ logger = get_logger(__name__)
 
 # AvatarAgent 可使用的工具名称（与 TutorAgent 共享注册表）
 AVATAR_TOOL_NAMES: list[str] = [
-    "create_document_file",
     "read_uploaded_file",
     "list_uploaded_files",
     "save_to_workplace",

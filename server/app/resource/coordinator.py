@@ -123,15 +123,6 @@ def build_agent_registry() -> dict[str, AgentEntry]:
         method="generate_code",
         result_summary=lambda r: f"语言: {r.get('detected_language', 'unknown')}",
     ),
-    "image": AgentEntry(
-        role="Image Agent",
-        desc="生成教学配图与图解资源",
-        type="image",
-        stage="enhancement",
-        agent_loader=_load_agent("app.resource.agents.image", "image_agent"),
-        method="generate_image",
-        result_summary=lambda r: f"生成 {len(r.get('images', []))} 张图解",
-    ),
     "ppt": AgentEntry(
         role="PPT Agent",
         desc="生成演示文稿与讲稿",
@@ -140,15 +131,6 @@ def build_agent_registry() -> dict[str, AgentEntry]:
         agent_loader=_load_agent("app.resource.agents.ppt", "ppt_agent"),
         method="generate_ppt",
         result_summary=lambda r: "PPT 大纲已生成",
-    ),
-    "video": AgentEntry(
-        role="Video Agent",
-        desc="生成视频讲解脚本与分镜",
-        type="video",
-        stage="presentation",
-        agent_loader=_load_agent("app.resource.agents.video", "video_agent"),
-        method="generate_video",
-        result_summary=lambda r: f"分镜 {len(r.get('storyboard', []))} 幕",
     ),
 }
 

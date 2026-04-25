@@ -350,6 +350,31 @@
           </div>
           <div class="insight-content">{{ tutorStrategy }}</div>
         </div>
+
+        <div class="recent-memory">
+          <div class="recent-memory-header">
+            <span>近期聊天记忆</span>
+            <button
+                class="memory-refresh-btn"
+                :disabled="!currentSessionId || recentMemoryLoading"
+                title="刷新近期记忆"
+                @click="fetchRecentChatMemory()"
+            >
+              <el-icon><Timer /></el-icon>
+            </button>
+          </div>
+          <div v-if="recentMemoryLoading" class="recent-memory-empty">正在同步...</div>
+          <div v-else-if="recentMemories.length === 0" class="recent-memory-empty">当前会话暂无近期记忆</div>
+          <div v-else class="recent-memory-list">
+            <div v-for="(item, idx) in recentMemories" :key="item.id ?? `${item.role}-${idx}`" class="recent-memory-item">
+              <div class="memory-item-meta">
+                <span>{{ item.role === 'assistant' ? '导师' : '我' }}</span>
+                <span>{{ formatMemoryTime(item.created_at) }}</span>
+              </div>
+              <p>{{ item.content }}</p>
+            </div>
+          </div>
+        </div>
       </aside>
     </main>
 
@@ -403,9 +428,10 @@ import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
 import {
   streamChat, getProfile, uploadFile,
-  getSessions, createSession, deleteSession, getChatHistory,
-  type ProfileData, type ChatSession
+  getSessions, createSession, deleteSession, getChatHistory, getRecentChatMemory,
+  type ProfileData, type ChatSession, type RecentChatMemoryItem
 } from '@/api/ai'
+import { getMe } from '@/api/auth'
 
 // ==========================================
 // 悬浮按钮 (FAB) 状态与拖拽逻辑
@@ -423,6 +449,14 @@ let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
 
+const getPointerPosition = (e: MouseEvent | TouchEvent) => {
+  if (e instanceof MouseEvent) {
+    return { x: e.clientX, y: e.clientY }
+  }
+  const touch = e.touches[0]
+  return touch ? { x: touch.clientX, y: touch.clientY } : null
+}
+
 const resetDimTimer = () => {
   isDimmed.value = false
   if (dimTimer) clearTimeout(dimTimer)
@@ -438,15 +472,15 @@ const startDrag = (e: MouseEvent | TouchEvent) => {
     showFabMenu.value = false
     return
   }
+  const pointer = getPointerPosition(e)
+  if (!pointer) return
+
   isDragging.value = true
   dragDistance = 0
   resetDimTimer()
 
-  const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX
-  const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY
-
-  dragStartX = clientX
-  dragStartY = clientY
+  dragStartX = pointer.x
+  dragStartY = pointer.y
   dragInitialX = fabPos.value.x
   dragInitialY = fabPos.value.y
 
@@ -459,11 +493,11 @@ const startDrag = (e: MouseEvent | TouchEvent) => {
 const onDrag = (e: MouseEvent | TouchEvent) => {
   if (!isDragging.value) return
   e.preventDefault()
-  const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX
-  const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY
+  const pointer = getPointerPosition(e)
+  if (!pointer) return
 
-  const dx = clientX - dragStartX
-  const dy = clientY - dragStartY
+  const dx = pointer.x - dragStartX
+  const dy = pointer.y - dragStartY
   dragDistance = Math.abs(dx) + Math.abs(dy)
 
   fabPos.value = {
@@ -567,6 +601,9 @@ const searchKeyword = ref('')
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
+const currentUserId = ref<string | number | null>(null)
+const recentMemories = ref<RecentChatMemoryItem[]>([])
+const recentMemoryLoading = ref(false)
 
 // 🌟 监听模式切换：如果是数字人互动强制折叠侧边栏；如果切换回图文交互自动展开侧边栏
 watch(chatMode, (newMode) => {
@@ -679,6 +716,16 @@ const formatRelativeTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString()
 }
 
+const formatMemoryTime = (dateStr: string | null) => {
+  if (!dateStr) return ''
+  return formatRelativeTime(dateStr)
+}
+
+const previewMemoryContent = (content: string) => {
+  const normalized = (content || '').replace(/\s+/g, ' ').trim()
+  return normalized.length > 72 ? `${normalized.slice(0, 72)}...` : normalized
+}
+
 const resolveIllustrationUrl = (path: string) => {
   if (!path) return ''
   if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
@@ -738,6 +785,41 @@ const scheduleProfilePoll = () => {
   })
 }
 
+const fetchCurrentUser = async () => {
+  if (currentUserId.value) return
+  try {
+    const res = await getMe()
+    currentUserId.value = res.data.data?.id ?? null
+  } catch {
+    currentUserId.value = null
+  }
+}
+
+const fetchRecentChatMemory = async (sessionId = currentSessionId.value) => {
+  if (!sessionId || !currentUserId.value) {
+    recentMemories.value = []
+    return
+  }
+  recentMemoryLoading.value = true
+  try {
+    const res = await getRecentChatMemory({
+      userId: currentUserId.value,
+      sessionId,
+      limit: 8,
+    })
+    recentMemories.value = (res.data.data || [])
+        .filter(item => ['user', 'assistant'].includes(item.role))
+        .map(item => ({
+          ...item,
+          content: previewMemoryContent(item.content),
+        }))
+  } catch {
+    recentMemories.value = []
+  } finally {
+    recentMemoryLoading.value = false
+  }
+}
+
 // ==========================================
 // 会话管理
 // ==========================================
@@ -754,6 +836,7 @@ const newSession = () => {
   currentSessionId.value = undefined
   messages.value = []
   pendingFiles.value = []
+  recentMemories.value = []
 }
 
 const switchSession = async (sessionId: string) => {
@@ -773,6 +856,7 @@ const switchSession = async (sessionId: string) => {
     }))
   } catch {
   }
+  await fetchRecentChatMemory(sessionId)
   scrollToBottom()
 }
 
@@ -783,6 +867,7 @@ const archiveSession = async (sessionId: string) => {
     if (currentSessionId.value === sessionId) {
       currentSessionId.value = undefined
       messages.value = []
+      recentMemories.value = []
       if (sessions.value.length > 0) {
         await switchSession(sessions.value[0]!.id)
       }
@@ -984,6 +1069,7 @@ const handleSend = async () => {
           setTimeout(() => { isSpeaking.value = false }, 3000)
         }
         scheduleProfilePoll()
+        fetchRecentChatMemory()
         abortController = null
       },
       (err) => {
@@ -1017,6 +1103,7 @@ onMounted(async () => {
   document.addEventListener('mousedown', handleGlobalClick)
   document.addEventListener('touchstart', handleGlobalClick, { passive: true })
 
+  await fetchCurrentUser()
   await loadSessions()
   if (sessions.value.length > 0) {
     await switchSession(sessions.value[0]!.id)
@@ -2161,6 +2248,91 @@ onBeforeUnmount(() => {
   font-size: 0.85rem;
   line-height: 1.6;
   color: #CBD5E1;
+}
+
+.recent-memory {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.recent-memory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #0F172A;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.memory-refresh-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #64748B;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.memory-refresh-btn:hover:not([disabled]) {
+  color: #0891B2;
+  border-color: #A5F3FC;
+  background: #ECFEFF;
+}
+
+.memory-refresh-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.recent-memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.recent-memory-item {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.memory-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #64748B;
+  font-size: 0.72rem;
+  margin-bottom: 6px;
+}
+
+.recent-memory-item p {
+  margin: 0;
+  color: #334155;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.recent-memory-empty {
+  border: 1px dashed #E2E8F0;
+  border-radius: 8px;
+  color: #94A3B8;
+  font-size: 0.82rem;
+  padding: 14px 10px;
+  text-align: center;
+  background: #FFFFFF;
 }
 
 :deep(.markdown-body) {

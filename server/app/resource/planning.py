@@ -8,8 +8,8 @@ from app.resource.schemas import ResourcePlan
 logger = get_logger(__name__)
 
 CORE_AGENTS = ["content", "mindmap", "quiz"]
-ENHANCEMENT_AGENTS = ["reading", "code", "image"]
-PRESENTATION_AGENTS = ["ppt", "video"]
+ENHANCEMENT_AGENTS = ["reading", "code"]
+PRESENTATION_AGENTS = ["ppt"]
 ALL_AGENTS = CORE_AGENTS + ENHANCEMENT_AGENTS + PRESENTATION_AGENTS
 
 DEFAULT_DEPENDENCIES: dict[str, list[str]] = {
@@ -18,9 +18,7 @@ DEFAULT_DEPENDENCIES: dict[str, list[str]] = {
     "quiz": ["content"],
     "reading": ["content"],
     "code": ["mindmap", "content"],
-    "image": ["content", "mindmap"],
-    "ppt": ["content", "mindmap", "image"],
-    "video": ["content", "image", "ppt"],
+    "ppt": ["content", "mindmap"],
 }
 
 

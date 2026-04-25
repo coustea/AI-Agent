@@ -13,9 +13,11 @@
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 
-from sqlalchemy import Text, Column
+from sqlalchemy import ARRAY, Integer, Text, Column, Index
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlmodel import SQLModel, Field
 
 from app.infra.logging import get_logger
@@ -54,8 +56,11 @@ class ActiveToken(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)  # 关联用户，支持按用户批量清理 token
     token: str = Field(unique=True, index=True)  # JWT 字符串，唯一索引用于快速查找
-    expires_at: datetime  # token 过期时间，用于清理过期记录
-    created_at: datetime = Field(default_factory=datetime.now)
+    expires_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))  # token 过期时间，用于清理过期记录
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -74,13 +79,16 @@ class ChatSession(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)  # 每次写入消息时更新
-    memory_token_count: int = Field(default=0)  # 记忆提取 token 累计（达到阈值触发 FactAgent）
-    profile_token_count: int = Field(default=0)  # 画像更新 token 累计（达到阈值触发 ProfileAgent）
+    memory_token_count: int = Field(default=0)  # 记忆提取 token 累计（达到阈值触发记忆抽取）
+    profile_token_count: int = Field(default=0)  # 画像更新 token 累计（达到阈值触发画像构建）
 
 
 class ChatMessage(SQLModel, table=True):
     """短期记忆表 — 存储用户的原始聊天记录，按会话隔离"""
     __tablename__ = "chat_messages"
+    __table_args__ = (
+        Index("ix_chat_messages_user_session_module_created_at", "user_id", "session_id", "module", "created_at"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
@@ -88,8 +96,8 @@ class ChatMessage(SQLModel, table=True):
     module: str = Field(default="profile_builder", index=True)
     role: str  # 消息角色："user" | "assistant" | "system" | "tool"
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
-    attachments: str | None = Field(default=None, sa_column=Column(Text))  # 附件信息（JSON 字符串）
-    tool_calls: str | None = Field(default=None, sa_column=Column(Text))  # 工具调用记录（JSON 字符串）
+    attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
+    tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
     created_at: datetime = Field(default_factory=datetime.now, index=True)  # 创建时间索引，用于过期清理
 
 
@@ -100,6 +108,9 @@ class ChatMessage(SQLModel, table=True):
 class UserMemory(SQLModel, table=True):
     """统一长期记忆表 — 存储经过提炼的用户知识/偏好/目标等持久化记忆"""
     __tablename__ = "user_memory"
+    __table_args__ = (
+        Index("ix_user_memory_context_lookup", "user_id", "module", "memory_type", "last_seen_at"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
@@ -109,12 +120,12 @@ class UserMemory(SQLModel, table=True):
     memory_type: str = Field(index=True)  # 类型：preference | goal | weakness | fact | background | summary
     dimension: str | None = None  # 可选维度标签（画像维度关联）
     importance: float = Field(default=0.5)  # 重要性评分 0.0~1.0
-    source: str = Field(default="conversation", index=True)  # 来源："fact_agent" | "conversation" | module名
+    source: str = Field(default="conversation", index=True)  # 来源："memory_extraction" | "conversation" | module名
     source_message_count: int = Field(default=0)  # 来源消息条数（用于压缩溯源）
     expires_at: datetime | None = Field(default=None)  # 过期时间（null 表示永不过期）
     evidence_count: int = Field(default=1)  # 该记忆被观察到的次数（去重累加）
     last_seen_at: datetime = Field(default_factory=datetime.now)  # 最后一次出现时间
-    attachments: str | None = Field(default=None, sa_column=Column(Text))  # 附件信息
+    attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     created_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -156,6 +167,9 @@ class UserProfile(SQLModel, table=True):
 class UserProfileHistory(SQLModel, table=True):
     """用户画像历史表 — 记录每次画像变更的快照，用于追踪画像演化过程"""
     __tablename__ = "user_profile_history"
+    __table_args__ = (
+        Index("ix_user_profile_history_user_version", "user_id", "version"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
@@ -182,7 +196,7 @@ class UserProfileHistory(SQLModel, table=True):
     profile_summary: str | None = Field(default=None, sa_column=Column(Text))
 
     change_reason: str | None = Field(default=None, sa_column=Column(Text))  # 变更原因（如"系统自动更新"）
-    source_memory_ids: str | None = Field(default=None, sa_column=Column(Text))  # 触发变更的记忆 ID 列表（JSON）
+    source_memory_ids: list[int] | None = Field(default=None, sa_column=Column(ARRAY(Integer)))  # 触发变更的记忆 ID 列表
 
     created_at: datetime = Field(default_factory=datetime.now)
 
@@ -224,6 +238,10 @@ class GeneratedResource(SQLModel, table=True):
 class LearningEvent(SQLModel, table=True):
     """学习行为事件表 — 记录资源使用、练习结果、路径反馈等评估信号。"""
     __tablename__ = "learning_events"
+    __table_args__ = (
+        Index("ix_learning_events_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_learning_events_user_type_created_at", "user_id", "event_type", "created_at"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
@@ -235,7 +253,7 @@ class LearningEvent(SQLModel, table=True):
     score: float | None = Field(default=None)
     duration_seconds: int | None = Field(default=None)
     feedback: str | None = Field(default=None, sa_column=Column(Text))
-    metadata_json: str | None = Field(default=None, sa_column=Column(Text))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     created_at: datetime = Field(default_factory=datetime.now, index=True)
 
 

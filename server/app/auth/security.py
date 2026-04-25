@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.database import get_session, session_scope
+from app.infra.database import session_scope
 from app.config import JWT_ALGORITHM, JWT_EXPIRE_DAYS, JWT_SECRET_KEY
 from app.infra.models import ActiveToken
 from app.infra.models import User
@@ -25,6 +25,18 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _is_expired(expires_at: datetime | None) -> bool:
+    if expires_at is None:
+        return True
+    return _as_utc(expires_at) <= datetime.now(timezone.utc)
 
 
 async def create_token(user_id: int, session: AsyncSession) -> str:
@@ -54,7 +66,7 @@ async def is_token_valid(token: str, session: AsyncSession) -> bool:
     active_token = (await session.exec(select(ActiveToken).where(ActiveToken.token == token))).first()
     if not active_token:
         return False
-    if active_token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if _is_expired(active_token.expires_at):
         await session.delete(active_token)
         await session.commit()
         return False
