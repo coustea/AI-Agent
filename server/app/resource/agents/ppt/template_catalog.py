@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-DEFAULT_TEMPLATE_ID = "wps_business_blue"
+DEFAULT_TEMPLATE_ID = "bluegreen_3d_internet"
 
 _DEFAULT_SLIDE_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -207,7 +207,7 @@ def _build_config(name: str, description: str) -> dict[str, Any]:
         "name": name,
         "description": description,
         "render_options": {
-            "preserve_template_shapes": False,
+            "preserve_template_shapes": True,
             "enable_icons": True,
             "enable_image_placeholders": True,
             "enable_dynamic_gradient": True,
@@ -217,6 +217,14 @@ def _build_config(name: str, description: str) -> dict[str, Any]:
 
 
 BUILTIN_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
+    "bluegreen_3d_internet": {
+        "id": "bluegreen_3d_internet",
+        "name": "蓝绿色3D宣传科技互联网演示文稿（本地）",
+        "description": "由用户提供的PPTX解析为JSON模板并直接复用版式。",
+        "style": "modern_minimal",
+        "tags": ["蓝绿色", "3D", "科技", "互联网", "本地模板"],
+        "config": _build_config("蓝绿色3D宣传科技互联网演示文稿（本地）", "使用本地解析模板，优先保留原始版式。"),
+    },
     "wps_business_blue": {
         "id": "wps_business_blue",
         "name": "WPS 商务蓝（类）",

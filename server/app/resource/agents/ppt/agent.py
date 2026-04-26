@@ -22,7 +22,6 @@ from app.resource.agents.ppt.template_catalog import (
     DEFAULT_TEMPLATE_ID,
     get_builtin_template_spec,
     merge_template_config,
-    recommend_template_id,
 )
 from app.shared.paths import WORKPLACE_DIR
 
@@ -327,7 +326,15 @@ class PptAgent:
             "template_name": config.get("name", "未命名模板"),
             "template_description": config.get("description", ""),
             "template_roles_definition": "\n".join(unique_roles),
-            "template_slot_rules": "\n".join(unique_rules)
+            "template_slot_rules": "\n".join(unique_rules),
+            "template_schema_json": json.dumps(
+                {
+                    "slide_definitions": config.get("slide_definitions", []),
+                    "render_options": config.get("render_options", {}),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
         }
 
     @staticmethod
@@ -344,7 +351,7 @@ class PptAgent:
             return normalized or "custom_online_template"
         if normalized and normalized not in {"cn_ink_education", "auto"}:
             return normalized
-        return recommend_template_id(user_profile, style) or DEFAULT_TEMPLATE_ID
+        return DEFAULT_TEMPLATE_ID
 
     async def _ensure_graph(self) -> None:
         """确保图已构建。"""
@@ -396,7 +403,13 @@ class PptAgent:
             return {"error": "LLM 调用超时", "is_valid": False}
         except Exception as exc:
             error_text = str(exc)
-            if "response_format type is unavailable" not in error_text:
+            structured_unavailable_markers = (
+                "response_format type is unavailable",
+                "does not support this tool_choice",
+                "tool_choice",
+                "structured output",
+            )
+            if not any(marker in error_text.lower() for marker in structured_unavailable_markers):
                 raise
 
             logger.warning(
@@ -636,7 +649,7 @@ class PptAgent:
         gap: str = "",
         user_profile: dict = None,
         shared_memory: dict = None,
-        template_id: str = "auto",
+        template_id: str = DEFAULT_TEMPLATE_ID,
         template_source_url: str = "",
         template_config_url: str = "",
     ) -> dict[str, Any]:

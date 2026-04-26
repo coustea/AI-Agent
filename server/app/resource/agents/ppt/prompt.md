@@ -30,6 +30,11 @@
 {template_slot_rules}
 </slot_rules>
 
+<template_schema>
+### [模板结构 JSON（必须遵守）]
+{template_schema_json}
+</template_schema>
+
 <content_structure>
 整份 PPT 必须保持 6-10 页。
 要求：
