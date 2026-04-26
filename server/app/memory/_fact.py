@@ -1,25 +1,3 @@
-"""Long-term fact extraction and long-term memory helpers.  # 长期事实提取与长期记忆辅助
-
-模块职责：
-- 从对话中抽取可稳定复用的用户事实/偏好/目标等
-- 将抽取结果写入长期记忆池供后续检索使用
-- 提供结构化输出模型确保 LLM 输出格式一致
-
-核心类：
-- FactExtractionService: 事实提取服务主入口
-- FactExtraction: LLM 结构化输出的顶层容器
-- ExtractedFactItem: 单条事实条目模型
-
-设计原则：
-- 使用 Pydantic 的 extra="forbid" 严格约束输出字段
-- 先做廉价启发式门控，避免无意义的 LLM 调用
-- 提取结果上限 3 条，控制写入量
-- 时效性事实自动计算 expires_at
-
-调用链：
-chat/agent.py → MemoryLayer.post_turn_pipeline() → FactExtractionService.extract_and_save()
-"""
-
 from __future__ import annotations
 
 from datetime import timedelta
@@ -160,7 +138,7 @@ class FactExtractionService:
         self.prompt_template = ChatPromptTemplate.from_messages([("human", "{prompt_text}")])
 
     async def extract_and_save(self, user_id: int, session_id: str) -> bool:
-        """从会话中提取事实并保存。  # 主入口：从对话中抽取长期记忆并写入存储
+        """从会话中提取事实并保存。
 
         参数：
         - user_id: 用户ID
@@ -177,8 +155,8 @@ class FactExtractionService:
         4. 构建上下文并调用 LLM
         5. 解析结构化输出并写入存储
         """
-        # 抽取按"尽力而为"处理：大多数"无事可做"的路径返回 True；只有出现真正异常时才返回 False，便于调用方做告警/降级。
-        recent_msgs = await self.store.get_recent_messages(  # 获取最近 20 条消息作为抽取窗口：兼顾近期性与上下文长度开销
+        #  获取最近 20 条消息作为抽取窗口
+        recent_msgs = await self.store.get_recent_messages(
             user_id=user_id,
             session_id=session_id,
             module=self.module_name,
@@ -187,11 +165,11 @@ class FactExtractionService:
         if not recent_msgs:
             return True
 
-        dialogue_msgs = select_dialogue_messages(recent_msgs)  # 筛选"可用于抽取"的对话消息（通常会排除系统/工具类噪声）
+        dialogue_msgs = select_dialogue_messages(recent_msgs)  # 筛选"可用于抽取"的对话消息
         if not dialogue_msgs:
             return True
 
-        user_texts = self._collect_user_texts(dialogue_msgs)  # 收集用户侧文本片段（过滤无意义短语），用于后续"是否值得抽取"的门控
+        user_texts = self._collect_user_texts(dialogue_msgs)  # 收集用户侧文本片段，用于后续"是否值得抽取"的门控
         # 先做一个廉价的启发式门控：当用户没说任何稳定/可复用信息时，避免触发昂贵的大模型调用。
         if not has_extractable_signal(user_texts):  # 检查是否存在可长期记忆的信号；没有则直接返回
             return True

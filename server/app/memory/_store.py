@@ -1,14 +1,5 @@
-"""Memory storage and lifecycle management.  # 记忆存储与生命周期管理模块
-
-This module owns:
-- session CRUD
-- short-term memory CRUD
-- long-term memory CRUD
-- token counters and thresholds
-- memory compression
-"""
-
 from __future__ import annotations
+
 
 import asyncio
 import re
@@ -22,7 +13,7 @@ from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.database import engine
-from app.infra.llm import get_llm
+from app.infra.llm import get_spark_llm
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, UserMemory
 from app.memory.memory_types import (
@@ -270,8 +261,8 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
 
     async def _generate_session_title(self, user_message: str) -> str:  # 用轻量级 LLM 从用户首条消息提取会话标题
         from langchain_core.prompts import ChatPromptTemplate
-        from app.infra.llm import get_fast_llm
-        llm = get_fast_llm(temperature=0.1, max_tokens=30)  # 使用 Spark Lite 轻量模型，低温度确保稳定输出
+        from app.infra.llm import get_deepseek_llm
+        llm = get_deepseek_llm(temperature=0.1, max_tokens=30)  # 使用 DeepSeek 快速模型
         prompt = ChatPromptTemplate.from_messages([
             ("system", "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题（不超过20字）。只输出标题本身，不要有任何其他内容。"),
             ("human", "{user_message}"),
@@ -832,7 +823,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             )),
             ("human", "{chat_text}"),
         ])
-        llm = get_llm(temperature=0.1)
+        llm = get_spark_llm(temperature=0.1)
         result = await llm.ainvoke(summarize_prompt.invoke({"chat_text": chat_text}))
         summarized_ids = [m.id for m in recent_msgs[:-keep_recent]]
         # 先落库摘要再删旧消息：即使清理过程中途失败，也能保证摘要已保存，避免"删了但没存摘要"的数据丢失。

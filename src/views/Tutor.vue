@@ -164,7 +164,12 @@
               <p>支持文字、图片、文档等多模态交流，<br>我将在对话中自动更新您的学习画像并提供量身定制的解答</p>
             </div>
 
-            <div v-for="msg in messages" :key="msg.id" :class="['message-row', msg.role]">
+            <div
+                v-for="msg in messages"
+                :key="msg.id"
+                :class="['message-row', msg.role]"
+                v-show="!(msg.role === 'ai' && msg.id === streamingMsgId && !msg.content)"
+            >
               <div class="msg-avatar">
                 <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
                 <div v-else class="avatar-circle user-av"><el-icon><UserFilled /></el-icon></div>
@@ -195,13 +200,31 @@
                   />
                 </div>
 
+                <div v-if="msg.diagramGenerating" class="diagram-generating">
+                  <span class="diagram-spinner"></span>
+                  <span>图解正在生成...</span>
+                </div>
+
+                <div v-if="msg.diagram" class="msg-diagram">
+                  <div class="diagram-header">
+                    <span class="diagram-title">{{ msg.diagram.title }}</span>
+                    <span class="diagram-type-tag">{{ msg.diagram.type }}</span>
+                  </div>
+                  <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
+                  <div
+                      class="diagram-svg-container"
+                      v-html="diagramSvgCache.get(msg.diagram.render.source) || ''"
+                  ></div>
+                </div>
+
               </div>
             </div>
 
             <div v-if="showThinkingIndicator" class="message-row ai thinking-row">
               <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
               <div class="thinking-bubble">
-                <span class="dot-typing"></span>
+                <el-icon class="is-loading thinking-spinner"><Loading /></el-icon>
+                <span class="thinking-text">正在思考...</span>
               </div>
             </div>
           </div>
@@ -231,7 +254,7 @@
                       </el-dropdown-item>
 
                       <el-dropdown-item divided @click="handleImageToggle">
-                        <el-icon><Picture /></el-icon> {{ generateImage ? '取消生成图片' : '生成图片' }}
+                        <el-icon><Picture /></el-icon> {{ needDiagram ? '取消生成图解' : '生成图解' }}
                       </el-dropdown-item>
                       <el-dropdown-item @click="handleVideoToggle">
                         <el-icon><VideoPlay /></el-icon> {{ generateVideo ? '取消生成视频' : '生成视频' }}
@@ -253,12 +276,12 @@
                   </button>
                 </el-tooltip>
 
-                <div class="active-media-chip" v-if="generateImage" @click="handleImageToggle" title="取消生成图片">
+                <div class="active-media-chip" v-if="needDiagram" @click="handleImageToggle" title="取消生成图解">
                   <div class="chip-icon-circle">
                     <el-icon class="icon-default"><Picture /></el-icon>
                     <el-icon class="icon-hover"><Close /></el-icon>
                   </div>
-                  <span>图片</span>
+                  <span>图解</span>
                 </div>
 
                 <div class="active-media-chip" v-if="generateVideo" @click="handleVideoToggle" title="取消生成视频">
@@ -426,18 +449,22 @@
 </template>
 
 <script setup lang="ts">
+// ==========================================
+// 1. 导入
+// ==========================================
 import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
-  MagicStick, Plus, Delete, Close, Top,
+  Plus, Delete, Close, Top,
   EditPen, Search, Discount, Timer, VideoPlay,
   Paperclip, CircleCheckFilled,
-  User, InfoFilled, Medal, Aim, Setting
+  User, InfoFilled, Medal, Aim, Setting, Loading
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
+import mermaid from 'mermaid'
 import {
   streamChat, getProfile, uploadFile,
   getSessions, createSession, deleteSession, getChatHistory,
@@ -446,14 +473,120 @@ import {
 import { getMe } from '@/api/auth'
 
 // ==========================================
-// 悬浮按钮 (FAB) 状态与拖拽逻辑
+// 2. 常量定义
 // ==========================================
+const DIMENSION_MAP = [
+  { key: 'knowledge_level', name: '擅长领域', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_style', name: '认知风格', defaultDesc: '自动分析中...' },
+  { key: 'error_pattern', name: '待提升方向', defaultDesc: '自动分析中...' },
+  { key: 'learning_goal', name: '学习目标', defaultDesc: '自动分析中...' },
+  { key: 'learning_history', name: '学习历史', defaultDesc: '自动分析中...' },
+  { key: 'interest_preference', name: '学习风格偏好', defaultDesc: '自动分析中...' },
+  { key: 'learning_pace', name: '学习节奏', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_level', name: '认知水平', defaultDesc: '自动分析中...' },
+] as const
+
+// ==========================================
+// 3. 类型定义
+// ==========================================
+interface PendingFile { file?: File; url?: string; fileType: string; name: string }
+interface Attachment { url: string; type: string; name: string }
+interface DiagramData {
+  type: string
+  title: string
+  summary: string
+  spec: Record<string, unknown>
+  render: {
+    engine: string
+    format: string
+    source: string
+  }
+}
+interface ChatMsg {
+  id: number
+  role: 'user' | 'ai'
+  content: string
+  time: string
+  attachments?: Attachment[] | null
+  illustrations?: string[]
+  diagram?: DiagramData | null
+  diagramGenerating?: boolean
+}
+interface ProfileDimension {
+  readonly key: string
+  readonly name: string
+  readonly defaultDesc: string
+  score: number | null
+  desc: string
+}
+
+// ==========================================
+// 4. Mermaid 初始化
+// ==========================================
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'default',
+  securityLevel: 'loose',
+})
+
+// ==========================================
+// 5. 响应式状态
+// ==========================================
+
+// --- 聊天模式与输入 ---
+const chatMode = ref('standard')
+const userInput = ref('')
+const isAIThinking = ref(false)
+const isSpeaking = ref(false)
+const chatScroll = ref<HTMLElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const isExpandedInput = ref(false)
+
+// --- 媒体生成开关 ---
+const enableWebSearch = ref(false)
+const needDiagram = ref(false)
+const generateVideo = ref(false)
+const hasToggledMedia = ref(false)
+
+// --- 语音相关 ---
+const isRecording = ref(false)
+const isVoiceChatting = ref(false)
+
+// --- 文件上传 ---
+const uploadingFile = ref(false)
+const docInput = ref<HTMLInputElement | null>(null)
+const imgInput = ref<HTMLInputElement | null>(null)
+const pendingFiles = ref<PendingFile[]>([])
+
+// --- 会话管理 ---
+const sessions = ref<ChatSession[]>([])
+const currentSessionId = ref<string | undefined>(undefined)
+const sessionSidebarCollapsed = ref(false)
+const currentUserId = ref<string | number | null>(null)
+const searchPopoverVisible = ref(false)
+const searchKeyword = ref('')
+
+// --- 消息列表 ---
+const messages = ref<ChatMsg[]>([])
+const streamingMsgId = ref<number | null>(null)
+let abortController: AbortController | null = null
+
+// --- 画像相关 ---
+const profileUpdated = ref(false)
+const memoryEnabled = ref(false)
+const profileDimensions = ref<ProfileDimension[]>(
+    DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
+)
+let profilePollTimers: ReturnType<typeof setTimeout>[] = []
+
+// --- FAB 悬浮按钮 ---
 const fabPos = ref({ x: 16, y: 0 })
 const isDragging = ref(false)
 const showFabMenu = ref(false)
 const isDimmed = ref(false)
 const isStickRight = computed(() => fabPos.value.x > window.innerWidth / 2)
 
+// --- FAB 拖拽状态 ---
 let dragStartX = 0
 let dragStartY = 0
 let dragInitialX = 0
@@ -461,6 +594,133 @@ let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
 
+// --- 图解渲染 ---
+let diagramRenderSeq = 0
+const diagramSvgCache = ref<Map<string, string>>(new Map())
+
+// --- 滚动状态 ---
+let scrollPending = false
+
+// ==========================================
+// 6. 计算属性
+// ==========================================
+const filteredSessions = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return []
+  return sessions.value.filter(s => {
+    const title = s.title || '新建对话'
+    return title.toLowerCase().includes(keyword)
+  })
+})
+
+const activeProfileDimensions = computed(() => {
+  return profileDimensions.value.filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
+})
+
+const showThinkingIndicator = computed(() => {
+  if (!isAIThinking.value) return false
+  if (chatMode.value === 'digital_human') return false
+  const streamingMsg = messages.value.find(m => m.id === streamingMsgId.value)
+  return !streamingMsg || !streamingMsg.content
+})
+
+// ==========================================
+// 7. 工具函数
+// ==========================================
+const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+const renderMarkdown = (text: string) => marked.parse(text)
+
+const getIcon = (key: string) => {
+  const map: Record<string, any> = {
+    knowledge_level: Medal,
+    cognitive_style: Aim,
+    error_pattern: Aim,
+    learning_goal: Aim,
+    learning_history: Timer,
+    interest_preference: Setting,
+    learning_pace: Timer,
+    cognitive_level: Medal
+  }
+  return map[key] || Discount
+}
+
+const formatRelativeTime = (dateStr: string) => {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}天前`
+  return new Date(dateStr).toLocaleDateString()
+}
+
+const resolveIllustrationUrl = (path: string) => {
+  if (!path) return ''
+  if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
+  return path
+}
+
+// ==========================================
+// 8. 滚动相关函数
+// ==========================================
+const scrollToBottom = () => {
+  if (scrollPending) return
+  scrollPending = true
+  nextTick(() => {
+    scrollPending = false
+    if (chatScroll.value) {
+      chatScroll.value.scrollTop = chatScroll.value.scrollHeight
+    }
+  })
+}
+
+const autoResize = () => {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = '24px'
+  const currentHeight = el.scrollHeight
+
+  if (currentHeight > 30) {
+    isExpandedInput.value = true
+    el.style.height = `${Math.min(currentHeight, 72)}px`
+  } else {
+    isExpandedInput.value = false
+    el.style.height = '24px'
+  }
+}
+
+// ==========================================
+// 9. 图解渲染函数
+// ==========================================
+const renderMermaid = async (source: string): Promise<string> => {
+  try {
+    diagramRenderSeq += 1
+    const { svg } = await mermaid.render(`mermaid-${Date.now()}-${diagramRenderSeq}`, source)
+    return svg
+  } catch {
+    return `<pre class="mermaid-error">图解渲染失败</pre>`
+  }
+}
+
+const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
+  const cacheKey = diagram.render.source
+  if (diagramSvgCache.value.has(cacheKey)) {
+    return diagramSvgCache.value.get(cacheKey)!
+  }
+  const svg = await renderMermaid(diagram.render.source)
+  diagramSvgCache.value.set(cacheKey, svg)
+  diagramSvgCache.value = new Map(diagramSvgCache.value)
+  scrollToBottom()
+  return svg
+}
+
+// ==========================================
+// 10. FAB 悬浮按钮函数
+// ==========================================
 const getPointerPosition = (e: MouseEvent | TouchEvent) => {
   if (e instanceof MouseEvent) {
     return { x: e.clientX, y: e.clientY }
@@ -542,14 +802,12 @@ const snapToEdge = () => {
   let targetX = fabPos.value.x
   let targetY = fabPos.value.y
 
-  // 1. 左右自动磁吸
   if (targetX + fabSize / 2 > screenW / 2) {
     targetX = screenW - fabSize - margin
   } else {
     targetX = margin
   }
 
-  // 2. 避免被底部输入框/其他元素过度遮挡
   const bottomBoundary = screenH - fabSize - 120
   if (targetY < margin) targetY = margin
   if (targetY > bottomBoundary) targetY = bottomBoundary
@@ -571,181 +829,7 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
 }
 
 // ==========================================
-// 维度定义
-// ==========================================
-const DIMENSION_MAP = [
-  { key: 'knowledge_level', name: '擅长领域', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_style', name: '认知风格', defaultDesc: '自动分析中...' },
-  { key: 'error_pattern', name: '待提升方向', defaultDesc: '自动分析中...' },
-  { key: 'learning_goal', name: '学习目标', defaultDesc: '自动分析中...' },
-  { key: 'learning_history', name: '学习历史', defaultDesc: '自动分析中...' },
-  { key: 'interest_preference', name: '学习风格偏好', defaultDesc: '自动分析中...' },
-  { key: 'learning_pace', name: '学习节奏', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_level', name: '认知水平', defaultDesc: '自动分析中...' },
-] as const
-
-const getIcon = (key: string) => {
-  const map: Record<string, any> = {
-    knowledge_level: Medal,
-    cognitive_style: Aim,
-    error_pattern: Aim,
-    learning_goal: Aim,
-    learning_history: Timer,
-    interest_preference: Setting,
-    learning_pace: Timer,
-    cognitive_level: Medal
-  }
-  return map[key] || Discount
-}
-
-// ==========================================
-// 状态
-// ==========================================
-const chatMode = ref('standard')
-const userInput = ref('')
-const isAIThinking = ref(false)
-const isSpeaking = ref(false)
-const chatScroll = ref<HTMLElement | null>(null)
-const profileUpdated = ref(false)
-const uploadingFile = ref(false)
-const memoryEnabled = ref(false)
-
-// 媒体生成开关逻辑
-const enableWebSearch = ref(false)
-const generateImage = ref(false)
-const generateVideo = ref(false)
-
-const isRecording = ref(false)
-const isVoiceChatting = ref(false)
-
-const hasToggledMedia = ref(false)
-
-// 历史搜索相关
-const searchPopoverVisible = ref(false)
-const searchKeyword = ref('')
-
-// 会话管理
-const sessions = ref<ChatSession[]>([])
-const currentSessionId = ref<string | undefined>(undefined)
-const sessionSidebarCollapsed = ref(false)
-const currentUserId = ref<string | number | null>(null)
-
-// 🌟 监听模式切换：如果是数字人互动强制折叠侧边栏；如果切换回图文交互自动展开侧边栏
-watch(chatMode, (newMode) => {
-  if (newMode === 'digital_human') {
-    sessionSidebarCollapsed.value = true
-  } else if (newMode === 'standard') {
-    sessionSidebarCollapsed.value = false
-  }
-})
-
-const docInput = ref<HTMLInputElement | null>(null)
-const imgInput = ref<HTMLInputElement | null>(null)
-interface PendingFile { file?: File; url?: string; fileType: string; name: string }
-const pendingFiles = ref<PendingFile[]>([])
-
-interface Attachment { url: string; type: string; name: string }
-interface ChatMsg { id: number; role: 'user' | 'ai'; content: string; time: string; attachments?: Attachment[] | null; illustrations?: string[] }
-const messages = ref<ChatMsg[]>([])
-
-interface ProfileDimension {
-  readonly key: string
-  readonly name: string
-  readonly defaultDesc: string
-  score: number | null
-  desc: string
-}
-
-const profileDimensions = ref<ProfileDimension[]>(
-    DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
-)
-
-const activeProfileDimensions = computed(() => {
-  return profileDimensions.value.filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
-})
-
-let abortController: AbortController | null = null
-const streamingMsgId = ref<number | null>(null)
-let profilePollTimers: ReturnType<typeof setTimeout>[] = []
-
-// ==========================================
-// 自动调节输入框高度及模式切换逻辑
-// ==========================================
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const isExpandedInput = ref(false)
-
-const autoResize = () => {
-  const el = textareaRef.value
-  if (!el) return
-  el.style.height = '24px'
-  const currentHeight = el.scrollHeight
-
-  if (currentHeight > 30) {
-    isExpandedInput.value = true
-    el.style.height = `${Math.min(currentHeight, 72)}px`
-  } else {
-    isExpandedInput.value = false
-    el.style.height = '24px'
-  }
-}
-
-// ==========================================
-// 计算属性
-// ==========================================
-const filteredSessions = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) return []
-
-  return sessions.value.filter(s => {
-    const title = s.title || '新建对话'
-    return title.toLowerCase().includes(keyword)
-  })
-})
-
-const renderMarkdown = (text: string) => marked.parse(text)
-
-const showThinkingIndicator = computed(() => {
-  if (!isAIThinking.value) return false
-  if (chatMode.value === 'digital_human') return false
-  const streamingMsg = messages.value.find(m => m.id === streamingMsgId.value)
-  return !streamingMsg || !streamingMsg.content
-})
-
-let scrollPending = false
-const scrollToBottom = () => {
-  if (scrollPending) return
-  scrollPending = true
-  nextTick(() => {
-    scrollPending = false
-    if (chatScroll.value) {
-      chatScroll.value.scrollTop = chatScroll.value.scrollHeight
-    }
-  })
-}
-
-const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
-const formatRelativeTime = (dateStr: string) => {
-  if (!dateStr) return ''
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时前`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}天前`
-  return new Date(dateStr).toLocaleDateString()
-}
-
-const resolveIllustrationUrl = (path: string) => {
-  if (!path) return ''
-  if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
-  return path
-}
-
-// ==========================================
-// 画像加载与轮询
+// 11. 画像加载与轮询
 // ==========================================
 const fetchProfile = async () => {
   try {
@@ -797,7 +881,7 @@ const fetchCurrentUser = async () => {
 }
 
 // ==========================================
-// 会话管理
+// 12. 会话管理函数
 // ==========================================
 const loadSessions = async () => {
   try {
@@ -849,6 +933,9 @@ const archiveSession = async (sessionId: string) => {
   }
 }
 
+// ==========================================
+// 13. 文件上传函数
+// ==========================================
 const triggerDocUpload = () => docInput.value?.click()
 const triggerImgUpload = () => imgInput.value?.click()
 
@@ -870,12 +957,15 @@ const removeAttachment = (idx: number) => {
   pendingFiles.value.splice(idx, 1)
 }
 
+// ==========================================
+// 14. 媒体生成开关函数
+// ==========================================
 const handleImageToggle = () => {
   hasToggledMedia.value = true
-  if (generateImage.value) {
-    generateImage.value = false
+  if (needDiagram.value) {
+    needDiagram.value = false
   } else {
-    generateImage.value = true
+    needDiagram.value = true
     generateVideo.value = false
   }
 }
@@ -886,10 +976,13 @@ const handleVideoToggle = () => {
     generateVideo.value = false
   } else {
     generateVideo.value = true
-    generateImage.value = false
+    needDiagram.value = false
   }
 }
 
+// ==========================================
+// 15. 语音相关函数
+// ==========================================
 const handleVoiceToggle = () => {
   isRecording.value = !isRecording.value
   if (isRecording.value) {
@@ -911,12 +1004,13 @@ const handleVoiceChatToggle = () => {
 }
 
 // ==========================================
-// 发送消息
+// 16. 发送消息函数
 // ==========================================
 const handleSend = async () => {
   const text = userInput.value.trim()
   const hasFiles = pendingFiles.value.length > 0
   if ((!text && !hasFiles) || isAIThinking.value) return
+  const shouldGenerateDiagram = needDiagram.value
 
   if (!currentSessionId.value) {
     try {
@@ -1024,7 +1118,7 @@ const handleSend = async () => {
         session_id: currentSessionId.value,
         image_urls: imageUrls.length > 0 ? imageUrls : undefined,
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
-        generate_image: generateImage.value,
+        need_diagram: shouldGenerateDiagram,
         generate_video: generateVideo.value,
       },
       (chunk) => {
@@ -1035,6 +1129,10 @@ const handleSend = async () => {
         }
       },
       () => {
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg) {
+          aiMsg.diagramGenerating = false
+        }
         isAIThinking.value = false
         streamingMsgId.value = null
         isSpeaking.value = chatMode.value === 'digital_human'
@@ -1046,30 +1144,81 @@ const handleSend = async () => {
       },
       (err) => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (aiMsg && !aiMsg.content) {
-          aiMsg.content = `Generate failed: ${err.message}`
+        if (aiMsg) {
+          aiMsg.diagramGenerating = false
+          if (!aiMsg.content) {
+            aiMsg.content = `Generate failed: ${err.message}`
+          }
         }
         isAIThinking.value = false
         streamingMsgId.value = null
         abortController = null
       },
       (evt) => {
-        if (evt.event !== 'illustration') return
-        const payload = evt.data as { path?: string }
-        const imagePath = resolveIllustrationUrl(payload?.path || '')
-        if (!imagePath) return
-        const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (!aiMsg) return
-        if (!aiMsg.illustrations) aiMsg.illustrations = []
-        if (!aiMsg.illustrations.includes(imagePath)) {
-          aiMsg.illustrations.push(imagePath)
+        if (evt.event === 'status') {
+          const payload = evt.data as { stage?: string; message?: string }
+          if (payload?.stage !== 'diagram_generate' || !shouldGenerateDiagram) return
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          aiMsg.diagramGenerating = true
+          scrollToBottom()
+          return
+        }
+
+        if (evt.event === 'illustration') {
+          const payload = evt.data as { path?: string }
+          const imagePath = resolveIllustrationUrl(payload?.path || '')
+          if (!imagePath) return
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          if (!aiMsg.illustrations) aiMsg.illustrations = []
+          if (!aiMsg.illustrations.includes(imagePath)) {
+            aiMsg.illustrations.push(imagePath)
+          }
+          return
+        }
+
+        if (evt.event === 'done') {
+          const payload = evt.data as { resources?: { diagram?: DiagramData | null } }
+          const diagram = payload?.resources?.diagram
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          aiMsg.diagramGenerating = false
+          if (!diagram) return
+          aiMsg.diagram = diagram
+          scrollToBottom()
         }
       },
   )
 }
 
+// ==========================================
+// 17. 监听器
+// ==========================================
+watch(chatMode, (newMode) => {
+  if (newMode === 'digital_human') {
+    sessionSidebarCollapsed.value = true
+  } else if (newMode === 'standard') {
+    sessionSidebarCollapsed.value = false
+  }
+})
+
+watch(
+  () => messages.value.map(m => m.diagram),
+  (diagrams) => {
+    diagrams.forEach((diagram) => {
+      if (diagram && diagram.render?.source && !diagramSvgCache.value.has(diagram.render.source)) {
+        getDiagramSvg(diagram)
+      }
+    })
+  },
+  { deep: true }
+)
+
+// ==========================================
+// 18. 生命周期钩子
+// ==========================================
 onMounted(async () => {
-  // 挂载时初始化 FAB 默认位置到左下角，并启动半透明定时器
   fabPos.value = { x: 16, y: window.innerHeight - 150 }
   resetDimTimer()
   document.addEventListener('mousedown', handleGlobalClick)
@@ -1366,6 +1515,91 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   border: 1px solid #E2E8F0;
   background: #F8FAFC;
+}
+
+.diagram-generating {
+  width: min(560px, 100%);
+  margin-top: 12px;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  background: #F8FAFC;
+  border: 1px dashed #CBD5E1;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.diagram-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #CBD5E1;
+  border-top-color: #4F46E5;
+  border-radius: 50%;
+  animation: diagramSpin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes diagramSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.msg-diagram {
+  margin-top: 12px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 560px;
+}
+
+.diagram-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.diagram-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.diagram-type-tag {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: #E0E7FF;
+  color: #4F46E5;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.diagram-summary {
+  font-size: 0.85rem;
+  color: #64748B;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.diagram-svg-container {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.diagram-svg-container :deep(svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  color: #EF4444;
+  font-size: 0.85rem;
+  padding: 8px;
 }
 
 .session-empty {
@@ -1684,41 +1918,29 @@ onBeforeUnmount(() => {
 .thinking-bubble {
   background: #FAFAFA;
   border: 1px solid #E2E8F0;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   border-radius: 12px;
   border-top-left-radius: 4px;
   display: flex;
   align-items: center;
+  gap: 8px;
+  color: #64748B;
+  font-size: 0.9rem;
 }
 
-.dot-typing {
-  position: relative;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #94A3B8;
-  color: #94A3B8;
-  animation: dotTyping 1.5s infinite linear;
-  box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
-  margin-right: 24px;
+.thinking-spinner {
+  font-size: 1.2rem;
+  color: #4F46E5;
 }
 
-@keyframes dotTyping {
-  0% {
-    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
-  }
-  33% {
-    background-color: #0F172A;
-    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
-  }
-  66% {
-    background-color: #94A3B8;
-    box-shadow: 12px 0 0 0 #0F172A, 24px 0 0 0 #94A3B8;
-  }
-  100% {
-    background-color: #94A3B8;
-    box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #0F172A;
-  }
+.thinking-text {
+  animation: pulse-text 1.5s infinite;
+}
+
+@keyframes pulse-text {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
 }
 
 .input-panel {
@@ -2098,7 +2320,6 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 
-/* ================= 侧边栏：画像区新样式 ================= */
 .profile-sidebar {
   width: 320px;
   padding: 1.5rem;
@@ -2155,7 +2376,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 0.8rem;
   color: #64748B;
-  text-align: center; /* 在这里进行居中 */
+  text-align: center;
 }
 
 .profile-feature-card {
@@ -2244,7 +2465,6 @@ onBeforeUnmount(() => {
   padding: 20px 0;
 }
 
-/* 将长期记忆通过 margin-top: auto 自动推倒底部 */
 .long-term-memory-section {
   display: flex;
   flex-direction: column;
@@ -2357,8 +2577,6 @@ onBeforeUnmount(() => {
   color: #111;
   margin-top: -10vh;
 }
-
-/* ================= 悬浮按钮 (FAB) 相关样式 ================= */
 
 .fab-container {
   position: fixed;
@@ -2483,7 +2701,6 @@ onBeforeUnmount(() => {
   display: flex;
 }
 
-/* 菜单淡入淡出动画 */
 .fab-menu-fade-enter-active,
 .fab-menu-fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -2509,7 +2726,7 @@ onBeforeUnmount(() => {
   padding: 10px 20px !important;
   display: flex;
   align-items: center;
-  justify-content: center; /* 让文字和图标居中 */
+  justify-content: center;
   gap: 12px;
   font-weight: 500;
 }

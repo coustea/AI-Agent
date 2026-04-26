@@ -110,7 +110,9 @@ class RepoClient:
         }
 
         result = await self._request("POST", "/repo/list", json_data=body)
-        return [Repo(**item) for item in result.get("list", [])]
+        # API 返回格式: {"total": N, "rows": [...]}
+        items = result.get("rows", result.get("list", []))
+        return [Repo(**item) for item in items]
 
     async def get(self, repo_id: str) -> RepoDetail:
         """查询知识库详情。
