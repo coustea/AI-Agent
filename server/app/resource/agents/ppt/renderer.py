@@ -18,12 +18,12 @@ import httpx
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE, MSO_CONNECTOR
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.util import Inches, Pt
 
 from app.infra.logging import get_logger
 from app.resource.agents.ppt.template_catalog import DEFAULT_TEMPLATE_ID, get_builtin_template_spec, merge_template_config
-from app.shared.paths import WORKPLACE_DIR, RESOURCE_DIR
+from app.shared.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
 
@@ -31,6 +31,17 @@ PPT_OUTPUT_DIR = WORKPLACE_DIR / "ppt"
 PPT_TEMPLATE_DIR = WORKPLACE_DIR / "templates"
 TEMPLATE_BASE_DIR = Path(__file__).parent.parent.parent.parent.parent / "template"
 STYLE_PALETTES: dict[str, dict[str, str]] = {
+    "ai_blue_project": {
+        "title": "FFFFFF",
+        "body": "1E2A44",
+        "accent": "1D6CFF",
+        "accent_alt": "49B6FF",
+        "soft": "EAF3FF",
+        "card": "FFFFFF",
+        "gradient_from": "0B3FA8",
+        "gradient_to": "0F67F5",
+        "theme": "ai_blue_report",
+    },
     "modern_minimal": {
         "title": "1E293B",
         "body": "334155",
@@ -72,14 +83,14 @@ STYLE_PALETTES: dict[str, dict[str, str]] = {
         "gradient_to": "DCFCE7",
     },
     "wps_business_blue": {
-        "title": "1E3A8A",
-        "body": "334155",
-        "accent": "1D4ED8",
+        "title": "143A8C",
+        "body": "22324D",
+        "accent": "1E66F5",
         "accent_alt": "0EA5E9",
-        "soft": "DBEAFE",
-        "card": "F8FAFC",
-        "gradient_from": "EFF6FF",
-        "gradient_to": "DBEAFE",
+        "soft": "D9E8FF",
+        "card": "F4F8FF",
+        "gradient_from": "EAF1FF",
+        "gradient_to": "DCEAFF",
         "theme": "wps",
     },
     "wps_minimal_gray": {
@@ -126,6 +137,40 @@ KEYWORD_ICON_MAP: list[tuple[str, str]] = [
     ("实战", "⚒"),
     ("总结", "✓"),
 ]
+
+
+def _looks_garbled_text(text: str) -> bool:
+    s = str(text or "").strip()
+    if not s:
+        return False
+    question_count = s.count("?")
+    replacement_count = s.count("�")
+    ratio = question_count / max(len(s), 1)
+    return replacement_count > 0 or question_count >= 2 or ratio >= 0.25
+
+
+def _slot_fallback_text(key: str) -> str:
+    normalized = str(key or "").lower()
+    if "title" in normalized:
+        return "标题内容"
+    if "subtitle" in normalized:
+        return "副标题内容"
+    if "presenter" in normalized:
+        return "汇报人信息"
+    if "desc" in normalized or "body" in normalized:
+        return "内容待补充"
+    if "point" in normalized or "item" in normalized or "step" in normalized:
+        return "关键要点"
+    return "内容待补充"
+
+
+def _repair_text(text: str, fallback: str = "") -> str:
+    value = str(text or "").strip()
+    if not value:
+        return fallback
+    if _looks_garbled_text(value):
+        return fallback or "内容待补充"
+    return value
 
 
 def _safe_filename(name: str) -> str:
@@ -200,7 +245,7 @@ def _build_default_template_config(template_id: str, template_file: str) -> dict
             "description": "在线导入模板（自动生成默认配置）",
             "template_file": template_file,
             "render_options": {
-                "preserve_template_shapes": False,
+                "preserve_template_shapes": True,
                 "enable_icons": True,
                 "enable_image_placeholders": True,
                 "enable_dynamic_gradient": True,
@@ -377,12 +422,25 @@ def _add_text_box(slide, left: float, top: float, width: float, height: float,
     )
     text_frame = text_box.text_frame
     text_frame.word_wrap = True
+    text_frame.vertical_anchor = MSO_ANCHOR.TOP
+    text_frame.margin_left = Inches(0.03)
+    text_frame.margin_right = Inches(0.03)
+    text_frame.margin_top = Inches(0.01)
+    text_frame.margin_bottom = Inches(0.01)
 
     p = text_frame.paragraphs[0]
-    p.text = text
+    p.text = _repair_text(text, fallback="内容待补充")
     p.font.size = Pt(font_size)
     p.font.bold = bold
     p.font.color.rgb = RGBColor.from_string(color)
+    p.font.name = "Microsoft YaHei"
+    p.space_after = Pt(2)
+    p.line_spacing = 1.18
+    if p.runs:
+        for run in p.runs:
+            run.font.name = "Microsoft YaHei"
+            r_pr = run._r.get_or_add_rPr()
+            r_pr.set("lang", "zh-CN")
     p.alignment = align
 
 
@@ -413,6 +471,165 @@ def _add_card(
         card.line.width = Pt(1.2)
     else:
         card.line.fill.background()
+
+
+def _add_readability_panel(
+    slide,
+    left: float,
+    top: float,
+    width: float,
+    height: float,
+    *,
+    fill_color: str = "FFFFFF",
+    border_color: str = "C7DBFF",
+    transparency: float = 0.08,
+) -> None:
+    panel = slide.shapes.add_shape(
+        MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+        Inches(left),
+        Inches(top),
+        Inches(width),
+        Inches(height),
+    )
+    panel.fill.solid()
+    panel.fill.fore_color.rgb = RGBColor.from_string(fill_color)
+    panel.fill.transparency = transparency
+    panel.line.color.rgb = RGBColor.from_string(border_color)
+    panel.line.width = Pt(1.1)
+
+
+def _collect_replace_values(slide_data: dict[str, Any]) -> list[str]:
+    title = _repair_text(slide_data.get("title", ""), fallback="标题")
+    slots = slide_data.get("slots", {})
+    slots = slots if isinstance(slots, dict) else {}
+    page_role = str(slide_data.get("page_role", "")).strip()
+
+    values: list[str] = [title]
+    if page_role == "cover":
+        for key in ("subtitle", "presenter"):
+            val = _repair_text(slots.get(key, ""), fallback="")
+            if val:
+                values.append(val)
+        return values
+
+    if page_role == "table_of_contents":
+        for i in range(1, 5):
+            t = _repair_text(slots.get(f"item{i}_title", ""), fallback="")
+            d = _repair_text(slots.get(f"item{i}_desc", ""), fallback="")
+            if t:
+                values.append(t)
+            if d:
+                values.append(d)
+        return values
+
+    preferred = [
+        "subtitle",
+        "point1",
+        "point2",
+        "point3",
+        "point4",
+        "item1_title",
+        "item1_body",
+        "item2_title",
+        "item2_body",
+        "item3_title",
+        "item3_body",
+        "item4_title",
+        "item4_body",
+        "step1_title",
+        "step1_body",
+        "step2_title",
+        "step2_body",
+        "step3_title",
+        "step3_body",
+        "body",
+    ]
+    used: set[str] = set()
+    for key in preferred:
+        if key in slots:
+            val = _repair_text(slots.get(key, ""), fallback="")
+            if val:
+                values.append(val)
+            used.add(key)
+    for key in sorted(slots.keys()):
+        if key in used:
+            continue
+        val = _repair_text(slots.get(key, ""), fallback="")
+        if val:
+            values.append(val)
+    return values
+
+
+def _replace_template_text_frames(slide, slide_data: dict[str, Any]) -> None:
+    text_shapes = [s for s in slide.shapes if getattr(s, "has_text_frame", False)]
+    if not text_shapes:
+        return
+
+    text_shapes.sort(key=lambda s: (float(getattr(s, "top", 0)), float(getattr(s, "left", 0))))
+    values = _collect_replace_values(slide_data)
+
+    for idx, value in enumerate(values):
+        if idx >= len(text_shapes):
+            break
+        tf = text_shapes[idx].text_frame
+        if tf is None:
+            continue
+        tf.clear()
+        tf.paragraphs[0].text = _repair_text(value, fallback="内容待补充")
+        p = tf.paragraphs[0]
+        p.font.name = "Microsoft YaHei"
+        for run in p.runs:
+            run.font.name = "Microsoft YaHei"
+            r_pr = run._r.get_or_add_rPr()
+            r_pr.set("lang", "zh-CN")
+            r_pr.set("eastAsia", "Microsoft YaHei")
+
+
+def _remove_unwanted_template_shapes(slide, page_role: str = "") -> None:
+    """删除模板中不需要保留的品牌字样或脏元素（如 Canva 水印文字）。"""
+    banned_keywords = ("canva", "www.canva", "com.canva", "可画")
+    to_remove = []
+    for shape in slide.shapes:
+        # 先看 shape 名称
+        shape_name = str(getattr(shape, "name", "") or "").lower()
+        if any(k in shape_name for k in banned_keywords):
+            to_remove.append(shape)
+            continue
+
+        # 再看文本内容
+        if getattr(shape, "has_text_frame", False):
+            tf = shape.text_frame
+            if tf is None:
+                continue
+            txt = "\n".join((p.text or "") for p in tf.paragraphs).strip().lower()
+            if any(k in txt for k in banned_keywords):
+                to_remove.append(shape)
+                continue
+
+        # 封面页定点清除左上角品牌/装饰 Logo（常见于第三方模板）
+        if page_role == "cover":
+            left = float(getattr(shape, "left", 0)) / 914400
+            top = float(getattr(shape, "top", 0)) / 914400
+            width = float(getattr(shape, "width", 0)) / 914400
+            height = float(getattr(shape, "height", 0)) / 914400
+            is_text = bool(getattr(shape, "has_text_frame", False))
+            if (not is_text) and left <= 5.2 and top <= 1.8 and width <= 4.5 and height <= 1.8:
+                to_remove.append(shape)
+                continue
+
+            # 彻底删除封面左上 Logo 干扰区域的小元素（含文本/矢量）
+            # 命中你截图中“可画/Canva”残留位置，直接物理删除，不做遮挡。
+            in_logo_zone = (1.0 <= left <= 4.4) and (0.45 <= top <= 1.55)
+            small_shape = width <= 4.0 and height <= 1.25
+            if in_logo_zone and small_shape:
+                to_remove.append(shape)
+
+    for shape in to_remove:
+        try:
+            sp = shape._element
+            sp.getparent().remove(sp)
+        except Exception:
+            continue
 
 
 def _resolve_icon_symbol(page_role: str, title: str) -> str:
@@ -1015,6 +1232,7 @@ def _apply_visual_theme(
     soft = palette["soft"]
     card = palette["card"]
 
+    theme_name = str(palette.get("theme", "")).strip().lower()
     canvas = slide.shapes.add_shape(
         MSO_AUTO_SHAPE_TYPE.RECTANGLE,
         Inches(0.0),
@@ -1022,13 +1240,89 @@ def _apply_visual_theme(
         Inches(13.333),
         Inches(7.5),
     )
+    if theme_name == "ai_blue_report":
+        # 模板结构重建：章节页深蓝背景 + 内容页白底卡片。
+        if page_role in {"cover", "table_of_contents"}:
+            if enable_dynamic_gradient:
+                _apply_gradient_fill(canvas, "0A2E88", "1168FF")
+            else:
+                canvas.fill.solid()
+                canvas.fill.fore_color.rgb = RGBColor.from_string("0A4CC8")
+            canvas.line.fill.background()
+            for left in (0.6, 2.6, 4.9, 7.2, 9.5, 11.7):
+                stripe = slide.shapes.add_shape(
+                    MSO_AUTO_SHAPE_TYPE.PARALLELOGRAM,
+                    Inches(left),
+                    Inches(0.0),
+                    Inches(1.35),
+                    Inches(7.5),
+                )
+                stripe.fill.solid()
+                stripe.fill.fore_color.rgb = RGBColor.from_string("103B9A")
+                stripe.fill.transparency = 0.42
+                stripe.line.fill.background()
+            for left, top, width, height in ((1.8, 6.15, 2.4, 0.75), (9.3, 6.1, 2.6, 0.8)):
+                glow = slide.shapes.add_shape(
+                    MSO_AUTO_SHAPE_TYPE.OVAL,
+                    Inches(left),
+                    Inches(top),
+                    Inches(width),
+                    Inches(height),
+                )
+                if enable_dynamic_gradient:
+                    _apply_gradient_fill(glow, "B7E6FF", "2A8BFF")
+                else:
+                    glow.fill.solid()
+                    glow.fill.fore_color.rgb = RGBColor.from_string("4AA2FF")
+                glow.fill.transparency = 0.25
+                glow.line.fill.background()
+            return
+
+        canvas.fill.solid()
+        canvas.fill.fore_color.rgb = RGBColor.from_string("EEF4FF")
+        canvas.line.fill.background()
+        header = slide.shapes.add_shape(
+            MSO_AUTO_SHAPE_TYPE.RECTANGLE,
+            Inches(0.0),
+            Inches(0.0),
+            Inches(13.333),
+            Inches(1.12),
+        )
+        if enable_dynamic_gradient:
+            _apply_gradient_fill(header, "0D48BF", "1E75FF")
+        else:
+            header.fill.solid()
+            header.fill.fore_color.rgb = RGBColor.from_string("145AD6")
+        header.line.fill.background()
+        section_bar = slide.shapes.add_shape(
+            MSO_AUTO_SHAPE_TYPE.RECTANGLE,
+            Inches(0.0),
+            Inches(1.12),
+            Inches(13.333),
+            Inches(0.12),
+        )
+        section_bar.fill.solid()
+        section_bar.fill.fore_color.rgb = RGBColor.from_string("53C1FF")
+        section_bar.line.fill.background()
+        panel = slide.shapes.add_shape(
+            MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+            Inches(0.45),
+            Inches(1.38),
+            Inches(12.45),
+            Inches(5.8),
+        )
+        panel.fill.solid()
+        panel.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
+        panel.line.color.rgb = RGBColor.from_string("CAE1FF")
+        panel.line.width = Pt(1.4)
+        return
+
     if enable_dynamic_gradient:
         _apply_gradient_fill(canvas, palette["gradient_from"], "FFFFFF")
     else:
         canvas.fill.solid()
         canvas.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
     canvas.line.fill.background()
-    theme_name = str(palette.get("theme", "")).strip().lower()
     if page_role == "cover":
         ribbon = slide.shapes.add_shape(
             MSO_AUTO_SHAPE_TYPE.RECTANGLE,
@@ -1122,23 +1416,133 @@ def _render_slide_content(slide, slide_data: dict, style: str, render_options: d
     enable_icons = bool(render_options.get("enable_icons", True))
     enable_image_placeholders = bool(render_options.get("enable_image_placeholders", True))
     enable_dynamic_gradient = bool(render_options.get("enable_dynamic_gradient", True))
+    preserve_template_shapes = bool(render_options.get("preserve_template_shapes", False))
     palette = _resolve_style_palette(style)
+    theme_name = str(palette.get("theme", "")).strip().lower()
+    is_wps_theme = theme_name == "wps"
+    is_ai_blue_theme = theme_name == "ai_blue_report"
+    ai_pdf_mode = is_ai_blue_theme and preserve_template_shapes
     title_color = palette["title"]
     body_color = palette["body"]
     muted_color = palette["accent"]
     subtle_color = palette["body"]
     accent = palette["accent"]
-    _apply_visual_theme(
-        slide,
-        page_role,
-        palette,
-        enable_dynamic_gradient=enable_dynamic_gradient,
-    )
+    # 保留模板图形时，避免再铺一层背景遮住原模板视觉。
+    if not preserve_template_shapes:
+        _apply_visual_theme(
+            slide,
+            page_role,
+            palette,
+            enable_dynamic_gradient=enable_dynamic_gradient,
+        )
+    if is_wps_theme and preserve_template_shapes:
+        enable_icons = False
+
+    if is_wps_theme and page_role in {"cover", "table_of_contents"}:
+        title_color = "FFFFFF"
+        body_color = "EAF2FF"
+        muted_color = "DCEBFF"
+        subtle_color = "CFE2FF"
+    if ai_pdf_mode:
+        enable_icons = False
+        title_color = "123E98"
+        body_color = "1D2F4E"
+        muted_color = "2B64DA"
+        subtle_color = "2A3D5F"
+
     if enable_icons:
         _add_title_icon(slide, _resolve_icon_symbol(page_role, title), palette)
 
     # 根据页面类型布局内容
-    if page_role == "cover":
+    if is_ai_blue_theme and page_role == "cover":
+        if ai_pdf_mode:
+            _add_readability_panel(
+                slide,
+                0.95,
+                1.45,
+                11.35,
+                2.55,
+                fill_color="0A3FAD",
+                border_color="69B6FF",
+                transparency=0.18,
+            )
+        _add_text_box(slide, 1.02, 1.58, 11.4, 1.4, title, font_size=64, bold=True, color="0B1F57", align=PP_ALIGN.CENTER)
+        _add_text_box(slide, 1.0, 1.54, 11.4, 1.4, title, font_size=64, bold=True, color="FFFFFF", align=PP_ALIGN.CENTER)
+        subtitle = _slot_text(slots, "subtitle")
+        if subtitle:
+            _add_text_box(slide, 1.8, 3.38, 9.8, 0.7, subtitle, font_size=22, color="D9ECFF", align=PP_ALIGN.CENTER)
+        presenter = _slot_text(slots, "presenter")
+        if presenter:
+            _add_text_box(slide, 3.0, 5.62, 7.3, 0.48, presenter, font_size=18, color="EAF4FF", align=PP_ALIGN.CENTER)
+
+    elif is_ai_blue_theme and page_role == "table_of_contents":
+        if ai_pdf_mode:
+            _add_readability_panel(
+                slide,
+                7.15,
+                1.62,
+                5.45,
+                5.45,
+                fill_color="0D4FC8",
+                border_color="7FD0FF",
+                transparency=0.22,
+            )
+        _add_text_box(slide, 0.9, 0.75, 3.2, 0.8, "目录", font_size=52, bold=True, color="FFFFFF")
+        top = 2.05
+        for i in range(1, 5):
+            item_title = _slot_text(slots, f"item{i}_title", default=f"模块{i}")
+            item_desc = _slot_text(slots, f"item{i}_desc")
+            num_box = slide.shapes.add_shape(
+                MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                Inches(7.35),
+                Inches(top - 0.02),
+                Inches(0.9),
+                Inches(0.52),
+            )
+            _apply_gradient_fill(num_box, "19A9FF", "2D7DFF")
+            num_box.line.fill.background()
+            _add_text_box(slide, 7.35, top + 0.02, 0.9, 0.45, f"{i:02d}", font_size=17, bold=True, color="FFFFFF", align=PP_ALIGN.CENTER)
+            _add_text_box(slide, 8.45, top, 4.2, 0.45, item_title, font_size=26, bold=True, color="FFFFFF")
+            if item_desc:
+                _add_text_box(slide, 8.45, top + 0.42, 4.2, 0.35, item_desc, font_size=14, color="DDEEFF")
+            top += 1.2
+
+    elif ai_pdf_mode:
+        # PDF 直转模板中原图已带大量文本，统一覆盖可读区并按模板节奏输出，
+        # 保证“模板适配内容”而不是简单叠加。
+        _add_readability_panel(
+            slide,
+            0.78,
+            1.32,
+            11.95,
+            5.92,
+            fill_color="FFFFFF",
+            border_color="BED6FF",
+            transparency=0.07,
+        )
+        _add_text_box(slide, 1.08, 1.68, 11.2, 0.72, title, font_size=34, bold=True, color="1346AB")
+        normalized_slots = {str(k): str(v) for k, v in slots.items() if str(v).strip()}
+        keys = sorted(normalized_slots.keys())
+        lines = []
+        for k in keys:
+            if k == "title":
+                continue
+            value = normalized_slots[k].strip()
+            if value:
+                label = k.replace("_", " ").title()
+                lines.append(f"{label}：{value}")
+        if not lines:
+            body = _slot_text(slots, "body")
+            if body:
+                lines = [body]
+        if not lines:
+            lines = ["内容待补充"]
+        top = 2.55
+        for line in lines[:8]:
+            _add_text_box(slide, 1.2, top, 10.95, 0.55, f"• {line}", font_size=18, color="203350")
+            top += 0.62
+
+    elif page_role == "cover":
         _add_text_box(slide, 0.9, 0.2, 11.7, 0.8, title, font_size=40, bold=True,
                       color=title_color, align=PP_ALIGN.CENTER)
         if slots.get("subtitle"):
@@ -1373,32 +1777,28 @@ def _parse_ppt_plan_json(ppt_plan_json: str) -> tuple[str, list[dict[str, Any]]]
     if not isinstance(raw, dict):
         raise ValueError("ppt_plan_json 顶层必须为对象")
 
-    presentation_title = str(raw.get("presentation_title", "")).strip() or "演示文稿"
+    presentation_title = _repair_text(raw.get("presentation_title", ""), fallback="演示文稿")
     raw_slides = raw.get("slides")
     if not isinstance(raw_slides, list) or not raw_slides:
         raise ValueError("ppt_plan_json 缺少 slides 列表")
 
     slides: list[dict[str, Any]] = []
-    for item in raw_slides:
+    for idx, item in enumerate(raw_slides, 1):
         if not isinstance(item, dict):
             continue
-        slots = item.get("slots", {})
-        slots = slots if isinstance(slots, dict) else {}
-        title = str(item.get("title") or slots.get("title") or "未命名页面").strip()
+        raw_slots = item.get("slots", {})
+        raw_slots = raw_slots if isinstance(raw_slots, dict) else {}
+        slots: dict[str, str] = {}
+        for key, value in raw_slots.items():
+            fallback = _slot_fallback_text(str(key))
+            slots[str(key)] = _repair_text(value, fallback=fallback)
+        title = _repair_text(item.get("title") or slots.get("title") or "", fallback=f"第{idx}页")
         page_role = str(item.get("page_role", "")).strip()
-        content_lines: list[str] = []
-        for key, value in slots.items():
-            if key == "title":
-                continue
-            text = str(value).strip()
-            if text:
-                content_lines.append(text)
         slides.append(
             {
                 "title": title,
                 "slots": slots,
-                "content": [{"type": "text", "text": "\n".join(content_lines)}] if content_lines else [],
-                "note": str(item.get("speaker_notes", "")).strip(),
+                "note": _repair_text(item.get("speaker_notes", ""), fallback=f"讲解第{idx}页核心内容。"),
                 "page_role": page_role,
                 "section": str(item.get("section", "")).strip(),
             }
@@ -1415,26 +1815,14 @@ def render_ppt_plan_to_file(
     template_source_url: str = "",
     template_config_url: str = "",
     style: str = "modern_minimal",
-    user_id: int = 0,
-    resource_id: int = 0,
 ) -> dict[str, Any]:
-    """将结构化 JSON 计划渲染为 PPT 文件并返回结果。
-
-    Args:
-        topic: 主题
-        ppt_plan_json: PPT JSON 计划
-        template_id: 模板 ID
-        template_source_url: 模板源 URL
-        template_config_url: 模板配置 URL
-        style: 样式
-        user_id: 用户 ID，用于保存路径
-        resource_id: 资源 ID，用于保存路径
-    """
+    """将结构化 JSON 计划渲染为 PPT 文件并返回结果。"""
     if not str(ppt_plan_json or "").strip():
         return {"error": "缺少必填参数 ppt_plan_json"}
-    resolved_template_id = str(template_id or "").strip()
-    if resolved_template_id in {"auto", "cn_ink_education"}:
-        resolved_template_id = DEFAULT_TEMPLATE_ID
+    # Force single-template mode; ignore runtime template switching.
+    resolved_template_id = DEFAULT_TEMPLATE_ID
+    if resolved_template_id == "ai_blue_pdf_template":
+        style = "ai_blue_project"
 
     try:
         presentation_title, slides = _parse_ppt_plan_json(ppt_plan_json)
@@ -1446,8 +1834,8 @@ def render_ppt_plan_to_file(
     try:
         ensure_template_available(
             template_id=resolved_template_id,
-            template_source_url=template_source_url,
-            template_config_url=template_config_url,
+            template_source_url="",
+            template_config_url="",
         )
     except Exception as exc:
         logger.warning("[render_ppt_plan_to_file] 在线模板下载失败，回退本地渲染: %s", exc)
@@ -1465,11 +1853,14 @@ def render_ppt_plan_to_file(
         prs = Presentation()
         prs.slide_width = Inches(13.333)
         prs.slide_height = Inches(7.5)
-        config = {"slide_definitions": []}
+        spec = get_builtin_template_spec(resolved_template_id) or {}
+        builtin_config = spec.get("config") if isinstance(spec.get("config"), dict) else {}
+        config = merge_template_config(resolved_template_id, builtin_config)
 
     initial_template_slide_count = len(prs.slides)
     render_options = config.get("render_options", {}) if isinstance(config, dict) else {}
     preserve_template_shapes = bool(render_options.get("preserve_template_shapes", False))
+    replace_template_text_frames = bool(render_options.get("replace_template_text_frames", False))
     slide_titles: list[str] = []
 
     # 为每个内容创建新幻灯片（基于模板布局）
@@ -1484,10 +1875,15 @@ def render_ppt_plan_to_file(
 
         # 复制模板幻灯片
         slide = _copy_slide(prs, template_idx, preserve_template_shapes=preserve_template_shapes)
-        _clear_text_frames(slide)
-
-        # 渲染内容
-        _render_slide_content(slide, slide_data, style, render_options)
+        # Keep original template decorations/text for fixed single-template mode.
+        if resolved_template_id != DEFAULT_TEMPLATE_ID:
+            _remove_unwanted_template_shapes(slide, page_role=page_role)
+        if replace_template_text_frames:
+            _replace_template_text_frames(slide, slide_data)
+        else:
+            _clear_text_frames(slide)
+            # 渲染内容
+            _render_slide_content(slide, slide_data, style, render_options)
 
         # 添加讲者备注
         if note_text:
@@ -1500,15 +1896,11 @@ def render_ppt_plan_to_file(
         prs.part.drop_rel(rId)
         del prs.slides._sldIdLst[idx]
 
-    # 保存文件到统一路径: workplace/resource/{user_id}/{resource_id}/
-    if user_id and resource_id:
-        output_dir = RESOURCE_DIR / str(user_id) / str(resource_id)
-    else:
-        output_dir = PPT_OUTPUT_DIR  # 回退到旧路径
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # 保存文件
+    PPT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     filename_stem = _safe_filename(topic) or _safe_filename(presentation_title) or "presentation"
     filename = f"{filename_stem}.pptx"
-    filepath = output_dir / filename
+    filepath = PPT_OUTPUT_DIR / filename
     prs.save(str(filepath))
 
     result = {

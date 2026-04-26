@@ -6,7 +6,6 @@ PPT 演示文稿生成 Agent。
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import re
 from pathlib import Path
@@ -23,7 +22,6 @@ from app.resource.agents.ppt.template_catalog import (
     DEFAULT_TEMPLATE_ID,
     get_builtin_template_spec,
     merge_template_config,
-    recommend_template_id,
 )
 from app.shared.paths import WORKPLACE_DIR
 
@@ -93,8 +91,6 @@ class PptState(TypedDict, total=False):
     gap: str
     user_profile: dict[str, Any]
     shared_memory: dict[str, Any]
-    user_id: int
-    resource_id: int
     messages: list[Any]
     is_valid: bool
     validation_feedback: str
@@ -205,18 +201,6 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return parsed
 
 
-def _filter_callable_kwargs(fn, kwargs: dict[str, Any]) -> dict[str, Any]:
-    signature = inspect.signature(fn)
-    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
-        return kwargs
-    allowed = {
-        name
-        for name, param in signature.parameters.items()
-        if param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
-    }
-    return {key: value for key, value in kwargs.items() if key in allowed}
-
-
 def _default_title_for_role(page_role: str) -> str:
     mapping = {
         "cover": "封面",
@@ -248,7 +232,7 @@ def _normalize_plan_dict(plan: dict[str, Any]) -> dict[str, Any]:
         return normalized
 
     fixed_slides: list[dict[str, Any]] = []
-    for index, item in enumerate(raw_slides):
+    for item in raw_slides:
         if not isinstance(item, dict):
             continue
         slide = dict(item)
@@ -259,8 +243,6 @@ def _normalize_plan_dict(plan: dict[str, Any]) -> dict[str, Any]:
 
         if not section:
             section = "learning"
-        if index < 2 and section in {"cover", "overview"}:
-            section = "opening"
 
         title = str(slide.get("title", "")).strip() or str(slots.get("title", "")).strip()
         if not title:
@@ -344,7 +326,15 @@ class PptAgent:
             "template_name": config.get("name", "未命名模板"),
             "template_description": config.get("description", ""),
             "template_roles_definition": "\n".join(unique_roles),
-            "template_slot_rules": "\n".join(unique_rules)
+            "template_slot_rules": "\n".join(unique_rules),
+            "template_schema_json": json.dumps(
+                {
+                    "slide_definitions": config.get("slide_definitions", []),
+                    "render_options": config.get("render_options", {}),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
         }
 
     @staticmethod
@@ -355,13 +345,8 @@ class PptAgent:
         user_profile: dict[str, Any],
         style: str,
     ) -> str:
-        normalized = str(requested_template_id or "").strip()
-        has_custom_source = bool(str(template_source_url or "").strip())
-        if has_custom_source:
-            return normalized or "custom_online_template"
-        if normalized and normalized not in {"cn_ink_education", "auto"}:
-            return normalized
-        return recommend_template_id(user_profile, style) or DEFAULT_TEMPLATE_ID
+        _ = (requested_template_id, template_source_url, user_profile, style)
+        return DEFAULT_TEMPLATE_ID
 
     async def _ensure_graph(self) -> None:
         """确保图已构建。"""
@@ -385,23 +370,41 @@ class PptAgent:
         graph.add_edge("render", END)
         return graph.compile()
 
-    async def _invoke_llm(self, messages: list[Any], state: Any) -> PptPlanOutput:
-        """Invoke LLM with structured output, falling back to JSON text mode."""
+    def _route_after_validate(self, state: Any) -> str:
+        """校验后决定重试、渲染或结束。"""
+        if state.get("error"):
+            return "end"
+        if state.get("is_valid", False) and state.get("render_ready", False):
+            return "render"
+        if state.get("retry_count", 0) < state.get("max_retries", 2):
+            return "retry"
+        return "end"
+
+    async def _agent_node(self, state: Any) -> dict:
+        """Agent 节点：调用 LLM 生成结构化计划。"""
         from app.config import LLM_TIMEOUT
 
+        messages = self._build_messages(state)
+        structured_llm = self.llm.with_structured_output(self.structured_output_schema)
+
         try:
-            structured_llm = self.llm.with_structured_output(self.structured_output_schema)
             result = await asyncio.wait_for(
                 structured_llm.ainvoke(messages),
                 timeout=LLM_TIMEOUT,
             )
-            return self.structured_output_schema.model_validate(result)
+            return {"ppt_plan": result.model_dump(), "error": None}
+        except asyncio.TimeoutError:
+            logger.error("[%s] LLM 调用超时", self.name)
+            return {"error": "LLM 调用超时", "is_valid": False}
         except Exception as exc:
             error_text = str(exc)
-            if (
-                "response_format type is unavailable" not in error_text
-                and "does not support this tool_choice" not in error_text
-            ):
+            structured_unavailable_markers = (
+                "response_format type is unavailable",
+                "does not support this tool_choice",
+                "tool_choice",
+                "structured output",
+            )
+            if not any(marker in error_text.lower() for marker in structured_unavailable_markers):
                 raise
 
             logger.warning(
@@ -428,7 +431,7 @@ class PptAgent:
                         "    }\n"
                         "  ]\n"
                         "}\n"
-                        f"必须包含 {_MIN_SLIDES}-{_MAX_SLIDES} 页 slides。"
+                        "必须包含至少 6 页 slides。"
                     )
                 )
             ]
@@ -438,34 +441,13 @@ class PptAgent:
             )
             raw_content = getattr(raw_response, "content", raw_response)
             logger.info("[%s] LLM 原始响应长度: %d", self.name, len(str(raw_content)))
-            plan = _normalize_plan_dict(_extract_json_object(raw_content))
-            return self.structured_output_schema.model_validate(plan)
-
-    def _route_after_validate(self, state: Any) -> str:
-        """校验后决定重试、渲染或结束。"""
-        if state.get("error"):
-            return "end"
-        if state.get("is_valid", False) and state.get("render_ready", False):
-            return "render"
-        if state.get("retry_count", 0) < state.get("max_retries", 2):
-            return "retry"
-        return "end"
-
-    async def _agent_node(self, state: Any) -> dict:
-        """Agent 节点：调用 LLM 生成结构化计划。"""
-        from app.config import LLM_TIMEOUT
-
-        messages = self._build_messages(state)
-
-        try:
-            result = await asyncio.wait_for(self._invoke_llm(messages, state), timeout=LLM_TIMEOUT)
-            return {"ppt_plan": result.model_dump(), "error": None}
-        except asyncio.TimeoutError:
-            logger.error("[%s] LLM 调用超时", self.name)
-            return {"error": "LLM 调用超时", "is_valid": False}
-        except Exception as exc:
-            logger.error("[%s] JSON 解析或验证失败: %s", self.name, exc)
-            return {"error": str(exc), "is_valid": False, "ppt_plan": {}}
+            try:
+                plan = _normalize_plan_dict(_extract_json_object(raw_content))
+                validated = self.structured_output_schema.model_validate(plan)
+                return {"ppt_plan": validated.model_dump(), "error": None}
+            except Exception as parse_exc:
+                logger.error("[%s] JSON 解析或验证失败: %s", self.name, parse_exc)
+                return {"error": str(parse_exc), "is_valid": False, "ppt_plan": {}}
 
     def _build_messages(self, state: Any) -> list:
         """构建消息列表。"""
@@ -480,7 +462,7 @@ class PptAgent:
 
     async def _validate_node(self, state: Any) -> dict:
         """校验节点：仅验证结构化计划质量，不做渲染。"""
-        ppt_plan = state.get("ppt_plan") or state.get("_structured_output") or {}
+        ppt_plan = state.get("ppt_plan") or {}
         retry_count = int(state.get("retry_count", 0))
         max_retries = int(state.get("max_retries", 2))
 
@@ -522,24 +504,16 @@ class PptAgent:
         template_source_url = state.get("template_source_url", "")
         template_config_url = state.get("template_config_url", "")
         style = state.get("style", "modern_minimal")
-        user_id = state.get("user_id", 0)
-        resource_id = state.get("resource_id", 0)
         logger.info("[PptAgent] 开始基于模板 [%s] 直接渲染 PPT", template_id)
         try:
-            renderer_kwargs = _filter_callable_kwargs(
-                render_ppt_plan_to_file,
-                {
-                    "topic": state.get("topic", "教学演示"),
-                    "ppt_plan_json": ppt_plan_json,
-                    "template_id": template_id,
-                    "template_source_url": template_source_url,
-                    "template_config_url": template_config_url,
-                    "style": style,
-                    "user_id": user_id,
-                    "resource_id": resource_id,
-                },
+            data = render_ppt_plan_to_file(
+                topic=state.get("topic", "教学演示"),
+                ppt_plan_json=ppt_plan_json,
+                template_id=template_id,
+                template_source_url=template_source_url,
+                template_config_url=template_config_url,
+                style=style,
             )
-            data = render_ppt_plan_to_file(**renderer_kwargs)
         except Exception as exc:
             logger.error("[PptAgent] 自动保存 PPT 失败: %s", exc, exc_info=exc)
             return {
@@ -670,11 +644,9 @@ class PptAgent:
         gap: str = "",
         user_profile: dict = None,
         shared_memory: dict = None,
-        template_id: str = "auto",
+        template_id: str = DEFAULT_TEMPLATE_ID,
         template_source_url: str = "",
         template_config_url: str = "",
-        user_id: int = 0,
-        resource_id: int = 0,
     ) -> dict[str, Any]:
         profile_data = user_profile or {}
         preferred_style = _select_ppt_style(profile_data.get("cognitive_style"))
@@ -704,8 +676,6 @@ class PptAgent:
             "template_id": resolved_template_id,
             "template_source_url": template_source_url or "",
             "template_config_url": template_config_url or "",
-            "user_id": user_id,
-            "resource_id": resource_id,
             "messages": [],
             "slide_titles": [],
             "style": resolved_style,
