@@ -242,26 +242,34 @@
             <div class="input-wrapper" :class="{ 'is-expanded': isExpandedInput }">
 
               <div class="toolbar-left">
-                <el-dropdown trigger="click" placement="top-start" popper-class="custom-plus-dropdown">
-                  <button class="standard-plus-btn" :disabled="uploadingFile"><el-icon><Plus /></el-icon></button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item @click="triggerDocUpload">
-                        <el-icon><Paperclip /></el-icon> 添加文件
-                      </el-dropdown-item>
-                      <el-dropdown-item @click="triggerImgUpload">
-                        <el-icon><Picture /></el-icon> 添加图片
-                      </el-dropdown-item>
-
-                      <el-dropdown-item divided @click="handleImageToggle">
-                        <el-icon><Picture /></el-icon> {{ needDiagram ? '取消生成图解' : '生成图解' }}
-                      </el-dropdown-item>
-                      <el-dropdown-item @click="handleVideoToggle">
-                        <el-icon><VideoPlay /></el-icon> {{ generateVideo ? '取消生成视频' : '生成视频' }}
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
+                <el-popover
+                  placement="top-start"
+                  trigger="click"
+                  :width="150"
+                  popper-class="custom-plus-popover"
+                  :show-arrow="false"
+                >
+                  <template #reference>
+                    <button class="standard-plus-btn" :disabled="uploadingFile" title="更多功能">
+                      <el-icon><Plus /></el-icon>
+                    </button>
                   </template>
-                </el-dropdown>
+                  
+                  <div class="action-menu">
+                    <div class="action-item" @click="triggerFileUpload">
+                      <el-icon><Document /></el-icon>
+                      <span>上传文件</span>
+                    </div>
+                    <div class="action-item" @click="handleImageToggle">
+                      <el-icon :class="{ 'is-active-icon': needDiagram }"><DataLine /></el-icon>
+                      <span>{{ needDiagram ? '取消生成图解' : '生成图解' }}</span>
+                    </div>
+                    <div class="action-item" @click="handleVideoToggle">
+                      <el-icon :class="{ 'is-active-icon': generateVideo }"><VideoCamera /></el-icon>
+                      <span>{{ generateVideo ? '取消生成视频' : '生成视频' }}</span>
+                    </div>
+                  </div>
+                </el-popover>
 
                 <el-tooltip content="联网搜索" placement="top" :show-after="500">
                   <button class="media-gen-btn btn-web" :class="{ active: enableWebSearch }" @click="enableWebSearch = !enableWebSearch">
@@ -278,7 +286,7 @@
 
                 <div class="active-media-chip" v-if="needDiagram" @click="handleImageToggle" title="取消生成图解">
                   <div class="chip-icon-circle">
-                    <el-icon class="icon-default"><Picture /></el-icon>
+                    <el-icon class="icon-default"><DataLine /></el-icon>
                     <el-icon class="icon-hover"><Close /></el-icon>
                   </div>
                   <span>图解</span>
@@ -286,7 +294,7 @@
 
                 <div class="active-media-chip" v-if="generateVideo" @click="handleVideoToggle" title="取消生成视频">
                   <div class="chip-icon-circle">
-                    <el-icon class="icon-default"><VideoPlay /></el-icon>
+                    <el-icon class="icon-default"><VideoCamera /></el-icon>
                     <el-icon class="icon-hover"><Close /></el-icon>
                   </div>
                   <span>视频</span>
@@ -296,7 +304,7 @@
               <textarea
                   ref="textareaRef"
                   v-model="userInput"
-                  placeholder="向 AI 导师提问（Enter 发送，Shift Enter换行）"
+                  placeholder="向 AI 导师提问（Enter 发送，Shift + Enter 换行）"
                   @keydown.enter.exact.prevent="handleSend"
                   @input="autoResize"
               ></textarea>
@@ -328,7 +336,7 @@
                   </button>
                 </el-tooltip>
 
-                <el-tooltip content="请输入您的问题" placement="top" :show-after="500">
+                <el-tooltip content="发送问题" placement="top" :show-after="500">
                   <button class="send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend">
                     <el-icon><Top /></el-icon>
                   </button>
@@ -340,8 +348,7 @@
           </div>
         </div>
 
-        <input ref="docInput" type="file" accept=".pdf,.doc,.docx,.txt" style="display:none" @change="onFileSelected($event, 'document')" />
-        <input ref="imgInput" type="file" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onFileSelected($event, 'image')" />
+        <input ref="fileInput" type="file" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onCombinedFileSelected" />
       </section>
 
       <aside class="profile-sidebar">
@@ -457,8 +464,8 @@ import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
   Plus, Delete, Close, Top,
-  EditPen, Search, Discount, Timer, VideoPlay,
-  Paperclip, CircleCheckFilled,
+  EditPen, Search, Discount, Timer, VideoPlay, VideoCamera, DataLine, Paperclip,
+  CircleCheckFilled,
   User, InfoFilled, Medal, Aim, Setting, Loading
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -466,10 +473,18 @@ import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
 import mermaid from 'mermaid'
 import {
-  streamChat, getProfile, uploadFile,
-  getSessions, createSession, deleteSession, getChatHistory,
-  type ProfileData, type ChatSession
+  getProfile,
+  type ProfileData,
 } from '@/api/ai'
+import {
+  streamChat,
+  uploadFile,
+  getSessions,
+  createSession,
+  deleteSession,
+  getChatHistory,
+  type ChatSession,
+} from '@/api/chat'
 import { getMe } from '@/api/auth'
 
 // ==========================================
@@ -542,8 +557,8 @@ const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
-// --- 媒体生成开关 ---
-const enableWebSearch = ref(false)
+// --- 媒体生成/联网搜索开关 ---
+const enableWebSearch = ref(false) // 恢复联网搜索状态
 const needDiagram = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
@@ -554,8 +569,7 @@ const isVoiceChatting = ref(false)
 
 // --- 文件上传 ---
 const uploadingFile = ref(false)
-const docInput = ref<HTMLInputElement | null>(null)
-const imgInput = ref<HTMLInputElement | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
 
 // --- 会话管理 ---
@@ -936,15 +950,15 @@ const archiveSession = async (sessionId: string) => {
 // ==========================================
 // 13. 文件上传函数
 // ==========================================
-const triggerDocUpload = () => docInput.value?.click()
-const triggerImgUpload = () => imgInput.value?.click()
+const triggerFileUpload = () => fileInput.value?.click()
 
-const onFileSelected = async (event: Event, expectedType: string) => {
+const onCombinedFileSelected = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
 
-  const fileType = expectedType === 'image' ? 'image' : 'document'
+  const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name)
+  const fileType = isImage ? 'image' : 'document'
   pendingFiles.value.push({
     file,
     fileType,
@@ -1120,6 +1134,7 @@ const handleSend = async () => {
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
         need_diagram: shouldGenerateDiagram,
         generate_video: generateVideo.value,
+        enable_search: enableWebSearch.value, // 使用联网搜索的值
       },
       (chunk) => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
@@ -1943,23 +1958,26 @@ onBeforeUnmount(() => {
   100% { opacity: 0.6; }
 }
 
+/* ================= 针对输入框的优化 ================= */
 .input-panel {
-  padding: 0 0 1rem 0;
+  padding: 0 24px 20px 24px; /* 添加左右安全边距，防止被滚动条或容器两侧盖住 */
   display: flex;
   flex-direction: column;
   align-items: center;
   background: transparent;
+  width: 100%;
+  box-sizing: border-box; /* 确保内边距不会撑破外容器 */
 }
 
 .attachments-preview {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
-  width: 80%;
+  width: 100%; /* 修改为100%以便与下方的 input-wrapper 保持宽度对齐 */
   max-width: 800px;
-  min-width: 300px;
   flex-wrap: wrap;
   justify-content: flex-start;
+  box-sizing: border-box;
 }
 
 .attachment-chip {
@@ -1984,25 +2002,25 @@ onBeforeUnmount(() => {
 }
 
 .input-wrapper {
-  width: 80%;
+  width: 100%;
   max-width: 800px;
-  min-width: 300px;
-  background: #F9F9F9;
-  border: 1px solid #E5E5E5;
-  border-radius: 32px;
-  padding: 10px 16px;
+  background: #F4F4F5;
+  border: 1px solid transparent;
+  border-radius: 36px; /* 增加到36px，使其形成完美的药丸形（四周圆角） */
+  padding: 12px 20px; /* 稍微增加 padding 提升呼吸感 */
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px 12px;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02); /* 轻微阴影，提升质感 */
 }
 
 .input-wrapper:focus-within {
   background: #FFFFFF;
-  border-color: #D1D5DB;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  border-color: #D4D4D8;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05); /* 聚焦时阴影放大 */
 }
 
 .toolbar-left {
@@ -2041,8 +2059,8 @@ onBeforeUnmount(() => {
 }
 
 .input-wrapper.is-expanded {
-  border-radius: 20px;
-  padding: 12px 16px;
+  border-radius: 24px; /* 展开成多行时，圆角稍微收缩避免文字贴着圆弧 */
+  padding: 16px 20px;
   align-items: end;
 }
 
@@ -2087,6 +2105,7 @@ onBeforeUnmount(() => {
   background: #E5E5E5;
 }
 
+/* 恢复联网搜索的按钮样式 */
 .media-gen-btn {
   width: 32px;
   height: 32px;
@@ -2106,10 +2125,12 @@ onBeforeUnmount(() => {
 .media-gen-btn.btn-web {
   color: #374151;
 }
+
 .media-gen-btn.btn-web:hover {
   background: #E5E5E5;
   color: #111827;
 }
+
 .media-gen-btn.btn-web.active {
   color: #0EA5E9;
   background: #F0F9FF;
@@ -2711,44 +2732,43 @@ onBeforeUnmount(() => {
   transform: scale(0.95) translateY(10px);
 }
 
-.custom-plus-dropdown {
-  border-radius: 16px !important;
-  padding: 6px !important;
-  border: 1px solid #E5E7EB !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+/* 弹出菜单项样式 */
+.action-menu {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
 }
 
-.custom-plus-dropdown .el-dropdown-menu__item {
-  border-radius: 10px;
-  margin: 2px 6px;
-  color: #374151 !important;
-  font-size: 0.95rem !important;
-  padding: 10px 20px !important;
+.action-item {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 12px;
-  font-weight: 500;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: #3f3f46;
+  font-size: 14px;
+  transition: background-color 0.2s;
+  border-radius: 6px;
 }
 
-.custom-plus-dropdown .el-dropdown-menu__item:hover {
-  background-color: #F3F4F6 !important;
-  color: #111827 !important;
+.action-item:hover {
+  background: #f4f4f5;
+  color: #18181b;
 }
 
-.custom-plus-dropdown .el-dropdown-menu__item .el-icon {
-  font-size: 1.2rem;
-  color: #374151 !important;
-  margin-right: 4px;
+.action-item .el-icon {
+  font-size: 18px;
 }
 
-.custom-plus-dropdown .el-dropdown-menu__item--divided {
-  margin-top: 6px !important;
-  padding-top: 6px !important;
-  border-top: 1px solid #D1D5DB !important;
+.action-item .is-active-icon {
+  color: #4F46E5;
 }
+</style>
 
-.custom-plus-dropdown .el-dropdown-menu__item--divided::before {
-  display: none !important;
+<style>
+.custom-plus-popover {
+  padding: 8px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
 }
 </style>

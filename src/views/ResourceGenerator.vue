@@ -66,6 +66,7 @@
         <section class="workflow-section">
           <div class="section-header">
             <h3><el-icon><Connection /></el-icon> 实时协同执行流</h3>
+            <div class="workflow-plan-title" v-if="currentExecutionGroupText">{{ currentExecutionGroupText }}</div>
             <div class="progress-info" v-if="isGenerating || progress === 100">
               <span>构建总进度: {{ progress }}%</span>
               <el-progress :percentage="progress" :show-text="false" class="top-progress" />
@@ -124,6 +125,10 @@
                     <div class="node-summary" v-if="['success', 'done'].includes(nodesState[agentId]?.status || '')">
                       <el-icon class="text-success" style="font-size: 1.2rem;"><CircleCheckFilled /></el-icon><span>资源构建成功</span>
                     </div>
+
+                    <div class="node-summary skipped-summary" v-else-if="nodesState[agentId]?.status === 'skipped'">
+                      <el-icon style="font-size: 1.2rem;"><CircleCloseFilled /></el-icon><span>{{ nodesState[agentId]?.currentAction || '已跳过' }}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -165,63 +170,19 @@
       destroy-on-close
     >
       <div v-if="previewData" class="preview-dialog-body">
-        
-        <template v-if="previewData.hasFile">
-          <video 
-            v-if="previewData.fileCategory === 'video'" 
-            :src="previewData.fileUrl" 
-            controls 
-            class="full-media"
-          ></video>
-          
-          <div v-else-if="previewData.fileCategory === 'image'" class="flex-center">
-            <el-image :src="previewData.fileUrl" fit="contain" class="full-media" />
-          </div>
-          
-          <iframe 
-            v-else-if="['html', 'pdf'].includes(previewData.fileCategory)" 
-            :src="previewData.fileUrl" 
-            class="full-iframe" 
-            frameborder="0"
-          ></iframe>
-          
-          <div v-else-if="['ppt', 'json', 'markdown', 'other'].includes(previewData.fileCategory)" class="placeholder-view">
-            <el-icon class="huge-icon" :class="previewData.fileCategory === 'ppt' ? 'text-ppt' : 'text-slate'"><DataBoard v-if="previewData.fileCategory === 'ppt'"/><Document v-else/></el-icon>
-            <p class="placeholder-text">{{ previewData.fileCategory === 'ppt' ? 'PPT 演示文稿' : (previewData.fileCategory.toUpperCase() + ' 文件') }}暂不支持直接内嵌预览</p>
-            <el-button type="primary" size="large" @click="downloadUrl(previewData.fileUrl, previewData.title)">
-              <el-icon class="mr-2"><Download /></el-icon> 立即下载文件
-            </el-button>
-          </div>
-        </template>
-
-        <template v-else>
-          <div 
-            v-if="['content', 'reading', 'ppt'].includes(previewData.agentId) || (typeof previewData.resultData === 'string' && previewData.resultData.includes('#'))" 
-            class="markdown-body custom-md" 
-            v-html="parseMarkdown(previewData.resultData?.content || previewData.resultData?.outline || previewData.resultData)"
-          ></div>
-          
-          <div v-else-if="previewData.agentId === 'code'" class="code-view">
-            <pre><code>{{ extractCode(previewData.resultData?.content) || previewData.resultData }}</code></pre>
-          </div>
-          
-          <div v-else-if="previewData.agentId === 'quiz'" class="quiz-view">
-            <div class="quiz-item" v-for="(q, i) in (previewData.resultData?.questions || [])" :key="i">
-              <div class="q-stem"><strong>Q{{ displayIndex(i) }}:</strong> {{ q.stem }}</div>
-              <div class="q-options" v-if="q.options">
-                <div v-for="(opt, oi) in q.options" :key="oi" class="q-opt">{{ opt }}</div>
-              </div>
-              <div class="q-answer" v-if="q.answer"><strong>答案:</strong> {{ q.answer }}</div>
-              <div class="q-analysis" v-if="q.analysis"><strong>解析:</strong> {{ q.analysis }}</div>
-            </div>
-            <pre v-if="!previewData.resultData?.questions" class="code-view"><code>{{ formatJson(previewData.resultData) }}</code></pre>
-          </div>
-          
-          <div v-else class="code-view">
-            <pre><code>{{ formatJson(previewData.resultData) }}</code></pre>
-          </div>
-        </template>
-        
+        <MindmapResourceView
+          v-if="previewData.agentId === 'mindmap'"
+          :result-data="previewData.resultData"
+        />
+        <QuizResourceView
+          v-else-if="previewData.agentId === 'quiz'"
+          :result-data="previewData.resultData"
+        />
+        <MarkdownResourceView
+          v-else-if="['content', 'reading', 'code'].includes(previewData.agentId)"
+          :result-data="previewData.resultData"
+        />
+        <pre v-else class="code-view"><code>{{ formatJson(previewData.resultData) }}</code></pre>
       </div>
     </el-dialog>
     
@@ -229,44 +190,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, type Component } from 'vue'
 import {
   Cpu, Document, Edit, Collection, VideoPlay, Monitor, Guide, Setting,
-  Share, Connection, FolderOpened, Select, ArrowRightBold, CaretRight, Loading, CircleCheckFilled, CollectionTag, Aim, Check, Download, DataBoard
+  Share, Connection, FolderOpened, Select, ArrowRightBold, CaretRight, Loading, CircleCheckFilled, CircleCloseFilled, CollectionTag, Aim, Check, DataBoard
 } from '@element-plus/icons-vue'
 
 import ResourceCard from '@/components/ResourceCard.vue'
-import { generateResources, recordLearningEvent, type GenerateParams, type ResourceGenerateEvent } from '@/api/ai'
-import { marked } from 'marked'
-import 'github-markdown-css/github-markdown-light.css'
+import MindmapResourceView from '@/components/resources/MindmapResourceView.vue'
+import MarkdownResourceView from '@/components/resources/MarkdownResourceView.vue'
+import QuizResourceView from '@/components/resources/QuizResourceView.vue'
+import {
+  generateResources,
+  getAgents,
+  type AgentInfo,
+  type ResourceAgentLogEvent,
+  type ResourceAgentStatusEvent,
+  type ResourceArtifact,
+  type ResourceArtifactReadyEvent,
+  type ResourceBundleUpdateEvent,
+  type ResourceGenerateEvent,
+  type ResourceGenerateRequest,
+  type ResourceWorkflowEvent,
+} from '@/api/resource'
+import { recordLearningEvent } from '@/api/ai'
 
 // ================= 数据定义 =================
 const isSidebarCollapsed = ref(false)
 const isGenerating = ref(false)
 const progress = ref(0)
-const results = ref<Record<string, any>>({})
+const results = ref<Record<string, ResourceArtifact>>({})
 const workflowController = ref<AbortController | null>(null)
 
 const form = reactive({
   topic: 'TCP/IP 三次握手',
   gap: '总是记不住状态流转过程',
-  selected: ['content', 'mindmap', 'quiz', 'code', 'image', 'ppt'] // 默认多选几个以测试分列效果
+  selected: ['content', 'mindmap', 'quiz', 'reading', 'code']
 })
 
 // 🌟 动态排序队列 (决定前端展示顺序)
 const dynamicExecutionQueue = ref<string[]>([])
 const completedAgentsQueue = ref<string[]>([])
 
-const agentConfig = [
-  { id: 'content', name: '核心精讲', icon: Document },
-  { id: 'mindmap', name: '思维导图', icon: Share },
-  { id: 'quiz', name: '专项题库', icon: Edit },
-  { id: 'code', name: '实操代码', icon: Cpu },
-  { id: 'image', name: '教学配图', icon: Monitor },
-  { id: 'reading', name: '拓展阅读', icon: Collection },
-  { id: 'ppt', name: '演示讲稿', icon: Document },
-  { id: 'video', name: '视频脚本', icon: VideoPlay }
-]
+interface AgentMeta {
+  id: string
+  name: string
+  desc: string
+  type: string
+  icon: Component
+}
+
+const defaultAgentMeta: Record<string, AgentMeta> = {
+  content: { id: 'content', name: '核心精讲', desc: '撰写深度知识精讲', type: 'doc', icon: Document },
+  mindmap: { id: 'mindmap', name: '思维导图', desc: '构建核心知识拓扑图', type: 'mindmap', icon: Share },
+  quiz: { id: 'quiz', name: '专项题库', desc: '生成分层练习题库', type: 'quiz', icon: Edit },
+  code: { id: 'code', name: '实操代码', desc: '编写可运行实操案例', type: 'code', icon: Cpu },
+  reading: { id: 'reading', name: '拓展阅读', desc: '检索拓展阅读与论文', type: 'reading', icon: Collection },
+  ppt: { id: 'ppt', name: '演示讲稿', desc: '生成演示文稿与讲稿', type: 'ppt', icon: DataBoard },
+  image: { id: 'image', name: '教学配图', desc: '生成教学配图', type: 'image', icon: Monitor },
+  video: { id: 'video', name: '视频脚本', desc: '生成视频脚本', type: 'video', icon: VideoPlay }
+}
+
+const supportedResourceIds = ['content', 'mindmap', 'quiz', 'reading', 'code']
+const backendAgentOrder: Array<keyof typeof defaultAgentMeta> = ['content', 'mindmap', 'quiz', 'reading', 'code']
+const agentConfig = ref<AgentMeta[]>(backendAgentOrder.map((id) => defaultAgentMeta[id] as AgentMeta))
 
 const friendlyActions: Record<string, string[]> = {
   coordinator: ['应用全局编排指令...', '诊断知识盲区特征...', '拆解任务并下发...'],
@@ -281,22 +268,24 @@ const friendlyActions: Record<string, string[]> = {
 }
 const coordinatorActions = friendlyActions.coordinator ?? []
 
-type CoordinatorStatus = 'idle' | 'profile_loading' | 'planning' | 'core_generating' | 'persisting' | 'done'
-type WorkerStatus = 'idle' | 'queued' | 'running' | 'success' | 'failed'
+type CoordinatorStatus = 'idle' | 'profile_loading' | 'planning' | 'persisting' | 'core_generating' | 'enhancement_generating' | 'presentation_generating' | 'video_generating' | 'done'
+type WorkerStatus = 'idle' | 'queued' | 'running' | 'success' | 'failed' | 'skipped'
 type NodeStatus = CoordinatorStatus | WorkerStatus
 
 interface NodeState { status: NodeStatus; currentAction: string; }
 const coordinatorState = ref<NodeState>({ status: 'idle', currentAction: '' })
 const nodesState = ref<Record<string, NodeState>>({})
+const processedAgentIds = ref<Set<string>>(new Set())
+const currentExecutionGroupText = ref('')
 
 // ================= 计算属性 =================
 const canGenerate = computed(() => form.topic.trim() !== '' && form.selected.length > 0)
-const getAgentMeta = (id: string) => agentConfig.find(a => a.id === id) || { id, name: id, icon: Document }
+const getAgentMeta = (id: string): AgentMeta => agentConfig.value.find(a => a.id === id) || defaultAgentMeta[id] || { id, name: id, desc: '', type: 'doc', icon: Document }
 
 // 🌟 核心：计算每列 4 个元素的二维数组
 const chunkedExecutionQueue = computed(() => {
   const chunkSize = 4
-  const chunks = []
+  const chunks: string[][] = []
   for (let i = 0; i < dynamicExecutionQueue.value.length; i += chunkSize) {
     chunks.push(dynamicExecutionQueue.value.slice(i, i + chunkSize))
   }
@@ -304,28 +293,36 @@ const chunkedExecutionQueue = computed(() => {
 })
 const isCoordinatorBusy = computed(() => coordinatorState.value.status !== 'idle' && coordinatorState.value.status !== 'done')
 
-const selectAll = () => { form.selected = agentConfig.map(a => a.id) }
+const selectAll = () => { form.selected = agentConfig.value.map(a => a.id).filter((id) => supportedResourceIds.includes(id)) }
 const getStatusTagType = (status?: string) => {
-  if (status === 'running' || status === 'planning' || status === 'profile_loading' || status === 'core_generating' || status === 'persisting') return 'primary'
+  if (status === 'running' || status === 'planning' || status === 'profile_loading' || status === 'core_generating' || status === 'enhancement_generating' || status === 'presentation_generating' || status === 'video_generating' || status === 'persisting') return 'primary'
   if (status === 'success' || status === 'done') return 'success'
   if (status === 'failed') return 'danger'
+  if (status === 'skipped') return 'warning'
   return 'info'
 }
 const getStatusText = (status?: string) => {
-  if (status === 'profile_loading') return 'profile_loading'
-  if (status === 'planning') return 'planning'
-  if (status === 'core_generating') return 'core_generating'
-  if (status === 'persisting') return 'persisting'
+  if (status === 'profile_loading') return '读取画像'
+  if (status === 'planning') return '规划中'
+  if (status === 'core_generating') return '核心资源'
+  if (status === 'enhancement_generating') return '增强资源'
+  if (status === 'presentation_generating') return '演示资源'
+  if (status === 'video_generating') return '视频资源'
+  if (status === 'persisting') return '保存中'
   if (status === 'running') return 'AI 处理中'
-  if (status === 'queued') return 'queued'
+  if (status === 'queued') return '排队中'
   if (status === 'success' || status === 'done') return '已产出'
-  if (status === 'failed') return 'failed'
+  if (status === 'failed') return '失败'
+  if (status === 'skipped') return '已跳过'
   return '等待调度'
 }
 const workflowStageFallback: Record<string, string> = {
   profile_loading: coordinatorActions[0] || '正在读取学习者画像...',
   planning: coordinatorActions[1] || '正在生成资源计划...',
   core_generating: coordinatorActions[2] || '正在编排核心资源...',
+  enhancement_generating: '正在补充增强资源...',
+  presentation_generating: '正在生成演示资源...',
+  video_generating: '正在生成视频资源...',
   persisting: '正在保存本次资源包...',
   done: '资源包构建完成'
 }
@@ -334,7 +331,8 @@ const agentStatusFallback: Record<string, string> = {
   queued: '等待进入执行队列...',
   running: '正在构建资源...',
   success: '资源已生成完成',
-  failed: '资源生成失败'
+  failed: '资源生成失败',
+  skipped: '已跳过'
 }
 
 const ensureNodeState = (agentId: string) => {
@@ -349,115 +347,142 @@ const clearWorkflowState = () => {
   progress.value = 0
   dynamicExecutionQueue.value = []
   completedAgentsQueue.value = []
+  processedAgentIds.value = new Set()
+  currentExecutionGroupText.value = ''
   coordinatorState.value = { status: 'idle', currentAction: '' }
   Object.keys(nodesState.value).forEach((key) => {
     delete nodesState.value[key]
   })
 }
 
-const getWorkflowActionText = (status: string, message?: string) => {
-  return message || workflowStageFallback[status] || coordinatorActions[0] || '正在协调任务...'
+const formatAgentList = (agents: string[]) => agents.map((agentId) => getAgentMeta(agentId).name || agentId).join('、')
+
+const getExecutionGroupAgents = (event: ResourceWorkflowEvent) => {
+  const agents = event.meta?.agents
+  if (Array.isArray(agents)) return agents.filter((agent): agent is string => typeof agent === 'string')
+
+  const executionGroup = event.meta?.execution_group
+  if (Array.isArray(executionGroup)) {
+    return executionGroup.filter((agent): agent is string => typeof agent === 'string')
+  }
+  if (typeof executionGroup === 'string') {
+    return executionGroup.split(',').map((agent) => agent.trim()).filter(Boolean)
+  }
+  return []
 }
 
-const getAgentActionText = (agentId: string, status: string, message?: string) => {
+const getWorkflowGroupText = (event: ResourceWorkflowEvent) => {
+  const groupIndex = event.meta?.group_index
+  const groupTotal = event.meta?.group_total
+  const agents = getExecutionGroupAgents(event)
+
+  if (typeof groupIndex !== 'number' || typeof groupTotal !== 'number' || agents.length === 0) return ''
+  return `第 ${groupIndex}/${groupTotal} 组：${formatAgentList(agents)} 并行执行`
+}
+
+const getWorkflowActionText = (event: ResourceWorkflowEvent) => {
+  const groupText = getWorkflowGroupText(event)
+  if (groupText) return groupText
+  return event.message || workflowStageFallback[event.stage] || coordinatorActions[0] || '正在协调任务...'
+}
+
+const getAgentActionText = (agentId: string, status: string, message?: string, event?: ResourceAgentStatusEvent) => {
+  if (status === 'skipped') {
+    return event?.meta?.skipped_reason || message || agentStatusFallback.skipped || '已跳过'
+  }
   const fallbackList = friendlyActions[agentId] || []
   return message || agentStatusFallback[status] || fallbackList[0] || '正在构建资源...'
 }
 
-const getEventString = (event: ResourceGenerateEvent, key: string) => {
-  const value = event[key]
-  return typeof value === 'string' ? value : ''
+const updateProcessedProgress = () => {
+  const total = form.selected.length
+  if (total > 0) {
+    progress.value = Math.max(progress.value, Math.min(100, Math.round((processedAgentIds.value.size / total) * 100)))
+  }
 }
 
-const getEventNumber = (event: ResourceGenerateEvent, key: string) => {
-  const value = event[key]
-  return typeof value === 'number' ? value : undefined
+const applyWorkflowEvent = (event: ResourceWorkflowEvent) => {
+  coordinatorState.value.status = (event.stage || 'planning') as CoordinatorStatus
+  currentExecutionGroupText.value = getWorkflowGroupText(event) || currentExecutionGroupText.value
+  coordinatorState.value.currentAction = getWorkflowActionText(event)
 }
 
-const displayIndex = (index: string | number) => Number(index) + 1
+const applyAgentStatusEvent = (event: ResourceAgentStatusEvent) => {
+  if (!event.agent || !event.status) return
 
-const applyWorkflowEvent = (event: ResourceGenerateEvent) => {
-  const stage = getEventString(event, 'stage')
-  const message = getEventString(event, 'message')
-  coordinatorState.value.status = (stage || 'planning') as CoordinatorStatus
-  coordinatorState.value.currentAction = getWorkflowActionText(stage, message)
-}
-
-const applyAgentStatusEvent = (event: ResourceGenerateEvent) => {
-  const agentId = getEventString(event, 'agent')
-  const status = getEventString(event, 'status') as WorkerStatus
-  if (!agentId || !status) return
-
-  if (!dynamicExecutionQueue.value.includes(agentId)) {
-    dynamicExecutionQueue.value.push(agentId)
+  if (!dynamicExecutionQueue.value.includes(event.agent)) {
+    dynamicExecutionQueue.value.push(event.agent)
   }
 
-  const node = ensureNodeState(agentId)
-  node.status = status
-  node.currentAction = getAgentActionText(agentId, status, getEventString(event, 'message'))
+  const node = ensureNodeState(event.agent)
+  node.status = event.status
+  node.currentAction = getAgentActionText(event.agent, event.status, event.message, event)
+
+  if (event.status === 'success' || event.status === 'failed' || event.status === 'skipped') {
+    processedAgentIds.value = new Set(processedAgentIds.value).add(event.agent)
+    updateProcessedProgress()
+  }
 }
 
-const applyAgentLogEvent = (event: ResourceGenerateEvent) => {
-  const agentId = getEventString(event, 'agent')
-  const logText = getEventString(event, 'log')
-  if (!agentId || !logText) return
+const applyAgentLogEvent = (event: ResourceAgentLogEvent) => {
+  if (!event.agent || !event.log) return
 
-  if (agentId === 'coordinator') {
-    coordinatorState.value.currentAction = logText
+  if (event.agent === 'coordinator') {
+    coordinatorState.value.currentAction = event.log
     return
   }
 
-  const node = ensureNodeState(agentId)
-  node.currentAction = logText
+  const node = ensureNodeState(event.agent)
+  node.currentAction = event.log
 }
 
-const applyArtifactReadyEvent = (event: ResourceGenerateEvent) => {
-  const agentId = getEventString(event, 'agent')
-  if (!agentId) return
+const applyArtifactReadyEvent = (event: ResourceArtifactReadyEvent) => {
+  if (!event.agent) return
 
-  const artifact = event.artifact ?? event.data ?? event.result ?? null
-  if (artifact != null) {
-    results.value[agentId] = artifact
+  results.value[event.agent] = event.artifact
+
+  if (!dynamicExecutionQueue.value.includes(event.agent)) {
+    dynamicExecutionQueue.value.push(event.agent)
   }
 
-  if (!dynamicExecutionQueue.value.includes(agentId)) {
-    dynamicExecutionQueue.value.push(agentId)
-  }
-
-  const node = ensureNodeState(agentId)
+  const node = ensureNodeState(event.agent)
   node.status = 'success'
-  node.currentAction = getAgentActionText(agentId, 'success', getEventString(event, 'message'))
+  node.currentAction = getAgentActionText(event.agent, 'success')
+  processedAgentIds.value = new Set(processedAgentIds.value).add(event.agent)
+  updateProcessedProgress()
 
-  if (!completedAgentsQueue.value.includes(agentId)) {
-    completedAgentsQueue.value.push(agentId)
+  if (!completedAgentsQueue.value.includes(event.agent)) {
+    completedAgentsQueue.value.push(event.agent)
   }
 
   recordLearningEvent({
     event_type: 'resource_completed',
     course: form.topic.trim(),
-    topic: getAgentMeta(agentId).name,
-    metadata: { agent: agentId },
+    topic: getAgentMeta(event.agent).name,
+    metadata: { agent: event.agent },
   }).catch((err) => {
     console.warn('[ResourceGenerator] record learning event failed:', err)
   })
 }
 
-const applyBundleUpdateEvent = (event: ResourceGenerateEvent) => {
-  const completed = getEventNumber(event, 'completed')
-  const total = getEventNumber(event, 'total')
-  if (typeof completed === 'number' && typeof total === 'number' && total > 0) {
-    progress.value = Math.min(100, Math.round((completed / total) * 100))
+const applyBundleUpdateEvent = (event: ResourceBundleUpdateEvent) => {
+  const visibleCompleted = typeof event.meta?.visible_completed === 'number' ? event.meta.visible_completed : undefined
+  const visibleTotal = typeof event.meta?.visible_total === 'number' ? event.meta.visible_total : undefined
+  const completed = visibleCompleted ?? event.completed
+  const total = visibleTotal && visibleTotal > 0 ? visibleTotal : event.total
+  if (total > 0) {
+    progress.value = Math.max(progress.value, Math.min(100, Math.round((completed / total) * 100)))
   }
 
-  const latestAgent = getEventString(event, 'latest_agent')
-  if (latestAgent) {
-    if (!dynamicExecutionQueue.value.includes(latestAgent)) {
-      dynamicExecutionQueue.value.push(latestAgent)
-    }
-    const node = ensureNodeState(latestAgent)
-    if (node.status === 'queued') {
-      node.status = 'running'
-    }
+  const latestAgent = typeof event.latest_agent === 'string' ? event.latest_agent : ''
+  if (!latestAgent) return
+
+  if (!dynamicExecutionQueue.value.includes(latestAgent)) {
+    dynamicExecutionQueue.value.push(latestAgent)
+  }
+  const node = ensureNodeState(latestAgent)
+  if (node.status === 'queued') {
+    node.status = 'running'
   }
 }
 
@@ -482,7 +507,7 @@ const handleGenerateEvent = (event: ResourceGenerateEvent) => {
       break
     case 'done':
       coordinatorState.value.status = 'done'
-      coordinatorState.value.currentAction = getWorkflowActionText('done', getEventString(event, 'message'))
+      coordinatorState.value.currentAction = event.message || workflowStageFallback.done || '资源包构建完成'
       progress.value = 100
       isGenerating.value = false
       workflowController.value = null
@@ -490,51 +515,46 @@ const handleGenerateEvent = (event: ResourceGenerateEvent) => {
   }
 }
 
-const buildGenerateParams = (): GenerateParams => ({
+const buildGenerateRequest = (): ResourceGenerateRequest => ({
   learning_task: {
     course: form.topic.trim(),
     gap: form.gap.trim(),
     need: 'review',
     extra: '',
+    template_id: 'auto',
   },
   selected_resources: [...form.selected],
 })
 
 // ================= 预览功能 =================
 const previewDialogVisible = ref(false)
-const previewData = ref<any>(null)
+const previewData = ref<{
+  agentId: string
+  title: string
+  hasFile: boolean
+  fileUrl: string
+  fileCategory: string
+  resultData: ResourceArtifact
+} | null>(null)
 
-const handlePreview = (data: any) => {
+const handlePreview = (data: {
+  agentId: string
+  title: string
+  hasFile: boolean
+  fileUrl: string
+  fileCategory: string
+  resultData: ResourceArtifact
+}) => {
   previewData.value = data
   previewDialogVisible.value = true
 }
 
-const parseMarkdown = (text: string) => {
-  if (!text) return ''
-  return marked.parse(text)
-}
-
-const extractCode = (text: string) => {
-  if (!text) return ''
-  return text.replace(/```[\w]*\n/g, '').replace(/```/g, '')
-}
-
-const formatJson = (data: any) => {
+const formatJson = (data: unknown) => {
   try {
     return JSON.stringify(data, null, 2)
-  } catch (e) {
+  } catch {
     return String(data)
   }
-}
-
-const downloadUrl = (url: string, title: string) => {
-  const link = document.createElement('a')
-  link.href = url
-  link.target = '_blank'
-  link.download = title || 'download'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 // ================= 动画流真实接入 (SSE) =================
@@ -553,7 +573,7 @@ const startResourceGeneration = () => {
   }
 
   workflowController.value = generateResources(
-    buildGenerateParams(),
+    buildGenerateRequest(),
     handleGenerateEvent,
     () => {
       coordinatorState.value.status = 'done'
@@ -571,6 +591,46 @@ const startResourceGeneration = () => {
     },
   )
 }
+
+const toAgentMeta = (agent: AgentInfo): AgentMeta => {
+  const fallback = defaultAgentMeta[agent.id] || {
+    id: agent.id,
+    name: agent.role || agent.id,
+    desc: agent.desc || '',
+    type: agent.type || 'doc',
+    icon: Document,
+  }
+  return {
+    ...fallback,
+    id: agent.id,
+    name: fallback.name || agent.role || agent.id,
+    desc: agent.desc || fallback.desc,
+    type: agent.type || fallback.type,
+  }
+}
+
+const loadBackendAgents = async () => {
+  try {
+    const response = await getAgents()
+    const agents = response.data.data || []
+    if (agents.length === 0) return
+
+    agentConfig.value = agents
+      .filter((agent) => supportedResourceIds.includes(agent.id))
+      .map(toAgentMeta)
+    const availableIds = new Set(agentConfig.value.map((agent) => agent.id))
+    form.selected = form.selected.filter((id) => availableIds.has(id))
+    if (form.selected.length === 0) {
+      form.selected = agentConfig.value.map((agent) => agent.id)
+    }
+  } catch (err) {
+    console.warn('[ResourceGenerator] load agents failed, using fallback config:', err)
+  }
+}
+
+onMounted(() => {
+  loadBackendAgents()
+})
 </script>
 
 <style scoped>
@@ -610,6 +670,7 @@ const startResourceGeneration = () => {
 .expand-trigger { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 24px; height: 60px; background: #FFFFFF; border: 1px solid #E2E8F0; border-left: none; border-radius: 0 8px 8px 0; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; box-shadow: 4px 0 10px rgba(0,0,0,0.05); color: #64748B; transition: all 0.2s; }
 .workspace-scroll-container { flex: 1; overflow-y: auto; padding: 32px 40px; display: flex; flex-direction: column; gap: 40px; }
 .section-header h3 { display: flex; align-items: center; gap: 8px; font-size: 1.2rem; font-weight: 700; color: #1E293B; margin: 0; }
+.workflow-plan-title { margin-top: 8px; font-size: 0.9rem; font-weight: 600; color: #475569; }
 .progress-info { display: flex; align-items: center; gap: 16px; margin-top: 12px; font-size: 0.9rem; font-weight: 600; color: #4F46E5; }
 .top-progress { flex: 1; max-width: 400px; }
 
@@ -659,6 +720,7 @@ const startResourceGeneration = () => {
 .worker-node.success,
 .worker-node.done { border-color: #10B981; }
 .worker-node.failed { border-color: #EF4444; }
+.worker-node.skipped { border-color: #F59E0B; }
 
 .node-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; background: #F8FAFC; border-bottom: 1px solid #F1F5F9; }
 .brain-node .node-header,
@@ -671,6 +733,7 @@ const startResourceGeneration = () => {
 .worker-node.success .node-header,
 .worker-node.done .node-header { background: #ECFDF5; border-bottom-color: #D1FAE5; }
 .worker-node.failed .node-header { background: #FEF2F2; border-bottom-color: #FEE2E2; }
+.worker-node.skipped .node-header { background: #FFFBEB; border-bottom-color: #FEF3C7; }
 
 .n-title { font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 8px; font-size: 0.95rem;}
 .brain-node .n-title,
@@ -688,6 +751,7 @@ const startResourceGeneration = () => {
 .worker-node.success .n-icon,
 .worker-node.done .n-icon { color: #10B981; }
 .worker-node.failed .n-icon { color: #EF4444; }
+.worker-node.skipped .n-icon { color: #F59E0B; }
 .brain-node.done .n-icon { color: #8B5CF6; }
 
 .node-animation-window { padding: 16px; background: #FFFFFF; }
@@ -699,6 +763,7 @@ const startResourceGeneration = () => {
 .sk-line::after { content: ""; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.15), transparent); animation: shimmer 1.5s infinite; }
 .brain-skeleton .sk-line::after { background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.2), transparent); }
 .node-summary { padding: 16px; display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: #475569; font-weight: 600; background: #F8FAFC; }
+.skipped-summary { color: #92400E; background: #FFFBEB; }
 .success-circle { width: 24px; height: 24px; background: #8B5CF6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
 /* 🌟 卡片区网格布局 */
