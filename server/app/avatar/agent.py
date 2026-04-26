@@ -4,7 +4,7 @@ AvatarAgent — 数字人独立 LangGraph 智能体
 
 与 TutorAgent 对等但独立的 Agent：
 - 独立的 LangGraph StateGraph 和 system prompt
-- 复用 tools/registry、skills/manager、infra/llm 等共享基础设施
+- 复用 tools/registry、infra/llm 等共享基础设施
 - 独立的记忆（source="avatar_fact"），共享画像
 - 输出适配：口语化文本 + 工具事件
 """
@@ -23,7 +23,7 @@ from typing_extensions import TypedDict
 
 from app.chat.utils import load_prompts
 from app.infra.logging import get_logger
-from app.infra.llm import get_llm, get_fast_llm, get_glm_vision_llm
+from app.infra.llm import get_spark_llm, get_deepseek_llm, get_glm_vision_llm
 from app.memory import MemoryLayer
 from app.shared.image_analyze import build_vision_service
 
@@ -31,7 +31,6 @@ logger = get_logger(__name__)
 
 # AvatarAgent 可使用的工具名称（与 TutorAgent 共享注册表）
 AVATAR_TOOL_NAMES: list[str] = [
-    "create_document_file",
     "read_uploaded_file",
     "list_uploaded_files",
     "save_to_workplace",
@@ -143,8 +142,8 @@ class AvatarAgent:
     """数字人 Agent — 独立 LangGraph 图"""
 
     def __init__(self) -> None:
-        self.llm = get_llm(temperature=0.7, streaming=True)
-        self.classifier_llm = get_fast_llm(temperature=0.0, max_tokens=100)
+        self.llm = get_spark_llm(temperature=0.7, streaming=True)
+        self.classifier_llm = get_deepseek_llm(temperature=0.0, max_tokens=100)
         self.memory_layer = MemoryLayer(module_name="avatar")
         self.vision_service = build_vision_service(get_glm_vision_llm())
         self._graph = self._build_graph()
@@ -439,15 +438,8 @@ class AvatarAgent:
 
     @staticmethod
     def _build_skills_context() -> str:
-        try:
-            from app.skills.manager import SkillManager
-            sm = SkillManager()
-            skills = sm.list_skills()
-            if not skills:
-                return "暂无可用技能"
-            return "\n".join(f"- {s['name']}: {s.get('description', '')}" for s in skills)
-        except Exception:
-            return "暂无可用技能"
+        """返回可用工具列表（skills 框架已移除）。"""
+        return "可用工具：read_uploaded_file, save_to_workplace, write_file, edit_file, append_file, read_file_lines"
 
     @staticmethod
     def _build_file_ctx(

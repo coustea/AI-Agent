@@ -70,6 +70,15 @@ export interface ChatMessageItem {
   created_at: string | null
 }
 
+export interface RecentChatMemoryItem {
+  id: number | null
+  role: string
+  content: string
+  attachments: AttachmentInfo[] | null
+  tool_calls: ToolCallRecord[] | null
+  created_at: string | null
+}
+
 export interface ChatSession {
   id: string
   title: string
@@ -88,7 +97,7 @@ export interface StreamChatParams {
   session_id?: string
   image_urls?: string[]
   file_urls?: string[]
-  generate_image?: boolean
+  need_diagram?: boolean
   generate_video?: boolean
   files?: File[]
 }
@@ -239,13 +248,35 @@ export function getEvaluationSummary(limit = 100) {
 // 画像 API
 // ==========================================
 
-export function getProfile() {
-  return http.get<{ code: number; message: string; data: ProfileData }>('/ai/profile')
+export function getProfile(userId?: number | string) {
+  const path = userId ? `/ai/profile/${userId}` : '/ai/profile'
+  return http.get<{ code: number; message: string; data: ProfileData }>(path)
 }
 
-export function getProfileHistory(limit = 20) {
-  return http.get<{ code: number; message: string; data: ProfileHistoryItem[] }>('/ai/profile/history', {
+export function getProfileHistory(limit = 20, userId?: number | string) {
+  const path = userId ? `/ai/profile/${userId}/history` : '/ai/profile/history'
+  return http.get<{ code: number; message: string; data: ProfileHistoryItem[] }>(path, {
     params: { limit }
+  })
+}
+
+// ==========================================
+// 近期聊天记忆 API
+// ==========================================
+
+export interface RecentChatMemoryParams {
+  userId: number | string
+  sessionId: string
+  limit?: number
+}
+
+export function getRecentChatMemory(params: RecentChatMemoryParams) {
+  return http.get<{ code: number; message: string; data: RecentChatMemoryItem[] }>('/ai/memory/recent-chat', {
+    params: {
+      user_id: params.userId,
+      session_id: params.sessionId,
+      limit: params.limit ?? 10,
+    },
   })
 }
 
@@ -333,8 +364,8 @@ export function streamChat(
   if (params.file_urls && params.file_urls.length > 0) {
     formData.append('file_urls', params.file_urls.join(','))
   }
-  if (params.generate_image != null) {
-    formData.append('generate_image', String(Boolean(params.generate_image)))
+  if (params.need_diagram != null) {
+    formData.append('need_diagram', String(Boolean(params.need_diagram)))
   }
   if (params.generate_video != null) {
     formData.append('generate_video', String(Boolean(params.generate_video)))

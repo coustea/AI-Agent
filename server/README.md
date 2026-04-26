@@ -15,7 +15,7 @@
 ## 技术栈
 
 - Python 3.13 + uv
-- FastAPI + SQLModel + SQLAlchemy Async + MySQL
+- FastAPI + SQLModel + SQLAlchemy Async + PostgreSQL
 - LangChain + LangGraph
 - OpenAI-compatible LLM API
 - GLM-4V / 讯飞星火图片理解
@@ -81,7 +81,7 @@ app/
 │
 ├── infra/               # 基础设施
 │   ├── models.py        #   全部 SQLModel 表定义（7 张表）
-│   ├── database.py      #   MySQL 异步引擎、init_db()、get_session()
+│   ├── database.py      #   PostgreSQL 异步引擎、init_db()、get_session()
 │   ├── llm.py           #   LLM 客户端工厂（get_llm、get_fast_llm，lru_cache）
 │   └── logging.py       #   日志配置（按天轮转 + 错误日志 + 控制台）
 │
@@ -154,7 +154,7 @@ HTTP Request → api.py → service.py → Agent / infra / memory
 ## 环境要求
 
 - Python `>=3.13`
-- MySQL 8+
+- PostgreSQL 15+
 - uv（包管理）
 - Tesseract OCR（图片文字识别）
 - Node.js >= 18（思维导图 MCP 服务）
@@ -176,11 +176,13 @@ SERVER_PORT=9999
 APP_DEBUG=false
 
 # Database
+DB_SCHEME=postgresql+asyncpg
 DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
+DB_PORT=5432
+DB_USER=postgres
 DB_PASSWORD=your_password
 DB_NAME=agent
+DATABASE_URL=
 DB_ECHO=false
 
 # JWT
@@ -209,7 +211,8 @@ APISecret=your_secret
 
 说明：
 
-- `DB_PASSWORD` 必填，未配置时应用启动会失败
+- `DATABASE_URL` 与 `DB_SCHEME/DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` 二选一即可
+- PostgreSQL 若采用本地可信连接，`DB_PASSWORD` 可以留空；远程部署建议显式配置密码
 - `.env` 由 `app/config.py` 统一通过 `load_dotenv()` 加载
 - `APP_DEBUG=true` 会在启动时先 DROP 再 CREATE 表，仅用于开发
 

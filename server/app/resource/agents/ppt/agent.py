@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field, model_validator
 
-from app.infra.llm import get_deepseek_chat_llm
+from app.infra.llm import get_deepseek_llm
 from app.infra.logging import get_logger
 from app.resource.agents.ppt.renderer import ensure_template_available, render_ppt_plan_to_file
 from app.resource.agents.ppt.template_catalog import (
@@ -278,7 +278,7 @@ class PptAgent:
         self.agent_dir = Path(__file__).parent
         self.state_schema = PptState
         self.temperature = 0.2
-        self.llm = get_deepseek_chat_llm(temperature=0.2, streaming=False, max_tokens=4000)
+        self.llm = get_deepseek_llm(temperature=0.2, streaming=False, max_tokens=4000)
         self.prompt_template = ""
         self._graph = None
         self._load_prompt()

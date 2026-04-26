@@ -33,11 +33,13 @@ SERVER_HOST: str = _env("SERVER_HOST", "0.0.0.0")
 SERVER_PORT: int = _env_int("SERVER_PORT", 9999)
 
 # Database
+DB_SCHEME: str = _env("DB_SCHEME", "postgresql+asyncpg")
 DB_HOST: str = _env("DB_HOST", "localhost")
-DB_PORT: int = _env_int("DB_PORT", 3306)
-DB_USER: str = _env("DB_USER", "root")
+DB_PORT: int = _env_int("DB_PORT", 5432)
+DB_USER: str = _env("DB_USER", "postgres")
 DB_PASSWORD: str = _env("DB_PASSWORD")
 DB_NAME: str = _env("DB_NAME", "agent")
+DATABASE_URL: str = _env("DATABASE_URL", "")
 DB_ECHO: bool = _env_bool("DB_ECHO", False)
 DB_POOL_SIZE: int = _env_int("DB_POOL_SIZE", 10)
 DB_MAX_OVERFLOW: int = _env_int("DB_MAX_OVERFLOW", 20)
@@ -56,30 +58,20 @@ OPENAI_API_KEY: str = _env("OPENAI_API_KEY", "")
 OPENAI_MODEL: str = _env("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_BASE: str = _env("OPENAI_API_BASE", "")
 
-# SparkLite
-FAST_LLM_MODEL: str = _env("FAST_LLM_MODEL", "general")
-FAST_LLM_API_BASE: str = _env("FAST_LLM_API_BASE", OPENAI_API_BASE)
-FAST_LLM_API_KEY: str = _env("FAST_LLM_API_KEY", OPENAI_API_KEY)
-
 # GLM
 GLM_MODEL: str = _env("GLM_MODEL", "glm-4.7")
 
 # Deepseek
 DEEPSEEK_API_KEY: str = _env("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_BASE: str = _env("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
-DEEPSEEK_CHAT_MODEL: str = _env("DEEPSEEK_CHAT_MODEL", "deepseek-chat")
-DEEPSEEK_REASONER_MODEL: str = _env("DEEPSEEK_REASONER_MODEL", "deepseek-reasoner")
+DEEPSEEK_CHAT_MODEL: str = _env("DEEPSEEK_CHAT_MODEL", "deepseek-v4-flash")
+DEEPSEEK_REASONER_MODEL: str = _env("DEEPSEEK_REASONER_MODEL", "deepseek-v4-pro")
 DEEPSEEK_MODEL: str = _env("DEEPSEEK_MODEL", DEEPSEEK_CHAT_MODEL)
 
-# Spark X
-SPARK_X_API_KEY: str = _env("SPARK_X_API_KEY", OPENAI_API_KEY)
-SPARK_X_MODEL: str = _env("SPARK_X_MODEL", OPENAI_MODEL)
-SPARK_X_API_BASE: str = _env("SPARK_X_API_BASE", OPENAI_API_BASE)
-
-# Spark Max
-SPARK_MAX_API_KEY: str = _env("SPARK_MAX_API_KEY", OPENAI_API_KEY)
-SPARK_MAX_MODEL: str = _env("SPARK_MAX_MODEL", OPENAI_MODEL)
-SPARK_MAX_API_BASE: str = _env("SPARK_MAX_API_BASE", OPENAI_API_BASE)
+# Spark LLM (星火大模型 WebSocket API)
+SPARK_APP_ID: str = _env("SPARK_APP_ID", "")
+SPARK_API_KEY: str = _env("SPARK_API_KEY", "")
+SPARK_API_SECRET: str = _env("SPARK_API_SECRET", "")
 
 # Vision
 GLM_VISION_MODEL: str = _env("GLM_VISION_MODEL", "glm-4v-flash")
@@ -91,16 +83,23 @@ MAX_MESSAGE_HISTORY: int = _env_int("MAX_MESSAGE_HISTORY", 20)
 PROFILE_GATE_EVERY_N_ASSISTANT_TURNS: int = _env_int("PROFILE_GATE_EVERY_N_ASSISTANT_TURNS", 2)
 CONTENT_AGENT_TIMEOUT_SECONDS: int = _env_int("CONTENT_AGENT_TIMEOUT_SECONDS", 360)
 CONTENT_LLM_TIMEOUT: int = _env_int("CONTENT_LLM_TIMEOUT", 180)
-MULTIMODAL_DOC_ENABLED: bool = _env_bool("MULTIMODAL_DOC_ENABLED", True)
+MULTIMODAL_DOC_ENABLED: bool = _env_bool(
+
+    "MULTIMODAL_DOC_ENABLED", True)
 
 # Debug
 APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
 LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
+LANGCHAIN_DEBUG: bool = _env_bool("LANGCHAIN_DEBUG",
+                                  )
+LANGCHAIN_VERBOSE: bool = _env_bool("LANGCHAIN_VERBOSE", False)
+LANGGRAPH_DEBUG: bool = _env_bool("LANGGRAPH_DEBUG", False)
+DEEPAGENTS_DEBUG: bool = _env_bool("DEEPAGENTS_DEBUG", False)
 
-# Spark Vision (星火图片理解)
-SPARK_VISION_APPID: str = _env("APPID", "")
-SPARK_VISION_API_KEY: str = _env("APIKey", "")
-SPARK_VISION_API_SECRET: str = _env("APISecret", "")
+# Spark Vision (星火图片理解) — 复用 Spark LLM 凭证
+SPARK_VISION_APPID: str = _env("SPARK_VISION_APPID", SPARK_APP_ID)
+SPARK_VISION_API_KEY: str = _env("SPARK_VISION_API_KEY", SPARK_API_KEY)
+SPARK_VISION_API_SECRET: str = _env("SPARK_VISION_API_SECRET", SPARK_API_SECRET)
 
 # Spark Image Generation (星火图片生成) - 复用相同凭证
 SPARK_IMAGE_APPID: str = _env("APPID", "")
@@ -138,3 +137,6 @@ CHATDOC_ENABLED: bool = _env_bool("CHATDOC_ENABLED", False)
 
 TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
 
+# Spark X (星火X模型 OpenAI兼容API)
+SPARK_X_API_PASSWORD: str = _env("SPARK_X_API_PASSWORD", "")
+SPARK_X_API_BASE: str = _env("SPARK_X_API_BASE", "https://spark-api-open.xf-yun.com/v2")

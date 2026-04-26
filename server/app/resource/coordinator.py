@@ -5,28 +5,33 @@ Coordinator Agent：画像加载 + 任务规划 + 分阶段编排 + SSE 实时�
 from __future__ import annotations
 
 import asyncio
-import importlib
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.infra.llm import get_deepseek_reasoner_llm
 
 from app.config import DEEPSEEK_REASONER_MODEL
-from app.infra.database import engine
 from app.infra.logging import get_logger
 from app.resource.events import AgentEventEmitter
 from app.resource.exceptions import PlanningError
-from app.resource.planning import (
-    build_default_resource_plan,
-    iter_plan_phases,
-    merge_planned_tasks_into_plan,
-)
-from app.resource.profile_snapshot import ProfileSnapshotLoader
 from app.resource.schemas import LearnerProfileSnapshot, PersonalizedTaskContext, ResourcePlan
+from app.resource.utils import (
+    AgentEntry,
+    get_agent_registry,
+    iter_plan_phases,
+    build_default_resource_plan,
+    merge_planned_tasks_into_plan,
+    normalize_selected_resources,
+    filter_tasks_by_selection,
+    merge_extra,
+    core_ready,
+    save_resource,
+    load_profile_snapshot,
+    build_personalized_context,
+)
 
 logger = get_logger(__name__)
 
@@ -56,121 +61,9 @@ class PlannerPlanOutput(BaseModel):
     tasks: list[PlannerTaskSchema] = Field(default_factory=list)
 
 
-@dataclass
-class AgentEntry:
-    role: str
-    desc: str
-    type: str
-    stage: str
-    agent_loader: Callable[[], Any]
-    method: str
-    result_summary: Callable[[dict], str] = field(default=lambda r: "")
-    extra_kwargs: dict = field(default_factory=dict)
-
-
-def _load_agent(module_path: str, attr_name: str) -> Callable[[], Any]:
-    def _loader() -> Any:
-        module = importlib.import_module(module_path)
-        return getattr(module, attr_name)
-
-    return _loader
-
-
-def build_agent_registry() -> dict[str, AgentEntry]:
-    return {
-    "content": AgentEntry(
-        role="Content Agent",
-        desc="撰写深度知识精讲",
-        type="doc",
-        stage="core",
-        agent_loader=_load_agent("app.resource.agents.content", "content_writer"),
-        method="generate_content",
-        result_summary=lambda r: f"文档 {len(r.get('content', ''))} 字",
-    ),
-    "mindmap": AgentEntry(
-        role="Mindmap Agent",
-        desc="构建核心知识拓扑图",
-        type="mindmap",
-        stage="core",
-        agent_loader=_load_agent("app.resource.agents.mindmap", "mindmap_generator"),
-        method="generate_mindmap",
-        result_summary=lambda r: f"导图已生成 → {r.get('file_path') or '内存结果'}",
-    ),
-    "quiz": AgentEntry(
-        role="Quiz Agent",
-        desc="生成分层练习题库",
-        type="quiz",
-        stage="core",
-        agent_loader=_load_agent("app.resource.agents.quiz", "quiz_agent"),
-        method="generate_quiz",
-        result_summary=lambda r: f"共 {len(r.get('questions', []))} 道题",
-    ),
-    "reading": AgentEntry(
-        role="Reading Agent",
-        desc="检索拓展阅读与论文",
-        type="reading",
-        stage="enhancement",
-        agent_loader=_load_agent("app.resource.agents.reading", "reading_agent"),
-        method="generate_reading",
-        result_summary=lambda r: f"共 {len(r.get('recommendations', []))} 条推荐",
-    ),
-    "code": AgentEntry(
-        role="Code Agent",
-        desc="编写可运行实操案例",
-        type="code",
-        stage="enhancement",
-        agent_loader=_load_agent("app.resource.agents.code", "code_agent"),
-        method="generate_code",
-        result_summary=lambda r: f"语言: {r.get('detected_language', 'unknown')}",
-    ),
-    "image": AgentEntry(
-        role="Image Agent",
-        desc="生成教学配图与图解资源",
-        type="image",
-        stage="enhancement",
-        agent_loader=_load_agent("app.resource.agents.image", "image_agent"),
-        method="generate_image",
-        result_summary=lambda r: f"生成 {len(r.get('images', []))} 张图解",
-    ),
-    "ppt": AgentEntry(
-        role="PPT Agent",
-        desc="生成演示文稿与讲稿",
-        type="ppt",
-        stage="presentation",
-        agent_loader=_load_agent("app.resource.agents.ppt", "ppt_agent"),
-        method="generate_ppt",
-        result_summary=lambda r: "PPT 大纲已生成",
-    ),
-    "video": AgentEntry(
-        role="Video Agent",
-        desc="生成视频讲解脚本与分镜",
-        type="video",
-        stage="presentation",
-        agent_loader=_load_agent("app.resource.agents.video", "video_agent"),
-        method="generate_video",
-        result_summary=lambda r: f"分镜 {len(r.get('storyboard', []))} 幕",
-    ),
-}
-
-
-AGENT_REGISTRY: dict[str, AgentEntry] | None = None
-
-
-def get_agent_registry() -> dict[str, AgentEntry]:
-    global AGENT_REGISTRY
-    if AGENT_REGISTRY is None:
-        AGENT_REGISTRY = build_agent_registry()
-    return AGENT_REGISTRY
-
-
 class CoordinatorAgent:
-    def __init__(
-        self,
-        emitter: AgentEventEmitter,
-        profile_loader: ProfileSnapshotLoader | None = None,
-    ):
+    def __init__(self, emitter: AgentEventEmitter):
         self.emitter = emitter
-        self.profile_loader = profile_loader or ProfileSnapshotLoader()
         self.llm = get_deepseek_reasoner_llm(streaming=False)
         self._planner_llm = self.llm.with_structured_output(PlannerPlanOutput)
         logger.info("[Coordinator] 初始化完成: planner_model=%s", DEEPSEEK_REASONER_MODEL)
@@ -190,7 +83,7 @@ class CoordinatorAgent:
         )
         await self.emitter.emit_workflow("profile_loading", "正在读取学习者画像...")
         snapshot = await self._safe_load_profile(user_id)
-        personalized_context = self.profile_loader.build_personalized_context(snapshot, task)
+        personalized_context = build_personalized_context(snapshot, task)
         logger.info(
             "[Coordinator] 个性化上下文已生成: difficulty=%s styles=%s emphasis_count=%s",
             personalized_context.target_difficulty,
@@ -313,7 +206,7 @@ class CoordinatorAgent:
 
     async def _safe_load_profile(self, user_id: int) -> LearnerProfileSnapshot:
         try:
-            snapshot = await self.profile_loader.load(user_id)
+            snapshot = await load_profile_snapshot(user_id)
             summary = snapshot.profile_summary or "暂无长期画像"
             logger.info(
                 "[Coordinator] 画像快照加载成功: user_id=%s major=%r knowledge_score=%r",
@@ -549,110 +442,20 @@ class CoordinatorAgent:
 
     @staticmethod
     def _merge_extra(existing_extra: str, personalized_context: PersonalizedTaskContext) -> str:
-        additions = []
-        if personalized_context.target_difficulty:
-            additions.append(f"推荐难度：{personalized_context.target_difficulty}")
-        if personalized_context.explanation_style:
-            additions.append(f"讲解风格：{'；'.join(personalized_context.explanation_style)}")
-        if personalized_context.emphasis:
-            additions.append(f"强调事项：{'；'.join(personalized_context.emphasis)}")
-        parts = [part for part in [existing_extra, " | ".join(additions)] if part]
-        return "\n".join(parts)
+        return merge_extra(existing_extra, personalized_context)
 
     @staticmethod
     def _normalize_selected_resources(selected_resources: list[str] | None) -> list[str] | None:
-        if not selected_resources:
-            return None
-
-        normalized: list[str] = []
-        seen: set[str] = set()
-        registry = get_agent_registry()
-        default_order = list(registry.keys())
-        order_index = {name: idx for idx, name in enumerate(default_order)}
-
-        for raw_name in selected_resources:
-            name = str(raw_name).strip().lower()
-            if not name or name not in registry or name in seen:
-                continue
-            normalized.append(name)
-            seen.add(name)
-
-        if not normalized:
-            return None
-
-        normalized.sort(key=lambda name: order_index[name])
-        return normalized
+        return normalize_selected_resources(selected_resources)
 
     @staticmethod
-    def _filter_tasks_by_selection(
-        tasks: list[dict],
-        allowed_agents: list[str] | None,
-    ) -> list[dict]:
-        if allowed_agents is None:
-            return tasks
-        allowed_set = set(allowed_agents)
-        return [task for task in tasks if task.get("agent") in allowed_set]
+    def _filter_tasks_by_selection(tasks: list[dict], allowed_agents: list[str] | None) -> list[dict]:
+        return filter_tasks_by_selection(tasks, allowed_agents)
 
     @staticmethod
     def _core_ready(plan: ResourcePlan, results: dict[str, dict]) -> bool:
-        for agent_name in plan.core_agents:
-            if not results.get(agent_name, {}).get("success"):
-                return False
-        return True
+        return core_ready(plan, results)
 
     @staticmethod
-    async def _save_resource(
-        user_id: int,
-        task: dict,
-        resource_plan: ResourcePlan,
-        results: dict,
-    ) -> None:
-        from sqlmodel.ext.asyncio.session import AsyncSession
-        from app.infra.models import GeneratedResource
-
-        def _serialize(data: dict | None) -> str | None:
-            if not data:
-                return None
-            return json.dumps(data, ensure_ascii=False)
-
-        logger.info(
-            "[Coordinator] 开始持久化资源包: user_id=%s course=%r result_keys=%s",
-            user_id,
-            task.get("course", ""),
-            list(results.keys()),
-        )
-        successful_agents = [name for name, value in results.items() if value.get("success")]
-        failed_agents = [name for name, value in results.items() if not value.get("success")]
-        if failed_agents and successful_agents:
-            status = "partial_success"
-        elif failed_agents:
-            status = "failed"
-        else:
-            status = "completed"
-        async with AsyncSession(engine) as session:
-            resource = GeneratedResource(
-                user_id=user_id,
-                course=task.get("course", ""),
-                gap=task.get("gap", ""),
-                need=task.get("need", "review"),
-                request_extra=task.get("extra", ""),
-                status=status,
-                plan_result=json.dumps(resource_plan.model_dump(), ensure_ascii=False),
-                mindmap_result=_serialize(results.get("mindmap")),
-                content_result=_serialize(results.get("content")),
-                code_result=_serialize(results.get("code")),
-                quiz_result=_serialize(results.get("quiz")),
-                reading_result=_serialize(results.get("reading")),
-                image_result=_serialize(results.get("image")),
-                ppt_result=_serialize(results.get("ppt")),
-                video_result=_serialize(results.get("video")),
-            )
-            session.add(resource)
-            await session.commit()
-            logger.info(
-                "[Coordinator] 资源包持久化完成: user_id=%s status=%s successful=%s failed=%s",
-                user_id,
-                status,
-                successful_agents,
-                failed_agents,
-            )
+    async def _save_resource(user_id: int, task: dict, resource_plan: ResourcePlan, results: dict) -> None:
+        await save_resource(user_id, task, resource_plan, results)

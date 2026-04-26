@@ -164,7 +164,12 @@
               <p>支持文字、图片、文档等多模态交流，<br>我将在对话中自动更新您的学习画像并提供量身定制的解答</p>
             </div>
 
-            <div v-for="msg in messages" :key="msg.id" :class="['message-row', msg.role]">
+            <div
+                v-for="msg in messages"
+                :key="msg.id"
+                :class="['message-row', msg.role]"
+                v-show="!(msg.role === 'ai' && msg.id === streamingMsgId && !msg.content)"
+            >
               <div class="msg-avatar">
                 <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
                 <div v-else class="avatar-circle user-av"><el-icon><UserFilled /></el-icon></div>
@@ -195,13 +200,31 @@
                   />
                 </div>
 
+                <div v-if="msg.diagramGenerating" class="diagram-generating">
+                  <span class="diagram-spinner"></span>
+                  <span>图解正在生成...</span>
+                </div>
+
+                <div v-if="msg.diagram" class="msg-diagram">
+                  <div class="diagram-header">
+                    <span class="diagram-title">{{ msg.diagram.title }}</span>
+                    <span class="diagram-type-tag">{{ msg.diagram.type }}</span>
+                  </div>
+                  <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
+                  <div
+                      class="diagram-svg-container"
+                      v-html="diagramSvgCache.get(msg.diagram.render.source) || ''"
+                  ></div>
+                </div>
+
               </div>
             </div>
 
             <div v-if="showThinkingIndicator" class="message-row ai thinking-row">
               <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
               <div class="thinking-bubble">
-                <span class="dot-typing"></span>
+                <el-icon class="is-loading thinking-spinner"><Loading /></el-icon>
+                <span class="thinking-text">正在思考...</span>
               </div>
             </div>
           </div>
@@ -231,7 +254,7 @@
                       </el-dropdown-item>
 
                       <el-dropdown-item divided @click="handleImageToggle">
-                        <el-icon><Picture /></el-icon> {{ generateImage ? '取消生成图片' : '生成图片' }}
+                        <el-icon><Picture /></el-icon> {{ needDiagram ? '取消生成图解' : '生成图解' }}
                       </el-dropdown-item>
                       <el-dropdown-item @click="handleVideoToggle">
                         <el-icon><VideoPlay /></el-icon> {{ generateVideo ? '取消生成视频' : '生成视频' }}
@@ -253,12 +276,12 @@
                   </button>
                 </el-tooltip>
 
-                <div class="active-media-chip" v-if="generateImage" @click="handleImageToggle" title="取消生成图片">
+                <div class="active-media-chip" v-if="needDiagram" @click="handleImageToggle" title="取消生成图解">
                   <div class="chip-icon-circle">
                     <el-icon class="icon-default"><Picture /></el-icon>
                     <el-icon class="icon-hover"><Close /></el-icon>
                   </div>
-                  <span>图片</span>
+                  <span>图解</span>
                 </div>
 
                 <div class="active-media-chip" v-if="generateVideo" @click="handleVideoToggle" title="取消生成视频">
@@ -326,29 +349,47 @@
           <div class="header-title-row">
             <h3>动态学习画像</h3>
             <span class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
-              <span class="dot"></span> {{ profileUpdated ? 'Synced' : 'Live' }}
+              <span class="dot"></span> Live
             </span>
           </div>
-        </div>
-        <p class="sidebar-desc">基于您的对话实时提取的关键特征</p>
-
-        <div class="tags-section">
-          <div class="tags-container" v-if="activeProfileTags.length > 0">
-            <span v-for="(tag, idx) in activeProfileTags" :key="idx" class="feature-tag shadow-sm">
-              <el-icon class="tag-icon"><Discount /></el-icon>
-              {{ tag }}
-            </span>
-          </div>
-          <div v-else class="empty-tags">
-            对话太少啦，多聊两句让我更了解你～
-          </div>
+          <p class="sidebar-desc">基于对话内容为你生成的学习画像</p>
         </div>
 
-        <div class="ai-insight">
-          <div class="insight-header">
-            <el-icon><MagicStick /></el-icon> 辅导策略
+        <div class="profile-feature-card">
+          <div class="feature-card-header">
+            <div class="header-icon"><el-icon><User /></el-icon></div>
+            <span class="header-title">学习特征总结</span>
           </div>
-          <div class="insight-content">{{ tutorStrategy }}</div>
+
+          <div class="feature-list" v-if="activeProfileDimensions.length > 0">
+            <div class="feature-item" v-for="dim in activeProfileDimensions" :key="dim.key">
+              <div class="item-icon-box">
+                <el-icon><component :is="getIcon(dim.key)" /></el-icon>
+              </div>
+              <div class="item-text-box">
+                <div class="item-title">{{ dim.name }}</div>
+                <div class="item-desc">{{ dim.desc }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="feature-list empty-state" v-else>
+            <div class="empty-text">对话太少啦，多聊两句让我更了解你～</div>
+          </div>
+        </div>
+
+        <div class="long-term-memory-section">
+          <div class="memory-header-row">
+            <div class="memory-title-wrap">
+              <span class="memory-title">长期记忆</span>
+              <el-icon class="info-icon"><InfoFilled /></el-icon>
+            </div>
+            <div class="memory-switch-wrap">
+              <span class="switch-status">{{ memoryEnabled ? '已启用' : '未使用' }}</span>
+              <el-switch v-model="memoryEnabled" size="small" />
+            </div>
+          </div>
+          <p class="memory-desc">将重要信息存入长期记忆，以提供更个性化的辅导服务。</p>
         </div>
       </aside>
     </main>
@@ -374,14 +415,32 @@
               :class="{ active: chatMode === 'standard' }"
               @click="setChatMode('standard')"
           >
-            <el-icon><ChatLineRound /></el-icon> 图文交互
+            <div class="menu-icon-box">
+              <el-icon><ChatLineRound /></el-icon>
+            </div>
+            <div class="menu-text-content">
+              <div class="menu-title">图文交互</div>
+              <div class="menu-desc">文字、图片多模态交流</div>
+            </div>
+            <div class="check-icon" v-if="chatMode === 'standard'">
+              <el-icon><CircleCheckFilled /></el-icon>
+            </div>
           </div>
           <div
               class="fab-menu-item"
               :class="{ active: chatMode === 'digital_human' }"
               @click="setChatMode('digital_human')"
           >
-            <el-icon><Avatar /></el-icon> 数字人互动
+            <div class="menu-icon-box">
+              <el-icon><Avatar /></el-icon>
+            </div>
+            <div class="menu-text-content">
+              <div class="menu-title">数字人互动</div>
+              <div class="menu-desc">与数字人进行语音对话</div>
+            </div>
+            <div class="check-icon" v-if="chatMode === 'digital_human'">
+              <el-icon><CircleCheckFilled /></el-icon>
+            </div>
           </div>
         </div>
       </transition>
@@ -390,38 +449,285 @@
 </template>
 
 <script setup lang="ts">
+// ==========================================
+// 1. 导入
+// ==========================================
 import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
-  MagicStick, Plus, Delete, Close, Top,
+  Plus, Delete, Close, Top,
   EditPen, Search, Discount, Timer, VideoPlay,
-  Paperclip
+  Paperclip, CircleCheckFilled,
+  User, InfoFilled, Medal, Aim, Setting, Loading
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
+import mermaid from 'mermaid'
 import {
   streamChat, getProfile, uploadFile,
   getSessions, createSession, deleteSession, getChatHistory,
   type ProfileData, type ChatSession
 } from '@/api/ai'
+import { getMe } from '@/api/auth'
 
 // ==========================================
-// 悬浮按钮 (FAB) 状态与拖拽逻辑
+// 2. 常量定义
 // ==========================================
+const DIMENSION_MAP = [
+  { key: 'knowledge_level', name: '擅长领域', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_style', name: '认知风格', defaultDesc: '自动分析中...' },
+  { key: 'error_pattern', name: '待提升方向', defaultDesc: '自动分析中...' },
+  { key: 'learning_goal', name: '学习目标', defaultDesc: '自动分析中...' },
+  { key: 'learning_history', name: '学习历史', defaultDesc: '自动分析中...' },
+  { key: 'interest_preference', name: '学习风格偏好', defaultDesc: '自动分析中...' },
+  { key: 'learning_pace', name: '学习节奏', defaultDesc: '自动分析中...' },
+  { key: 'cognitive_level', name: '认知水平', defaultDesc: '自动分析中...' },
+] as const
+
+// ==========================================
+// 3. 类型定义
+// ==========================================
+interface PendingFile { file?: File; url?: string; fileType: string; name: string }
+interface Attachment { url: string; type: string; name: string }
+interface DiagramData {
+  type: string
+  title: string
+  summary: string
+  spec: Record<string, unknown>
+  render: {
+    engine: string
+    format: string
+    source: string
+  }
+}
+interface ChatMsg {
+  id: number
+  role: 'user' | 'ai'
+  content: string
+  time: string
+  attachments?: Attachment[] | null
+  illustrations?: string[]
+  diagram?: DiagramData | null
+  diagramGenerating?: boolean
+}
+interface ProfileDimension {
+  readonly key: string
+  readonly name: string
+  readonly defaultDesc: string
+  score: number | null
+  desc: string
+}
+
+// ==========================================
+// 4. Mermaid 初始化
+// ==========================================
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'default',
+  securityLevel: 'loose',
+})
+
+// ==========================================
+// 5. 响应式状态
+// ==========================================
+
+// --- 聊天模式与输入 ---
+const chatMode = ref('standard')
+const userInput = ref('')
+const isAIThinking = ref(false)
+const isSpeaking = ref(false)
+const chatScroll = ref<HTMLElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const isExpandedInput = ref(false)
+
+// --- 媒体生成开关 ---
+const enableWebSearch = ref(false)
+const needDiagram = ref(false)
+const generateVideo = ref(false)
+const hasToggledMedia = ref(false)
+
+// --- 语音相关 ---
+const isRecording = ref(false)
+const isVoiceChatting = ref(false)
+
+// --- 文件上传 ---
+const uploadingFile = ref(false)
+const docInput = ref<HTMLInputElement | null>(null)
+const imgInput = ref<HTMLInputElement | null>(null)
+const pendingFiles = ref<PendingFile[]>([])
+
+// --- 会话管理 ---
+const sessions = ref<ChatSession[]>([])
+const currentSessionId = ref<string | undefined>(undefined)
+const sessionSidebarCollapsed = ref(false)
+const currentUserId = ref<string | number | null>(null)
+const searchPopoverVisible = ref(false)
+const searchKeyword = ref('')
+
+// --- 消息列表 ---
+const messages = ref<ChatMsg[]>([])
+const streamingMsgId = ref<number | null>(null)
+let abortController: AbortController | null = null
+
+// --- 画像相关 ---
+const profileUpdated = ref(false)
+const memoryEnabled = ref(false)
+const profileDimensions = ref<ProfileDimension[]>(
+    DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
+)
+let profilePollTimers: ReturnType<typeof setTimeout>[] = []
+
+// --- FAB 悬浮按钮 ---
 const fabPos = ref({ x: 16, y: 0 })
 const isDragging = ref(false)
 const showFabMenu = ref(false)
 const isDimmed = ref(false)
 const isStickRight = computed(() => fabPos.value.x > window.innerWidth / 2)
 
+// --- FAB 拖拽状态 ---
 let dragStartX = 0
 let dragStartY = 0
 let dragInitialX = 0
 let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
+
+// --- 图解渲染 ---
+let diagramRenderSeq = 0
+const diagramSvgCache = ref<Map<string, string>>(new Map())
+
+// --- 滚动状态 ---
+let scrollPending = false
+
+// ==========================================
+// 6. 计算属性
+// ==========================================
+const filteredSessions = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return []
+  return sessions.value.filter(s => {
+    const title = s.title || '新建对话'
+    return title.toLowerCase().includes(keyword)
+  })
+})
+
+const activeProfileDimensions = computed(() => {
+  return profileDimensions.value.filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
+})
+
+const showThinkingIndicator = computed(() => {
+  if (!isAIThinking.value) return false
+  if (chatMode.value === 'digital_human') return false
+  const streamingMsg = messages.value.find(m => m.id === streamingMsgId.value)
+  return !streamingMsg || !streamingMsg.content
+})
+
+// ==========================================
+// 7. 工具函数
+// ==========================================
+const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+const renderMarkdown = (text: string) => marked.parse(text)
+
+const getIcon = (key: string) => {
+  const map: Record<string, any> = {
+    knowledge_level: Medal,
+    cognitive_style: Aim,
+    error_pattern: Aim,
+    learning_goal: Aim,
+    learning_history: Timer,
+    interest_preference: Setting,
+    learning_pace: Timer,
+    cognitive_level: Medal
+  }
+  return map[key] || Discount
+}
+
+const formatRelativeTime = (dateStr: string) => {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}天前`
+  return new Date(dateStr).toLocaleDateString()
+}
+
+const resolveIllustrationUrl = (path: string) => {
+  if (!path) return ''
+  if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
+  return path
+}
+
+// ==========================================
+// 8. 滚动相关函数
+// ==========================================
+const scrollToBottom = () => {
+  if (scrollPending) return
+  scrollPending = true
+  nextTick(() => {
+    scrollPending = false
+    if (chatScroll.value) {
+      chatScroll.value.scrollTop = chatScroll.value.scrollHeight
+    }
+  })
+}
+
+const autoResize = () => {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = '24px'
+  const currentHeight = el.scrollHeight
+
+  if (currentHeight > 30) {
+    isExpandedInput.value = true
+    el.style.height = `${Math.min(currentHeight, 72)}px`
+  } else {
+    isExpandedInput.value = false
+    el.style.height = '24px'
+  }
+}
+
+// ==========================================
+// 9. 图解渲染函数
+// ==========================================
+const renderMermaid = async (source: string): Promise<string> => {
+  try {
+    diagramRenderSeq += 1
+    const { svg } = await mermaid.render(`mermaid-${Date.now()}-${diagramRenderSeq}`, source)
+    return svg
+  } catch {
+    return `<pre class="mermaid-error">图解渲染失败</pre>`
+  }
+}
+
+const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
+  const cacheKey = diagram.render.source
+  if (diagramSvgCache.value.has(cacheKey)) {
+    return diagramSvgCache.value.get(cacheKey)!
+  }
+  const svg = await renderMermaid(diagram.render.source)
+  diagramSvgCache.value.set(cacheKey, svg)
+  diagramSvgCache.value = new Map(diagramSvgCache.value)
+  scrollToBottom()
+  return svg
+}
+
+// ==========================================
+// 10. FAB 悬浮按钮函数
+// ==========================================
+const getPointerPosition = (e: MouseEvent | TouchEvent) => {
+  if (e instanceof MouseEvent) {
+    return { x: e.clientX, y: e.clientY }
+  }
+  const touch = e.touches[0]
+  return touch ? { x: touch.clientX, y: touch.clientY } : null
+}
 
 const resetDimTimer = () => {
   isDimmed.value = false
@@ -438,15 +744,15 @@ const startDrag = (e: MouseEvent | TouchEvent) => {
     showFabMenu.value = false
     return
   }
+  const pointer = getPointerPosition(e)
+  if (!pointer) return
+
   isDragging.value = true
   dragDistance = 0
   resetDimTimer()
 
-  const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX
-  const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY
-
-  dragStartX = clientX
-  dragStartY = clientY
+  dragStartX = pointer.x
+  dragStartY = pointer.y
   dragInitialX = fabPos.value.x
   dragInitialY = fabPos.value.y
 
@@ -459,11 +765,11 @@ const startDrag = (e: MouseEvent | TouchEvent) => {
 const onDrag = (e: MouseEvent | TouchEvent) => {
   if (!isDragging.value) return
   e.preventDefault()
-  const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX
-  const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY
+  const pointer = getPointerPosition(e)
+  if (!pointer) return
 
-  const dx = clientX - dragStartX
-  const dy = clientY - dragStartY
+  const dx = pointer.x - dragStartX
+  const dy = pointer.y - dragStartY
   dragDistance = Math.abs(dx) + Math.abs(dy)
 
   fabPos.value = {
@@ -496,14 +802,12 @@ const snapToEdge = () => {
   let targetX = fabPos.value.x
   let targetY = fabPos.value.y
 
-  // 1. 左右自动磁吸
   if (targetX + fabSize / 2 > screenW / 2) {
     targetX = screenW - fabSize - margin
   } else {
     targetX = margin
   }
 
-  // 2. 避免被底部输入框/其他元素过度遮挡
   const bottomBoundary = screenH - fabSize - 120
   if (targetY < margin) targetY = margin
   if (targetY > bottomBoundary) targetY = bottomBoundary
@@ -525,168 +829,7 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
 }
 
 // ==========================================
-// 维度定义
-// ==========================================
-const DIMENSION_MAP = [
-  { key: 'knowledge_level', name: '知识基础', color: '#0891B2', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_style', name: '认知风格', color: '#10B981', defaultDesc: '自动分析中...' },
-  { key: 'error_pattern', name: '易错倾向', color: '#F59E0B', defaultDesc: '自动分析中...' },
-  { key: 'learning_goal', name: '学习目标', color: '#8B5CF6', defaultDesc: '自动分析中...' },
-  { key: 'learning_history', name: '学习历史', color: '#EC4899', defaultDesc: '自动分析中...' },
-  { key: 'interest_preference', name: '兴趣偏好', color: '#3B82F6', defaultDesc: '自动分析中...' },
-  { key: 'learning_pace', name: '学习节奏', color: '#14B8A6', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_level', name: '认知水平', color: '#F97316', defaultDesc: '自动分析中...' },
-] as const
-
-// ==========================================
-// 状态
-// ==========================================
-const chatMode = ref('standard')
-const userInput = ref('')
-const isAIThinking = ref(false)
-const isSpeaking = ref(false)
-const chatScroll = ref<HTMLElement | null>(null)
-const profileUpdated = ref(false)
-const uploadingFile = ref(false)
-
-// 媒体生成开关逻辑
-const enableWebSearch = ref(false)
-const generateImage = ref(false)
-const generateVideo = ref(false)
-
-const isRecording = ref(false)
-const isVoiceChatting = ref(false)
-
-const hasToggledMedia = ref(false)
-
-// 历史搜索相关
-const searchPopoverVisible = ref(false)
-const searchKeyword = ref('')
-
-// 会话管理
-const sessions = ref<ChatSession[]>([])
-const currentSessionId = ref<string | undefined>(undefined)
-const sessionSidebarCollapsed = ref(false)
-
-// 🌟 监听模式切换：如果是数字人互动强制折叠侧边栏；如果切换回图文交互自动展开侧边栏
-watch(chatMode, (newMode) => {
-  if (newMode === 'digital_human') {
-    sessionSidebarCollapsed.value = true
-  } else if (newMode === 'standard') {
-    sessionSidebarCollapsed.value = false
-  }
-})
-
-const docInput = ref<HTMLInputElement | null>(null)
-const imgInput = ref<HTMLInputElement | null>(null)
-interface PendingFile { file?: File; url?: string; fileType: string; name: string }
-const pendingFiles = ref<PendingFile[]>([])
-
-interface Attachment { url: string; type: string; name: string }
-interface ChatMsg { id: number; role: 'user' | 'ai'; content: string; time: string; attachments?: Attachment[] | null; illustrations?: string[] }
-const messages = ref<ChatMsg[]>([])
-
-interface ProfileDimension {
-  readonly key: string
-  readonly name: string
-  readonly color: string
-  readonly defaultDesc: string
-  score: number | null
-  desc: string
-}
-
-const profileDimensions = ref<ProfileDimension[]>(
-    DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
-)
-const extractedTags = ref<string[]>([])
-const tutorStrategy = ref('开始对话后，系统将自动提取特征,为您生成专属策略，快开始您的对话吧！')
-
-const activeProfileTags = computed(() => {
-  return extractedTags.value
-})
-
-let abortController: AbortController | null = null
-const streamingMsgId = ref<number | null>(null)
-let profilePollTimers: ReturnType<typeof setTimeout>[] = []
-
-// ==========================================
-// 自动调节输入框高度及模式切换逻辑
-// ==========================================
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const isExpandedInput = ref(false)
-
-const autoResize = () => {
-  const el = textareaRef.value
-  if (!el) return
-  el.style.height = '24px'
-  const currentHeight = el.scrollHeight
-
-  if (currentHeight > 30) {
-    isExpandedInput.value = true
-    el.style.height = `${Math.min(currentHeight, 72)}px`
-  } else {
-    isExpandedInput.value = false
-    el.style.height = '24px'
-  }
-}
-
-// ==========================================
-// 计算属性
-// ==========================================
-const filteredSessions = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) return []
-
-  return sessions.value.filter(s => {
-    const title = s.title || '新建对话'
-    return title.toLowerCase().includes(keyword)
-  })
-})
-
-const renderMarkdown = (text: string) => marked.parse(text)
-
-const showThinkingIndicator = computed(() => {
-  if (!isAIThinking.value) return false
-  if (chatMode.value === 'digital_human') return false
-  const streamingMsg = messages.value.find(m => m.id === streamingMsgId.value)
-  return !streamingMsg || !streamingMsg.content
-})
-
-let scrollPending = false
-const scrollToBottom = () => {
-  if (scrollPending) return
-  scrollPending = true
-  nextTick(() => {
-    scrollPending = false
-    if (chatScroll.value) {
-      chatScroll.value.scrollTop = chatScroll.value.scrollHeight
-    }
-  })
-}
-
-const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
-const formatRelativeTime = (dateStr: string) => {
-  if (!dateStr) return ''
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时前`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}天前`
-  return new Date(dateStr).toLocaleDateString()
-}
-
-const resolveIllustrationUrl = (path: string) => {
-  if (!path) return ''
-  if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
-  return path
-}
-
-// ==========================================
-// 画像加载与轮询
+// 11. 画像加载与轮询
 // ==========================================
 const fetchProfile = async () => {
   try {
@@ -708,17 +851,6 @@ const fetchProfile = async () => {
       }
     }
 
-    if (data.profile_summary) {
-      tutorStrategy.value = data.profile_summary
-    }
-
-    const tags = profileDimensions.value
-        .filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
-        .map(d => d.name)
-    if (tags.length > 0) {
-      extractedTags.value = tags
-    }
-
     if (changed) {
       profileUpdated.value = true
       setTimeout(() => { profileUpdated.value = false }, 4000)
@@ -738,8 +870,18 @@ const scheduleProfilePoll = () => {
   })
 }
 
+const fetchCurrentUser = async () => {
+  if (currentUserId.value) return
+  try {
+    const res = await getMe()
+    currentUserId.value = res.data.data?.id ?? null
+  } catch {
+    currentUserId.value = null
+  }
+}
+
 // ==========================================
-// 会话管理
+// 12. 会话管理函数
 // ==========================================
 const loadSessions = async () => {
   try {
@@ -791,6 +933,9 @@ const archiveSession = async (sessionId: string) => {
   }
 }
 
+// ==========================================
+// 13. 文件上传函数
+// ==========================================
 const triggerDocUpload = () => docInput.value?.click()
 const triggerImgUpload = () => imgInput.value?.click()
 
@@ -812,12 +957,15 @@ const removeAttachment = (idx: number) => {
   pendingFiles.value.splice(idx, 1)
 }
 
+// ==========================================
+// 14. 媒体生成开关函数
+// ==========================================
 const handleImageToggle = () => {
   hasToggledMedia.value = true
-  if (generateImage.value) {
-    generateImage.value = false
+  if (needDiagram.value) {
+    needDiagram.value = false
   } else {
-    generateImage.value = true
+    needDiagram.value = true
     generateVideo.value = false
   }
 }
@@ -828,10 +976,13 @@ const handleVideoToggle = () => {
     generateVideo.value = false
   } else {
     generateVideo.value = true
-    generateImage.value = false
+    needDiagram.value = false
   }
 }
 
+// ==========================================
+// 15. 语音相关函数
+// ==========================================
 const handleVoiceToggle = () => {
   isRecording.value = !isRecording.value
   if (isRecording.value) {
@@ -853,12 +1004,13 @@ const handleVoiceChatToggle = () => {
 }
 
 // ==========================================
-// 发送消息
+// 16. 发送消息函数
 // ==========================================
 const handleSend = async () => {
   const text = userInput.value.trim()
   const hasFiles = pendingFiles.value.length > 0
   if ((!text && !hasFiles) || isAIThinking.value) return
+  const shouldGenerateDiagram = needDiagram.value
 
   if (!currentSessionId.value) {
     try {
@@ -966,7 +1118,7 @@ const handleSend = async () => {
         session_id: currentSessionId.value,
         image_urls: imageUrls.length > 0 ? imageUrls : undefined,
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
-        generate_image: generateImage.value,
+        need_diagram: shouldGenerateDiagram,
         generate_video: generateVideo.value,
       },
       (chunk) => {
@@ -977,6 +1129,10 @@ const handleSend = async () => {
         }
       },
       () => {
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg) {
+          aiMsg.diagramGenerating = false
+        }
         isAIThinking.value = false
         streamingMsgId.value = null
         isSpeaking.value = chatMode.value === 'digital_human'
@@ -988,35 +1144,87 @@ const handleSend = async () => {
       },
       (err) => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (aiMsg && !aiMsg.content) {
-          aiMsg.content = `Generate failed: ${err.message}`
+        if (aiMsg) {
+          aiMsg.diagramGenerating = false
+          if (!aiMsg.content) {
+            aiMsg.content = `Generate failed: ${err.message}`
+          }
         }
         isAIThinking.value = false
         streamingMsgId.value = null
         abortController = null
       },
       (evt) => {
-        if (evt.event !== 'illustration') return
-        const payload = evt.data as { path?: string }
-        const imagePath = resolveIllustrationUrl(payload?.path || '')
-        if (!imagePath) return
-        const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (!aiMsg) return
-        if (!aiMsg.illustrations) aiMsg.illustrations = []
-        if (!aiMsg.illustrations.includes(imagePath)) {
-          aiMsg.illustrations.push(imagePath)
+        if (evt.event === 'status') {
+          const payload = evt.data as { stage?: string; message?: string }
+          if (payload?.stage !== 'diagram_generate' || !shouldGenerateDiagram) return
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          aiMsg.diagramGenerating = true
+          scrollToBottom()
+          return
+        }
+
+        if (evt.event === 'illustration') {
+          const payload = evt.data as { path?: string }
+          const imagePath = resolveIllustrationUrl(payload?.path || '')
+          if (!imagePath) return
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          if (!aiMsg.illustrations) aiMsg.illustrations = []
+          if (!aiMsg.illustrations.includes(imagePath)) {
+            aiMsg.illustrations.push(imagePath)
+          }
+          return
+        }
+
+        if (evt.event === 'done') {
+          const payload = evt.data as { resources?: { diagram?: DiagramData | null } }
+          const diagram = payload?.resources?.diagram
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          aiMsg.diagramGenerating = false
+          if (!diagram) return
+          aiMsg.diagram = diagram
+          scrollToBottom()
         }
       },
   )
 }
 
+// ==========================================
+// 17. 监听器
+// ==========================================
+watch(chatMode, (newMode) => {
+  if (newMode === 'digital_human') {
+    sessionSidebarCollapsed.value = true
+  } else if (newMode === 'standard') {
+    sessionSidebarCollapsed.value = false
+  }
+})
+
+watch(
+  () => messages.value.map(m => m.diagram),
+  (diagrams) => {
+    diagrams.forEach((diagram) => {
+      if (diagram && diagram.render?.source && !diagramSvgCache.value.has(diagram.render.source)) {
+        getDiagramSvg(diagram)
+      }
+    })
+  },
+  { deep: true }
+)
+
+// ==========================================
+// 18. 生命周期钩子
+// ==========================================
 onMounted(async () => {
-  // 挂载时初始化 FAB 默认位置到左下角，并启动半透明定时器
   fabPos.value = { x: 16, y: window.innerHeight - 150 }
   resetDimTimer()
   document.addEventListener('mousedown', handleGlobalClick)
   document.addEventListener('touchstart', handleGlobalClick, { passive: true })
 
+  await fetchCurrentUser()
   await loadSessions()
   if (sessions.value.length > 0) {
     await switchSession(sessions.value[0]!.id)
@@ -1036,7 +1244,6 @@ onBeforeUnmount(() => {
 <style scoped>
 @import url('https://gs.jurieo.com/gemini/fonts-googleapis/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
-/* ================= 全局设定 ================= */
 .tutor-dashboard {
   display: flex;
   flex-direction: column;
@@ -1047,14 +1254,12 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-/* ================= 主体排版 ================= */
 .dashboard-main {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* --- 左侧：会话列表 --- */
 .session-sidebar {
   position: relative;
   width: 240px;
@@ -1142,35 +1347,20 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 0.95rem;
   transition: all 0.2s ease;
+  color: #475569;
 }
 
-/* ================= 统一样式：搜索历史 ================= */
-.nav-item.search-item {
-  color: #475569;
-  font-weight: 400 !important;
-}
-.nav-item.search-item:hover {
+.nav-item:hover {
   background: #EBF0F5;
   color: #475569;
 }
 
-/* ================= 新建对话：幽灵按钮 ================= */
+.nav-item.search-item {
+  font-weight: 400 !important;
+}
+
 .nav-item.new-chat-btn {
-  background: transparent !important;
-  border: 1px solid transparent !important;
-  color: #4F46E5 !important;
-  font-weight: 500 !important;
-  transition: all 0.2s ease;
-}
-.nav-item.new-chat-btn:hover {
-  background: transparent !important;
-  border: 1px solid #4F46E5 !important; /* 悬停显示轮廓 */
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
-}
-.nav-item.new-chat-btn.active {
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none;
+  font-weight: 400 !important;
 }
 
 .nav-item.history-collapsed-btn {
@@ -1327,6 +1517,91 @@ onBeforeUnmount(() => {
   background: #F8FAFC;
 }
 
+.diagram-generating {
+  width: min(560px, 100%);
+  margin-top: 12px;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  background: #F8FAFC;
+  border: 1px dashed #CBD5E1;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.diagram-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #CBD5E1;
+  border-top-color: #4F46E5;
+  border-radius: 50%;
+  animation: diagramSpin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes diagramSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.msg-diagram {
+  margin-top: 12px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 560px;
+}
+
+.diagram-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.diagram-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.diagram-type-tag {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: #E0E7FF;
+  color: #4F46E5;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.diagram-summary {
+  font-size: 0.85rem;
+  color: #64748B;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.diagram-svg-container {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.diagram-svg-container :deep(svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  color: #EF4444;
+  font-size: 0.85rem;
+  padding: 8px;
+}
+
 .session-empty {
   font-size: 0.8rem;
   color: #94A3B8;
@@ -1461,12 +1736,21 @@ onBeforeUnmount(() => {
   animation: wave-anim 1s infinite ease-in-out;
 }
 
-.speech-wave span:nth-child(2) { animation-delay: 0.1s; }
-.speech-wave span:nth-child(3) { animation-delay: 0.2s; }
+.speech-wave span:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.speech-wave span:nth-child(3) {
+  animation-delay: 0.2s;
+}
 
 @keyframes wave-anim {
-  0%, 100% { height: 8px; }
-  50% { height: 16px; }
+  0%, 100% {
+    height: 8px;
+  }
+  50% {
+    height: 16px;
+  }
 }
 
 .status-badge {
@@ -1535,7 +1819,9 @@ onBeforeUnmount(() => {
   flex-direction: row-reverse;
 }
 
-.msg-avatar { flex-shrink: 0; }
+.msg-avatar {
+  flex-shrink: 0;
+}
 
 .avatar-circle {
   width: 32px;
@@ -1547,8 +1833,15 @@ onBeforeUnmount(() => {
   font-size: 1rem;
 }
 
-.ai-av { background: #0F172A; color: #FFF; }
-.user-av { background: #0891B2; color: #FFF; }
+.ai-av {
+  background: #0F172A;
+  color: #FFF;
+}
+
+.user-av {
+  background: #0891B2;
+  color: #FFF;
+}
 
 .bubble-wrapper {
   display: flex;
@@ -1571,7 +1864,10 @@ onBeforeUnmount(() => {
   flex-direction: row-reverse;
 }
 
-.sender { font-weight: 600; color: #475569; }
+.sender {
+  font-weight: 600;
+  color: #475569;
+}
 
 .bubble {
   padding: 0.75rem 1.25rem;
@@ -1622,30 +1918,29 @@ onBeforeUnmount(() => {
 .thinking-bubble {
   background: #FAFAFA;
   border: 1px solid #E2E8F0;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   border-radius: 12px;
   border-top-left-radius: 4px;
   display: flex;
   align-items: center;
+  gap: 8px;
+  color: #64748B;
+  font-size: 0.9rem;
 }
 
-.dot-typing {
-  position: relative;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #94A3B8;
-  color: #94A3B8;
-  animation: dotTyping 1.5s infinite linear;
-  box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8;
-  margin-right: 24px;
+.thinking-spinner {
+  font-size: 1.2rem;
+  color: #4F46E5;
 }
 
-@keyframes dotTyping {
-  0% { box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
-  33% { background-color: #0F172A; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #94A3B8; }
-  66% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #0F172A, 24px 0 0 0 #94A3B8; }
-  100% { background-color: #94A3B8; box-shadow: 12px 0 0 0 #94A3B8, 24px 0 0 0 #0F172A; }
+.thinking-text {
+  animation: pulse-text 1.5s infinite;
+}
+
+@keyframes pulse-text {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
 }
 
 .input-panel {
@@ -1935,10 +2230,21 @@ onBeforeUnmount(() => {
   transition: height 0.2s ease;
 }
 
-.voice-bars-icon .bar:nth-child(1) { height: 8px; }
-.voice-bars-icon .bar:nth-child(2) { height: 14px; }
-.voice-bars-icon .bar:nth-child(3) { height: 10px; }
-.voice-bars-icon .bar:nth-child(4) { height: 6px; }
+.voice-bars-icon .bar:nth-child(1) {
+  height: 8px;
+}
+
+.voice-bars-icon .bar:nth-child(2) {
+  height: 14px;
+}
+
+.voice-bars-icon .bar:nth-child(3) {
+  height: 10px;
+}
+
+.voice-bars-icon .bar:nth-child(4) {
+  height: 6px;
+}
 
 .direct-voice-chat-btn.is-active {
   background: #4F46E5;
@@ -1949,10 +2255,21 @@ onBeforeUnmount(() => {
   animation: bar-dance 0.8s infinite ease-in-out alternate;
 }
 
-.direct-voice-chat-btn.is-active .bar:nth-child(1) { animation-delay: 0.0s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(2) { animation-delay: 0.2s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(3) { animation-delay: 0.1s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(4) { animation-delay: 0.3s; }
+.direct-voice-chat-btn.is-active .bar:nth-child(1) {
+  animation-delay: 0.0s;
+}
+
+.direct-voice-chat-btn.is-active .bar:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.direct-voice-chat-btn.is-active .bar:nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+.direct-voice-chat-btn.is-active .bar:nth-child(4) {
+  animation-delay: 0.3s;
+}
 
 .send-btn {
   width: 32px;
@@ -2004,24 +2321,21 @@ onBeforeUnmount(() => {
 }
 
 .profile-sidebar {
-  width: 300px;
+  width: 320px;
   padding: 1.5rem;
   background: #FAFAFA;
   border-left: 1px solid #E2E8F0;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 20px;
   overflow-y: auto;
   flex-shrink: 0;
-  align-items: center;
-  text-align: center;
 }
 
 .sidebar-header {
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
 }
 
@@ -2032,43 +2346,30 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-.sidebar-header h3 {
+.header-title-row h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   color: #0F172A;
-  font-weight: 600;
-  text-align: left;
+  font-weight: 700;
 }
 
 .sync-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 0.7rem;
-  font-family: 'Space Grotesk', monospace;
+  gap: 6px;
+  font-size: 0.75rem;
   color: #64748B;
-  background: #E2E8F0;
-  padding: 2px 8px;
+  background: #F1F5F9;
+  padding: 4px 10px;
   border-radius: 12px;
-  transition: all 0.3s ease;
+  font-weight: 500;
 }
 
 .sync-badge .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #94A3B8;
-}
-
-.sync-badge.is-syncing {
-  background: #ECFEFF;
-  color: #0891B2;
-}
-
-.sync-badge.is-syncing .dot {
-  background: #0891B2;
-  box-shadow: 0 0 6px rgba(8, 145, 178, 0.5);
+  background: #10B981;
 }
 
 .sidebar-desc {
@@ -2078,89 +2379,140 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.tags-section {
+.profile-feature-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  padding: 20px;
   display: flex;
   flex-direction: column;
+  gap: 20px;
+  border: 1px solid #F1F5F9;
+}
+
+.feature-card-header {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  flex: 1;
-  width: 100%;
-  overflow-y: auto;
-  padding: 8px 0;
-  align-items: center;
 }
 
-.tags-container {
+.header-icon {
+  width: 32px;
+  height: 32px;
+  background: #EFF6FF;
+  color: #3B82F6;
+  border-radius: 50%;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
   justify-content: center;
-  padding: 4px 0;
-}
-
-.feature-tag {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  color: #0F172A;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.feature-tag:hover {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
-  transform: translateY(-1px);
-}
-
-.tag-icon {
-  color: #0891B2;
   font-size: 1rem;
 }
 
-.empty-tags {
-  color: #94A3B8;
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 2rem 0;
-  border: 1px dashed #E2E8F0;
-  border-radius: 12px;
-  background: #FAFAFA;
+.header-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1E293B;
 }
 
-.ai-insight {
-  margin-top: auto;
-  background: #0F172A;
-  border-radius: 12px;
-  padding: 1.25rem;
-  color: #F8FAFC;
-  width: 100%;
+.feature-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  box-sizing: border-box;
+  gap: 20px;
 }
 
-.insight-header {
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.item-icon-box {
+  width: 32px;
+  height: 32px;
+  background: #F1F5F9;
+  color: #3B82F6;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: #38BDF8;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.insight-content {
+.item-text-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.item-desc {
+  font-size: 0.8rem;
+  color: #64748B;
+  line-height: 1.5;
+}
+
+.empty-state .empty-text {
   font-size: 0.85rem;
+  color: #94A3B8;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.long-term-memory-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 4px;
+  margin-top: auto;
+}
+
+.memory-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memory-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.info-icon {
+  font-size: 0.9rem;
+  color: #94A3B8;
+  cursor: help;
+}
+
+.memory-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-status {
+  font-size: 0.8rem;
+  color: #64748B;
+}
+
+.memory-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748B;
   line-height: 1.6;
-  color: #CBD5E1;
 }
 
 :deep(.markdown-body) {
@@ -2226,8 +2578,6 @@ onBeforeUnmount(() => {
   margin-top: -10vh;
 }
 
-/* ================= 悬浮按钮 (FAB) 相关样式 ================= */
-
 .fab-container {
   position: fixed;
   z-index: 1000;
@@ -2245,21 +2595,21 @@ onBeforeUnmount(() => {
 }
 
 .fab-button {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #5B8CFF, #7A5CFF);
+  background: #5A52FF;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 16px rgba(91,140,255,0.25);
+  box-shadow: 0 6px 16px rgba(90, 82, 255, 0.3);
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .fab-button:hover {
   transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(91,140,255,0.35);
+  box-shadow: 0 8px 20px rgba(90, 82, 255, 0.4);
 }
 .fab-button:active {
   transform: scale(0.95);
@@ -2267,16 +2617,16 @@ onBeforeUnmount(() => {
 
 .fab-menu {
   position: absolute;
-  bottom: 60px;
+  bottom: 70px;
   left: 0;
-  width: 150px;
+  width: 240px;
   background: #FFFFFF;
   border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);
-  padding: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   transform-origin: bottom left;
 }
 .fab-container.stick-right .fab-menu {
@@ -2286,30 +2636,71 @@ onBeforeUnmount(() => {
 }
 
 .fab-menu-item {
-  padding: 12px 16px;
+  padding: 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: #475569;
+  gap: 12px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
+  background: transparent;
 }
 .fab-menu-item:hover {
-  background: #F1F5F9;
-  color: #1E293B;
+  background: #F8FAFC;
 }
 .fab-menu-item.active {
-  color: #4F46E5;
-  background: #EEF2FF;
-}
-.fab-menu-item .el-icon {
-  font-size: 1.2rem;
+  background: #F4F3FF;
 }
 
-/* 菜单淡入淡出动画 */
+.menu-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 1.3rem;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.fab-menu-item.active .menu-icon-box {
+  background: #EBE9FF;
+  color: #5A52FF;
+}
+
+.menu-text-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.menu-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #334155;
+  transition: color 0.2s;
+}
+.fab-menu-item.active .menu-title {
+  color: #5A52FF;
+}
+.menu-desc {
+  font-size: 0.75rem;
+  color: #94A3B8;
+}
+
+.check-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #5A52FF;
+  font-size: 1.2rem;
+  display: flex;
+}
+
 .fab-menu-fade-enter-active,
 .fab-menu-fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -2319,9 +2710,7 @@ onBeforeUnmount(() => {
   opacity: 0;
   transform: scale(0.95) translateY(10px);
 }
-</style>
 
-<style>
 .custom-plus-dropdown {
   border-radius: 16px !important;
   padding: 6px !important;
@@ -2337,7 +2726,7 @@ onBeforeUnmount(() => {
   padding: 10px 20px !important;
   display: flex;
   align-items: center;
-  justify-content: center; /* 让文字和图标居中 */
+  justify-content: center;
   gap: 12px;
   font-weight: 500;
 }

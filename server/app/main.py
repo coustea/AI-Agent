@@ -59,6 +59,7 @@ from app.resource.api import router as resource_router
 from app.path.api import router as path_router
 from app.avatar.api import router as avatar_router
 from app.evaluation.api import router as evaluation_router
+from app.memory.api import router as memory_router
 
 app.include_router(auth_router, prefix="/api/v1/users", tags=["auth"])
 app.include_router(chat_router, prefix="/api/v1/ai", tags=["chat"])
@@ -66,6 +67,7 @@ app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 app.include_router(path_router, prefix="/api/v1/ai", tags=["path"])
 app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
 app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
+app.include_router(memory_router, prefix="/api/v1/ai", tags=["memory"])
 
 
 @app.exception_handler(Exception)

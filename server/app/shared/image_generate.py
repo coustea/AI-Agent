@@ -24,7 +24,7 @@ from urllib.parse import urlencode
 from wsgiref.handlers import format_date_time
 
 from app.config import SPARK_IMAGE_APPID, SPARK_IMAGE_API_KEY, SPARK_IMAGE_API_SECRET, SPARK_IMAGE_PATCH_ID
-from app.infra.llm import get_deepseek_chat_llm
+from app.infra.llm import get_deepseek_llm
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class ImageGeneratorAsync:
     # ================= LLM优化 =================
     def _optimize_prompt(self, content: str) -> str:
         try:
-            llm = get_deepseek_chat_llm(temperature=0.3)
+            llm = get_deepseek_llm(temperature=0.3)
 
             resp = llm.invoke([
                 {"role": "system", "content": PROMPT_ENGINEER_SYSTEM},

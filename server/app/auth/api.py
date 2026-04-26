@@ -8,9 +8,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
+from app.auth.schemas import UserLogin, UserRegister, UserUpdate, UserRead
 from app.infra.database import get_session
 from app.infra.models import User
-from app.auth.schemas import UserLogin, UserRegister, UserUpdate
 from app.auth.service import auth_usecases
 from app.shared.response import HttpResponse
 
@@ -56,7 +56,7 @@ async def logout(
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
-    return HttpResponse.success(data=current_user)
+    return HttpResponse.success(data=UserRead.model_validate(current_user))
 
 
 @router.patch("/me")
@@ -68,4 +68,4 @@ async def update_me(
     user = await auth_usecases.update_me(session, current_user.id, data)
     if not user:
         return HttpResponse.error(code=404, message="用户不存在")
-    return HttpResponse.success(data=user)
+    return HttpResponse.success(data=UserRead.model_validate(user))

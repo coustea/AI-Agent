@@ -10,9 +10,9 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from app.infra.llm import get_deepseek_chat_llm
+from app.infra.llm import get_deepseek_llm
 from app.infra.logging import get_logger
-from app.resource.agent_support import append_context, format_profile_fields, load_prompt, save_to_workplace
+from app.resource.utils import append_context, format_profile_fields, load_prompt, save_to_workplace
 
 logger = get_logger(__name__)
 
@@ -34,7 +34,7 @@ class ReadingAgent:
         self.name = "ReadingAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_deepseek_chat_llm(temperature=0.3)
+        self.llm = get_deepseek_llm(temperature=0.3)
 
     @staticmethod
     def _extract_memory(shared_memory: dict[str, Any]) -> str:

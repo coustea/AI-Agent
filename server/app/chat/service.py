@@ -1,6 +1,8 @@
 """Chat application service boundary.
 
-集中保留 chat 的应用层编排，明确主链路为：api -> service -> agent
+集中保留 chat 的应用层编排，明确主链路为：api -> service -> agent。
+
+主要组件：
 - 文件/图片处理接口（含保护机制）
 - ConversationStore: 会话/历史持久化
 - ChatUseCases: 路由入口与 agent 调用
@@ -43,17 +45,20 @@ from app.shared.storage import local_file_store
 
 from app.chat.schemas import AttachmentInfo, ChatMessageItem, ToolCallRecord
 
+# 模块名称常量
 CHAT_MODULE_NAME = "mentor"
 
 logger = get_logger(__name__)
-MAX_FILE_CONTENT_CHARS = 15000
-MAX_ANALYZE_FILE_COUNT = 8
-MAX_ANALYZE_TOTAL_CHARS = 40000
-MAX_PDF_PAGES_TO_READ = 80
-MAX_DOCX_PARAGRAPHS_TO_READ = 1200
-MAX_IMAGE_ANALYZE_COUNT = 8
-MAX_UPLOAD_FILES_PER_REQUEST = 12
-AVATAR_MODULE_NAME = "avatar"
+
+# ---- 保护机制常量 ----
+MAX_FILE_CONTENT_CHARS = 15000  # 单个文件最大字符数
+MAX_ANALYZE_FILE_COUNT = 8  # 单次分析最大文件数
+MAX_ANALYZE_TOTAL_CHARS = 40000  # 单次分析总字符数上限
+MAX_PDF_PAGES_TO_READ = 80  # PDF 最大读取页数
+MAX_DOCX_PARAGRAPHS_TO_READ = 1200  # DOCX 最大读取段落数
+MAX_IMAGE_ANALYZE_COUNT = 8  # 单次分析最大图片数
+MAX_UPLOAD_FILES_PER_REQUEST = 12  # 单次上传最大文件数
+AVATAR_MODULE_NAME = "avatar"  # 数字人模块名称
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +66,15 @@ AVATAR_MODULE_NAME = "avatar"
 # ---------------------------------------------------------------------------
 
 def format_sse(event: str, data: Any) -> str:
-    """Encode a single SSE frame."""
+    """编码单个 SSE 帧。
+
+    Args:
+        event: 事件类型名称。
+        data: 事件数据，字符串或可 JSON 序列化的对象。
+
+    Returns:
+        符合 SSE 规范的文本帧。
+    """
     payload = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
     lines = payload.splitlines() or [""]
     body = "\n".join(f"data: {line}" for line in lines)
@@ -73,7 +86,16 @@ def format_sse(event: str, data: Any) -> str:
 # ---------------------------------------------------------------------------
 
 def read_uploaded_file_content_with_meta(absolute_path: str) -> dict[str, Any]:
-    """读取上传文档内容并返回保护机制元数据（页数/段落/长度截断提示）。"""
+    """读取上传文档内容并返回保护机制元数据。
+
+    支持 PDF、DOCX、TXT、MD、LOG 格式，包含页数/段落/长度截断提示。
+
+    Args:
+        absolute_path: 文件绝对路径。
+
+    Returns:
+        包含 success、content、notes 字段的字典。
+    """
     path = Path(absolute_path)
     if not path.exists():
         return {
@@ -90,6 +112,8 @@ def read_uploaded_file_content_with_meta(absolute_path: str) -> dict[str, Any]:
 
     notes: list[str] = []
     suffix = path.suffix.lower()
+
+    # 处理 PDF 文件
     if suffix == ".pdf":
         from pymupdf import open as pdf_open
 
@@ -99,23 +123,30 @@ def read_uploaded_file_content_with_meta(absolute_path: str) -> dict[str, Any]:
             pages_to_read = min(total_pages, MAX_PDF_PAGES_TO_READ)
             for idx in range(pages_to_read):
                 text_parts.append(doc[idx].get_text())
+            # 超过页数限制时添加提示
             if total_pages > MAX_PDF_PAGES_TO_READ:
                 notes.append(f"PDF 共 {total_pages} 页，为保护性能仅分析前 {MAX_PDF_PAGES_TO_READ} 页。")
         content = "\n".join(text_parts)
+
+    # 处理 DOCX 文件
     elif suffix == ".docx":
         from docx import Document
 
         doc = Document(str(path))
         paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
         total_paragraphs = len(paragraphs)
+        # 超过段落限制时添加提示
         if total_paragraphs > MAX_DOCX_PARAGRAPHS_TO_READ:
             notes.append(
                 f"DOCX 共 {total_paragraphs} 个段落，为保护性能仅分析前 {MAX_DOCX_PARAGRAPHS_TO_READ} 个段落。"
             )
         content = "\n".join(paragraphs[:MAX_DOCX_PARAGRAPHS_TO_READ])
+
+    # 处理纯文本文件
     elif suffix in {".txt", ".md", ".log"}:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
+
     else:
         return {
             "success": False,
@@ -123,15 +154,19 @@ def read_uploaded_file_content_with_meta(absolute_path: str) -> dict[str, Any]:
             "notes": [],
         }
 
+    # 处理空内容
     if not content or not content.strip():
         return {
             "success": True,
             "content": "文件内容为空",
             "notes": notes,
         }
+
+    # 超过字符限制时截断
     if len(content) > MAX_FILE_CONTENT_CHARS:
         content = content[:MAX_FILE_CONTENT_CHARS] + "\n\n[...文档内容过长，已截断...]"
         notes.append(f"文档文本超过 {MAX_FILE_CONTENT_CHARS} 字符，已截断。")
+
     return {
         "success": True,
         "content": content,
@@ -140,11 +175,22 @@ def read_uploaded_file_content_with_meta(absolute_path: str) -> dict[str, Any]:
 
 
 async def analyze_documents(*, current_user_id: int, file_urls: list[str], question: str) -> dict:
-    """批量读取用户上传的文档内容（含保护机制），返回分析摘要。"""
+    """批量读取用户上传的文档内容（含保护机制），返回分析摘要。
+
+    Args:
+        current_user_id: 当前用户ID。
+        file_urls: 文件URL列表。
+        question: 用户问题。
+
+    Returns:
+        包含 success、documents、analysis_text、error、notices 字段的字典。
+    """
     documents: list[dict[str, str]] = []
     snippets: list[str] = []
     notices: list[str] = []
     remaining_chars = MAX_ANALYZE_TOTAL_CHARS
+
+    # 限制文件数量
     limited_file_urls = (file_urls or [])[:MAX_ANALYZE_FILE_COUNT]
     if len(file_urls or []) > MAX_ANALYZE_FILE_COUNT:
         notices.append(
@@ -152,24 +198,30 @@ async def analyze_documents(*, current_user_id: int, file_urls: list[str], quest
         )
 
     for file_url in limited_file_urls:
+        # 检查剩余字符预算
         if remaining_chars <= 0:
             notices.append("已达到本轮分析内容上限，后续文档将不再展开解析。")
             break
+
+        # 解析文件路径
         resolved = resolve_uploaded_path(file_url)
         if resolved is None:
             logger.warning("[DocumentAnalysis] failed to resolve %s", file_url)
             continue
 
         owner_id, absolute_path = resolved
+        # 权限校验
         if owner_id != current_user_id:
             logger.warning("[DocumentAnalysis] forbidden file access user=%s owner=%s", current_user_id, owner_id)
             continue
 
+        # 读取文件内容
         content_payload = read_uploaded_file_content_with_meta(absolute_path)
         content = str(content_payload.get("content", ""))
         note_items = [str(item) for item in (content_payload.get("notes") or []) if str(item).strip()]
         notices.extend(note_items)
 
+        # 截断超出预算的内容
         if len(content) > remaining_chars:
             content = content[:remaining_chars] + "\n\n[...超出本轮分析内容预算，已截断...]"
             notices.append(f"分析总文本已达到 {MAX_ANALYZE_TOTAL_CHARS} 字符上限，后续内容已截断。")
@@ -184,6 +236,7 @@ async def analyze_documents(*, current_user_id: int, file_urls: list[str], quest
         note_text = f"\n[保护提示] {'; '.join(note_items)}" if note_items else ""
         snippets.append(f"文件《{Path(absolute_path).name}》内容如下：\n{content}{note_text}")
 
+    # 无有效文档时返回错误
     if not documents:
         return {
             "success": False,
@@ -193,6 +246,7 @@ async def analyze_documents(*, current_user_id: int, file_urls: list[str], quest
             "notices": notices,
         }
 
+    # 构建分析文本
     notice_prefix = ""
     if notices:
         uniq_notices = list(dict.fromkeys(notices))
@@ -203,6 +257,7 @@ async def analyze_documents(*, current_user_id: int, file_urls: list[str], quest
         + "以下是已提取的文档内容，请基于它们回答用户问题，并在回答中尽量提炼知识点：\n\n"
         + "\n\n".join(snippets)
     )
+
     return {
         "success": True,
         "documents": documents,
@@ -217,6 +272,17 @@ def _build_attachment_analysis_context(
     image_result: dict[str, Any] | None,
     document_result: dict[str, Any] | None,
 ) -> str:
+    """构建附件分析上下文文本。
+
+    合并图片和文档的分析结果。
+
+    Args:
+        image_result: 图片分析结果。
+        document_result: 文档分析结果。
+
+    Returns:
+        合并后的上下文文本。
+    """
     sections: list[str] = []
 
     if isinstance(image_result, dict):
@@ -243,11 +309,23 @@ async def analyze_attachments_parallel(
     question: str,
     vision_service: "VisionService",
 ) -> dict[str, Any]:
-    """并行分析附件（图片 + 文档），返回结构化结果与可注入上下文。"""
+    """并行分析附件（图片 + 文档），返回结构化结果与可注入上下文。
+
+    Args:
+        current_user_id: 当前用户ID。
+        image_urls: 图片URL列表。
+        file_urls: 文件URL列表。
+        question: 用户问题。
+        vision_service: 视觉服务实例。
+
+    Returns:
+        包含 success、image、document、analysis_context、notices 字段的字典。
+    """
     image_urls = image_urls or []
     file_urls = file_urls or []
     notices: list[str] = []
 
+    # 限制图片数量
     if len(image_urls) > MAX_IMAGE_ANALYZE_COUNT:
         notices.append(f"本次上传图片 {len(image_urls)} 张，为保护性能仅分析前 {MAX_IMAGE_ANALYZE_COUNT} 张。")
         image_urls = image_urls[:MAX_IMAGE_ANALYZE_COUNT]
@@ -262,6 +340,7 @@ async def analyze_attachments_parallel(
     if not image_urls and not file_urls:
         return result
 
+    # 并行启动图片和文档分析任务
     tasks: list[asyncio.Task] = []
     slots: list[str] = []
 
@@ -280,6 +359,7 @@ async def analyze_attachments_parallel(
         )
         slots.append("document")
 
+    # 等待所有任务完成
     done = await asyncio.gather(*tasks, return_exceptions=True)
     for slot, payload in zip(slots, done):
         if isinstance(payload, Exception):
@@ -292,12 +372,15 @@ async def analyze_attachments_parallel(
             continue
         result[slot] = payload
 
+    # 构建分析上下文
     image_result = result.get("image")
     document_result = result.get("document")
     result["analysis_context"] = _build_attachment_analysis_context(
         image_result=image_result if isinstance(image_result, dict) else None,
         document_result=document_result if isinstance(document_result, dict) else None,
     )
+
+    # 添加保护提示
     if notices:
         notice_block = "### 附件分析保护提示\n" + "\n".join(f"- {msg}" for msg in notices)
         result["analysis_context"] = (
@@ -312,9 +395,22 @@ async def analyze_attachments_parallel(
 # ---------------------------------------------------------------------------
 
 class ConversationStore:
-    """对话会话与历史持久化。"""
+    """对话会话与历史持久化。
+
+    封装会话列表、创建、归档和历史查询操作。
+    """
 
     async def list_sessions(self, user_id: int, limit: int = 30, module_name: str = CHAT_MODULE_NAME) -> list[dict]:
+        """获取用户的会话列表。
+
+        Args:
+            user_id: 用户ID。
+            limit: 返回数量限制。
+            module_name: 模块名称。
+
+        Returns:
+            会话信息列表，包含 id、title、updated_at 字段。
+        """
         memory_layer = MemoryLayer(module_name=module_name)
         sessions = await memory_layer.list_sessions(user_id=user_id, limit=limit)
         return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in sessions]
@@ -325,11 +421,31 @@ class ConversationStore:
         title: str = "新对话",
         module_name: str = CHAT_MODULE_NAME,
     ) -> dict:
+        """创建新会话。
+
+        Args:
+            user_id: 用户ID。
+            title: 会话标题。
+            module_name: 模块名称。
+
+        Returns:
+            新创建的会话信息。
+        """
         memory_layer = MemoryLayer(module_name=module_name)
         session = await memory_layer.create_session(user_id=user_id, title=title)
         return {"id": session.id, "title": session.title}
 
     async def archive_session(self, user_id: int, session_id: str, module_name: str = CHAT_MODULE_NAME) -> bool:
+        """归档会话（软删除）。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 会话ID。
+            module_name: 模块名称。
+
+        Returns:
+            操作是否成功。
+        """
         memory_layer = MemoryLayer(module_name=module_name)
         return await memory_layer.archive_session(user_id=user_id, session_id=session_id)
 
@@ -341,8 +457,20 @@ class ConversationStore:
         limit: int = 50,
         module_name: str = CHAT_MODULE_NAME,
     ) -> list[ChatMessageItem]:
+        """获取聊天历史。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 可选的会话ID，为空则返回最近会话的历史。
+            limit: 返回消息数量限制。
+            module_name: 模块名称。
+
+        Returns:
+            消息条目列表。
+        """
         memory_layer = MemoryLayer(module_name=module_name)
         target_session = session_id
+        # 未指定会话时获取最近的会话
         if not target_session:
             sessions = await memory_layer.list_sessions(user_id=user_id, limit=1)
             if not sessions:
@@ -355,20 +483,21 @@ class ConversationStore:
             limit=limit,
         )
 
+        # 转换为 API 响应格式
         items: list[ChatMessageItem] = []
         for msg in messages:
             attachments = None
             if msg.attachments:
                 try:
-                    attachments = [AttachmentInfo(**v) for v in json.loads(msg.attachments)]
-                except (json.JSONDecodeError, TypeError):
+                    attachments = [AttachmentInfo(**value) for value in msg.attachments]
+                except (TypeError, ValueError):
                     attachments = None
 
             tool_calls = None
             if msg.tool_calls:
                 try:
-                    tool_calls = [ToolCallRecord(**v) for v in json.loads(msg.tool_calls)]
-                except (json.JSONDecodeError, TypeError):
+                    tool_calls = [ToolCallRecord(**value) for value in msg.tool_calls]
+                except (TypeError, ValueError):
                     tool_calls = None
 
             items.append(
@@ -388,7 +517,10 @@ class ConversationStore:
 # ---------------------------------------------------------------------------
 
 class ChatUseCases:
-    """路由层可调用的 chat 应用入口。"""
+    """路由层可调用的 chat 应用入口。
+
+    封装对话流、文件上传、会话管理等业务逻辑。
+    """
 
     def __init__(
         self,
@@ -399,6 +531,15 @@ class ChatUseCases:
         default_session_suffix: str | None = None,
         stream_runner: Callable[..., Any] | None = None,
     ) -> None:
+        """初始化 ChatUseCases。
+
+        Args:
+            conversation_store: 会话存储实例。
+            file_store: 文件存储实例。
+            module_name: 模块名称。
+            default_session_suffix: 默认会话ID后缀。
+            stream_runner: 可选的流式运行器。
+        """
         self.conversation_store = conversation_store
         self.file_store = file_store
         self.module_name = module_name
@@ -406,10 +547,25 @@ class ChatUseCases:
         self._stream_runner = stream_runner
 
     def default_session_id(self, user_id: int) -> str:
+        """生成默认会话ID。
+
+        Args:
+            user_id: 用户ID。
+
+        Returns:
+            格式化的默认会话ID。
+        """
         return f"user-{user_id}-default-{self.default_session_suffix}"
 
     @staticmethod
     def _default_tutor_stream_runner() -> Callable[..., Any]:
+        """获取默认的 Tutor 流式运行器。
+
+        延迟导入以避免循环依赖。
+
+        Returns:
+            TutorAgent.chat_stream 方法。
+        """
         # Delay import to avoid the service <-> agent circular import at module load time.
         from app.chat.agent import TutorAgent
 
@@ -426,6 +582,21 @@ class ChatUseCases:
         file_urls: list[str],
         attachment_analysis: dict[str, Any] | None,
     ) -> dict[str, Any] | None:
+        """构建附件分析结果。
+
+        如果已提供分析结果则直接返回，否则执行并行分析。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 会话ID。
+            user_message: 用户消息。
+            image_urls: 图片URL列表。
+            file_urls: 文件URL列表。
+            attachment_analysis: 可选的预分析结果。
+
+        Returns:
+            附件分析结果字典。
+        """
         if attachment_analysis is not None:
             return attachment_analysis
 
@@ -468,16 +639,36 @@ class ChatUseCases:
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
-        generate_image: bool = False,
+        need_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
     ):
+        """流式生成对话事件。
+
+        Args:
+            user_id: 用户ID。
+            user_message: 用户消息。
+            session_id: 可选的会话ID。
+            image_urls: 图片URL列表。
+            file_urls: 文件URL列表。
+            need_diagram: 是否生成图解。
+            generate_video: 是否生成视频。
+            enable_search: 是否启用搜索。
+            attachment_analysis: 可选的附件预分析结果。
+            stream_runner: 可选的流式运行器。
+            input_source: 输入来源标识。
+
+        Yields:
+            事件字典，包含 event 和 data 字段。
+        """
         effective_session = session_id or self.default_session_id(user_id)
+        # 去重URL
         merged_image_urls = list(dict.fromkeys(image_urls or []))
         merged_file_urls = list(dict.fromkeys(file_urls or []))
+        # 构建附件分析
         prepared_attachment_analysis = await self._build_attachment_analysis(
             user_id=user_id,
             session_id=effective_session,
@@ -487,15 +678,17 @@ class ChatUseCases:
             attachment_analysis=attachment_analysis,
         )
 
+        # 获取流式运行器
         runner = stream_runner or self._stream_runner or self._default_tutor_stream_runner()
 
+        # 构建运行参数
         kwargs: dict[str, Any] = {
             "user_id": user_id,
             "user_message": user_message,
             "session_id": effective_session,
             "image_urls": merged_image_urls,
             "file_urls": merged_file_urls,
-            "generate_image": bool(generate_image),
+            "need_diagram": bool(need_diagram),
             "generate_video": bool(generate_video),
             "attachment_analysis": prepared_attachment_analysis,
         }
@@ -504,8 +697,10 @@ class ChatUseCases:
         if input_source is not None:
             kwargs["input_source"] = input_source
 
+        # 在上下文中运行
         with chat_runtime_context(user_id, effective_session):
             async for event in runner(**kwargs):
+                # 标准化事件格式
                 if isinstance(event, dict):
                     if "event" in event and "data" in event:
                         yield event
@@ -530,6 +725,19 @@ class ChatUseCases:
         user_id: int,
         session_id: str | None = None,
     ) -> tuple[str, list[str], list[str]]:
+        """准备上传文件。
+
+        Args:
+            files: 文件列表，每项为 (文件名, 文件内容) 元组。
+            user_id: 用户ID。
+            session_id: 可选的会话ID。
+
+        Returns:
+            (有效会话ID, 图片URL列表, 文件URL列表) 元组。
+
+        Raises:
+            ValueError: 文件数量超过限制或文件名为空。
+        """
         if len(files) > MAX_UPLOAD_FILES_PER_REQUEST:
             raise ValueError(f"单次最多上传 {MAX_UPLOAD_FILES_PER_REQUEST} 个文件，请分批上传。")
         effective_session = session_id or self.default_session_id(user_id)
@@ -562,12 +770,25 @@ class ChatUseCases:
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
     ) -> dict[str, Any]:
-        """上传并并行分析附件，返回可复用的分析结果。"""
+        """上传并并行分析附件，返回可复用的分析结果。
+
+        Args:
+            user_id: 用户ID。
+            question: 用户问题。
+            session_id: 可选的会话ID。
+            files: 可选的文件列表。
+            image_urls: 可选的图片URL列表。
+            file_urls: 可选的文件URL列表。
+
+        Returns:
+            包含会话ID、URL列表和附件分析结果的字典。
+        """
         upload_payloads = files or []
         effective_session = session_id or self.default_session_id(user_id)
 
         uploaded_image_urls: list[str] = []
         uploaded_file_urls: list[str] = []
+        # 处理上传文件
         if upload_payloads:
             (
                 effective_session,
@@ -579,9 +800,11 @@ class ChatUseCases:
                 session_id=effective_session,
             )
 
+        # 合并URL
         merged_image_urls = list(dict.fromkeys(uploaded_image_urls + list(image_urls or [])))
         merged_file_urls = list(dict.fromkeys(uploaded_file_urls + list(file_urls or [])))
 
+        # 构建附件分析
         attachment_analysis = await self._build_attachment_analysis(
             user_id=user_id,
             session_id=effective_session,
@@ -613,20 +836,38 @@ class ChatUseCases:
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
-        generate_image: bool = False,
+        need_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
     ):
+        """流式生成对话响应（SSE 格式）。
+
+        Args:
+            user_id: 用户ID。
+            user_message: 用户消息。
+            session_id: 可选的会话ID。
+            image_urls: 图片URL列表。
+            file_urls: 文件URL列表。
+            need_diagram: 是否生成图解。
+            generate_video: 是否生成视频。
+            enable_search: 是否启用搜索。
+            attachment_analysis: 可选的附件预分析结果。
+            stream_runner: 可选的流式运行器。
+            input_source: 输入来源标识。
+
+        Yields:
+            SSE 格式的文本帧。
+        """
         async for event in self.stream_chat_events(
             user_id=user_id,
             user_message=user_message,
             session_id=session_id,
             image_urls=image_urls,
             file_urls=file_urls,
-            generate_image=generate_image,
+            need_diagram=need_diagram,
             generate_video=generate_video,
             enable_search=enable_search,
             attachment_analysis=attachment_analysis,
@@ -643,6 +884,17 @@ class ChatUseCases:
         user_id: int,
         session_id: str,
     ) -> dict:
+        """保存上传文件。
+
+        Args:
+            filename: 文件名。
+            content: 文件内容。
+            user_id: 用户ID。
+            session_id: 会话ID。
+
+        Returns:
+            保存结果，包含 url、file_type 等字段。
+        """
         return await self.file_store.save_upload(
             filename=filename,
             content=content,
@@ -658,6 +910,22 @@ class ChatUseCases:
         session_id: str,
         filename: str,
     ):
+        """解析上传文件路径（带权限校验）。
+
+        Args:
+            current_user_id: 当前用户ID。
+            owner_id: 文件所有者ID。
+            session_id: 会话ID。
+            filename: 文件名。
+
+        Returns:
+            文件绝对路径。
+
+        Raises:
+            PermissionError: 权限不足。
+            ValueError: 参数无效。
+            FileNotFoundError: 文件不存在。
+        """
         return self.file_store.resolve_user_file(
             current_user_id=current_user_id,
             owner_id=owner_id,
@@ -666,12 +934,39 @@ class ChatUseCases:
         )
 
     async def list_sessions(self, user_id: int, limit: int = 20) -> list[dict]:
+        """获取用户的会话列表。
+
+        Args:
+            user_id: 用户ID。
+            limit: 返回数量限制。
+
+        Returns:
+            会话信息列表。
+        """
         return await self.conversation_store.list_sessions(user_id, limit, module_name=self.module_name)
 
     async def create_session(self, user_id: int, title: str = "新对话") -> dict:
+        """创建新会话。
+
+        Args:
+            user_id: 用户ID。
+            title: 会话标题。
+
+        Returns:
+            新创建的会话信息。
+        """
         return await self.conversation_store.create_session(user_id, title, module_name=self.module_name)
 
     async def archive_session(self, user_id: int, session_id: str) -> bool:
+        """归档会话。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 会话ID。
+
+        Returns:
+            操作是否成功。
+        """
         return await self.conversation_store.archive_session(user_id, session_id, module_name=self.module_name)
 
     async def get_history(
@@ -681,6 +976,16 @@ class ChatUseCases:
         session_id: str | None = None,
         limit: int = 50,
     ):
+        """获取聊天历史。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 可选的会话ID。
+            limit: 返回消息数量限制。
+
+        Returns:
+            消息条目列表。
+        """
         return await self.conversation_store.get_history(
             user_id=user_id,
             session_id=session_id,
@@ -693,12 +998,20 @@ class ChatUseCases:
 # 模块装配
 # ---------------------------------------------------------------------------
 
+# 会话存储单例
 conversation_store = ConversationStore()
+# Chat 用例单例
 chat_usecases: ChatUseCases | None = None
+# 数字人 Chat 用例单例
 avatar_chat_usecases: ChatUseCases | None = None
 
 
 def get_chat_usecases() -> ChatUseCases:
+    """获取 Chat 用例单例。
+
+    Returns:
+        ChatUseCases 实例。
+    """
     global chat_usecases
     if chat_usecases is None:
         chat_usecases = ChatUseCases(
@@ -710,6 +1023,11 @@ def get_chat_usecases() -> ChatUseCases:
 
 
 def get_avatar_chat_usecases() -> ChatUseCases:
+    """获取数字人 Chat 用例单例。
+
+    Returns:
+        用于数字人模块的 ChatUseCases 实例。
+    """
     global avatar_chat_usecases
     if avatar_chat_usecases is None:
         avatar_chat_usecases = ChatUseCases(

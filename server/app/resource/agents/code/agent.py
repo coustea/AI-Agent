@@ -9,9 +9,9 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from app.infra.llm import get_deepseek_chat_llm
+from app.infra.llm import get_deepseek_llm
 from app.infra.logging import get_logger
-from app.resource.agent_support import append_context, format_profile_fields, load_prompt, save_to_workplace
+from app.resource.utils import append_context, format_profile_fields, load_prompt, save_to_workplace
 
 logger = get_logger(__name__)
 
@@ -21,7 +21,7 @@ _LANG_KEYWORDS: dict[str, list[str]] = {
     "java": ["java"],
     "c": ["c", "clang"],
     "cpp": ["cpp", "c++", "cxx"],
-    "sql": ["sql", "mysql", "postgresql"],
+    "sql": ["sql", "postgresql"],
     "go": ["go", "golang"],
     "rust": ["rust", "rs"],
 }
@@ -51,7 +51,7 @@ class CodeAgent:
         self.name = "CodeAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_deepseek_chat_llm(temperature=0.2)
+        self.llm = get_deepseek_llm(temperature=0.2)
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         ctx = ""

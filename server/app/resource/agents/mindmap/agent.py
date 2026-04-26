@@ -1,6 +1,6 @@
 """
 思维导图生成 Agent。
-独立实现：deepagents + create-mindmap skill + markdown_to_mindmap 工具。
+独立实现：deepagents + markdown_to_mindmap 工具。
 """
 
 import json
@@ -16,9 +16,9 @@ from langchain_core.messages import AIMessage
 from langchain.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.infra.llm import get_deepseek_chat_llm
+from app.infra.llm import get_deepseek_llm
 from app.infra.logging import get_logger
-from app.resource.agent_support import append_context, load_prompt
+from app.resource.utils import append_context, load_prompt
 from app.shared.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
@@ -175,7 +175,7 @@ class MindmapGenerator:
         self.name = "MindmapAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_deepseek_chat_llm(temperature=0.1, max_tokens=900)
+        self.llm = get_deepseek_llm(temperature=0.1, max_tokens=900)
 
     def _build_system_message(self, state: dict[str, Any]) -> str:
         need_key = state.get("need", "review")

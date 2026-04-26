@@ -6,7 +6,8 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.models import GeneratedResource, UserProfile
+from app.infra.models import GeneratedResource
+from app.memory import MemoryLayer
 from app.path.planner import (
     ALL_NODE_IDS,
     adjust_plan,
@@ -20,8 +21,9 @@ from app.path.schemas import PathInsight, PathPlan, PathPlanData, PathPlanMeta, 
 
 
 class PathService:
-    def __init__(self, repository: PathRepository) -> None:
+    def __init__(self, repository: PathRepository, memory_layer: MemoryLayer | None = None) -> None:
         self.repository = repository
+        self.memory_layer = memory_layer or MemoryLayer(module_name="mentor")
 
     async def build_path_plan(
         self,
@@ -33,7 +35,7 @@ class PathService:
         weak_points: list[str] | None = None,
         force_rebuild: bool = False,
     ) -> PathPlanData:
-        profile = await self.repository.get_profile(session, user_id)
+        profile = await self.memory_layer.get_profile(user_id=user_id)
         resource = await self._resolve_resource(session, user_id, resource_id)
 
         if resource_id is not None and resource is None:
@@ -115,7 +117,7 @@ class PathService:
 
     def _extract_weak_points(
         self,
-        profile: UserProfile | None,
+        profile: Any | None,
         resource: GeneratedResource | None,
         extra_weak_points: list[str] | None,
     ) -> list[str]:
@@ -165,7 +167,7 @@ class PathService:
 
     def _compute_confidence(
         self,
-        profile: UserProfile | None,
+        profile: Any | None,
         resource: GeneratedResource | None,
         has_plan_payload: bool,
         completed_node_ids: set[str],
@@ -196,7 +198,7 @@ class PathService:
         self,
         *,
         plan: PathPlan,
-        profile: UserProfile | None,
+        profile: Any | None,
         resource: GeneratedResource | None,
         force_rebuild: bool,
     ) -> PathPlanData:
