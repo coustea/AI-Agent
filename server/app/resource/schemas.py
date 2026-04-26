@@ -10,7 +10,7 @@ class LearningTask(BaseModel):
     gap: str = Field(..., description="知识瓶颈/核心痛点")
     need: str = Field(default="review", description="资源偏好: exam/review/deep")
     extra: str = Field(default="", description="额外需求")
-    template_id: str = Field(default="bluegreen_3d_internet", description="可选：PPT 模板标识（默认 bluegreen_3d_internet）")
+    template_id: str = Field(default="python_ppt_template", description="可选：PPT 模板标识（默认 python_ppt_template）")
     template_source_url: Optional[str] = Field(default=None, description="可选：在线 PPT 模板直链（.pptx）")
     template_config_url: Optional[str] = Field(default=None, description="可选：在线模板配置 JSON 直链")
 

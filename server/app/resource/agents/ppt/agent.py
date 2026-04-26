@@ -345,12 +345,7 @@ class PptAgent:
         user_profile: dict[str, Any],
         style: str,
     ) -> str:
-        normalized = str(requested_template_id or "").strip()
-        has_custom_source = bool(str(template_source_url or "").strip())
-        if has_custom_source:
-            return normalized or "custom_online_template"
-        if normalized and normalized not in {"cn_ink_education", "auto"}:
-            return normalized
+        _ = (requested_template_id, template_source_url, user_profile, style)
         return DEFAULT_TEMPLATE_ID
 
     async def _ensure_graph(self) -> None:

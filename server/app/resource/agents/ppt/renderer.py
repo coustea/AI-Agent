@@ -568,19 +568,21 @@ def _replace_template_text_frames(slide, slide_data: dict[str, Any]) -> None:
     text_shapes.sort(key=lambda s: (float(getattr(s, "top", 0)), float(getattr(s, "left", 0))))
     values = _collect_replace_values(slide_data)
 
-    for shape in text_shapes:
-        tf = shape.text_frame
-        if tf is None:
-            continue
-        tf.clear()
-
     for idx, value in enumerate(values):
         if idx >= len(text_shapes):
             break
         tf = text_shapes[idx].text_frame
         if tf is None:
             continue
-        tf.paragraphs[0].text = value
+        tf.clear()
+        tf.paragraphs[0].text = _repair_text(value, fallback="内容待补充")
+        p = tf.paragraphs[0]
+        p.font.name = "Microsoft YaHei"
+        for run in p.runs:
+            run.font.name = "Microsoft YaHei"
+            r_pr = run._r.get_or_add_rPr()
+            r_pr.set("lang", "zh-CN")
+            r_pr.set("eastAsia", "Microsoft YaHei")
 
 
 def _remove_unwanted_template_shapes(slide, page_role: str = "") -> None:
@@ -1817,9 +1819,8 @@ def render_ppt_plan_to_file(
     """将结构化 JSON 计划渲染为 PPT 文件并返回结果。"""
     if not str(ppt_plan_json or "").strip():
         return {"error": "缺少必填参数 ppt_plan_json"}
-    resolved_template_id = str(template_id or "").strip()
-    if resolved_template_id in {"auto", "cn_ink_education"}:
-        resolved_template_id = DEFAULT_TEMPLATE_ID
+    # Force single-template mode; ignore runtime template switching.
+    resolved_template_id = DEFAULT_TEMPLATE_ID
     if resolved_template_id == "ai_blue_pdf_template":
         style = "ai_blue_project"
 
@@ -1833,8 +1834,8 @@ def render_ppt_plan_to_file(
     try:
         ensure_template_available(
             template_id=resolved_template_id,
-            template_source_url=template_source_url,
-            template_config_url=template_config_url,
+            template_source_url="",
+            template_config_url="",
         )
     except Exception as exc:
         logger.warning("[render_ppt_plan_to_file] 在线模板下载失败，回退本地渲染: %s", exc)
@@ -1874,7 +1875,9 @@ def render_ppt_plan_to_file(
 
         # 复制模板幻灯片
         slide = _copy_slide(prs, template_idx, preserve_template_shapes=preserve_template_shapes)
-        _remove_unwanted_template_shapes(slide, page_role=page_role)
+        # Keep original template decorations/text for fixed single-template mode.
+        if resolved_template_id != DEFAULT_TEMPLATE_ID:
+            _remove_unwanted_template_shapes(slide, page_role=page_role)
         if replace_template_text_frames:
             _replace_template_text_frames(slide, slide_data)
         else:
