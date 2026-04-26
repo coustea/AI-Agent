@@ -4,17 +4,20 @@
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from app.infra.llm import get_deepseek_llm
 from app.infra.logging import get_logger
-from app.resource.utils import append_context, format_profile_fields, load_prompt, save_to_workplace
+from app.resource.utils import append_context, format_profile_fields, load_prompt, save_resource_file
 
 logger = get_logger(__name__)
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
 
 
 class ReadingItem(BaseModel):
@@ -68,37 +71,60 @@ class ReadingAgent:
         )
 
     @staticmethod
-    def _looks_like_tool_error(text: str) -> bool:
-        value = (text or "").strip()
-        if not value:
-            return True
-        if value.startswith("\u2713"):
-            return False
-        if value.startswith("\u274c"):
-            return True
-        return value.startswith(("ERROR", "Error", "Traceback", "Exception"))
-
-    @staticmethod
     def _render_reading_section(items: list[dict[str, Any]]) -> str:
-        lines: list[str] = ["## Suggested Reading", ""]
+        lines: list[str] = ["# 拓展阅读", ""]
         for idx, item in enumerate(items, start=1):
             lines.extend(
                 [
                     f"### {idx}. {item.get('title', 'Untitled Resource')}",
-                    f"- Source: {item.get('author_or_source', 'Unknown')}",
-                    f"- Type: {item.get('type', 'Unknown')}",
-                    f"- Relevance: {item.get('relevance', 'Not specified')}",
-                    f"- Abstract: {item.get('abstract', '').strip()}",
+                    f"- 来源：{item.get('author_or_source', 'Unknown')}",
+                    f"- 类型：{item.get('type', 'Unknown')}",
+                    f"- 推荐理由：{item.get('relevance', 'Not specified')}",
+                    f"- 摘要：{item.get('abstract', '').strip()}",
                     "",
                 ]
             )
         return "\n".join(lines).strip()
 
+    @staticmethod
+    def _extract_json_object(text: str) -> dict[str, Any]:
+        raw = str(text or "").strip()
+        if not raw:
+            raise ValueError("模型返回为空，无法提取阅读推荐 JSON")
+
+        match = _JSON_FENCE_RE.search(raw)
+        if match:
+            raw = match.group(1).strip()
+
+        if not raw.startswith("{"):
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start >= 0 and end > start:
+                raw = raw[start:end + 1]
+
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("阅读推荐 JSON 顶层必须是对象")
+        return parsed
+
     async def _generate_recommendations(self, state: dict[str, Any]) -> ReadingOutput:
         prompt = self._build_system_message(state)
-        human = f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
-        structured_llm = self.llm.with_structured_output(ReadingOutput)
-        return ReadingOutput.model_validate(await structured_llm.ainvoke([HumanMessage(content=prompt), HumanMessage(content=human)]))
+        human = (
+            f"请为主题 '{state.get('topic')}' 生成推荐阅读清单。"
+            "只输出合法 JSON 对象，不要 Markdown 代码块和解释文字。"
+            "JSON 格式："
+            '{"recommendations":[{"title":"资源标题","author_or_source":"作者或来源",'
+            '"abstract":"摘要","relevance":"与主题的关联","type":"book|paper|article|course|docs"}]}'
+            "至少返回 3 条推荐。"
+        )
+        response = await self.llm.ainvoke(
+            [
+                SystemMessage(content=prompt),
+                HumanMessage(content=human),
+            ]
+        )
+        raw_content = getattr(response, "content", response)
+        return ReadingOutput.model_validate(self._extract_json_object(str(raw_content)))
 
     async def _operate_markdown_file(
         self,
@@ -108,17 +134,15 @@ class ReadingAgent:
         edit_instruction: str = "",
         output_md_path: str | None = None,
     ) -> dict[str, Any]:
-        from app.tools.registry import get as get_tool
-
-        read_result = get_tool("read_file_safe").invoke({"file_path": target_md_path})
-        markdown_text = read_result if isinstance(read_result, str) else str(read_result)
-        if self._looks_like_tool_error(markdown_text):
+        try:
+            markdown_text = Path(target_md_path).read_text(encoding="utf-8")
+        except Exception as exc:
             return {
                 "success": False,
                 "recommendations": [],
                 "file_path": None,
                 "raw_json": "",
-                "error": f"Failed to read Markdown: {markdown_text}",
+                "error": f"Failed to read Markdown: {exc}",
             }
 
         effective_instruction = edit_instruction.strip() or "Add high-quality reading recommendations grounded in the current document."
@@ -130,8 +154,19 @@ class ReadingAgent:
             "Markdown content:\n"
             f"{markdown_text}"
         )
-        structured_llm = self.llm.with_structured_output(ReadingOutput)
-        validated = ReadingOutput.model_validate(await structured_llm.ainvoke([HumanMessage(content=prompt)]))
+        response = await self.llm.ainvoke(
+            [
+                HumanMessage(
+                    content=(
+                        f"{prompt}\n\n"
+                        "只输出合法 JSON 对象，不要 Markdown 代码块和解释文字。"
+                        'JSON 顶层格式为 {"recommendations":[...]}，至少 3 条。'
+                    )
+                )
+            ]
+        )
+        raw_content = getattr(response, "content", response)
+        validated = ReadingOutput.model_validate(self._extract_json_object(str(raw_content)))
         items = [item.model_dump() for item in validated.recommendations]
         if len(items) < 3:
             return {
@@ -146,15 +181,17 @@ class ReadingAgent:
         separator = "\n\n" if markdown_text.strip() else ""
         merged_markdown = f"{markdown_text.rstrip()}{separator}{section}\n"
         write_path = output_md_path or target_md_path
-        write_result = get_tool("write_file").invoke({"filepath": write_path, "content": merged_markdown, "create_dirs": True})
-        write_text = write_result if isinstance(write_result, str) else str(write_result)
-        if self._looks_like_tool_error(write_text):
+        try:
+            path = Path(write_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(merged_markdown, encoding="utf-8")
+        except Exception as exc:
             return {
                 "success": False,
                 "recommendations": items,
                 "file_path": None,
                 "raw_json": json.dumps({"recommendations": items}, ensure_ascii=False),
-                "error": f"Failed to write Markdown: {write_text}",
+                "error": f"Failed to write Markdown: {exc}",
             }
 
         return {
@@ -177,8 +214,10 @@ class ReadingAgent:
         target_md_path: str | None = None,
         edit_instruction: str = "",
         output_md_path: str | None = None,
+        user_id: int = 0,
+        resource_id: int = 0,
     ) -> dict[str, Any]:
-        logger.info("[ReadingAgent] Request received: topic=%s", topic)
+        logger.info("[ReadingAgent] Request received: topic=%s user_id=%s resource_id=%s", topic, user_id, resource_id)
         if target_md_path:
             return await self._operate_markdown_file(
                 topic=topic or "Markdown Document",
@@ -203,10 +242,16 @@ class ReadingAgent:
 
         parsed = [item.model_dump() for item in output.recommendations]
         raw_json = json.dumps({"recommendations": parsed}, ensure_ascii=False)
-        file_path = save_to_workplace("reading", topic, json.dumps(parsed, ensure_ascii=False, indent=2), "json")
+        markdown_content = self._render_reading_section(parsed) if parsed else ""
+        file_path = None
+        if parsed and user_id and resource_id:
+            file_path = save_resource_file(topic, markdown_content, user_id, resource_id, "md", prefix="reading")
+            logger.info("[ReadingAgent] 文件已保存: %s", file_path)
         return {
             "success": bool(parsed),
             "recommendations": parsed,
+            "content": markdown_content,
+            "markdown_content": markdown_content,
             "file_path": file_path,
             "raw_json": raw_json,
             "error": None if parsed else "empty recommendations",

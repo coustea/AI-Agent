@@ -65,7 +65,6 @@ GLM_MODEL: str = _env("GLM_MODEL", "glm-4.7")
 DEEPSEEK_API_KEY: str = _env("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_BASE: str = _env("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
 DEEPSEEK_CHAT_MODEL: str = _env("DEEPSEEK_CHAT_MODEL", "deepseek-v4-flash")
-DEEPSEEK_REASONER_MODEL: str = _env("DEEPSEEK_REASONER_MODEL", "deepseek-v4-pro")
 DEEPSEEK_MODEL: str = _env("DEEPSEEK_MODEL", DEEPSEEK_CHAT_MODEL)
 
 # Spark LLM (星火大模型 WebSocket API)

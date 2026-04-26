@@ -481,6 +481,7 @@ class ConversationStore:
             user_id=user_id,
             session_id=target_session,
             limit=limit,
+            only_unexpired=False,
         )
 
         # 转换为 API 响应格式

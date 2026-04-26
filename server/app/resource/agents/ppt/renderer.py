@@ -23,7 +23,7 @@ from pptx.util import Inches, Pt
 
 from app.infra.logging import get_logger
 from app.resource.agents.ppt.template_catalog import DEFAULT_TEMPLATE_ID, get_builtin_template_spec, merge_template_config
-from app.shared.paths import WORKPLACE_DIR
+from app.shared.paths import WORKPLACE_DIR, RESOURCE_DIR
 
 logger = get_logger(__name__)
 
@@ -1386,10 +1386,18 @@ def _parse_ppt_plan_json(ppt_plan_json: str) -> tuple[str, list[dict[str, Any]]]
         slots = slots if isinstance(slots, dict) else {}
         title = str(item.get("title") or slots.get("title") or "未命名页面").strip()
         page_role = str(item.get("page_role", "")).strip()
+        content_lines: list[str] = []
+        for key, value in slots.items():
+            if key == "title":
+                continue
+            text = str(value).strip()
+            if text:
+                content_lines.append(text)
         slides.append(
             {
                 "title": title,
                 "slots": slots,
+                "content": [{"type": "text", "text": "\n".join(content_lines)}] if content_lines else [],
                 "note": str(item.get("speaker_notes", "")).strip(),
                 "page_role": page_role,
                 "section": str(item.get("section", "")).strip(),
@@ -1407,8 +1415,21 @@ def render_ppt_plan_to_file(
     template_source_url: str = "",
     template_config_url: str = "",
     style: str = "modern_minimal",
+    user_id: int = 0,
+    resource_id: int = 0,
 ) -> dict[str, Any]:
-    """将结构化 JSON 计划渲染为 PPT 文件并返回结果。"""
+    """将结构化 JSON 计划渲染为 PPT 文件并返回结果。
+
+    Args:
+        topic: 主题
+        ppt_plan_json: PPT JSON 计划
+        template_id: 模板 ID
+        template_source_url: 模板源 URL
+        template_config_url: 模板配置 URL
+        style: 样式
+        user_id: 用户 ID，用于保存路径
+        resource_id: 资源 ID，用于保存路径
+    """
     if not str(ppt_plan_json or "").strip():
         return {"error": "缺少必填参数 ppt_plan_json"}
     resolved_template_id = str(template_id or "").strip()
@@ -1479,11 +1500,15 @@ def render_ppt_plan_to_file(
         prs.part.drop_rel(rId)
         del prs.slides._sldIdLst[idx]
 
-    # 保存文件
-    PPT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # 保存文件到统一路径: workplace/resource/{user_id}/{resource_id}/
+    if user_id and resource_id:
+        output_dir = RESOURCE_DIR / str(user_id) / str(resource_id)
+    else:
+        output_dir = PPT_OUTPUT_DIR  # 回退到旧路径
+    output_dir.mkdir(parents=True, exist_ok=True)
     filename_stem = _safe_filename(topic) or _safe_filename(presentation_title) or "presentation"
     filename = f"{filename_stem}.pptx"
-    filepath = PPT_OUTPUT_DIR / filename
+    filepath = output_dir / filename
     prs.save(str(filepath))
 
     result = {

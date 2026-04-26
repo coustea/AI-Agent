@@ -1,16 +1,17 @@
 """Local filesystem storage adapter."""
 from __future__ import annotations
 
-import uuid
+import re
+from datetime import datetime
 from pathlib import Path
 
 from app.chat.schemas import UploadResponse
-from app.shared.paths import WORKPLACE_DIR
+from app.shared.paths import CHAT_DIR
 
 
 class LocalFileStore:
     def __init__(self) -> None:
-        self.upload_dir = WORKPLACE_DIR / "chat-uploads"
+        self.upload_dir = CHAT_DIR
         self.allowed_image_ext = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
         self.allowed_doc_ext = {".pdf", ".docx", ".txt", ".md", ".log", ".xlsx", ".xls", ".csv", ".tsv"}
         self.max_image_size = 5 * 1024 * 1024
@@ -42,7 +43,13 @@ class LocalFileStore:
 
         session_dir = self.upload_dir / str(user_id) / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
-        safe_name = f"{uuid.uuid4().hex}{suffix}"
+
+        # 保留原始文件名（清理非法字符），如果为空则用时间戳命名
+        safe_name = self._safe_filename(filename)
+        if not safe_name:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = f"{timestamp}{suffix}"
+
         file_path = session_dir / safe_name
         file_path.write_bytes(content)
 
@@ -52,6 +59,16 @@ class LocalFileStore:
             original_name=filename,
             size_bytes=len(content),
         ).model_dump()
+
+    def _safe_filename(self, filename: str) -> str:
+        """清理文件名中的非法字符，保留原始名称。"""
+        # 移除路径分隔符和其他非法字符
+        safe = re.sub(r'[\\/*?:"<>|]', "", filename).strip()
+        # 限制长度
+        if len(safe) > 100:
+            name, ext = Path(safe).stem, Path(safe).suffix
+            safe = f"{name[:100 - len(ext)]}{ext}"
+        return safe
 
     def resolve_user_file(
         self,

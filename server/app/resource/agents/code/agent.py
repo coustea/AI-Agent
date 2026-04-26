@@ -1,6 +1,10 @@
 """
 代码实操案例生成 Agent。
-轻量实现：直接生成 Markdown 代码案例，再补充教学讲解。
+生成分步讲解 + 代码块 + 完整代码。
+
+输出结构：
+1. 分步讲解：讲解 + 代码块（每一步）
+2. 完整代码：所有代码合并
 """
 
 import re
@@ -9,9 +13,9 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from app.infra.llm import get_deepseek_llm
+from app.infra.llm import get_spark_x_llm
 from app.infra.logging import get_logger
-from app.resource.utils import append_context, format_profile_fields, load_prompt, save_to_workplace
+from app.resource.utils import append_context, format_profile_fields, load_prompt, save_resource_file
 
 logger = get_logger(__name__)
 
@@ -29,6 +33,7 @@ _CODE_BLOCK_RE = re.compile(r"```(\w+)\s*\n(.*?)\n```", re.DOTALL)
 
 
 def _detect_language(code_content: str) -> str:
+    """从 Markdown 中检测编程语言。"""
     match = _CODE_BLOCK_RE.search(code_content)
     if match:
         lang_tag = match.group(1).lower()
@@ -39,21 +44,37 @@ def _detect_language(code_content: str) -> str:
     return "unknown"
 
 
-def _extract_code_block(code_content: str) -> str:
-    match = _CODE_BLOCK_RE.search(code_content)
-    if match:
-        return match.group(2)
-    return code_content
+def _extract_all_code_blocks(content: str) -> list[str]:
+    """提取所有代码块内容。"""
+    matches = _CODE_BLOCK_RE.findall(content)
+    return [match[1] for match in matches]
+
+
+def _merge_code_blocks(code_blocks: list[str]) -> str:
+    """合并所有代码块为完整代码（去重）。"""
+    if not code_blocks:
+        return ""
+    unique_blocks = []
+    seen = set()
+    for block in code_blocks:
+        stripped = block.strip()
+        if stripped and stripped not in seen:
+            seen.add(stripped)
+            unique_blocks.append(stripped)
+    return "\n\n".join(unique_blocks)
 
 
 class CodeAgent:
+    """代码实操案例生成 Agent。"""
+
     def __init__(self) -> None:
         self.name = "CodeAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_deepseek_llm(temperature=0.2)
+        self.llm = get_spark_x_llm(temperature=0.2)
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
+        """从黑板提取上下文。"""
         ctx = ""
         mm = ((shared_memory or {}).get("mindmap") or {}).get("agent_output", "")
         outline = ((shared_memory or {}).get("content") or {}).get("outline", "")
@@ -68,6 +89,7 @@ class CodeAgent:
         return format_profile_fields(profile, [("knowledge_level", "知识水平"), ("learning_pace", "学习节奏")])
 
     def _build_system_message(self, state: dict[str, Any]) -> str:
+        """构建系统提示词。"""
         user_profile = state.get("user_profile", {})
         system_prompt = self.prompt_template.format(
             major=state.get("major", "通用"),
@@ -77,36 +99,36 @@ class CodeAgent:
             knowledge_level=user_profile.get("knowledge_level", "中等"),
             learning_pace=user_profile.get("learning_pace", "中等"),
         )
-        system_prompt = append_context(system_prompt, state=state, format_user_profile=self._format_user_profile, extract_memory=self._extract_memory)
+        system_prompt = append_context(
+            system_prompt,
+            state=state,
+            format_user_profile=self._format_user_profile,
+            extract_memory=self._extract_memory,
+        )
         return system_prompt + (
-            "\n\n【重要指令】\n"
-            "1. 请直接生成对应的完整实操代码，并以 Markdown 形式输出。\n"
-            "2. 不要只回复计划、说明或向用户追问，必须产出最终代码内容。\n"
-            "3. 输出结构包含：问题场景、完整代码、运行结果、关键点解析。"
+            "\n\n【输出格式要求】\n"
+            "请按以下结构生成分步讲解的代码案例：\n\n"
+            "## 步骤1：xxx\n"
+            "讲解这一步的目的和原理...\n"
+            "```语言\n"
+            "# 这一步的代码\n"
+            "```\n\n"
+            "## 步骤2：xxx\n"
+            "讲解...\n"
+            "```语言\n"
+            "# 代码\n"
+            "```\n\n"
+            "...（继续更多步骤）\n\n"
+            "## 完整代码\n"
+            "```语言\n"
+            "# 所有步骤合并后的完整可运行代码\n"
+            "```\n\n"
+            "要求：\n"
+            "1. 每个步骤必须包含：标题、讲解、代码块\n"
+            "2. 步骤之间逻辑连贯，逐步构建\n"
+            "3. 最后必须提供完整代码块\n"
+            "4. 直接输出内容，不要追问用户"
         )
-
-    async def _add_explanation(self, code_content: str, language: str) -> str:
-        prompt = (
-            "你是一位编程教学专家。请在以下代码案例中添加详细的编号式逐步解析：\n\n"
-            "1. 在代码中的关键行前添加编号行内注释（如 `# [1] 定义数据结构`）\n"
-            "2. 在代码块之前添加 2-3 句的背景说明\n"
-            "3. 在代码块之后添加编号解析列表，解释每一步的含义和设计思路\n\n"
-            f"编程语言：{language}\n\n原始代码：\n{code_content}\n\n"
-            "请输出完整的 Markdown 文档（包含说明 + 带注释的代码 + 解析）。"
-        )
-        response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-        return response.content.strip() if isinstance(response.content, str) else str(response.content)
-
-    async def _fallback_generate_code(self, state: dict[str, Any]) -> dict[str, Any]:
-        prompt = (
-            "你是一位编程教学专家。请直接生成一个完整、可运行的 Markdown 代码案例，不要输出计划，不要追问用户。\n\n"
-            f"专业：{state.get('major', '通用')}\n课程：{state.get('course', '')}\n主题：{state.get('topic', '')}\n知识短板：{state.get('gap', '')}\n"
-            f"知识水平：{state.get('user_profile', {}).get('knowledge_level', '中等')}\n"
-            "要求：\n1. 使用 Python\n2. 输出结构必须包含：问题场景、完整代码、运行结果、关键点解析\n3. 代码块使用 ```python 标记\n4. 示例要适合初学者并可直接运行\n"
-        )
-        response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-        content = response.content.strip() if isinstance(response.content, str) else str(response.content)
-        return {"explained_content": content, "code_content": content, "detected_language": _detect_language(content), "error": None}
 
     async def generate_code(
         self,
@@ -116,22 +138,70 @@ class CodeAgent:
         gap: str = "",
         user_profile: dict | None = None,
         shared_memory: dict | None = None,
+        user_id: int = 0,
+        resource_id: int = 0,
     ) -> dict[str, Any]:
-        logger.info("[CodeAgent] 收到生成请求: topic=%s", topic)
-        state = {"major": major, "course": course, "topic": topic, "gap": gap, "user_profile": user_profile or {}, "shared_memory": shared_memory or {}}
-        try:
-            messages = [HumanMessage(content=self._build_system_message(state)), HumanMessage(content=f"请为主题 '{topic}' 生成一个完整的可运行代码案例。")]
-            response = await self.llm.ainvoke(messages)
-            code_content = response.content.strip() if isinstance(response.content, str) else str(response.content)
-            language = _detect_language(code_content)
-            explained = await self._add_explanation(code_content, language)
-            result = {"explained_content": explained, "code_content": code_content, "detected_language": language, "error": None}
-        except Exception as exc:
-            logger.error("[CodeAgent] 主流程失败: %s", exc)
-            result = await self._fallback_generate_code(state)
+        """生成代码案例。
 
-        explained = result.get("explained_content", "") or result.get("code_content", "")
-        code_only = _extract_code_block(result.get("code_content", ""))
-        language = result.get("detected_language", "unknown")
-        file_path = save_to_workplace("code", topic, explained, "md") if explained else None
-        return {"success": bool(explained), "content": explained, "file_path": file_path, "detected_language": language, "code_only": code_only, "error": result.get("error") if not explained else None}
+        Args:
+            topic: 主题
+            course: 课程名称
+            major: 专业
+            gap: 知识薄弱点
+            user_profile: 用户画像
+            shared_memory: 共享记忆（黑板）
+            user_id: 用户 ID，用于保存文件
+            resource_id: 资源 ID，用于保存文件
+
+        Returns:
+            - step_by_step: 分步讲解内容（Markdown 格式）
+            - full_code: 完整代码（纯代码，无 Markdown）
+            - content: 完整内容（包含分步讲解和完整代码）
+            - detected_language: 检测到的编程语言
+            - file_path: 保存的文件路径
+        """
+        logger.info("[CodeAgent] 收到生成请求: topic=%s user_id=%s resource_id=%s", topic, user_id, resource_id)
+
+        state = {
+            "major": major,
+            "course": course,
+            "topic": topic,
+            "gap": gap,
+            "user_profile": user_profile or {},
+            "shared_memory": shared_memory or {},
+        }
+
+        messages = [
+            HumanMessage(content=self._build_system_message(state)),
+            HumanMessage(content=f"请为主题 '{topic}' 生成一个完整的可运行代码案例。"),
+        ]
+
+        try:
+            response = await self.llm.ainvoke(messages)
+            content = response.content.strip() if isinstance(response.content, str) else str(response.content)
+            language = _detect_language(content)
+            code_blocks = _extract_all_code_blocks(content)
+            full_code = _merge_code_blocks(code_blocks)
+            error = None
+        except Exception as exc:
+            logger.error("[CodeAgent] 生成失败: %s", exc)
+            content = ""
+            language = "unknown"
+            full_code = ""
+            error = str(exc)
+
+        # 保存文件
+        file_path = None
+        if content and user_id and resource_id:
+            file_path = save_resource_file(topic, content, user_id, resource_id, "md", prefix="code")
+            logger.info("[CodeAgent] 内容已保存到文件: %s", file_path)
+
+        return {
+            "success": bool(content),
+            "content": content,
+            "step_by_step": content,
+            "full_code": full_code,
+            "file_path": file_path,
+            "detected_language": language,
+            "error": error,
+        }

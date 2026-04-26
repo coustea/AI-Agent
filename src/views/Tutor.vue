@@ -175,12 +175,15 @@
                 <div v-else class="avatar-circle user-av"><el-icon><UserFilled /></el-icon></div>
               </div>
 
-              <div class="bubble-wrapper">
+              <div class="bubble-wrapper" @click="handleMessageClick">
                 <div class="msg-meta">
                   <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : 'You' }}</span>
                   <span class="time">{{ msg.time }}</span>
                 </div>
-                <div :class="['bubble', 'markdown-body', { streaming: msg.id === streamingMsgId && isAIThinking }]" v-html="renderMarkdown(msg.content)"></div>
+                <div
+                    :class="['bubble', 'markdown-body', { streaming: msg.id === streamingMsgId && isAIThinking }]"
+                    v-html="renderTutorMarkdown(msg.content, msg.id === streamingMsgId && isAIThinking)"
+                ></div>
 
                 <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
                   <a v-for="att in msg.attachments" :key="att.url" :href="att.url" target="_blank" class="attachment-link">
@@ -359,22 +362,22 @@
               <span class="dot"></span> Live
             </span>
           </div>
-          <p class="sidebar-desc">基于对话内容为你生成的学习画像</p>
         </div>
 
         <div class="profile-feature-card">
-          <div class="feature-card-header">
-            <div class="header-icon"><el-icon><User /></el-icon></div>
-            <span class="header-title">学习特征总结</span>
-          </div>
-
           <div class="feature-list" v-if="activeProfileDimensions.length > 0">
             <div class="feature-item" v-for="dim in activeProfileDimensions" :key="dim.key">
               <div class="item-icon-box">
                 <el-icon><component :is="getIcon(dim.key)" /></el-icon>
               </div>
-              <div class="item-text-box">
-                <div class="item-title">{{ dim.name }}</div>
+              <div class="item-content-wrapper">
+                <div class="item-header-row">
+                  <div class="item-title">{{ dim.name }}</div>
+                  <div class="item-score" :class="getScoreClass(dim.score)">{{ dim.score }}<span class="score-unit">/100</span></div>
+                </div>
+                <div class="item-progress-track">
+                  <div class="item-progress-bar" :class="getScoreClass(dim.score)" :style="{ width: `${dim.score}%` }"></div>
+                </div>
                 <div class="item-desc">{{ dim.desc }}</div>
               </div>
             </div>
@@ -464,14 +467,16 @@ import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
   Plus, Delete, Close, Top,
-  EditPen, Search, Discount, Timer, VideoPlay, VideoCamera, DataLine, Paperclip,
+  EditPen, Search, Discount, Timer, VideoCamera, DataLine,
   CircleCheckFilled,
-  User, InfoFilled, Medal, Aim, Setting, Loading
+  InfoFilled, Medal, Aim, Setting, Loading
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
 import 'github-markdown-css/github-markdown-light.css'
+import 'highlight.js/styles/github.css'
 import mermaid from 'mermaid'
+import { getErrorMessage } from '@/utils/http'
+import { renderTutorMarkdown } from '@/utils/markdown'
 import {
   getProfile,
   type ProfileData,
@@ -535,6 +540,9 @@ interface ProfileDimension {
   desc: string
 }
 
+const DEFAULT_SESSION_TITLE = '新对话'
+const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
+
 // ==========================================
 // 4. Mermaid 初始化
 // ==========================================
@@ -558,7 +566,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
 // --- 媒体生成/联网搜索开关 ---
-const enableWebSearch = ref(false) // 恢复联网搜索状态
+const enableWebSearch = ref(false) 
 const needDiagram = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
@@ -643,7 +651,34 @@ const showThinkingIndicator = computed(() => {
 // ==========================================
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-const renderMarkdown = (text: string) => marked.parse(text)
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('已复制到剪贴板')
+  } catch (err) {
+    ElMessage.error('复制失败，请重试')
+  }
+}
+
+// 代理事件委托：用于捕获由 v-html 渲染出来的“复制代码”按钮点击事件
+const handleMessageClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (target && target.classList.contains('copy-code-btn')) {
+    const code = target.dataset.code
+    if (code != null) {
+      copyToClipboard(code)
+      
+      // 添加临时的视觉反馈
+      const originalText = target.innerText
+      target.innerText = '已复制'
+      target.classList.add('copied')
+      setTimeout(() => {
+        target.innerText = originalText
+        target.classList.remove('copied')
+      }, 2000)
+    }
+  }
+}
 
 const getIcon = (key: string) => {
   const map: Record<string, any> = {
@@ -657,6 +692,13 @@ const getIcon = (key: string) => {
     cognitive_level: Medal
   }
   return map[key] || Discount
+}
+
+const getScoreClass = (score: number | null) => {
+  if (score === null) return 'score-neutral'
+  if (score < 40) return 'score-danger'
+  if (score < 70) return 'score-warning'
+  return 'score-success'
 }
 
 const formatRelativeTime = (dateStr: string) => {
@@ -679,16 +721,19 @@ const resolveIllustrationUrl = (path: string) => {
 }
 
 // ==========================================
-// 8. 滚动相关函数
+// 8. 滚动机制优化 (利用 rAF 让流式输出彻底丝滑)
 // ==========================================
 const scrollToBottom = () => {
   if (scrollPending) return
   scrollPending = true
+  
   nextTick(() => {
-    scrollPending = false
-    if (chatScroll.value) {
-      chatScroll.value.scrollTop = chatScroll.value.scrollHeight
-    }
+    requestAnimationFrame(() => {
+      if (chatScroll.value) {
+        chatScroll.value.scrollTop = chatScroll.value.scrollHeight
+      }
+      scrollPending = false
+    })
   })
 }
 
@@ -700,7 +745,7 @@ const autoResize = () => {
 
   if (currentHeight > 30) {
     isExpandedInput.value = true
-    el.style.height = `${Math.min(currentHeight, 72)}px`
+    el.style.height = `${Math.min(currentHeight, 120)}px`
   } else {
     isExpandedInput.value = false
     el.style.height = '24px'
@@ -906,6 +951,25 @@ const loadSessions = async () => {
   }
 }
 
+const refreshSessionTitleWithRetry = async (sessionId: string) => {
+  for (const delay of SESSION_TITLE_REFRESH_DELAYS) {
+    await new Promise(resolve => setTimeout(resolve, delay))
+
+    try {
+      const res = await getSessions()
+      const nextSessions = res.data.data || []
+
+      const refreshed = nextSessions.find(s => s.id === sessionId)
+      if (refreshed?.title && refreshed.title !== DEFAULT_SESSION_TITLE) {
+        sessions.value = nextSessions
+        return
+      }
+    } catch {
+      return
+    }
+  }
+}
+
 const newSession = () => {
   currentSessionId.value = undefined
   messages.value = []
@@ -927,7 +991,8 @@ const switchSession = async (sessionId: string) => {
       attachments: msg.attachments || null,
       illustrations: [],
     }))
-  } catch {
+  } catch (err) {
+    ElMessage.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
   }
   scrollToBottom()
 }
@@ -1038,7 +1103,7 @@ const handleSend = async () => {
 
   if (currentSessionId.value && text) {
     const session = sessions.value.find(s => s.id === currentSessionId.value)
-    if (session && (!session.title || session.title === '新建对话')) {
+    if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
       session.title = text.length > 20 ? text.slice(0, 20) + '...' : text
     }
   }
@@ -1134,7 +1199,7 @@ const handleSend = async () => {
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
         need_diagram: shouldGenerateDiagram,
         generate_video: generateVideo.value,
-        enable_search: enableWebSearch.value, // 使用联网搜索的值
+        enable_search: enableWebSearch.value,
       },
       (chunk) => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
@@ -1144,6 +1209,7 @@ const handleSend = async () => {
         }
       },
       () => {
+        const finishedSessionId = currentSessionId.value
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
           aiMsg.diagramGenerating = false
@@ -1156,6 +1222,9 @@ const handleSend = async () => {
         }
         scheduleProfilePoll()
         abortController = null
+        if (finishedSessionId) {
+          void refreshSessionTitleWithRetry(finishedSessionId)
+        }
       },
       (err) => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
@@ -1790,7 +1859,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  scroll-behavior: smooth;
 }
 
 .welcome-banner {
@@ -1898,6 +1966,138 @@ onBeforeUnmount(() => {
   color: #0F172A;
 }
 
+/* markdown 渲染样式 - 特别针对代码块优化 */
+:deep(.markdown-body) {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 0.95rem !important;
+  background: transparent !important;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+:deep(.markdown-body > :first-child) {
+  margin-top: 0;
+}
+
+:deep(.markdown-body > :last-child) {
+  margin-bottom: 0;
+}
+
+:deep(.markdown-body p) {
+  margin: 0 0 0.65rem;
+}
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  margin: 0.55rem 0 0.75rem;
+  padding-left: 1.35rem;
+}
+
+:deep(.markdown-body li + li) {
+  margin-top: 0.25rem;
+}
+
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3),
+:deep(.markdown-body h4) {
+  margin: 0.9rem 0 0.5rem;
+  padding-bottom: 0;
+  border-bottom: 0;
+  line-height: 1.35;
+}
+
+:deep(.markdown-body h1) {
+  font-size: 1.25rem;
+}
+
+:deep(.markdown-body h2) {
+  font-size: 1.15rem;
+}
+
+:deep(.markdown-body h3) {
+  font-size: 1.05rem;
+}
+
+:deep(.markdown-body code:not(pre code)) {
+  padding: 0.12rem 0.32rem;
+  border-radius: 5px;
+  background: #EEF2F7;
+  color: #B42318;
+  font-size: 0.88em;
+}
+
+:deep(.markdown-body blockquote) {
+  margin: 0.7rem 0;
+  padding: 0.15rem 0 0.15rem 0.85rem;
+  color: #475569;
+  border-left: 3px solid #CBD5E1;
+}
+
+:deep(.code-block-wrapper) {
+  position: relative;
+  margin: 1rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #F8FAFC;
+  border: 1px solid #CBD5E1;
+}
+
+:deep(.code-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background-color: #EEF2F7;
+  border-bottom: 1px solid #CBD5E1;
+}
+
+:deep(.code-lang) {
+  color: #475569;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+}
+
+:deep(.copy-code-btn) {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #334155;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+:deep(.copy-code-btn:hover) {
+  background: #E0F2FE;
+  color: #075985;
+  border-color: #7DD3FC;
+}
+
+:deep(.copy-code-btn.copied) {
+  background: #10B981;
+  color: white;
+  border-color: #10B981;
+}
+
+:deep(.code-block-wrapper pre) {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: #F8FAFC;
+  border: 0;
+  border-radius: 0;
+}
+
+:deep(.code-block-wrapper code) {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
 .message-row.user .bubble {
   background: #F1F5F9;
   border: 1px solid #E2E8F0;
@@ -1960,20 +2160,20 @@ onBeforeUnmount(() => {
 
 /* ================= 针对输入框的优化 ================= */
 .input-panel {
-  padding: 0 24px 20px 24px; /* 添加左右安全边距，防止被滚动条或容器两侧盖住 */
+  padding: 0 24px 20px 24px; 
   display: flex;
   flex-direction: column;
   align-items: center;
   background: transparent;
   width: 100%;
-  box-sizing: border-box; /* 确保内边距不会撑破外容器 */
+  box-sizing: border-box; 
 }
 
 .attachments-preview {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
-  width: 100%; /* 修改为100%以便与下方的 input-wrapper 保持宽度对齐 */
+  width: 100%; 
   max-width: 800px;
   flex-wrap: wrap;
   justify-content: flex-start;
@@ -2006,21 +2206,21 @@ onBeforeUnmount(() => {
   max-width: 800px;
   background: #F4F4F5;
   border: 1px solid transparent;
-  border-radius: 36px; /* 增加到36px，使其形成完美的药丸形（四周圆角） */
-  padding: 12px 20px; /* 稍微增加 padding 提升呼吸感 */
+  border-radius: 36px; 
+  padding: 12px 20px; 
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px 12px;
   transition: all 0.3s ease;
   box-sizing: border-box;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02); /* 轻微阴影，提升质感 */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02); 
 }
 
 .input-wrapper:focus-within {
   background: #FFFFFF;
   border-color: #D4D4D8;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05); /* 聚焦时阴影放大 */
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05); 
 }
 
 .toolbar-left {
@@ -2059,7 +2259,7 @@ onBeforeUnmount(() => {
 }
 
 .input-wrapper.is-expanded {
-  border-radius: 24px; /* 展开成多行时，圆角稍微收缩避免文字贴着圆弧 */
+  border-radius: 24px; 
   padding: 16px 20px;
   align-items: end;
 }
@@ -2105,7 +2305,6 @@ onBeforeUnmount(() => {
   background: #E5E5E5;
 }
 
-/* 恢复联网搜索的按钮样式 */
 .media-gen-btn {
   width: 32px;
   height: 32px;
@@ -2445,14 +2644,20 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F1F5F9;
+}
+.feature-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .item-icon-box {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   background: #F1F5F9;
   color: #3B82F6;
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2461,10 +2666,18 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
-.item-text-box {
+.item-content-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  flex: 1;
+}
+
+.item-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .item-title {
@@ -2472,6 +2685,44 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: #334155;
 }
+
+.item-score {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.score-unit {
+  font-size: 0.65rem;
+  color: #94A3B8;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.item-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #F1F5F9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.item-progress-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.score-success { color: #10B981; }
+.item-progress-bar.score-success { background: #10B981; }
+
+.score-warning { color: #F59E0B; }
+.item-progress-bar.score-warning { background: #F59E0B; }
+
+.score-danger { color: #EF4444; }
+.item-progress-bar.score-danger { background: #EF4444; }
+
+.score-neutral { color: #94A3B8; }
+.item-progress-bar.score-neutral { background: #CBD5E1; }
 
 .item-desc {
   font-size: 0.8rem;
@@ -2534,39 +2785,6 @@ onBeforeUnmount(() => {
   font-size: 0.8rem;
   color: #64748B;
   line-height: 1.6;
-}
-
-:deep(.markdown-body) {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.95rem !important;
-  background: transparent !important;
-}
-
-:deep(.markdown-body p) {
-  margin-bottom: 0.5rem;
-}
-
-:deep(.markdown-body p:last-child) {
-  margin-bottom: 0;
-}
-
-:deep(.markdown-body pre) {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-}
-
-.bubble.streaming::after {
-  content: '▍';
-  animation: cursor-blink 1s step-end infinite;
-  color: #94A3B8;
-  font-weight: 400;
-}
-
-@keyframes cursor-blink {
-  0% { opacity: 1; }
-  50% { opacity: 0; }
-  100% { opacity: 1; }
 }
 
 ::-webkit-scrollbar { width: 4px; }

@@ -4,7 +4,9 @@
       v-if="fileUrl && fileCategory === 'html'"
       :src="fileUrl"
       class="mindmap-frame"
+      title="思维导图在线预览"
       frameborder="0"
+      loading="lazy"
     ></iframe>
     <MarkdownResourceView v-else :result-data="resultData" :compact="compact" />
   </div>
@@ -33,7 +35,7 @@ const fileCategory = computed(() => getFileCategory(fileUrl.value))
   width: 100%;
   height: 62vh;
   min-height: 420px;
-  border: 1px solid #dbe4ef;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
 }
@@ -42,5 +44,17 @@ const fileCategory = computed(() => getFileCategory(fileUrl.value))
   height: 180px;
   min-height: 180px;
   pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .mindmap-frame {
+    height: 58vh;
+    min-height: 320px;
+  }
+
+  .compact .mindmap-frame {
+    height: 160px;
+    min-height: 160px;
+  }
 }
 </style>

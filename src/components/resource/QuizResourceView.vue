@@ -20,7 +20,7 @@
         </div>
       </article>
       <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
-        ...等共 {{ questions.length }} 道专项练习
+        共 {{ questions.length }} 道专项练习，在线预览可查看答案与解析
       </div>
     </div>
     <pre v-else class="quiz-json"><code>{{ fallbackJson }}</code></pre>
@@ -70,14 +70,14 @@ const getQuestionTypeText = (questionType?: string) => {
 .quiz-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .quiz-item {
   padding: 12px;
-  border: 1px solid #dbe4ef;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #fff;
 }
 
 .quiz-stem {
@@ -103,7 +103,7 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .quiz-index {
   flex: 0 0 auto;
-  color: #2563eb;
+  color: #1d4ed8;
   font-weight: 800;
 }
 
@@ -111,8 +111,15 @@ const getQuestionTypeText = (questionType?: string) => {
   display: grid;
   gap: 6px;
   margin-top: 10px;
-  color: #475569;
+  color: #334155;
   font-size: 0.86rem;
+}
+
+.quiz-options span {
+  padding: 7px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
 }
 
 .quiz-answer,
@@ -128,9 +135,7 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .compact .quiz-stem {
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .compact .quiz-title {
@@ -146,7 +151,6 @@ const getQuestionTypeText = (questionType?: string) => {
 .quiz-more {
   color: #64748b;
   font-size: 0.84rem;
-  font-style: italic;
 }
 
 .quiz-json {

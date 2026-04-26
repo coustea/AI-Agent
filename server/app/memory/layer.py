@@ -214,6 +214,7 @@ class MemoryLayer:
         content: str,
         attachments: str | None = None,
         tool_calls: str | None = None,
+        diagram: dict | None = None,
     ) -> int:
         """写入短期记忆消息。  # 保存一条会话消息（可附带附件/工具调用元数据），供后续上下文与审计使用
 
@@ -224,6 +225,7 @@ class MemoryLayer:
         - content: 消息内容
         - attachments: 附件信息（JSON 字符串）
         - tool_calls: 工具调用记录（JSON 字符串）
+        - diagram: 图解数据（Mermaid 源码等）
 
         返回：
         - 会话当前消息总数
@@ -236,6 +238,7 @@ class MemoryLayer:
             content=content,
             attachments=attachments,
             tool_calls=tool_calls,
+            diagram=diagram,
         )
 
     async def save_message(
@@ -247,6 +250,7 @@ class MemoryLayer:
         content: str,
         attachments: str | None = None,
         tool_calls: str | None = None,
+        diagram: dict | None = None,
     ) -> None:
         """保存消息。  # 历史兼容别名（内部仍落到 create_short_term_message，避免重复实现）
 
@@ -257,6 +261,7 @@ class MemoryLayer:
         - content: 消息内容
         - attachments: 附件信息
         - tool_calls: 工具调用记录
+        - diagram: 图解数据
         """
         await self.create_short_term_message(
             user_id=user_id,
@@ -265,6 +270,7 @@ class MemoryLayer:
             content=content,
             attachments=attachments,
             tool_calls=tool_calls,
+            diagram=diagram,
         )
 
     async def list_short_term_messages(

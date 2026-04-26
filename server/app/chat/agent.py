@@ -101,6 +101,26 @@ def _graph_stream_kwargs() -> dict[str, Any]:
     return kwargs
 
 
+def _stream_chunk_text(chunk: Any) -> str:
+    """Extract plain text from a LangChain stream chunk."""
+    if chunk is None:
+        return ""
+    content = getattr(chunk, "content", chunk)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return ""
+
+
 class TutorAgent:
     """智能辅导 Agent — 轻量级编排器。
 
@@ -129,7 +149,6 @@ class TutorAgent:
         )
         # 图解生成模型 - 使用 deepseek-chat 因为 reasoner 模型不支持 tool_choice
         self.diagram_llm = get_deepseek_llm(
-            model="deepseek-chat",
             temperature=0.1,
             streaming=False,
             max_tokens=1600,
@@ -143,6 +162,12 @@ class TutorAgent:
         self._background_tasks: set[asyncio.Task] = set()
 
         logger.info("[TutorAgent] 初始化完成")
+
+    @staticmethod
+    def _merge_system_prompts(*prompts: str) -> str:
+        """合并多个系统提示词，生成单个 SystemMessage 内容。"""
+        parts = [str(p).strip() for p in prompts if str(p).strip()]
+        return "\n\n".join(parts)
 
     @classmethod
     def get_shared(cls) -> "TutorAgent":
@@ -278,15 +303,18 @@ class TutorAgent:
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答 route=direct_answer question=%s", truncate(question, 180))
 
-            full_messages = build_messages(system_prompt, list(messages))
-            full_messages = [SystemMessage(content=_get_prompt("direct_answer_system"))] + full_messages
+            merged_system_prompt = self._merge_system_prompts(
+                _get_prompt("direct_answer_system"),
+                system_prompt,
+            )
+            full_messages = build_messages(merged_system_prompt, list(messages))
 
             try:
                 response = await self.llm.ainvoke(full_messages)
                 text = normalize_message_content(getattr(response, "content", response))
-            except Exception:
-                logger.exception("[TutorAgent] direct_answer Spark MAX 调用失败")
-                raise
+            except Exception as exc:
+                logger.warning("[TutorAgent] direct_answer Spark MAX 调用失败 err=%s", exc)
+                text = ""
 
             # 无效回复重试
             if is_unusable_reply_text(text):
@@ -294,8 +322,12 @@ class TutorAgent:
                 retry_messages = full_messages + [
                     HumanMessage(content="请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。")
                 ]
-                retry_response = await self.llm.ainvoke(retry_messages)
-                text = normalize_message_content(getattr(retry_response, "content", retry_response))
+                try:
+                    retry_response = await self.llm.ainvoke(retry_messages)
+                    text = normalize_message_content(getattr(retry_response, "content", retry_response))
+                except Exception as exc:
+                    logger.warning("[TutorAgent] direct_answer 重试调用失败 err=%s", exc)
+                    text = ""
 
             if is_unusable_reply_text(text):
                 text = "抱歉，我暂时无法回答这个问题，请稍后重试。"
@@ -331,8 +363,11 @@ class TutorAgent:
         with node_timer("search_node", user=user_id, session=session_id):
             logger.info("[TutorAgent] 搜索节点 question=%s", truncate(question, 180))
 
-            full_messages = build_messages(system_prompt, list(messages))
-            full_messages = [SystemMessage(content=_get_prompt("search_node_system"))] + full_messages
+            merged_system_prompt = self._merge_system_prompts(
+                _get_prompt("search_node_system"),
+                system_prompt,
+            )
+            full_messages = build_messages(merged_system_prompt, list(messages))
 
             # 绑定搜索工具
             llm_with_tools = self.search_llm.bind_tools([duckduckgo_search, tavily_search])
@@ -410,9 +445,9 @@ class TutorAgent:
             try:
                 response = await self.llm.ainvoke(full_messages)
                 text = normalize_message_content(getattr(response, "content", response))
-            except Exception:
-                logger.exception("[TutorAgent] spark_summary Spark MAX 调用失败")
-                raise
+            except Exception as exc:
+                logger.warning("[TutorAgent] spark_summary Spark MAX 调用失败 err=%s", exc)
+                text = ""
 
             # 无效回复重试
             if is_unusable_reply_text(text):
@@ -420,8 +455,12 @@ class TutorAgent:
                 retry_messages = full_messages + [
                     HumanMessage(content="请基于搜索结果重新回答，给出完整、可读、适合教学场景的中文回答。")
                 ]
-                retry_response = await self.llm.ainvoke(retry_messages)
-                text = normalize_message_content(getattr(retry_response, "content", retry_response))
+                try:
+                    retry_response = await self.llm.ainvoke(retry_messages)
+                    text = normalize_message_content(getattr(retry_response, "content", retry_response))
+                except Exception as exc:
+                    logger.warning("[TutorAgent] spark_summary 重试调用失败 err=%s", exc)
+                    text = ""
 
             if is_unusable_reply_text(text):
                 text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
@@ -491,15 +530,18 @@ class TutorAgent:
                 "回答要清晰、分点、适合教学场景。"
             )
 
-            full_messages = build_messages(system_prompt, [HumanMessage(content=answer_prompt)])
-            full_messages = [SystemMessage(content=_get_prompt("direct_answer_system"))] + full_messages
+            merged_system_prompt = self._merge_system_prompts(
+                _get_prompt("direct_answer_system"),
+                system_prompt,
+            )
+            full_messages = build_messages(merged_system_prompt, [HumanMessage(content=answer_prompt)])
 
             try:
                 response = await self.llm.ainvoke(full_messages)
                 text = normalize_message_content(getattr(response, "content", response))
-            except Exception:
-                logger.exception("[TutorAgent] attachment_answer Spark MAX 调用失败")
-                raise
+            except Exception as exc:
+                logger.warning("[TutorAgent] attachment_answer Spark MAX 调用失败 err=%s", exc)
+                text = ""
 
             # 无效回复重试
             if is_unusable_reply_text(text):
@@ -507,8 +549,12 @@ class TutorAgent:
                 retry_messages = full_messages + [
                     HumanMessage(content="请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。")
                 ]
-                retry_response = await self.llm.ainvoke(retry_messages)
-                text = normalize_message_content(getattr(retry_response, "content", retry_response))
+                try:
+                    retry_response = await self.llm.ainvoke(retry_messages)
+                    text = normalize_message_content(getattr(retry_response, "content", retry_response))
+                except Exception as exc:
+                    logger.warning("[TutorAgent] attachment_answer 重试调用失败 err=%s", exc)
+                    text = ""
 
             if is_unusable_reply_text(text):
                 text = "抱歉，我暂时无法回答这个问题，请稍后重试。"
@@ -894,8 +940,18 @@ class TutorAgent:
                                 else:
                                     runtime_state[key] = value
 
-                    # 回答节点结束时发送 token 事件
-                    if kind == "on_chain_end" and name in ANSWER_NODE_NAMES:
+                    # LLM 实时流式输出：前端收到每个 chunk 后逐步追加显示。
+                    if kind == "on_chat_model_stream":
+                        metadata = event.get("metadata") or {}
+                        node_name = metadata.get("langgraph_node") or active_node
+                        if node_name in ANSWER_NODE_NAMES:
+                            chunk_text = _stream_chunk_text(event.get("data", {}).get("chunk"))
+                            if chunk_text:
+                                full_reply += chunk_text
+                                yield stream_event("token", chunk_text)
+
+                    # 兼容未产生流式 chunk 的模型/路径，避免前端空白。
+                    if kind == "on_chain_end" and name in ANSWER_NODE_NAMES and not full_reply:
                         node_output = event.get("data", {}).get("output", {})
                         if isinstance(node_output, dict):
                             final_messages = node_output.get("messages")
@@ -944,6 +1000,7 @@ class TutorAgent:
                 session_id=effective_session,
                 role="assistant",
                 content=full_reply,
+                diagram=runtime_state.get("diagram"),
             )
 
             # 启动后台任务处理后续流程

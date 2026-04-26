@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
+from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.database import engine
-from app.infra.llm import get_spark_llm
+from app.infra.llm import get_deepseek_llm, get_spark_x_llm
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, UserMemory
 from app.memory.memory_types import (
@@ -25,6 +26,7 @@ from app.memory.memory_types import (
     MEMORY_TYPE_SUMMARY,
     MEMORY_TYPE_WEAKNESS,
 )
+from app.shared.json_utils import parse_first_json_object
 
 logger = get_logger(__name__)
 
@@ -57,6 +59,26 @@ _MIN_OVERLAP_BY_TYPE: dict[str, float] = {  # 判定"内容足够相似可合并
     "fact": 0.45,
     "background": 0.45,
 }
+
+
+class SessionTitleOutput(BaseModel):
+    """会话标题结构化输出模型。"""
+    title: str = Field(description="会话标题，不超过15个字")
+
+
+def _normalize_session_title(title: Any, fallback: str = "新对话") -> str:
+    text = str(title or "").strip()
+    if not text:
+        return fallback
+    return text[:15] if len(text) > 15 else text
+
+
+def _should_fallback_session_title_generation(exc: Exception) -> bool:
+    error_text = str(exc)
+    return (
+        "response_format type is unavailable" in error_text
+        or "does not support this tool_choice" in error_text
+    )
 
 
 def normalize_text(content: str) -> str:
@@ -261,21 +283,37 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
 
     async def _generate_session_title(self, user_message: str) -> str:  # 用轻量级 LLM 从用户首条消息提取会话标题
         from langchain_core.prompts import ChatPromptTemplate
-        from app.infra.llm import get_deepseek_llm
-        llm = get_deepseek_llm(temperature=0.1, max_tokens=30)  # 使用 DeepSeek 快速模型
+        raw_llm = get_deepseek_llm(temperature=0.1, max_tokens=80)
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题（不超过20字）。只输出标题本身，不要有任何其他内容。"),
+            ("system", "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题。标题应该简洁明了，能够概括对话主题。"),
             ("human", "{user_message}"),
         ])
+        messages = prompt.invoke({"user_message": user_message[:500]})
         try:
-            result = await llm.ainvoke(prompt.invoke({"user_message": user_message[:500]}))  # 截断输入避免过长
-            content = result.content
-            if isinstance(content, str):
-                return content.strip() or "新对话"
-            return "新对话"
-        except Exception:
-            logger.exception("[MemoryStore] title_generation.failed")
-            return user_message[:20] if user_message else "新对话"  # 失败时回退到截取前 20 字
+            llm = raw_llm.with_structured_output(SessionTitleOutput)
+            result = await llm.ainvoke(messages)
+            title = _normalize_session_title(result.title)
+            logger.info("[MemoryStore] title.llm_response title=%r", title)
+            return title
+        except Exception as exc:
+            if not _should_fallback_session_title_generation(exc):
+                logger.exception("[MemoryStore] title_generation.failed")
+                raise
+
+            logger.warning("[MemoryStore] title structured_output 不可用，回退到 JSON 文本生成: %s", exc)
+            fallback_messages = list(messages.to_messages()) + [
+                (
+                    "human",
+                    "请直接输出一个合法 JSON 对象，不要使用 Markdown 代码块，不要添加解释文字。"
+                    '格式必须是：{"title":"会话标题"}，标题不超过15个字。',
+                )
+            ]
+            raw_response = await raw_llm.ainvoke(fallback_messages)
+            raw_content = getattr(raw_response, "content", raw_response)
+            parsed = parse_first_json_object(str(raw_content))
+            title = _normalize_session_title(parsed.get("title"))
+            logger.info("[MemoryStore] title.llm_response fallback title=%r", title)
+            return title
 
     async def _generate_and_update_title_background(self, session_id: str, user_message: str) -> None:  # 后台任务：生成标题并更新数据库（不阻塞主流程）
         """后台异步生成标题并更新会话。此方法通过 asyncio.create_task 调用，不阻塞消息保存。"""
@@ -331,6 +369,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         content: str,
         attachments: str | None = None,
         tool_calls: str | None = None,
+        diagram: dict | None = None,
     ) -> int:
         should_generate_title = False  # 标记是否需要生成标题（首条用户消息且标题为"新对话"）
         async with AsyncSession(self.engine) as session:
@@ -359,6 +398,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                     content=content,
                     attachments=attachments,
                     tool_calls=tool_calls,
+                    diagram=diagram,
                 )
             )
             # 单次 commit 同时持久化"会话元数据更新"和"消息新增"，尽量保证写入原子性，避免出现只写消息或只改会话的中间态。
@@ -823,7 +863,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             )),
             ("human", "{chat_text}"),
         ])
-        llm = get_spark_llm(temperature=0.1)
+        llm = get_spark_x_llm(temperature=0.1)
         result = await llm.ainvoke(summarize_prompt.invoke({"chat_text": chat_text}))
         summarized_ids = [m.id for m in recent_msgs[:-keep_recent]]
         # 先落库摘要再删旧消息：即使清理过程中途失败，也能保证摘要已保存，避免"删了但没存摘要"的数据丢失。

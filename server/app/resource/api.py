@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user
+from app.auth.security import decode_token, get_current_user, is_token_valid
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.resource.schemas import ResourceGenerateRequest
 from app.resource.service import resource_usecases
+from app.shared.paths import RESOURCE_DIR
 from app.shared.response import HttpResponse
 
 router = APIRouter()
@@ -103,6 +105,35 @@ async def list_resources(
             }
         )
     return HttpResponse.success(data=items)
+
+
+@router.get("/resources/{resource_id}/files/{filename}")
+async def get_resource_file(
+    resource_id: int,
+    filename: str,
+    token: str = Query(..., description="资源文件访问 token"),
+    session: AsyncSession = Depends(get_session),
+):
+    if not await is_token_valid(token, session):
+        raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
+    user_id = decode_token(token)
+
+    resource = await resource_usecases.get_resource(session, user_id, resource_id)
+    if resource is None:
+        raise HTTPException(status_code=404, detail="资源不存在")
+
+    safe_filename = Path(filename).name
+    if safe_filename != filename:
+        raise HTTPException(status_code=400, detail="非法文件名")
+
+    resource_dir = (RESOURCE_DIR / str(user_id) / str(resource_id)).resolve()
+    file_path = (resource_dir / safe_filename).resolve()
+    if not str(file_path).startswith(str(resource_dir)):
+        raise HTTPException(status_code=400, detail="非法文件路径")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    return FileResponse(path=str(file_path), filename=safe_filename)
 
 
 @router.get("/resources/{resource_id}")

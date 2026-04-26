@@ -11,11 +11,11 @@ from typing import Optional
 from langchain_core.messages import HumanMessage
 
 from app.infra.logging import get_logger
-from app.shared.paths import WORKPLACE_DIR
+from app.shared.paths import CHAT_DIR
 
 logger = get_logger(__name__)
 
-UPLOAD_DIR = WORKPLACE_DIR / "chat-uploads"
+UPLOAD_DIR = CHAT_DIR
 MAX_FILE_CONTENT_CHARS = 15000
 
 

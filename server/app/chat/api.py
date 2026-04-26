@@ -13,7 +13,6 @@ from fastapi.responses import FileResponse, StreamingResponse
 from app.auth.security import get_current_user
 from app.infra.models import User
 from app.chat.service import get_chat_usecases
-from app.shared.paths import WORKPLACE_DIR
 from app.shared.response import HttpResponse
 
 # 路由器实例
@@ -99,6 +98,11 @@ async def mentor_chat_stream(
             enable_search=enable_search,
         ),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

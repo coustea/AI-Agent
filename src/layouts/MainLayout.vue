@@ -98,10 +98,10 @@ const router = useRouter()
 
 const navItems = [
   { path: '/dashboard', label: '全景中枢', icon: Menu },
-  { path: '/path-planner', label: '路径规划', icon: Connection },
-  { path: '/resource-generator', label: '资源引擎', icon: Cpu },
-  { path: '/evaluation', label: '多维评估', icon: DataLine },
   { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
+  { path: '/resource-generator', label: '资源引擎', icon: Cpu },
+  { path: '/path-planner', label: '路径规划', icon: Connection },
+  { path: '/evaluation', label: '多维评估', icon: DataLine },
 ]
 
 const activePath = computed(() => route.path)
@@ -189,7 +189,7 @@ const handleCommand = async (command: string) => {
 
 .navbar-center {
   position: absolute;
-  left: 50%;
+  left: 42%;
   transform: translateX(-50%);
   display: flex;
   justify-content: center;

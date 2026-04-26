@@ -5,6 +5,7 @@ Coordinator Agent：画像加载 + 任务规划 + 分阶段编排 + SSE 实时�
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from pathlib import Path
 from typing import Any
@@ -13,22 +14,17 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.infra.llm import get_deepseek_reasoner_llm
 
-from app.config import DEEPSEEK_REASONER_MODEL
+from app.config import DEEPSEEK_CHAT_MODEL
 from app.infra.logging import get_logger
 from app.resource.events import AgentEventEmitter
 from app.resource.exceptions import PlanningError
 from app.resource.schemas import LearnerProfileSnapshot, PersonalizedTaskContext, ResourcePlan
 from app.resource.utils import (
-    AgentEntry,
     get_agent_registry,
-    iter_plan_phases,
     build_default_resource_plan,
-    merge_planned_tasks_into_plan,
+    merge_planner_plan_into_default,
     normalize_selected_resources,
-    filter_tasks_by_selection,
     merge_extra,
-    core_ready,
-    save_resource,
     load_profile_snapshot,
     build_personalized_context,
 )
@@ -37,6 +33,32 @@ logger = get_logger(__name__)
 
 PROMPT_DIR = Path(__file__).parent / "prompts"
 PLANNER_PROMPT_PATH = PROMPT_DIR / "planner.md"
+
+
+def _attach_file_url(result: dict, resource_id: int) -> dict:
+    file_path = result.get("file_path")
+    if not file_path:
+        return result
+    filename = Path(str(file_path)).name
+    if not filename:
+        return result
+    return {
+        **result,
+        "file_url": f"/api/v1/ai/resources/{resource_id}/files/{filename}",
+    }
+
+
+def _filter_kwargs_for_callable(fn, kwargs: dict[str, Any]) -> dict[str, Any]:
+    signature = inspect.signature(fn)
+    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
+        return kwargs
+
+    allowed = {
+        name
+        for name, param in signature.parameters.items()
+        if param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return {key: value for key, value in kwargs.items() if key in allowed}
 
 
 class PlannerTaskParameterSchema(BaseModel):
@@ -59,14 +81,27 @@ class PlannerTaskSchema(BaseModel):
 
 class PlannerPlanOutput(BaseModel):
     tasks: list[PlannerTaskSchema] = Field(default_factory=list)
+    execution_groups: list[list[str]] = Field(default_factory=list)
+    dependencies: dict[str, list[str]] = Field(default_factory=dict)
+    failure_policy: dict[str, str] = Field(default_factory=dict)
+    visible_agents: list[str] = Field(default_factory=list)
+    hidden_dependency_agents: list[str] = Field(default_factory=list)
+    execution_agents: list[str] = Field(default_factory=list)
+    agent_parameters: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class CoordinatorAgent:
-    def __init__(self, emitter: AgentEventEmitter):
+    def __init__(self, emitter: AgentEventEmitter, resource_store):
         self.emitter = emitter
-        self.llm = get_deepseek_reasoner_llm(streaming=False)
-        self._planner_llm = self.llm.with_structured_output(PlannerPlanOutput)
-        logger.info("[Coordinator] 初始化完成: planner_model=%s", DEEPSEEK_REASONER_MODEL)
+        self.resource_store = resource_store
+        self.llm = get_deepseek_reasoner_llm(
+            streaming=False,
+        )
+        self._planner_llm = self.llm.with_structured_output(
+            PlannerPlanOutput,
+            method="json_mode",
+        )
+        logger.info("[Coordinator] 初始化完成: planner_model=%s thinking=enabled structured_method=json_mode", DEEPSEEK_CHAT_MODEL)
 
     async def run(
         self,
@@ -101,14 +136,32 @@ class CoordinatorAgent:
             allowed_agents=allowed_agents,
         )
         logger.info(
-            "[Coordinator] 资源计划已确定: core=%s enhancement=%s presentation=%s requested=%s execution=%s visible=%s hidden=%s",
-            resource_plan.core_agents,
-            resource_plan.enhancement_agents,
-            resource_plan.presentation_agents,
+            "[Coordinator] 资源计划已确定: groups=%s requested=%s execution=%s visible=%s hidden=%s failure_policy=%s",
+            resource_plan.execution_groups,
             resource_plan.requested_agents,
             resource_plan.execution_agents,
             resource_plan.visible_agents,
             resource_plan.hidden_dependency_agents,
+            resource_plan.failure_policy,
+        )
+
+        # 先创建主表记录，获取 resource_id
+        await self.emitter.emit_workflow("persisting", "正在创建资源记录...")
+        resource_record = await self.resource_store.create_resource(
+            user_id=user_id,
+            course=task.get("course", ""),
+            gap=task.get("gap", ""),
+            need=task.get("need", "review"),
+            request_extra=task.get("extra", ""),
+        )
+        resource_id = resource_record.id
+        logger.info("[Coordinator] 主表记录已创建: resource_id=%s", resource_id)
+
+        # 更新主表的规划结果
+        await self.resource_store.update_resource_status(
+            resource_id=resource_id,
+            status="running",
+            plan_result=json.dumps(resource_plan.model_dump(), ensure_ascii=False),
         )
 
         final: dict[str, dict] = {}
@@ -120,46 +173,87 @@ class CoordinatorAgent:
         visible_completed_count = 0
         visible_total = len(resource_plan.visible_agents)
 
-        for stage_key, stage_label, stage_agents in iter_plan_phases(resource_plan):
-            if not stage_agents:
-                logger.info("[Coordinator] 跳过空阶段: stage=%s", stage_key)
+        for group_index, group_agents in enumerate(resource_plan.execution_groups, start=1):
+            if not group_agents:
+                logger.info("[Coordinator] 跳过空执行组: index=%s", group_index)
                 continue
 
-            # 每个阶段都只读取当前已完成的黑板结果，避免下游拿到半成品。
+            # 每个执行组只读取此前已完成的黑板结果，避免下游拿到半成品。
             logger.info(
-                "[Coordinator] 进入阶段: stage=%s label=%s agents=%s shared_memory_keys=%s",
-                stage_key,
-                stage_label,
-                stage_agents,
+                "[Coordinator] 进入执行组: index=%s/%s agents=%s shared_memory_keys=%s",
+                group_index,
+                len(resource_plan.execution_groups),
+                group_agents,
                 list(context_bag.keys()),
             )
             await self.emitter.emit_workflow(
-                stage_key,
-                f"阶段 [{stage_label}] 已启动，正在分配 {len(stage_agents)} 个智能体...",
+                "execution_group",
+                f"第 {group_index}/{len(resource_plan.execution_groups)} 组已启动：{', '.join(group_agents)}",
+                group_index=group_index,
+                group_total=len(resource_plan.execution_groups),
+                agents=group_agents,
+                execution_group=group_agents,
             )
-            for agent_name in stage_agents:
+
+            futures = []
+            skipped_results: list[tuple[str, dict]] = []
+            for agent_name in group_agents:
+                dependency_failures = self._dependency_failures(agent_name, resource_plan, final)
+                policy = resource_plan.failure_policy.get(agent_name, "independent_fail")
                 await self.emitter.emit_agent_status(
                     agent_name,
                     "queued",
-                    f"等待进入 {stage_label}",
-                    stage=stage_key,
+                    f"等待进入第 {group_index} 组",
+                    stage="execution_group",
                     visible=agent_name in visible_set,
                     dependency_only=agent_name in hidden_set,
+                    dependencies=resource_plan.dependencies.get(agent_name, []),
+                    failure_policy=policy,
                 )
-
-            futures = [
-                asyncio.create_task(
-                    self._run_agent_with_name(
+                if dependency_failures and policy == "skip_on_dependency_failed":
+                    skipped_result = await self._skip_agent(
                         agent_name=agent_name,
-                        params=resource_plan.agent_parameters.get(agent_name, {}),
-                        profile=snapshot.as_agent_profile(),
-                        personalized_context=personalized_context,
-                        shared_memory=context_bag,
+                        dependency_failures=dependency_failures,
                         visible_agents=visible_set,
                     )
+                    skipped_results.append((agent_name, skipped_result))
+                    continue
+
+                agent_memory = self._shared_memory_for_agent(agent_name, resource_plan, context_bag)
+                if dependency_failures and policy == "degraded_run":
+                    await self.emitter.emit_agent_log(
+                        agent_name,
+                        f"上游依赖未全部成功，将降级生成：{', '.join(dependency_failures)}",
+                        dependency_failures=dependency_failures,
+                    )
+                futures.append(
+                    asyncio.create_task(
+                        self._run_agent_with_name(
+                            agent_name=agent_name,
+                            params=resource_plan.agent_parameters.get(agent_name, {}),
+                            profile=snapshot.as_agent_profile(),
+                            personalized_context=personalized_context,
+                            shared_memory=agent_memory,
+                            visible_agents=visible_set,
+                            user_id=user_id,
+                            resource_id=resource_id,
+                        )
+                    )
                 )
-                for agent_name in stage_agents
-            ]
+
+            for agent_name, result in skipped_results:
+                final[agent_name] = result
+                completed_count += 1
+                if agent_name in visible_set:
+                    visible_completed_count += 1
+                await self.emitter.emit_bundle_update(
+                    completed=completed_count,
+                    total=total_agents,
+                    core_ready=self._core_ready(resource_plan, final),
+                    latest_agent=agent_name,
+                    visible_completed=visible_completed_count,
+                    visible_total=visible_total,
+                )
 
             for future in asyncio.as_completed(futures):
                 agent_name, result = await future
@@ -185,17 +279,11 @@ class CoordinatorAgent:
                     visible_completed=visible_completed_count,
                     visible_total=visible_total,
                 )
-            logger.info("[Coordinator] 阶段结束: stage=%s completed=%s/%s", stage_key, completed_count, total_agents)
+            logger.info("[Coordinator] 执行组结束: index=%s completed=%s/%s", group_index, completed_count, total_agents)
 
-        await self.emitter.emit_workflow("persisting", "正在保存本次资源包...")
-        try:
-            await self._save_resource(user_id, task, resource_plan, final)
-            await self.emitter.emit_agent_log("coordinator", "资源包已入库")
-        except Exception as exc:
-            logger.error("[Coordinator] 保存资源记录失败: %s", exc, exc_info=exc)
-            await self.emitter.emit_agent_log("coordinator", f"资源包保存失败，将仅保留本次流式结果：{exc}")
-
-        logger.info("[Coordinator] 执行结束: user_id=%s completed_agents=%s visible_agents=%s", user_id, list(final.keys()), resource_plan.visible_agents)
+        # 异步保存子表记录并更新主表状态（不阻塞主流程）
+        asyncio.create_task(self.resource_store.persist_all_results(resource_id, final))
+        logger.info("[Coordinator] 执行结束: user_id=%s resource_id=%s completed_agents=%s visible_agents=%s", user_id, resource_id, list(final.keys()), resource_plan.visible_agents)
         await self.emitter.emit_done("资源包构建完成")
         visible_final = {
             agent: final[agent]
@@ -230,7 +318,8 @@ class CoordinatorAgent:
     ) -> ResourcePlan:
         base_plan = build_default_resource_plan(task, allowed_agents)
         logger.info(
-            "[Coordinator] 默认资源计划已构建: ordered_agents=%s requested=%s execution=%s visible=%s hidden=%s",
+            "[Coordinator] 默认资源计划已构建: groups=%s ordered_agents=%s requested=%s execution=%s visible=%s hidden=%s",
+            base_plan.execution_groups,
             base_plan.ordered_agents,
             base_plan.requested_agents,
             base_plan.execution_agents,
@@ -246,7 +335,7 @@ class CoordinatorAgent:
             )
 
         try:
-            planned_tasks = await self._plan(
+            planner_plan = await self._plan(
                 task=task,
                 snapshot=snapshot,
                 personalized_context=personalized_context,
@@ -255,7 +344,7 @@ class CoordinatorAgent:
                 hidden_dependency_agents=base_plan.hidden_dependency_agents,
             )
             logger.info("[Coordinator] Planner 规划成功，开始合并参数")
-            return merge_planned_tasks_into_plan(base_plan, planned_tasks)
+            return merge_planner_plan_into_default(base_plan, planner_plan)
         except PlanningError as exc:
             logger.error("[Coordinator] 规划失败: %s", exc)
             await self.emitter.emit_agent_log("coordinator", f"规划失败，使用默认资源计划：{exc}")
@@ -273,7 +362,7 @@ class CoordinatorAgent:
         allowed_agents: list[str] | None,
         requested_agents: list[str] | None = None,
         hidden_dependency_agents: list[str] | None = None,
-    ) -> list[dict]:
+    ) -> ResourcePlan:
         if not PLANNER_PROMPT_PATH.exists():
             raise PlanningError(f"Planner prompt 不存在: {PLANNER_PROMPT_PATH}")
 
@@ -298,19 +387,96 @@ class CoordinatorAgent:
             HumanMessage(content="请根据以上信息生成资源任务规划。"),
         ]
         logger.info(
-            "[Coordinator] 正在调用 Planner (structured_output): course=%r allowed_agents=%s prompt_path=%s",
+            "[Coordinator] 正在调用 Planner (json_mode structured_output): course=%r allowed_agents=%s prompt_path=%s",
             task.get("course", ""),
             allowed_agents or "ALL",
             PLANNER_PROMPT_PATH,
         )
         response = await self._planner_llm.ainvoke(messages)
-        if not isinstance(response, PlannerPlanOutput):
-            raise PlanningError(f"Planner 返回类型异常: {type(response).__name__}")
+        response = PlannerPlanOutput.model_validate(response)
 
-        tasks = [t.model_dump() for t in response.tasks]
+        agent_parameters = dict(response.agent_parameters)
+        for task_item in response.tasks:
+            dumped = task_item.model_dump()
+            agent = dumped.get("agent")
+            if not agent:
+                continue
+            agent_parameters[agent] = {
+                **agent_parameters.get(agent, {}),
+                **(dumped.get("parameters") or {}),
+            }
 
-        logger.info("[Coordinator] Planner 返回 %s 个任务", len(tasks))
-        return self._filter_tasks_by_selection(tasks, allowed_agents)
+        plan = ResourcePlan(
+            execution_groups=response.execution_groups,
+            dependencies=response.dependencies,
+            failure_policy=response.failure_policy,
+            visible_agents=response.visible_agents,
+            hidden_dependency_agents=response.hidden_dependency_agents,
+            execution_agents=response.execution_agents,
+            agent_parameters=agent_parameters,
+        )
+
+        logger.info(
+            "[Coordinator] Planner 返回执行计划: groups=%s visible=%s execution=%s",
+            plan.execution_groups,
+            plan.visible_agents,
+            plan.execution_agents,
+        )
+        return plan
+
+    async def _skip_agent(
+        self,
+        agent_name: str,
+        dependency_failures: list[str],
+        visible_agents: set[str],
+    ) -> dict:
+        entry = get_agent_registry()[agent_name]
+        message = f"上游依赖失败，已跳过：{', '.join(dependency_failures)}"
+        await self.emitter.emit_agent_status(
+            agent_name,
+            "skipped",
+            message,
+            visible=agent_name in visible_agents,
+            dependency_failures=dependency_failures,
+            skipped_reason=message,
+            failure_policy="skip_on_dependency_failed",
+        )
+        return {
+            "success": False,
+            "skipped": True,
+            "type": entry.type,
+            "title": entry.role,
+            "content": "",
+            "error": message,
+        }
+
+    @staticmethod
+    def _dependency_failures(
+        agent_name: str,
+        plan: ResourcePlan,
+        results: dict[str, dict],
+    ) -> list[str]:
+        failures: list[str] = []
+        for dep in plan.dependencies.get(agent_name, []):
+            dep_result = results.get(dep)
+            if dep_result is not None and not dep_result.get("success"):
+                failures.append(dep)
+        return failures
+
+    @staticmethod
+    def _shared_memory_for_agent(
+        agent_name: str,
+        plan: ResourcePlan,
+        context_bag: dict[str, dict],
+    ) -> dict[str, dict]:
+        dependencies = plan.dependencies.get(agent_name, [])
+        if not dependencies:
+            return {}
+        return {
+            dep: context_bag[dep]
+            for dep in dependencies
+            if dep in context_bag
+        }
 
     async def _run_agent(
         self,
@@ -320,6 +486,8 @@ class CoordinatorAgent:
         personalized_context: PersonalizedTaskContext,
         shared_memory: dict,
         visible_agents: set[str] | None = None,
+        user_id: int = 0,
+        resource_id: int = 0,
     ) -> dict:
         entry = get_agent_registry()[agent_name]
         is_visible = True if visible_agents is None else (agent_name in visible_agents)
@@ -353,18 +521,17 @@ class CoordinatorAgent:
             "gap": params.get("gap", ""),
             "user_profile": profile,
             "shared_memory": shared_memory,
+            "user_id": user_id,
+            "resource_id": resource_id,
             **entry.extra_kwargs,
         }
-        for key in (
-            "target_md_path",
-            "edit_instruction",
-            "output_md_path",
-            "template_id",
-            "template_source_url",
-            "template_config_url",
-        ):
+        for key in ("target_md_path", "edit_instruction", "output_md_path"):
             if key in params:
                 kwargs[key] = params.get(key)
+        if agent_name == "ppt":
+            for key in ("template_id", "template_source_url", "template_config_url"):
+                if key in params:
+                    kwargs[key] = params.get(key)
         if agent_name == "mindmap":
             # 导图 Agent 需要额外的学习目标和补充说明来调整导图粒度。
             kwargs["need"] = params.get("need", "review")
@@ -373,6 +540,7 @@ class CoordinatorAgent:
         try:
             logger.info("[Coordinator] 调用 Agent 方法: agent=%s method=%s", agent_name, entry.method)
             fn = getattr(entry.agent_loader(), entry.method)
+            kwargs = _filter_kwargs_for_callable(fn, kwargs)
             result = await fn(**kwargs)
         except Exception as exc:
             logger.error("[Coordinator] Agent %s 执行失败: %s", agent_name, exc, exc_info=exc)
@@ -398,7 +566,7 @@ class CoordinatorAgent:
                 dependency_only=not is_visible,
             )
             if is_visible:
-                await self.emitter.emit_artifact_ready(agent_name, result)
+                await self.emitter.emit_artifact_ready(agent_name, _attach_file_url(result, resource_id))
             else:
                 await self.emitter.emit_agent_log(
                     agent_name,
@@ -429,6 +597,8 @@ class CoordinatorAgent:
         personalized_context: PersonalizedTaskContext,
         shared_memory: dict,
         visible_agents: set[str] | None = None,
+        user_id: int = 0,
+        resource_id: int = 0,
     ) -> tuple[str, dict]:
         result = await self._run_agent(
             agent_name=agent_name,
@@ -437,6 +607,8 @@ class CoordinatorAgent:
             personalized_context=personalized_context,
             shared_memory=shared_memory,
             visible_agents=visible_agents,
+            user_id=user_id,
+            resource_id=resource_id,
         )
         return agent_name, result
 
@@ -449,13 +621,8 @@ class CoordinatorAgent:
         return normalize_selected_resources(selected_resources)
 
     @staticmethod
-    def _filter_tasks_by_selection(tasks: list[dict], allowed_agents: list[str] | None) -> list[dict]:
-        return filter_tasks_by_selection(tasks, allowed_agents)
-
-    @staticmethod
     def _core_ready(plan: ResourcePlan, results: dict[str, dict]) -> bool:
-        return core_ready(plan, results)
-
-    @staticmethod
-    async def _save_resource(user_id: int, task: dict, resource_plan: ResourcePlan, results: dict) -> None:
-        await save_resource(user_id, task, resource_plan, results)
+        for agent_name in plan.visible_agents:
+            if agent_name in ("content", "mindmap", "quiz") and not results.get(agent_name, {}).get("success"):
+                return False
+        return True

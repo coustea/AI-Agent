@@ -4,6 +4,7 @@
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -12,7 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.infra.llm import get_deepseek_llm
 from app.infra.logging import get_logger
-from app.resource.utils import append_context, format_profile_fields, load_prompt, save_to_workplace
+from app.resource.utils import append_context, format_profile_fields, load_prompt, save_resource_file
 
 logger = get_logger(__name__)
 
@@ -57,12 +58,6 @@ class QuizOutput(BaseModel):
 
 
 class QuizAgent:
-    tool_names = [
-        "save_to_workplace", "read_file_safe",
-        "write_file", "edit_file", "append_file", "read_file_lines",
-        "list_directory", "file_tree", "find_files", "get_file_info",
-    ]
-
     def __init__(self) -> None:
         self.name = "QuizAgent"
         self.agent_dir = Path(__file__).parent
@@ -101,59 +96,96 @@ class QuizAgent:
             extract_memory=self._extract_memory,
         )
 
-    async def _generate_structured_questions(self, state: dict[str, Any]) -> QuizOutput:
-        prompt = self._build_system_message(state)
-        human = f"请为主题 '{state.get('topic')}' 生成一套分层练习题。"
-        structured_llm = self.llm.with_structured_output(QuizOutput)
-        return QuizOutput.model_validate(await structured_llm.ainvoke([HumanMessage(content=prompt), HumanMessage(content=human)]))
+    def _extract_json(self, text: str) -> dict | None:
+        """从文本中提取 JSON。"""
+        def _normalize_payload(value: Any) -> dict | None:
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, list):
+                return {"questions": value}
+            return None
 
-    async def _format_quiz_json_with_ds(
-        self,
-        *,
-        topic: str,
-        course: str,
-        raw_json: str,
-        parsed: list[dict[str, Any]],
-    ) -> str:
-        prompt = (
-            "你是题库 JSON 规范化助手。\n"
-            "请把输入题库转换为严格 JSON，必须满足：\n"
-            "1. 仅允许 question_type 为 choice 或 short_answer。\n"
-            "2. 必须同时包含这两种题型。\n"
-            "3. choice 必须有 options；short_answer 不要 options。\n"
-            "4. 保留并补全 stem/answer/explanation 字段。\n"
-            "5. 输出将通过 Pydantic + LangChain structured_output 校验。\n\n"
-            f"主题: {topic}\n"
-            f"课程: {course}\n"
-            f"输入 JSON:\n{raw_json}"
-        )
+        # 尝试直接解析
         try:
-            structured_llm = self.llm.with_structured_output(QuizOutput)
-            structured = await structured_llm.ainvoke([HumanMessage(content=prompt)])
-            validated = QuizOutput.model_validate(structured)
-            return json.dumps(
-                {"questions": [q.model_dump() for q in validated.questions]},
-                ensure_ascii=False,
-                indent=2,
-            )
-        except Exception as exc:
-            logger.warning("[QuizAgent] DS JSON 规范化失败，回退本地 JSON: %s", exc)
-        fallback_questions = []
-        for q in parsed:
-            q_type = q.get("question_type")
-            if q_type not in {"choice", "short_answer"}:
-                continue
-            fallback_questions.append(
-                {
-                    "difficulty": str(q.get("difficulty", "basic")),
-                    "question_type": q_type,
-                    "stem": str(q.get("stem", "")),
-                    "answer": str(q.get("answer", "")),
-                    "explanation": str(q.get("explanation", "")),
-                    "options": q.get("options") if q_type == "choice" else None,
-                }
-            )
-        return json.dumps({"questions": fallback_questions}, ensure_ascii=False, indent=2)
+            return _normalize_payload(json.loads(text))
+        except json.JSONDecodeError:
+            pass
+
+        # 尝试提取代码块中的 JSON
+        json_block = re.search(r"```(?:json)?\s*\n(.*?)\n```", text, re.DOTALL)
+        if json_block:
+            try:
+                return _normalize_payload(json.loads(json_block.group(1)))
+            except json.JSONDecodeError:
+                pass
+
+        # 有些模型会直接输出数组形式的题目列表，前后还可能带说明文字。
+        array_match = re.search(r"\[.*\]", text, re.DOTALL)
+        if array_match:
+            try:
+                return _normalize_payload(json.loads(array_match.group(0)))
+            except json.JSONDecodeError:
+                pass
+
+        # 尝试提取 { } 包裹的内容
+        brace_match = re.search(r"\{.*\}", text, re.DOTALL)
+        if brace_match:
+            try:
+                return _normalize_payload(json.loads(brace_match.group(0)))
+            except json.JSONDecodeError:
+                pass
+
+        return None
+
+    async def _generate_questions(self, state: dict[str, Any]) -> QuizOutput:
+        """生成题目，使用普通 JSON 输出方式。"""
+        prompt = self._build_system_message(state)
+
+        json_format = '''
+{
+  "questions": [
+    {
+      "difficulty": "basic",
+      "question_type": "choice",
+      "stem": "题干内容",
+      "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
+      "answer": "B",
+      "explanation": "解析说明"
+    },
+    {
+      "difficulty": "intermediate",
+      "question_type": "short_answer",
+      "stem": "题干内容",
+      "answer": "答案内容",
+      "explanation": "解析说明"
+    }
+  ]
+}
+'''
+        human = f"""请为主题 '{state.get("topic")}' 生成一套分层练习题。
+
+要求：
+1. 至少生成 4 道题
+2. 必须同时包含 choice（选择题）和 short_answer（简答题）两种题型
+3. difficulty 可选：basic、intermediate、challenge
+4. 选择题必须有 options 字段（至少2个选项），简答题不要 options 字段
+5. 只输出 JSON，不要其他内容
+
+JSON 格式示例：
+{json_format}"""
+
+        response = await self.llm.ainvoke([
+            HumanMessage(content=prompt),
+            HumanMessage(content=human),
+        ])
+
+        # 提取并解析 JSON
+        parsed = self._extract_json(response.content)
+        if not parsed:
+            raise ValueError("无法从响应中提取有效的 JSON")
+
+        # 验证并转换为 QuizOutput
+        return QuizOutput.model_validate(parsed)
 
     async def generate_quiz(
         self,
@@ -163,8 +195,10 @@ class QuizAgent:
         gap: str = "",
         user_profile: dict | None = None,
         shared_memory: dict | None = None,
+        user_id: int = 0,
+        resource_id: int = 0,
     ) -> dict[str, Any]:
-        logger.info("[QuizAgent] 收到生成请求: topic=%s", topic)
+        logger.info("[QuizAgent] 收到生成请求: topic=%s user_id=%s resource_id=%s", topic, user_id, resource_id)
         state = {
             "major": major,
             "course": course,
@@ -175,27 +209,24 @@ class QuizAgent:
         }
 
         try:
-            output = await self._generate_structured_questions(state)
+            output = await self._generate_questions(state)
         except Exception as exc:
             logger.error("[QuizAgent] 题库生成失败: %s", exc)
-            return {"success": False, "questions": [], "raw_json": "", "error": str(exc)}
+            return {"success": False, "questions": [], "content": None, "error": str(exc)}
 
         questions = [q.model_dump() for q in output.questions]
-        raw_json = json.dumps({"questions": questions}, ensure_ascii=False)
-        file_path = save_to_workplace("quiz", topic, json.dumps(questions, ensure_ascii=False, indent=2), "json")
-        formatted_output = await self._format_quiz_json_with_ds(
-            topic=topic,
-            course=course,
-            raw_json=raw_json,
-            parsed=questions,
-        )
-        formatted_file_path = save_to_workplace("quiz", topic, formatted_output, "formatted.json") if formatted_output else None
+        content = json.dumps({"questions": questions}, ensure_ascii=False, indent=2)
+
+        # 保存文件到统一路径
+        file_path = None
+        if user_id and resource_id:
+            file_path = save_resource_file(topic, content, user_id, resource_id, "json", prefix="quiz")
+            logger.info("[QuizAgent] 文件已保存: %s", file_path)
+
         return {
             "success": True,
             "questions": questions,
+            "content": content,
             "file_path": file_path,
-            "raw_json": raw_json,
-            "formatted_output": formatted_output,
-            "formatted_file_path": formatted_file_path,
             "error": None,
         }

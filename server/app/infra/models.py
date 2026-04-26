@@ -98,6 +98,7 @@ class ChatMessage(SQLModel, table=True):
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
+    diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 图解数据（Mermaid 源码等）
     created_at: datetime = Field(default_factory=datetime.now, index=True)  # 创建时间索引，用于过期清理
 
 
@@ -206,7 +207,7 @@ class UserProfileHistory(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class GeneratedResource(SQLModel, table=True):
-    """生成资源记录表 — 记录每次多智能体资源生成的输入参数和各阶段产出"""
+    """生成资源主表 — 记录每次多智能体资源生成的输入参数和整体状态"""
     __tablename__ = "generated_resources"
 
     id: int | None = Field(default=None, primary_key=True)
@@ -215,19 +216,88 @@ class GeneratedResource(SQLModel, table=True):
     gap: str = Field(sa_column=Column(Text))  # 知识缺口描述
     need: str = Field(default="review", max_length=50)  # 需求类型（如 "review"、"learn"）
     request_extra: str | None = Field(default=None, sa_column=Column(Text))  # 用户附加要求
-    status: str = Field(default="completed", max_length=50)  # 生成状态
+    status: str = Field(default="pending", max_length=50)  # 整体生成状态
     plan_result: str | None = Field(default=None, sa_column=Column(Text))  # DAG 规划结果（JSON）
+    created_at: datetime = Field(default_factory=datetime.now)
 
-    # 各资源 Agent 的产出结果（JSON 字符串）
-    mindmap_result: str | None = Field(default=None, sa_column=Column(Text))  # 思维导图
-    content_result: str | None = Field(default=None, sa_column=Column(Text))  # 内容讲解
-    code_result: str | None = Field(default=None, sa_column=Column(Text))  # 代码示例
-    quiz_result: str | None = Field(default=None, sa_column=Column(Text))  # 练习题
-    reading_result: str | None = Field(default=None, sa_column=Column(Text))  # 延伸阅读
-    image_result: str | None = Field(default=None, sa_column=Column(Text))  # 配图
-    ppt_result: str | None = Field(default=None, sa_column=Column(Text))  # PPT 大纲
-    video_result: str | None = Field(default=None, sa_column=Column(Text))  # 视频
 
+class ResourceMindmap(SQLModel, table=True):
+    """思维导图资源子表"""
+    __tablename__ = "resource_mindmaps"
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    file_path: str | None = Field(default=None, max_length=500)  # HTML文件路径
+    content: str | None = Field(default=None, sa_column=Column(Text))  # Markdown原文
+    status: str = Field(default="pending", max_length=50)  # pending/success/failed
+    error: str | None = Field(default=None, sa_column=Column(Text))  # 错误信息
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class ResourceContent(SQLModel, table=True):
+    """内容讲解资源子表"""
+    __tablename__ = "resource_contents"
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
+    content: str | None = Field(default=None, sa_column=Column(Text))  # 内容文本
+    status: str = Field(default="pending", max_length=50)
+    error: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class ResourceQuiz(SQLModel, table=True):
+    """练习题资源子表"""
+    __tablename__ = "resource_quizzes"
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
+    content: str | None = Field(default=None, sa_column=Column(Text))  # 题目内容（JSON或文本）
+    status: str = Field(default="pending", max_length=50)
+    error: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class ResourceReading(SQLModel, table=True):
+    """延伸阅读资源子表"""
+    __tablename__ = "resource_readings"
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
+    content: str | None = Field(default=None, sa_column=Column(Text))  # 阅读列表内容（JSON或文本）
+    status: str = Field(default="pending", max_length=50)
+    error: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class ResourceCode(SQLModel, table=True):
+    """代码实操资源子表"""
+    __tablename__ = "resource_codes"
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
+    content: str | None = Field(default=None, sa_column=Column(Text))  # 分步讲解内容
+    full_code: str | None = Field(default=None, sa_column=Column(Text))  # 完整代码
+    language: str | None = Field(default=None, max_length=50)  # 编程语言
+    status: str = Field(default="pending", max_length=50)
+    error: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class ResourceMedia(SQLModel, table=True):
+    """多模态资源子表（PPT/图片/视频）"""
+    __tablename__ = "resource_media"
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    media_type: str = Field(max_length=20, index=True)  # ppt/image/video
+    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
+    status: str = Field(default="pending", max_length=50)
+    error: str | None = Field(default=None, sa_column=Column(Text))
     created_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -269,6 +339,12 @@ REGISTERED_MODELS = (
     UserProfile,
     UserProfileHistory,
     GeneratedResource,
+    ResourceMindmap,
+    ResourceContent,
+    ResourceQuiz,
+    ResourceReading,
+    ResourceCode,
+    ResourceMedia,
     LearningEvent,
     User,
 )

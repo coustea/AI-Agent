@@ -21,15 +21,26 @@ const content = computed(() => getMarkdownContent(props.resultData))
 <style scoped>
 .markdown-resource {
   min-width: 0;
+  width: 100%;
 }
 
 .markdown-shell {
   color: #263446;
   line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.markdown-shell :deep(pre) {
+  border-radius: 8px;
+  background: #0f172a;
+}
+
+.markdown-shell :deep(code) {
+  white-space: pre-wrap;
 }
 
 .compact .markdown-shell {
-  max-height: 150px;
+  max-height: 158px;
   overflow: hidden;
   font-size: 0.86rem;
   mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
@@ -44,6 +55,10 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 .markdown-empty {
+  padding: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
   color: #64748b;
   font-size: 0.9rem;
 }

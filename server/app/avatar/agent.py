@@ -142,8 +142,12 @@ class AvatarAgent:
     """数字人 Agent — 独立 LangGraph 图"""
 
     def __init__(self) -> None:
+        # 主模型使用 Spark MAX，负责直接回答（带并发控制）
         self.llm = get_spark_llm(temperature=0.7, streaming=True)
+        # 分类器使用 DeepSeek
         self.classifier_llm = get_deepseek_llm(temperature=0.0, max_tokens=100)
+        # 工具调用使用 DeepSeek（Spark 不支持工具调用）
+        self.tool_llm = get_deepseek_llm(temperature=0.2, streaming=False)
         self.memory_layer = MemoryLayer(module_name="avatar")
         self.vision_service = build_vision_service(get_glm_vision_llm())
         self._graph = self._build_graph()
@@ -381,9 +385,10 @@ class AvatarAgent:
         return {"messages": [AIMessage(content=text)]}
 
     async def _agent_node(self, state: AvatarState) -> dict:
-        """工具调用路径"""
+        """工具调用路径 — 使用 DeepSeek 进行工具调用"""
         tools = _lazy_import_tools()
-        llm_with_tools = self.llm.bind_tools(tools) if tools else self.llm
+        # 使用 DeepSeek 进行工具调用（Spark 不支持 bind_tools）
+        llm_with_tools = self.tool_llm.bind_tools(tools) if tools else self.tool_llm
 
         from app.shared.request_context import set_user_id, set_session_id
         set_user_id(state["user_id"])

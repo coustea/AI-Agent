@@ -85,6 +85,8 @@ class PersonalizedTaskContext(BaseModel):
 
 
 class ResourcePlan(BaseModel):
+    execution_groups: list[list[str]] = Field(default_factory=list)
+    failure_policy: dict[str, str] = Field(default_factory=dict)
     core_agents: list[str] = Field(default_factory=list)
     enhancement_agents: list[str] = Field(default_factory=list)
     presentation_agents: list[str] = Field(default_factory=list)
@@ -98,4 +100,11 @@ class ResourcePlan(BaseModel):
     @property
     def ordered_agents(self) -> list[str]:
         # coordinator 用这个顺序统计总任务数和默认执行顺序。
+        if self.execution_groups:
+            ordered: list[str] = []
+            for group in self.execution_groups:
+                for agent in group:
+                    if agent not in ordered:
+                        ordered.append(agent)
+            return ordered
         return self.core_agents + self.enhancement_agents + self.presentation_agents

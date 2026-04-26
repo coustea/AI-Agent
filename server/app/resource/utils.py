@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 from app.infra.logging import get_logger
 from app.resource.schemas import ResourcePlan
+from app.shared.paths import WORKPLACE_DIR, RESOURCE_DIR
 
 logger = get_logger(__name__)
 
@@ -34,6 +36,26 @@ DEFAULT_DEPENDENCIES: dict[str, list[str]] = {
     "code": ["mindmap", "content"],
     "ppt": ["content", "mindmap"],
 }
+
+DEFAULT_EXECUTION_LAYER: dict[str, int] = {
+    "content": 0,
+    "mindmap": 0,
+    "quiz": 1,
+    "reading": 1,
+    "code": 1,
+    "ppt": 2,
+}
+
+DEFAULT_FAILURE_POLICY: dict[str, str] = {
+    "content": "independent_fail",
+    "mindmap": "independent_fail",
+    "quiz": "degraded_run",
+    "reading": "degraded_run",
+    "code": "degraded_run",
+    "ppt": "skip_on_dependency_failed",
+}
+
+FAILURE_POLICIES = {"independent_fail", "degraded_run", "skip_on_dependency_failed"}
 
 
 # =============================================================================
@@ -90,8 +112,47 @@ def append_context(
 # 文件保存与工具加载
 # =============================================================================
 
+def save_resource_file(
+    topic: str,
+    content: str,
+    user_id: int,
+    resource_id: int,
+    ext: str = "md",
+    prefix: str | None = None,
+) -> str:
+    """保存资源文件到统一路径: workplace/resource/{user_id}/{resource_id}/{topic}.{ext}
+
+    Args:
+        topic: 主题名称（用于生成文件名）
+        content: 文件内容
+        user_id: 用户 ID
+        resource_id: 资源 ID
+        ext: 文件扩展名
+        prefix: 可选文件名前缀，用于隔离不同 Agent 的产物
+
+    Returns:
+        文件路径
+    """
+    safe_topic = re.sub(r'[\\/*?:"<>|]', "", topic).strip()[:50]
+    if not safe_topic:
+        safe_topic = "untitled"
+
+    target_dir = RESOURCE_DIR / str(user_id) / str(resource_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_prefix = re.sub(r'[\\/*?:"<>|]', "", prefix or "").strip()
+    filename = f"{safe_prefix}_{safe_topic}.{ext}" if safe_prefix else f"{safe_topic}.{ext}"
+    filepath = target_dir / filename
+
+    filepath.write_text(content, encoding="utf-8")
+    return str(filepath)
+
+
 def save_to_workplace(sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-    """保存内容到 workplace 目录，返回文件路径。"""
+    """保存内容到 workplace 目录，返回文件路径。
+
+    已废弃：请使用 save_resource_file 统一保存到 workplace/{user_id}/{resource_id}/
+    """
     from app.tools.registry import get as get_tool
 
     return get_tool("save_to_workplace").invoke(
@@ -235,6 +296,53 @@ def expand_dependencies(selected: list[str], dependency_map: dict[str, list[str]
     return ordered
 
 
+def build_execution_groups(
+    execution_agents: list[str],
+    dependencies: dict[str, list[str]],
+) -> list[list[str]]:
+    """Build dependency-ordered parallel execution groups."""
+    execution_set = set(execution_agents)
+    remaining = list(execution_agents)
+    completed: set[str] = set()
+    groups: list[list[str]] = []
+
+    while remaining:
+        ready = [
+            agent
+            for agent in remaining
+            if all(dep in completed or dep not in execution_set for dep in dependencies.get(agent, []))
+        ]
+        if not ready:
+            logger.warning("[Planning] 依赖图存在环或缺口，剩余 Agent 将作为降级组执行: %s", remaining)
+            ready = list(remaining)
+        min_layer = min(DEFAULT_EXECUTION_LAYER.get(agent, 99) for agent in ready)
+        group = [agent for agent in ready if DEFAULT_EXECUTION_LAYER.get(agent, 99) == min_layer]
+        groups.append(group)
+        completed.update(group)
+        remaining = [agent for agent in remaining if agent not in set(group)]
+
+    return groups
+
+
+def execution_groups_follow_dependencies(
+    groups: list[list[str]],
+    dependencies: dict[str, list[str]],
+) -> bool:
+    """Return whether every dependency appears in an earlier group."""
+    group_index: dict[str, int] = {}
+    for index, group in enumerate(groups):
+        for agent in group:
+            group_index[agent] = index
+
+    for agent, deps in dependencies.items():
+        if agent not in group_index:
+            return False
+        for dep in deps:
+            if dep in group_index and group_index[dep] >= group_index[agent]:
+                return False
+    return True
+
+
 def build_default_resource_plan(
     task: dict[str, Any],
     allowed_agents: list[str] | None,
@@ -274,7 +382,18 @@ def build_default_resource_plan(
             "template_config_url": task.get("template_config_url") or "",
         }
 
+    dependencies = {
+        agent: [dep for dep in DEFAULT_DEPENDENCIES.get(agent, []) if dep in execution_set]
+        for agent in execution_agents
+    }
+    execution_groups = build_execution_groups(execution_agents, dependencies)
+
     return ResourcePlan(
+        execution_groups=execution_groups,
+        failure_policy={
+            agent: DEFAULT_FAILURE_POLICY.get(agent, "independent_fail")
+            for agent in execution_agents
+        },
         core_agents=[agent for agent in CORE_AGENTS if agent in execution_set],
         enhancement_agents=[agent for agent in ENHANCEMENT_AGENTS if agent in execution_set],
         presentation_agents=[agent for agent in PRESENTATION_AGENTS if agent in execution_set],
@@ -282,11 +401,90 @@ def build_default_resource_plan(
         execution_agents=execution_agents,
         visible_agents=visible_agents,
         hidden_dependency_agents=hidden_dependency_agents,
-        dependencies={
-            agent: [dep for dep in DEFAULT_DEPENDENCIES.get(agent, []) if dep in execution_set]
+        dependencies=dependencies,
+        agent_parameters={agent: _params() for agent in execution_agents},
+    )
+
+
+def normalize_resource_plan(
+    plan: ResourcePlan,
+    allowed_agents: list[str] | None = None,
+) -> ResourcePlan:
+    """Normalize planner output into a safe executable plan."""
+    registry = get_agent_registry()
+    allowed_set = set(allowed_agents or ALL_AGENTS)
+
+    visible_agents: list[str] = []
+    for agent in plan.visible_agents or plan.requested_agents or []:
+        if agent in registry and agent in allowed_set and agent not in visible_agents:
+            visible_agents.append(agent)
+    if not visible_agents:
+        visible_agents = [agent for agent in ALL_AGENTS if agent in allowed_set]
+
+    execution_seed = plan.execution_agents or visible_agents
+    execution_agents = expand_dependencies(
+        [agent for agent in execution_seed if agent in registry and agent in allowed_set],
+        DEFAULT_DEPENDENCIES,
+    )
+    if not execution_agents:
+        execution_agents = expand_dependencies(visible_agents, DEFAULT_DEPENDENCIES)
+
+    execution_set = set(execution_agents)
+    visible_agents = [agent for agent in visible_agents if agent in execution_set]
+    hidden_dependency_agents = [agent for agent in execution_agents if agent not in set(visible_agents)]
+
+    dependencies: dict[str, list[str]] = {}
+    for agent in execution_agents:
+        raw_deps = plan.dependencies.get(agent, DEFAULT_DEPENDENCIES.get(agent, []))
+        dependencies[agent] = [
+            dep
+            for dep in raw_deps
+            if dep in execution_set and dep != agent
+        ]
+
+    groups: list[list[str]] = []
+    seen: set[str] = set()
+    for raw_group in plan.execution_groups:
+        group = [
+            agent
+            for agent in raw_group
+            if agent in execution_set and agent not in seen
+        ]
+        if group:
+            groups.append(group)
+            seen.update(group)
+    missing_agents = [agent for agent in execution_agents if agent not in seen]
+    if missing_agents:
+        generated_groups = build_execution_groups(missing_agents, dependencies)
+        groups.extend(generated_groups)
+    if not groups:
+        groups = build_execution_groups(execution_agents, dependencies)
+    elif not execution_groups_follow_dependencies(groups, dependencies):
+        logger.warning("[Planning] Planner 执行组不满足依赖顺序，将按依赖重建: %s", groups)
+        groups = build_execution_groups(execution_agents, dependencies)
+
+    failure_policy = {}
+    for agent in execution_agents:
+        policy = plan.failure_policy.get(agent) or DEFAULT_FAILURE_POLICY.get(agent, "independent_fail")
+        if policy not in FAILURE_POLICIES:
+            policy = DEFAULT_FAILURE_POLICY.get(agent, "independent_fail")
+        failure_policy[agent] = policy
+
+    return ResourcePlan(
+        execution_groups=groups,
+        failure_policy=failure_policy,
+        core_agents=[agent for agent in CORE_AGENTS if agent in execution_set],
+        enhancement_agents=[agent for agent in ENHANCEMENT_AGENTS if agent in execution_set],
+        presentation_agents=[agent for agent in PRESENTATION_AGENTS if agent in execution_set],
+        requested_agents=visible_agents,
+        execution_agents=execution_agents,
+        visible_agents=visible_agents,
+        hidden_dependency_agents=hidden_dependency_agents,
+        dependencies=dependencies,
+        agent_parameters={
+            agent: plan.agent_parameters.get(agent, {})
             for agent in execution_agents
         },
-        agent_parameters={agent: _params() for agent in execution_agents},
     )
 
 
@@ -294,7 +492,7 @@ def merge_planned_tasks_into_plan(
     plan: ResourcePlan,
     tasks: list[dict[str, Any]],
 ) -> ResourcePlan:
-    """将 Planner 任务合并到资源计划。"""
+    """将旧版 Planner 任务合并到资源计划。"""
     for task in tasks:
         agent = task.get("agent")
         if agent not in plan.agent_parameters:
@@ -305,7 +503,32 @@ def merge_planned_tasks_into_plan(
         merged = {**plan.agent_parameters[agent], **parameters}
         plan.agent_parameters[agent] = merged
         logger.info("[Planning] 已合并 Planner 参数: agent=%s keys=%s", agent, list(parameters.keys()))
-    return plan
+    return normalize_resource_plan(plan, plan.execution_agents)
+
+
+def merge_planner_plan_into_default(
+    default_plan: ResourcePlan,
+    planner_plan: ResourcePlan,
+) -> ResourcePlan:
+    """Merge explicit planner output with deterministic defaults."""
+    allowed = default_plan.execution_agents
+    normalized = normalize_resource_plan(planner_plan, allowed)
+    merged_parameters = {
+        agent: {
+            **default_plan.agent_parameters.get(agent, {}),
+            **normalized.agent_parameters.get(agent, {}),
+        }
+        for agent in normalized.execution_agents
+    }
+    normalized.agent_parameters = merged_parameters
+    normalized.requested_agents = [
+        agent for agent in normalized.visible_agents if agent in default_plan.visible_agents
+    ] or list(default_plan.visible_agents)
+    normalized.visible_agents = list(normalized.requested_agents)
+    normalized.hidden_dependency_agents = [
+        agent for agent in normalized.execution_agents if agent not in set(normalized.visible_agents)
+    ]
+    return normalize_resource_plan(normalized, allowed)
 
 
 def iter_plan_phases(plan: ResourcePlan) -> list[tuple[str, str, list[str]]]:
@@ -382,65 +605,6 @@ def core_ready(plan: ResourcePlan, results: dict[str, dict]) -> bool:
         if not results.get(agent_name, {}).get("success"):
             return False
     return True
-
-
-async def save_resource(
-    user_id: int,
-    task: dict,
-    resource_plan: ResourcePlan,
-    results: dict,
-) -> None:
-    """持久化资源包到数据库。"""
-    from sqlmodel.ext.asyncio.session import AsyncSession
-    from app.infra.database import engine
-    from app.infra.models import GeneratedResource
-
-    def _serialize(data: dict | None) -> str | None:
-        if not data:
-            return None
-        return json.dumps(data, ensure_ascii=False)
-
-    logger.info(
-        "[Coordinator] 开始持久化资源包: user_id=%s course=%r result_keys=%s",
-        user_id,
-        task.get("course", ""),
-        list(results.keys()),
-    )
-    successful_agents = [name for name, value in results.items() if value.get("success")]
-    failed_agents = [name for name, value in results.items() if not value.get("success")]
-    if failed_agents and successful_agents:
-        status = "partial_success"
-    elif failed_agents:
-        status = "failed"
-    else:
-        status = "completed"
-    async with AsyncSession(engine) as session:
-        resource = GeneratedResource(
-            user_id=user_id,
-            course=task.get("course", ""),
-            gap=task.get("gap", ""),
-            need=task.get("need", "review"),
-            request_extra=task.get("extra", ""),
-            status=status,
-            plan_result=json.dumps(resource_plan.model_dump(), ensure_ascii=False),
-            mindmap_result=_serialize(results.get("mindmap")),
-            content_result=_serialize(results.get("content")),
-            code_result=_serialize(results.get("code")),
-            quiz_result=_serialize(results.get("quiz")),
-            reading_result=_serialize(results.get("reading")),
-            image_result=_serialize(results.get("image")),
-            ppt_result=_serialize(results.get("ppt")),
-            video_result=_serialize(results.get("video")),
-        )
-        session.add(resource)
-        await session.commit()
-        logger.info(
-            "[Coordinator] 资源包持久化完成: user_id=%s status=%s successful=%s failed=%s",
-            user_id,
-            status,
-            successful_agents,
-            failed_agents,
-        )
 
 
 # =============================================================================

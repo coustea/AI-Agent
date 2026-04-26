@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Lightning, Opportunity, TrendCharts,
@@ -122,6 +122,7 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { RadarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
+import { getProfile } from '@/api/ai'
 
 use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
 
@@ -147,15 +148,19 @@ const multimodalResources = ref([
 ])
 
 // --- 4. 画像与评估数据 ---
+const profileScores = ref([60, 60, 60, 60, 60, 60, 60, 60]) // 默认分值
+
 const profileOption = computed(() => ({
   radar: {
     indicator: [
       { name: '知识基础', max: 100 },
       { name: '认知风格', max: 100 },
       { name: '易错偏好', max: 100 },
-      { name: '学习兴趣', max: 100 },
-      { name: '学习效率', max: 100 },
-      { name: '实践能力', max: 100 }
+      { name: '学习目标', max: 100 },
+      { name: '学习历史', max: 100 },
+      { name: '兴趣偏好', max: 100 },
+      { name: '学习节奏', max: 100 },
+      { name: '认知水平', max: 100 }
     ],
     shape: 'circle',
     splitNumber: 4,
@@ -166,7 +171,7 @@ const profileOption = computed(() => ({
   series: [{
     type: 'radar',
     data: [{
-      value: [85, 60, 40, 92, 75, 88],
+      value: profileScores.value,
       areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
       lineStyle: { color: '#4F46E5', width: 2 },
       symbol: 'circle',
@@ -195,6 +200,31 @@ const trendOption = computed(() => ({
     }
   }]
 }))
+
+onMounted(async () => {
+  try {
+    const res = await getProfile()
+    const data = res.data.data
+    if (data) {
+      profileScores.value = [
+        data.knowledge_level_score ?? 60,
+        data.cognitive_style_score ?? 60,
+        data.error_pattern_score ?? 60,
+        data.learning_goal_score ?? 60,
+        data.learning_history_score ?? 60,
+        data.interest_preference_score ?? 60,
+        data.learning_pace_score ?? 60,
+        data.cognitive_level_score ?? 60
+      ]
+      
+      if (data.profile_summary) {
+         aiInsight.value = data.profile_summary
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load profile', e)
+  }
+})
 </script>
 
 <style scoped>
