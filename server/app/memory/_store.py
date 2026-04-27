@@ -210,7 +210,7 @@ def classify_merge_relation(memory_type: str, new_text: str | None, existing_tex
 
 
 def score_merge_candidate(memory_type: str, new_text: str | None, candidate: Any) -> MergeDecision | None:  # 为单个候选记忆计算合并匹配分（relation 为主，importance/证据/新鲜度仅作极弱的平局裁决）
-    relation, relation_score = classify_merge_relation(memory_type, new_text, getattr(candidate, "content", None))
+    relation, relation_score = classify_merge_relation(memory_type, new_text, getattr(candidate, "content_markdown", None))
     if relation_score <= 0:
         return None
 
@@ -232,7 +232,7 @@ def rank_merge_candidates(memory_type: str, new_text: str | None, candidates: It
             clamp_importance(getattr(item.candidate, "importance", None)),
             max(1, int(getattr(item.candidate, "evidence_count", 1) or 1)),
             (getattr(item.candidate, "last_seen_at", None) or getattr(item.candidate, "created_at", None) or datetime.min),
-            len(normalize_text(getattr(item.candidate, "content", None) or "")),
+            len(normalize_text(getattr(item.candidate, "content_markdown", None) or "")),
         ),
         reverse=True,
     )
@@ -661,7 +661,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             )
             candidates = list((await session.exec(exact_stmt)).all())
             for duplicate in candidates:
-                if normalize_text(duplicate.content) == normalized_content:
+                if normalize_text(duplicate.content_markdown) == normalized_content:
                     duplicate.evidence_count = max(1, duplicate.evidence_count) + 1
                     duplicate.last_seen_at = _now
                     duplicate.session_id = session_id or duplicate.session_id
@@ -678,12 +678,12 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                     await session.refresh(duplicate)
                     return duplicate
 
-            # 没有完全相同内容时，才按相似/包含/重叠关系挑选最优候选合并（并用更信息丰富的文本覆盖 content）。
+            # 没有完全相同内容时，才按相似/包含/重叠关系挑选最优候选合并（并用更信息丰富的文本覆盖 content_markdown）。
             ranked_candidates = rank_merge_candidates(normalized_type, cleaned_content, candidates)
             if ranked_candidates:
                 best_match = ranked_candidates[0]
                 candidate = best_match.candidate
-                candidate.content = choose_more_informative_content(candidate.content, cleaned_content)
+                candidate.content_markdown = choose_more_informative_content(candidate.content_markdown, cleaned_content)
                 candidate.evidence_count = max(1, candidate.evidence_count) + 1
                 candidate.last_seen_at = _now
                 candidate.session_id = session_id or candidate.session_id
@@ -704,7 +704,8 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                 user_id=user_id,
                 session_id=session_id or "",
                 module=module,
-                content=cleaned_content,
+                title=None,
+                content_markdown=cleaned_content,
                 memory_type=normalized_type,
                 source="fact_agent",
                 expires_at=expires_at,
@@ -752,7 +753,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             m_type = item.memory_type or MEMORY_TYPE_FACT
             if m_type not in target_types:
                 continue
-            normalized = normalize_text(item.content)
+            normalized = normalize_text(item.content_markdown)
             if not normalized or normalized in seen_by_type[m_type]:
                 continue
             seen_by_type[m_type].add(normalized)
@@ -775,13 +776,15 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         source: str = "conversation",
         source_message_count: int = 0,
         module: str = "mentor",
+        title: str | None = None,
     ) -> UserMemory:
         async with AsyncSession(self.engine) as session:
             memory = UserMemory(
                 user_id=user_id,
                 session_id=session_id,
                 module=module,
-                content=content,
+                title=title,
+                content_markdown=content,
                 memory_type=memory_type,
                 dimension=dimension,
                 importance=clamp_importance(importance),
@@ -820,7 +823,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                 cleaned_content = content.strip()
                 if not normalize_text(cleaned_content):
                     raise ValueError("记忆内容不能为空")
-                memory.content = cleaned_content
+                memory.content_markdown = cleaned_content
             if memory_type is not None:
                 normalized_type = memory_type.strip().lower()
                 if normalized_type not in FACT_AGENT_MEMORY_TYPES:
@@ -891,6 +894,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             source=module,
             source_message_count=len(summarized_ids),
             module=module,
+            title="对话摘要",
         )
         await self.delete_old_messages(user_id, session_id, module, keep_recent)
 

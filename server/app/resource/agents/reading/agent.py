@@ -47,22 +47,69 @@ class ReadingAgent:
 
     @staticmethod
     def _format_user_profile(profile: dict[str, Any]) -> str:
-        return format_profile_fields(
-            profile,
-            [
-                ("interest_preference", "兴趣偏好"),
-                ("cognitive_style", "认知风格"),
-            ],
-        )
+        """格式化用户画像，从 profile_markdown 中提取兴趣和认知风格信息。"""
+        profile_markdown = profile.get("profile_markdown", "")
+        if not profile_markdown:
+            return ""
+
+        # 解析 Markdown 提取相关字段
+        sections: dict[str, str] = {}
+        current_section: str | None = None
+        current_content: list[str] = []
+
+        for line in profile_markdown.split("\n"):
+            if line.startswith("## "):
+                if current_section and current_content:
+                    sections[current_section] = "\n".join(current_content).strip()
+                current_section = line[3:].strip()
+                current_content = []
+            else:
+                if current_section:
+                    current_content.append(line)
+        if current_section and current_content:
+            sections[current_section] = "\n".join(current_content).strip()
+
+        parts: list[str] = []
+        if "兴趣方向" in sections:
+            parts.append(f"- 兴趣偏好：{sections['兴趣方向']}")
+        if "认知风格" in sections:
+            parts.append(f"- 认知风格：{sections['认知风格']}")
+        return "\n".join(parts)
 
     def _build_system_message(self, state: dict[str, Any]) -> str:
         user_profile = state.get("user_profile", {})
+        profile_markdown = user_profile.get("profile_markdown", "")
+
+        # 解析 Markdown 提取兴趣和认知风格
+        interest_preference = ""
+        cognitive_style = ""
+        sections: dict[str, str] = {}
+        current_section: str | None = None
+        current_content: list[str] = []
+
+        for line in profile_markdown.split("\n"):
+            if line.startswith("## "):
+                if current_section and current_content:
+                    sections[current_section] = "\n".join(current_content).strip()
+                current_section = line[3:].strip()
+                current_content = []
+            else:
+                if current_section:
+                    current_content.append(line)
+        if current_section and current_content:
+            sections[current_section] = "\n".join(current_content).strip()
+
+        if "兴趣方向" in sections:
+            interest_preference = sections["兴趣方向"]
+        if "认知风格" in sections:
+            cognitive_style = sections["认知风格"]
+
         system_prompt = self.prompt_template.format(
             major=state.get("major", "通用"),
             course=state.get("course", ""),
             topic=state.get("topic", ""),
-            interest_preference=user_profile.get("interest_preference", ""),
-            cognitive_style=user_profile.get("cognitive_style", ""),
+            interest_preference=interest_preference,
+            cognitive_style=cognitive_style,
         )
         return append_context(
             system_prompt,

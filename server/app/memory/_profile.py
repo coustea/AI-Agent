@@ -2,30 +2,19 @@
 
 模块职责：
 - 管理用户画像的 CRUD 操作
-- 从对话中提取并合并 8 维学习画像
+- 从对话中提取并生成 Markdown 用户画像
 - 维护画像历史版本用于审计与回溯
 - 提供辅助函数用于信号检测和上下文构建
 
 核心类：
 - ProfileService: 画像持久化服务，管理 UserProfile 表
-- ProfileBuildingService: 画像构建服务，从对话中提取特征
-- ProfileExtraction: LLM 结构化输出的数据模型
-
-8 维画像矩阵：
-1. knowledge_level - 知识基础
-2. cognitive_style - 认知风格
-3. error_pattern - 易错点偏好
-4. learning_goal - 学习目标
-5. learning_history - 学习历史
-6. interest_preference - 兴趣偏好
-7. learning_pace - 学习节奏
-8. cognitive_level - 认知水平
+- ProfileBuildingService: 画像构建服务，从对话中生成 Markdown 画像
 
 设计原则：
-- 使用 Pydantic 的 extra="forbid" 严格约束输出字段
-- 先检查是否需要更新，避免无意义的数据库写入
+- 用户画像主体只保存 Markdown
+- 不要求大模型输出 JSON
+- Markdown 使用固定结构，便于前端按 ## 切分
 - 每次更新创建历史版本，支持审计与回溯
-- 增量更新：最新证据优先，无新证据时保留原有值
 
 调用链：
 chat/agent.py → MemoryLayer.post_turn_pipeline() → ProfileBuildingService.build_profile()
@@ -36,12 +25,9 @@ from __future__ import annotations
 import re
 from typing import Final
 
-from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from typing_extensions import Annotated
 
 from app.config import PROFILE_GATE_EVERY_N_ASSISTANT_TURNS
 from app.infra.database import engine
@@ -58,42 +44,51 @@ from app.memory.memory_types import (
 from app.memory._store import MemoryStore, normalize_text
 
 logger = get_logger(__name__)
-Score = Annotated[int, Field(ge=0, le=100)]  # 评分类型：0-100 的整数，用于各维度评分
 
-PROFILE_BUILDING_PROMPT = """  # 画像构建提示词模板：从对话中提取 8 维学习画像
-# 角色与目标
-你是一个顶尖的 AI 教育心理学家和学习画像建模引擎。你的任务是根据学生【原有的学习画像】、【已有长期记忆】和【最新的一段导师对话记录】，提炼出稳定、可复用、足够抽象的学习特征，合并生成包含 **8 个核心维度** 的【最新全局学习画像】。
+# 画像构建提示词：让大模型直接输出 Markdown
+PROFILE_BUILDING_PROMPT = """# 角色与目标
+你是学生画像构建器。请根据【旧画像】、【最近聊天记录】、【长期记忆】和【学习行为】生成一份完整的 Markdown 学生画像。
 
-# 8 个核心维度矩阵：
-1. 知识基础 (Knowledge Level)
-2. 认知风格 (Cognitive Style)
-3. 易错点偏好 (Error Pattern)
-4. 学习目标 (Learning Goal)
-5. 学习历史 (Learning History)
-6. 兴趣偏好 (Interest Preference)
-7. 学习节奏 (Learning Pace)
-8. 认知水平 (Cognitive Level)
+要求：
+1. 只输出 Markdown，不要输出 JSON。
+2. 不要编造用户没有表达过的信息。
+3. 保留对后续智能辅导有价值的信息。
+4. 内容要完整、自然、可读，适合直接注入智能辅导 Agent 的 prompt。
+5. 使用固定二级标题，便于前端按 `##` 切分卡片展示。
+6. 如果某一项信息不足，请写"暂无明显信息"，不要强行推断。
+7. 不要输出解释说明，不要包裹代码块。
 
-# 原有学习画像：
+固定结构如下：
+
+# 学生画像
+
+## 基础信息
+
+## 当前学习/项目背景
+
+## 技术能力判断
+
+## 学习偏好
+
+## 当前薄弱点
+
+## 兴趣方向
+
+## 推荐辅导策略
+
+## 最近变化
+
+【旧画像】
 {current_profile}
 
-# 已有长期记忆：
+【已有长期记忆】
 {memory_context}
 
-# 最新对话记录：
+【最近聊天记录】
 {chat_history}
 
-# 更新与合并规则
-0. 若最近对话没有稳定可复用的学习特征变化，`should_update=false`。
-1. 每个非空字段都必须能被原画像、长期记忆或最新对话支撑。
-2. 最新稳定证据优先增量更新；无新证据时保留原有值。
-3. 只有稳定、跨主题可复用的特征写入画像。
-4. 具体临时事实应留在长期记忆，不要直接上升为画像。
-5. 请输出 `profile_summary`。
-6. 非空维度同时输出 0-100 的整数评分；证据不足则输出 null。
-
-# 输出格式要求
-{format_instructions}
+【学习行为】
+{learning_event_context}
 """
 
 # 无意义短语集合：这些文本不应触发记忆提取
@@ -186,25 +181,24 @@ async def build_memory_context_text(store: MemoryStore, user_id: int, module: st
     for memory_type, items in memories_by_type.items():
         if not items:
             continue
-        lines.append(f"- {memory_type}: {'；'.join(item.content for item in items)}")
+        lines.append(f"- {memory_type}: {'；'.join(item.content_markdown for item in items)}")
     return "\n".join(lines) if lines else "暂无已有长期记忆。"
 
 
 def build_profile_text_from_model(profile: UserProfile | None) -> str:
-    """从画像模型构建文本表示。  # 将 UserProfile 转换为可读文本供 LLM 使用
+    """从画像模型构建文本表示。  # 将 UserProfile 的 profile_markdown 直接返回
 
     参数：
     - profile: 用户画像模型实例
 
     返回：
-    - 格式化的画像文本，无画像时返回默认提示
+    - 画像 Markdown 文本，无画像时返回默认提示
     """
     if not profile:
         return "暂无原有画像（新用户）"
-    profile_dict = profile.model_dump(exclude_unset=True, exclude={"user_id", "updated_at", "created_at", "id"})
-    if not profile_dict:
+    if not profile.profile_markdown or not profile.profile_markdown.strip():
         return "暂无原有画像（新用户）"
-    return "\n".join(f"- {k}: {v}" for k, v in profile_dict.items() if v) or "暂无原有画像（新用户）"
+    return profile.profile_markdown
 
 
 def normalize_signal_text(text: str) -> str:
@@ -255,57 +249,6 @@ def has_extractable_signal(texts: list[str]) -> bool:
     return any(is_memory_worthy_text(text) for text in cleaned_texts)
 
 
-def should_update_profile(current_profile: dict | None, extracted_features: dict) -> bool:
-    """判断是否需要更新画像。  # 比较新旧特征，决定是否写入数据库
-
-    参数：
-    - current_profile: 当前画像字典
-    - extracted_features: 提取的新特征
-
-    返回：
-    - True: 需要更新
-    - False: 无需更新
-    """
-    if not extracted_features.get("should_update", True):
-        return False
-    features = {k: v for k, v in extracted_features.items() if k != "should_update" and v is not None}
-    if not features:
-        return False
-    if not current_profile:
-        return True
-    return any(current_profile.get(key) != value for key, value in features.items())
-
-
-class ProfileExtraction(BaseModel):
-    """画像提取结果模型。  # LLM 结构化输出的数据模型，包含 8 个维度及其评分
-
-    设计原则：
-    - 使用 extra="forbid" 禁止额外字段
-    - 每个维度包含描述文本和 0-100 评分
-    - should_update 控制是否需要写入数据库
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    should_update: bool = Field(default=False)  # 是否需要更新：False 时跳过写入
-    knowledge_level: str | None = None  # 知识基础：用户当前知识储备水平
-    knowledge_level_score: Score | None = None  # 知识基础评分：0-100
-    cognitive_style: str | None = None  # 认知风格：用户偏好的学习/思考方式
-    cognitive_style_score: Score | None = None  # 认知风格评分：0-100
-    error_pattern: str | None = None  # 易错点偏好：用户常见的错误模式
-    error_pattern_score: Score | None = None  # 易错点评分：0-100
-    learning_goal: str | None = None  # 学习目标：用户的短期/长期学习目标
-    learning_goal_score: Score | None = None  # 学习目标评分：0-100
-    learning_history: str | None = None  # 学习历史：用户的学习经历背景
-    learning_history_score: Score | None = None  # 学习历史评分：0-100
-    interest_preference: str | None = None  # 兴趣偏好：用户的学习兴趣方向
-    interest_preference_score: Score | None = None  # 兴趣偏好评分：0-100
-    learning_pace: str | None = None  # 学习节奏：用户的学习速度偏好
-    learning_pace_score: Score | None = None  # 学习节奏评分：0-100
-    cognitive_level: str | None = None  # 认知水平：用户的思维能力层次
-    cognitive_level_score: Score | None = None  # 认知水平评分：0-100
-    profile_summary: str | None = None  # 画像摘要：对用户画像的综合描述
-
-
 class ProfileService:
     """画像持久化服务。  # 管理 UserProfile 表的 CRUD 操作
 
@@ -317,7 +260,6 @@ class ProfileService:
     设计原则：
     - 每次更新自动创建历史版本
     - 使用事务保证数据一致性
-    - 支持增量更新，只修改传入的字段
     """
 
     def __init__(self) -> None:
@@ -339,17 +281,21 @@ class ProfileService:
     async def update_user_profile(  # 更新用户画像（创建历史版本）
         self,
         user_id: int,
-        features: dict,
+        profile_markdown: str,
         change_reason: str = "系统自动更新",
+        source_session_ids: list[str] | None = None,
         source_memory_ids: list[int] | None = None,
+        confidence: float = 0.7,
     ) -> UserProfile:
-        """更新用户画像。  # 增量更新画像字段，并创建历史版本
+        """更新用户画像。  # 更新画像 Markdown 并创建历史版本
 
         参数：
         - user_id: 用户ID
-        - features: 要更新的字段字典
+        - profile_markdown: 画像 Markdown 内容
         - change_reason: 变更原因，用于审计
+        - source_session_ids: 来源会话ID列表
         - source_memory_ids: 来源记忆ID列表
+        - confidence: 画像置信度
 
         返回：
         - 更新后的 UserProfile 实例
@@ -363,10 +309,22 @@ class ProfileService:
             async with session.begin():
                 profile = await session.get(UserProfile, user_id)
                 if not profile:
-                    profile = UserProfile(user_id=user_id)
-                for field, value in features.items():
-                    if hasattr(profile, field):
-                        setattr(profile, field, value)
+                    profile = UserProfile(
+                        user_id=user_id,
+                        profile_markdown=profile_markdown,
+                        version=1,
+                        confidence=confidence,
+                        source_session_ids=source_session_ids,
+                        source_memory_ids=source_memory_ids,
+                        updated_reason=change_reason,
+                    )
+                else:
+                    profile.profile_markdown = profile_markdown
+                    profile.version = (profile.version or 1) + 1
+                    profile.confidence = confidence
+                    profile.source_session_ids = source_session_ids
+                    profile.source_memory_ids = source_memory_ids
+                    profile.updated_reason = change_reason
                 session.add(profile)
                 await session.flush()
                 latest_version = (
@@ -375,25 +333,10 @@ class ProfileService:
                 history = UserProfileHistory(
                     user_id=user_id,
                     version=0 if latest_version is None else int(latest_version) + 1,
-                    knowledge_level=profile.knowledge_level,
-                    knowledge_level_score=profile.knowledge_level_score,
-                    learning_goal=profile.learning_goal,
-                    learning_goal_score=profile.learning_goal_score,
-                    learning_history=profile.learning_history,
-                    learning_history_score=profile.learning_history_score,
-                    cognitive_style=profile.cognitive_style,
-                    cognitive_style_score=profile.cognitive_style_score,
-                    error_pattern=profile.error_pattern,
-                    error_pattern_score=profile.error_pattern_score,
-                    learning_pace=profile.learning_pace,
-                    learning_pace_score=profile.learning_pace_score,
-                    interest_preference=profile.interest_preference,
-                    interest_preference_score=profile.interest_preference_score,
-                    cognitive_level=profile.cognitive_level,
-                    cognitive_level_score=profile.cognitive_level_score,
-                    profile_summary=profile.profile_summary,
+                    profile_markdown=profile_markdown,
                     change_reason=change_reason,
-                    source_memory_ids=source_memory_ids or None,
+                    source_session_ids=source_session_ids,
+                    source_memory_ids=source_memory_ids,
                 )
                 session.add(history)
             await session.refresh(profile)
@@ -420,11 +363,11 @@ class ProfileService:
 
 
 class ProfileBuildingService:
-    """画像构建服务。  # 从对话中提取并合并用户画像
+    """画像构建服务。  # 从对话中生成 Markdown 用户画像
 
     职责：
     - 从最近对话中提取学习特征
-    - 与现有画像合并，生成新版本
+    - 生成 Markdown 格式的用户画像
     - 判断是否需要更新，避免无意义写入
 
     调用入口：
@@ -432,7 +375,7 @@ class ProfileBuildingService:
 
     设计原则：
     - 使用 DeepSeek 模型做特征提取
-    - 增量更新：最新证据优先，无新证据保留原值
+    - 直接输出 Markdown，不要求 JSON
     - 门控检查：无变化时不写入数据库
     """
 
@@ -449,11 +392,10 @@ class ProfileBuildingService:
         self.profile_service = profile_service or ProfileService()
         self.llm_manager = get_llm_manager()
         self.model_kwargs = {"temperature": 0.1, "streaming": False}
-        self.output_parser = PydanticOutputParser(pydantic_object=ProfileExtraction)
         self.prompt_template = ChatPromptTemplate.from_messages([("human", "{prompt_text}")])
 
     async def build_profile(self, user_id: int, session_id: str | None = None) -> tuple[bool, bool]:
-        """构建用户画像。  # 主入口：从对话中提取特征并合并到画像
+        """构建用户画像。  # 主入口：从对话中提取特征并生成 Markdown 画像
 
         参数：
         - user_id: 用户ID
@@ -466,7 +408,7 @@ class ProfileBuildingService:
         1. 确定会话ID
         2. 获取最近 20 条消息
         3. 构建上下文（对话历史 + 长期记忆 + 当前画像）
-        4. 调用 LLM 提取特征
+        4. 调用 LLM 生成 Markdown 画像
         5. 判断是否需要更新
         6. 写入数据库并创建历史版本
         """
@@ -492,37 +434,51 @@ class ProfileBuildingService:
         current_profile = await self.profile_service.get_user_profile(user_id)  # 获取当前画像
         current_profile_str = build_profile_text_from_model(current_profile)  # 转换为文本
 
+        # 学习行为上下文（当前简化处理）
+        learning_event_context = "暂无学习行为数据。"
+
         try:
             prompt_text = PROFILE_BUILDING_PROMPT.format(  # 组装提示词
                 current_profile=current_profile_str,
                 memory_context=memory_context,
                 chat_history=chat_history,
-                format_instructions=self.output_parser.get_format_instructions(),
+                learning_event_context=learning_event_context,
             )
             response = await self.llm_manager.ainvoke(  # 调用 LLM
                 "deepseek",
                 self.prompt_template.format_messages(prompt_text=prompt_text),
                 model_kwargs=self.model_kwargs,
             )
-            updated_data = self.output_parser.parse(response.content if isinstance(response.content, str) else str(response.content))  # 解析结果
+            profile_markdown = response.content if isinstance(response.content, str) else str(response.content)
         except Exception as exc:
-            logger.error("[ProfileBuilding] 画像提取与合并失败: %s", str(exc))
+            logger.error("[ProfileBuilding] 画像生成失败: %s", str(exc))
             return False, False
 
-        current_dict = current_profile.model_dump(exclude_unset=True) if current_profile else None
-        if not should_update_profile(current_dict, updated_data.model_dump()):  # 检查是否需要更新
+        # 清理 Markdown 内容（去除可能的代码块包裹）
+        profile_markdown = profile_markdown.strip()
+        if profile_markdown.startswith("```markdown"):
+            profile_markdown = profile_markdown[len("```markdown"):].strip()
+        if profile_markdown.startswith("```"):
+            profile_markdown = profile_markdown[3:].strip()
+        if profile_markdown.endswith("```"):
+            profile_markdown = profile_markdown[:-3].strip()
+
+        # 检查是否为有效内容
+        if not profile_markdown or not profile_markdown.strip():
+            logger.warning("[ProfileBuilding] LLM 返回空内容，跳过更新")
             return True, False
 
-        final_features = updated_data.model_dump(exclude_none=True)  # 过滤空值
-        final_features.pop("should_update", None)  # 移除控制字段
-        if not final_features:
-            return True, False
+        # 检查是否需要更新（与旧画像比较）
+        if current_profile and current_profile.profile_markdown:
+            if normalize_text(profile_markdown) == normalize_text(current_profile.profile_markdown):
+                return True, False  # 内容相同，无需更新
 
         try:
             await self.profile_service.update_user_profile(  # 保存更新后的画像
                 user_id=user_id,
-                features=final_features,
-                change_reason=f"基于最近{len(dialogue_msgs)}条有效对话的显著特征增量合并",
+                profile_markdown=profile_markdown,
+                change_reason=f"基于最近{len(dialogue_msgs)}条有效对话生成画像",
+                source_session_ids=[effective_session],
             )
             return True, True
         except Exception as exc:

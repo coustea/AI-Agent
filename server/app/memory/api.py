@@ -51,30 +51,29 @@ def _profile_payload(profile) -> dict:
     - profile: UserProfile 实例或 None
 
     返回：
-    - 包含所有画像字段的字典，无画像时返回全 null 字典
+    - 包含画像 Markdown 的字典，无画像时返回默认值
     """
     if profile is None:
         return {
-            "knowledge_level": None,
-            "knowledge_level_score": None,
-            "cognitive_style": None,
-            "cognitive_style_score": None,
-            "error_pattern": None,
-            "error_pattern_score": None,
-            "learning_goal": None,
-            "learning_goal_score": None,
-            "learning_history": None,
-            "learning_history_score": None,
-            "interest_preference": None,
-            "interest_preference_score": None,
-            "learning_pace": None,
-            "learning_pace_score": None,
-            "cognitive_level": None,
-            "cognitive_level_score": None,
-            "profile_summary": None,
+            "user_id": None,
+            "profile_markdown": None,
+            "version": None,
+            "confidence": None,
+            "source_session_ids": None,
+            "source_memory_ids": None,
+            "updated_reason": None,
             "updated_at": None,
         }
-    return profile.model_dump(exclude={"user_id", "created_at"})
+    return {
+        "user_id": profile.user_id,
+        "profile_markdown": profile.profile_markdown,
+        "version": profile.version,
+        "confidence": profile.confidence,
+        "source_session_ids": profile.source_session_ids,
+        "source_memory_ids": profile.source_memory_ids,
+        "updated_reason": profile.updated_reason,
+        "updated_at": profile.updated_at,
+    }
 
 
 def _chat_memory_payload(message) -> dict:
@@ -96,11 +95,62 @@ def _chat_memory_payload(message) -> dict:
     }
 
 
+def _memory_payload(memory) -> dict:
+    """构建长期记忆响应载荷。  # 将 UserMemory 转换为前端友好的字典格式
+
+    参数：
+    - memory: UserMemory 实例
+
+    返回：
+    - 包含记忆字段的字典
+    """
+    return {
+        "id": memory.id,
+        "user_id": memory.user_id,
+        "session_id": memory.session_id,
+        "module": memory.module,
+        "title": memory.title,
+        "content_markdown": memory.content_markdown,
+        "memory_type": memory.memory_type,
+        "dimension": memory.dimension,
+        "importance": memory.importance,
+        "source": memory.source,
+        "source_message_count": memory.source_message_count,
+        "expires_at": memory.expires_at,
+        "evidence_count": memory.evidence_count,
+        "last_seen_at": memory.last_seen_at,
+        "attachments": memory.attachments,
+        "created_at": memory.created_at,
+        "updated_at": memory.updated_at,
+    }
+
+
+def _profile_history_payload(history) -> dict:
+    """构建画像历史响应载荷。  # 将 UserProfileHistory 转换为前端友好的字典格式
+
+    参数：
+    - history: UserProfileHistory 实例
+
+    返回：
+    - 包含历史快照字段的字典
+    """
+    return {
+        "id": history.id,
+        "user_id": history.user_id,
+        "version": history.version,
+        "profile_markdown": history.profile_markdown,
+        "change_reason": history.change_reason,
+        "source_session_ids": history.source_session_ids,
+        "source_memory_ids": history.source_memory_ids,
+        "created_at": history.created_at,
+    }
+
+
 @router.get("/profile")
 async def get_current_profile(
     current_user: User = Depends(get_current_user),
 ):
-    """获取当前用户画像。  # 返回登录用户的 8 维学习画像
+    """获取当前用户画像。  # 返回登录用户的 Markdown 画像
 
     返回：
     - HttpResponse: 包含画像数据的响应
@@ -125,7 +175,7 @@ async def get_current_profile_history(
     """
     memory_layer = MemoryLayer(module_name="mentor")
     history = await memory_layer.list_profile_history(user_id=current_user.id, limit=limit)
-    return HttpResponse.success(data=[item.model_dump(exclude={"id", "user_id"}) for item in history])
+    return HttpResponse.success(data=[_profile_history_payload(item) for item in history])
 
 
 @router.get("/profile/{user_id}")
@@ -133,7 +183,7 @@ async def get_profile_by_user_id(
     user_id: int,
     current_user: User = Depends(get_current_user),
 ):
-    """获取指定用户画像。  # 返回指定用户的 8 维学习画像（需权限校验）
+    """获取指定用户画像。  # 返回指定用户的 Markdown 画像（需权限校验）
 
     参数：
     - user_id: 目标用户ID
@@ -165,7 +215,7 @@ async def get_profile_history_by_user_id(
     _assert_user_scope(current_user, user_id)
     memory_layer = MemoryLayer(module_name="mentor")
     history = await memory_layer.list_profile_history(user_id=user_id, limit=limit)
-    return HttpResponse.success(data=[item.model_dump(exclude={"id", "user_id"}) for item in history])
+    return HttpResponse.success(data=[_profile_history_payload(item) for item in history])
 
 
 @router.get("/memory/recent-chat")
@@ -202,3 +252,21 @@ async def get_recent_chat_memory(
         if getattr(message, "role", "") in {"user", "assistant"} and getattr(message, "content", "").strip()
     ]
     return HttpResponse.success(data=[_chat_memory_payload(message) for message in dialogue_messages])
+
+
+@router.get("/memory/long-term")
+async def get_long_term_memories(
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+):
+    """获取长期记忆列表。  # 返回当前用户的长期记忆
+
+    参数：
+    - limit: 返回数量上限（1-100）
+
+    返回：
+    - HttpResponse: 包含长期记忆列表的响应
+    """
+    memory_layer = MemoryLayer(module_name="mentor")
+    memories = await memory_layer.list_long_term_memories(user_id=current_user.id, limit=limit)
+    return HttpResponse.success(data=[_memory_payload(memory) for memory in memories])

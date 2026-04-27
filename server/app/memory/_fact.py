@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.memory.memory_types import FactAgentMemoryType
@@ -21,9 +17,8 @@ from app.memory._store import MemoryStore, now
 
 logger = get_logger(__name__)
 
-# 提示词文本会通过 PydanticOutputParser 的 format_instructions 与 FactExtraction 的 Pydantic 数据模型（字段约束）强绑定；改动字段/含义时必须同步更新提示词，否则容易解析失败或持久化脏数据。
-FACT_EXTRACTION_PROMPT = """  # 长期记忆提取提示词模板：只注入已有长期记忆/最新对话，并强制模型按解析器要求输出结构化结果（最多 3 条）
-# 角色与目标
+# 长期记忆提取提示词：让大模型输出 Markdown 格式的记忆
+FACT_EXTRACTION_PROMPT = """# 角色与目标
 你是一个专业的长期记忆提取器。你只负责提取长期记忆，不负责总结对话、生成画像、规划学习路径、评价用户或回答用户问题。
 你的唯一任务是从用户的【最新导师对话记录】中，提取值得写入【长期记忆池】的长期记忆候选。
 
@@ -39,69 +34,38 @@ FACT_EXTRACTION_PROMPT = """  # 长期记忆提取提示词模板：只注入已
 3. 不根据对话推断画像，不输出学习风格、能力评估、性格判断等非长期记忆内容。
 4. 不重复已有长期记忆；只有更具体、更准确或明显更新时才输出。
 
-# 输出约束
-1. 每条 content 必须是独立、简洁、可长期复用的用户相关记忆。
-2. 如记忆与时间节点相关，请标记时效性并估算过期天数。
-3. 如果没有值得写入长期记忆池的内容，has_fact=false 且 facts=[]。
-4. 最多输出 3 条。
+# 输出格式
+如果没有值得保存的信息，请只输出：NO_MEMORY
+
+如果有记忆，请按以下格式输出一条或多条（最多 3 条）：
+
+---MEMORY---
+TITLE: 记忆标题
+TYPE: preference | goal | weakness | fact | background | summary
+DIMENSION: 可选维度，没有则写 none
+IMPORTANCE: 0.0 到 1.0
+CONTENT:
+# 记忆标题
+
+## 内容
+
+这里写完整的 Markdown 记忆内容。
+
+## 适用场景
+
+说明这条记忆在后续什么场景下应该被使用。
+
+## 证据
+
+用简短自然语言说明这条记忆来自最近哪些对话表现，不要复制大段原文。
+---END---
 
 # 已有长期记忆：
 {memory_context}
 
 # 最新对话记录：
 {chat_history}
-
-# 输出格式要求
-{format_instructions}
 """
-
-
-class ExtractedFactItem(BaseModel):
-    """单条长期事实条目模型。  # 描述一条可写入长期记忆池的事实/偏好/目标等
-
-    字段说明：
-    - content: 事实文本内容，必须非空
-    - memory_type: 长期记忆类型，用于下游分类/检索策略
-    - is_time_sensitive: 是否具备时效性，True 时需配合过期策略
-    - expires_in_days: 时效过期天数，仅 is_time_sensitive=True 时有意义
-
-    设计原则：
-    - 使用 extra="forbid" 禁止额外字段，防止提示词漂移导致脏数据
-    - content 必须经过 strip() 清理，不能为空
-    """
-    model_config = ConfigDict(extra="forbid")  # 禁止额外字段：一旦模型输出出现未定义键就立即失败，避免提示词漂移/解析偏差把未知字段悄悄写入存储。
-
-    content: str = Field(min_length=1)  # 事实文本内容
-    memory_type: FactAgentMemoryType  # 长期记忆类型（用于下游分类/检索策略，不同类型可能对应不同展示或更新规则）
-    is_time_sensitive: bool = False  # 是否具备时效性：True 表示该事实可能随时间过期，需要配合过期策略处理
-    expires_in_days: int | None = Field(default=None, gt=0)  # 时效过期天数（>0）；用于计算存储层 expires_at。仅在 is_time_sensitive=True 时才有意义；None 表示模型未提供有效的过期信息。
-
-    @field_validator("content")
-    @classmethod
-    def _clean_content(cls, value: str) -> str:
-        """清理 content 字段：去除首尾空白，确保非空。"""
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("content 不能为空")
-        return cleaned
-
-
-class FactExtraction(BaseModel):
-    """事实提取结果容器。  # LLM 结构化输出的顶层对象
-
-    字段说明：
-    - has_fact: 是否发现值得写入长期记忆的事实信号
-    - facts: 提取到的事实条目列表
-
-    设计原则：
-    - 使用 extra="forbid" 保持解析严格
-    - has_fact=False 时调用方应忽略 facts
-    - 写入前仍会做数量上限与存储层校验
-    """
-    model_config = ConfigDict(extra="forbid")  # 保持解析严格：出现未知字段通常意味着提示词与数据模型不一致或模型幻觉，应直接失败而不是吞掉。
-
-    has_fact: bool  # 是否发现值得写入长期记忆的事实信号；为 False 时调用方应忽略 facts
-    facts: list[ExtractedFactItem] = Field(default_factory=list)  # 提取到的事实条目列表（默认空；写入前仍会做数量上限与存储层校验）
 
 
 class FactExtractionService:
@@ -110,7 +74,7 @@ class FactExtractionService:
     职责：
     - 从最近对话中提取可长期复用的用户信息
     - 使用启发式门控避免无意义的 LLM 调用
-    - 将结构化结果写入长期记忆池
+    - 将 Markdown 结果写入长期记忆池
 
     调用入口：
     - extract_and_save(user_id, session_id) -> bool
@@ -135,8 +99,6 @@ class FactExtractionService:
         self.store = store or MemoryStore()
         self.llm_manager = get_llm_manager()
         self.model_kwargs = {"temperature": 0.1, "streaming": False}
-        self.output_parser = PydanticOutputParser(pydantic_object=FactExtraction)  # 结构化输出解析器：把模型文本解析为 FactExtraction
-        self.prompt_template = ChatPromptTemplate.from_messages([("human", "{prompt_text}")])
 
     async def extract_and_save(self, user_id: int, session_id: str) -> bool:
         """从会话中提取事实并保存。
@@ -154,7 +116,7 @@ class FactExtractionService:
         2. 筛选可用对话消息
         3. 启发式门控检查是否有可提取信号
         4. 构建上下文并调用 LLM
-        5. 解析结构化输出并写入存储
+        5. 解析 Markdown 输出并写入存储
         """
         #  获取最近 20 条消息作为抽取窗口
         recent_msgs = await self.store.get_recent_messages(
@@ -179,35 +141,40 @@ class FactExtractionService:
         memory_context = await build_memory_context_text(self.store, user_id, self.module_name)  # 构建已有长期记忆文本：指导模型避免重复输出
 
         try:
-            prompt_text = FACT_EXTRACTION_PROMPT.format(  # 组装最终提示词：把上下文与解析器格式要求（format_instructions）一起注入
+            prompt_text = FACT_EXTRACTION_PROMPT.format(
                 memory_context=memory_context,
                 chat_history=chat_history,
-                format_instructions=self.output_parser.get_format_instructions(),
             )
-            response = await self.llm_manager.ainvoke(  # 调用大模型进行结构化抽取
+            response = await self.llm_manager.ainvoke(  # 调用大模型进行抽取
                 "deepseek",
-                self.prompt_template.format_messages(prompt_text=prompt_text),
+                prompt_text,
                 model_kwargs=self.model_kwargs,
             )
-            # 不同大模型实现的 response.content 可能是 str 或其他对象；这里统一转成字符串再交给解析器。
-            extracted = self.output_parser.parse(response.content if isinstance(response.content, str) else str(response.content))  # 严格解析结构化输出（不符合数据模型约束会抛错）
-            if extracted.has_fact and extracted.facts:  # 仅当模型明确标记"有事实"且列表非空时才写入存储，避免空写入/误触发
-                for item in extracted.facts[:3]:  # 再做一次上限裁剪（最多 3 条）：与提示约束保持一致，防止越界输出导致写入过多
-                    expires_at = None
-                    if item.is_time_sensitive and item.expires_in_days and item.expires_in_days > 0:  # 若为时效事实且提供了过期天数，则计算 expires_at
-                        expires_at = now() + timedelta(days=item.expires_in_days)
+            # 获取响应文本
+            response_text = response.content if isinstance(response.content, str) else str(response.content)
+            # 解析并保存记忆
+            memories = self._parse_memory_output(response_text)
+            if not memories:
+                return True  # 无记忆可保存
+            for memory_data in memories[:3]:  # 最多保存 3 条
+                expires_at = None
+                if memory_data.get("is_time_sensitive") and memory_data.get("expires_in_days"):
                     try:
-                        await self.store.save_user_fact(
-                            user_id=user_id,
-                            content=item.content,
-                            memory_type=item.memory_type,
-                            session_id=session_id,
-                            expires_at=expires_at,
-                            module=self.module_name,
-                        )
-                    except ValueError:
-                        # 存储层校验/唯一性冲突等 ValueError 不应导致整次抽取失败：跳过该条，继续处理其它事实。
-                        continue
+                        expires_at = now() + timedelta(days=int(memory_data["expires_in_days"]))
+                    except (ValueError, TypeError):
+                        pass
+                try:
+                    await self.store.save_user_fact(
+                        user_id=user_id,
+                        content=memory_data["content_markdown"],
+                        memory_type=memory_data["memory_type"],
+                        session_id=session_id,
+                        expires_at=expires_at,
+                        module=self.module_name,
+                    )
+                except ValueError:
+                    # 存储层校验/唯一性冲突等 ValueError 不应导致整次抽取失败：跳过该条，继续处理其它事实。
+                    continue
             return True
         except Exception as exc:
             logger.error("[FactExtraction] 事实提炼失败: %s", str(exc))
@@ -238,3 +205,90 @@ class FactExtractionService:
                 continue
             user_texts.append(cleaned)
         return user_texts
+
+    def _parse_memory_output(self, response_text: str) -> list[dict]:
+        """解析 LLM 输出的记忆内容。
+
+        参数：
+        - response_text: LLM 响应文本
+
+        返回：
+        - 解析出的记忆列表，每条记忆包含 title、content_markdown、memory_type、dimension、importance 等字段
+        """
+        if not response_text or not response_text.strip():
+            return []
+        # 检查是否为 NO_MEMORY
+        if "NO_MEMORY" in response_text.upper():
+            return []
+        memories = []
+        # 按 ---MEMORY--- 分割
+        blocks = response_text.split("---MEMORY---")
+        for block in blocks:
+            if "---END---" not in block:
+                continue
+            # 提取 ---MEMORY--- 到 ---END--- 之间的内容
+            memory_content = block.split("---END---")[0].strip()
+            if not memory_content:
+                continue
+            memory_data = self._parse_single_memory(memory_content)
+            if memory_data:
+                memories.append(memory_data)
+        return memories
+
+    def _parse_single_memory(self, memory_text: str) -> dict | None:
+        """解析单条记忆。
+
+        参数：
+        - memory_text: 单条记忆文本
+
+        返回：
+        - 解析出的记忆字典，或 None（解析失败）
+        """
+        lines = memory_text.strip().split("\n")
+        title = None
+        memory_type = "fact"
+        dimension = None
+        importance = 0.5
+        content_start_idx = -1
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if line.startswith("TITLE:"):
+                title = line[6:].strip()
+            elif line.startswith("TYPE:"):
+                type_str = line[5:].strip().lower()
+                if type_str in {"preference", "goal", "weakness", "fact", "background", "summary"}:
+                    memory_type = type_str
+            elif line.startswith("DIMENSION:"):
+                dim_str = line[9:].strip().lower()
+                if dim_str != "none":
+                    dimension = dim_str
+            elif line.startswith("IMPORTANCE:"):
+                try:
+                    importance = float(line[11:].strip())
+                    importance = max(0.0, min(1.0, importance))
+                except (ValueError, TypeError):
+                    importance = 0.5
+            elif line.startswith("CONTENT:"):
+                content_start_idx = i + 1
+                break
+        if content_start_idx < 0:
+            return None
+        # 提取 CONTENT 后的所有内容作为 Markdown
+        content_lines = lines[content_start_idx:]
+        content_markdown = "\n".join(content_lines).strip()
+        if not content_markdown:
+            return None
+        # 如果没有标题，尝试从 Markdown 中提取第一个标题
+        if not title:
+            for line in content_lines:
+                line = line.strip()
+                if line.startswith("# "):
+                    title = line[2:].strip()
+                    break
+        return {
+            "title": title,
+            "content_markdown": content_markdown,
+            "memory_type": memory_type,
+            "dimension": dimension,
+            "importance": importance,
+        }

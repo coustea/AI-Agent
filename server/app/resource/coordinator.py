@@ -296,14 +296,14 @@ class CoordinatorAgent:
     async def _safe_load_profile(self, user_id: int) -> LearnerProfileSnapshot:
         try:
             snapshot = await load_profile_snapshot(user_id)
-            summary = snapshot.profile_summary or "暂无长期画像"
+            profile_markdown = snapshot.profile_markdown or "暂无画像"
             logger.info(
-                "[Coordinator] 画像快照加载成功: user_id=%s major=%r knowledge_score=%r",
+                "[Coordinator] 画像快照加载成功: user_id=%s major=%r version=%s",
                 user_id,
                 snapshot.major,
-                snapshot.knowledge_level_score,
+                snapshot.version,
             )
-            await self.emitter.emit_agent_log("coordinator", f"画像加载成功：{summary}")
+            await self.emitter.emit_agent_log("coordinator", f"画像加载成功")
             return snapshot
         except Exception as exc:
             logger.error("[Coordinator] 画像加载失败: %s", exc, exc_info=exc)
@@ -512,8 +512,8 @@ class CoordinatorAgent:
             dependency_only=not is_visible,
         )
 
-        profile_summary = profile.get("profile_summary") or "暂无稳定画像摘要"
-        await self.emitter.emit_agent_log(agent_name, f"已注入学习画像：{profile_summary}")
+        profile_markdown = profile.get("profile_markdown") or "暂无画像"
+        await self.emitter.emit_agent_log(agent_name, f"已注入学习画像：{profile_markdown[:100]}...")
         if shared_memory:
             await self.emitter.emit_agent_log(agent_name, f"已读取上游成果：{', '.join(shared_memory.keys())}")
         else:

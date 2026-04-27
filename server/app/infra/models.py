@@ -84,7 +84,7 @@ class ChatSession(SQLModel, table=True):
 
 
 class ChatMessage(SQLModel, table=True):
-    """短期记忆表 — 存储用户的原始聊天记录，按会话隔离"""
+    """聊天消息表 — 保存用户与助手的原始聊天记录，是短期记忆、长期记忆抽取和画像更新的事实来源"""
     __tablename__ = "chat_messages"
     __table_args__ = (
         Index("ix_chat_messages_user_session_module_created_at", "user_id", "session_id", "module", "created_at"),
@@ -107,7 +107,13 @@ class ChatMessage(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class UserMemory(SQLModel, table=True):
-    """统一长期记忆表 — 存储经过提炼的用户知识/偏好/目标等持久化记忆"""
+    """长期记忆表 — 存储经过提炼的 Markdown 记忆内容。
+
+    注意：
+    - 长期记忆主体只保存 Markdown。
+    - 不保存 content_json / memory_json。
+    - JSONB 只用于附件等程序元数据。
+    """
     __tablename__ = "user_memory"
     __table_args__ = (
         Index("ix_user_memory_context_lookup", "user_id", "module", "memory_type", "last_seen_at"),
@@ -117,7 +123,10 @@ class UserMemory(SQLModel, table=True):
     user_id: int = Field(index=True)
     session_id: str = Field(default="", index=True)  # 来源会话
     module: str = Field(default="mentor", index=True)  # 所属功能模块（"mentor" | "avatar"），用于长期记忆隔离
-    content: str = Field(sa_column=Column(Text))  # 记忆正文
+
+    title: str | None = Field(default=None, max_length=200)  # 记忆标题
+    content_markdown: str = Field(sa_column=Column(Text))  # 记忆主体 Markdown
+
     memory_type: str = Field(index=True)  # 类型：preference | goal | weakness | fact | background | summary
     dimension: str | None = None  # 可选维度标签（画像维度关联）
     importance: float = Field(default=0.5)  # 重要性评分 0.0~1.0
@@ -128,6 +137,7 @@ class UserMemory(SQLModel, table=True):
     last_seen_at: datetime = Field(default_factory=datetime.now)  # 最后一次出现时间
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
 
 
 # ---------------------------------------------------------------------------
@@ -135,38 +145,31 @@ class UserMemory(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class UserProfile(SQLModel, table=True):
-    """用户画像表 — 存储用户当前的学习画像状态（8 维度 + 摘要）
-    主键为 user_id（非自增），与 User 表一对一关系。"""
+    """用户画像表 — 存储当前学生画像 Markdown。
+
+    主键为 user_id，与 User 表一对一。
+    画像主体由大模型生成 Markdown。
+    前端可直接渲染 Markdown，或按二级标题 `##` 切分为画像卡片。
+    """
     __tablename__ = "user_profiles"
 
     user_id: int = Field(primary_key=True)  # 与 User.id 一对一
 
-    # 8 个画像维度，每个维度包含描述文本 + 评分（0~100）
-    knowledge_level: str | None = Field(default=None, sa_column=Column(Text))  # 知识水平描述
-    knowledge_level_score: int | None = Field(default=None)  # 知识水平评分
-    learning_goal: str | None = Field(default=None, sa_column=Column(Text))  # 学习目标
-    learning_goal_score: int | None = Field(default=None)
-    learning_history: str | None = Field(default=None, sa_column=Column(Text))  # 学习经历
-    learning_history_score: int | None = Field(default=None)
-    cognitive_style: str | None = Field(default=None, sa_column=Column(Text))  # 认知风格
-    cognitive_style_score: int | None = Field(default=None)
-    error_pattern: str | None = Field(default=None, sa_column=Column(Text))  # 错误模式
-    error_pattern_score: int | None = Field(default=None)
-    learning_pace: str | None = Field(default=None, sa_column=Column(Text))  # 学习节奏
-    learning_pace_score: int | None = Field(default=None)
-    interest_preference: str | None = Field(default=None, sa_column=Column(Text))  # 兴趣偏好
-    interest_preference_score: int | None = Field(default=None)
-    cognitive_level: str | None = Field(default=None, sa_column=Column(Text))  # 认知水平
-    cognitive_level_score: int | None = Field(default=None)
+    profile_markdown: str = Field(sa_column=Column(Text))  # 画像主体 Markdown
 
-    profile_summary: str | None = Field(default=None, sa_column=Column(Text))  # 画像总摘要
+    version: int = Field(default=1, index=True)  # 画像版本号
+    confidence: float = Field(default=0.7)  # 画像置信度
 
-    updated_at: datetime = Field(default_factory=datetime.now)
+    source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
+    source_memory_ids: list[int] | None = Field(default=None, sa_column=Column(ARRAY(Integer)))  # 触发画像更新的长期记忆 ID
+    updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 画像更新原因
+
     created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
 
 
 class UserProfileHistory(SQLModel, table=True):
-    """用户画像历史表 — 记录每次画像变更的快照，用于追踪画像演化过程"""
+    """用户画像历史表 — 保存每次画像变更的 Markdown 快照"""
     __tablename__ = "user_profile_history"
     __table_args__ = (
         Index("ix_user_profile_history_user_version", "user_id", "version"),
@@ -174,29 +177,13 @@ class UserProfileHistory(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
+
     version: int = Field(index=True)  # 版本号，每次更新递增
 
-    # 与 UserProfile 相同的 8 维度字段（快照）
-    knowledge_level: str | None = Field(default=None, sa_column=Column(Text))
-    knowledge_level_score: int | None = Field(default=None)
-    learning_goal: str | None = Field(default=None, sa_column=Column(Text))
-    learning_goal_score: int | None = Field(default=None)
-    learning_history: str | None = Field(default=None, sa_column=Column(Text))
-    learning_history_score: int | None = Field(default=None)
-    cognitive_style: str | None = Field(default=None, sa_column=Column(Text))
-    cognitive_style_score: int | None = Field(default=None)
-    error_pattern: str | None = Field(default=None, sa_column=Column(Text))
-    error_pattern_score: int | None = Field(default=None)
-    learning_pace: str | None = Field(default=None, sa_column=Column(Text))
-    learning_pace_score: int | None = Field(default=None)
-    interest_preference: str | None = Field(default=None, sa_column=Column(Text))
-    interest_preference_score: int | None = Field(default=None)
-    cognitive_level: str | None = Field(default=None, sa_column=Column(Text))
-    cognitive_level_score: int | None = Field(default=None)
-
-    profile_summary: str | None = Field(default=None, sa_column=Column(Text))
+    profile_markdown: str = Field(sa_column=Column(Text))  # 画像快照 Markdown
 
     change_reason: str | None = Field(default=None, sa_column=Column(Text))  # 变更原因（如"系统自动更新"）
+    source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
     source_memory_ids: list[int] | None = Field(default=None, sa_column=Column(ARRAY(Integer)))  # 触发变更的记忆 ID 列表
 
     created_at: datetime = Field(default_factory=datetime.now)

@@ -345,18 +345,20 @@ class MemoryLayer:
         importance: float = 0.5,
         source: str = "conversation",
         source_message_count: int = 0,
+        title: str | None = None,
     ) -> UserMemory:
         """创建长期记忆。  # 写入一条长期记忆记录（含类型/维度/重要度/来源等元数据）
 
         参数：
         - user_id: 用户ID
         - session_id: 会话ID
-        - content: 记忆内容
+        - content: 记忆内容（Markdown）
         - memory_type: 记忆类型
         - dimension: 维度标签
         - importance: 重要度（0-1）
         - source: 来源标识
         - source_message_count: 来源消息数量
+        - title: 记忆标题
 
         返回：
         - UserMemory 实例
@@ -371,6 +373,7 @@ class MemoryLayer:
             source=source,
             source_message_count=source_message_count,
             module=self.module_name,
+            title=title,
         )
 
     async def upsert_long_term_fact(
@@ -471,18 +474,20 @@ class MemoryLayer:
         importance: float | None = None,
         expires_at=None,
         source: str | None = None,
+        title: str | None = None,
     ) -> UserMemory | None:
         """更新长期记忆。  # 允许按字段部分更新（内容/类型/维度/重要度/过期时间等）
 
         参数：
         - memory_id: 记忆ID
         - user_id: 用户ID（用于权限约束）
-        - content: 新内容
+        - content: 新内容（Markdown）
         - memory_type: 新类型
         - dimension: 新维度
         - importance: 新重要度
         - expires_at: 新过期时间
         - source: 新来源
+        - title: 新标题
 
         返回：
         - 更新后的 UserMemory 实例或 None
@@ -531,52 +536,64 @@ class MemoryLayer:
         self,
         *,
         user_id: int,
-        features: dict,
+        profile_markdown: str,
         change_reason: str = "系统自动更新",
+        source_session_ids: list[str] | None = None,
         source_memory_ids: list[int] | None = None,
+        confidence: float = 0.7,
     ) -> UserProfile:
-        """插入或更新用户画像。  # 写入画像特征并记录变更原因/来源记忆，便于审计与回溯
+        """插入或更新用户画像。  # 写入画像 Markdown 并记录变更原因/来源记忆，便于审计与回溯
 
         参数：
         - user_id: 用户ID
-        - features: 画像特征字典
+        - profile_markdown: 画像 Markdown 内容
         - change_reason: 变更原因
+        - source_session_ids: 来源会话ID列表
         - source_memory_ids: 来源记忆ID列表
+        - confidence: 画像置信度
 
         返回：
         - UserProfile 实例
         """
         return await self.profile_service.update_user_profile(
             user_id=user_id,
-            features=features,
+            profile_markdown=profile_markdown,
             change_reason=change_reason,
+            source_session_ids=source_session_ids,
             source_memory_ids=source_memory_ids,
+            confidence=confidence,
         )
 
     async def update_profile(
         self,
         *,
         user_id: int,
-        features: dict,
+        profile_markdown: str,
         change_reason: str = "系统自动更新",
+        source_session_ids: list[str] | None = None,
         source_memory_ids: list[int] | None = None,
+        confidence: float = 0.7,
     ) -> UserProfile:
         """更新用户画像。  # 历史兼容别名（同 upsert_profile，避免重复实现）
 
         参数：
         - user_id: 用户ID
-        - features: 画像特征字典
+        - profile_markdown: 画像 Markdown 内容
         - change_reason: 变更原因
+        - source_session_ids: 来源会话ID列表
         - source_memory_ids: 来源记忆ID列表
+        - confidence: 画像置信度
 
         返回：
         - UserProfile 实例
         """
         return await self.upsert_profile(
             user_id=user_id,
-            features=features,
+            profile_markdown=profile_markdown,
             change_reason=change_reason,
+            source_session_ids=source_session_ids,
             source_memory_ids=source_memory_ids,
+            confidence=confidence,
         )
 
     async def list_profile_history(self, *, user_id: int, limit: int = 20) -> list[UserProfileHistory]:
@@ -623,24 +640,21 @@ class MemoryLayer:
     # ------------------------------------------------------------------
 
     async def build_profile_context(self, user_id: int) -> str:
-        """构建画像上下文文本。  # 将画像特征序列化为可读条目（仅输出有值字段，避免噪声）
+        """构建画像上下文文本。  # 直接返回画像 Markdown
 
         参数：
         - user_id: 用户ID
 
         返回：
-        - 格式化的画像文本
+        - 画像 Markdown 文本
         """
         profile = await self.get_profile(user_id=user_id)
-        if not profile:
+        if not profile or not profile.profile_markdown:
             return "暂无画像信息（新用户），请直接开始对话。"
-        profile_dict = profile.model_dump(exclude_unset=True, exclude={"updated_at", "created_at"})
-        if not profile_dict:
-            return "暂无画像信息（新用户），请直接开始对话。"
-        return "\n".join(f"- {key}: {value}" for key, value in profile_dict.items() if value)
+        return profile.profile_markdown
 
     async def build_long_term_memory_context(self, user_id: int) -> str:
-        """构建长期记忆上下文文本。  # 按记忆类型分组输出为提示词片段，供模型快速检索用户信息
+        """构建长期记忆上下文文本。  # 按记忆类型分组输出 Markdown 内容
 
         参数：
         - user_id: 用户ID
@@ -661,7 +675,8 @@ class MemoryLayer:
             items = memories_by_type.get(memory_type, [])
             if not items:
                 continue
-            chunks.append(f"### {title}\n" + "\n".join(f"- {item.content}" for item in items))
+            # 使用 content_markdown 字段
+            chunks.append(f"### {title}\n" + "\n".join(f"- {item.content_markdown}" for item in items))
         return "\n\n".join(chunks) if chunks else "暂无特定事实记忆。"
 
     async def build_recent_chat_context(

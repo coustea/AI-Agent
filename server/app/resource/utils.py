@@ -668,22 +668,73 @@ async def load_profile_snapshot(user_id: int):
     return LearnerProfileSnapshot.from_sources(**data)
 
 
+def _parse_profile_markdown(profile_markdown: str | None) -> dict[str, str]:
+    """从画像 Markdown 中提取关键信息。
+
+    参数：
+    - profile_markdown: 画像 Markdown 文本
+
+    返回：
+    - 包含 knowledge_level、learning_goal、learning_pace、weakness、interest 等字段的字典
+    """
+    result: dict[str, str] = {}
+    if not profile_markdown:
+        return result
+
+    # 简单的 Markdown 解析：按二级标题分割
+    sections: dict[str, str] = {}
+    current_section: str | None = None
+    current_content: list[str] = []
+
+    for line in profile_markdown.split("\n"):
+        if line.startswith("## "):
+            if current_section and current_content:
+                sections[current_section] = "\n".join(current_content).strip()
+            current_section = line[3:].strip()
+            current_content = []
+        else:
+            if current_section:
+                current_content.append(line)
+    if current_section and current_content:
+        sections[current_section] = "\n".join(current_content).strip()
+
+    # 映射到字段
+    section_mapping = {
+        "技术能力判断": "knowledge_level",
+        "当前学习/项目背景": "learning_goal",
+        "学习偏好": "learning_pace",
+        "当前薄弱点": "weakness",
+        "兴趣方向": "interest",
+        "认知风格": "cognitive_style",
+    }
+    for section_name, field_name in section_mapping.items():
+        if section_name in sections:
+            result[field_name] = sections[section_name]
+
+    return result
+
+
 def build_personalized_context(snapshot, task: dict):
     """构建个性化任务上下文。"""
     from app.resource.schemas import PersonalizedTaskContext
 
     need = task.get("need", "review")
     difficulty = "intermediate"
-    knowledge_score = snapshot.knowledge_level_score
 
-    if knowledge_score is not None and knowledge_score < 40:
+    # 从 profile_markdown 解析信息
+    profile_info = _parse_profile_markdown(snapshot.profile_markdown)
+    knowledge_level = profile_info.get("knowledge_level", "")
+
+    # 根据知识水平文本判断难度
+    if "初级" in knowledge_level or "入门" in knowledge_level or "基础" in knowledge_level:
         difficulty = "basic"
-    elif knowledge_score is not None and knowledge_score >= 75:
+    elif "高级" in knowledge_level or "精通" in knowledge_level or "专家" in knowledge_level:
         difficulty = "advanced"
 
     explanation_style: list[str] = []
-    if snapshot.cognitive_style:
-        explanation_style.append(snapshot.cognitive_style)
+    cognitive_style = profile_info.get("cognitive_style", "")
+    if cognitive_style:
+        explanation_style.append(cognitive_style)
     if need == "exam":
         explanation_style.append("考点优先，短时高频强化")
     elif need == "deep":
@@ -692,10 +743,12 @@ def build_personalized_context(snapshot, task: dict):
         explanation_style.append("先图解梳理，再精讲与练习")
 
     emphasis: list[str] = []
-    if snapshot.error_pattern:
-        emphasis.append(f"重点纠偏：{snapshot.error_pattern}")
-    if snapshot.interest_preference:
-        emphasis.append(f"案例偏好：{snapshot.interest_preference}")
+    weakness = profile_info.get("weakness", "")
+    if weakness:
+        emphasis.append(f"重点纠偏：{weakness}")
+    interest = profile_info.get("interest", "")
+    if interest:
+        emphasis.append(f"案例偏好：{interest}")
     if task.get("extra"):
         emphasis.append(f"本次额外要求：{task['extra']}")
 
@@ -708,5 +761,5 @@ def build_personalized_context(snapshot, task: dict):
         explanation_style=explanation_style,
         emphasis=emphasis,
         recommended_order=["content", "mindmap", "quiz", "reading", "code", "image", "ppt", "video"],
-        profile_summary=snapshot.profile_summary,
+        profile_markdown=snapshot.profile_markdown,
     )

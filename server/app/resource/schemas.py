@@ -24,29 +24,17 @@ class ResourceGenerateRequest(BaseModel):
 
 
 class LearnerProfileSnapshot(BaseModel):
+    """学习者画像快照 — 用于资源生成 Agent 的个性化上下文。"""
     user_id: int | None = None
     username: str | None = None
     major: str | None = None
     grade: str | None = None
     school: str | None = None
 
-    knowledge_level: str | None = None
-    knowledge_level_score: int | None = None
-    learning_goal: str | None = None
-    learning_goal_score: int | None = None
-    learning_history: str | None = None
-    learning_history_score: int | None = None
-    cognitive_style: str | None = None
-    cognitive_style_score: int | None = None
-    error_pattern: str | None = None
-    error_pattern_score: int | None = None
-    learning_pace: str | None = None
-    learning_pace_score: int | None = None
-    interest_preference: str | None = None
-    interest_preference_score: int | None = None
-    cognitive_level: str | None = None
-    cognitive_level_score: int | None = None
-    profile_summary: str | None = None
+    # 画像主体 Markdown
+    profile_markdown: str | None = None
+    version: int | None = None
+    confidence: float | None = None
     updated_at: str | None = None
 
     @classmethod
@@ -77,7 +65,7 @@ class PersonalizedTaskContext(BaseModel):
     explanation_style: list[str] = Field(default_factory=list)
     emphasis: list[str] = Field(default_factory=list)
     recommended_order: list[str] = Field(default_factory=list)
-    profile_summary: str | None = None
+    profile_markdown: str | None = None  # 画像 Markdown
 
     def as_prompt_context(self) -> dict[str, Any]:
         # 这里返回可序列化 dict，方便直接注入 planner prompt。

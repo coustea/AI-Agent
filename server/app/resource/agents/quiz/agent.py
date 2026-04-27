@@ -72,23 +72,70 @@ class QuizAgent:
 
     @staticmethod
     def _format_user_profile(profile: dict[str, Any]) -> str:
-        return format_profile_fields(
-            profile,
-            [
-                ("error_pattern", "易错模式"),
-                ("knowledge_level", "知识水平"),
-            ],
-        )
+        """格式化用户画像，从 profile_markdown 中提取易错点和知识水平信息。"""
+        profile_markdown = profile.get("profile_markdown", "")
+        if not profile_markdown:
+            return ""
+
+        # 解析 Markdown 提取相关字段
+        sections: dict[str, str] = {}
+        current_section: str | None = None
+        current_content: list[str] = []
+
+        for line in profile_markdown.split("\n"):
+            if line.startswith("## "):
+                if current_section and current_content:
+                    sections[current_section] = "\n".join(current_content).strip()
+                current_section = line[3:].strip()
+                current_content = []
+            else:
+                if current_section:
+                    current_content.append(line)
+        if current_section and current_content:
+            sections[current_section] = "\n".join(current_content).strip()
+
+        parts: list[str] = []
+        if "当前薄弱点" in sections:
+            parts.append(f"- 易错模式：{sections['当前薄弱点']}")
+        if "技术能力判断" in sections:
+            parts.append(f"- 知识水平：{sections['技术能力判断']}")
+        return "\n".join(parts)
 
     def _build_system_message(self, state: dict[str, Any]) -> str:
         user_profile = state.get("user_profile", {})
+        profile_markdown = user_profile.get("profile_markdown", "")
+
+        # 解析 Markdown 提取易错点和知识水平
+        error_pattern = ""
+        knowledge_level = "中等"
+        sections: dict[str, str] = {}
+        current_section: str | None = None
+        current_content: list[str] = []
+
+        for line in profile_markdown.split("\n"):
+            if line.startswith("## "):
+                if current_section and current_content:
+                    sections[current_section] = "\n".join(current_content).strip()
+                current_section = line[3:].strip()
+                current_content = []
+            else:
+                if current_section:
+                    current_content.append(line)
+        if current_section and current_content:
+            sections[current_section] = "\n".join(current_content).strip()
+
+        if "当前薄弱点" in sections:
+            error_pattern = sections["当前薄弱点"]
+        if "技术能力判断" in sections:
+            knowledge_level = sections["技术能力判断"]
+
         system_prompt = self.prompt_template.format(
             major=state.get("major", "通用"),
             course=state.get("course", ""),
             topic=state.get("topic", ""),
             gap=state.get("gap", ""),
-            knowledge_level=user_profile.get("knowledge_level", "中等"),
-            error_pattern=user_profile.get("error_pattern", ""),
+            knowledge_level=knowledge_level,
+            error_pattern=error_pattern,
         )
         return append_context(
             system_prompt,

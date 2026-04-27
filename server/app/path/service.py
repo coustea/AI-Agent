@@ -46,9 +46,12 @@ class PathService:
         inferred_weak_points = self._extract_weak_points(profile, resource, weak_points)
         completed_node_ids = self._extract_completed_node_ids(resource)
 
+        # 从画像 Markdown 中提取信息
+        profile_info = self._parse_profile_markdown(profile.profile_markdown if profile else None)
+
         plan = build_initial_plan(
-            knowledge_level=profile.knowledge_level if profile else None,
-            learning_goal=profile.learning_goal if profile else None,
+            knowledge_level=profile_info.get("knowledge_level"),
+            learning_goal=profile_info.get("learning_goal"),
             weak_points=inferred_weak_points,
             planned_node_ids=planned_node_ids,
         )
@@ -56,7 +59,7 @@ class PathService:
         plan = compute_progress(
             plan,
             completed_node_ids=completed_node_ids,
-            pace=profile.learning_pace if profile else None,
+            pace=profile_info.get("learning_pace"),
         )
         if feedback or weak_points:
             plan = adjust_plan(plan, weak_points=inferred_weak_points, feedback=feedback)
@@ -122,8 +125,11 @@ class PathService:
         extra_weak_points: list[str] | None,
     ) -> list[str]:
         texts: list[str] = []
-        if profile and profile.error_pattern:
-            texts.append(profile.error_pattern)
+        # 从画像 Markdown 中提取薄弱点
+        if profile and profile.profile_markdown:
+            profile_info = self._parse_profile_markdown(profile.profile_markdown)
+            if profile_info.get("weakness"):
+                texts.append(profile_info["weakness"])
         if resource and resource.gap:
             texts.append(resource.gap)
         if resource and resource.need:
@@ -155,8 +161,10 @@ class PathService:
             if node_id in ALL_NODE_IDS:
                 inferred.append(node_id)
 
-        if not inferred and profile and profile.learning_goal:
-            goal = profile.learning_goal.lower()
+        # 从画像 Markdown 中提取学习目标
+        if not inferred and profile and profile.profile_markdown:
+            profile_info = self._parse_profile_markdown(profile.profile_markdown)
+            goal = (profile_info.get("learning_goal") or "").lower()
             if "exam" in goal or "考试" in goal:
                 inferred.append("quiz")
             if "project" in goal or "项目" in goal:
@@ -164,6 +172,50 @@ class PathService:
 
         ordered = [node_id for node_id in ALL_NODE_IDS if node_id in set(inferred)]
         return ordered
+
+    def _parse_profile_markdown(self, profile_markdown: str | None) -> dict[str, str]:
+        """从画像 Markdown 中提取关键信息。
+
+        参数：
+        - profile_markdown: 画像 Markdown 文本
+
+        返回：
+        - 包含 knowledge_level、learning_goal、learning_pace、weakness 等字段的字典
+        """
+        result: dict[str, str] = {}
+        if not profile_markdown:
+            return result
+
+        # 简单的 Markdown 解析：按二级标题分割
+        sections = {}
+        current_section = None
+        current_content: list[str] = []
+
+        for line in profile_markdown.split("\n"):
+            if line.startswith("## "):
+                if current_section and current_content:
+                    sections[current_section] = "\n".join(current_content).strip()
+                current_section = line[3:].strip()
+                current_content = []
+            else:
+                if current_section:
+                    current_content.append(line)
+        if current_section and current_content:
+            sections[current_section] = "\n".join(current_content).strip()
+
+        # 映射到字段
+        section_mapping = {
+            "技术能力判断": "knowledge_level",
+            "当前学习/项目背景": "learning_goal",
+            "学习偏好": "learning_pace",
+            "当前薄弱点": "weakness",
+            "兴趣方向": "interest",
+        }
+        for section_name, field_name in section_mapping.items():
+            if section_name in sections:
+                result[field_name] = sections[section_name]
+
+        return result
 
     def _compute_confidence(
         self,
