@@ -340,6 +340,25 @@ def _load_template_config(template_dir: Path, template_id: str) -> dict:
     raise FileNotFoundError(f"未找到模板配置文件: {template_dir}")
 
 
+def _load_template_layouts(template_dir: Path, template_id: str) -> dict[str, dict[str, Any]]:
+    """加载模板布局绑定（来自 *.schema.json 的 layouts）。"""
+    schema_candidates = [
+        template_dir / f"{template_id}.schema.json",
+        template_dir / "template.schema.json",
+    ]
+    for schema_path in schema_candidates:
+        if not schema_path.exists():
+            continue
+        try:
+            payload = json.loads(schema_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        layouts = payload.get("layouts")
+        if isinstance(layouts, dict):
+            return layouts
+    return {}
+
+
 def _find_template_file(template_dir: Path, config: dict) -> Path:
     """查找模板文件。"""
     template_file = config.get("template_file")
@@ -498,6 +517,72 @@ def _add_readability_panel(
     panel.line.width = Pt(1.1)
 
 
+def _estimate_text_capacity(shape, font_size_pt: int) -> int:
+    """按文本框尺寸粗略估算可承载字符数。"""
+    try:
+        width_in = max(float(getattr(shape, "width", 0)) / 914400.0, 0.1)
+        height_in = max(float(getattr(shape, "height", 0)) / 914400.0, 0.1)
+    except Exception:
+        return 120
+    # 混合中英文场景下采用保守估算，优先不溢出。
+    char_width_in = max((float(font_size_pt) / 72.0) * 0.56, 0.06)
+    line_height_in = max((float(font_size_pt) / 72.0) * 1.25, 0.1)
+    chars_per_line = max(int(width_in / char_width_in), 6)
+    lines = max(int(height_in / line_height_in), 1)
+    return max(chars_per_line * lines, 8)
+
+
+def _compact_text_for_capacity(text: str, max_chars: int) -> str:
+    value = str(text or "").replace("\r", "").strip()
+    if not value:
+        return ""
+    # 保留换行层次，但压缩空白。
+    lines = [re.sub(r"\s+", " ", line).strip() for line in value.split("\n")]
+    compact = "\n".join([line for line in lines if line])
+    if len(compact) <= max_chars:
+        return compact
+    cut = max(max_chars - 1, 1)
+    return compact[:cut].rstrip() + "…"
+
+
+def _apply_fitted_text(shape, value: str, *, preferred_font_size: int | None = None) -> None:
+    tf = shape.text_frame
+    if tf is None:
+        return
+    tf.word_wrap = True
+    tf.vertical_anchor = MSO_ANCHOR.TOP
+
+    base_size = int(preferred_font_size or 0)
+    if base_size <= 0:
+        base_size = 18
+    min_size = 12
+    normalized = _repair_text(value, fallback="内容待补充")
+
+    chosen_size = base_size
+    fitted_text = normalized
+    for size in range(base_size, min_size - 1, -1):
+        cap = _estimate_text_capacity(shape, size)
+        candidate = _compact_text_for_capacity(normalized, cap)
+        # 文本被截断时继续降字号尝试，优先完整展示。
+        if len(candidate) >= len(normalized) or size == min_size:
+            chosen_size = size
+            fitted_text = candidate
+            break
+
+    tf.clear()
+    p = tf.paragraphs[0]
+    p.text = fitted_text
+    p.font.name = "Microsoft YaHei"
+    p.font.size = Pt(chosen_size)
+    p.line_spacing = 1.15
+    for run in p.runs:
+        run.font.name = "Microsoft YaHei"
+        run.font.size = Pt(chosen_size)
+        r_pr = run._r.get_or_add_rPr()
+        r_pr.set("lang", "zh-CN")
+        r_pr.set("eastAsia", "Microsoft YaHei")
+
+
 def _collect_replace_values(slide_data: dict[str, Any]) -> list[str]:
     title = _repair_text(slide_data.get("title", ""), fallback="标题")
     slots = slide_data.get("slots", {})
@@ -560,29 +645,143 @@ def _collect_replace_values(slide_data: dict[str, Any]) -> list[str]:
     return values
 
 
-def _replace_template_text_frames(slide, slide_data: dict[str, Any]) -> None:
+def _replace_template_text_frames(
+    slide,
+    slide_data: dict[str, Any],
+    *,
+    bindings: list[dict[str, Any]] | None = None,
+    binding_blacklist: dict[str, Any] | None = None,
+) -> None:
     text_shapes = [s for s in slide.shapes if getattr(s, "has_text_frame", False)]
     if not text_shapes:
         return
 
+    slot_values: dict[str, str] = {}
+    slot_values["title"] = _repair_text(slide_data.get("title", ""), fallback="标题")
+    slots = slide_data.get("slots", {})
+    if isinstance(slots, dict):
+        for key, raw in slots.items():
+            slot_key = str(key).strip()
+            if not slot_key:
+                continue
+            slot_values[slot_key] = _repair_text(raw, fallback=_slot_fallback_text(slot_key))
+
+    def _binding_blocked(item: dict[str, Any]) -> bool:
+        if not isinstance(binding_blacklist, dict):
+            return False
+        page_role = str(slide_data.get("page_role", "")).strip()
+        role_rules = binding_blacklist.get(page_role)
+        if not isinstance(role_rules, dict):
+            return False
+
+        slot_name = str(item.get("slot_name", "")).strip()
+        shape_name = str(item.get("shape_name", "")).strip()
+        shape_id = item.get("shape_id")
+
+        blocked_slots = role_rules.get("slot_names", [])
+        if isinstance(blocked_slots, list) and slot_name in {str(v).strip() for v in blocked_slots}:
+            return True
+
+        blocked_names = role_rules.get("shape_names", [])
+        if isinstance(blocked_names, list) and shape_name in {str(v).strip() for v in blocked_names}:
+            return True
+
+        blocked_ids = role_rules.get("shape_ids", [])
+        if isinstance(blocked_ids, list):
+            id_set: set[int] = set()
+            for v in blocked_ids:
+                try:
+                    id_set.add(int(v))
+                except Exception:
+                    continue
+            try:
+                if shape_id is not None and int(shape_id) in id_set:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    # 先按页黑名单强制清空文本层（即使该 shape 不在 bindings 里也会清空）。
+    if isinstance(binding_blacklist, dict):
+        page_role = str(slide_data.get("page_role", "")).strip()
+        role_rules = binding_blacklist.get(page_role, {})
+        if isinstance(role_rules, dict):
+            blocked_ids: set[int] = set()
+            for v in role_rules.get("shape_ids", []) if isinstance(role_rules.get("shape_ids", []), list) else []:
+                try:
+                    blocked_ids.add(int(v))
+                except Exception:
+                    continue
+            blocked_names = {
+                str(v).strip()
+                for v in (role_rules.get("shape_names", []) if isinstance(role_rules.get("shape_names", []), list) else [])
+                if str(v).strip()
+            }
+            if blocked_ids or blocked_names:
+                for shape in text_shapes:
+                    sid = int(getattr(shape, "shape_id", -1))
+                    sname = str(getattr(shape, "name", "")).strip()
+                    if sid in blocked_ids or sname in blocked_names:
+                        try:
+                            shape.text_frame.clear()
+                        except Exception:
+                            continue
+
+    # 优先按 schema bindings 精准填充，避免“按坐标顺序”导致错位。
+    if isinstance(bindings, list) and bindings:
+        shape_by_id = {int(getattr(s, "shape_id", -1)): s for s in text_shapes}
+        shape_by_name = {str(getattr(s, "name", "")).strip(): s for s in text_shapes}
+        written = 0
+        for item in bindings:
+            if not isinstance(item, dict):
+                continue
+            target = None
+            shape_id = item.get("shape_id")
+            try:
+                if shape_id is not None:
+                    target = shape_by_id.get(int(shape_id))
+            except Exception:
+                target = None
+            if target is None:
+                shape_name = str(item.get("shape_name", "")).strip()
+                if shape_name:
+                    target = shape_by_name.get(shape_name)
+
+            if _binding_blocked(item):
+                # 命中黑名单时清空模板原始文本，避免残留文字“印”在图片层上。
+                if target is not None and getattr(target, "text_frame", None) is not None:
+                    try:
+                        target.text_frame.clear()
+                    except Exception:
+                        pass
+                continue
+            slot_name = str(item.get("slot_name", "")).strip()
+            if not slot_name or slot_name not in slot_values:
+                continue
+            value = slot_values.get(slot_name, "")
+            if not str(value or "").strip():
+                continue
+
+            if target is None:
+                continue
+            preferred_size = item.get("font_size_pt")
+            try:
+                preferred_size = int(round(float(preferred_size)))
+            except Exception:
+                preferred_size = None
+            _apply_fitted_text(target, value, preferred_font_size=preferred_size)
+            written += 1
+
+        if written > 0:
+            return
+
+    # 兜底：按视觉坐标顺序替换
     text_shapes.sort(key=lambda s: (float(getattr(s, "top", 0)), float(getattr(s, "left", 0))))
     values = _collect_replace_values(slide_data)
-
     for idx, value in enumerate(values):
         if idx >= len(text_shapes):
             break
-        tf = text_shapes[idx].text_frame
-        if tf is None:
-            continue
-        tf.clear()
-        tf.paragraphs[0].text = _repair_text(value, fallback="内容待补充")
-        p = tf.paragraphs[0]
-        p.font.name = "Microsoft YaHei"
-        for run in p.runs:
-            run.font.name = "Microsoft YaHei"
-            r_pr = run._r.get_or_add_rPr()
-            r_pr.set("lang", "zh-CN")
-            r_pr.set("eastAsia", "Microsoft YaHei")
+        _apply_fitted_text(text_shapes[idx], value)
 
 
 def _remove_unwanted_template_shapes(slide, page_role: str = "") -> None:
@@ -1841,9 +2040,11 @@ def render_ppt_plan_to_file(
         logger.warning("[render_ppt_plan_to_file] 在线模板下载失败，回退本地渲染: %s", exc)
 
     # 查找模板目录和配置
+    template_layouts: dict[str, dict[str, Any]] = {}
     try:
         template_dir = _find_template_dir(resolved_template_id)
         config = _load_template_config(template_dir, resolved_template_id)
+        template_layouts = _load_template_layouts(template_dir, resolved_template_id)
         template_path = _find_template_file(template_dir, config)
 
         prs = Presentation(str(template_path))
@@ -1861,6 +2062,11 @@ def render_ppt_plan_to_file(
     render_options = config.get("render_options", {}) if isinstance(config, dict) else {}
     preserve_template_shapes = bool(render_options.get("preserve_template_shapes", False))
     replace_template_text_frames = bool(render_options.get("replace_template_text_frames", False))
+    binding_blacklist = (
+        render_options.get("binding_blacklist", {})
+        if isinstance(render_options, dict)
+        else {}
+    )
     slide_titles: list[str] = []
 
     # 为每个内容创建新幻灯片（基于模板布局）
@@ -1879,7 +2085,14 @@ def render_ppt_plan_to_file(
         if resolved_template_id != DEFAULT_TEMPLATE_ID:
             _remove_unwanted_template_shapes(slide, page_role=page_role)
         if replace_template_text_frames:
-            _replace_template_text_frames(slide, slide_data)
+            layout = template_layouts.get(page_role, {})
+            bindings = layout.get("bindings") if isinstance(layout, dict) else None
+            _replace_template_text_frames(
+                slide,
+                slide_data,
+                bindings=bindings,
+                binding_blacklist=binding_blacklist,
+            )
         else:
             _clear_text_frames(slide)
             # 渲染内容

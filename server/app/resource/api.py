@@ -14,13 +14,14 @@ from app.auth.security import decode_token, get_current_user, is_token_valid
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.resource.schemas import ResourceGenerateRequest
+from app.resource.schemas import PptGenerateRequest, ResourceGenerateRequest
 from app.resource.service import resource_usecases
-from app.shared.paths import RESOURCE_DIR
+from app.shared.paths import RESOURCE_DIR, WORKPLACE_DIR
 from app.shared.response import HttpResponse
 
 router = APIRouter()
 logger = get_logger(__name__)
+PPT_DIR = WORKPLACE_DIR / "ppt"
 
 
 def _extract_visible_agents_from_plan(plan_result: str | None) -> set[str] | None:
@@ -171,3 +172,71 @@ async def get_resource(
                 # 新架构里仍允许个别资源先以纯文本落库，详情页不因为单个解析失败而中断。
                 data["results"][key] = raw
     return HttpResponse.success(data=data)
+
+
+@router.post("/ppt/generate")
+async def generate_ppt_direct(
+    req: PptGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """直接调用 PPT Agent（AI 规划 + 模板渲染），不走整套资源编排。"""
+    logger.info(
+        "[ResourceAPI] 直连 PPT 生成: user_id=%s topic=%r template=%s",
+        current_user.id,
+        req.topic,
+        req.template_id,
+    )
+    from app.resource.agents.ppt import ppt_agent
+
+    result = await ppt_agent.generate_ppt(
+        topic=req.topic,
+        course=req.course,
+        major=req.major,
+        gap=req.gap,
+        user_profile={},
+        shared_memory={},
+        template_id=req.template_id,
+        template_source_url=req.template_source_url or "",
+        template_config_url=req.template_config_url or "",
+    )
+    if not result.get("success"):
+        return HttpResponse.error(code=500, message=result.get("error") or "PPT 生成失败", data=result)
+
+    file_path = str(result.get("file_path") or "")
+    filename = Path(file_path).name if file_path else ""
+    file_url = f"/api/v1/ai/ppt/files/{filename}" if filename else None
+    data = {
+        "success": True,
+        "topic": req.topic,
+        "file_path": file_path,
+        "file_url": file_url,
+        "slide_count": result.get("slide_count", 0),
+        "slide_titles": result.get("slide_titles", []),
+        "template_id": result.get("template_id", req.template_id),
+        "style": result.get("style", ""),
+    }
+    return HttpResponse.success(data=data)
+
+
+@router.get("/ppt/files/{filename}")
+async def get_ppt_file(
+    filename: str,
+    token: str = Query(..., description="PPT 文件访问 token"),
+    session: AsyncSession = Depends(get_session),
+):
+    """下载直连 PPT 生成文件。"""
+    if not await is_token_valid(token, session):
+        raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
+    _ = decode_token(token)
+
+    safe_filename = Path(filename).name
+    if safe_filename != filename:
+        raise HTTPException(status_code=400, detail="非法文件名")
+
+    ppt_dir = PPT_DIR.resolve()
+    file_path = (ppt_dir / safe_filename).resolve()
+    if not str(file_path).startswith(str(ppt_dir)):
+        raise HTTPException(status_code=400, detail="非法文件路径")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    return FileResponse(path=str(file_path), filename=safe_filename)

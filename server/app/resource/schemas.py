@@ -23,6 +23,18 @@ class ResourceGenerateRequest(BaseModel):
     )
 
 
+class PptGenerateRequest(BaseModel):
+    """直接触发 AI 生成 PPT 的请求体。"""
+
+    topic: str = Field(..., description="PPT 主题")
+    course: str = Field(default="", description="课程名称")
+    major: str = Field(default="通用", description="专业方向")
+    gap: str = Field(default="", description="学习痛点/目标")
+    template_id: str = Field(default="python_ppt_template", description="模板标识")
+    template_source_url: Optional[str] = Field(default=None, description="可选：在线模板直链（.pptx）")
+    template_config_url: Optional[str] = Field(default=None, description="可选：在线模板配置 JSON 直链")
+
+
 class LearnerProfileSnapshot(BaseModel):
     """学习者画像快照 — 用于资源生成 Agent 的个性化上下文。"""
     user_id: int | None = None
