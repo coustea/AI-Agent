@@ -13,7 +13,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from app.infra.llm import get_spark_x_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.utils import append_context, format_profile_fields, load_prompt, save_resource_file
 
@@ -71,7 +71,8 @@ class CodeAgent:
         self.name = "CodeAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_spark_x_llm(temperature=0.2)
+        self.llm_manager = get_llm_manager()
+        self.model_kwargs = {"temperature": 0.2}
 
     def _extract_memory(self, shared_memory: dict[str, Any]) -> str:
         """从黑板提取上下文。"""
@@ -177,7 +178,11 @@ class CodeAgent:
         ]
 
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self.llm_manager.ainvoke(
+                "spark_x",
+                messages,
+                model_kwargs=self.model_kwargs,
+            )
             content = response.content.strip() if isinstance(response.content, str) else str(response.content)
             language = _detect_language(content)
             code_blocks = _extract_all_code_blocks(content)

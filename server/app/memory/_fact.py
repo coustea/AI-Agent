@@ -6,7 +6,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.infra.llm import get_deepseek_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.memory.memory_types import FactAgentMemoryType
 from app.memory._profile import (
@@ -133,7 +133,8 @@ class FactExtractionService:
         """
         self.module_name = module_name  # module_name 会参与存储分区键：它决定读写哪个"模块/场景"的长期记忆池
         self.store = store or MemoryStore()
-        self.llm = get_deepseek_llm(temperature=0.1, streaming=False)  # 使用 DeepSeek 做事实抽取：低温度减少发散，非流式便于结构化解析
+        self.llm_manager = get_llm_manager()
+        self.model_kwargs = {"temperature": 0.1, "streaming": False}
         self.output_parser = PydanticOutputParser(pydantic_object=FactExtraction)  # 结构化输出解析器：把模型文本解析为 FactExtraction
         self.prompt_template = ChatPromptTemplate.from_messages([("human", "{prompt_text}")])
 
@@ -183,7 +184,11 @@ class FactExtractionService:
                 chat_history=chat_history,
                 format_instructions=self.output_parser.get_format_instructions(),
             )
-            response = await self.llm.ainvoke(self.prompt_template.format_messages(prompt_text=prompt_text))  # 调用大模型进行结构化抽取
+            response = await self.llm_manager.ainvoke(  # 调用大模型进行结构化抽取
+                "deepseek",
+                self.prompt_template.format_messages(prompt_text=prompt_text),
+                model_kwargs=self.model_kwargs,
+            )
             # 不同大模型实现的 response.content 可能是 str 或其他对象；这里统一转成字符串再交给解析器。
             extracted = self.output_parser.parse(response.content if isinstance(response.content, str) else str(response.content))  # 严格解析结构化输出（不符合数据模型约束会抛错）
             if extracted.has_fact and extracted.facts:  # 仅当模型明确标记"有事实"且列表非空时才写入存储，避免空写入/误触发

@@ -12,7 +12,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import CONTENT_AGENT_TIMEOUT_SECONDS
-from app.infra.llm import get_spark_x_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.utils import append_context, load_prompt
 from app.shared.paths import RESOURCE_DIR
@@ -64,7 +64,8 @@ class ContentWriter:
         self.name = "ContentAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_spark_x_llm(temperature=0.3)
+        self.llm_manager = get_llm_manager()
+        self.model_kwargs = {"temperature": 0.3}
 
     @staticmethod
     def _workflow_timeout_seconds() -> int:
@@ -104,11 +105,13 @@ class ContentWriter:
 
     async def _generate_text(self, system_prompt: str, user_message: str) -> str:
         """调用模型直接生成文本内容。"""
-        response = await self.llm.ainvoke(
+        response = await self.llm_manager.ainvoke(
+            "spark_x",
             [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_message),
-            ]
+            ],
+            model_kwargs=self.model_kwargs,
         )
         return self._strip_markdown_fence(
             response.content if hasattr(response, "content") else str(response)

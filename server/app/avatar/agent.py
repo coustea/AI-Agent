@@ -23,7 +23,7 @@ from typing_extensions import TypedDict
 
 from app.chat.utils import load_prompts
 from app.infra.logging import get_logger
-from app.infra.llm import get_spark_llm, get_deepseek_llm, get_glm_vision_llm
+from app.infra.llm import get_llm_manager
 from app.memory import MemoryLayer
 from app.shared.image_analyze import build_vision_service
 
@@ -142,14 +142,12 @@ class AvatarAgent:
     """数字人 Agent — 独立 LangGraph 图"""
 
     def __init__(self) -> None:
-        # 主模型使用 Spark MAX，负责直接回答（带并发控制）
-        self.llm = get_spark_llm(temperature=0.7, streaming=True)
-        # 分类器使用 DeepSeek
-        self.classifier_llm = get_deepseek_llm(temperature=0.0, max_tokens=100)
-        # 工具调用使用 DeepSeek（Spark 不支持工具调用）
-        self.tool_llm = get_deepseek_llm(temperature=0.2, streaming=False)
+        self.llm_manager = get_llm_manager()
+        self.spark_model_kwargs = {"temperature": 0.7, "streaming": True}
+        self.classifier_model_kwargs = {"temperature": 0.0, "max_tokens": 100}
+        self.tool_model_kwargs = {"temperature": 0.2, "streaming": False}
         self.memory_layer = MemoryLayer(module_name="avatar")
-        self.vision_service = build_vision_service(get_glm_vision_llm())
+        self.vision_service = build_vision_service(self.llm_manager)
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -344,11 +342,13 @@ class AvatarAgent:
 
         # LLM 分类
         try:
-            result = await self.classifier_llm.ainvoke(
+            result = await self.llm_manager.ainvoke(
+                "deepseek",
                 AVATAR_CLASSIFIER_PROMPT.format(
                     user_message=user_msg,
                     has_attachments="是" if (state.get("file_urls") or state.get("image_urls")) else "否",
-                )
+                ),
+                model_kwargs=self.classifier_model_kwargs,
             )
             route = result.content.strip().strip('"').strip("'")
             if route not in ("direct", "tool_needed", "vision_needed"):
@@ -369,7 +369,11 @@ class AvatarAgent:
     async def _direct_answer_node(self, state: AvatarState) -> dict:
         """直接回答路径"""
         messages = [SystemMessage(content=state["system_prompt"])] + state["messages"]
-        response = await self.llm.ainvoke(messages)
+        response = await self.llm_manager.ainvoke(
+            "spark",
+            messages,
+            model_kwargs=self.spark_model_kwargs,
+        )
         return {"messages": [response]}
 
     async def _vision_answer_node(self, state: AvatarState) -> dict:
@@ -388,14 +392,22 @@ class AvatarAgent:
         """工具调用路径 — 使用 DeepSeek 进行工具调用"""
         tools = _lazy_import_tools()
         # 使用 DeepSeek 进行工具调用（Spark 不支持 bind_tools）
-        llm_with_tools = self.tool_llm.bind_tools(tools) if tools else self.tool_llm
+        llm_with_tools = self.llm_manager.bind_tools(
+            "deepseek",
+            tools,
+            model_kwargs=self.tool_model_kwargs,
+        ) if tools else self.llm_manager.get_model("deepseek", **self.tool_model_kwargs)
 
         from app.shared.request_context import set_user_id, set_session_id
         set_user_id(state["user_id"])
         set_session_id(state["session_id"])
 
         messages = [SystemMessage(content=state["tool_system_prompt"])] + state["messages"]
-        response = await llm_with_tools.ainvoke(messages)
+        response = await self.llm_manager.ainvoke_runnable(
+            llm_with_tools,
+            messages,
+            model_type="deepseek",
+        )
         return {"messages": [response]}
 
     async def _tools_node(self, state: AvatarState) -> dict:

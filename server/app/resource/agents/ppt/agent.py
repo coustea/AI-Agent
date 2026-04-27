@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field, model_validator
 
-from app.infra.llm import get_deepseek_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.agents.ppt.renderer import ensure_template_available, render_ppt_plan_to_file
 from app.resource.agents.ppt.template_catalog import (
@@ -277,7 +277,8 @@ class PptAgent:
         self.agent_dir = Path(__file__).parent
         self.state_schema = PptState
         self.temperature = 0.2
-        self.llm = get_deepseek_llm(temperature=0.2, streaming=False, max_tokens=4000)
+        self.llm_manager = get_llm_manager()
+        self.model_kwargs = {"temperature": 0.2, "streaming": False, "max_tokens": 4000}
         self.prompt_template = ""
         self._graph = None
         self._load_prompt()
@@ -385,11 +386,19 @@ class PptAgent:
         from app.config import LLM_TIMEOUT
 
         messages = self._build_messages(state)
-        structured_llm = self.llm.with_structured_output(self.structured_output_schema)
+        structured_llm = self.llm_manager.with_structured_output(
+            "deepseek",
+            self.structured_output_schema,
+            model_kwargs=self.model_kwargs,
+        )
 
         try:
             result = await asyncio.wait_for(
-                structured_llm.ainvoke(messages),
+                self.llm_manager.ainvoke_runnable(
+                    structured_llm,
+                    messages,
+                    model_type="deepseek",
+                ),
                 timeout=LLM_TIMEOUT,
             )
             return {"ppt_plan": result.model_dump(), "error": None}
@@ -436,7 +445,11 @@ class PptAgent:
                 )
             ]
             raw_response = await asyncio.wait_for(
-                self.llm.ainvoke(fallback_messages),
+                self.llm_manager.ainvoke(
+                    "deepseek",
+                    fallback_messages,
+                    model_kwargs=self.model_kwargs,
+                ),
                 timeout=LLM_TIMEOUT,
             )
             raw_content = getattr(raw_response, "content", raw_response)

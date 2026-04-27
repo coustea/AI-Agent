@@ -14,7 +14,7 @@ from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.database import engine
-from app.infra.llm import get_deepseek_llm, get_spark_x_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, UserMemory
 from app.memory.memory_types import (
@@ -29,6 +29,7 @@ from app.memory.memory_types import (
 from app.shared.json_utils import parse_first_json_object
 
 logger = get_logger(__name__)
+llm_manager = get_llm_manager()
 
 SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7  # 短期记忆消息默认保留天数（用于最近消息查询/清理过期消息的截止时间计算）
 MEMORY_COMPRESSION_TOKEN_THRESHOLD = 150  # 触发"对话摘要压缩"的token阈值（达到阈值后可将旧消息压缩为长期摘要）
@@ -283,15 +284,23 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
 
     async def _generate_session_title(self, user_message: str) -> str:  # 用轻量级 LLM 从用户首条消息提取会话标题
         from langchain_core.prompts import ChatPromptTemplate
-        raw_llm = get_deepseek_llm(temperature=0.1, max_tokens=80)
+        model_kwargs = {"temperature": 0.1, "max_tokens": 80}
         prompt = ChatPromptTemplate.from_messages([
             ("system", "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题。标题应该简洁明了，能够概括对话主题。"),
             ("human", "{user_message}"),
         ])
         messages = prompt.invoke({"user_message": user_message[:500]})
         try:
-            llm = raw_llm.with_structured_output(SessionTitleOutput)
-            result = await llm.ainvoke(messages)
+            llm = llm_manager.with_structured_output(
+                "deepseek",
+                SessionTitleOutput,
+                model_kwargs=model_kwargs,
+            )
+            result = await llm_manager.ainvoke_runnable(
+                llm,
+                messages,
+                model_type="deepseek",
+            )
             title = _normalize_session_title(result.title)
             logger.info("[MemoryStore] title.llm_response title=%r", title)
             return title
@@ -308,7 +317,11 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                     '格式必须是：{"title":"会话标题"}，标题不超过15个字。',
                 )
             ]
-            raw_response = await raw_llm.ainvoke(fallback_messages)
+            raw_response = await llm_manager.ainvoke(
+                "deepseek",
+                fallback_messages,
+                model_kwargs=model_kwargs,
+            )
             raw_content = getattr(raw_response, "content", raw_response)
             parsed = parse_first_json_object(str(raw_content))
             title = _normalize_session_title(parsed.get("title"))
@@ -863,8 +876,11 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             )),
             ("human", "{chat_text}"),
         ])
-        llm = get_spark_x_llm(temperature=0.1)
-        result = await llm.ainvoke(summarize_prompt.invoke({"chat_text": chat_text}))
+        result = await llm_manager.ainvoke(
+            "spark_x",
+            summarize_prompt.invoke({"chat_text": chat_text}),
+            model_kwargs={"temperature": 0.1},
+        )
         summarized_ids = [m.id for m in recent_msgs[:-keep_recent]]
         # 先落库摘要再删旧消息：即使清理过程中途失败，也能保证摘要已保存，避免"删了但没存摘要"的数据丢失。
         await self.save_long_term_memory(

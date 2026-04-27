@@ -16,6 +16,7 @@ import hmac
 import requests
 import time
 import logging
+import asyncio
 
 from datetime import datetime
 from queue import Queue
@@ -24,9 +25,10 @@ from urllib.parse import urlencode
 from wsgiref.handlers import format_date_time
 
 from app.config import SPARK_IMAGE_APPID, SPARK_IMAGE_API_KEY, SPARK_IMAGE_API_SECRET, SPARK_IMAGE_PATCH_ID
-from app.infra.llm import get_deepseek_llm
+from app.infra.llm import get_llm_manager
 
 logger = logging.getLogger(__name__)
+llm_manager = get_llm_manager()
 
 PROMPT_ENGINEER_SYSTEM = """You are an expert prompt engineer.
 
@@ -120,12 +122,16 @@ class ImageGeneratorAsync:
     # ================= LLM优化 =================
     def _optimize_prompt(self, content: str) -> str:
         try:
-            llm = get_deepseek_llm(temperature=0.3)
-
-            resp = llm.invoke([
-                {"role": "system", "content": PROMPT_ENGINEER_SYSTEM},
-                {"role": "user", "content": content}
-            ])
+            resp = asyncio.run(
+                llm_manager.ainvoke(
+                    "deepseek",
+                    [
+                        {"role": "system", "content": PROMPT_ENGINEER_SYSTEM},
+                        {"role": "user", "content": content},
+                    ],
+                    model_kwargs={"temperature": 0.3},
+                )
+            )
 
             optimized = resp.content.strip()
             optimized = self._sanitize_prompt(optimized)

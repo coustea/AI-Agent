@@ -37,7 +37,7 @@ from app.chat.utils import (
 )
 from app.config import LANGGRAPH_DEBUG
 from app.memory import MemoryLayer
-from app.infra.llm import get_deepseek_llm, get_spark_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.tools.search import duckduckgo_search, tavily_search
 
@@ -139,20 +139,11 @@ class TutorAgent:
         创建 LLM 实例、上下文服务、图和工具。
         """
         # LLM 实例
-        # 主模型使用 Spark Max，负责直接回答和总结
-        self.llm = get_spark_llm(temperature=0.7, streaming=True)
-        # 搜索模型使用 DeepSeek，负责联网搜索
-        self.search_llm = get_deepseek_llm(
-            temperature=0.2,
-            streaming=False,
-            max_tokens=1200,
-        )
+        self.llm_manager = get_llm_manager()
+        self.spark_model_kwargs = {"temperature": 0.7, "streaming": True}
+        self.search_model_kwargs = {"temperature": 0.2, "streaming": False, "max_tokens": 1200}
         # 图解生成模型 - 使用 deepseek-chat 因为 reasoner 模型不支持 tool_choice
-        self.diagram_llm = get_deepseek_llm(
-            temperature=0.1,
-            streaming=False,
-            max_tokens=1600,
-        )
+        self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
         # 上下文服务
         self.memory_layer = MemoryLayer(module_name="mentor")
 
@@ -310,7 +301,11 @@ class TutorAgent:
             full_messages = build_messages(merged_system_prompt, list(messages))
 
             try:
-                response = await self.llm.ainvoke(full_messages)
+                response = await self.llm_manager.ainvoke(
+                    "spark",
+                    full_messages,
+                    model_kwargs=self.spark_model_kwargs,
+                )
                 text = normalize_message_content(getattr(response, "content", response))
             except Exception as exc:
                 logger.warning("[TutorAgent] direct_answer Spark MAX 调用失败 err=%s", exc)
@@ -323,7 +318,11 @@ class TutorAgent:
                     HumanMessage(content="请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。")
                 ]
                 try:
-                    retry_response = await self.llm.ainvoke(retry_messages)
+                    retry_response = await self.llm_manager.ainvoke(
+                        "spark",
+                        retry_messages,
+                        model_kwargs=self.spark_model_kwargs,
+                    )
                     text = normalize_message_content(getattr(retry_response, "content", retry_response))
                 except Exception as exc:
                     logger.warning("[TutorAgent] direct_answer 重试调用失败 err=%s", exc)
@@ -370,10 +369,18 @@ class TutorAgent:
             full_messages = build_messages(merged_system_prompt, list(messages))
 
             # 绑定搜索工具
-            llm_with_tools = self.search_llm.bind_tools([duckduckgo_search, tavily_search])
+            llm_with_tools = self.llm_manager.bind_tools(
+                "deepseek",
+                [duckduckgo_search, tavily_search],
+                model_kwargs=self.search_model_kwargs,
+            )
 
             try:
-                response = await llm_with_tools.ainvoke(full_messages)
+                response = await self.llm_manager.ainvoke_runnable(
+                    llm_with_tools,
+                    full_messages,
+                    model_type="deepseek",
+                )
             except Exception:
                 logger.exception("[TutorAgent] search_node DeepSeek 调用失败")
                 raise
@@ -443,7 +450,11 @@ class TutorAgent:
             ]
 
             try:
-                response = await self.llm.ainvoke(full_messages)
+                response = await self.llm_manager.ainvoke(
+                    "spark",
+                    full_messages,
+                    model_kwargs=self.spark_model_kwargs,
+                )
                 text = normalize_message_content(getattr(response, "content", response))
             except Exception as exc:
                 logger.warning("[TutorAgent] spark_summary Spark MAX 调用失败 err=%s", exc)
@@ -456,7 +467,11 @@ class TutorAgent:
                     HumanMessage(content="请基于搜索结果重新回答，给出完整、可读、适合教学场景的中文回答。")
                 ]
                 try:
-                    retry_response = await self.llm.ainvoke(retry_messages)
+                    retry_response = await self.llm_manager.ainvoke(
+                        "spark",
+                        retry_messages,
+                        model_kwargs=self.spark_model_kwargs,
+                    )
                     text = normalize_message_content(getattr(retry_response, "content", retry_response))
                 except Exception as exc:
                     logger.warning("[TutorAgent] spark_summary 重试调用失败 err=%s", exc)
@@ -537,7 +552,11 @@ class TutorAgent:
             full_messages = build_messages(merged_system_prompt, [HumanMessage(content=answer_prompt)])
 
             try:
-                response = await self.llm.ainvoke(full_messages)
+                response = await self.llm_manager.ainvoke(
+                    "spark",
+                    full_messages,
+                    model_kwargs=self.spark_model_kwargs,
+                )
                 text = normalize_message_content(getattr(response, "content", response))
             except Exception as exc:
                 logger.warning("[TutorAgent] attachment_answer Spark MAX 调用失败 err=%s", exc)
@@ -550,7 +569,11 @@ class TutorAgent:
                     HumanMessage(content="请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。")
                 ]
                 try:
-                    retry_response = await self.llm.ainvoke(retry_messages)
+                    retry_response = await self.llm_manager.ainvoke(
+                        "spark",
+                        retry_messages,
+                        model_kwargs=self.spark_model_kwargs,
+                    )
                     text = normalize_message_content(getattr(retry_response, "content", retry_response))
                 except Exception as exc:
                     logger.warning("[TutorAgent] attachment_answer 重试调用失败 err=%s", exc)
@@ -654,8 +677,16 @@ class TutorAgent:
         Returns:
             验证后的模型实例。
         """
-        structured_llm = self.diagram_llm.with_structured_output(model_cls)
-        result = await structured_llm.ainvoke(messages)
+        structured_llm = self.llm_manager.with_structured_output(
+            "deepseek",
+            model_cls,
+            model_kwargs=self.diagram_model_kwargs,
+        )
+        result = await self.llm_manager.ainvoke_runnable(
+            structured_llm,
+            messages,
+            model_type="deepseek",
+        )
         return model_cls.model_validate(result)
 
     async def _generate_diagram_by_type(

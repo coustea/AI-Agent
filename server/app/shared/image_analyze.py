@@ -19,6 +19,7 @@ import websockets
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import SPARK_VISION_API_KEY, SPARK_VISION_API_SECRET, SPARK_VISION_APPID
+from app.infra.llm import LlmManager, get_llm_manager
 from app.infra.logging import get_logger
 from app.shared.file_service import resolve_uploaded_image_path
 
@@ -118,8 +119,9 @@ spark_image_service = SparkImageService()
 class VisionService:
     """图片分析服务，支持 Spark OCR 和 GLM-4V 双模式。"""
 
-    def __init__(self, glm_vision_llm) -> None:
-        self.glm_vision_llm = glm_vision_llm
+    def __init__(self, llm_manager: LlmManager | None = None) -> None:
+        self.llm_manager = llm_manager or get_llm_manager()
+        self.glm_model_kwargs = {"temperature": 0.7}
 
     async def analyze_images(self, image_urls: list[str], question: str) -> dict:
         """分析图片，优先 Spark 模式，失败时降级到 GLM-4V。"""
@@ -158,7 +160,11 @@ class VisionService:
         content_blocks: list[dict] = [{"type": "text", "text": question or "请描述这些图片"}]
         for url in image_urls:
             content_blocks.append({"type": "image_url", "image_url": {"url": url}})
-        response = await self.glm_vision_llm.ainvoke([HumanMessage(content=content_blocks)])
+        response = await self.llm_manager.ainvoke(
+            "glm_vision",
+            [HumanMessage(content=content_blocks)],
+            model_kwargs=self.glm_model_kwargs,
+        )
         return {
             "success": True,
             "mode": "glm",
@@ -168,9 +174,9 @@ class VisionService:
         }
 
 
-def build_vision_service(glm_vision_llm):
+def build_vision_service(llm_manager: LlmManager | None = None):
     """工厂函数：创建 VisionService 实例。"""
-    return VisionService(glm_vision_llm)
+    return VisionService(llm_manager)
 
 
 __all__ = ["VisionService", "build_vision_service", "spark_image_service"]

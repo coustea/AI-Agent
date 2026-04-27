@@ -45,7 +45,7 @@ from typing_extensions import Annotated
 
 from app.config import PROFILE_GATE_EVERY_N_ASSISTANT_TURNS
 from app.infra.database import engine
-from app.infra.llm import get_deepseek_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, UserProfile, UserProfileHistory
 from app.memory.memory_types import (
@@ -447,7 +447,8 @@ class ProfileBuildingService:
         self.module_name = module_name
         self.store = store or MemoryStore()
         self.profile_service = profile_service or ProfileService()
-        self.llm = get_deepseek_llm(temperature=0.1, streaming=False)  # 使用 DeepSeek 模型：低温度减少发散，非流式便于结构化解析
+        self.llm_manager = get_llm_manager()
+        self.model_kwargs = {"temperature": 0.1, "streaming": False}
         self.output_parser = PydanticOutputParser(pydantic_object=ProfileExtraction)
         self.prompt_template = ChatPromptTemplate.from_messages([("human", "{prompt_text}")])
 
@@ -498,7 +499,11 @@ class ProfileBuildingService:
                 chat_history=chat_history,
                 format_instructions=self.output_parser.get_format_instructions(),
             )
-            response = await self.llm.ainvoke(self.prompt_template.format_messages(prompt_text=prompt_text))  # 调用 LLM
+            response = await self.llm_manager.ainvoke(  # 调用 LLM
+                "deepseek",
+                self.prompt_template.format_messages(prompt_text=prompt_text),
+                model_kwargs=self.model_kwargs,
+            )
             updated_data = self.output_parser.parse(response.content if isinstance(response.content, str) else str(response.content))  # 解析结果
         except Exception as exc:
             logger.error("[ProfileBuilding] 画像提取与合并失败: %s", str(exc))

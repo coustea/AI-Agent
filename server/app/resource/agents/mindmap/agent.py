@@ -9,7 +9,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.infra.llm import get_spark_x_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.utils import append_context, load_prompt
 from app.resource.agents.mindmap.utils import (
@@ -28,7 +28,8 @@ class MindmapGenerator:
         self.name = "MindmapAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_spark_x_llm(temperature=0.1)
+        self.llm_manager = get_llm_manager()
+        self.model_kwargs = {"temperature": 0.1}
 
     def _build_system_message(self, state: dict[str, Any]) -> str:
         need_key = state.get("need", "review")
@@ -119,11 +120,13 @@ class MindmapGenerator:
 
     async def _generate_markdown(self, system_prompt: str, user_message: str) -> str:
         """调用模型生成 Markdown 思维导图内容。"""
-        response = await self.llm.ainvoke(
+        response = await self.llm_manager.ainvoke(
+            "spark_x",
             [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_message),
-            ]
+            ],
+            model_kwargs=self.model_kwargs,
         )
         content = getattr(response, "content", response)
         return content if isinstance(content, str) else str(content)

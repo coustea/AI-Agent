@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.infra.llm import get_deepseek_reasoner_llm
+from app.infra.llm import get_llm_manager
 
 from app.config import DEEPSEEK_CHAT_MODEL
 from app.infra.logging import get_logger
@@ -94,11 +94,12 @@ class CoordinatorAgent:
     def __init__(self, emitter: AgentEventEmitter, resource_store):
         self.emitter = emitter
         self.resource_store = resource_store
-        self.llm = get_deepseek_reasoner_llm(
-            streaming=False,
-        )
-        self._planner_llm = self.llm.with_structured_output(
+        self.llm_manager = get_llm_manager()
+        self.planner_model_kwargs = {"streaming": False}
+        self._planner_llm = self.llm_manager.with_structured_output(
+            "deepseek_reasoner",
             PlannerPlanOutput,
+            model_kwargs=self.planner_model_kwargs,
             method="json_mode",
         )
         logger.info("[Coordinator] 初始化完成: planner_model=%s thinking=enabled structured_method=json_mode", DEEPSEEK_CHAT_MODEL)
@@ -392,7 +393,11 @@ class CoordinatorAgent:
             allowed_agents or "ALL",
             PLANNER_PROMPT_PATH,
         )
-        response = await self._planner_llm.ainvoke(messages)
+        response = await self.llm_manager.ainvoke_runnable(
+            self._planner_llm,
+            messages,
+            model_type="deepseek_reasoner",
+        )
         response = PlannerPlanOutput.model_validate(response)
 
         agent_parameters = dict(response.agent_parameters)

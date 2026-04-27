@@ -11,7 +11,7 @@ from typing import Any, Literal
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field, model_validator
 
-from app.infra.llm import get_deepseek_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.utils import append_context, format_profile_fields, load_prompt, save_resource_file
 
@@ -62,7 +62,8 @@ class QuizAgent:
         self.name = "QuizAgent"
         self.agent_dir = Path(__file__).parent
         self.prompt_template = load_prompt(self.agent_dir)
-        self.llm = get_deepseek_llm(temperature=0.3)
+        self.llm_manager = get_llm_manager()
+        self.model_kwargs = {"temperature": 0.3}
 
     @staticmethod
     def _extract_memory(shared_memory: dict[str, Any]) -> str:
@@ -174,10 +175,14 @@ class QuizAgent:
 JSON 格式示例：
 {json_format}"""
 
-        response = await self.llm.ainvoke([
-            HumanMessage(content=prompt),
-            HumanMessage(content=human),
-        ])
+        response = await self.llm_manager.ainvoke(
+            "deepseek",
+            [
+                HumanMessage(content=prompt),
+                HumanMessage(content=human),
+            ],
+            model_kwargs=self.model_kwargs,
+        )
 
         # 提取并解析 JSON
         parsed = self._extract_json(response.content)

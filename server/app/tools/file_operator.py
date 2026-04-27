@@ -18,14 +18,17 @@ import csv
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Literal
+import asyncio
 
 from langchain.tools import tool
 from langchain_core.messages import HumanMessage
 
 from app.config import GLM_API_KEY, MULTIMODAL_DOC_ENABLED
-from app.infra.llm import get_glm_vision_llm
+from app.infra.llm import get_llm_manager
 from app.shared.paths import SERVER_DIR, WORKPLACE_DIR
 from app.tools.registry import register
+
+llm_manager = get_llm_manager()
 
 
 class FileOperator:
@@ -267,7 +270,6 @@ class FileOperator:
             return None
 
         try:
-            llm = get_glm_vision_llm(temperature=0.2)
             prompt = (
                 "你是文档分析助手。请基于以下文档提取内容给出结构化分析：\n"
                 "1) 文档主题与摘要\n"
@@ -276,7 +278,7 @@ class FileOperator:
                 "4) 建议的后续问题\n\n"
                 f"文档内容片段：\n{snippet}"
             )
-            resp = llm.invoke([HumanMessage(content=prompt)])
+            resp = asyncio.run(llm_manager.ainvoke("glm_vision", [HumanMessage(content=prompt)], model_kwargs={"temperature": 0.2}))
             text = resp.content if isinstance(resp.content, str) else str(resp.content)
             text = (text or "").strip()
             return text or None
@@ -316,8 +318,7 @@ class FileOperator:
                         "image_url": {"url": f"data:image/png;base64,{b64}"},
                     })
 
-            llm = get_glm_vision_llm(temperature=0.2)
-            resp = llm.invoke([HumanMessage(content=content_blocks)])
+            resp = asyncio.run(llm_manager.ainvoke("glm_vision", [HumanMessage(content=content_blocks)], model_kwargs={"temperature": 0.2}))
             text = resp.content if isinstance(resp.content, str) else str(resp.content)
             text = (text or "").strip()
             if not text:

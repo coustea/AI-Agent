@@ -39,7 +39,7 @@ from app.shared.file_service import (
 )
 
 from app.chat.utils import truncate
-from app.infra.llm import get_glm_vision_llm
+from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.shared.storage import local_file_store
 
@@ -49,6 +49,7 @@ from app.chat.schemas import AttachmentInfo, ChatMessageItem, ToolCallRecord
 CHAT_MODULE_NAME = "mentor"
 
 logger = get_logger(__name__)
+llm_manager = get_llm_manager()
 
 # ---- 保护机制常量 ----
 MAX_FILE_CONTENT_CHARS = 15000  # 单个文件最大字符数
@@ -605,7 +606,7 @@ class ChatUseCases:
             return None
 
         try:
-            vision_service = build_vision_service(get_glm_vision_llm())
+            vision_service = build_vision_service(llm_manager)
             built = await analyze_attachments_parallel(
                 current_user_id=user_id,
                 image_urls=image_urls,
