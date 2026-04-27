@@ -139,3 +139,11 @@ TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
 # Spark X (星火X模型 OpenAI兼容API)
 SPARK_X_API_PASSWORD: str = _env("SPARK_X_API_PASSWORD", "")
 SPARK_X_API_BASE: str = _env("SPARK_X_API_BASE", "https://spark-api-open.xf-yun.com/v2")
+
+# Spark Max (星火Max模型 OpenAI兼容API)
+SPARK_MAX_API_PASSWORD: str = _env("SPARK_MAX_API_PASSWORD", "")
+SPARK_MAX_API_BASE: str = _env("SPARK_MAX_API_BASE", "https://spark-api-open.xf-yun.com/x2/chat/completions")
+
+# Spark (星火模型 OpenAI兼容API) — 替代原 WebSocket API
+SPARK_API_PASSWORD: str = _env("SPARK_API_PASSWORD", "")
+SPARK_API_BASE: str = _env("SPARK_API_BASE", "")
