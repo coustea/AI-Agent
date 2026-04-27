@@ -15,28 +15,25 @@ import asyncio
 from functools import lru_cache
 from typing import Any, AsyncIterator, Hashable
 
-from langchain_community.chat_models import ChatSparkLLM
-from langchain_deepseek import ChatDeepSeek
 from langchain_openai import ChatOpenAI
 
 from app.config import (
     DEEPSEEK_API_KEY,
+    DEEPSEEK_API_BASE,
     DEEPSEEK_CHAT_MODEL,
     DEEPSEEK_MODEL,
     GLM_API_KEY,
     GLM_VISION_MODEL,
-    SPARK_APP_ID,
-    SPARK_API_KEY,
-    SPARK_API_SECRET,
-    SPARK_X_API_BASE,
+    SPARK_API_PASSWORD,
+    SPARK_API_BASE,
+    SPARK_MAX_API_PASSWORD,
+    SPARK_MAX_API_BASE,
     SPARK_X_API_PASSWORD,
+    SPARK_X_API_BASE,
 )
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
-
-DEEPSEEK_THINKING_ENABLED_BODY = {"thinking": {"type": "enabled"}}
-DEEPSEEK_THINKING_DISABLED_BODY = {"thinking": {"type": "disabled"}}
 
 
 class LLMConcurrencyBusyError(Exception):
