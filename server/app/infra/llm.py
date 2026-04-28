@@ -47,6 +47,7 @@ class LlmManager:
     DEFAULT_CONCURRENCY_LIMITS: dict[str, int] = {
         "spark": 10,
         "spark_x": 20,
+        "spark_max": 10,
     }
 
     def __init__(
@@ -79,6 +80,13 @@ class LlmManager:
     def _cache_key(self, model_type: str, kwargs: dict[str, Any]) -> tuple[str, tuple[tuple[str, Hashable], ...]]:
         frozen_kwargs = tuple((k, self._freeze(v)) for k, v in sorted(kwargs.items()))
         return model_type, frozen_kwargs
+
+    def _has_available_slot(self, model_type: str) -> bool:
+        """检查指定模型类型是否有可用并发槽位。"""
+        semaphore = self._semaphores.get(model_type)
+        if semaphore is None:
+            return True  # 无限制的模型类型
+        return semaphore._value > 0
 
     def _create_model(self, model_type: str, **kwargs: Any) -> Any:
         if model_type == "spark":
