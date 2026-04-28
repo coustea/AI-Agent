@@ -130,13 +130,13 @@ class ReadingAgent:
             SystemMessage(content=prompt),
             HumanMessage(content=human),
         ]
-        response = await self.llm_manager.ainvoke(
+        response = await self.llm_manager.ainvoke_structured(
             "deepseek",
+            ReadingOutput,
             messages,
             model_kwargs=self.model_kwargs,
         )
-        raw_content = getattr(response, "content", response)
-        return ReadingOutput.model_validate(self._extract_json_object(str(raw_content)))
+        return response
 
     async def _operate_markdown_file(
         self,
@@ -175,13 +175,13 @@ class ReadingAgent:
                 )
             )
         ]
-        response = await self.llm_manager.ainvoke(
+        response = await self.llm_manager.ainvoke_structured(
             "deepseek",
+            ReadingOutput,
             messages,
             model_kwargs=self.model_kwargs,
         )
-        raw_content = getattr(response, "content", response)
-        validated = ReadingOutput.model_validate(self._extract_json_object(str(raw_content)))
+        validated = response
         items = [item.model_dump() for item in validated.recommendations]
         if len(items) < 3:
             return {

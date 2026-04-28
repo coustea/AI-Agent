@@ -1,51 +1,61 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage
+from pydantic import BaseModel
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
-class FakeStructuredLLM:
-    def __init__(self, payload):
-        self.payload = payload
-        self.calls = []
-
-    async def ainvoke(self, messages):
-        self.calls.append(messages)
-        if isinstance(self.payload, Exception):
-            raise self.payload
-        return self.payload
+class FakeResponse:
+    def __init__(self, content):
+        self.content = content
 
 
-class FakeDiagramLLM:
+class FakeLlmManager:
     def __init__(self, outputs):
         self.outputs = list(outputs)
-        self.models = []
-        self.structured_llms = []
+        self.calls = []
 
-    def with_structured_output(self, model_cls):
-        self.models.append(model_cls)
-        structured = FakeStructuredLLM(self.outputs.pop(0))
-        self.structured_llms.append(structured)
-        return structured
+    async def ainvoke_structured(self, model_type, schema, messages, **kwargs):
+        self.calls.append(
+            {
+                "model_type": model_type,
+                "schema": schema,
+                "messages": messages,
+                "structured_kwargs": kwargs,
+            }
+        )
+        payload = self.outputs.pop(0)
+        if isinstance(payload, Exception):
+            raise payload
+        if isinstance(payload, BaseModel):
+            return payload
+        return schema.model_validate(payload)
 
-
-class FallbackDiagramLLM:
-    def __init__(self, raw_outputs):
-        self.raw_outputs = list(raw_outputs)
-
-    def with_structured_output(self, _model_cls):
-        return FakeStructuredLLM(RuntimeError("This response_format type is unavailable now"))
-
-    async def ainvoke(self, _messages):
-        return AIMessage(content=self.raw_outputs.pop(0))
+    async def ainvoke(self, model_type, messages, *, model_kwargs=None, **_kwargs):
+        self.calls.append(
+            {
+                "model_type": model_type,
+                "messages": messages,
+                "model_kwargs": model_kwargs or {},
+            }
+        )
+        payload = self.outputs.pop(0)
+        if isinstance(payload, Exception):
+            raise payload
+        if isinstance(payload, str):
+            return FakeResponse(payload)
+        if isinstance(payload, BaseModel):
+            return FakeResponse(payload.model_dump_json(by_alias=True, ensure_ascii=False))
+        return FakeResponse(json.dumps(payload, ensure_ascii=False))
 
 
 class FakeCtxService:
@@ -81,7 +91,7 @@ def test_diagram_generate_node_skips_when_disabled():
     from app.chat.agent import TutorAgent
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.diagram_llm = FakeDiagramLLM([])
+    tutor.llm_manager = FakeLlmManager([])
 
     state = {
         "need_diagram": False,
@@ -92,15 +102,15 @@ def test_diagram_generate_node_skips_when_disabled():
     result = asyncio.run(tutor._diagram_generate_node(state))
 
     assert result["diagram"] is None
-    assert tutor.diagram_llm.models == []
+    assert tutor.llm_manager.calls == []
 
 
 def test_diagram_generate_node_generates_sequence_when_requested():
     from app.chat.agent import TutorAgent
-    from app.chat.diagram_schemas import DiagramDecision, SequenceDiagram
+    from app.chat.schemas import DiagramDecision, SequenceDiagram
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.diagram_llm = FakeDiagramLLM(
+    tutor.llm_manager = FakeLlmManager(
         [
             DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
             {
@@ -124,6 +134,7 @@ def test_diagram_generate_node_generates_sequence_when_requested():
             },
         ]
     )
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
 
     state = {
         "need_diagram": True,
@@ -137,8 +148,10 @@ def test_diagram_generate_node_generates_sequence_when_requested():
 
     result = asyncio.run(tutor._diagram_generate_node(state))
 
-    assert tutor.diagram_llm.models[0].__name__ == "DiagramDecision"
-    assert tutor.diagram_llm.models[1] is SequenceDiagram
+    assert SequenceDiagram is not None
+    assert tutor.llm_manager.calls[0]["model_type"] == "deepseek"
+    assert tutor.llm_manager.calls[0]["structured_kwargs"]["strict"] is True
+    assert tutor.llm_manager.calls[1]["structured_kwargs"]["strict"] is True
     assert result["diagram"]["type"] == "sequence"
     assert result["diagram"]["spec"]["messages"][0]["from"] == "client"
     assert result["diagram"]["render"]["engine"] == "mermaid"
@@ -146,12 +159,62 @@ def test_diagram_generate_node_generates_sequence_when_requested():
     assert "client->>server: SYN" in result["diagram"]["render"]["source"]
 
 
-def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
+def test_diagram_generate_node_normalizes_hierarchy_nodes_payload():
     from app.chat.agent import TutorAgent
-    from app.chat.diagram_schemas import DiagramDecision
+    from app.chat.schemas import DiagramDecision
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.diagram_llm = FakeDiagramLLM(
+    tutor.llm_manager = FakeLlmManager(
+        [
+            DiagramDecision(need_diagram=True, diagram_type="hierarchy", reason="适合层级图"),
+            RuntimeError("strict tool validation failed"),
+            {
+                "type": "hierarchy",
+                "title": "计算机网络",
+                "summary": "展示核心知识结构",
+                "nodes": [
+                    {
+                        "id": "root",
+                        "label": "计算机网络",
+                        "description": "核心主题",
+                        "children": [
+                            {
+                                "id": "tcpip",
+                                "label": "TCP/IP",
+                                "description": "协议体系",
+                                "children": [],
+                            }
+                        ],
+                    }
+                ],
+            },
+        ]
+    )
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
+
+    state = {
+        "need_diagram": True,
+        "messages": [HumanMessage(content="输出一份关于计算机网络的知识图解")],
+        "answer_text": "计算机网络可从体系结构、传输机制和应用协议来理解。",
+        "profile_context": "",
+        "fact_context": "",
+        "recent_chat_context": "",
+        "attachment_analysis_context": "",
+    }
+
+    result = asyncio.run(tutor._diagram_generate_node(state))
+
+    assert result["diagram"]["type"] == "hierarchy"
+    assert result["diagram"]["spec"]["root"]["id"] == "root"
+    assert result["diagram"]["spec"]["root"]["children"][0]["id"] == "tcpip"
+
+
+def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
+    from app.chat.agent import TutorAgent
+    from app.chat.schemas import DiagramDecision
+
+    tutor = TutorAgent.__new__(TutorAgent)
+    tutor.llm_manager = FakeLlmManager(
         [
             DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
             {
@@ -175,6 +238,7 @@ def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
             },
         ]
     )
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
 
     state = {
         "need_diagram": True,
@@ -194,16 +258,80 @@ def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
     assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
 
 
-def test_decide_diagram_falls_back_to_sequence_when_user_requested_diagram_without_type():
+def test_diagram_generate_node_normalizes_sequence_message_lengths():
     from app.chat.agent import TutorAgent
-    from app.chat.diagram_schemas import DiagramDecision
+    from app.chat.schemas import DiagramDecision
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.diagram_llm = FakeDiagramLLM(
+    tutor.llm_manager = FakeLlmManager(
+        [
+            DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
+            RuntimeError("strict tool validation failed"),
+            {
+                "type": "sequence",
+                "title": "TCP三次握手",
+                "summary": "展示连接建立过程",
+                "spec": {
+                    "actors": [
+                        {"id": "client", "label": "客户端", "description": "发起连接"},
+                        {"id": "server", "label": "服务器", "description": "接受连接"},
+                    ],
+                    "messages": [
+                        {
+                            "from": "client",
+                            "to": "server",
+                            "label": "SYN (seq=x, flags=open)",
+                            "description": "客户端发送 SYN 报文，请求建立连接。",
+                        },
+                        {
+                            "from": "server",
+                            "to": "client",
+                            "label": "SYN+ACK (seq=y, ack=x+1)",
+                            "description": "服务器收到 SYN 后，返回 SYN+ACK，同时确认客户端初始序列号。",
+                        },
+                        {
+                            "from": "client",
+                            "to": "server",
+                            "label": "ACK (ack=y+1, established)",
+                            "description": "客户端发送 ACK，连接建立完成。",
+                        },
+                    ],
+                },
+            },
+        ]
+    )
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
+
+    state = {
+        "need_diagram": True,
+        "messages": [HumanMessage(content="请用图解说明 TCP 三次握手")],
+        "answer_text": "客户端先发 SYN，服务端回 SYN+ACK，客户端再发 ACK。",
+        "profile_context": "",
+        "fact_context": "",
+        "recent_chat_context": "",
+        "attachment_analysis_context": "",
+    }
+
+    result = asyncio.run(tutor._diagram_generate_node(state))
+
+    assert result["diagram"]["type"] == "sequence"
+    messages = result["diagram"]["spec"]["messages"]
+    assert len(messages[0]["label"]) <= 16
+    assert len(messages[1]["label"]) <= 16
+    assert len(messages[2]["label"]) <= 16
+
+
+def test_decide_diagram_returns_none_when_user_requested_diagram_without_valid_type():
+    from app.chat.agent import TutorAgent
+    from app.chat.schemas import DiagramDecision
+
+    tutor = TutorAgent.__new__(TutorAgent)
+    tutor.llm_manager = FakeLlmManager(
         [
             DiagramDecision(need_diagram=False, diagram_type=None, reason="简单问题"),
         ]
     )
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
 
     decision = asyncio.run(
         tutor._decide_diagram(
@@ -213,35 +341,16 @@ def test_decide_diagram_falls_back_to_sequence_when_user_requested_diagram_witho
         )
     )
 
-    assert decision.need_diagram is True
-    assert decision.diagram_type == "sequence"
+    assert decision.need_diagram is False
+    assert decision.diagram_type is None
 
 
-def test_diagram_generate_node_uses_json_fallback_when_structured_output_is_unavailable():
+def test_diagram_generate_node_returns_none_when_structured_output_is_unavailable():
     from app.chat.agent import TutorAgent
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.diagram_llm = FallbackDiagramLLM(
-        [
-            '{"need_diagram": true, "diagram_type": "sequence", "reason": "适合时序图"}',
-            """
-            {
-              "type": "sequence",
-              "title": "TCP三次握手",
-              "summary": "展示连接建立过程",
-              "spec": {
-                "actors": [
-                  {"id": "client", "label": "客户端", "description": "发起连接"},
-                  {"id": "server", "label": "服务器", "description": "接受连接"}
-                ],
-                "messages": [
-                  {"from": "client", "to": "server", "label": "SYN", "description": "请求连接"}
-                ]
-              }
-            }
-            """,
-        ]
-    )
+    tutor.llm_manager = FakeLlmManager([RuntimeError("This response_format type is unavailable now")])
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
 
     state = {
         "need_diagram": True,
@@ -257,35 +366,15 @@ def test_diagram_generate_node_uses_json_fallback_when_structured_output_is_unav
 
     result = asyncio.run(tutor._diagram_generate_node(state))
 
-    assert result["diagram"]["type"] == "sequence"
-    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
+    assert result["diagram"] is None
 
 
-def test_diagram_json_fallback_trims_overlong_labels_before_validation():
+def test_diagram_generate_node_returns_none_when_tool_choice_is_unsupported():
     from app.chat.agent import TutorAgent
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.diagram_llm = FallbackDiagramLLM(
-        [
-            '{"need_diagram": true, "diagram_type": "sequence", "reason": "适合时序图"}',
-            """
-            {
-              "type": "sequence",
-              "title": "TCP三次握手",
-              "summary": "展示连接建立过程",
-              "spec": {
-                "actors": [
-                  {"id": "client", "label": "客户端", "description": "发起连接"},
-                  {"id": "server", "label": "服务器", "description": "接受连接"}
-                ],
-                "messages": [
-                  {"from": "client", "to": "server", "label": "SYN-ACK (seq=y, ack=x+1)", "description": "服务端确认请求"}
-                ]
-              }
-            }
-            """,
-        ]
-    )
+    tutor.llm_manager = FakeLlmManager([RuntimeError("deepseek-reasoner does not support this tool_choice")])
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
 
     state = {
         "need_diagram": True,
@@ -300,17 +389,15 @@ def test_diagram_json_fallback_trims_overlong_labels_before_validation():
     }
 
     result = asyncio.run(tutor._diagram_generate_node(state))
-
-    label = result["diagram"]["spec"]["messages"][0]["label"]
-    assert len(label) <= 16
-    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
+    assert result["diagram"] is None
 
 
 def test_diagram_generate_node_failure_does_not_raise():
     from app.chat.agent import TutorAgent
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.diagram_llm = FakeDiagramLLM([RuntimeError("structured output unavailable")])
+    tutor.llm_manager = FakeLlmManager([RuntimeError("structured output unavailable")])
+    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
 
     state = {
         "need_diagram": True,
@@ -353,6 +440,18 @@ def test_chat_stream_done_event_includes_diagram_resource(monkeypatch):
                 "data": {"output": {"route": "direct", "execution_mode": "direct"}},
             }
             yield {"event": "on_chain_start", "name": "direct_answer"}
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "ChatSparkLLM",
+                "metadata": {"langgraph_node": "direct_answer"},
+                "data": {"chunk": AIMessage(content="这是")},
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "ChatSparkLLM",
+                "metadata": {"langgraph_node": "direct_answer"},
+                "data": {"chunk": AIMessage(content="最终整合后的回答")},
+            }
             yield {
                 "event": "on_chain_end",
                 "name": "direct_answer",
@@ -399,7 +498,10 @@ def test_chat_stream_done_event_includes_diagram_resource(monkeypatch):
     status_events = [event for event in events if event["event"] == "status"]
     done_events = [event for event in events if event["event"] == "done"]
 
-    assert token_events == [{"event": "token", "data": "这是最终整合后的回答"}]
+    assert token_events == [
+        {"event": "token", "data": "这是"},
+        {"event": "token", "data": "最终整合后的回答"},
+    ]
     assert status_events[-1]["data"]["stage"] == "diagram_generate"
     assert done_events[0]["data"]["resources"]["diagram"]["type"] == "compare"
     assert done_events[0]["data"]["resources"]["diagram"]["render"]["engine"] == "mermaid"

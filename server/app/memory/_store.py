@@ -74,14 +74,6 @@ def _normalize_session_title(title: Any, fallback: str = "新对话") -> str:
     return text[:15] if len(text) > 15 else text
 
 
-def _should_fallback_session_title_generation(exc: Exception) -> bool:
-    error_text = str(exc)
-    return (
-        "response_format type is unavailable" in error_text
-        or "does not support this tool_choice" in error_text
-    )
-
-
 def normalize_text(content: str) -> str:
     # 规范化文本：去首尾空白、统一小写、合并多余空白（用于去重/重叠度/包含关系判断）
     return " ".join((content or "").strip().lower().split())
@@ -286,47 +278,30 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         from langchain_core.prompts import ChatPromptTemplate
         model_kwargs = {"temperature": 0.1, "max_tokens": 80}
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题。标题应该简洁明了，能够概括对话主题。"),
+            (
+                "system",
+                "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题。"
+                "标题应该简洁明了，能够概括对话主题。"
+                "你必须只返回一个合法 JSON 对象，不要输出 Markdown 代码块，不要添加解释文字。"
+                '格式必须是：{{"title":"会话标题"}}，标题不超过15个字。',
+            ),
             ("human", "{user_message}"),
         ])
         messages = prompt.invoke({"user_message": user_message[:500]})
         try:
-            llm = llm_manager.with_structured_output(
+            result = await llm_manager.ainvoke_structured(
                 "deepseek",
                 SessionTitleOutput,
-                model_kwargs=model_kwargs,
-            )
-            result = await llm_manager.ainvoke_runnable(
-                llm,
                 messages,
-                model_type="deepseek",
+                strict=True,
+                model_kwargs=model_kwargs,
             )
             title = _normalize_session_title(result.title)
             logger.info("[MemoryStore] title.llm_response title=%r", title)
             return title
-        except Exception as exc:
-            if not _should_fallback_session_title_generation(exc):
-                logger.exception("[MemoryStore] title_generation.failed")
-                raise
-
-            logger.warning("[MemoryStore] title structured_output 不可用，回退到 JSON 文本生成: %s", exc)
-            fallback_messages = list(messages.to_messages()) + [
-                (
-                    "human",
-                    "请直接输出一个合法 JSON 对象，不要使用 Markdown 代码块，不要添加解释文字。"
-                    '格式必须是：{"title":"会话标题"}，标题不超过15个字。',
-                )
-            ]
-            raw_response = await llm_manager.ainvoke(
-                "deepseek",
-                fallback_messages,
-                model_kwargs=model_kwargs,
-            )
-            raw_content = getattr(raw_response, "content", raw_response)
-            parsed = parse_first_json_object(str(raw_content))
-            title = _normalize_session_title(parsed.get("title"))
-            logger.info("[MemoryStore] title.llm_response fallback title=%r", title)
-            return title
+        except Exception:
+            logger.exception("[MemoryStore] title_generation.failed")
+            raise
 
     async def _generate_and_update_title_background(self, session_id: str, user_message: str) -> None:  # 后台任务：生成标题并更新数据库（不阻塞主流程）
         """后台异步生成标题并更新会话。此方法通过 asyncio.create_task 调用，不阻塞消息保存。"""

@@ -904,6 +904,61 @@ class ChatUseCases:
             session_id=session_id,
         )
 
+    async def save_diagram_image(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        user_id: int,
+        session_id: str,
+        message_id: int | None = None,
+    ) -> dict:
+        """保存图解 PNG 图片。
+
+        将前端渲染的图解 PNG 保存到 diagrams 子目录，
+        并可选地更新对应消息的 diagram.image_url 字段。
+
+        Args:
+            filename: 文件名。
+            content: PNG 文件内容。
+            user_id: 用户ID。
+            session_id: 会话ID。
+            message_id: 可选的消息ID，用于更新 diagram.image_url。
+
+        Returns:
+            保存结果，包含 url、file_type 等字段。
+        """
+        # 保存 PNG 文件
+        saved = await self.file_store.save_diagram_image(
+            filename=filename,
+            content=content,
+            user_id=user_id,
+            session_id=session_id,
+        )
+
+        # 如果提供了 message_id，更新消息的 diagram.image_url
+        if message_id:
+            from app.infra.database import engine
+            from sqlmodel import select
+            from sqlmodel.ext.asyncio.session import AsyncSession
+            from app.infra.models import ChatMessage
+
+            async with AsyncSession(engine) as session:
+                stmt = select(ChatMessage).where(
+                    ChatMessage.id == message_id,
+                    ChatMessage.user_id == user_id,
+                    ChatMessage.session_id == session_id,
+                )
+                msg = (await session.exec(stmt)).first()
+                if msg and msg.diagram:
+                    diagram = dict(msg.diagram)
+                    diagram["image_url"] = saved["url"]
+                    msg.diagram = diagram
+                    session.add(msg)
+                    await session.commit()
+
+        return saved
+
     def resolve_uploaded_file(
         self,
         *,

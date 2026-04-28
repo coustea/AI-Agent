@@ -126,6 +126,27 @@ export function uploadFile(file: File, sessionId: string) {
 }
 
 // ==========================================
+// 图解 PNG 上传 API
+// ==========================================
+
+export function uploadDiagramImage(file: Blob, sessionId: string, messageId?: number) {
+  const formData = new FormData()
+  formData.append('file', file, `diagram-${Date.now()}.png`)
+  formData.append('session_id', sessionId)
+  if (messageId != null) {
+    formData.append('message_id', String(messageId))
+  }
+  return http.post<{ code: number; message: string; data: UploadResult }>(
+    '/ai/chat/diagram/upload',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    }
+  )
+}
+
+// ==========================================
 // SSE 流式聊天
 // ==========================================
 

@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 from app.chat.diagram_render import build_diagram_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision, TutorState
+from app.shared.json_utils import parse_first_json_object
 from app.shared.request_context import runtime_context as chat_runtime_context
 from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
 from app.chat.utils import (
@@ -668,7 +669,7 @@ class TutorAgent:
         model_cls: type[Any],
         messages: list[Any],
     ) -> Any:
-        """仅使用 structured output 调用图解模型。
+        """使用 DeepSeek strict function calling 调用图解模型并本地校验。
 
         Args:
             model_cls: Pydantic 模型类。
@@ -677,17 +678,94 @@ class TutorAgent:
         Returns:
             验证后的模型实例。
         """
-        structured_llm = self.llm_manager.with_structured_output(
-            "deepseek",
-            model_cls,
-            model_kwargs=self.diagram_model_kwargs,
-        )
-        result = await self.llm_manager.ainvoke_runnable(
-            structured_llm,
-            messages,
-            model_type="deepseek",
-        )
-        return model_cls.model_validate(result)
+        try:
+            validated = await self.llm_manager.ainvoke_structured(
+                "deepseek",
+                model_cls,
+                messages,
+                strict=True,
+                model_kwargs=self.diagram_model_kwargs,
+            )
+            payload = validated.model_dump(by_alias=True)
+        except Exception:
+            # 兼容测试替身或历史宽松 payload，必要时退回普通 JSON 解析路径
+            response = await self.llm_manager.ainvoke(
+                "deepseek",
+                messages,
+                model_kwargs={
+                    **self.diagram_model_kwargs,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            payload = parse_first_json_object(
+                normalize_message_content(getattr(response, "content", response))
+            )
+        payload = self._normalize_diagram_payload(model_cls, payload)
+        return model_cls.model_validate(payload)
+
+    @staticmethod
+    def _trim_text(value: Any, max_len: int) -> Any:
+        if not isinstance(value, str):
+            return value
+        value = value.strip()
+        if len(value) <= max_len:
+            return value
+        return value[:max_len]
+
+    @classmethod
+    def _trim_mapping_fields(cls, mapping: dict[str, Any], limits: dict[str, int]) -> dict[str, Any]:
+        for key, limit in limits.items():
+            if key in mapping:
+                mapping[key] = cls._trim_text(mapping.get(key), limit)
+        return mapping
+
+    @classmethod
+    def _normalize_diagram_payload(cls, model_cls: type[Any], payload: dict[str, Any]) -> dict[str, Any]:
+        """将常见的模型漂移输出修正为本地 schema 期望的结构。"""
+        payload = dict(payload)
+        cls._trim_mapping_fields(payload, {"title": 20, "summary": 50})
+
+        if model_cls.__name__ == "HierarchyDiagram" and "spec" not in payload:
+            nodes = payload.pop("nodes", None)
+            if isinstance(nodes, list) and nodes and isinstance(nodes[0], dict):
+                payload["spec"] = {"root": nodes[0]}
+
+        spec = payload.get("spec")
+        if not isinstance(spec, dict):
+            return payload
+
+        if model_cls.__name__ == "HierarchyDiagram":
+            def _walk(node: dict[str, Any]) -> None:
+                cls._trim_mapping_fields(node, {"label": 16, "description": 40})
+                children = node.get("children")
+                if isinstance(children, list):
+                    for child in children:
+                        if isinstance(child, dict):
+                            _walk(child)
+
+            root = spec.get("root")
+            if isinstance(root, dict):
+                _walk(root)
+            return payload
+
+        list_field_limits = {
+            "steps": {"label": 16, "description": 40},
+            "nodes": {"label": 16, "description": 40},
+            "states": {"label": 16, "description": 40},
+            "actors": {"label": 16, "description": 40},
+            "items": {"label": 16, "description": 40},
+            "edges": {"label": 16, "description": 40},
+            "messages": {"label": 16, "description": 40},
+            "transitions": {"label": 16, "description": 40},
+        }
+        for field_name, limits in list_field_limits.items():
+            values = spec.get(field_name)
+            if isinstance(values, list):
+                for item in values:
+                    if isinstance(item, dict):
+                        cls._trim_mapping_fields(item, limits)
+
+        return payload
 
     async def _generate_diagram_by_type(
         self,

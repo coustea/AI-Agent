@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.infra.llm import get_llm_manager
 
-from app.config import DEEPSEEK_CHAT_MODEL
 from app.infra.logging import get_logger
 from app.resource.events import AgentEventEmitter
 from app.resource.exceptions import PlanningError
 from app.resource.schemas import LearnerProfileSnapshot, PersonalizedTaskContext, ResourcePlan
+from app.shared.json_utils import parse_first_json_object
 from app.resource.utils import (
     get_agent_registry,
     build_default_resource_plan,
@@ -115,13 +115,7 @@ class CoordinatorAgent:
         self.resource_store = resource_store
         self.llm_manager = get_llm_manager()
         self.planner_model_kwargs = {"streaming": False}
-        self._planner_llm = self.llm_manager.with_structured_output(
-            "deepseek_reasoner",
-            PlannerPlanOutput,
-            model_kwargs=self.planner_model_kwargs,
-            method="json_mode",
-        )
-        logger.info("[Coordinator] 初始化完成: planner_model=%s thinking=enabled structured_method=json_mode", DEEPSEEK_CHAT_MODEL)
+        logger.info("[Coordinator] 初始化完成: planner_model=deepseek strict_function_calling")
 
     async def run(
         self,
@@ -407,17 +401,18 @@ class CoordinatorAgent:
             HumanMessage(content="请根据以上信息生成资源任务规划。"),
         ]
         logger.info(
-            "[Coordinator] 正在调用 Planner (json_mode structured_output): course=%r allowed_agents=%s prompt_path=%s",
+            "[Coordinator] 正在调用 Planner (json_object): course=%r allowed_agents=%s prompt_path=%s",
             task.get("course", ""),
             allowed_agents or "ALL",
             PLANNER_PROMPT_PATH,
         )
-        response = await self.llm_manager.ainvoke_runnable(
-            self._planner_llm,
+        response = await self.llm_manager.ainvoke_structured(
+            "deepseek",
+            PlannerPlanOutput,
             messages,
-            model_type="deepseek_reasoner",
+            strict=True,
+            model_kwargs=self.planner_model_kwargs,
         )
-        response = PlannerPlanOutput.model_validate(response)
 
         agent_parameters = dict(response.agent_parameters)
         for task_item in response.tasks:

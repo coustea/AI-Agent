@@ -181,6 +181,47 @@ async def get_uploaded_file(
     return FileResponse(path=str(file_path), filename=filename)
 
 
+@router.get("/chat/uploads/{owner_id}/{session_id}/diagrams/{filename}")
+async def get_diagram_file(
+    owner_id: int,
+    session_id: str,
+    filename: str,
+    current_user: User = Depends(get_current_user),
+):
+    """读取图解 PNG 文件（带权限校验）。
+
+    只允许文件所有者访问。
+
+    Args:
+        owner_id: 文件所有者ID。
+        session_id: 会话ID。
+        filename: 图解文件名。
+        current_user: 当前登录用户。
+
+    Returns:
+        文件响应。
+
+    Raises:
+        HTTPException: 权限不足、文件不存在等错误。
+    """
+    uc = get_chat_usecases()
+    try:
+        file_path = uc.resolve_uploaded_file(
+            current_user_id=current_user.id,
+            owner_id=owner_id,
+            session_id=session_id,
+            filename=f"diagrams/{filename}",
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return FileResponse(path=str(file_path), filename=filename)
+
+
 @router.get("/chat/sessions")
 async def get_sessions(
     limit: int = Query(default=20, ge=1, le=100),
@@ -261,3 +302,48 @@ async def chat_history(
         limit=limit,
     )
     return HttpResponse.success(data=[item.model_dump() for item in items])
+
+
+@router.post("/chat/diagram/upload")
+async def upload_diagram_image(
+    file: UploadFile = File(...),
+    session_id: str = Form(...),
+    message_id: int | None = Form(default=None),
+    current_user: User = Depends(get_current_user),
+):
+    """上传图解 PNG 图片。
+
+    前端将 SVG 渲染为 PNG 后上传，后端保存到本地文件系统，
+    并更新对应消息的 diagram.image_url 字段。
+
+    Args:
+        file: PNG 图片文件。
+        session_id: 会话ID。
+        message_id: 可选的消息ID，用于关联更新。
+        current_user: 当前登录用户。
+
+    Returns:
+        上传成功响应，包含文件URL等信息。
+    """
+    if not file.filename:
+        return HttpResponse.error(code=400, message="文件名不能为空")
+
+    # 验证文件类型
+    if not file.filename.lower().endswith(".png"):
+        return HttpResponse.error(code=400, message="仅支持 PNG 格式图片")
+
+    uc = get_chat_usecases()
+    content = await file.read()
+
+    try:
+        saved = await uc.save_diagram_image(
+            filename=file.filename,
+            content=content,
+            user_id=current_user.id,
+            session_id=session_id,
+            message_id=message_id,
+        )
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+
+    return HttpResponse.success(data=saved)

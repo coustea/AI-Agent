@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app.chat.diagram_schemas import (
+from app.chat.schemas import (
     DIAGRAM_MODEL_MAP,
     DiagramRender,
     FlowDiagram,
@@ -17,6 +17,7 @@ from app.chat.diagram_schemas import (
     SequenceDiagram,
     StateDiagram,
 )
+from app.chat.utils import load_prompts
 
 
 def test_diagram_model_map_exports_all_supported_types() -> None:
@@ -28,6 +29,20 @@ def test_diagram_model_map_exports_all_supported_types() -> None:
         "sequence",
         "state",
     }
+
+
+def test_diagram_prompts_require_json_output() -> None:
+    prompts = load_prompts(Path(__file__).resolve().parents[2] / "app" / "chat")
+
+    decision_prompt = prompts["diagram_decision_system"]
+    generation_prompt = prompts["diagram_generation_system"]
+
+    assert "JSON" in decision_prompt
+    assert "json" in decision_prompt.lower()
+    assert "JSON" in generation_prompt
+    assert "json" in generation_prompt.lower()
+    assert "`hierarchy` 只能使用 `spec.root`" in generation_prompt
+    assert "不能输出顶层 `nodes`" in generation_prompt
 
 
 def test_diagram_render_schema_accepts_mermaid_text_only() -> None:

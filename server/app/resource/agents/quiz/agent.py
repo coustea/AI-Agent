@@ -187,19 +187,13 @@ JSON 格式示例：
             HumanMessage(content=prompt),
             HumanMessage(content=human),
         ]
-        response = await self.llm_manager.ainvoke(
+        response = await self.llm_manager.ainvoke_structured(
             "deepseek",
+            QuizOutput,
             messages,
             model_kwargs=self.model_kwargs,
         )
-
-        # 提取并解析 JSON
-        parsed = self._extract_json(response.content)
-        if not parsed:
-            raise ValueError("无法从响应中提取有效的 JSON")
-
-        # 验证并转换为 QuizOutput
-        return QuizOutput.model_validate(parsed)
+        return response
 
     async def generate_quiz(
         self,

@@ -38,11 +38,32 @@ const markdown = new MarkdownIt({
 const fencePattern = /(^|\n)(`{3,}|~{3,})/g
 const sectionHeadingPattern = /^([一二三四五六七八九十]+、|方式\d+[:：]|第\d+[步点][:：]|最后[:：]|总结[:：])/
 
+export interface TutorContentBlock {
+  type: 'markdown' | 'code'
+  html?: string
+  code?: string
+  language?: string
+}
+
+interface ParseTutorContentOptions {
+  isStreaming?: boolean
+}
+
+interface FenceBlock {
+  language: string
+  code: string
+  closed: boolean
+}
+
 markdown.renderer.rules.fence = (tokens, index): string => {
   const token = tokens[index]
   if (!token) return ''
   const code = token.content
   const language = token.info.trim().split(/\s+/)[0] || ''
+  return renderCodeBlockHtml(code, language)
+}
+
+function renderCodeBlockHtml(code: string, language = ''): string {
   const lang = language && hljs.getLanguage(language) ? language : 'plaintext'
   const highlighted = hljs.highlight(code, { language: lang }).value
   const copyableCode = escapeHtml(code)
@@ -54,6 +75,22 @@ markdown.renderer.rules.fence = (tokens, index): string => {
     `<button class="copy-code-btn" type="button" data-code="${copyableCode}">复制</button>`,
     '</div>',
     `<pre><code class="hljs language-${escapeHtml(lang)}">${highlighted}</code></pre>`,
+    '</div>',
+  ].join('')
+}
+
+function renderStreamingCodeBlockHtml(code: string, language = ''): string {
+  const lang = language && hljs.getLanguage(language) ? language : 'plaintext'
+  const copyableCode = escapeHtml(code)
+  const escapedCode = escapeHtml(code)
+
+  return [
+    '<div class="code-block-wrapper">',
+    '<div class="code-header">',
+    `<span class="code-lang">${escapeHtml(lang)}</span>`,
+    `<button class="copy-code-btn" type="button" data-code="${copyableCode}">复制</button>`,
+    '</div>',
+    `<pre><code class="language-${escapeHtml(lang)}">${escapedCode}</code></pre>`,
     '</div>',
   ].join('')
 }
@@ -120,4 +157,148 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
 export function renderTutorMarkdown(text: string, isStreaming = false): string {
   const normalized = normalizeStreamingMarkdown(text, isStreaming)
   return normalized ? markdown.render(normalized) : ''
+}
+
+function normalizeCodeLineBreaks(code: string): string {
+  return code.replace(/\r\n/g, '\n')
+}
+
+function isLikelyCodeLine(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed) return false
+  if (/^#{1,6}\s/.test(trimmed)) return false
+  if (/^[-*]\s/.test(trimmed)) return false
+  if (/^\d+\.\s/.test(trimmed)) return false
+  if (/^[\u4e00-\u9fa5].*[。！？；]$/.test(trimmed) && !trimmed.includes(':')) return false
+
+  return (
+    /^(```|~~~)/.test(trimmed)
+    || /^(def|class|if|elif|else:|for|while|try:|except|finally:|return|continue|break|pass|import|from)\b/.test(trimmed)
+    || /^#/.test(trimmed)
+    || /[{}[\]()=:]/.test(trimmed)
+    || /^\s{2,}\S/.test(line)
+  )
+}
+
+function foldHeuristicCodeBlocks(text: string): string {
+  const lines = text.replace(/\r\n/g, '\n').split('\n')
+  const output: string[] = []
+  let index = 0
+
+  while (index < lines.length) {
+    if (!isLikelyCodeLine(lines[index] ?? '')) {
+      output.push(lines[index] ?? '')
+      index += 1
+      continue
+    }
+
+    const candidate: string[] = []
+    let cursor = index
+    while (cursor < lines.length) {
+      const line = lines[cursor] ?? ''
+      if (!line.trim()) {
+        candidate.push(line)
+        cursor += 1
+        continue
+      }
+      if (!isLikelyCodeLine(line)) break
+      candidate.push(line)
+      cursor += 1
+    }
+
+    const meaningfulLines = candidate.filter((line) => line.trim())
+    if (meaningfulLines.length >= 2) {
+      output.push('```text')
+      output.push(...candidate)
+      output.push('```')
+    } else {
+      output.push(...candidate)
+    }
+    index = cursor
+  }
+
+  return output.join('\n')
+}
+
+function pushMarkdownBlock(blocks: TutorContentBlock[], text: string): void {
+  const normalized = text.trim()
+  if (!normalized) return
+  blocks.push({
+    type: 'markdown',
+    html: markdown.render(normalized),
+  })
+}
+
+function parseFenceBlock(source: string, startIndex: number): { block: FenceBlock; nextIndex: number } | null {
+  const rest = source.slice(startIndex)
+  const openingMatch = rest.match(/^(```|~~~)([\w+-]*)[ \t]*\n?/)
+  if (!openingMatch) return null
+
+  const fenceToken = openingMatch[1] || '```'
+  const language = (openingMatch[2] || '').trim()
+  const contentStart = startIndex + openingMatch[0].length
+  const closingPattern = new RegExp(`(?:^|\\n)${fenceToken}[ \\t]*(?=\\n|$)`, 'g')
+  closingPattern.lastIndex = 0
+
+  const searchArea = source.slice(contentStart)
+  const closingMatch = closingPattern.exec(searchArea)
+  if (!closingMatch) {
+    return {
+      block: {
+        language,
+        code: source.slice(contentStart),
+        closed: false,
+      },
+      nextIndex: source.length,
+    }
+  }
+
+  const codeEnd = contentStart + closingMatch.index
+  const closingTokenLength = closingMatch[0].replace(/^\n/, '').length
+  const nextIndex = codeEnd + closingMatch[0].length
+
+  return {
+    block: {
+      language,
+      code: source.slice(contentStart, codeEnd),
+      closed: true,
+    },
+    nextIndex: Math.max(nextIndex, codeEnd + closingTokenLength),
+  }
+}
+
+export function parseTutorContentBlocks(text: string, options: ParseTutorContentOptions = {}): TutorContentBlock[] {
+  const normalized = foldHeuristicCodeBlocks(normalizeStreamingMarkdown(text, Boolean(options.isStreaming)))
+  const blocks: TutorContentBlock[] = []
+  let cursor = 0
+
+  while (cursor < normalized.length) {
+    const fenceStart = normalized.slice(cursor).search(/(^|\n)(```|~~~)/)
+    if (fenceStart < 0) {
+      pushMarkdownBlock(blocks, normalized.slice(cursor))
+      break
+    }
+
+    const absoluteFenceStart = cursor + fenceStart + (normalized.slice(cursor + fenceStart, cursor + fenceStart + 1) === '\n' ? 1 : 0)
+    pushMarkdownBlock(blocks, normalized.slice(cursor, absoluteFenceStart))
+
+    const parsed = parseFenceBlock(normalized, absoluteFenceStart)
+    if (!parsed) {
+      pushMarkdownBlock(blocks, normalized.slice(absoluteFenceStart))
+      break
+    }
+
+    const normalizedLanguage = parsed.block.language || 'text'
+    const code = normalizeCodeLineBreaks(parsed.block.code.trimEnd())
+    blocks.push({
+      type: 'code',
+      code,
+      language: normalizedLanguage,
+      html: options.isStreaming
+        ? renderStreamingCodeBlockHtml(code, normalizedLanguage)
+        : renderCodeBlockHtml(code, normalizedLanguage),
+    })
+    cursor = parsed.nextIndex
+  }
+  return blocks.length > 0 ? blocks : [{ type: 'markdown', html: '' }]
 }

@@ -41,8 +41,14 @@ class User(SQLModel, table=True):
     major: str | None = Field(default=None, max_length=100)  # 专业
     grade: str | None = Field(default=None, max_length=20)  # 年级
     school: str | None = Field(default=None, max_length=100)  # 学校
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -77,8 +83,14 @@ class ChatSession(SQLModel, table=True):
     title: str = Field(default="新对话", max_length=100)  # 会话标题（取首条消息前 20 字符）
     is_archived: bool = Field(default=False)  # 软删除标记
 
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)  # 每次写入消息时更新
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
     memory_token_count: int = Field(default=0)  # 记忆提取 token 累计（达到阈值触发记忆抽取）
     profile_token_count: int = Field(default=0)  # 画像更新 token 累计（达到阈值触发画像构建）
 
@@ -99,7 +111,10 @@ class ChatMessage(SQLModel, table=True):
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
     diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 图解数据（Mermaid 源码等）
-    created_at: datetime = Field(default_factory=datetime.now, index=True)  # 创建时间索引，用于过期清理
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -134,10 +149,19 @@ class UserMemory(SQLModel, table=True):
     source_message_count: int = Field(default=0)  # 来源消息条数（用于压缩溯源）
     expires_at: datetime | None = Field(default=None)  # 过期时间（null 表示永不过期）
     evidence_count: int = Field(default=1)  # 该记忆被观察到的次数（去重累加）
-    last_seen_at: datetime = Field(default_factory=datetime.now)  # 最后一次出现时间
+    last_seen_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -164,8 +188,14 @@ class UserProfile(SQLModel, table=True):
     source_memory_ids: list[int] | None = Field(default=None, sa_column=Column(ARRAY(Integer)))  # 触发画像更新的长期记忆 ID
     updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 画像更新原因
 
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 class UserProfileHistory(SQLModel, table=True):
@@ -186,7 +216,10 @@ class UserProfileHistory(SQLModel, table=True):
     source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
     source_memory_ids: list[int] | None = Field(default=None, sa_column=Column(ARRAY(Integer)))  # 触发变更的记忆 ID 列表
 
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +238,10 @@ class GeneratedResource(SQLModel, table=True):
     request_extra: str | None = Field(default=None, sa_column=Column(Text))  # 用户附加要求
     status: str = Field(default="pending", max_length=50)  # 整体生成状态
     plan_result: str | None = Field(default=None, sa_column=Column(Text))  # DAG 规划结果（JSON）
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 class ResourceMindmap(SQLModel, table=True):
@@ -218,7 +254,10 @@ class ResourceMindmap(SQLModel, table=True):
     content: str | None = Field(default=None, sa_column=Column(Text))  # Markdown原文
     status: str = Field(default="pending", max_length=50)  # pending/success/failed
     error: str | None = Field(default=None, sa_column=Column(Text))  # 错误信息
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 class ResourceContent(SQLModel, table=True):
@@ -231,7 +270,10 @@ class ResourceContent(SQLModel, table=True):
     content: str | None = Field(default=None, sa_column=Column(Text))  # 内容文本
     status: str = Field(default="pending", max_length=50)
     error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 class ResourceQuiz(SQLModel, table=True):
@@ -244,7 +286,10 @@ class ResourceQuiz(SQLModel, table=True):
     content: str | None = Field(default=None, sa_column=Column(Text))  # 题目内容（JSON或文本）
     status: str = Field(default="pending", max_length=50)
     error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 class ResourceReading(SQLModel, table=True):
@@ -257,7 +302,10 @@ class ResourceReading(SQLModel, table=True):
     content: str | None = Field(default=None, sa_column=Column(Text))  # 阅读列表内容（JSON或文本）
     status: str = Field(default="pending", max_length=50)
     error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 class ResourceCode(SQLModel, table=True):
@@ -272,7 +320,10 @@ class ResourceCode(SQLModel, table=True):
     language: str | None = Field(default=None, max_length=50)  # 编程语言
     status: str = Field(default="pending", max_length=50)
     error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 class ResourceMedia(SQLModel, table=True):
@@ -285,7 +336,10 @@ class ResourceMedia(SQLModel, table=True):
     file_path: str | None = Field(default=None, max_length=500)  # 文件路径
     status: str = Field(default="pending", max_length=50)
     error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +365,10 @@ class LearningEvent(SQLModel, table=True):
     duration_seconds: int | None = Field(default=None)
     feedback: str | None = Field(default=None, sa_column=Column(Text))
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    created_at: datetime = Field(default_factory=datetime.now, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
 
 
 # ---------------------------------------------------------------------------

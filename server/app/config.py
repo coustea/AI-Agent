@@ -64,8 +64,6 @@ GLM_MODEL: str = _env("GLM_MODEL", "glm-4.7")
 # Deepseek
 DEEPSEEK_API_KEY: str = _env("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_BASE: str = _env("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
-DEEPSEEK_CHAT_MODEL: str = _env("DEEPSEEK_CHAT_MODEL", "deepseek-v4-flash")
-DEEPSEEK_MODEL: str = _env("DEEPSEEK_MODEL", DEEPSEEK_CHAT_MODEL)
 
 # Spark LLM (星火大模型 WebSocket API)
 SPARK_APP_ID: str = _env("SPARK_APP_ID", "")
@@ -140,9 +138,9 @@ TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
 SPARK_X_API_PASSWORD: str = _env("SPARK_X_API_PASSWORD", "")
 SPARK_X_API_BASE: str = _env("SPARK_X_API_BASE", "https://spark-api-open.xf-yun.com/v2")
 
-# Spark Max (星火Max模型 OpenAI兼容API)
+# Spark Max (星火语言模型 OpenAI兼容API，OpenAI SDK base_url 使用 /v1)
 SPARK_MAX_API_PASSWORD: str = _env("SPARK_MAX_API_PASSWORD", "")
-SPARK_MAX_API_BASE: str = _env("SPARK_MAX_API_BASE", "https://spark-api-open.xf-yun.com/x2/chat/completions")
+SPARK_MAX_API_BASE: str = _env("SPARK_MAX_API_BASE", "https://spark-api-open.xf-yun.com/v1")
 
 # Spark (别名，使用 Spark Max 配置)
 SPARK_API_PASSWORD: str = SPARK_MAX_API_PASSWORD

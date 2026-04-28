@@ -23,6 +23,7 @@ from app.resource.agents.ppt.template_catalog import (
     get_builtin_template_spec,
     merge_template_config,
 )
+from app.shared.json_utils import parse_first_json_object
 from app.shared.paths import WORKPLACE_DIR
 
 logger = get_logger(__name__)
@@ -409,81 +410,47 @@ class PptAgent:
         from app.config import LLM_TIMEOUT
 
         messages = self._build_messages(state)
-        structured_llm = self.llm_manager.with_structured_output(
-            "deepseek",
-            self.structured_output_schema,
-            model_kwargs=self.model_kwargs,
-        )
 
         try:
-            result = await asyncio.wait_for(
-                self.llm_manager.ainvoke_runnable(
-                    structured_llm,
-                    messages,
-                    model_type="deepseek",
-                ),
-                timeout=LLM_TIMEOUT,
-            )
-            return {"ppt_plan": result.model_dump(), "error": None}
-        except asyncio.TimeoutError:
-            logger.error("[%s] LLM 调用超时", self.name)
-            return {"error": "LLM 调用超时", "is_valid": False}
-        except Exception as exc:
-            error_text = str(exc)
-            structured_unavailable_markers = (
-                "response_format type is unavailable",
-                "does not support this tool_choice",
-                "tool_choice",
-                "structured output",
-            )
-            if not any(marker in error_text.lower() for marker in structured_unavailable_markers):
-                raise
-
-            logger.warning(
-                "[%s] structured_output 不可用，回退到 JSON 文本生成: %s",
-                self.name,
-                error_text,
-            )
-            fallback_messages = list(messages) + [
-                HumanMessage(
-                    content=(
-                        "structured_output 当前不可用。"
-                        "请直接输出一个合法 JSON 对象，不要使用 Markdown 代码块，不要添加解释文字。"
-                        "JSON 必须满足以下结构：\n"
-                        "{\n"
-                        '  "presentation_title": "演示文稿标题",\n'
-                        f'  "template_id": "{DEFAULT_TEMPLATE_ID}",\n'
-                        '  "slides": [\n'
-                        "    {\n"
-                        '      "title": "页面标题",\n'
-                        '      "section": "learning",\n'
-                        '      "page_role": "single_text",\n'
-                        '      "slots": {"title": "标题", "body": "内容"},\n'
-                        '      "speaker_notes": "讲者备注"\n'
-                        "    }\n"
-                        "  ]\n"
-                        "}\n"
-                        "必须包含至少 6 页 slides。"
-                    )
-                )
-            ]
-            raw_response = await asyncio.wait_for(
-                self.llm_manager.ainvoke(
+            validated = await asyncio.wait_for(
+                self.llm_manager.ainvoke_structured(
                     "deepseek",
-                    fallback_messages,
+                    self.structured_output_schema,
+                    messages,
+                    strict=True,
                     model_kwargs=self.model_kwargs,
                 ),
                 timeout=LLM_TIMEOUT,
             )
-            raw_content = getattr(raw_response, "content", raw_response)
-            logger.info("[%s] LLM 原始响应长度: %d", self.name, len(str(raw_content)))
+            plan = _normalize_plan_dict(validated.model_dump(by_alias=True))
+            validated = self.structured_output_schema.model_validate(plan)
+            logger.info("[%s] LLM 结构化计划页数: %d", self.name, len(validated.slides))
+            return {"ppt_plan": validated.model_dump(), "error": None}
+        except asyncio.TimeoutError:
+            logger.error("[%s] LLM 调用超时", self.name)
+            return {"error": "LLM 调用超时", "is_valid": False}
+        except Exception as exc:
+            logger.error("[%s] JSON 解析或验证失败: %s", self.name, exc)
             try:
-                plan = _normalize_plan_dict(_extract_json_object(raw_content))
+                raw_response = await asyncio.wait_for(
+                    self.llm_manager.ainvoke(
+                        "deepseek",
+                        messages,
+                        model_kwargs={
+                            **self.model_kwargs,
+                            "response_format": {"type": "json_object"},
+                        },
+                    ),
+                    timeout=LLM_TIMEOUT,
+                )
+                raw_content = getattr(raw_response, "content", raw_response)
+                plan = _normalize_plan_dict(parse_first_json_object(str(raw_content)))
                 validated = self.structured_output_schema.model_validate(plan)
+                logger.info("[%s] LLM 回退 JSON 计划页数: %d", self.name, len(validated.slides))
                 return {"ppt_plan": validated.model_dump(), "error": None}
-            except Exception as parse_exc:
-                logger.error("[%s] JSON 解析或验证失败: %s", self.name, parse_exc)
-                return {"error": str(parse_exc), "is_valid": False, "ppt_plan": {}}
+            except Exception as fallback_exc:
+                logger.error("[%s] 回退 JSON 解析失败: %s", self.name, fallback_exc)
+                return {"error": str(fallback_exc), "is_valid": False, "ppt_plan": {}}
 
     def _build_messages(self, state: Any) -> list:
         """构建消息列表。"""

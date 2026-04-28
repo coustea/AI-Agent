@@ -176,19 +176,17 @@ def save_to_workplace(sub_dir: str, topic: str, content: str, ext: str = "md") -
 
     已废弃：请使用 save_resource_file 统一保存到 workplace/{user_id}/{resource_id}/
     """
-    from app.tools.registry import get as get_tool
+    safe_topic = re.sub(r'[\\/*?:"<>|]', "", topic).strip()[:50]
+    if not safe_topic:
+        safe_topic = "untitled"
 
-    return get_tool("save_to_workplace").invoke(
-        {"sub_dir": sub_dir, "topic": topic, "content": content, "ext": ext}
-    )
+    target_dir = WORKPLACE_DIR / sub_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-
-def load_registered_tools(tool_names: list[str]) -> list[Any]:
-    """从工具注册表加载指定工具。"""
-    from app.tools import registry
-
-    registry.ensure_loaded()
-    return registry.get_many(tool_names)
+    safe_filename = f"{safe_topic}.{ext}"
+    filepath = target_dir / safe_filename
+    filepath.write_text(content, encoding="utf-8")
+    return str(filepath)
 
 
 # =============================================================================

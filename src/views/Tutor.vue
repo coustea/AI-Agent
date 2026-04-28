@@ -180,10 +180,12 @@
                   <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : 'You' }}</span>
                   <span class="time">{{ msg.time }}</span>
                 </div>
-                <div
-                    :class="['bubble', 'markdown-body', { streaming: msg.id === streamingMsgId && isAIThinking }]"
-                    v-html="renderTutorMarkdown(msg.content, msg.id === streamingMsgId && isAIThinking)"
-                ></div>
+                <div class="bubble">
+                  <TutorMessageContent
+                    :content="msg.content"
+                    :is-streaming="isStreamingMessage(msg)"
+                  />
+                </div>
 
                 <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
                   <a v-for="att in msg.attachments" :key="att.url" :href="att.url" target="_blank" class="attachment-link">
@@ -214,7 +216,18 @@
                     <span class="diagram-type-tag">{{ msg.diagram.type }}</span>
                   </div>
                   <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
+
+                  <!-- 优先展示 PNG 图片 -->
+                  <img
+                      v-if="msg.diagram.image_url"
+                      :src="msg.diagram.image_url"
+                      :alt="msg.diagram.title || 'AI 图解'"
+                      class="diagram-image"
+                  />
+
+                  <!-- 降级到 SVG 渲染 -->
                   <div
+                      v-else
                       class="diagram-svg-container"
                       v-html="diagramSvgCache.get(msg.diagram.render.source) || ''"
                   ></div>
@@ -472,13 +485,14 @@ import 'github-markdown-css/github-markdown-light.css'
 import 'highlight.js/styles/github.css'
 import mermaid from 'mermaid'
 import { getErrorMessage } from '@/utils/http'
-import { renderTutorMarkdown } from '@/utils/markdown'
+import TutorMessageContent from '@/components/TutorMessageContent.vue'
 import {
   getProfile,
 } from '@/api/ai'
 import {
   streamChat,
   uploadFile,
+  uploadDiagramImage,
   getSessions,
   createSession,
   deleteSession,
@@ -502,6 +516,7 @@ interface DiagramData {
     format: string
     source: string
   }
+  image_url?: string  // PNG 图片 URL（前端渲染后上传）
 }
 interface ChatMsg {
   id: number
@@ -599,6 +614,12 @@ const diagramSvgCache = ref<Map<string, string>>(new Map())
 
 // --- 滚动状态 ---
 let scrollPending = false
+let streamFlushHandle: number | null = null
+let pendingStreamText = ''
+let pendingStreamTargetId: number | null = null
+let lastAutoScrollAt = 0
+
+const STREAM_SCROLL_INTERVAL_MS = 64
 
 // ==========================================
 // 6. 计算属性
@@ -618,6 +639,8 @@ const showThinkingIndicator = computed(() => {
   const streamingMsg = messages.value.find(m => m.id === streamingMsgId.value)
   return !streamingMsg || !streamingMsg.content
 })
+
+const isStreamingMessage = (msg: ChatMsg) => msg.id === streamingMsgId.value && isAIThinking.value
 
 // ==========================================
 // 7. 工具函数
@@ -737,6 +760,53 @@ const scrollToBottom = () => {
   })
 }
 
+const scrollToBottomThrottled = (force = false) => {
+  const nowTs = Date.now()
+  if (!force && nowTs - lastAutoScrollAt < STREAM_SCROLL_INTERVAL_MS) {
+    return
+  }
+  lastAutoScrollAt = nowTs
+  scrollToBottom()
+}
+
+const flushPendingStreamText = (forceScroll = false) => {
+  if (streamFlushHandle != null) {
+    cancelAnimationFrame(streamFlushHandle)
+    streamFlushHandle = null
+  }
+  if (!pendingStreamText || pendingStreamTargetId == null) {
+    pendingStreamText = ''
+    pendingStreamTargetId = null
+    return
+  }
+
+  const aiMsg = messages.value.find(m => m.id === pendingStreamTargetId)
+  if (aiMsg) {
+    aiMsg.content += pendingStreamText
+    scrollToBottomThrottled(forceScroll)
+  }
+
+  pendingStreamText = ''
+  pendingStreamTargetId = null
+}
+
+const enqueueStreamChunk = (messageId: number, chunk: string) => {
+  if (!chunk) return
+
+  if (pendingStreamTargetId !== null && pendingStreamTargetId !== messageId) {
+    flushPendingStreamText()
+  }
+
+  pendingStreamTargetId = messageId
+  pendingStreamText += chunk
+
+  if (streamFlushHandle != null) return
+  streamFlushHandle = requestAnimationFrame(() => {
+    streamFlushHandle = null
+    flushPendingStreamText()
+  })
+}
+
 const autoResize = () => {
   const el = textareaRef.value
   if (!el) return
@@ -765,6 +835,99 @@ const renderMermaid = async (source: string): Promise<string> => {
   }
 }
 
+/**
+ * 将 SVG 字符串转换为 PNG Blob
+ */
+const svgToPng = (svgString: string): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    // 创建临时容器获取 SVG 尺寸
+    const tempDiv = document.createElement('div')
+    tempDiv.style.position = 'absolute'
+    tempDiv.style.visibility = 'hidden'
+    tempDiv.style.width = '800px'
+    document.body.appendChild(tempDiv)
+    tempDiv.innerHTML = svgString
+
+    const svgElement = tempDiv.querySelector('svg')
+    if (!svgElement) {
+      document.body.removeChild(tempDiv)
+      reject(new Error('SVG element not found'))
+      return
+    }
+
+    // 获取 SVG 尺寸
+    let width = svgElement.clientWidth || svgElement.getBoundingClientRect().width || 600
+    let height = svgElement.clientHeight || svgElement.getBoundingClientRect().height || 400
+
+    // 限制最大尺寸
+    const maxWidth = 800
+    const maxHeight = 600
+    if (width > maxWidth) {
+      height = (height * maxWidth) / width
+      width = maxWidth
+    }
+    if (height > maxHeight) {
+      width = (width * maxHeight) / height
+      height = maxHeight
+    }
+
+    document.body.removeChild(tempDiv)
+
+    // 创建 Canvas
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      reject(new Error('Canvas context not available'))
+      return
+    }
+
+    // 2x 分辨率
+    canvas.width = width * 2
+    canvas.height = height * 2
+    ctx.scale(2, 2)
+
+    // 白色背景
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, 0, width, height)
+
+    // SVG 转 Data URL
+    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+
+    const img = new Image()
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, width, height)
+      URL.revokeObjectURL(url)
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob)
+        } else {
+          reject(new Error('Canvas toBlob failed'))
+        }
+      }, 'image/png')
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Image load failed'))
+    }
+    img.src = url
+  })
+}
+
+/**
+ * 上传图解 PNG 到后端
+ */
+const uploadDiagramPng = async (sessionId: string, pngBlob: Blob): Promise<string | null> => {
+  try {
+    const res = await uploadDiagramImage(pngBlob, sessionId)
+    return res.data.data?.url || null
+  } catch (err) {
+    console.error('[Diagram] PNG upload failed:', err)
+    return null
+  }
+}
+
 const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
   const cacheKey = diagram.render.source
   if (diagramSvgCache.value.has(cacheKey)) {
@@ -774,6 +937,22 @@ const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
   diagramSvgCache.value.set(cacheKey, svg)
   diagramSvgCache.value = new Map(diagramSvgCache.value)
   scrollToBottom()
+
+  // 异步上传 PNG（不阻塞渲染）
+  if (currentSessionId.value) {
+    svgToPng(svg)
+      .then((pngBlob) => uploadDiagramPng(currentSessionId.value!, pngBlob))
+      .then((imageUrl) => {
+        if (imageUrl && diagram) {
+          // 更新 diagram 的 image_url
+          diagram.image_url = imageUrl
+        }
+      })
+      .catch((err) => {
+        console.warn('[Diagram] PNG conversion/upload failed:', err)
+      })
+  }
+
   return svg
 }
 
@@ -1193,13 +1372,10 @@ const handleSend = async () => {
         enable_search: enableWebSearch.value,
       },
       (chunk) => {
-        const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (aiMsg) {
-          aiMsg.content += chunk
-          scrollToBottom()
-        }
+        enqueueStreamChunk(aiMsgId, chunk)
       },
       () => {
+        flushPendingStreamText(true)
         const finishedSessionId = currentSessionId.value
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
@@ -1218,6 +1394,7 @@ const handleSend = async () => {
         }
       },
       (err) => {
+        flushPendingStreamText(true)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
           aiMsg.diagramGenerating = false
@@ -1308,6 +1485,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  flushPendingStreamText()
   abortController?.abort()
   profilePollTimers.forEach(t => clearTimeout(t))
   if (dimTimer) clearTimeout(dimTimer)
@@ -1669,6 +1847,14 @@ onBeforeUnmount(() => {
 .diagram-svg-container :deep(svg) {
   max-width: 100%;
   height: auto;
+}
+
+.diagram-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+  margin: 0 auto;
 }
 
 .mermaid-error {
