@@ -24,8 +24,6 @@ from app.config import (
     DEEPSEEK_MODEL,
     GLM_API_KEY,
     GLM_VISION_MODEL,
-    SPARK_API_PASSWORD,
-    SPARK_API_BASE,
     SPARK_MAX_API_PASSWORD,
     SPARK_MAX_API_BASE,
     SPARK_X_API_PASSWORD,
@@ -47,7 +45,6 @@ class LlmManager:
     DEFAULT_CONCURRENCY_LIMITS: dict[str, int] = {
         "spark": 10,
         "spark_x": 20,
-        "spark_max": 10,
     }
 
     def __init__(
@@ -98,9 +95,9 @@ class LlmManager:
 
         if model_type == "spark":
             return ChatOpenAI(
-                model=model or "spark-3.5",
-                api_key=SPARK_API_PASSWORD,
-                base_url=SPARK_API_BASE,
+                model=model or "spark-max",
+                api_key=SPARK_MAX_API_PASSWORD,
+                base_url=SPARK_MAX_API_BASE,
                 temperature=temperature,
                 streaming=streaming,
                 max_tokens=max_tokens,
@@ -114,19 +111,6 @@ class LlmManager:
                 model=model or "spark-x",
                 api_key=SPARK_X_API_PASSWORD,
                 base_url=SPARK_X_API_BASE,
-                temperature=temperature,
-                streaming=streaming,
-                max_tokens=max_tokens,
-                max_retries=max_retries,
-                timeout=timeout,
-                **kwargs,
-            )
-
-        if model_type == "spark_max":
-            return ChatOpenAI(
-                model=model or "spark-max",
-                api_key=SPARK_MAX_API_PASSWORD,
-                base_url=SPARK_MAX_API_BASE,
                 temperature=temperature,
                 streaming=streaming,
                 max_tokens=max_tokens,
@@ -175,10 +159,10 @@ class LlmManager:
     def get_model(self, model_type: str, **kwargs: Any) -> Any:
         """获取模型实例（缓存命中则复用）。
 
-        当 spark/spark_x/spark_max 并发已满时，自动溢出到 deepseek。
+        当 spark/spark_x 并发已满时，自动溢出到 deepseek。
         """
         # 检查是否需要溢出
-        overflow_types = ("spark", "spark_x", "spark_max")
+        overflow_types = ("spark", "spark_x")
         if model_type in overflow_types and not self._has_available_slot(model_type):
             logger.info("[LLM] %s 并发已满，溢出到 deepseek", model_type)
             model_type = "deepseek"

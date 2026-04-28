@@ -144,6 +144,6 @@ SPARK_X_API_BASE: str = _env("SPARK_X_API_BASE", "https://spark-api-open.xf-yun.
 SPARK_MAX_API_PASSWORD: str = _env("SPARK_MAX_API_PASSWORD", "")
 SPARK_MAX_API_BASE: str = _env("SPARK_MAX_API_BASE", "https://spark-api-open.xf-yun.com/x2/chat/completions")
 
-# Spark (星火模型 OpenAI兼容API) — 替代原 WebSocket API
-SPARK_API_PASSWORD: str = _env("SPARK_API_PASSWORD", "")
-SPARK_API_BASE: str = _env("SPARK_API_BASE", "")
+# Spark (别名，使用 Spark Max 配置)
+SPARK_API_PASSWORD: str = SPARK_MAX_API_PASSWORD
+SPARK_API_BASE: str = SPARK_MAX_API_BASE
