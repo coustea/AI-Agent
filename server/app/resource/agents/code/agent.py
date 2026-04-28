@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.resource.utils import append_context, format_profile_fields, load_prompt, save_resource_file
+from app.resource.utils import append_context, format_profile_fields, load_prompt, parse_markdown_sections, save_resource_file
 
 logger = get_logger(__name__)
 
@@ -87,18 +87,26 @@ class CodeAgent:
 
     @staticmethod
     def _format_user_profile(profile: dict[str, Any]) -> str:
-        return format_profile_fields(profile, [("knowledge_level", "知识水平"), ("learning_pace", "学习节奏")])
+        sections = parse_markdown_sections(profile.get("profile_markdown"))
+        return format_profile_fields(
+            {
+                "技术能力判断": sections.get("技术能力判断"),
+                "学习偏好": sections.get("学习偏好"),
+            },
+            [("技术能力判断", "技术能力判断"), ("学习偏好", "学习偏好")],
+        )
 
     def _build_system_message(self, state: dict[str, Any]) -> str:
         """构建系统提示词。"""
         user_profile = state.get("user_profile", {})
+        sections = parse_markdown_sections(user_profile.get("profile_markdown"))
         system_prompt = self.prompt_template.format(
             major=state.get("major", "通用"),
             course=state.get("course", ""),
             topic=state.get("topic", ""),
             gap=state.get("gap", ""),
-            knowledge_level=user_profile.get("knowledge_level", "中等"),
-            learning_pace=user_profile.get("learning_pace", "中等"),
+            technical_ability=sections.get("技术能力判断") or "暂无明显信息",
+            learning_preference=sections.get("学习偏好") or "暂无明显信息",
         )
         system_prompt = append_context(
             system_prompt,

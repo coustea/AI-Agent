@@ -49,16 +49,14 @@ logger = get_logger(__name__)
 PROFILE_BUILDING_PROMPT = """# 角色与目标
 你是学生画像构建器。请根据【旧画像】、【最近聊天记录】、【长期记忆】和【学习行为】生成一份完整的 Markdown 学生画像。
 
-要求：
-1. 只输出 Markdown，不要输出 JSON。
-2. 不要编造用户没有表达过的信息。
-3. 保留对后续智能辅导有价值的信息。
-4. 内容要完整、自然、可读，适合直接注入智能辅导 Agent 的 prompt。
-5. 使用固定二级标题，便于前端按 `##` 切分卡片展示。
-6. 如果某一项信息不足，请写"暂无明显信息"，不要强行推断。
-7. 不要输出解释说明，不要包裹代码块。
+# 输出要求（严格遵守）
+1. 直接输出 Markdown 内容，不要有任何前言、解释、说明或后记。
+2. 不要输出 JSON，不要包裹在代码块中，不要添加 ```markdown 标记。
+3. 开头直接是 `# 学生画像`，结尾直接结束，不要有多余文字。
+4. 不要编造用户没有表达过的信息。
+5. 如果某一项信息不足，请写"暂无明显信息"，不要强行推断。
 
-固定结构如下：
+# 固定结构（必须按此顺序输出）
 
 # 学生画像
 
@@ -81,7 +79,7 @@ PROFILE_BUILDING_PROMPT = """# 角色与目标
 【旧画像】
 {current_profile}
 
-【已有长期记忆】
+【长期记忆】
 {memory_context}
 
 【最近聊天记录】
@@ -445,7 +443,7 @@ class ProfileBuildingService:
                 learning_event_context=learning_event_context,
             )
             response = await self.llm_manager.ainvoke(  # 调用 LLM
-                "deepseek",
+                "spark_x",
                 self.prompt_template.format_messages(prompt_text=prompt_text),
                 model_kwargs=self.model_kwargs,
             )

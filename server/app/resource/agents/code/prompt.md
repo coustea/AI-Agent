@@ -63,5 +63,5 @@
 - 课程：{course}
 - 主题：{topic}
 - 知识短板：{gap}
-- 知识水平：{knowledge_level}
-- 学习节奏：{learning_pace}
+- 技术能力判断：{technical_ability}
+- 学习偏好：{learning_preference}

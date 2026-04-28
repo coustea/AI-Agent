@@ -19,8 +19,7 @@ logger = get_logger(__name__)
 
 # 长期记忆提取提示词：让大模型输出 Markdown 格式的记忆
 FACT_EXTRACTION_PROMPT = """# 角色与目标
-你是一个专业的长期记忆提取器。你只负责提取长期记忆，不负责总结对话、生成画像、规划学习路径、评价用户或回答用户问题。
-你的唯一任务是从用户的【最新导师对话记录】中，提取值得写入【长期记忆池】的长期记忆候选。
+你是一个专业的长期记忆提取器。你的唯一任务是从用户的【最新导师对话记录】中，提取值得写入【长期记忆池】的长期记忆候选。
 
 # 只提取这些长期记忆
 1. 用户明确表达的稳定偏好。
@@ -34,18 +33,16 @@ FACT_EXTRACTION_PROMPT = """# 角色与目标
 3. 不根据对话推断画像，不输出学习风格、能力评估、性格判断等非长期记忆内容。
 4. 不重复已有长期记忆；只有更具体、更准确或明显更新时才输出。
 
-# 输出格式
-如果没有值得保存的信息，请只输出：NO_MEMORY
+# 输出要求（严格遵守）
+1. 如果没有值得保存的信息，只输出：NO_MEMORY
+2. 如果有记忆，直接输出 Markdown 格式的记忆内容，每条记忆用分隔线 `---` 分开。
+3. 不要有任何前言、解释、说明或后记，直接开始输出记忆内容。
+4. 每条记忆最多 3 条，格式如下：
 
-如果有记忆，请按以下格式输出一条或多条（最多 3 条）：
-
----MEMORY---
-TITLE: 记忆标题
-TYPE: preference | goal | weakness | fact | background | summary
-DIMENSION: 可选维度，没有则写 none
-IMPORTANCE: 0.0 到 1.0
-CONTENT:
 # 记忆标题
+
+类型：preference | goal | weakness | fact | background | summary
+重要度：0.0 到 1.0
 
 ## 内容
 
@@ -58,7 +55,8 @@ CONTENT:
 ## 证据
 
 用简短自然语言说明这条记忆来自最近哪些对话表现，不要复制大段原文。
----END---
+
+---
 
 # 已有长期记忆：
 {memory_context}
@@ -146,7 +144,7 @@ class FactExtractionService:
                 chat_history=chat_history,
             )
             response = await self.llm_manager.ainvoke(  # 调用大模型进行抽取
-                "deepseek",
+                "spark_x",
                 prompt_text,
                 model_kwargs=self.model_kwargs,
             )
@@ -166,7 +164,7 @@ class FactExtractionService:
                 try:
                     await self.store.save_user_fact(
                         user_id=user_id,
-                        content=memory_data["content_markdown"],
+                        content_markdown=memory_data["content_markdown"],
                         memory_type=memory_data["memory_type"],
                         session_id=session_id,
                         expires_at=expires_at,
@@ -213,7 +211,7 @@ class FactExtractionService:
         - response_text: LLM 响应文本
 
         返回：
-        - 解析出的记忆列表，每条记忆包含 title、content_markdown、memory_type、dimension、importance 等字段
+        - 解析出的记忆列表，每条记忆包含 title、content_markdown、memory_type、importance 等字段
         """
         if not response_text or not response_text.strip():
             return []
@@ -221,16 +219,13 @@ class FactExtractionService:
         if "NO_MEMORY" in response_text.upper():
             return []
         memories = []
-        # 按 ---MEMORY--- 分割
-        blocks = response_text.split("---MEMORY---")
+        # 按 --- 分割（新格式使用 --- 作为分隔线）
+        blocks = response_text.split("---")
         for block in blocks:
-            if "---END---" not in block:
+            block = block.strip()
+            if not block:
                 continue
-            # 提取 ---MEMORY--- 到 ---END--- 之间的内容
-            memory_content = block.split("---END---")[0].strip()
-            if not memory_content:
-                continue
-            memory_data = self._parse_single_memory(memory_content)
+            memory_data = self._parse_single_memory(block)
             if memory_data:
                 memories.append(memory_data)
         return memories
@@ -239,56 +234,45 @@ class FactExtractionService:
         """解析单条记忆。
 
         参数：
-        - memory_text: 单条记忆文本
+        - memory_text: 单条记忆文本（纯 Markdown）
 
         返回：
         - 解析出的记忆字典，或 None（解析失败）
         """
-        lines = memory_text.strip().split("\n")
+        text = memory_text.strip()
+        if not text:
+            return None
+
+        lines = text.split("\n")
         title = None
         memory_type = "fact"
-        dimension = None
         importance = 0.5
-        content_start_idx = -1
-        for i, line in enumerate(lines):
+
+        # 从 Markdown 中提取标题（第一个 # 标题）
+        for line in lines:
             line = line.strip()
-            if line.startswith("TITLE:"):
-                title = line[6:].strip()
-            elif line.startswith("TYPE:"):
-                type_str = line[5:].strip().lower()
+            if line.startswith("# ") and not title:
+                title = line[2:].strip()
+            elif line.startswith("类型：") or line.startswith("类型:"):
+                type_str = line.split("：")[-1].split(":")[-1].strip().lower()
                 if type_str in {"preference", "goal", "weakness", "fact", "background", "summary"}:
                     memory_type = type_str
-            elif line.startswith("DIMENSION:"):
-                dim_str = line[9:].strip().lower()
-                if dim_str != "none":
-                    dimension = dim_str
-            elif line.startswith("IMPORTANCE:"):
+            elif line.startswith("重要度：") or line.startswith("重要度:"):
                 try:
-                    importance = float(line[11:].strip())
+                    importance_str = line.split("：")[-1].split(":")[-1].strip()
+                    importance = float(importance_str)
                     importance = max(0.0, min(1.0, importance))
                 except (ValueError, TypeError):
                     importance = 0.5
-            elif line.startswith("CONTENT:"):
-                content_start_idx = i + 1
-                break
-        if content_start_idx < 0:
-            return None
-        # 提取 CONTENT 后的所有内容作为 Markdown
-        content_lines = lines[content_start_idx:]
-        content_markdown = "\n".join(content_lines).strip()
+
+        # 整个文本作为 content_markdown
+        content_markdown = text
         if not content_markdown:
             return None
-        # 如果没有标题，尝试从 Markdown 中提取第一个标题
-        if not title:
-            for line in content_lines:
-                line = line.strip()
-                if line.startswith("# "):
-                    title = line[2:].strip()
-                    break
+
         return {
             "title": title,
             "content_markdown": content_markdown,
             "memory_type": memory_type,
-            "dimension": dimension,
             "importance": importance,
         }

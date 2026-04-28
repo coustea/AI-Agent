@@ -631,7 +631,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
     async def save_user_fact(  # 写入"用户事实"长期记忆（对 fact_agent 来源做去重与近似合并，尽量避免重复条目）
         self,
         user_id: int,
-        content: str,
+        content_markdown: str,
         memory_type: str,
         session_id: str | None = None,
         expires_at=None,
@@ -640,7 +640,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         normalized_type = (memory_type or MEMORY_TYPE_FACT).strip().lower()
         if normalized_type not in FACT_AGENT_MEMORY_TYPES:
             normalized_type = MEMORY_TYPE_FACT
-        cleaned_content = (content or "").strip()
+        cleaned_content = (content_markdown or "").strip()
         normalized_content = normalize_text(cleaned_content)
         if not normalized_content:
             raise ValueError("记忆内容不能为空")
@@ -769,7 +769,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         self,
         user_id: int,
         session_id: str,
-        content: str,
+        content_markdown: str,
         memory_type: str,
         dimension: str | None = None,
         importance: float = 0.5,
@@ -784,7 +784,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                 session_id=session_id,
                 module=module,
                 title=title,
-                content_markdown=content,
+                content_markdown=content_markdown,
                 memory_type=memory_type,
                 dimension=dimension,
                 importance=clamp_importance(importance),
@@ -804,7 +804,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         *,
         user_id: int | None = None,
         module: str | None = None,
-        content: str | None = None,
+        content_markdown: str | None = None,
         memory_type: str | None = None,
         dimension: str | None = None,
         importance: float | None = None,
@@ -819,8 +819,8 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                 return None
             if module is not None and memory.module != module:
                 return None
-            if content is not None:
-                cleaned_content = content.strip()
+            if content_markdown is not None:
+                cleaned_content = content_markdown.strip()
                 if not normalize_text(cleaned_content):
                     raise ValueError("记忆内容不能为空")
                 memory.content_markdown = cleaned_content
@@ -873,9 +873,20 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
 
         summarize_prompt = ChatPromptTemplate.from_messages([
             ("system", (
-                "你是一个记忆压缩引擎。请将以下对话记录提炼为若干条关键知识点和结论。\n"
-                "每条用一行表示，格式：`类别|内容`，类别包括 knowledge/error/behavior/interest/question/answer。\n"
-                "只输出有价值的条目，忽略闲聊。"
+                "你是一个记忆压缩引擎。请将以下对话记录提炼为关键知识点和结论。\n"
+                "直接输出 Markdown 格式，不要有任何前言或解释。\n\n"
+                "格式要求：\n"
+                "## 知识点\n"
+                "- 掌握的知识点1\n"
+                "- 掌握的知识点2\n\n"
+                "## 问题与解答\n"
+                "- Q: 问题1\n"
+                "  A: 答案要点\n\n"
+                "## 错误与纠正\n"
+                "- 错误点及纠正方法\n\n"
+                "## 学习行为\n"
+                "- 观察到的学习习惯或偏好\n\n"
+                "只输出有价值的条目，忽略闲聊。如果某类信息不足，可省略该部分。"
             )),
             ("human", "{chat_text}"),
         ])
@@ -889,7 +900,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         await self.save_long_term_memory(
             user_id=user_id,
             session_id=session_id,
-            content=result.content,
+            content_markdown=result.content,
             memory_type=MEMORY_TYPE_SUMMARY,
             source=module,
             source_message_count=len(summarized_ids),

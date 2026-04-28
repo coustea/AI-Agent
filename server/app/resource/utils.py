@@ -82,6 +82,29 @@ def format_profile_fields(profile: dict[str, Any], fields: list[tuple[str, str]]
     return "\n".join(parts)
 
 
+def parse_markdown_sections(markdown_text: str | None) -> dict[str, str]:
+    """按二级标题解析 Markdown 文本。"""
+    sections: dict[str, str] = {}
+    if not markdown_text:
+        return sections
+
+    current_section: str | None = None
+    current_content: list[str] = []
+    for raw_line in markdown_text.split("\n"):
+        heading = re.match(r"^##\s+(.+?)\s*$", raw_line)
+        if heading:
+            if current_section is not None:
+                sections[current_section] = "\n".join(current_content).strip()
+            current_section = heading.group(1).strip()
+            current_content = []
+            continue
+        if current_section is not None:
+            current_content.append(raw_line)
+    if current_section is not None:
+        sections[current_section] = "\n".join(current_content).strip()
+    return sections
+
+
 def append_context(
     system_prompt: str,
     *,
@@ -681,36 +704,15 @@ def _parse_profile_markdown(profile_markdown: str | None) -> dict[str, str]:
     if not profile_markdown:
         return result
 
-    # 简单的 Markdown 解析：按二级标题分割
-    sections: dict[str, str] = {}
-    current_section: str | None = None
-    current_content: list[str] = []
-
-    for line in profile_markdown.split("\n"):
-        if line.startswith("## "):
-            if current_section and current_content:
-                sections[current_section] = "\n".join(current_content).strip()
-            current_section = line[3:].strip()
-            current_content = []
-        else:
-            if current_section:
-                current_content.append(line)
-    if current_section and current_content:
-        sections[current_section] = "\n".join(current_content).strip()
-
-    # 映射到字段
-    section_mapping = {
-        "技术能力判断": "knowledge_level",
-        "当前学习/项目背景": "learning_goal",
-        "学习偏好": "learning_pace",
-        "当前薄弱点": "weakness",
-        "兴趣方向": "interest",
-        "认知风格": "cognitive_style",
+    sections = parse_markdown_sections(profile_markdown)
+    result = {
+        "技术能力判断": sections.get("技术能力判断", ""),
+        "当前学习/项目背景": sections.get("当前学习/项目背景", ""),
+        "学习偏好": sections.get("学习偏好", ""),
+        "当前薄弱点": sections.get("当前薄弱点", ""),
+        "兴趣方向": sections.get("兴趣方向", ""),
+        "推荐辅导策略": sections.get("推荐辅导策略", ""),
     }
-    for section_name, field_name in section_mapping.items():
-        if section_name in sections:
-            result[field_name] = sections[section_name]
-
     return result
 
 
@@ -723,18 +725,18 @@ def build_personalized_context(snapshot, task: dict):
 
     # 从 profile_markdown 解析信息
     profile_info = _parse_profile_markdown(snapshot.profile_markdown)
-    knowledge_level = profile_info.get("knowledge_level", "")
+    technical_ability = profile_info.get("技术能力判断", "")
 
     # 根据知识水平文本判断难度
-    if "初级" in knowledge_level or "入门" in knowledge_level or "基础" in knowledge_level:
+    if "初级" in technical_ability or "入门" in technical_ability or "基础" in technical_ability:
         difficulty = "basic"
-    elif "高级" in knowledge_level or "精通" in knowledge_level or "专家" in knowledge_level:
+    elif "高级" in technical_ability or "精通" in technical_ability or "专家" in technical_ability:
         difficulty = "advanced"
 
     explanation_style: list[str] = []
-    cognitive_style = profile_info.get("cognitive_style", "")
-    if cognitive_style:
-        explanation_style.append(cognitive_style)
+    learning_preference = profile_info.get("学习偏好", "")
+    if learning_preference:
+        explanation_style.append(learning_preference)
     if need == "exam":
         explanation_style.append("考点优先，短时高频强化")
     elif need == "deep":
@@ -743,10 +745,10 @@ def build_personalized_context(snapshot, task: dict):
         explanation_style.append("先图解梳理，再精讲与练习")
 
     emphasis: list[str] = []
-    weakness = profile_info.get("weakness", "")
+    weakness = profile_info.get("当前薄弱点", "")
     if weakness:
         emphasis.append(f"重点纠偏：{weakness}")
-    interest = profile_info.get("interest", "")
+    interest = profile_info.get("兴趣方向", "")
     if interest:
         emphasis.append(f"案例偏好：{interest}")
     if task.get("extra"):

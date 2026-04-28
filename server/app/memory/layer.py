@@ -339,7 +339,7 @@ class MemoryLayer:
         *,
         user_id: int,
         session_id: str,
-        content: str,
+        content_markdown: str,
         memory_type: str,
         dimension: str | None = None,
         importance: float = 0.5,
@@ -352,7 +352,7 @@ class MemoryLayer:
         参数：
         - user_id: 用户ID
         - session_id: 会话ID
-        - content: 记忆内容（Markdown）
+        - content_markdown: 记忆内容（Markdown）
         - memory_type: 记忆类型
         - dimension: 维度标签
         - importance: 重要度（0-1）
@@ -366,7 +366,7 @@ class MemoryLayer:
         return await self.store.save_long_term_memory(
             user_id=user_id,
             session_id=session_id,
-            content=content,
+            content_markdown=content_markdown,
             memory_type=memory_type,
             dimension=dimension,
             importance=importance,
@@ -380,7 +380,7 @@ class MemoryLayer:
         self,
         *,
         user_id: int,
-        content: str,
+        content_markdown: str,
         memory_type: str,
         session_id: str | None = None,
         expires_at=None,
@@ -389,7 +389,7 @@ class MemoryLayer:
 
         参数：
         - user_id: 用户ID
-        - content: 事实内容
+        - content_markdown: 事实内容（Markdown）
         - memory_type: 记忆类型
         - session_id: 会话ID
         - expires_at: 过期时间
@@ -399,7 +399,7 @@ class MemoryLayer:
         """
         return await self.store.save_user_fact(
             user_id=user_id,
-            content=content,
+            content_markdown=content_markdown,
             memory_type=memory_type,
             session_id=session_id,
             expires_at=expires_at,
@@ -468,7 +468,7 @@ class MemoryLayer:
         *,
         memory_id: int,
         user_id: int | None = None,
-        content: str | None = None,
+        content_markdown: str | None = None,
         memory_type: str | None = None,
         dimension: str | None = None,
         importance: float | None = None,
@@ -481,7 +481,7 @@ class MemoryLayer:
         参数：
         - memory_id: 记忆ID
         - user_id: 用户ID（用于权限约束）
-        - content: 新内容（Markdown）
+        - content_markdown: 新内容（Markdown）
         - memory_type: 新类型
         - dimension: 新维度
         - importance: 新重要度
@@ -496,7 +496,7 @@ class MemoryLayer:
             memory_id,
             user_id=user_id,
             module=self.module_name,
-            content=content,
+            content_markdown=content_markdown,
             memory_type=memory_type,
             dimension=dimension,
             importance=importance,

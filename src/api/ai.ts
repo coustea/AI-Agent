@@ -6,46 +6,24 @@ import type { ApiResponse } from '@/api/auth'
 // ==========================================
 
 export interface ProfileData {
-  knowledge_level: string | null
-  knowledge_level_score: number | null
-  cognitive_style: string | null
-  cognitive_style_score: number | null
-  error_pattern: string | null
-  error_pattern_score: number | null
-  learning_goal: string | null
-  learning_goal_score: number | null
-  learning_history: string | null
-  learning_history_score: number | null
-  interest_preference: string | null
-  interest_preference_score: number | null
-  learning_pace: string | null
-  learning_pace_score: number | null
-  cognitive_level: string | null
-  cognitive_level_score: number | null
-  profile_summary: string | null
+  user_id: number | null
+  profile_markdown: string | null
+  version: number | null
+  confidence: number | null
+  source_session_ids: string[] | null
+  source_memory_ids: number[] | null
+  updated_reason: string | null
   updated_at: string | null
 }
 
 export interface ProfileHistoryItem {
+  id: number
+  user_id: number
   version: number
-  knowledge_level: string | null
-  knowledge_level_score: number | null
-  cognitive_style: string | null
-  cognitive_style_score: number | null
-  error_pattern: string | null
-  error_pattern_score: number | null
-  learning_goal: string | null
-  learning_goal_score: number | null
-  learning_history: string | null
-  learning_history_score: number | null
-  interest_preference: string | null
-  interest_preference_score: number | null
-  learning_pace: string | null
-  learning_pace_score: number | null
-  cognitive_level: string | null
-  cognitive_level_score: number | null
-  profile_summary: string | null
+  profile_markdown: string | null
   change_reason: string | null
+  source_session_ids: string[] | null
+  source_memory_ids: number[] | null
   created_at: string | null
 }
 

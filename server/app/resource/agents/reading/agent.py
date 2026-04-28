@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.resource.utils import append_context, format_profile_fields, load_prompt, save_resource_file
+from app.resource.utils import append_context, format_profile_fields, load_prompt, parse_markdown_sections, save_resource_file
 
 logger = get_logger(__name__)
 
@@ -47,69 +47,30 @@ class ReadingAgent:
 
     @staticmethod
     def _format_user_profile(profile: dict[str, Any]) -> str:
-        """格式化用户画像，从 profile_markdown 中提取兴趣和认知风格信息。"""
-        profile_markdown = profile.get("profile_markdown", "")
-        if not profile_markdown:
-            return ""
-
-        # 解析 Markdown 提取相关字段
-        sections: dict[str, str] = {}
-        current_section: str | None = None
-        current_content: list[str] = []
-
-        for line in profile_markdown.split("\n"):
-            if line.startswith("## "):
-                if current_section and current_content:
-                    sections[current_section] = "\n".join(current_content).strip()
-                current_section = line[3:].strip()
-                current_content = []
-            else:
-                if current_section:
-                    current_content.append(line)
-        if current_section and current_content:
-            sections[current_section] = "\n".join(current_content).strip()
+        """格式化用户画像，从 profile_markdown 中提取兴趣和学习偏好信息。"""
+        sections = parse_markdown_sections(profile.get("profile_markdown"))
 
         parts: list[str] = []
         if "兴趣方向" in sections:
             parts.append(f"- 兴趣偏好：{sections['兴趣方向']}")
-        if "认知风格" in sections:
-            parts.append(f"- 认知风格：{sections['认知风格']}")
+        if "学习偏好" in sections:
+            parts.append(f"- 学习偏好：{sections['学习偏好']}")
         return "\n".join(parts)
 
     def _build_system_message(self, state: dict[str, Any]) -> str:
         user_profile = state.get("user_profile", {})
         profile_markdown = user_profile.get("profile_markdown", "")
 
-        # 解析 Markdown 提取兴趣和认知风格
-        interest_preference = ""
-        cognitive_style = ""
-        sections: dict[str, str] = {}
-        current_section: str | None = None
-        current_content: list[str] = []
-
-        for line in profile_markdown.split("\n"):
-            if line.startswith("## "):
-                if current_section and current_content:
-                    sections[current_section] = "\n".join(current_content).strip()
-                current_section = line[3:].strip()
-                current_content = []
-            else:
-                if current_section:
-                    current_content.append(line)
-        if current_section and current_content:
-            sections[current_section] = "\n".join(current_content).strip()
-
-        if "兴趣方向" in sections:
-            interest_preference = sections["兴趣方向"]
-        if "认知风格" in sections:
-            cognitive_style = sections["认知风格"]
+        sections = parse_markdown_sections(profile_markdown)
+        interest_direction = sections.get("兴趣方向", "")
+        learning_preference = sections.get("学习偏好", "")
 
         system_prompt = self.prompt_template.format(
             major=state.get("major", "通用"),
             course=state.get("course", ""),
             topic=state.get("topic", ""),
-            interest_preference=interest_preference,
-            cognitive_style=cognitive_style,
+            interest_direction=interest_direction,
+            learning_preference=learning_preference,
         )
         return append_context(
             system_prompt,
@@ -165,12 +126,13 @@ class ReadingAgent:
             '"abstract":"摘要","relevance":"与主题的关联","type":"book|paper|article|course|docs"}]}'
             "至少返回 3 条推荐。"
         )
+        messages = [
+            SystemMessage(content=prompt),
+            HumanMessage(content=human),
+        ]
         response = await self.llm_manager.ainvoke(
             "deepseek",
-            [
-                SystemMessage(content=prompt),
-                HumanMessage(content=human),
-            ],
+            messages,
             model_kwargs=self.model_kwargs,
         )
         raw_content = getattr(response, "content", response)
@@ -204,17 +166,18 @@ class ReadingAgent:
             "Markdown content:\n"
             f"{markdown_text}"
         )
+        messages = [
+            HumanMessage(
+                content=(
+                    f"{prompt}\n\n"
+                    "只输出合法 JSON 对象，不要 Markdown 代码块和解释文字。"
+                    'JSON 顶层格式为 {"recommendations":[...]}，至少 3 条。'
+                )
+            )
+        ]
         response = await self.llm_manager.ainvoke(
             "deepseek",
-            [
-                HumanMessage(
-                    content=(
-                        f"{prompt}\n\n"
-                        "只输出合法 JSON 对象，不要 Markdown 代码块和解释文字。"
-                        'JSON 顶层格式为 {"recommendations":[...]}，至少 3 条。'
-                    )
-                )
-            ],
+            messages,
             model_kwargs=self.model_kwargs,
         )
         raw_content = getattr(response, "content", response)

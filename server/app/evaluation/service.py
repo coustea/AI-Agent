@@ -170,7 +170,7 @@ class EvaluationService:
             try:
                 await memory_layer.upsert_long_term_fact(
                     user_id=user_id,
-                    content=candidate.content,
+                    content_markdown=candidate.content,
                     memory_type=candidate.memory_type,
                     session_id=event.session_id,
                 )

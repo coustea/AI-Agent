@@ -18,6 +18,7 @@ from app.path.planner import (
 )
 from app.path.repository import PathRepository
 from app.path.schemas import PathInsight, PathPlan, PathPlanData, PathPlanMeta, PathSummary
+from app.resource.utils import parse_markdown_sections
 
 
 class PathService:
@@ -50,8 +51,8 @@ class PathService:
         profile_info = self._parse_profile_markdown(profile.profile_markdown if profile else None)
 
         plan = build_initial_plan(
-            knowledge_level=profile_info.get("knowledge_level"),
-            learning_goal=profile_info.get("learning_goal"),
+            knowledge_level=profile_info.get("技术能力判断"),
+            learning_goal=profile_info.get("当前学习/项目背景"),
             weak_points=inferred_weak_points,
             planned_node_ids=planned_node_ids,
         )
@@ -59,7 +60,7 @@ class PathService:
         plan = compute_progress(
             plan,
             completed_node_ids=completed_node_ids,
-            pace=profile_info.get("learning_pace"),
+            pace=profile_info.get("学习偏好"),
         )
         if feedback or weak_points:
             plan = adjust_plan(plan, weak_points=inferred_weak_points, feedback=feedback)
@@ -128,8 +129,8 @@ class PathService:
         # 从画像 Markdown 中提取薄弱点
         if profile and profile.profile_markdown:
             profile_info = self._parse_profile_markdown(profile.profile_markdown)
-            if profile_info.get("weakness"):
-                texts.append(profile_info["weakness"])
+            if profile_info.get("当前薄弱点"):
+                texts.append(profile_info["当前薄弱点"])
         if resource and resource.gap:
             texts.append(resource.gap)
         if resource and resource.need:
@@ -164,7 +165,7 @@ class PathService:
         # 从画像 Markdown 中提取学习目标
         if not inferred and profile and profile.profile_markdown:
             profile_info = self._parse_profile_markdown(profile.profile_markdown)
-            goal = (profile_info.get("learning_goal") or "").lower()
+            goal = (profile_info.get("当前学习/项目背景") or "").lower()
             if "exam" in goal or "考试" in goal:
                 inferred.append("quiz")
             if "project" in goal or "项目" in goal:
@@ -186,35 +187,10 @@ class PathService:
         if not profile_markdown:
             return result
 
-        # 简单的 Markdown 解析：按二级标题分割
-        sections = {}
-        current_section = None
-        current_content: list[str] = []
-
-        for line in profile_markdown.split("\n"):
-            if line.startswith("## "):
-                if current_section and current_content:
-                    sections[current_section] = "\n".join(current_content).strip()
-                current_section = line[3:].strip()
-                current_content = []
-            else:
-                if current_section:
-                    current_content.append(line)
-        if current_section and current_content:
-            sections[current_section] = "\n".join(current_content).strip()
-
-        # 映射到字段
-        section_mapping = {
-            "技术能力判断": "knowledge_level",
-            "当前学习/项目背景": "learning_goal",
-            "学习偏好": "learning_pace",
-            "当前薄弱点": "weakness",
-            "兴趣方向": "interest",
-        }
-        for section_name, field_name in section_mapping.items():
-            if section_name in sections:
-                result[field_name] = sections[section_name]
-
+        sections = parse_markdown_sections(profile_markdown)
+        for name in ("技术能力判断", "当前学习/项目背景", "学习偏好", "当前薄弱点", "兴趣方向"):
+            if sections.get(name):
+                result[name] = sections[name]
         return result
 
     def _compute_confidence(

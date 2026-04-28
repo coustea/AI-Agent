@@ -59,5 +59,5 @@
 - 课程：{course}
 - 主题：{topic}
 - 知识短板：{gap}
-- 知识水平：{knowledge_level}
-- 易错点模式：{error_pattern}
+- 技术能力判断：{technical_ability}
+- 当前薄弱点：{weakness_focus}

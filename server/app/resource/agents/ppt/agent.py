@@ -110,9 +110,9 @@ class PptState(TypedDict, total=False):
     render_ready: bool
 
 
-def _select_ppt_style(cognitive_style: str | None) -> str:
-    """根据认知风格选择更贴近学习体验的视觉主题。"""
-    style = (cognitive_style or "").strip()
+def _select_ppt_style(learning_preference: str | None) -> str:
+    """根据学习偏好选择更贴近学习体验的视觉主题。"""
+    style = (learning_preference or "").strip()
     if any(keyword in style for keyword in _VISUAL_KEYWORDS):
         return "creative_bold"
     if any(keyword in style for keyword in _SEQUENTIAL_KEYWORDS):
@@ -122,8 +122,8 @@ def _select_ppt_style(cognitive_style: str | None) -> str:
     return "modern_minimal"
 
 
-def _extract_cognitive_style_from_markdown(profile_markdown: str | None) -> str:
-    """从画像 Markdown 中提取认知风格。"""
+def _extract_learning_preference_from_markdown(profile_markdown: str | None) -> str:
+    """从画像 Markdown 中提取学习偏好。"""
     if not profile_markdown:
         return ""
     sections: dict[str, str] = {}
@@ -142,7 +142,7 @@ def _extract_cognitive_style_from_markdown(profile_markdown: str | None) -> str:
     if current_section and current_content:
         sections[current_section] = "\n".join(current_content).strip()
 
-    return sections.get("认知风格", "")
+    return sections.get("学习偏好", "") or sections.get("认知风格", "")
 
 
 def _check_slide_plan_quality(plan: dict[str, Any]) -> tuple[bool, str, int]:
@@ -602,9 +602,9 @@ class PptAgent:
             return ""
         parts = []
         profile_markdown = profile.get("profile_markdown", "")
-        cognitive_style = _extract_cognitive_style_from_markdown(profile_markdown)
-        if cognitive_style:
-            parts.append(f"- 认知风格: {cognitive_style}")
+        learning_preference = _extract_learning_preference_from_markdown(profile_markdown)
+        if learning_preference:
+            parts.append(f"- 学习偏好: {learning_preference}")
         return "\n".join(parts)
 
     def _build_system_message(self, state: Any) -> str:
@@ -613,9 +613,9 @@ class PptAgent:
         template_source_url = str(state.get("template_source_url") or "").strip()
         template_config_url = str(state.get("template_config_url") or "").strip()
 
-        # 从 profile_markdown 提取认知风格
+        # 从 profile_markdown 提取学习偏好
         profile_markdown = user_profile.get("profile_markdown", "")
-        cognitive_style = _extract_cognitive_style_from_markdown(profile_markdown) or "通用"
+        learning_preference = _extract_learning_preference_from_markdown(profile_markdown) or "通用"
 
         try:
             ensure_template_available(
@@ -645,7 +645,7 @@ class PptAgent:
             course=state.get("course", ""),
             topic=state.get("topic", ""),
             gap=state.get("gap", ""),
-            cognitive_style=cognitive_style,
+            cognitive_style=learning_preference,
             **dynamic_parts
         )
         system_prompt = self._append_context_to_prompt(system_prompt, state)
@@ -692,8 +692,8 @@ class PptAgent:
     ) -> dict[str, Any]:
         profile_data = user_profile or {}
         profile_markdown = profile_data.get("profile_markdown", "")
-        cognitive_style = _extract_cognitive_style_from_markdown(profile_markdown)
-        preferred_style = _select_ppt_style(cognitive_style)
+        learning_preference = _extract_learning_preference_from_markdown(profile_markdown)
+        preferred_style = _select_ppt_style(learning_preference)
         resolved_template_id = self._resolve_template_selection(
             requested_template_id=template_id,
             template_source_url=template_source_url,

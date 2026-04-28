@@ -365,20 +365,16 @@
         </div>
 
         <div class="profile-feature-card">
-          <div class="feature-list" v-if="activeProfileDimensions.length > 0">
-            <div class="feature-item" v-for="dim in activeProfileDimensions" :key="dim.key">
+          <div class="feature-list" v-if="profileCards.length > 0">
+            <div class="feature-item" v-for="card in profileCards" :key="card.key">
               <div class="item-icon-box">
-                <el-icon><component :is="getIcon(dim.key)" /></el-icon>
+                <el-icon><component :is="getProfileCardIcon(card.key)" /></el-icon>
               </div>
               <div class="item-content-wrapper">
                 <div class="item-header-row">
-                  <div class="item-title">{{ dim.name }}</div>
-                  <div class="item-score" :class="getScoreClass(dim.score)">{{ dim.score }}<span class="score-unit">/100</span></div>
+                  <div class="item-title">{{ card.title }}</div>
                 </div>
-                <div class="item-progress-track">
-                  <div class="item-progress-bar" :class="getScoreClass(dim.score)" :style="{ width: `${dim.score}%` }"></div>
-                </div>
-                <div class="item-desc">{{ dim.desc }}</div>
+                <div class="item-desc">{{ card.content }}</div>
               </div>
             </div>
           </div>
@@ -467,9 +463,9 @@ import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
   Plus, Delete, Close, Top,
-  EditPen, Search, Discount, Timer, VideoCamera, DataLine,
+  EditPen, Search, Timer, VideoCamera, DataLine,
   CircleCheckFilled,
-  InfoFilled, Medal, Aim, Setting, Loading
+  InfoFilled, Medal, Aim, Loading
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import 'github-markdown-css/github-markdown-light.css'
@@ -479,7 +475,6 @@ import { getErrorMessage } from '@/utils/http'
 import { renderTutorMarkdown } from '@/utils/markdown'
 import {
   getProfile,
-  type ProfileData,
 } from '@/api/ai'
 import {
   streamChat,
@@ -491,20 +486,6 @@ import {
   type ChatSession,
 } from '@/api/chat'
 import { getMe } from '@/api/auth'
-
-// ==========================================
-// 2. 常量定义
-// ==========================================
-const DIMENSION_MAP = [
-  { key: 'knowledge_level', name: '擅长领域', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_style', name: '认知风格', defaultDesc: '自动分析中...' },
-  { key: 'error_pattern', name: '待提升方向', defaultDesc: '自动分析中...' },
-  { key: 'learning_goal', name: '学习目标', defaultDesc: '自动分析中...' },
-  { key: 'learning_history', name: '学习历史', defaultDesc: '自动分析中...' },
-  { key: 'interest_preference', name: '学习风格偏好', defaultDesc: '自动分析中...' },
-  { key: 'learning_pace', name: '学习节奏', defaultDesc: '自动分析中...' },
-  { key: 'cognitive_level', name: '认知水平', defaultDesc: '自动分析中...' },
-] as const
 
 // ==========================================
 // 3. 类型定义
@@ -532,12 +513,10 @@ interface ChatMsg {
   diagram?: DiagramData | null
   diagramGenerating?: boolean
 }
-interface ProfileDimension {
-  readonly key: string
-  readonly name: string
-  readonly defaultDesc: string
-  score: number | null
-  desc: string
+interface ProfileCard {
+  key: string
+  title: string
+  content: string
 }
 
 const DEFAULT_SESSION_TITLE = '新对话'
@@ -596,9 +575,7 @@ let abortController: AbortController | null = null
 // --- 画像相关 ---
 const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
-const profileDimensions = ref<ProfileDimension[]>(
-    DIMENSION_MAP.map(d => ({ ...d, score: null, desc: d.defaultDesc }))
-)
+const profileCards = ref<ProfileCard[]>([])
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
 
 // --- FAB 悬浮按钮 ---
@@ -633,10 +610,6 @@ const filteredSessions = computed(() => {
     const title = s.title || '新建对话'
     return title.toLowerCase().includes(keyword)
   })
-})
-
-const activeProfileDimensions = computed(() => {
-  return profileDimensions.value.filter(d => d.score != null && d.desc && d.desc !== d.defaultDesc)
 })
 
 const showThinkingIndicator = computed(() => {
@@ -680,25 +653,52 @@ const handleMessageClick = (e: MouseEvent) => {
   }
 }
 
-const getIcon = (key: string) => {
-  const map: Record<string, any> = {
-    knowledge_level: Medal,
-    cognitive_style: Aim,
-    error_pattern: Aim,
-    learning_goal: Aim,
-    learning_history: Timer,
-    interest_preference: Setting,
-    learning_pace: Timer,
-    cognitive_level: Medal
-  }
-  return map[key] || Discount
+const PROFILE_CARD_ICON_MAP: Record<string, any> = {
+  基础信息: Medal,
+  当前学习项目背景: Aim,
+  技术能力判断: Aim,
+  学习偏好: Timer,
+  当前薄弱点: Aim,
+  兴趣方向: Medal,
+  推荐辅导策略: Service,
+  最近变化: Timer,
 }
 
-const getScoreClass = (score: number | null) => {
-  if (score === null) return 'score-neutral'
-  if (score < 40) return 'score-danger'
-  if (score < 70) return 'score-warning'
-  return 'score-success'
+const normalizeCardKey = (title: string) => title.replace(/[\/\s]/g, '')
+
+const getProfileCardIcon = (key: string) => {
+  return PROFILE_CARD_ICON_MAP[key] || DataLine
+}
+
+const parseProfileMarkdown = (profileMarkdown: string): ProfileCard[] => {
+  const cards: ProfileCard[] = []
+  let currentTitle = ''
+  const currentLines: string[] = []
+
+  const flush = () => {
+    if (!currentTitle) return
+    const text = currentLines.join('\n').trim() || '暂无明显信息'
+    cards.push({
+      key: normalizeCardKey(currentTitle),
+      title: currentTitle,
+      content: text,
+    })
+  }
+
+  for (const line of profileMarkdown.split('\n')) {
+    const heading = line.match(/^##\s+(.+?)\s*$/)
+    if (heading) {
+      flush()
+      currentTitle = (heading[1] ?? '').trim()
+      currentLines.length = 0
+      continue
+    }
+    if (currentTitle) {
+      currentLines.push(line)
+    }
+  }
+  flush()
+  return cards
 }
 
 const formatRelativeTime = (dateStr: string) => {
@@ -896,19 +896,10 @@ const fetchProfile = async () => {
     const data = res.data.data
     if (!data) return
 
-    let changed = false
-    for (const dim of profileDimensions.value) {
-      const desc = data[dim.key as keyof ProfileData] as string | null
-      const score = data[`${dim.key}_score` as keyof ProfileData] as number | null
-      if (desc && desc !== dim.desc) {
-        dim.desc = desc
-        changed = true
-      }
-      if (score != null && score !== dim.score) {
-        dim.score = score
-        changed = true
-      }
-    }
+    const markdown = (data.profile_markdown || '').trim()
+    const nextCards = markdown ? parseProfileMarkdown(markdown) : []
+    const changed = JSON.stringify(nextCards) !== JSON.stringify(profileCards.value)
+    profileCards.value = nextCards
 
     if (changed) {
       profileUpdated.value = true
