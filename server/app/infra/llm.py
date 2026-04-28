@@ -173,7 +173,17 @@ class LlmManager:
         raise ValueError(f"Unsupported model_type: {model_type}")
 
     def get_model(self, model_type: str, **kwargs: Any) -> Any:
-        """获取模型实例（缓存命中则复用）。"""
+        """获取模型实例（缓存命中则复用）。
+
+        当 spark/spark_x/spark_max 并发已满时，自动溢出到 deepseek。
+        """
+        # 检查是否需要溢出
+        overflow_types = ("spark", "spark_x", "spark_max")
+        if model_type in overflow_types and not self._has_available_slot(model_type):
+            logger.info("[LLM] %s 并发已满，溢出到 deepseek", model_type)
+            model_type = "deepseek"
+
+        # 原有缓存逻辑
         key = self._cache_key(model_type, kwargs)
         model = self._models.get(key)
         if model is not None:
