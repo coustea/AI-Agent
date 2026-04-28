@@ -89,81 +89,81 @@ class LlmManager:
         return semaphore._value > 0
 
     def _create_model(self, model_type: str, **kwargs: Any) -> Any:
+        model = kwargs.pop("model", None)
+        temperature = kwargs.pop("temperature", 0.3)
+        streaming = kwargs.pop("streaming", False)
+        max_tokens = kwargs.pop("max_tokens", None)
+        max_retries = kwargs.pop("max_retries", 2)
+        timeout = kwargs.pop("timeout", None)
+
         if model_type == "spark":
-            model = kwargs.pop("model", "generalv3.5")
-            temperature = kwargs.pop("temperature", 0.3)
-            streaming = kwargs.pop("streaming", False)
-            return ChatSparkLLM(
-                spark_app_id=SPARK_APP_ID,
-                spark_api_key=SPARK_API_KEY,
-                spark_api_secret=SPARK_API_SECRET,
-                spark_llm_domain=model,
+            return ChatOpenAI(
+                model=model or "spark-3.5",
+                api_key=SPARK_API_PASSWORD,
+                base_url=SPARK_API_BASE,
                 temperature=temperature,
                 streaming=streaming,
+                max_tokens=max_tokens,
+                max_retries=max_retries,
+                timeout=timeout,
                 **kwargs,
             )
 
         if model_type == "spark_x":
-            model = kwargs.pop("model", "spark-x")
-            temperature = kwargs.pop("temperature", 0.3)
-            streaming = kwargs.pop("streaming", False)
             return ChatOpenAI(
-                model=model,
+                model=model or "spark-x",
                 api_key=SPARK_X_API_PASSWORD,
                 base_url=SPARK_X_API_BASE,
                 temperature=temperature,
                 streaming=streaming,
+                max_tokens=max_tokens,
+                max_retries=max_retries,
+                timeout=timeout,
                 **kwargs,
             )
 
-        if model_type == "deepseek":
-            model = kwargs.pop("model", DEEPSEEK_MODEL)
-            temperature = kwargs.pop("temperature", 0.3)
-            streaming = kwargs.pop("streaming", False)
-            max_tokens = kwargs.pop("max_tokens", None)
-            max_retries = kwargs.pop("max_retries", 2)
-            timeout = kwargs.pop("timeout", None)
-            thinking = kwargs.pop("thinking", False)
-            extra_body = (
-                DEEPSEEK_THINKING_ENABLED_BODY
-                if thinking
-                else DEEPSEEK_THINKING_DISABLED_BODY
-            )
-            return ChatDeepSeek(
-                model=model,
-                api_key=DEEPSEEK_API_KEY,
+        if model_type == "spark_max":
+            return ChatOpenAI(
+                model=model or "spark-max",
+                api_key=SPARK_MAX_API_PASSWORD,
+                base_url=SPARK_MAX_API_BASE,
                 temperature=temperature,
                 streaming=streaming,
                 max_tokens=max_tokens,
                 max_retries=max_retries,
                 timeout=timeout,
-                extra_body=extra_body,
                 **kwargs,
             )
 
-        if model_type == "deepseek_reasoner":
-            model = kwargs.pop("model", DEEPSEEK_CHAT_MODEL)
-            streaming = kwargs.pop("streaming", False)
-            max_tokens = kwargs.pop("max_tokens", None)
-            max_retries = kwargs.pop("max_retries", 2)
-            timeout = kwargs.pop("timeout", None)
-            return ChatDeepSeek(
-                model=model,
+        if model_type == "deepseek":
+            return ChatOpenAI(
+                model=model or DEEPSEEK_MODEL,
                 api_key=DEEPSEEK_API_KEY,
-                temperature=1.0,
+                base_url=DEEPSEEK_API_BASE,
+                temperature=temperature,
                 streaming=streaming,
                 max_tokens=max_tokens,
                 max_retries=max_retries,
                 timeout=timeout,
-                extra_body=DEEPSEEK_THINKING_ENABLED_BODY,
+                **kwargs,
+            )
+
+        if model_type == "deepseek_reasoner":
+            return ChatOpenAI(
+                model=model or DEEPSEEK_CHAT_MODEL,
+                api_key=DEEPSEEK_API_KEY,
+                base_url=DEEPSEEK_API_BASE,
+                temperature=1.0,  # reasoner 固定 1.0
+                streaming=streaming,
+                max_tokens=max_tokens,
+                max_retries=max_retries,
+                timeout=timeout,
                 **kwargs,
             )
 
         if model_type == "glm_vision":
-            model = kwargs.pop("model", GLM_VISION_MODEL)
-            temperature = kwargs.pop("temperature", 0.7)
             return ChatOpenAI(
-                model=model,
+                model=model or GLM_VISION_MODEL,
                 api_key=GLM_API_KEY,
                 base_url="https://open.bigmodel.cn/api/paas/v4/",
                 temperature=temperature,
