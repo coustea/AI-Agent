@@ -31,6 +31,24 @@
         :result-data="resultData"
         compact
       />
+      <div v-else-if="agentId === 'ppt'" class="ppt-card-body">
+        <div class="ppt-info-row">
+          <el-icon class="ppt-file-icon"><DataBoard /></el-icon>
+          <span class="ppt-file-name">{{ pptFileName }}</span>
+        </div>
+        <div class="ppt-meta" v-if="pptSlideCount > 0">
+          共 {{ pptSlideCount }} 页幻灯片
+        </div>
+        <div class="ppt-titles" v-if="pptSlideTitles.length > 0">
+          <div v-for="(title, idx) in pptSlideTitles.slice(0, 5)" :key="idx" class="ppt-title-item">
+            <span class="ppt-title-num">{{ idx + 1 }}</span>
+            <span class="ppt-title-text">{{ title }}</span>
+          </div>
+          <div v-if="pptSlideTitles.length > 5" class="ppt-title-more">
+            ...还有 {{ pptSlideTitles.length - 5 }} 页
+          </div>
+        </div>
+      </div>
       <pre v-else class="fallback-json"><code>{{ JSON.stringify(resultData || {}, null, 2) }}</code></pre>
     </div>
 
@@ -54,7 +72,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Check, Download, View } from '@element-plus/icons-vue'
+import { Check, Download, View, DataBoard } from '@element-plus/icons-vue'
 import { recordLearningEvent } from '@/api/ai'
 import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
 import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
@@ -81,6 +99,23 @@ const fileCategory = computed(() => getFileCategory(fileUrl.value))
 const fileName = computed(() => getFileName(fileUrl.value))
 const isMarkdownAgent = computed(() => ['content', 'reading', 'code'].includes(props.agentId))
 
+const pptSlideCount = computed(() => {
+  if (props.agentId !== 'ppt' || !props.resultData) return 0
+  return props.resultData.slide_count || 0
+})
+
+const pptSlideTitles = computed(() => {
+  if (props.agentId !== 'ppt' || !props.resultData) return []
+  return Array.isArray(props.resultData.slide_titles) ? props.resultData.slide_titles : []
+})
+
+const pptFileName = computed(() => {
+  if (fileUrl.value) return getFileName(fileUrl.value)
+  return props.resultData?.file_path
+    ? (props.resultData.file_path.split(/[\\/]/).pop() || 'presentation.pptx')
+    : 'presentation.pptx'
+})
+
 const quizCount = computed(() => {
   return Array.isArray(props.resultData?.questions) ? props.resultData.questions.length : 0
 })
@@ -90,6 +125,9 @@ const readingCount = computed(() => {
 })
 
 const badgeText = computed(() => {
+  if (props.agentId === 'ppt') {
+    return pptSlideCount.value > 0 ? `已生成 ${pptSlideCount.value} 页演示文稿` : '演示文稿已生成'
+  }
   if (props.agentId === 'mindmap') {
     return fileCategory.value === 'html' ? '动态 HTML 导图已就绪' : '知识拓扑提取完成'
   }
@@ -126,6 +164,18 @@ const handlePreview = () => {
 }
 
 const handleDownload = () => {
+  if (props.agentId === 'ppt' && fileUrl.value) {
+    const link = document.createElement('a')
+    link.href = fileUrl.value
+    link.download = pptFileName.value
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    return
+  }
+
   const filename = `${props.meta.name}_${props.agentId}${props.agentId === 'quiz' ? '.json' : '.md'}`
 
   if (fileUrl.value) {
@@ -235,6 +285,77 @@ const handleDownload = () => {
   background: #1e293b;
   color: #e2e8f0;
   overflow: auto;
+}
+
+.ppt-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ppt-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ppt-file-icon {
+  font-size: 2rem;
+  color: #6366f1;
+  flex-shrink: 0;
+}
+
+.ppt-file-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+  word-break: break-all;
+}
+
+.ppt-meta {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.ppt-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ppt-title-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ppt-title-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #eef2ff;
+  color: #6366f1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ppt-title-text {
+  font-size: 0.85rem;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ppt-title-more {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  padding-left: 30px;
 }
 
 .res-footer {

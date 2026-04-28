@@ -17,6 +17,7 @@ export function getFileCategory(fileUrl: string): string {
   if (['json'].includes(ext)) return 'json'
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image'
   if (['mp4', 'webm', 'ogg', 'mov'].includes(ext)) return 'video'
+  if (['pptx', 'ppt'].includes(ext)) return 'pptx'
   return ext || 'other'
 }
 

@@ -2085,14 +2085,22 @@ def render_ppt_plan_to_file(
         if resolved_template_id != DEFAULT_TEMPLATE_ID:
             _remove_unwanted_template_shapes(slide, page_role=page_role)
         if replace_template_text_frames:
+            has_bindings = False
             layout = template_layouts.get(page_role, {})
             bindings = layout.get("bindings") if isinstance(layout, dict) else None
-            _replace_template_text_frames(
-                slide,
-                slide_data,
-                bindings=bindings,
-                binding_blacklist=binding_blacklist,
-            )
+            if isinstance(bindings, list) and len(bindings) > 0:
+                has_bindings = True
+            # 目录页在没有精确 bindings 时走代码绘制，避免坐标乱序
+            if not has_bindings and page_role in ("table_of_contents", "cover"):
+                _clear_text_frames(slide)
+                _render_slide_content(slide, slide_data, style, render_options)
+            else:
+                _replace_template_text_frames(
+                    slide,
+                    slide_data,
+                    bindings=bindings,
+                    binding_blacklist=binding_blacklist,
+                )
         else:
             _clear_text_frames(slide)
             # 渲染内容

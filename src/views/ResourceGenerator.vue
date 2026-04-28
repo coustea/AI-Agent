@@ -241,6 +241,29 @@
           v-else-if="['content', 'reading', 'code'].includes(previewData.agentId)"
           :result-data="previewData.resultData"
         />
+        <div v-else-if="previewData.agentId === 'ppt'" class="ppt-preview-body">
+          <div class="ppt-preview-header">
+            <el-icon class="ppt-preview-icon"><DataBoard /></el-icon>
+            <div>
+              <h4>{{ previewData.resultData?.presentation_title || '演示文稿' }}</h4>
+              <span v-if="previewData.resultData?.slide_count">共 {{ previewData.resultData.slide_count }} 页</span>
+            </div>
+          </div>
+          <div class="ppt-preview-slides" v-if="previewData.resultData?.ppt_plan?.slides">
+            <div v-for="(slide, idx) in previewData.resultData.ppt_plan.slides" :key="idx" class="ppt-preview-slide">
+              <div class="slide-num">{{ idx + 1 }}</div>
+              <div class="slide-info">
+                <div class="slide-title">{{ slide.title }}</div>
+                <div class="slide-role">{{ slide.page_role }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="ppt-preview-actions" v-if="previewData.fileUrl">
+            <el-button type="primary" size="large" @click="downloadPptFile(previewData.fileUrl)">
+              <el-icon><Download /></el-icon> 下载 PPT 文件
+            </el-button>
+          </div>
+        </div>
         <pre v-else class="code-view"><code>{{ formatJson(previewData.resultData) }}</code></pre>
       </div>
     </el-dialog>
@@ -252,7 +275,7 @@
 import { ref, reactive, computed, onMounted, type Component } from 'vue'
 import {
   Cpu, Document, Edit, Collection, VideoPlay, Monitor, Guide, Setting,
-  Share, Connection, FolderOpened, Select, ArrowRightBold, CaretRight, Loading, CollectionTag, Aim, Check, DataBoard, DataAnalysis, ChatLineSquare, Close
+  Share, Connection, FolderOpened, Select, ArrowRightBold, CaretRight, Loading, CollectionTag, Aim, Check, DataBoard, DataAnalysis, ChatLineSquare, Close, Download
 } from '@element-plus/icons-vue'
 
 import ResourceCard from '@/components/resource/ResourceCard.vue'
@@ -311,8 +334,8 @@ const defaultAgentMeta: Record<string, AgentMeta> = {
   video: { id: 'video', name: '视频脚本', desc: '生成视频脚本', type: 'video', icon: VideoPlay }
 }
 
-const supportedResourceIds = ['content', 'mindmap', 'quiz', 'reading', 'code']
-const backendAgentOrder: Array<keyof typeof defaultAgentMeta> = ['content', 'mindmap', 'quiz', 'reading', 'code']
+const supportedResourceIds = ['content', 'mindmap', 'quiz', 'reading', 'code', 'ppt']
+const backendAgentOrder: Array<keyof typeof defaultAgentMeta> = ['content', 'mindmap', 'quiz', 'reading', 'code', 'ppt']
 const agentConfig = ref<AgentMeta[]>(backendAgentOrder.map((id) => defaultAgentMeta[id] as AgentMeta))
 
 const friendlyActions: Record<string, string[]> = {
@@ -614,6 +637,17 @@ const formatJson = (data: unknown) => {
   } catch {
     return String(data)
   }
+}
+
+const downloadPptFile = (fileUrl: string) => {
+  const link = document.createElement('a')
+  link.href = fileUrl
+  link.download = ''
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 // ================= 动画流真实接入 =================
@@ -1014,6 +1048,21 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 }
+
+/* PPT Preview Dialog */
+.ppt-preview-body { display: flex; flex-direction: column; gap: 20px; }
+.ppt-preview-header { display: flex; align-items: center; gap: 16px; padding: 16px; background: #f8fafc; border-radius: 12px; }
+.ppt-preview-icon { font-size: 2.5rem; color: #6366f1; }
+.ppt-preview-header h4 { margin: 0; font-size: 1.2rem; font-weight: 700; color: #1e293b; }
+.ppt-preview-header span { font-size: 0.85rem; color: #64748b; }
+.ppt-preview-slides { display: flex; flex-direction: column; gap: 8px; }
+.ppt-preview-slide { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; transition: border-color 150ms ease; }
+.ppt-preview-slide:hover { border-color: #6366f1; }
+.ppt-preview-slide .slide-num { width: 28px; height: 28px; border-radius: 50%; background: #eef2ff; color: #6366f1; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ppt-preview-slide .slide-title { font-size: 0.95rem; font-weight: 600; color: #1e293b; }
+.ppt-preview-slide .slide-role { font-size: 0.75rem; color: #94a3b8; }
+.ppt-preview-slide .slide-info { display: flex; flex-direction: column; gap: 2px; }
+.ppt-preview-actions { display: flex; justify-content: center; padding-top: 8px; }
 
 @media (prefers-reduced-motion: reduce) {
   .resource-generator-layout,

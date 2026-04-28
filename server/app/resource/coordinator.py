@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ from app.resource.utils import (
     load_profile_snapshot,
     build_personalized_context,
 )
+from app.shared.paths import RESOURCE_DIR
 
 logger = get_logger(__name__)
 
@@ -46,6 +48,23 @@ def _attach_file_url(result: dict, resource_id: int) -> dict:
         **result,
         "file_url": f"/api/v1/ai/resources/{resource_id}/files/{filename}",
     }
+
+
+def _relocate_ppt_to_resource_dir(result: dict, user_id: int, resource_id: int) -> dict:
+    """将 PPT agent 输出的文件从 workplace/ppt/ 复制到 resource/{user_id}/{resource_id}/ 下，
+    以便统一通过 /resources/{id}/files/{name} 端点下载。"""
+    file_path = result.get("file_path")
+    if not file_path:
+        return result
+    src = Path(str(file_path))
+    if not src.exists():
+        return result
+    target_dir = RESOURCE_DIR / str(user_id) / str(resource_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    dst = target_dir / src.name
+    shutil.copy2(str(src), str(dst))
+    logger.info("[Coordinator] PPT 文件已复制: %s -> %s", src, dst)
+    return {**result, "file_path": str(dst)}
 
 
 def _filter_kwargs_for_callable(fn, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -561,6 +580,9 @@ class CoordinatorAgent:
 
         success = bool(result.get("success"))
         if success:
+            # PPT 文件保存到 workplace/ppt/，需要复制到 resource 目录
+            if agent_name == "ppt":
+                result = _relocate_ppt_to_resource_dir(result, user_id, resource_id)
             summary = entry.result_summary(result)
             logger.info("[Coordinator] Agent 执行成功: agent=%s summary=%s", agent_name, summary)
             await self.emitter.emit_agent_status(
