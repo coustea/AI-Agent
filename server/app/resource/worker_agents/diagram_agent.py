@@ -544,40 +544,54 @@ class DiagramAgent:
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #f8fafc;
+      background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+      background-size: 20px 20px;
       min-height: 100vh;
-      padding: 20px;
+      padding: 40px 20px;
+      color: #1e293b;
     }}
     .container {{
       max-width: 1200px;
       margin: 0 auto;
-      background: white;
-      border-radius: 16px;
-      padding: 30px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02);
     }}
     .header {{
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(226, 232, 240, 0.6);
     }}
     .title {{
-      font-size: 24px;
-      color: #333;
-      font-weight: 600;
-      margin-bottom: 8px;
+      font-size: 28px;
+      color: #0f172a;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 12px;
     }}
     .summary {{
-      font-size: 14px;
-      color: #666;
+      font-size: 16px;
+      color: #64748b;
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.6;
     }}
     .diagram-type {{
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      margin-top: 8px;
+      background: #e0e7ff;
+      color: #4f46e5;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .diagram-container {{
       display: flex;
@@ -585,6 +599,11 @@ class DiagramAgent:
       align-items: center;
       min-height: {container_height};
       overflow: auto;
+      padding: 20px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+      border: 1px solid #f1f5f9;
     }}
     .mermaid {{
       max-width: 100%;
@@ -608,19 +627,33 @@ class DiagramAgent:
   <script>
     mermaid.initialize({{
       startOnLoad: true,
-      theme: 'default',
+      theme: 'base',
+      themeVariables: {{
+        primaryColor: '#e0e7ff',
+        primaryTextColor: '#3730a3',
+        primaryBorderColor: '#a5b4fc',
+        lineColor: '#6366f1',
+        secondaryColor: '#f3e8ff',
+        tertiaryColor: '#ede9fe',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        fontSize: '14px',
+        nodeBorder: 'rgba(165, 180, 252, 0.8)'
+      }},
       securityLevel: 'loose',
       flowchart: {{
         useMaxWidth: true,
         htmlLabels: true,
-        curve: 'basis'
+        curve: 'monotoneX',
+        padding: 20
       }},
       sequence: {{
         useMaxWidth: true,
-        wrap: true
+        wrap: true,
+        actorMargin: 50
       }},
       state: {{
-        useMaxWidth: true
+        useMaxWidth: true,
+        nodeSpacing: 50
       }},
       er: {{
         useMaxWidth: true
