@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from functools import lru_cache
 from typing import Any, AsyncIterator, Hashable
 
@@ -22,6 +23,7 @@ from app.config import (
     DEEPSEEK_API_BASE,
     GLM_API_KEY,
     GLM_VISION_MODEL,
+    LLM_TIMEOUT,
     SPARK_MAX_API_PASSWORD,
     SPARK_MAX_API_BASE,
     SPARK_X_API_PASSWORD,
@@ -38,6 +40,11 @@ class LLMConcurrencyBusyError(Exception):
 
 class LlmFactory:
     """LLM 工厂类：根据 model_type 创建 ChatOpenAI 实例。"""
+
+    @staticmethod
+    def _require_non_empty(name: str, value: str) -> None:
+        if not (value or "").strip():
+            raise ValueError(f"Missing required config: {name}")
 
     @staticmethod
     def _spark_model_name(base_url: str) -> str:
@@ -69,6 +76,8 @@ class LlmFactory:
 
         # 兼容讯飞不同代际网关：/x2、/v2 仅接受 spark-x；/v1 接受 generalv3.5 等模型名。
         if model_type == "spark":
+            cls._require_non_empty("SPARK_MAX_API_PASSWORD", SPARK_MAX_API_PASSWORD)
+            cls._require_non_empty("SPARK_MAX_API_BASE", SPARK_MAX_API_BASE)
             return ChatOpenAI(
                 model=cls._spark_model_name(SPARK_MAX_API_BASE),
                 api_key=SPARK_MAX_API_PASSWORD,
@@ -83,6 +92,8 @@ class LlmFactory:
 
         # 创建 Spark X 模型
         if model_type == "spark_x":
+            cls._require_non_empty("SPARK_X_API_PASSWORD", SPARK_X_API_PASSWORD)
+            cls._require_non_empty("SPARK_X_API_BASE", SPARK_X_API_BASE)
             return ChatOpenAI(
                 model="spark-x",
                 api_key=SPARK_X_API_PASSWORD,
@@ -97,6 +108,8 @@ class LlmFactory:
 
         # 创建 DeepSeek 快速模型，关闭思考模式
         if model_type == "deepseek":
+            cls._require_non_empty("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
+            cls._require_non_empty("DEEPSEEK_API_BASE", DEEPSEEK_API_BASE)
             return ChatOpenAI(
                 model="deepseek-chat",
                 api_key=DEEPSEEK_API_KEY,
@@ -115,6 +128,8 @@ class LlmFactory:
 
         # 创建 DeepSeek 快速模型，开启思考模式
         if model_type == "deepseek_reasoner":
+            cls._require_non_empty("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
+            cls._require_non_empty("DEEPSEEK_API_BASE", DEEPSEEK_API_BASE)
             return ChatOpenAI(
                 model="deepseek-reasoner",
                 api_key=DEEPSEEK_API_KEY,
@@ -133,6 +148,8 @@ class LlmFactory:
 
         # 创建 GLM 视觉模型
         if model_type == "glm_vision":
+            cls._require_non_empty("GLM_API_KEY", GLM_API_KEY)
+            cls._require_non_empty("GLM_VISION_MODEL", GLM_VISION_MODEL)
             return ChatOpenAI(
                 model=GLM_VISION_MODEL,
                 api_key=GLM_API_KEY,
@@ -151,12 +168,20 @@ class LlmFactory:
 class LlmManager:
     """极简统一 LLM 管理器。"""
 
-    DEFAULT_TIMEOUT_SECONDS = 10.0
+    DEFAULT_TIMEOUT_SECONDS = float(LLM_TIMEOUT)
+    DEFAULT_MODEL_CACHE_SIZE = 64
+    PRIMARY_PROBE_TIMEOUT_SECONDS = 0.001
 
     # 不同模型类型的默认并发上限
     DEFAULT_CONCURRENCY_LIMITS: dict[str, int] = {
         "spark": 10,
         "spark_x": 20,
+        "deepseek": 40,
+        "deepseek_reasoner": 10,
+    }
+    OVERFLOW_MODEL_TYPES: dict[str, str] = {
+        "spark": "deepseek",
+        "spark_x": "deepseek",
     }
 
     def __init__(
@@ -164,9 +189,11 @@ class LlmManager:
         *,
         concurrency_limits: dict[str, int] | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        model_cache_size: int = DEFAULT_MODEL_CACHE_SIZE,
     ) -> None:
         # 缓存已经创建过的模型实例，避免重复初始化
-        self._models: dict[tuple[str, tuple[tuple[str, Hashable], ...]], Any] = {}
+        self._models: OrderedDict[tuple[str, tuple[tuple[str, Hashable], ...]], Any] = OrderedDict()
+        self._model_cache_size = max(1, model_cache_size)
 
         # 合并默认并发配置和外部传入的并发配置
         self._limits = dict(self.DEFAULT_CONCURRENCY_LIMITS)
@@ -210,33 +237,28 @@ class LlmManager:
         """检查指定模型类型是否有可用并发槽位。"""
         semaphore = self._semaphores.get(model_type)
         if semaphore is None:
-            return True  # 没有配置并发限制的模型默认认为可用
-
-        # 直接检查当前信号量剩余值，用于判断是否需要溢出
-        return semaphore._value > 0
+            return True
+        return not semaphore.locked()
 
     def _resolve_model_type(self, model_type: str) -> str:
         """根据当前并发情况解析真实使用的模型类型。"""
-        actual_model_type = model_type
+        fallback_model_type = self.OVERFLOW_MODEL_TYPES.get(model_type)
+        if fallback_model_type is None:
+            return model_type
+        if self._has_available_slot(model_type):
+            return model_type
+        logger.info("[LLM] %s 并发已满，溢出到 %s", model_type, fallback_model_type)
+        return fallback_model_type
 
-        # Spark 系列模型并发已满时，自动切换到普通 deepseek
-        overflow_types = ("spark", "spark_x")
-        if actual_model_type in overflow_types and not self._has_available_slot(actual_model_type):
-            logger.info("[LLM] %s 并发已满，溢出到 deepseek", actual_model_type)
-            actual_model_type = "deepseek"
-
-        return actual_model_type
-
-    def get_model(self, model_type: str, **kwargs: Any) -> tuple[str, Any]:
-        """获取模型实例（缓存命中则复用）。
-
-        当 spark/spark_x 并发已满时，自动溢出到 deepseek。
-
-        Returns:
-            tuple[str, Any]: 真实使用的模型类型和模型实例。
-        """
-        # 获取真实使用的模型类型
-        actual_model_type = self._resolve_model_type(model_type)
+    def _get_model(
+        self,
+        model_type: str,
+        *,
+        resolve_overflow: bool,
+        **kwargs: Any,
+    ) -> tuple[str, Any]:
+        """获取模型实例（缓存命中则复用）。"""
+        actual_model_type = self._resolve_model_type(model_type) if resolve_overflow else model_type
 
         # 禁止 model 参数参与缓存 key，避免传错 model 导致缓存污染
         kwargs.pop("model", None)
@@ -245,14 +267,21 @@ class LlmManager:
         key = self._cache_key(actual_model_type, kwargs)
         model = self._models.get(key)
         if model is not None:
+            self._models.move_to_end(key)
             return actual_model_type, model
 
         # 缓存未命中时通过工厂创建新模型实例
         logger.debug("[LLM] 创建模型: type=%s kwargs=%s", actual_model_type, kwargs)
         model = LlmFactory.create(actual_model_type, **kwargs)
         self._models[key] = model
+        if len(self._models) > self._model_cache_size:
+            self._models.popitem(last=False)
 
         return actual_model_type, model
+
+    def get_model(self, model_type: str, **kwargs: Any) -> tuple[str, Any]:
+        """获取模型实例（缓存命中则复用）。"""
+        return self._get_model(model_type, resolve_overflow=True, **kwargs)
 
     async def _acquire(
         self,
@@ -277,6 +306,38 @@ class LlmManager:
 
         return semaphore
 
+    async def _try_acquire_immediately(self, model_type: str) -> asyncio.Semaphore | None:
+        """尝试立即获取并发槽位，不阻塞。"""
+        semaphore = self._semaphores.get(model_type)
+        if semaphore is None:
+            return None
+        try:
+            # timeout=0 在部分事件循环调度下会误判，使用极短超时做“快速探测”。
+            await asyncio.wait_for(semaphore.acquire(), timeout=self.PRIMARY_PROBE_TIMEOUT_SECONDS)
+            return semaphore
+        except asyncio.TimeoutError:
+            return None
+
+    async def _acquire_for_model_call(
+        self,
+        preferred_model_type: str,
+        timeout: float | None = None,
+    ) -> tuple[str, asyncio.Semaphore | None]:
+        """为模型调用获取并发槽位，必要时溢出到替代模型。"""
+        fallback_model_type = self.OVERFLOW_MODEL_TYPES.get(preferred_model_type)
+        if fallback_model_type is None:
+            semaphore = await self._acquire(preferred_model_type, timeout=timeout)
+            return preferred_model_type, semaphore
+
+        # 先原子地“立即抢占”首选模型槽位，失败才降级，避免检查与抢占分离带来的竞态。
+        primary_semaphore = await self._try_acquire_immediately(preferred_model_type)
+        if primary_semaphore is not None:
+            return preferred_model_type, primary_semaphore
+
+        logger.info("[LLM] %s 并发已满，溢出到 %s", preferred_model_type, fallback_model_type)
+        fallback_semaphore = await self._acquire(fallback_model_type, timeout=timeout)
+        return fallback_model_type, fallback_semaphore
+
     async def ainvoke(
         self,
         model_type: str,
@@ -287,11 +348,8 @@ class LlmManager:
         **invoke_kwargs: Any,
     ) -> Any:
         """通过 manager 异步调用 LLM。"""
-        # 获取真实使用的模型类型和模型实例
-        actual_model_type, llm = self.get_model(model_type, **(model_kwargs or {}))
-
-        # 按真实模型类型进行并发控制
-        semaphore = await self._acquire(actual_model_type, timeout=timeout)
+        actual_model_type, semaphore = await self._acquire_for_model_call(model_type, timeout=timeout)
+        _, llm = self._get_model(actual_model_type, resolve_overflow=False, **(model_kwargs or {}))
 
         try:
             # 执行 LangChain 模型的异步调用
@@ -313,10 +371,9 @@ class LlmManager:
         """通过 manager 异步调用 Runnable（如 bind_tools/structured_output 返回对象）。"""
         semaphore: asyncio.Semaphore | None = None
 
-        # 如果传入 model_type，则对 Runnable 调用也启用并发控制
+        # Runnable 已绑定具体模型，不做降级，仅对声明的模型类型限流。
         if model_type is not None:
-            actual_model_type = self._resolve_model_type(model_type)
-            semaphore = await self._acquire(actual_model_type, timeout=timeout)
+            semaphore = await self._acquire(model_type, timeout=timeout)
 
         try:
             # 执行 Runnable 的异步调用
@@ -336,11 +393,8 @@ class LlmManager:
         **stream_kwargs: Any,
     ) -> AsyncIterator[Any]:
         """通过 manager 异步流式调用 LLM。"""
-        # 获取真实使用的模型类型和模型实例
-        actual_model_type, llm = self.get_model(model_type, **(model_kwargs or {}))
-
-        # 按真实模型类型进行并发控制
-        semaphore = await self._acquire(actual_model_type, timeout=timeout)
+        actual_model_type, semaphore = await self._acquire_for_model_call(model_type, timeout=timeout)
+        _, llm = self._get_model(actual_model_type, resolve_overflow=False, **(model_kwargs or {}))
 
         try:
             # 持续产出模型流式返回的 chunk
@@ -363,10 +417,9 @@ class LlmManager:
         """通过 manager 异步流式调用 Runnable。"""
         semaphore: asyncio.Semaphore | None = None
 
-        # 如果传入 model_type，则对 Runnable 流式调用也启用并发控制
+        # Runnable 已绑定具体模型，不做降级，仅对声明的模型类型限流。
         if model_type is not None:
-            actual_model_type = self._resolve_model_type(model_type)
-            semaphore = await self._acquire(actual_model_type, timeout=timeout)
+            semaphore = await self._acquire(model_type, timeout=timeout)
 
         try:
             # 持续产出 Runnable 流式返回的 chunk
@@ -416,8 +469,8 @@ class LlmManager:
         **invoke_kwargs: Any,
     ) -> Any:
         """使用 function calling strict 调用模型，并将 tool args 校验为 schema。"""
-        actual_model_type, llm = self.get_model(model_type, **(model_kwargs or {}))
-        semaphore = await self._acquire(actual_model_type, timeout=timeout)
+        actual_model_type, semaphore = await self._acquire_for_model_call(model_type, timeout=timeout)
+        _, llm = self._get_model(actual_model_type, resolve_overflow=False, **(model_kwargs or {}))
 
         tool_name = function_name or schema.__name__
         tool_description = function_description or f"Return a structured {schema.__name__} object."

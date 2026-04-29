@@ -6,14 +6,13 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.infra.logging import get_logger
+from app.resource.registry import get_agent_registry
 from app.resource.schemas import ResourcePlan
 from app.shared.paths import WORKPLACE_DIR, RESOURCE_DIR
 
@@ -25,7 +24,7 @@ logger = get_logger(__name__)
 
 CORE_AGENTS = ["content", "mindmap", "quiz"]
 ENHANCEMENT_AGENTS = ["reading", "code"]
-PRESENTATION_AGENTS = ["ppt"]
+PRESENTATION_AGENTS: list[str] = ["ppt"]
 ALL_AGENTS = CORE_AGENTS + ENHANCEMENT_AGENTS + PRESENTATION_AGENTS
 
 DEFAULT_DEPENDENCIES: dict[str, list[str]] = {
@@ -34,7 +33,7 @@ DEFAULT_DEPENDENCIES: dict[str, list[str]] = {
     "quiz": ["content"],
     "reading": ["content"],
     "code": ["mindmap", "content"],
-    "ppt": ["content", "mindmap"],
+    "ppt": ["content"],
 }
 
 DEFAULT_EXECUTION_LAYER: dict[str, int] = {
@@ -52,7 +51,7 @@ DEFAULT_FAILURE_POLICY: dict[str, str] = {
     "quiz": "degraded_run",
     "reading": "degraded_run",
     "code": "degraded_run",
-    "ppt": "skip_on_dependency_failed",
+    "ppt": "degraded_run",
 }
 
 FAILURE_POLICIES = {"independent_fail", "degraded_run", "skip_on_dependency_failed"}
@@ -187,102 +186,6 @@ def save_to_workplace(sub_dir: str, topic: str, content: str, ext: str = "md") -
     filepath = target_dir / safe_filename
     filepath.write_text(content, encoding="utf-8")
     return str(filepath)
-
-
-# =============================================================================
-# Agent 注册表
-# =============================================================================
-
-@dataclass
-class AgentEntry:
-    """Agent 注册条目。"""
-    role: str
-    desc: str
-    type: str
-    stage: str
-    agent_loader: Callable[[], Any]
-    method: str
-    result_summary: Callable[[dict], str] = field(default=lambda r: "")
-    extra_kwargs: dict = field(default_factory=dict)
-
-
-def _load_agent(module_path: str, attr_name: str) -> Callable[[], Any]:
-    """创建 Agent 懒加载函数。"""
-    def _loader() -> Any:
-        module = importlib.import_module(module_path)
-        return getattr(module, attr_name)
-    return _loader
-
-
-def build_agent_registry() -> dict[str, AgentEntry]:
-    """构建 Agent 注册表。"""
-    return {
-        "content": AgentEntry(
-            role="Content Agent",
-            desc="撰写深度知识精讲",
-            type="doc",
-            stage="core",
-            agent_loader=_load_agent("app.resource.agents.content", "content_writer"),
-            method="generate_content",
-            result_summary=lambda r: f"文档 {len(r.get('content', ''))} 字",
-        ),
-        "mindmap": AgentEntry(
-            role="Mindmap Agent",
-            desc="构建核心知识拓扑图",
-            type="mindmap",
-            stage="core",
-            agent_loader=_load_agent("app.resource.agents.mindmap", "mindmap_generator"),
-            method="generate_mindmap",
-            result_summary=lambda r: f"导图已生成 → {r.get('file_path') or '内存结果'}",
-        ),
-        "quiz": AgentEntry(
-            role="Quiz Agent",
-            desc="生成分层练习题库",
-            type="quiz",
-            stage="core",
-            agent_loader=_load_agent("app.resource.agents.quiz", "quiz_agent"),
-            method="generate_quiz",
-            result_summary=lambda r: f"共 {len(r.get('questions', []))} 道题",
-        ),
-        "reading": AgentEntry(
-            role="Reading Agent",
-            desc="检索拓展阅读与论文",
-            type="reading",
-            stage="enhancement",
-            agent_loader=_load_agent("app.resource.agents.reading", "reading_agent"),
-            method="generate_reading",
-            result_summary=lambda r: f"共 {len(r.get('recommendations', []))} 条推荐",
-        ),
-        "code": AgentEntry(
-            role="Code Agent",
-            desc="编写可运行实操案例",
-            type="code",
-            stage="enhancement",
-            agent_loader=_load_agent("app.resource.agents.code", "code_agent"),
-            method="generate_code",
-            result_summary=lambda r: f"语言: {r.get('detected_language', 'unknown')}",
-        ),
-        "ppt": AgentEntry(
-            role="PPT Agent",
-            desc="生成演示文稿与讲稿",
-            type="ppt",
-            stage="presentation",
-            agent_loader=_load_agent("app.resource.agents.ppt", "ppt_agent"),
-            method="generate_ppt",
-            result_summary=lambda r: "PPT 大纲已生成",
-        ),
-    }
-
-
-AGENT_REGISTRY: dict[str, AgentEntry] | None = None
-
-
-def get_agent_registry() -> dict[str, AgentEntry]:
-    """获取 Agent 注册表单例。"""
-    global AGENT_REGISTRY
-    if AGENT_REGISTRY is None:
-        AGENT_REGISTRY = build_agent_registry()
-    return AGENT_REGISTRY
 
 
 # =============================================================================
@@ -554,14 +457,10 @@ def merge_planner_plan_into_default(
 
 def iter_plan_phases(plan: ResourcePlan) -> list[tuple[str, str, list[str]]]:
     """按阶段迭代资源计划。"""
-    # video 单独拆到最后一段，确保它依赖的 PPT 和图解已经稳定产出。
-    presentation_agents = [agent for agent in plan.presentation_agents if agent != "video"]
-    video_agents = [agent for agent in plan.presentation_agents if agent == "video"]
     phases = [
         ("core_generating", "核心资源生成", plan.core_agents),
         ("enhancement_generating", "增强资源补充", plan.enhancement_agents),
-        ("presentation_generating", "演示资源生成", presentation_agents),
-        ("video_generating", "视频资源生成", video_agents),
+        ("presentation_generating", "演示资源生成", plan.presentation_agents),
     ]
     logger.info("[Planning] 阶段划分完成: %s", phases)
     return phases
@@ -760,6 +659,444 @@ def build_personalized_context(snapshot, task: dict):
         target_difficulty=difficulty,
         explanation_style=explanation_style,
         emphasis=emphasis,
-        recommended_order=["content", "mindmap", "quiz", "reading", "code", "image", "ppt", "video"],
+        recommended_order=["content", "mindmap", "quiz", "reading", "code"],
         profile_markdown=snapshot.profile_markdown,
     )
+
+
+# =============================================================================
+# Markdown 转 HTML
+# =============================================================================
+
+def markdown_to_mindmap_html(markdown: str, title: str = "知识思维导图") -> str:
+    """将 Markdown 列表转换为交互式思维导图 HTML。
+
+    Args:
+        markdown: Markdown 格式的思维导图内容
+        title: HTML 页面标题
+
+    Returns:
+        完整的 HTML 字符串
+    """
+    html_lines = _convert_markdown_lists_to_html(markdown)
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }}
+        .mindmap-container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }}
+        .mindmap-title {{
+            text-align: center;
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }}
+        .mindmap-tree ul {{
+            list-style: none;
+            padding-left: 25px;
+            margin: 10px 0;
+        }}
+        .mindmap-tree li {{
+            position: relative;
+            padding: 8px 0 8px 20px;
+            margin: 5px 0;
+            border-left: 2px solid #667eea;
+        }}
+        .mindmap-tree li::before {{
+            content: '';
+            position: absolute;
+            left: -2px;
+            top: 50%;
+            width: 20px;
+            height: 2px;
+            background: #667eea;
+        }}
+        .mindmap-tree li:last-child {{
+            border-left-color: transparent;
+        }}
+        .mindmap-tree > ul {{
+            padding-left: 0;
+        }}
+        .mindmap-tree > ul > li {{
+            border-left: none;
+            padding-left: 0;
+        }}
+        .mindmap-tree > ul > li::before {{
+            display: none;
+        }}
+        .node {{
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }}
+        .node.level-0 {{
+            font-size: 18px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }}
+        .node.level-1 {{
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }}
+        .node.level-2 {{
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }}
+        .node.level-3 {{
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }}
+    </style>
+</head>
+<body>
+    <div class="mindmap-container">
+        <h1 class="mindmap-title">{title}</h1>
+        <div class="mindmap-tree">
+{html_lines}
+        </div>
+    </div>
+</body>
+</html>"""
+
+
+def _convert_markdown_lists_to_html(markdown: str) -> str:
+    """将 Markdown 列表转换为 HTML 树形结构。"""
+    lines = markdown.strip().split("\n")
+    html_parts: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # 计算缩进级别
+        indent = len(line) - len(line.lstrip())
+        level = indent // 2 if indent > 0 else 0
+
+        # 移除列表标记
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            content = stripped[2:]
+        elif stripped.startswith("# "):
+            content = stripped[2:]
+            level = 0
+        elif stripped.startswith("## "):
+            content = stripped[3:]
+            level = 1
+        elif stripped.startswith("### "):
+            content = stripped[4:]
+            level = 2
+        else:
+            content = stripped
+
+        # 生成节点
+        node_class = f"level-{min(level, 3)}"
+        html_parts.append(f'            <li><span class="node {node_class}">{content}</span></li>')
+
+    # 包装成 ul 结构
+    if html_parts:
+        return "            <ul>\n" + "\n".join(html_parts) + "\n            </ul>"
+    return ""
+
+
+# =============================================================================
+# Workspace 文件产物系统
+# =============================================================================
+
+import json
+from datetime import datetime, timezone
+
+import aiofiles
+
+MAX_FILE_SIZE = 1024 * 1024  # 1MB
+
+# manifest 缓存（简单实现，避免频繁读取文件）
+_manifest_cache: dict[str, dict[str, Any]] = {}
+
+
+def _get_workspace_dir(user_id: int, resource_id: int) -> Path:
+    """获取 workspace 目录路径。"""
+    return RESOURCE_DIR / str(user_id) / str(resource_id)
+
+
+async def init_workspace(user_id: int, resource_id: int) -> Path:
+    """初始化 workspace，创建目录结构和 manifest.json。
+
+    Args:
+        user_id: 用户 ID
+        resource_id: 资源 ID
+
+    Returns:
+        workspace 目录路径
+    """
+    workspace_dir = _get_workspace_dir(user_id, resource_id)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = workspace_dir / "manifest.json"
+    if not manifest_path.exists():
+        initial_manifest = {
+            "user_id": user_id,
+            "resource_id": resource_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "initialized",
+            "agents": {},
+        }
+        content = json.dumps(initial_manifest, ensure_ascii=False, indent=2)
+        await write_file_atomic(manifest_path, content, workspace_dir)
+        _manifest_cache[f"{user_id}_{resource_id}"] = initial_manifest
+        logger.info("[Workspace] 初始化完成: %s", workspace_dir)
+
+    return workspace_dir
+
+
+async def read_manifest(user_id: int, resource_id: int) -> dict[str, Any]:
+    """读取 manifest.json。
+
+    Args:
+        user_id: 用户 ID
+        resource_id: 资源 ID
+
+    Returns:
+        manifest 字典
+    """
+    cache_key = f"{user_id}_{resource_id}"
+    if cache_key in _manifest_cache:
+        return _manifest_cache[cache_key]
+
+    workspace_dir = _get_workspace_dir(user_id, resource_id)
+    manifest_path = workspace_dir / "manifest.json"
+    content = await read_file_safe(manifest_path, workspace_dir)
+    if content is None:
+        return {}
+
+    manifest = json.loads(content)
+    _manifest_cache[cache_key] = manifest
+    return manifest
+
+
+async def update_manifest(user_id: int, resource_id: int, updates: dict[str, Any]) -> None:
+    """更新 manifest.json。
+
+    Args:
+        user_id: 用户 ID
+        resource_id: 资源 ID
+        updates: 要更新的字段
+    """
+    manifest = await read_manifest(user_id, resource_id)
+    manifest.update(updates)
+    manifest["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    workspace_dir = _get_workspace_dir(user_id, resource_id)
+    manifest_path = workspace_dir / "manifest.json"
+    content = json.dumps(manifest, ensure_ascii=False, indent=2)
+    await write_file_atomic(manifest_path, content, workspace_dir)
+
+    cache_key = f"{user_id}_{resource_id}"
+    _manifest_cache[cache_key] = manifest
+    logger.debug("[Workspace] Manifest 已更新: %s", list(updates.keys()))
+
+
+async def update_agent_status(
+    user_id: int,
+    resource_id: int,
+    agent_name: str,
+    status: str,
+    artifact_path: str | None = None,
+    error: str | None = None,
+) -> None:
+    """更新 Agent 执行状态。
+
+    Args:
+        user_id: 用户 ID
+        resource_id: 资源 ID
+        agent_name: Agent 名称
+        status: 状态
+        artifact_path: 产物路径
+        error: 错误信息
+    """
+    manifest = await read_manifest(user_id, resource_id)
+    agents = manifest.get("agents", {})
+
+    if agent_name not in agents:
+        agents[agent_name] = {
+            "status": status,
+            "dependencies": [],
+            "artifact_path": artifact_path,
+            "error": error,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+    else:
+        agents[agent_name]["status"] = status
+        if artifact_path:
+            agents[agent_name]["artifact_path"] = artifact_path
+        if error:
+            agents[agent_name]["error"] = error
+        if status in ("completed", "failed", "skipped"):
+            agents[agent_name]["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    await update_manifest(user_id, resource_id, {"agents": agents})
+
+
+async def write_agent_artifact(
+    user_id: int,
+    resource_id: int,
+    agent_name: str,
+    content: str,
+    file_type: str = "md",
+) -> str:
+    """写入 Agent 产物。
+
+    Args:
+        user_id: 用户 ID
+        resource_id: 资源 ID
+        agent_name: Agent 名称
+        content: 产物内容
+        file_type: 文件类型
+
+    Returns:
+        产物文件路径
+    """
+    workspace_dir = _get_workspace_dir(user_id, resource_id)
+    artifact_path = workspace_dir / f"{agent_name}.{file_type}"
+    return await write_file_atomic(artifact_path, content, workspace_dir)
+
+
+async def read_agent_artifact(
+    user_id: int,
+    resource_id: int,
+    agent_name: str,
+    file_type: str = "md",
+) -> str | None:
+    """读取 Agent 产物。
+
+    Args:
+        user_id: 用户 ID
+        resource_id: 资源 ID
+        agent_name: Agent 名称
+        file_type: 文件类型
+
+    Returns:
+        产物内容或 None
+    """
+    workspace_dir = _get_workspace_dir(user_id, resource_id)
+    artifact_path = workspace_dir / f"{agent_name}.{file_type}"
+    return await read_file_safe(artifact_path, workspace_dir, MAX_FILE_SIZE)
+
+
+async def read_agent_report(
+    user_id: int,
+    resource_id: int,
+    agent_name: str,
+) -> str | None:
+    """读取 Agent 执行报告。
+
+    Args:
+        user_id: 用户 ID
+        resource_id: 资源 ID
+        agent_name: Agent 名称
+
+    Returns:
+        报告内容或 None
+    """
+    workspace_dir = _get_workspace_dir(user_id, resource_id)
+    report_path = workspace_dir / f"{agent_name}_report.md"
+    return await read_file_safe(report_path, workspace_dir, MAX_FILE_SIZE)
+
+
+def get_workspace_dir(user_id: int, resource_id: int) -> Path:
+    """获取 workspace 目录路径。"""
+    return _get_workspace_dir(user_id, resource_id)
+
+
+# =============================================================================
+# 文件读写工具
+# =============================================================================
+
+import os
+import tempfile
+
+import aiofiles
+import aiofiles.os
+
+MAX_FILE_SIZE = 1024 * 1024  # 1MB
+
+
+def validate_path(path: Path, base_dir: Path) -> bool:
+    """校验路径安全，防止目录穿越攻击。"""
+    try:
+        resolved = path.resolve()
+        base_resolved = base_dir.resolve()
+        return str(resolved).startswith(str(base_resolved))
+    except Exception:
+        return False
+
+
+async def write_file_atomic(path: Path, content: str, base_dir: Path) -> str:
+    """原子写入文件（tmp → rename）。
+
+    Args:
+        path: 目标文件路径
+        content: 文件内容
+        base_dir: 基础目录（用于安全校验）
+
+    Returns:
+        文件路径字符串
+    """
+    if not validate_path(path, base_dir):
+        raise ValueError(f"Invalid path: {path}")
+
+    fd, tmp_path = tempfile.mkstemp(dir=base_dir, suffix=".tmp")
+    try:
+        async with aiofiles.open(fd, "w", encoding="utf-8") as f:
+            await f.write(content)
+        await aiofiles.os.rename(tmp_path, str(path))
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+    logger.info("[FileUtils] 文件已写入: %s", path)
+    return str(path)
+
+
+async def read_file_safe(path: Path, base_dir: Path, max_size: int = MAX_FILE_SIZE) -> str | None:
+    """安全读取文件，限制大小。
+
+    Args:
+        path: 文件路径
+        base_dir: 基础目录（用于安全校验）
+        max_size: 最大文件大小
+
+    Returns:
+        文件内容或 None（文件不存在）
+    """
+    if not path.exists():
+        return None
+
+    if not validate_path(path, base_dir):
+        raise ValueError(f"Invalid path: {path}")
+
+    stat = await aiofiles.os.stat(path)
+    if stat.st_size > max_size:
+        raise ValueError(f"File too large: {stat.st_size} > {max_size}")
+
+    async with aiofiles.open(path, "r", encoding="utf-8") as f:
+        return await f.read()

@@ -188,8 +188,6 @@ class TutorAgent:
             if self.graph is not None:
                 return
 
-            logger.info("[TutorAgent] 图构建开始")
-
             # 创建状态图
             graph = StateGraph(TutorState)
             # 添加节点
@@ -218,7 +216,6 @@ class TutorAgent:
             graph.add_edge("diagram_generate", END)
 
             self.graph = graph.compile()
-            logger.info("[TutorAgent] 图构建完成")
 
     # ------------------------------------------------------------------
     # 节点: classify
@@ -293,7 +290,7 @@ class TutorAgent:
         question = extract_question(messages)
 
         with node_timer("direct_answer", user=user_id, session=session_id):
-            logger.debug("[TutorAgent] 直接回答 route=direct_answer question=%s", truncate(question, 180))
+            logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
 
             merged_system_prompt = self._merge_system_prompts(
                 _get_prompt("direct_answer_system"),

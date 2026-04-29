@@ -74,6 +74,10 @@ class AgentEventEmitter:
     async def emit_done(self, message: str = "资源包构建完成") -> None:
         await self.emit("done", message=message)
 
+    async def close(self) -> None:
+        """关闭事件流。"""
+        await self._queue.put(None)
+
     async def stream(self) -> AsyncGenerator[str, None]:
         logger.info("[Emitter] SSE 流开始消费事件")
         while True:
