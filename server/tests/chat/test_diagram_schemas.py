@@ -28,6 +28,18 @@ def test_diagram_model_map_exports_all_supported_types() -> None:
         "relation",
         "sequence",
         "state",
+        "class",
+        "er",
+        "block",
+        "packet",
+        "git",
+        "activity",
+        "usecase",
+        "component",
+        "package",
+        "deployment",
+        "object",
+        "communication",
     }
 
 
