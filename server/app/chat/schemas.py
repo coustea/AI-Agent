@@ -55,12 +55,13 @@ class ToolCallRecord(BaseModel):
 class ChatMessageItem(BaseModel):
     """返回给前端的消息条目。
 
-    包含角色、内容、附件、工具调用记录等。
+    包含角色、内容、附件、工具调用记录、图解等。
     """
     role: str  # 消息角色: "user" | "assistant" | "tool"
     content: str  # 消息文本内容
     attachments: Optional[list[AttachmentInfo]] = None  # 附件列表
     tool_calls: Optional[list[ToolCallRecord]] = None  # 工具调用记录
+    diagram: Optional[dict[str, Any]] = None  # 图解数据（包含 Mermaid 源码和 PNG URL）
     created_at: Optional[datetime] = None  # 创建时间
 
 
@@ -146,7 +147,11 @@ class TutorState(TypedDict, total=False):
 # ===================================================================
 
 # 图解类型字面量
-DiagramType = Literal["hierarchy", "flow", "compare", "relation", "sequence", "state"]
+DiagramType = Literal[
+    "hierarchy", "flow", "compare", "relation", "sequence", "state",
+    "class", "er", "block", "packet", "git",
+    "activity", "usecase", "component", "package", "deployment", "object", "communication",
+]
 
 
 class BaseDiagramModel(BaseModel):
@@ -222,8 +227,8 @@ class FlowSpec(BaseDiagramModel):
 
     定义流程图的步骤和边。
     """
-    steps: list[FlowStep] = Field(min_length=1, max_length=8)  # 步骤列表
-    edges: list[FlowEdge] = Field(default_factory=list, max_length=12)  # 边列表
+    steps: list[FlowStep] = Field(min_length=1, max_length=25)  # 步骤列表
+    edges: list[FlowEdge] = Field(default_factory=list, max_length=40)  # 边列表
 
     @model_validator(mode="after")
     def validate_edges(self) -> "FlowSpec":
@@ -259,8 +264,8 @@ class RelationSpec(BaseDiagramModel):
 
     定义关系图的节点和边。
     """
-    nodes: list[DiagramNode] = Field(min_length=1, max_length=8)  # 节点列表
-    edges: list[DiagramEdge] = Field(default_factory=list, max_length=16)  # 边列表
+    nodes: list[DiagramNode] = Field(min_length=1, max_length=25)  # 节点列表
+    edges: list[DiagramEdge] = Field(default_factory=list, max_length=40)  # 边列表
 
     @model_validator(mode="after")
     def validate_edges(self) -> "RelationSpec":
@@ -327,8 +332,8 @@ class StateSpec(BaseDiagramModel):
 
     定义状态图的状态和转换。
     """
-    states: list[DiagramNode] = Field(min_length=1, max_length=8)  # 状态列表
-    transitions: list[StateTransition] = Field(default_factory=list, max_length=12)  # 转换列表
+    states: list[DiagramNode] = Field(min_length=1, max_length=25)  # 状态列表
+    transitions: list[StateTransition] = Field(default_factory=list, max_length=40)  # 转换列表
 
     @model_validator(mode="after")
     def validate_transitions(self) -> "StateSpec":
@@ -406,6 +411,521 @@ class StateDiagram(BaseDiagramModel):
     spec: StateSpec  # 状态规格
 
 
+# ===================================================================
+# 计算机学科专用图表 Schema
+# ===================================================================
+
+
+class ClassItem(BaseDiagramModel):
+    """类图中的类定义。
+
+    用于类图中的单个类。
+    """
+    name: str = Field(min_length=1, max_length=40)  # 类名
+    annotation: Optional[str] = Field(default=None, max_length=20)  # 注解（如 interface）
+    attributes: list[str] = Field(default_factory=list, max_length=8)  # 属性列表
+    methods: list[str] = Field(default_factory=list, max_length=8)  # 方法列表
+
+
+class ClassRelationship(BaseDiagramModel):
+    """类图关系。
+
+    用于类图中类之间的关系。
+    """
+    from_class: str = Field(alias="from", min_length=1, max_length=40)  # 源类名
+    to_class: str = Field(alias="to", min_length=1, max_length=40)  # 目标类名
+    type: str = Field(default="association", max_length=20)  # 关系类型
+    label: Optional[str] = Field(default=None, max_length=16)  # 关系标签
+
+
+class ClassSpec(BaseDiagramModel):
+    """类图规格。
+
+    定义类图的类和关系。
+    """
+    classes: list[ClassItem] = Field(min_length=1, max_length=8)  # 类列表
+    relationships: list[ClassRelationship] = Field(default_factory=list, max_length=12)  # 关系列表
+
+
+class ClassDiagram(BaseDiagramModel):
+    """类图。
+
+    用于展示类结构、继承关系、接口实现。
+    """
+    type: Literal["class"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: ClassSpec  # 类图规格
+
+
+class ERField(BaseDiagramModel):
+    """ER 图字段。
+
+    用于实体中的字段定义。
+    """
+    name: str = Field(min_length=1, max_length=20)  # 字段名
+    type: str = Field(min_length=1, max_length=20)  # 字段类型
+    key: Optional[str] = Field(default=None, max_length=10)  # 键类型: pk/fk/unique
+
+
+class EREntity(BaseDiagramModel):
+    """ER 图实体。
+
+    用于 ER 图中的实体定义。
+    """
+    name: str = Field(min_length=1, max_length=40)  # 实体名
+    fields: list[ERField] = Field(min_length=1, max_length=12)  # 字段列表
+
+
+class ERRelationship(BaseDiagramModel):
+    """ER 图关系。
+
+    用于实体之间的关系。
+    """
+    from_entity: str = Field(alias="from", min_length=1, max_length=40)  # 源实体名
+    to_entity: str = Field(alias="to", min_length=1, max_length=40)  # 目标实体名
+    type: Optional[str] = Field(default="||--||", max_length=10)  # 关系类型符号
+    label: Optional[str] = Field(default=None, max_length=16)  # 关系标签
+
+
+class ERSpec(BaseDiagramModel):
+    """ER 图规格。
+
+    定义 ER 图的实体和关系。
+    """
+    entities: list[EREntity] = Field(min_length=1, max_length=8)  # 实体列表
+    relationships: list[ERRelationship] = Field(default_factory=list, max_length=12)  # 关系列表
+
+
+class ERDiagram(BaseDiagramModel):
+    """实体关系图。
+
+    用于展示数据库表结构、字段关系。
+    """
+    type: Literal["er"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: ERSpec  # ER 图规格
+
+
+class BlockItem(BaseDiagramModel):
+    """方块图中的方块。
+
+    用于方块图中的单个方块。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 方块 ID
+    type: Optional[str] = Field(default="block", max_length=10)  # 方块类型: block/space/x
+    label: Optional[str] = Field(default=None, max_length=16)  # 方块标签
+
+
+class BlockConnection(BaseDiagramModel):
+    """方块图连接。
+
+    用于方块之间的连接。
+    """
+    from_block: str = Field(alias="from", min_length=1, max_length=40)  # 源方块 ID
+    to_block: str = Field(alias="to", min_length=1, max_length=40)  # 目标方块 ID
+    label: Optional[str] = Field(default=None, max_length=16)  # 连接标签
+
+
+class BlockSpec(BaseDiagramModel):
+    """方块图规格。
+
+    定义方块图的方块和连接。
+    """
+    columns: Optional[int] = Field(default=3, ge=1, le=10)  # 列数
+    blocks: list[BlockItem] = Field(min_length=1, max_length=16)  # 方块列表
+    connections: list[BlockConnection] = Field(default_factory=list, max_length=12)  # 连接列表
+
+
+class BlockDiagram(BaseDiagramModel):
+    """方块图。
+
+    用于展示系统架构、模块布局。
+    """
+    type: Literal["block"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: BlockSpec  # 方块图规格
+
+
+class PacketField(BaseDiagramModel):
+    """网络包字段。
+
+    用于网络包中的字段定义。
+    """
+    name: str = Field(min_length=1, max_length=20)  # 字段名
+    start: int = Field(ge=0, le=128)  # 起始位
+    length: int = Field(ge=1, le=64)  # 字段长度
+
+
+class PacketSpec(BaseDiagramModel):
+    """网络包规格。
+
+    定义网络包的标题和字段。
+    """
+    title: Optional[str] = Field(default=None, max_length=20)  # 包标题
+    fields: list[PacketField] = Field(min_length=1, max_length=16)  # 字段列表
+
+
+class PacketDiagram(BaseDiagramModel):
+    """网络包图。
+
+    用于展示网络协议包结构、数据帧格式。
+    """
+    type: Literal["packet"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: PacketSpec  # 网络包规格
+
+
+class GitCommit(BaseDiagramModel):
+    """Git 提交/分支操作。
+
+    用于 Git 图中的单个操作。
+    """
+    type: str = Field(default="commit", max_length=20)  # 操作类型: commit/branch/checkout/merge/cherry-pick
+    id: Optional[str] = Field(default=None, max_length=40)  # 提交 ID
+    name: Optional[str] = Field(default=None, max_length=40)  # 分支名
+    tag: Optional[str] = Field(default=None, max_length=20)  # 标签
+    target: Optional[str] = Field(default=None, max_length=40)  # cherry-pick 目标
+
+
+class GitSpec(BaseDiagramModel):
+    """Git 图规格。
+
+    定义 Git 图的提交和分支操作。
+    """
+    commits: list[GitCommit] = Field(min_length=1, max_length=20)  # 提交/操作列表
+
+
+class GitDiagram(BaseDiagramModel):
+    """Git 图。
+
+    用于展示 Git 分支、提交历史、合并流程。
+    """
+    type: Literal["git"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: GitSpec  # Git 图规格
+
+
+# ===================================================================
+# 软件工程教学常用图表 Schema
+# ===================================================================
+
+
+class ActivityNode(BaseDiagramModel):
+    """活动图节点。
+
+    用于活动图中的活动节点。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 节点 ID
+    label: str = Field(min_length=1, max_length=16)  # 节点标签
+    nodeType: Optional[str] = Field(default="action", max_length=20)  # 节点类型: start/end/action/decision/fork/join
+    description: Optional[str] = Field(default=None, max_length=40)  # 节点描述
+
+
+class ActivityTransition(BaseDiagramModel):
+    """活动图转换。
+
+    用于活动之间的转换。
+    """
+    from_activity: str = Field(alias="from", min_length=1, max_length=40)  # 源活动 ID
+    to_activity: str = Field(alias="to", min_length=1, max_length=40)  # 目标活动 ID
+    label: Optional[str] = Field(default=None, max_length=16)  # 转换标签
+
+
+class ActivitySpec(BaseDiagramModel):
+    """活动图规格。
+
+    定义活动图的活动和转换。
+    """
+    activities: list[ActivityNode] = Field(min_length=1, max_length=12)  # 活动列表
+    transitions: list[ActivityTransition] = Field(default_factory=list, max_length=40)  # 转换列表
+
+
+class ActivityDiagram(BaseDiagramModel):
+    """活动图。
+
+    用于展示业务流程、算法步骤、操作流程。
+    """
+    type: Literal["activity"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: ActivitySpec  # 活动图规格
+
+
+class UsecaseActor(BaseDiagramModel):
+    """用例图参与者。
+
+    用于用例图中的参与者。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 参与者 ID
+    label: str = Field(min_length=1, max_length=16)  # 参与者标签
+
+
+class UsecaseItem(BaseDiagramModel):
+    """用例图用例。
+
+    用于用例图中的用例。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 用例 ID
+    label: str = Field(min_length=1, max_length=16)  # 用例标签
+
+
+class UsecaseRelationship(BaseDiagramModel):
+    """用例图关系。
+
+    用于参与者与用例之间的关系。
+    """
+    from_item: str = Field(alias="from", min_length=1, max_length=40)  # 源 ID
+    to_item: str = Field(alias="to", min_length=1, max_length=40)  # 目标 ID
+    type: Optional[str] = Field(default="association", max_length=20)  # 关系类型: association/include/extend/generalization
+    label: Optional[str] = Field(default=None, max_length=16)  # 关系标签
+
+
+class UsecaseSpec(BaseDiagramModel):
+    """用例图规格。
+
+    定义用例图的参与者、用例和关系。
+    """
+    system: Optional[str] = Field(default="系统", max_length=20)  # 系统名称
+    actors: list[UsecaseActor] = Field(min_length=1, max_length=25)  # 参与者列表
+    usecases: list[UsecaseItem] = Field(min_length=1, max_length=8)  # 用例列表
+    relationships: list[UsecaseRelationship] = Field(default_factory=list, max_length=12)  # 关系列表
+
+
+class UsecaseDiagram(BaseDiagramModel):
+    """用例图。
+
+    用于展示系统功能、用户交互、需求分析。
+    """
+    type: Literal["usecase"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: UsecaseSpec  # 用例图规格
+
+
+class ComponentItem(BaseDiagramModel):
+    """组件图组件。
+
+    用于组件图中的组件。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 组件 ID
+    label: str = Field(min_length=1, max_length=16)  # 组件标签
+    type: Optional[str] = Field(default="component", max_length=20)  # 组件类型: component/package
+    children: list["ComponentItem"] = Field(default_factory=list, max_length=6)  # 子组件
+
+
+class ComponentInterface(BaseDiagramModel):
+    """组件图接口。
+
+    用于组件图中的接口。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 接口 ID
+    label: str = Field(min_length=1, max_length=16)  # 接口标签
+    ifaceType: Optional[str] = Field(default="provided", max_length=10)  # 接口类型: provided/required
+
+
+class ComponentConnection(BaseDiagramModel):
+    """组件图连接。
+
+    用于组件之间的连接。
+    """
+    from_comp: str = Field(alias="from", min_length=1, max_length=40)  # 源组件 ID
+    to_comp: str = Field(alias="to", min_length=1, max_length=40)  # 目标组件 ID
+    type: Optional[str] = Field(default="dependency", max_length=20)  # 连接类型: dependency/interface
+    label: Optional[str] = Field(default=None, max_length=16)  # 连接标签
+
+
+class ComponentSpec(BaseDiagramModel):
+    """组件图规格。
+
+    定义组件图的组件、接口和连接。
+    """
+    components: list[ComponentItem] = Field(min_length=1, max_length=12)  # 组件列表
+    interfaces: list[ComponentInterface] = Field(default_factory=list, max_length=8)  # 接口列表
+    connections: list[ComponentConnection] = Field(default_factory=list, max_length=12)  # 连接列表
+
+
+class ComponentDiagram(BaseDiagramModel):
+    """组件图。
+
+    用于展示系统架构、模块划分、接口依赖。
+    """
+    type: Literal["component"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: ComponentSpec  # 组件图规格
+
+
+class PackageItem(BaseDiagramModel):
+    """包图包。
+
+    用于包图中的包。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 包 ID
+    label: str = Field(min_length=1, max_length=16)  # 包标签
+    children: list["PackageItem"] = Field(default_factory=list, max_length=6)  # 子包
+
+
+class PackageDependency(BaseDiagramModel):
+    """包图依赖。
+
+    用于包之间的依赖。
+    """
+    from_pkg: str = Field(alias="from", min_length=1, max_length=40)  # 源包 ID
+    to_pkg: str = Field(alias="to", min_length=1, max_length=40)  # 目标包 ID
+    type: Optional[str] = Field(default="dependency", max_length=20)  # 依赖类型: dependency/import/access
+    label: Optional[str] = Field(default=None, max_length=16)  # 依赖标签
+
+
+class PackageSpec(BaseDiagramModel):
+    """包图规格。
+
+    定义包图的包和依赖。
+    """
+    packages: list[PackageItem] = Field(min_length=1, max_length=8)  # 包列表
+    dependencies: list[PackageDependency] = Field(default_factory=list, max_length=12)  # 依赖列表
+
+
+class PackageDiagram(BaseDiagramModel):
+    """包图。
+
+    用于展示代码组织、模块依赖、架构划分。
+    """
+    type: Literal["package"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: PackageSpec  # 包图规格
+
+
+class DeploymentNode(BaseDiagramModel):
+    """部署图节点。
+
+    用于部署图中的节点。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 节点 ID
+    label: str = Field(min_length=1, max_length=16)  # 节点标签
+    type: Optional[str] = Field(default="device", max_length=20)  # 节点类型: device/execution
+    artifacts: list[str] = Field(default_factory=list, max_length=6)  # 制品列表
+
+
+class DeploymentConnection(BaseDiagramModel):
+    """部署图连接。
+
+    用于节点之间的连接。
+    """
+    from_node: str = Field(alias="from", min_length=1, max_length=40)  # 源节点 ID
+    to_node: str = Field(alias="to", min_length=1, max_length=40)  # 目标节点 ID
+    type: Optional[str] = Field(default="association", max_length=20)  # 连接类型: association/dependency
+    label: Optional[str] = Field(default=None, max_length=16)  # 连接标签
+
+
+class DeploymentSpec(BaseDiagramModel):
+    """部署图规格。
+
+    定义部署图的节点和连接。
+    """
+    nodes: list[DeploymentNode] = Field(min_length=1, max_length=8)  # 节点列表
+    connections: list[DeploymentConnection] = Field(default_factory=list, max_length=12)  # 连接列表
+
+
+class DeploymentDiagram(BaseDiagramModel):
+    """部署图。
+
+    用于展示运行环境、硬件节点、分布式系统架构。
+    """
+    type: Literal["deployment"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: DeploymentSpec  # 部署图规格
+
+
+class ObjectItem(BaseDiagramModel):
+    """对象图对象。
+
+    用于对象图中的对象。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 对象 ID
+    name: Optional[str] = Field(default=None, max_length=20)  # 对象名
+    class_name: Optional[str] = Field(default=None, alias="class", max_length=20)  # 类名
+    attributes: list[str] = Field(default_factory=list, max_length=6)  # 属性列表
+
+
+class ObjectLink(BaseDiagramModel):
+    """对象图链接。
+
+    用于对象之间的链接。
+    """
+    from_obj: str = Field(alias="from", min_length=1, max_length=40)  # 源对象 ID
+    to_obj: str = Field(alias="to", min_length=1, max_length=40)  # 目标对象 ID
+    type: Optional[str] = Field(default="association", max_length=20)  # 链接类型: association/aggregation/composition
+    label: Optional[str] = Field(default=None, max_length=16)  # 链接标签
+
+
+class ObjectSpec(BaseDiagramModel):
+    """对象图规格。
+
+    定义对象图的对象和链接。
+    """
+    objects: list[ObjectItem] = Field(min_length=1, max_length=8)  # 对象列表
+    links: list[ObjectLink] = Field(default_factory=list, max_length=12)  # 链接列表
+
+
+class ObjectDiagram(BaseDiagramModel):
+    """对象图。
+
+    用于展示对象实例、运行时状态、对象关系。
+    """
+    type: Literal["object"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: ObjectSpec  # 对象图规格
+
+
+class CommunicationObject(BaseDiagramModel):
+    """通信图对象。
+
+    用于通信图中的对象。
+    """
+    id: str = Field(min_length=1, max_length=40)  # 对象 ID
+    name: Optional[str] = Field(default=None, max_length=20)  # 对象名
+    class_name: Optional[str] = Field(default=None, alias="class", max_length=20)  # 类名
+
+
+class CommunicationMessage(BaseDiagramModel):
+    """通信图消息。
+
+    用于对象之间的消息。
+    """
+    from_obj: str = Field(alias="from", min_length=1, max_length=40)  # 源对象 ID
+    to_obj: str = Field(alias="to", min_length=1, max_length=40)  # 目标对象 ID
+    label: str = Field(min_length=1, max_length=16)  # 消息标签
+    sequence: Optional[str] = Field(default=None, max_length=10)  # 序号
+
+
+class CommunicationSpec(BaseDiagramModel):
+    """通信图规格。
+
+    定义通信图的对象和消息。
+    """
+    objects: list[CommunicationObject] = Field(min_length=1, max_length=8)  # 对象列表
+    messages: list[CommunicationMessage] = Field(min_length=1, max_length=12)  # 消息列表
+
+
+class CommunicationDiagram(BaseDiagramModel):
+    """通信图。
+
+    用于展示对象协作、消息流向、交互关系。
+    """
+    type: Literal["communication"]  # 图解类型标识
+    title: str = Field(min_length=1, max_length=20)  # 图解标题
+    summary: Optional[str] = Field(default=None, max_length=50)  # 图解摘要
+    spec: CommunicationSpec  # 通信图规格
+
+
 class DiagramRender(BaseDiagramModel):
     """图解渲染信息。
 
@@ -419,12 +939,27 @@ class DiagramRender(BaseDiagramModel):
 # 支持的图解类型联合
 EnabledDiagram = Annotated[
     Union[
+        # 基础图解类型
         HierarchyDiagram,
         FlowDiagram,
         CompareDiagram,
         RelationDiagram,
         SequenceDiagram,
         StateDiagram,
+        # 计算机学科专用图表
+        ClassDiagram,
+        ERDiagram,
+        BlockDiagram,
+        PacketDiagram,
+        GitDiagram,
+        # 软件工程教学常用图表
+        ActivityDiagram,
+        UsecaseDiagram,
+        ComponentDiagram,
+        PackageDiagram,
+        DeploymentDiagram,
+        ObjectDiagram,
+        CommunicationDiagram,
     ],
     Field(discriminator="type"),
 ]
@@ -442,14 +977,31 @@ class DiagramDecision(BaseDiagramModel):
 
 # 图解类型到模型类的映射
 DIAGRAM_MODEL_MAP: dict[str, type[BaseDiagramModel]] = {
+    # 基础图解类型
     "hierarchy": HierarchyDiagram,
     "flow": FlowDiagram,
     "compare": CompareDiagram,
     "relation": RelationDiagram,
     "sequence": SequenceDiagram,
     "state": StateDiagram,
+    # 计算机学科专用图表
+    "class": ClassDiagram,
+    "er": ERDiagram,
+    "block": BlockDiagram,
+    "packet": PacketDiagram,
+    "git": GitDiagram,
+    # 软件工程教学常用图表
+    "activity": ActivityDiagram,
+    "usecase": UsecaseDiagram,
+    "component": ComponentDiagram,
+    "package": PackageDiagram,
+    "deployment": DeploymentDiagram,
+    "object": ObjectDiagram,
+    "communication": CommunicationDiagram,
 }
 
 
-# 重建 HierarchyNode 的 forward reference
+# 重建 forward reference
 HierarchyNode.model_rebuild()
+ComponentItem.model_rebuild()
+PackageItem.model_rebuild()
