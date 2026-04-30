@@ -437,38 +437,6 @@ class DiagramAgent:
       padding: 40px;
       box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02);
     }}
-    .header {{
-      text-align: center;
-      margin-bottom: 32px;
-      padding-bottom: 24px;
-      border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-    }}
-    .title {{
-      font-size: 28px;
-      color: #0f172a;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      margin-bottom: 12px;
-    }}
-    .summary {{
-      font-size: 16px;
-      color: #64748b;
-      max-width: 800px;
-      margin: 0 auto;
-      line-height: 1.6;
-    }}
-    .diagram-type {{
-      display: inline-block;
-      background: #e0e7ff;
-      color: #4f46e5;
-      padding: 6px 16px;
-      border-radius: 9999px;
-      font-size: 13px;
-      font-weight: 600;
-      margin-top: 16px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }}
     .diagram-container {{
       display: flex;
       justify-content: center;
@@ -488,11 +456,6 @@ class DiagramAgent:
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1 class="title">{title}</h1>
-      {f'<p class="summary">{summary}</p>' if summary else ''}
-      <span class="diagram-type">{diagram_type}</span>
-    </div>
     <div class="diagram-container">
       <pre class="mermaid">
 {mermaid_source}
