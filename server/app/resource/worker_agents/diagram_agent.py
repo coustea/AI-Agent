@@ -426,12 +426,11 @@ class DiagramAgent:
       min-height: 100vh;
       padding: 40px;
       color: #1e293b;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      display: inline-block;
+      min-width: 100%;
     }}
     .container {{
-      width: fit-content;
+      display: inline-block;
       min-width: 600px;
       background: rgba(255, 255, 255, 0.85);
       backdrop-filter: blur(12px);
@@ -439,6 +438,8 @@ class DiagramAgent:
       border-radius: 24px;
       padding: 30px;
       box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02);
+      margin-bottom: 40px;
+      margin-right: 40px;
     }}
     .diagram-container {{
       display: flex;

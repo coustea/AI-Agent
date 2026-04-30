@@ -230,7 +230,8 @@ class MermaidRenderer:
 
         try:
             page = await self._browser.new_page()
-            await page.set_viewport_size({"width": width, "height": height})
+            # 初始设定一个极大的视口，防止 Mermaid 排版因为宽度不足而被挤压折行
+            await page.set_viewport_size({"width": 4000, "height": 4000})
 
             # 加载 HTML
             await page.set_content(html_content, wait_until="networkidle")
@@ -248,14 +249,14 @@ class MermaidRenderer:
             container_box = await page.evaluate("() => { const el = document.querySelector('.container'); return el ? {x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y, width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height} : null; }")
             
             if container_box:
+                # 包含 40px 的外边距 (padding on body is 40px)
                 clip = {
-                    "x": container_box["x"],
-                    "y": container_box["y"],
-                    "width": container_box["width"],
-                    "height": container_box["height"],
+                    "x": max(0, container_box["x"] - 40),
+                    "y": max(0, container_box["y"] - 40),
+                    "width": container_box["width"] + 80,
+                    "height": container_box["height"] + 80,
                 }
-                # 设置略大于 container 的 viewport，确保渲染不被截断
-                await page.set_viewport_size({"width": int(container_box["width"] + container_box["x"] * 2), "height": int(container_box["height"] + container_box["y"] * 2)})
+                await page.set_viewport_size({"width": int(clip["width"] + clip["x"]), "height": int(clip["height"] + clip["y"])})
             else:
                 # 降级方案
                 body_box = await page.evaluate("() => { return {width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight}; }")
