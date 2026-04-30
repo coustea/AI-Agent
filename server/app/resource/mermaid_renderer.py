@@ -279,6 +279,8 @@ class MermaidRenderer:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_bytes(png_bytes)
 
+            actual_width = clip["width"] if clip else body_box["width"]
+            actual_height = clip["height"] if clip else body_box["height"]
             logger.info("[MermaidRenderer] HTML PNG 已生成: %s, 尺寸: %dx%d", output_path, actual_width, actual_height)
 
             return png_bytes, output_path
