@@ -49,10 +49,10 @@ MERMAID_HTML_TEMPLATE = """<!DOCTYPE html>
     </pre>
   </div>
   <script>
-    mermaid.initialize({
+    mermaid.initialize({{
       startOnLoad: true,
       theme: 'base',
-      themeVariables: {
+      themeVariables: {{
         primaryColor: '#e0e7ff',
         primaryTextColor: '#3730a3',
         primaryBorderColor: '#a5b4fc',
@@ -62,33 +62,33 @@ MERMAID_HTML_TEMPLATE = """<!DOCTYPE html>
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
         fontSize: '14px',
         nodeBorder: 'rgba(165, 180, 252, 0.8)'
-      },
+      }},
       securityLevel: 'loose',
-      flowchart: {
+      flowchart: {{
         useMaxWidth: false,
         htmlLabels: true,
         curve: 'monotoneX',
         padding: 20
-      },
-      sequence: {
+      }},
+      sequence: {{
         useMaxWidth: false,
         wrap: true,
         actorMargin: 50
-      },
-      state: {
+      }},
+      state: {{
         useMaxWidth: false,
         nodeSpacing: 50
-      },
-      er: {
+      }},
+      er: {{
         useMaxWidth: false
-      },
-      class: {
+      }},
+      class: {{
         useMaxWidth: false
-      },
-      gitGraph: {
+      }},
+      gitGraph: {{
         useMaxWidth: false
-      }
-    });
+      }}
+    }});
   </script>
 </body>
 </html>"""
@@ -215,6 +215,67 @@ class MermaidRenderer:
             logger.exception("[MermaidRenderer] 渲染失败: %s", exc)
             raise RuntimeError(f"Mermaid 渲染失败: {exc}") from exc
 
+    async def render_html_to_png(
+        self,
+        html_content: str,
+        output_path: Optional[Path] = None,
+        width: int = 1200,
+        height: int = 800,
+    ) -> tuple[bytes, Path]:
+        """将完整的 HTML 渲染为 PNG 图片。"""
+        await self._ensure_browser()
+
+        if self._browser is None:
+            raise RuntimeError("浏览器未初始化，无法渲染 HTML")
+
+        try:
+            page = await self._browser.new_page()
+            await page.set_viewport_size({"width": width, "height": height})
+
+            # 加载 HTML
+            await page.set_content(html_content, wait_until="networkidle")
+
+            # 等待 Mermaid 渲染完成
+            try:
+                await page.wait_for_selector(".mermaid[data-processed='true']", timeout=10000)
+            except Exception:
+                pass  # Ignore if no mermaid is found
+
+            # 稍微等待确保样式和字体完全应用
+            await page.wait_for_timeout(500)
+
+            # 获取页面的实际宽高（基于内容）
+            body_box = await page.evaluate("() => { return {width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight}; }")
+            
+            # 增加一些边缘留白以生成更美观的海报
+            actual_width = max(width, body_box["width"])
+            actual_height = max(height, body_box["height"])
+            await page.set_viewport_size({"width": actual_width, "height": actual_height})
+
+            # 截取全屏 PNG
+            png_bytes = await page.screenshot(
+                type="png",
+                full_page=True,
+                scale="device",
+            )
+
+            await page.close()
+
+            # 保存文件
+            if output_path is None:
+                output_path = RESOURCE_DIR / "diagrams" / "temp_html.png"
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(png_bytes)
+
+            logger.info("[MermaidRenderer] HTML PNG 已生成: %s, 尺寸: %dx%d", output_path, actual_width, actual_height)
+
+            return png_bytes, output_path
+
+        except Exception as exc:
+            logger.exception("[MermaidRenderer] HTML 渲染失败: %s", exc)
+            raise RuntimeError(f"HTML 渲染失败: {exc}") from exc
+
     async def render_to_svg(
         self,
         mermaid_code: str,
@@ -290,6 +351,16 @@ async def render_mermaid_to_png(
     renderer = await MermaidRenderer.get_instance()
     return await renderer.render_to_png(mermaid_code, output_path, width, height)
 
+
+async def render_html_to_png(
+    html_content: str,
+    output_path: Optional[Path] = None,
+    width: int = 1200,
+    height: int = 800,
+) -> tuple[bytes, Path]:
+    """便捷函数：将 HTML 渲染为 PNG。"""
+    renderer = await MermaidRenderer.get_instance()
+    return await renderer.render_html_to_png(html_content, output_path, width, height)
 
 async def render_mermaid_to_svg(mermaid_code: str) -> str:
     """便捷函数：将 Mermaid 代码渲染为 SVG 字符串。

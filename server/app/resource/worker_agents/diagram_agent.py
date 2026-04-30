@@ -144,27 +144,28 @@ class DiagramAgent:
             rendered["render"] = build_diagram_render(rendered)
             mermaid_source = rendered.get("render", {}).get("source", "")
 
-            # 4. 后端渲染 Mermaid 为 PNG
+            # 4. 后端渲染为精美海报 PNG
             workspace_dir = get_workspace_dir(self.user_id, self.resource_id)
             png_path = workspace_dir / "diagram.png"
 
             try:
-                await self._emit_action("rendering_png", "使用 Playwright 渲染 PNG 图片")
-                png_bytes, png_path = await render_mermaid_to_png(
-                    mermaid_source,
-                    output_path=png_path,
-                    width=1200,
-                    height=800,
-                )
-                logger.info("[DiagramAgent] PNG 已生成: %s, 大小: %d bytes", png_path, len(png_bytes))
+                # 5. 构建包含排版样式的 HTML 内容
+                html_content = self._build_html_content(rendered)
 
-                # 5. 同时保存 Mermaid 源码（供前端可选渲染）
+                await self._emit_action("rendering_png", "使用 Playwright 渲染精美海报 PNG")
+                
+                # 将这个 HTML 直接截取为 PNG（包含容器和样式）
+                from app.resource.mermaid_renderer import render_html_to_png
+                png_bytes, png_path = await render_html_to_png(
+                    html_content,
+                    output_path=png_path,
+                )
+                logger.info("[DiagramAgent] PNG 海报已生成: %s, 大小: %d bytes", png_path, len(png_bytes))
+
+                # 6. 同时保存 Mermaid 源码（供前端可选渲染）
                 mermaid_path = await write_agent_artifact(
                     self.user_id, self.resource_id, "diagram", mermaid_source, file_type="mermaid"
                 )
-
-                # 6. 构建 HTML 内容（包含 PNG 图片）
-                html_content = self._build_html_with_png(rendered, png_path)
 
                 # 7. 写入 HTML 产物
                 await self._emit_action("saving_artifact", f"保存知识图解产物 ({len(html_content)} 字符)")
@@ -391,131 +392,6 @@ class DiagramAgent:
                         cls._trim_mapping_fields(item, limits)
 
         return payload
-
-    def _build_html_with_png(self, rendered: dict[str, Any], png_path: Path) -> str:
-        """构建包含 PNG 图片的 HTML 内容。"""
-        title = rendered.get("title", "知识图解")
-        summary = rendered.get("summary", "")
-        diagram_type = rendered.get("type", "hierarchy")
-        mermaid_source = rendered.get("render", {}).get("source", "")
-
-        # PNG 图片相对路径（相对于 workspace 目录）
-        png_relative = png_path.name
-
-        return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title}</title>
-  <style>
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: #f8fafc;
-      background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
-      background-size: 20px 20px;
-      min-height: 100vh;
-      padding: 40px 20px;
-      color: #1e293b;
-    }}
-    .container {{
-      max-width: 1200px;
-      margin: 0 auto;
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      border-radius: 24px;
-      padding: 40px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02);
-    }}
-    .header {{
-      text-align: center;
-      margin-bottom: 32px;
-      padding-bottom: 24px;
-      border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-    }}
-    .title {{
-      font-size: 28px;
-      color: #0f172a;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      margin-bottom: 12px;
-    }}
-    .summary {{
-      font-size: 16px;
-      color: #64748b;
-      max-width: 800px;
-      margin: 0 auto;
-      line-height: 1.6;
-    }}
-    .diagram-type {{
-      display: inline-block;
-      background: #e0e7ff;
-      color: #4f46e5;
-      padding: 6px 16px;
-      border-radius: 9999px;
-      font-size: 13px;
-      font-weight: 600;
-      margin-top: 16px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }}
-    .diagram-container {{
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-      background: white;
-      border-radius: 16px;
-      box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
-      border: 1px solid #f1f5f9;
-    }}
-    .diagram-image {{
-      max-width: 100%;
-      border-radius: 8px;
-      transition: transform 0.3s ease;
-    }}
-    .diagram-image:hover {{
-      transform: scale(1.01);
-    }}
-    .mermaid-source {{
-      margin-top: 30px;
-      padding: 20px;
-      background: #1e293b;
-      color: #e2e8f0;
-      border-radius: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 13px;
-      white-space: pre-wrap;
-      overflow-x: auto;
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-    }}
-    details summary {{
-      font-weight: 500;
-      color: #64748b;
-      margin-top: 20px;
-      outline: none;
-    }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1 class="title">{title}</h1>
-      {f'<p class="summary">{summary}</p>' if summary else ''}
-      <span class="diagram-type">{diagram_type}</span>
-    </div>
-    <div class="diagram-container">
-      <img class="diagram-image" src="{png_relative}" alt="{title}" />
-    </div>
-    <details>
-      <summary style="cursor: pointer; padding: 10px; color: #666;">Mermaid 源码</summary>
-      <pre class="mermaid-source">{mermaid_source}</pre>
-    </details>
-  </div>
-</body>
-</html>"""
 
     def _build_html_content(self, rendered: dict[str, Any]) -> str:
         """构建 HTML 内容，包含 Mermaid 渲染。"""
