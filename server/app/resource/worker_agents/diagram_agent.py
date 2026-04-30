@@ -580,12 +580,13 @@ class DiagramAgent:
 - 你必须只返回一个合法 JSON 对象
 - 不要输出 Markdown 代码块
 - 不要输出解释文字、前后缀、注释或任何 JSON 之外的内容
-- 图解必须服务于教学理解
+- 图解必须服务于教学理解，必须进行【原子化知识拆分】
+- 绝对不要在单个节点内堆砌大段文字
 - title 不超过 20 个字
 - summary 不超过 50 个字
 - label 极其简短，不超过 10 个字。如果有较长文字，使用 <br/> 换行或放入 description
 - description 不超过 40 个字
-- 节点数量控制在 5 到 12 个左右，确保结构丰富"""
+- 节点数量控制在 8 到 25 个左右，确保图表结构丰富、连线清晰"""
 
     async def _build_input(self, state: WorkerState) -> str:
         """构建输入内容。"""
