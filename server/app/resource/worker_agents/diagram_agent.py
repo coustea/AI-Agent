@@ -424,17 +424,20 @@ class DiagramAgent:
       background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
       background-size: 20px 20px;
       min-height: 100vh;
-      padding: 40px 20px;
+      padding: 40px;
       color: #1e293b;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }}
     .container {{
-      max-width: 1200px;
-      margin: 0 auto;
+      width: fit-content;
+      min-width: 600px;
       background: rgba(255, 255, 255, 0.85);
       backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.5);
       border-radius: 24px;
-      padding: 40px;
+      padding: 30px;
       box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02);
     }}
     .diagram-container {{
@@ -442,15 +445,15 @@ class DiagramAgent:
       justify-content: center;
       align-items: center;
       min-height: {container_height};
-      overflow: auto;
-      padding: 20px;
+      overflow: visible;
+      padding: 10px;
       background: white;
       border-radius: 16px;
       box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
       border: 1px solid #f1f5f9;
     }}
     .mermaid {{
-      max-width: 100%;
+      max-width: none;
     }}
   </style>
 </head>
@@ -480,28 +483,28 @@ class DiagramAgent:
       }},
       securityLevel: 'loose',
       flowchart: {{
-        useMaxWidth: true,
+        useMaxWidth: false,
         htmlLabels: true,
         curve: 'monotoneX',
         padding: 20
       }},
       sequence: {{
-        useMaxWidth: true,
+        useMaxWidth: false,
         wrap: true,
         actorMargin: 50
       }},
       state: {{
-        useMaxWidth: true,
+        useMaxWidth: false,
         nodeSpacing: 50
       }},
       er: {{
-        useMaxWidth: true
+        useMaxWidth: false
       }},
       class: {{
-        useMaxWidth: true
+        useMaxWidth: false
       }},
       gitGraph: {{
-        useMaxWidth: true
+        useMaxWidth: false
       }}
     }});
   </script>

@@ -244,18 +244,29 @@ class MermaidRenderer:
             # 稍微等待确保样式和字体完全应用
             await page.wait_for_timeout(500)
 
-            # 获取页面的实际宽高（基于内容）
-            body_box = await page.evaluate("() => { return {width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight}; }")
+            # 获取 .container 元素的尺寸，精确截图
+            container_box = await page.evaluate("() => { const el = document.querySelector('.container'); return el ? {x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y, width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height} : null; }")
             
-            # 增加一些边缘留白以生成更美观的海报
-            actual_width = max(width, body_box["width"])
-            actual_height = max(height, body_box["height"])
-            await page.set_viewport_size({"width": actual_width, "height": actual_height})
+            if container_box:
+                clip = {
+                    "x": container_box["x"],
+                    "y": container_box["y"],
+                    "width": container_box["width"],
+                    "height": container_box["height"],
+                }
+                # 设置略大于 container 的 viewport，确保渲染不被截断
+                await page.set_viewport_size({"width": int(container_box["width"] + container_box["x"] * 2), "height": int(container_box["height"] + container_box["y"] * 2)})
+            else:
+                # 降级方案
+                body_box = await page.evaluate("() => { return {width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight}; }")
+                await page.set_viewport_size({"width": body_box["width"], "height": body_box["height"]})
+                clip = None
 
-            # 截取全屏 PNG
+            # 截取 PNG，提高清晰度
             png_bytes = await page.screenshot(
                 type="png",
-                full_page=True,
+                full_page=not clip,
+                clip=clip,
                 scale="device",
             )
 
