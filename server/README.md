@@ -48,7 +48,6 @@
 - **依赖管理**：uv
 - **大模型支持**：
   - OpenAI (GPT-4o/o1)
-  - DeepSeek
   - 讯飞星火 (Spark Max/X/Vision/Image)
   - 智谱 AI (GLM-4V)
 - **搜索增强**：Tavily / DuckDuckGo

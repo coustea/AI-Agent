@@ -35,9 +35,14 @@ from app.infra.models import ChatMessage, UserMemory, UserProfile, UserProfileHi
 from app.memory._fact import FactExtractionService
 from app.memory.memory_types import (
     MEMORY_TYPE_BACKGROUND,
+    MEMORY_TYPE_CONSTRAINT,
+    MEMORY_TYPE_CORRECTION,
     MEMORY_TYPE_FACT,
     MEMORY_TYPE_GOAL,
+    MEMORY_TYPE_INTERACTION,
     MEMORY_TYPE_PREFERENCE,
+    MEMORY_TYPE_STRATEGY,
+    MEMORY_TYPE_SUMMARY,
     MEMORY_TYPE_WEAKNESS,
 )
 from app.memory._profile import ProfileBuildingService, ProfileService
@@ -384,6 +389,7 @@ class MemoryLayer:
         memory_type: str,
         session_id: str | None = None,
         expires_at=None,
+        importance: float | None = None,
     ) -> UserMemory:
         """插入或更新长期事实。  # 对同类事实做去重/合并，避免长期记忆无限膨胀
 
@@ -404,6 +410,7 @@ class MemoryLayer:
             session_id=session_id,
             expires_at=expires_at,
             module=self.module_name,
+            importance=importance,
         )
 
     async def get_long_term_memory(self, *, memory_id: int, user_id: int | None = None) -> UserMemory | None:
@@ -663,13 +670,42 @@ class MemoryLayer:
         - 格式化的长期记忆文本
         """
         memories_by_type = await self.query_long_term_memories_by_type(user_id=user_id)
+        high_priority_by_type = await self.query_long_term_memories_by_type(
+            user_id=user_id,
+            memory_types=[
+                MEMORY_TYPE_CORRECTION,
+                MEMORY_TYPE_CONSTRAINT,
+                MEMORY_TYPE_INTERACTION,
+                MEMORY_TYPE_STRATEGY,
+            ],
+            per_type_limits={
+                MEMORY_TYPE_CORRECTION: 3,
+                MEMORY_TYPE_CONSTRAINT: 3,
+                MEMORY_TYPE_INTERACTION: 2,
+                MEMORY_TYPE_STRATEGY: 2,
+            },
+        )
+        summary_by_type = await self.store.get_user_context_memories(
+            user_id=user_id,
+            module=self.module_name,
+            memory_types=[MEMORY_TYPE_SUMMARY],
+            per_type_limits={MEMORY_TYPE_SUMMARY: 2},
+            source=None,
+        )
         titles = {  # 长期记忆类型到展示标题的映射：决定输出分组顺序与标题文案
+            MEMORY_TYPE_CORRECTION: "用户纠正",
+            MEMORY_TYPE_CONSTRAINT: "必须遵守的约束",
+            MEMORY_TYPE_INTERACTION: "互动偏好",
+            MEMORY_TYPE_STRATEGY: "有效辅导策略",
             MEMORY_TYPE_PREFERENCE: "偏好",
             MEMORY_TYPE_GOAL: "目标",
             MEMORY_TYPE_WEAKNESS: "薄弱点",
             MEMORY_TYPE_FACT: "稳定事实",
             MEMORY_TYPE_BACKGROUND: "背景信息",
+            MEMORY_TYPE_SUMMARY: "会话压缩摘要",
         }
+        memories_by_type.update(high_priority_by_type)
+        memories_by_type.update(summary_by_type)
         chunks: list[str] = []
         for memory_type, title in titles.items():
             items = memories_by_type.get(memory_type, [])
@@ -678,6 +714,90 @@ class MemoryLayer:
             # 使用 content_markdown 字段
             chunks.append(f"### {title}\n" + "\n".join(f"- {item.content_markdown}" for item in items))
         return "\n\n".join(chunks) if chunks else "暂无特定事实记忆。"
+
+    async def build_context_preview(self, *, user_id: int, session_id: str, recent_limit: int = 10) -> str:
+        """构建下一轮聊天会注入的记忆上下文预览。"""
+        profile_context = await self.build_profile_context(user_id)
+        high_priority = await self.query_long_term_memories_by_type(
+            user_id=user_id,
+            memory_types=[
+                MEMORY_TYPE_CORRECTION,
+                MEMORY_TYPE_CONSTRAINT,
+                MEMORY_TYPE_INTERACTION,
+                MEMORY_TYPE_STRATEGY,
+            ],
+            per_type_limits={
+                MEMORY_TYPE_CORRECTION: 3,
+                MEMORY_TYPE_CONSTRAINT: 3,
+                MEMORY_TYPE_INTERACTION: 2,
+                MEMORY_TYPE_STRATEGY: 2,
+            },
+        )
+        learning_context = await self.query_long_term_memories_by_type(
+            user_id=user_id,
+            memory_types=[
+                MEMORY_TYPE_GOAL,
+                MEMORY_TYPE_WEAKNESS,
+                MEMORY_TYPE_PREFERENCE,
+                MEMORY_TYPE_BACKGROUND,
+                MEMORY_TYPE_FACT,
+            ],
+            per_type_limits={
+                MEMORY_TYPE_GOAL: 2,
+                MEMORY_TYPE_WEAKNESS: 3,
+                MEMORY_TYPE_PREFERENCE: 3,
+                MEMORY_TYPE_BACKGROUND: 2,
+                MEMORY_TYPE_FACT: 3,
+            },
+        )
+        summaries = await self.store.get_user_context_memories(
+            user_id=user_id,
+            module=self.module_name,
+            memory_types=[MEMORY_TYPE_SUMMARY],
+            per_type_limits={MEMORY_TYPE_SUMMARY: 2},
+            source=None,
+        )
+        recent_msgs = await self.list_short_term_messages(
+            user_id=user_id,
+            session_id=session_id,
+            limit=recent_limit,
+        )
+
+        def render_group(grouped: dict[str, list[UserMemory]], titles: dict[str, str]) -> str:
+            chunks: list[str] = []
+            for memory_type, title in titles.items():
+                items = grouped.get(memory_type, [])
+                if items:
+                    chunks.append(f"## {title}\n" + "\n".join(f"- {item.content_markdown}" for item in items))
+            return "\n\n".join(chunks) if chunks else "暂无。"
+
+        recent_lines = [
+            f"- {msg.role}: {msg.content}"
+            for msg in recent_msgs
+            if getattr(msg, "role", "") in {"user", "assistant"} and getattr(msg, "content", "").strip()
+        ]
+        recent_context = "\n".join(recent_lines) if recent_lines else "暂无最近原始对话。"
+
+        return "\n\n".join([
+            f"# 用户画像\n{profile_context}",
+            "# 必须遵守的用户规则\n" + render_group(high_priority, {
+                MEMORY_TYPE_CORRECTION: "用户纠正",
+                MEMORY_TYPE_CONSTRAINT: "约束与禁忌",
+                MEMORY_TYPE_INTERACTION: "互动偏好",
+                MEMORY_TYPE_STRATEGY: "有效策略",
+            }),
+            "# 当前目标与薄弱点\n" + render_group(learning_context, {
+                MEMORY_TYPE_GOAL: "学习目标",
+                MEMORY_TYPE_WEAKNESS: "薄弱点",
+                MEMORY_TYPE_PREFERENCE: "偏好",
+                MEMORY_TYPE_BACKGROUND: "背景信息",
+                MEMORY_TYPE_FACT: "稳定事实",
+            }),
+            "# 会话压缩摘要\n" + render_group(summaries, {
+                MEMORY_TYPE_SUMMARY: "最近摘要",
+            }),
+            f"# 最近原始对话\n{recent_context}",
+        ])
 
     async def build_recent_chat_context(
         self,

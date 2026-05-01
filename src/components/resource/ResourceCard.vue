@@ -49,6 +49,35 @@
           </div>
         </div>
       </div>
+      <div v-else-if="agentId === 'image'" class="image-card-body">
+        <div class="image-preview-container">
+          <el-image 
+            v-if="imageUrl" 
+            :src="imageUrl" 
+            fit="cover" 
+            class="res-image-preview"
+            :preview-src-list="[imageUrl]"
+            preview-teleported
+          >
+            <template #placeholder>
+              <div class="image-placeholder"><el-icon class="is-loading"><Loading /></el-icon></div>
+            </template>
+          </el-image>
+          <div v-else class="image-placeholder empty">
+            <el-icon><Picture /></el-icon>
+            <span>图片渲染中</span>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="agentId === 'video'" class="video-card-body">
+        <div class="video-preview-placeholder">
+          <div class="video-overlay">
+            <el-icon class="play-icon"><VideoPlay /></el-icon>
+          </div>
+          <el-icon class="video-bg-icon"><VideoCamera /></el-icon>
+          <div class="video-badge">视频脚本与素材已就绪</div>
+        </div>
+      </div>
       <pre v-else class="fallback-json"><code>{{ JSON.stringify(resultData || {}, null, 2) }}</code></pre>
     </div>
 
@@ -72,7 +101,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Check, Download, View, DataBoard } from '@element-plus/icons-vue'
+import { Check, Download, View, DataBoard, Picture, VideoCamera, VideoPlay, Loading } from '@element-plus/icons-vue'
 import { recordLearningEvent } from '@/api/ai'
 import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
 import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
@@ -98,6 +127,11 @@ const fileUrl = computed(() => getFileUrl(props.resultData))
 const fileCategory = computed(() => getFileCategory(fileUrl.value))
 const fileName = computed(() => getFileName(fileUrl.value))
 const isMarkdownAgent = computed(() => ['content', 'reading', 'code'].includes(props.agentId))
+
+const imageUrl = computed(() => {
+  if (props.agentId !== 'image' || !props.resultData) return ''
+  return props.resultData.image_url || props.resultData.url || ''
+})
 
 const pptSlideCount = computed(() => {
   if (props.agentId !== 'ppt' || !props.resultData) return 0
@@ -356,6 +390,109 @@ const handleDownload = () => {
   font-size: 0.8rem;
   color: #94a3b8;
   padding-left: 30px;
+}
+
+.image-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.image-preview-container {
+  flex: 1;
+  width: 100%;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+
+.res-image-preview {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.res-image-preview:hover {
+  transform: scale(1.02);
+}
+
+.image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.image-placeholder .el-icon {
+  font-size: 1.5rem;
+}
+
+.video-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-preview-placeholder {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  background: #0f172a;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+
+.video-bg-icon {
+  font-size: 3.5rem;
+  color: #334155;
+  opacity: 0.4;
+}
+
+.video-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.play-icon {
+  font-size: 3rem;
+  color: #ffffff;
+  opacity: 0.8;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.video-preview-placeholder:hover .play-icon {
+  transform: scale(1.15);
+  opacity: 1;
+}
+
+.video-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
 }
 
 .res-footer {

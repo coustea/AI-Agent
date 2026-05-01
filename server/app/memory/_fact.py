@@ -4,7 +4,6 @@ from datetime import timedelta
 
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.memory.memory_types import FactAgentMemoryType
 from app.memory._profile import (
     build_chat_history_text,
     build_memory_context_text,
@@ -19,13 +18,21 @@ logger = get_logger(__name__)
 
 # 长期记忆提取提示词：让大模型输出 Markdown 格式的记忆
 FACT_EXTRACTION_PROMPT = """# 角色与目标
-你是一个专业的长期记忆提取器。你的唯一任务是从用户的【最新导师对话记录】中，提取值得写入【长期记忆池】的长期记忆候选。
+你是一个专业的长期记忆提取器。你的唯一任务是从用户的对话记录中，提取值得写入【长期记忆池】的成长型记忆候选，让聊天智能体越用越了解用户。
 
 # 只提取这些长期记忆
 1. 用户明确表达的稳定偏好。
 2. 用户明确提出的长期或阶段性目标。
 3. 用户自身相关、后续对话可复用的稳定事实或背景。
 4. 用户反复暴露或明确承认的稳定薄弱点。
+5. **用户对 AI 的纠正、补充、提醒（重要！）**：
+   - 用户指出 AI 说错了什么
+   - 用户补充了 AI 遗漏的信息
+   - 用户提醒 AI 需要注意的事项（如"不要..."、"你应该..."）
+   - 用户对 AI 行为的反馈
+6. 用户希望 AI 如何互动、解释、提问或控制节奏（interaction）。
+7. 用户明确禁止、排斥或要求避免的回答方式（constraint）。
+8. 已经证明对该用户有效的辅导或协作策略（strategy）。
 
 # 不提取这些内容
 1. 不提取助手的建议、解释、评价、计划或总结。
@@ -36,17 +43,29 @@ FACT_EXTRACTION_PROMPT = """# 角色与目标
 # 输出要求（严格遵守）
 1. 如果没有值得保存的信息，只输出：NO_MEMORY
 2. 如果有记忆，直接输出 Markdown 格式的记忆内容，每条记忆用分隔线 `---` 分开。
-3. 不要有任何前言、解释、说明或后记，直接开始输出记忆内容。
-4. 每条记忆最多 3 条，格式如下：
+3. 不要输出 JSON，不要包裹在代码块中，不要添加 ```markdown 标记。
+4. 不要有任何前言、解释、说明或后记，直接开始输出记忆内容。
+5. 每条记忆最多 3 条，格式如下：
 
 # 记忆标题
 
-类型：preference | goal | weakness | fact | background | summary
-重要度：0.0 到 1.0
+类型：preference | goal | weakness | fact | background | correction | interaction | constraint | strategy
+重要度：0.0 到 1.0（correction 和 constraint 建议 0.85 以上）
+稳定性：短期 | 阶段性 | 长期
+置信度：低 | 中 | 高
 
 ## 内容
 
 这里写完整的 Markdown 记忆内容。
+
+## 用户原意
+
+说明用户真正希望 AI 记住什么。
+
+## AI 应遵守的规则
+
+- 对于 correction/interaction/constraint/strategy，必须写出后续 AI 应如何做或避免什么。
+- 对于其它类型，如果没有明确规则，写“暂无明确规则”。
 
 ## 适用场景
 
@@ -55,6 +74,10 @@ FACT_EXTRACTION_PROMPT = """# 角色与目标
 ## 证据
 
 用简短自然语言说明这条记忆来自最近哪些对话表现，不要复制大段原文。
+
+## 更新关系
+
+新增 / 修正旧记忆 / 强化已有记忆。
 
 ---
 
@@ -79,7 +102,7 @@ class FactExtractionService:
 
     设计原则：
     - module_name 参与存储分区键，决定读写哪个模块的长期记忆池
-    - 使用 DeepSeek 模型做抽取，低温度减少发散
+    - 使用 Spark X 模型做抽取，低温度减少发散
     - 尽力而为处理：大多数"无事可做"返回 True，只有真正异常才返回 False
     """
 
@@ -169,6 +192,7 @@ class FactExtractionService:
                         session_id=session_id,
                         expires_at=expires_at,
                         module=self.module_name,
+                        importance=memory_data.get("importance"),
                     )
                 except ValueError:
                     # 存储层校验/唯一性冲突等 ValueError 不应导致整次抽取失败：跳过该条，继续处理其它事实。
@@ -255,7 +279,7 @@ class FactExtractionService:
                 title = line[2:].strip()
             elif line.startswith("类型：") or line.startswith("类型:"):
                 type_str = line.split("：")[-1].split(":")[-1].strip().lower()
-                if type_str in {"preference", "goal", "weakness", "fact", "background", "summary"}:
+                if type_str in {"preference", "goal", "weakness", "fact", "background", "summary", "correction", "interaction", "constraint", "strategy"}:
                     memory_type = type_str
             elif line.startswith("重要度：") or line.startswith("重要度:"):
                 try:

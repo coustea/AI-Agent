@@ -37,11 +37,8 @@
 - `book`：书籍
 - `paper`：论文
 - `article`：文章
-- `website`：网站 / 文档
-- `course`：在线课程
-- `video`：教学视频
 - `documentation`：官方文档
-- `project`：实践项目 / 开源项目
+- `practice_project`：实践项目 / 开源项目
 
 不需要每种类型都包含，应根据课程主题和知识点选择最合适的资源类型。
 
@@ -214,11 +211,8 @@ JSON 中不要出现注释。
 - `book`
 - `paper`
 - `article`
-- `website`
-- `course`
-- `video`
 - `documentation`
-- `project`
+- `practice_project`
 
 ---
 

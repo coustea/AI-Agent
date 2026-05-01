@@ -20,13 +20,16 @@ from app.infra.models import ChatMessage, ChatSession, UserMemory
 from app.memory.memory_types import (
     FACT_AGENT_MEMORY_TYPES,
     MEMORY_TYPE_BACKGROUND,
+    MEMORY_TYPE_CONSTRAINT,
+    MEMORY_TYPE_CORRECTION,
     MEMORY_TYPE_FACT,
     MEMORY_TYPE_GOAL,
+    MEMORY_TYPE_INTERACTION,
     MEMORY_TYPE_PREFERENCE,
+    MEMORY_TYPE_STRATEGY,
     MEMORY_TYPE_SUMMARY,
     MEMORY_TYPE_WEAKNESS,
 )
-from app.shared.json_utils import parse_first_json_object
 
 logger = get_logger(__name__)
 llm_manager = get_llm_manager()
@@ -37,12 +40,56 @@ MEMORY_EXTRACTION_TOKEN_THRESHOLD = 80  # 触发"事实提取"流程的token阈�
 PROFILE_UPDATE_TOKEN_THRESHOLD = 120  # 触发"画像更新"流程的token阈值（基于会话累积计数器判断是否需要更新画像）
 
 DEFAULT_MEMORY_TYPE_LIMITS: dict[str, int] = {  # 获取上下文记忆时，各 memory_type 的默认返回上限（用于控制提示词注入的长度）
+    MEMORY_TYPE_CORRECTION: 3,
+    MEMORY_TYPE_CONSTRAINT: 3,
+    MEMORY_TYPE_INTERACTION: 2,
+    MEMORY_TYPE_STRATEGY: 2,
     MEMORY_TYPE_PREFERENCE: 3,
     MEMORY_TYPE_GOAL: 2,
     MEMORY_TYPE_WEAKNESS: 3,
     MEMORY_TYPE_FACT: 3,
     MEMORY_TYPE_BACKGROUND: 2,
+    MEMORY_TYPE_SUMMARY: 2,
 }
+
+COMPRESSION_PROMPT = """你是一个专业的对话上下文恢复压缩引擎。请将以下对话记录压缩为可恢复上下文的 Markdown 摘要。
+直接输出 Markdown 内容，不要有任何前言、解释、说明或后记。
+不要输出 JSON，不要包裹在代码块中，不要添加 ```markdown 标记。
+
+## 格式要求
+
+# 对话压缩摘要
+
+## 本段对话核心结论
+保留已经讲清楚、达成共识、后续仍可能需要引用的结论。
+
+## 用户明确纠正
+记录用户指出 AI 错在哪里、正确说法是什么、以后要避免什么。
+
+## 用户画像增量
+记录本段对话新增的专业背景、学习目标、学习历史、知识基础、认知风格、偏好、薄弱点或禁忌。
+
+## 已完成事项
+列出已经解决的问题或已经完成的任务。
+
+## 未完成事项
+列出下一轮需要继续的任务、开放问题、用户等待的结果。
+
+## 当前学习状态
+记录用户当前主题、掌握程度、卡点和下一步最自然的推进方向。
+
+## 后续回复约束
+记录下一轮 AI 必须遵守的上下文，例如不要重复解释、继续某个方案、沿用某个格式。
+
+## 可丢弃内容
+说明哪些寒暄、重复解释、临时细节可以不再保留。
+
+## 输出原则
+1. 只保留对后续对话恢复有价值的内容。
+2. 用户纠正、禁忌、未完成事项和后续约束优先保留。
+3. 如果某类信息不足，请写“暂无明显信息”。
+4. 保持简洁，但不要丢失能影响下一轮回答的上下文。
+"""
 
 _TERM_PATTERN = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]+", re.IGNORECASE)  # 轻量分词正则：将英文/数字连串与中文连续片段拆成"术语块"用于重叠度计算
 _SOURCE_WEIGHTS: dict[str, float] = {"fact_agent": 1.0, "conversation": 0.94}  # 记忆来源权重：用于在相同内容下微调重要性/排序（更信任 fact_agent）
@@ -52,6 +99,11 @@ _INITIAL_IMPORTANCE_BY_TYPE: dict[str, float] = {  # 新写入记忆的类型基
     "weakness": 0.62,
     "fact": 0.58,
     "background": 0.54,
+    "summary": 0.68,
+    "correction": 0.88,
+    "interaction": 0.74,
+    "constraint": 0.9,
+    "strategy": 0.72,
 }
 _MIN_OVERLAP_BY_TYPE: dict[str, float] = {  # 判定"内容足够相似可合并"的最小重叠阈值（不同类型容忍度不同）
     "preference": 0.4,
@@ -59,6 +111,10 @@ _MIN_OVERLAP_BY_TYPE: dict[str, float] = {  # 判定"内容足够相似可合并
     "weakness": 0.4,
     "fact": 0.45,
     "background": 0.45,
+    "correction": 0.35,
+    "interaction": 0.4,
+    "constraint": 0.35,
+    "strategy": 0.4,
 }
 
 
@@ -77,6 +133,17 @@ def _normalize_session_title(title: Any, fallback: str = "新对话") -> str:
 def normalize_text(content: str) -> str:
     # 规范化文本：去首尾空白、统一小写、合并多余空白（用于去重/重叠度/包含关系判断）
     return " ".join((content or "").strip().lower().split())
+
+
+def _strip_markdown_fence(content: str) -> str:
+    text = (content or "").strip()
+    if text.startswith("```markdown"):
+        text = text[len("```markdown"):].strip()
+    if text.startswith("```"):
+        text = text[3:].strip()
+    if text.endswith("```"):
+        text = text[:-3].strip()
+    return text
 
 
 def now() -> datetime:
@@ -290,7 +357,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         messages = prompt.invoke({"user_message": user_message[:500]})
         try:
             result = await llm_manager.ainvoke_structured(
-                "deepseek",
+                "spark_x",
                 SessionTitleOutput,
                 messages,
                 strict=True,
@@ -611,6 +678,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         session_id: str | None = None,
         expires_at=None,
         module: str = "mentor",
+        importance: float | None = None,
     ) -> UserMemory:
         normalized_type = (memory_type or MEMORY_TYPE_FACT).strip().lower()
         if normalized_type not in FACT_AGENT_MEMORY_TYPES:
@@ -643,7 +711,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                     if expires_at:
                         duplicate.expires_at = expires_at
                     duplicate.importance = bump_importance(
-                        duplicate.importance,
+                        max(clamp_importance(duplicate.importance), clamp_importance(importance, default=0.0)),
                         source=duplicate.source,
                         evidence_count=duplicate.evidence_count,
                         match_score=1.0,
@@ -665,7 +733,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                 if expires_at:
                     candidate.expires_at = expires_at
                 candidate.importance = bump_importance(
-                    candidate.importance,
+                    max(clamp_importance(candidate.importance), clamp_importance(importance, default=0.0)),
                     source=candidate.source,
                     evidence_count=candidate.evidence_count,
                     match_score=best_match.match_score,
@@ -686,7 +754,10 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                 expires_at=expires_at,
                 evidence_count=1,
                 last_seen_at=_now,
-                importance=initial_fact_importance(normalized_type, source="fact_agent"),
+                importance=clamp_importance(
+                    importance,
+                    default=initial_fact_importance(normalized_type, source="fact_agent"),
+                ),
             )
             session.add(memory)
             await session.commit()
@@ -847,22 +918,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         from langchain_core.prompts import ChatPromptTemplate
 
         summarize_prompt = ChatPromptTemplate.from_messages([
-            ("system", (
-                "你是一个记忆压缩引擎。请将以下对话记录提炼为关键知识点和结论。\n"
-                "直接输出 Markdown 格式，不要有任何前言或解释。\n\n"
-                "格式要求：\n"
-                "## 知识点\n"
-                "- 掌握的知识点1\n"
-                "- 掌握的知识点2\n\n"
-                "## 问题与解答\n"
-                "- Q: 问题1\n"
-                "  A: 答案要点\n\n"
-                "## 错误与纠正\n"
-                "- 错误点及纠正方法\n\n"
-                "## 学习行为\n"
-                "- 观察到的学习习惯或偏好\n\n"
-                "只输出有价值的条目，忽略闲聊。如果某类信息不足，可省略该部分。"
-            )),
+            ("system", COMPRESSION_PROMPT),
             ("human", "{chat_text}"),
         ])
         result = await llm_manager.ainvoke(
@@ -871,11 +927,15 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             model_kwargs={"temperature": 0.1},
         )
         summarized_ids = [m.id for m in recent_msgs[:-keep_recent]]
+        summary_markdown = result.content if isinstance(result.content, str) else str(result.content)
+        summary_markdown = _strip_markdown_fence(summary_markdown)
+        if not normalize_text(summary_markdown):
+            return
         # 先落库摘要再删旧消息：即使清理过程中途失败，也能保证摘要已保存，避免"删了但没存摘要"的数据丢失。
         await self.save_long_term_memory(
             user_id=user_id,
             session_id=session_id,
-            content_markdown=result.content,
+            content_markdown=summary_markdown,
             memory_type=MEMORY_TYPE_SUMMARY,
             source=module,
             source_message_count=len(summarized_ids),

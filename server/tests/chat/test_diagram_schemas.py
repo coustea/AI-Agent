@@ -51,10 +51,13 @@ def test_diagram_prompts_require_json_output() -> None:
 
     assert "JSON" in decision_prompt
     assert "json" in decision_prompt.lower()
-    assert "JSON" in generation_prompt
-    assert "json" in generation_prompt.lower()
-    assert "`hierarchy` 只能使用 `spec.root`" in generation_prompt
-    assert "不能输出顶层 `nodes`" in generation_prompt
+    assert "Mermaid" in generation_prompt
+    assert "JSON" not in generation_prompt
+    assert "json" not in generation_prompt.lower()
+    assert "只输出 Mermaid 源码" in generation_prompt
+    assert "不是 demo" in generation_prompt
+    assert "8 到 18" in generation_prompt
+    assert "覆盖用户问题中的主要概念、关系、步骤或边界条件" in generation_prompt
 
 
 def test_diagram_render_schema_accepts_mermaid_text_only() -> None:

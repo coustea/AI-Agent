@@ -61,10 +61,6 @@ OPENAI_API_BASE: str = _env("OPENAI_API_BASE", "")
 # GLM
 GLM_MODEL: str = _env("GLM_MODEL", "glm-4.7")
 
-# Deepseek
-DEEPSEEK_API_KEY: str = _env("DEEPSEEK_API_KEY", "")
-DEEPSEEK_API_BASE: str = _env("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
-
 # Spark LLM (星火大模型 WebSocket API)
 SPARK_APP_ID: str = _env("SPARK_APP_ID", "")
 SPARK_API_KEY: str = _env("SPARK_API_KEY", "")

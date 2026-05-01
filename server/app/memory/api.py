@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth.security import get_current_user
 from app.infra.models import User
 from app.memory import MemoryLayer
+from app.memory._store import MEMORY_COMPRESSION_TOKEN_THRESHOLD
 from app.shared.response import HttpResponse
 
 router = APIRouter()
@@ -91,6 +92,7 @@ def _chat_memory_payload(message) -> dict:
         "content": message.content,
         "attachments": message.attachments,
         "tool_calls": message.tool_calls,
+        "diagram": message.diagram,
         "created_at": message.created_at,
     }
 
@@ -256,6 +258,7 @@ async def get_recent_chat_memory(
 
 @router.get("/memory/long-term")
 async def get_long_term_memories(
+    memory_type: str | None = Query(default=None, alias="type"),
     limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
 ):
@@ -268,5 +271,76 @@ async def get_long_term_memories(
     - HttpResponse: 包含长期记忆列表的响应
     """
     memory_layer = MemoryLayer(module_name="mentor")
-    memories = await memory_layer.list_long_term_memories(user_id=current_user.id, limit=limit)
+    if memory_type:
+        if memory_type == "summary":
+            grouped = await memory_layer.store.get_user_context_memories(
+                user_id=current_user.id,
+                module=memory_layer.module_name,
+                memory_types=[memory_type],
+                per_type_limits={memory_type: limit},
+                source=None,
+            )
+        else:
+            grouped = await memory_layer.query_long_term_memories_by_type(
+                user_id=current_user.id,
+                memory_types=[memory_type],
+                per_type_limits={memory_type: limit},
+            )
+        memories = grouped.get(memory_type, [])
+    else:
+        memories = await memory_layer.list_long_term_memories(user_id=current_user.id, limit=limit)
     return HttpResponse.success(data=[_memory_payload(memory) for memory in memories])
+
+
+@router.get("/memory/context-preview")
+async def get_memory_context_preview(
+    session_id: str = Query(..., min_length=1),
+    recent_limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+):
+    """预览下一轮聊天会注入的记忆上下文。"""
+    memory_layer = MemoryLayer(module_name="mentor")
+    context_markdown = await memory_layer.build_context_preview(
+        user_id=current_user.id,
+        session_id=session_id,
+        recent_limit=recent_limit,
+    )
+    return HttpResponse.success(data={"context_markdown": context_markdown})
+
+
+@router.post("/memory/extract")
+async def extract_memory(
+    session_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user),
+):
+    """手动触发当前用户指定会话的长期记忆提取。"""
+    memory_layer = MemoryLayer(module_name="mentor")
+    success = await memory_layer.extract_facts(user_id=current_user.id, session_id=session_id)
+    return HttpResponse.success(data={"success": success})
+
+
+@router.post("/memory/rebuild-profile")
+async def rebuild_profile(
+    session_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user),
+):
+    """手动重建当前用户画像。"""
+    memory_layer = MemoryLayer(module_name="mentor")
+    success = await memory_layer.build_profile(user_id=current_user.id, session_id=session_id)
+    return HttpResponse.success(data={"success": success})
+
+
+@router.post("/memory/compress-session")
+async def compress_session(
+    session_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user),
+):
+    """手动触发当前用户指定会话的对话压缩。"""
+    memory_layer = MemoryLayer(module_name="mentor")
+    await memory_layer.store.summarize_and_compress(
+        user_id=current_user.id,
+        session_id=session_id,
+        module=memory_layer.module_name,
+        threshold=MEMORY_COMPRESSION_TOKEN_THRESHOLD,
+    )
+    return HttpResponse.success(data={"success": True})

@@ -21,7 +21,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from app.chat.diagram_render import build_diagram_render
+from app.chat.diagram_render import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 from app.chat.utils import load_prompts, truncate
 from app.infra.logging import get_logger
@@ -79,7 +79,7 @@ class AvatarAgent:
     工作流：
         START -> classify
           ├─ direct_answer (Spark 直接回答) -> diagram_generate -> END
-          ├─ search_node (DeepSeek 搜索) -> spark_summary -> diagram_generate -> END
+          ├─ search_node (Spark 搜索) -> spark_summary -> diagram_generate -> END
           ├─ attachment_answer (Spark 基于附件回答) -> diagram_generate -> END
           └─ vision_answer (GLM 视觉) -> diagram_generate -> END
     """
@@ -304,7 +304,7 @@ class AvatarAgent:
         try:
             classifier_prompt = _get_prompt("classifier")
             result = await self.llm_manager.ainvoke(
-                "deepseek",
+                "spark",
                 classifier_prompt.format(
                     user_message=user_msg,
                     has_attachments="是" if (file_urls or image_urls) else "否",
@@ -386,7 +386,7 @@ class AvatarAgent:
         return {"messages": [response], "answer_text": text}
 
     async def _search_node(self, state: AvatarState) -> dict:
-        """搜索节点：DeepSeek 使用搜索工具查找信息"""
+        """搜索节点：Spark 使用搜索工具查找信息"""
         messages = state.get("messages") or []
         user_msg = ""
         for m in reversed(messages):
@@ -400,7 +400,7 @@ class AvatarAgent:
 
         # 绑定搜索工具
         llm_with_tools = self.llm_manager.bind_tools(
-            "deepseek",
+            "spark",
             AVATAR_TOOLS,
             model_kwargs=self.tool_model_kwargs,
         )
@@ -408,7 +408,7 @@ class AvatarAgent:
         response = await self.llm_manager.ainvoke_runnable(
             llm_with_tools,
             full_messages,
-            model_type="deepseek",
+            model_type="spark",
         )
 
         # 处理工具调用
@@ -516,7 +516,7 @@ class AvatarAgent:
 
         try:
             decision = await self.llm_manager.ainvoke_structured(
-                "deepseek",
+                "spark",
                 DiagramDecision,
                 [
                     SystemMessage(content=_get_prompt("diagram_decision_system")),
@@ -550,23 +550,28 @@ class AvatarAgent:
             f"diagram_type：{diagram_type}\n\n"
             f"学生问题：\n{question}\n\n"
             f"最终文字回答：\n{answer}\n\n"
-            "请严格生成指定 diagram_type 对应的结构化图解对象。"
+            "请直接生成指定 diagram_type 对应的 Mermaid 源码。"
+            "只输出 Mermaid 源码，不要输出解释、代码围栏或对象格式。"
+            "必须是完整知识图解，不是 demo；覆盖主要概念、关系、步骤、边界条件或易混点。"
+            "优先拆成 8 到 18 个原子知识节点。"
         )
 
         try:
-            validated = await self.llm_manager.ainvoke_structured(
-                "deepseek",
-                model_cls,
+            response = await self.llm_manager.ainvoke(
+                "spark",
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),
                 ],
-                strict=True,
                 model_kwargs=self.diagram_model_kwargs,
             )
-            rendered = validated.model_dump(by_alias=True)
-            rendered["render"] = build_diagram_render(rendered)
-            return rendered
+            content = response.content if hasattr(response, "content") else str(response)
+            return {
+                "type": diagram_type,
+                "title": f"{diagram_type} 图解",
+                "summary": "Mermaid 知识图解",
+                "render": build_mermaid_render(content),
+            }
         except Exception as exc:
             logger.warning("[AvatarAgent] 图解生成失败 type=%s error=%s", diagram_type, exc)
             return None

@@ -508,6 +508,7 @@ class ConversationStore:
                     content=msg.content,
                     attachments=attachments,
                     tool_calls=tool_calls,
+                    diagram=msg.diagram,
                     created_at=msg.created_at,
                 )
             )

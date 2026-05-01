@@ -371,29 +371,64 @@
         <div class="sidebar-header">
           <div class="header-title-row">
             <h3>动态学习画像</h3>
-            <span class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
-              <span class="dot"></span> Live
-            </span>
+            <div class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
+              <span class="dot"></span> <span>Live</span>
+            </div>
           </div>
         </div>
 
-        <div class="profile-feature-card">
-          <div class="feature-list" v-if="profileCards.length > 0">
-            <div class="feature-item" v-for="card in profileCards" :key="card.key">
-              <div class="item-icon-box">
+        <div class="profile-radar-section" v-if="profileCards.length > 0">
+          <div class="radar-bg"></div>
+          <v-chart class="radar-chart" :option="profileOption" autoresize />
+        </div>
+
+        <div class="profile-cards-container" v-if="profileCards.length > 0">
+          <div
+            v-for="card in profileCards"
+            :key="card.key"
+            :class="['insight-card', { 'special-card': card.key === '最近变化' || card.key === '推荐辅导策略' }]"
+          >
+            <div class="card-header">
+              <div class="card-icon-wrap" :style="{ color: card.key === '最近变化' ? '#F59E0B' : '#4F46E5' }">
                 <el-icon><component :is="getProfileCardIcon(card.key)" /></el-icon>
               </div>
-              <div class="item-content-wrapper">
-                <div class="item-header-row">
-                  <div class="item-title">{{ card.title }}</div>
+              <span class="card-title">{{ card.title }}</span>
+            </div>
+            <div class="card-body">
+              <div class="card-content">
+                <div v-for="(line, idx) in card.content.split('\n')" :key="idx" class="content-line">
+                  <template v-if="line.trim().startsWith('-') || line.trim().startsWith('*') || line.trim().startsWith('•')">
+                    <span class="bullet-item">
+                      <span class="dot-marker"></span>
+                      <span class="text">{{ line.trim().replace(/^[-*•]\s*/, '') }}</span>
+                    </span>
+                  </template>
+                  <template v-else-if="line.trim()">
+                    <p class="plain-text">{{ line }}</p>
+                  </template>
                 </div>
-                <div class="item-desc">{{ card.content }}</div>
               </div>
             </div>
           </div>
+        </div>
 
-          <div class="feature-list empty-state" v-else>
-            <div class="empty-text">对话太少啦，多聊两句让我更了解你～</div>
+        <div class="profile-empty-state" v-else>
+          <div class="empty-visual-container">
+            <div class="pulse-ring"></div>
+            <div class="pulse-ring delay-1"></div>
+            <div class="pulse-ring delay-2"></div>
+            <div class="empty-visual">
+              <el-icon><Cpu /></el-icon>
+            </div>
+          </div>
+          <div class="empty-text-wrap">
+            <h4>待捕获画像特征</h4>
+            <p>由于对话样本较少，您的动态学习画像仍在孕育中。多跟我聊聊，我将为您精准画像。</p>
+          </div>
+          <div class="empty-hints">
+            <div class="hint-item"><el-icon><ChatLineRound /></el-icon> <span>深度交流</span></div>
+            <div class="hint-item"><el-icon><Aim /></el-icon> <span>定位痛点</span></div>
+            <div class="hint-item"><el-icon><TrendCharts /></el-icon> <span>反馈进度</span></div>
           </div>
         </div>
 
@@ -478,14 +513,21 @@ import {
   Plus, Delete, Close, Top,
   EditPen, Search, Timer, VideoCamera, DataLine,
   CircleCheckFilled,
-  InfoFilled, Medal, Aim, Loading
+  InfoFilled, Medal, Aim, Loading, TrendCharts
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import 'github-markdown-css/github-markdown-light.css'
 import 'highlight.js/styles/github.css'
 import mermaid from 'mermaid'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { RadarChart } from 'echarts/charts'
+import { TooltipComponent } from 'echarts/components'
 import { getErrorMessage } from '@/utils/http'
 import TutorMessageContent from '@/components/TutorMessageContent.vue'
+
+use([CanvasRenderer, RadarChart, TooltipComponent])
 import {
   getProfile,
 } from '@/api/ai'
@@ -592,6 +634,92 @@ const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
 const profileCards = ref<ProfileCard[]>([])
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
+const profileScores = ref([60, 60, 60, 60, 60, 60, 60, 60])
+const PROFILE_SECTIONS = [
+  '基础信息',
+  '当前学习/项目背景',
+  '技术能力判断',
+  '学习偏好',
+  '当前薄弱点',
+  '兴趣方向',
+  '推荐辅导策略',
+  '最近变化',
+] as const
+
+const scoreFromSection = (content?: string) => {
+  if (!content) return 55
+  const compact = content.replace(/\s+/g, '')
+  if (!compact || compact.includes('暂无明显信息')) return 55
+  return Math.min(88, Math.max(65, 60 + Math.floor(compact.length / 20)))
+}
+
+const profileOption = computed(() => ({
+  radar: {
+    indicator: [
+      { name: '基础', max: 100 },
+      { name: '背景', max: 100 },
+      { name: '能力', max: 100 },
+      { name: '偏好', max: 100 },
+      { name: '薄弱', max: 100 },
+      { name: '兴趣', max: 100 },
+      { name: '策略', max: 100 },
+      { name: '动态', max: 100 },
+    ],
+    center: ['50%', '50%'],
+    radius: '65%',
+    splitNumber: 4,
+    shape: 'circle',
+    axisName: {
+      color: '#94A3B8',
+      fontSize: 10,
+      fontWeight: 500
+    },
+    splitLine: {
+      lineStyle: {
+        color: 'rgba(148, 163, 184, 0.1)'
+      }
+    },
+    splitArea: {
+      show: false
+    },
+    axisLine: {
+      lineStyle: {
+        color: 'rgba(148, 163, 184, 0.1)'
+      }
+    }
+  },
+  series: [
+    {
+      type: 'radar',
+      data: [
+        {
+          value: profileScores.value,
+          name: '学习画像',
+          symbol: 'none',
+          itemStyle: {
+            color: '#4F46E5'
+          },
+          areaStyle: {
+            color: {
+              type: 'radial',
+              x: 0.5,
+              y: 0.5,
+              r: 0.5,
+              colorStops: [
+                { offset: 0, color: 'rgba(79, 70, 229, 0.4)' },
+                { offset: 1, color: 'rgba(79, 70, 229, 0.05)' }
+              ]
+            }
+          },
+          lineStyle: {
+            width: 2,
+            color: '#4F46E5'
+          }
+        }
+      ]
+    }
+  ]
+}))
 
 // --- FAB 悬浮按钮 ---
 const fabPos = ref({ x: 16, y: 0 })
@@ -1079,6 +1207,12 @@ const fetchProfile = async () => {
     const nextCards = markdown ? parseProfileMarkdown(markdown) : []
     const changed = JSON.stringify(nextCards) !== JSON.stringify(profileCards.value)
     profileCards.value = nextCards
+
+    if (markdown) {
+      const sections: Record<string, string> = {}
+      nextCards.forEach(c => { sections[c.title] = c.content })
+      profileScores.value = PROFILE_SECTIONS.map((title) => scoreFromSection(sections[title]))
+    }
 
     if (changed) {
       profileUpdated.value = true
@@ -2718,48 +2852,48 @@ onBeforeUnmount(() => {
 }
 
 .profile-sidebar {
-  width: 320px;
+  width: 340px;
   padding: 1.5rem;
-  background: #FAFAFA;
+  background: #F8FAFC;
   border-left: 1px solid #E2E8F0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   overflow-y: auto;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .sidebar-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
+  margin-bottom: 4px;
 }
 
 .header-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  width: 100%;
 }
 
 .header-title-row h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   color: #0F172A;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .sync-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #64748B;
-  background: #F1F5F9;
+  background: #FFFFFF;
   padding: 4px 10px;
-  border-radius: 12px;
-  font-weight: 500;
+  border-radius: 99px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  border: 1px solid #E2E8F0;
 }
 
 .sync-badge .dot {
@@ -2769,163 +2903,247 @@ onBeforeUnmount(() => {
   background: #10B981;
 }
 
-.sidebar-desc {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #64748B;
-  text-align: center;
+.is-syncing .dot {
+  animation: pulse-green 2s infinite;
 }
 
-.profile-feature-card {
+@keyframes pulse-green {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Radar Chart Section */
+.profile-radar-section {
+  position: relative;
   background: #FFFFFF;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  border: 1px solid #F1F5F9;
-}
-
-.feature-card-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.header-icon {
-  width: 32px;
-  height: 32px;
-  background: #EFF6FF;
-  color: #3B82F6;
-  border-radius: 50%;
+  border-radius: 16px;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  overflow: hidden;
 }
 
-.header-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #1E293B;
+.radar-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, #F1F5F9 0%, transparent 70%);
+  opacity: 0.5;
 }
 
-.feature-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.feature-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #F1F5F9;
-}
-.feature-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.item-icon-box {
-  width: 36px;
-  height: 36px;
-  background: #F1F5F9;
-  color: #3B82F6;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.item-content-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-}
-
-.item-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.radar-chart {
   width: 100%;
+  height: 100%;
+  z-index: 1;
 }
 
-.item-title {
+/* Insight Cards */
+.profile-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.insight-card {
+  background: #FFFFFF;
+  border-radius: 14px;
+  border: 1px solid #E2E8F0;
+  padding: 14px;
+  transition: all 0.2s ease;
+}
+
+.insight-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  transform: translateY(-1px);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.card-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.card-title {
   font-size: 0.9rem;
   font-weight: 600;
   color: #334155;
 }
 
-.item-score {
-  font-size: 0.85rem;
-  font-weight: 700;
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.score-unit {
-  font-size: 0.65rem;
-  color: #94A3B8;
-  font-weight: 500;
-  margin-left: 2px;
-}
-
-.item-progress-track {
-  width: 100%;
-  height: 6px;
-  background: #F1F5F9;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.item-progress-bar {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.score-success { color: #10B981; }
-.item-progress-bar.score-success { background: #10B981; }
-
-.score-warning { color: #F59E0B; }
-.item-progress-bar.score-warning { background: #F59E0B; }
-
-.score-danger { color: #EF4444; }
-.item-progress-bar.score-danger { background: #EF4444; }
-
-.score-neutral { color: #94A3B8; }
-.item-progress-bar.score-neutral { background: #CBD5E1; }
-
-.item-desc {
-  font-size: 0.8rem;
-  color: #64748B;
+.content-line {
+  font-size: 0.825rem;
+  color: #475569;
   line-height: 1.5;
 }
 
-.empty-state .empty-text {
-  font-size: 0.85rem;
-  color: #94A3B8;
+.bullet-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dot-marker {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #94A3B8;
+  margin-top: 7px;
+  flex-shrink: 0;
+}
+
+.plain-text {
+  margin: 0;
+}
+
+/* Special Cards Styling */
+.special-card {
+  background: linear-gradient(to bottom right, #FFFFFF, #F8FAFC);
+  border-left: 3px solid #4F46E5;
+}
+
+.special-card.recent-changes-card {
+  border-left-color: #F59E0B;
+}
+
+/* Empty State */
+.profile-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
   text-align: center;
-  padding: 20px 0;
+  background: #FFFFFF;
+  border-radius: 20px;
+  border: 1px solid #E2E8F0;
+  box-shadow: inset 0 0 20px rgba(148, 163, 184, 0.05);
+  margin-top: 8px;
+}
+
+.empty-visual-container {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 1px solid #4F46E5;
+  border-radius: 50%;
+  opacity: 0;
+  animation: pulse-out 3s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+.pulse-ring.delay-1 { animation-delay: 1s; }
+.pulse-ring.delay-2 { animation-delay: 2s; }
+
+@keyframes pulse-out {
+  0% { transform: scale(0.5); opacity: 0; }
+  50% { opacity: 0.3; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.empty-visual {
+  width: 60px;
+  height: 60px;
+  background: #EEF2FF;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  color: #4F46E5;
+  z-index: 2;
+  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.1);
+  animation: float 4s ease-in-out infinite;
+}
+
+.empty-text-wrap h4 {
+  margin: 0 0 8px 0;
+  font-size: 1.05rem;
+  color: #1E293B;
+  font-weight: 700;
+}
+
+.empty-text-wrap p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748B;
+  line-height: 1.6;
+}
+
+.empty-hints {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.hint-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #F8FAFC;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: #475569;
+  font-weight: 600;
+  border: 1px solid #F1F5F9;
+}
+
+.hint-item .el-icon {
+  font-size: 0.9rem;
+  color: #4F46E5;
 }
 
 .long-term-memory-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 4px;
   margin-top: auto;
+  padding: 16px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid #E2E8F0;
 }
 
 .memory-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 .memory-title-wrap {
@@ -2935,9 +3153,9 @@ onBeforeUnmount(() => {
 }
 
 .memory-title {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  color: #1E293B;
+  color: #0F172A;
 }
 
 .info-icon {
@@ -2953,13 +3171,14 @@ onBeforeUnmount(() => {
 }
 
 .switch-status {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #64748B;
+  font-weight: 500;
 }
 
 .memory-desc {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #64748B;
   line-height: 1.6;
 }

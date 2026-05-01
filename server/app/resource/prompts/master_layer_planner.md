@@ -14,10 +14,9 @@
 
 | 层级 | Agent | 说明 |
 |------|-------|------|
-| 0 | content, mindmap | 基础内容，无依赖 |
-| 1 | quiz, code, reading | 扩展内容，依赖 content |
-| 2 | image, ppt | 可视化，依赖 content + mindmap |
-| 3 | video | 视频，依赖 ppt |
+| 0 | content | 课程讲解文档，无依赖 |
+| 1 | diagram, mindmap | 可视化和知识结构，优先使用 content 作为上游上下文 |
+| 2 | code, quiz, reading | 实操、练习和拓展阅读，优先使用 content 作为上游上下文 |
 
 ## 输出格式
 

@@ -19,8 +19,6 @@ from typing import Any, AsyncIterator, Hashable
 from langchain_openai import ChatOpenAI
 
 from app.config import (
-    DEEPSEEK_API_KEY,
-    DEEPSEEK_API_BASE,
     GLM_API_KEY,
     GLM_VISION_MODEL,
     LLM_TIMEOUT,
@@ -71,7 +69,7 @@ class LlmFactory:
         max_retries = kwargs.pop("max_retries", 2)
         timeout = kwargs.pop("timeout", None)
 
-        # 提取 extra_body，DeepSeek 会在内部强制覆盖 enable_thinking
+        # 提取 extra_body（部分模型支持额外参数）
         user_extra_body = kwargs.pop("extra_body", None) or {}
 
         # 兼容讯飞不同代际网关：/x2、/v2 仅接受 spark-x；/v1 接受 generalv3.5 等模型名。
@@ -106,46 +104,6 @@ class LlmFactory:
                 **kwargs,
             )
 
-        # 创建 DeepSeek 快速模型，关闭思考模式
-        if model_type == "deepseek":
-            cls._require_non_empty("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
-            cls._require_non_empty("DEEPSEEK_API_BASE", DEEPSEEK_API_BASE)
-            return ChatOpenAI(
-                model="deepseek-chat",
-                api_key=DEEPSEEK_API_KEY,
-                base_url=DEEPSEEK_API_BASE,
-                temperature=temperature,
-                streaming=streaming,
-                max_tokens=max_tokens,
-                max_retries=max_retries,
-                timeout=timeout,
-                extra_body={
-                    **user_extra_body,
-                    "enable_thinking": False,
-                },
-                **kwargs,
-            )
-
-        # 创建 DeepSeek 快速模型，开启思考模式
-        if model_type == "deepseek_reasoner":
-            cls._require_non_empty("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
-            cls._require_non_empty("DEEPSEEK_API_BASE", DEEPSEEK_API_BASE)
-            return ChatOpenAI(
-                model="deepseek-reasoner",
-                api_key=DEEPSEEK_API_KEY,
-                base_url=DEEPSEEK_API_BASE,
-                temperature=temperature,
-                streaming=streaming,
-                max_tokens=max_tokens,
-                max_retries=max_retries,
-                timeout=timeout,
-                extra_body={
-                    **user_extra_body,
-                    "enable_thinking": True,
-                },
-                **kwargs,
-            )
-
         # 创建 GLM 视觉模型
         if model_type == "glm_vision":
             cls._require_non_empty("GLM_API_KEY", GLM_API_KEY)
@@ -176,13 +134,8 @@ class LlmManager:
     DEFAULT_CONCURRENCY_LIMITS: dict[str, int] = {
         "spark": 10,
         "spark_x": 20,
-        "deepseek": 40,
-        "deepseek_reasoner": 10,
     }
-    OVERFLOW_MODEL_TYPES: dict[str, str] = {
-        "spark": "deepseek",
-        "spark_x": "deepseek",
-    }
+    OVERFLOW_MODEL_TYPES: dict[str, str] = {}
 
     def __init__(
         self,

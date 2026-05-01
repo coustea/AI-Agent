@@ -1,63 +1,60 @@
-"""Resource HTTP routes."""
+"""
+Resource HTTP routes.
+
+API 端点：
+- POST /generate - 生成资源包（SSE 流式）
+- GET /agents - 查询可用 Agent 列表
+- GET /resources - 查询资源列表
+- GET /resources/{id} - 查询资源详情
+"""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import decode_token, get_current_user, is_token_valid
+from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.resource.schemas import ResourceGenerateRequest
+from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceUsecases, ResourceStreamService, get_stream_service
-from app.shared.paths import RESOURCE_DIR
 from app.shared.response import HttpResponse
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
-def _extract_visible_agents_from_plan(plan_result: str | None) -> set[str] | None:
-    """从 plan_result 中提取 visible_agents。"""
-    if not plan_result:
-        return None
-    try:
-        payload: dict[str, Any] = json.loads(plan_result)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    visible = payload.get("visible_agents")
-    if not isinstance(visible, list):
-        return None
-    return {str(item) for item in visible if str(item).strip()}
-
-
 @router.post("/generate")
 async def generate_resources(
-    req: ResourceGenerateRequest,
+    req: ResourceGenerationRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """生成资源包（SSE 流式）。"""
-    task_dict = req.learning_task.model_dump()
+    """生成资源包（SSE 流式）。
+
+    请求体：ResourceGenerationRequest
+    - task: LearningTaskInput（course, chapter, topic, weak_points, learning_goal, extra_requirement）
+    - personalization: PersonalizationConfig
+    - selected_agents: list[AgentSelection]
+    - agent_configs: AgentConfigs
+    - output_options: OutputOptions
+    """
     logger.info(
-        "[ResourceAPI] 收到生成请求: user_id=%s course=%r selected_resources=%s",
+        "[ResourceAPI] 收到生成请求: user_id=%s course=%r selected_agents=%s",
         current_user.id,
-        task_dict.get("course", ""),
-        req.selected_resources,
+        req.task.course,
+        req.enabled_agent_ids(),
     )
 
     stream_service = await get_stream_service(session)
     return StreamingResponse(
         stream_service.stream_bundle(
             user_id=current_user.id,
-            task=task_dict,
-            selected_resources=req.selected_resources,
+            request=req,
         ),
         media_type="text/event-stream",
         headers={
@@ -70,20 +67,30 @@ async def generate_resources(
 
 @router.get("/agents")
 async def list_agents():
-    """查询可用 Agent 列表。"""
+    """查询可用 Agent 列表。
+
+    返回 6 个活跃 Agent：content, mindmap, diagram, quiz, reading, code
+    """
     logger.info("[ResourceAPI] 查询可用 Agent 列表")
-    from app.resource.utils import get_agent_registry
-    registry = get_agent_registry()
-    agents = [
-        {
-            "name": name,
-            "role": entry.role,
-            "desc": entry.desc,
-            "type": entry.type,
-            "stage": entry.stage,
-        }
-        for name, entry in registry.items()
-    ]
+    from app.resource.registry import ensure_initialized, get_enabled_agent_ids, get_agent_entry
+    ensure_initialized()
+
+    agent_ids = get_enabled_agent_ids()
+    agents: list[dict[str, Any]] = []
+
+    for agent_id in agent_ids:
+        entry = get_agent_entry(agent_id)
+        if entry:
+            agents.append({
+                "id": agent_id,
+                "name": entry.agent_class.__name__,
+                "role": entry.role,
+                "description": entry.description,
+                "dependencies": entry.dependencies,
+                "execution_layer": entry.execution_layer,
+                "configurable": True,
+            })
+
     return HttpResponse.success(data=agents)
 
 
@@ -98,24 +105,24 @@ async def list_resources(
 
     usecases = ResourceUsecases(session)
     resources = await usecases.list_resources(current_user.id, limit)
+    type_summary = await usecases.list_resource_type_summary(
+        user_id=current_user.id,
+        task_ids=[value.id for value in resources if value.id is not None],
+    )
 
     items: list[dict[str, Any]] = []
     for value in resources:
-        visible = _extract_visible_agents_from_plan(value.plan_result)
         items.append(
             {
                 "id": value.id,
                 "course": value.course,
-                "gap": value.gap,
-                "need": value.need,
+                "chapter": value.chapter or "",
+                "topic": value.topic or "",
+                "learning_goal": value.learning_goal or value.need,
                 "status": value.status,
-                "has_mindmap": value.mindmap_result is not None and (visible is None or "mindmap" in visible),
-                "has_content": value.content_result is not None and (visible is None or "content" in visible),
-                "has_code": value.code_result is not None and (visible is None or "code" in visible),
-                "has_quiz": value.quiz_result is not None and (visible is None or "quiz" in visible),
-                "has_reading": value.reading_result is not None and (visible is None or "reading" in visible),
-                "has_ppt": value.ppt_result is not None and (visible is None or "ppt" in visible),
+                "resource_types": type_summary.get(value.id or 0, []),
                 "created_at": value.created_at,
+                "updated_at": value.updated_at,
             }
         )
     return HttpResponse.success(data=items)
@@ -125,31 +132,10 @@ async def list_resources(
 async def get_resource_file(
     resource_id: int,
     filename: str,
-    token: str = Query(..., description="资源文件访问 token"),
-    session: AsyncSession = Depends(get_session),
+    token: str = Query(default="", description="资源文件访问 token"),
 ):
-    """下载资源文件。"""
-    if not await is_token_valid(token, session):
-        raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
-    user_id = decode_token(token)
-
-    usecases = ResourceUsecases(session)
-    resource = await usecases.get_resource(user_id, resource_id)
-    if resource is None:
-        raise HTTPException(status_code=404, detail="资源不存在")
-
-    safe_filename = Path(filename).name
-    if safe_filename != filename:
-        raise HTTPException(status_code=400, detail="非法文件名")
-
-    resource_dir = (RESOURCE_DIR / str(user_id) / str(resource_id)).resolve()
-    file_path = (resource_dir / safe_filename).resolve()
-    if not str(file_path).startswith(str(resource_dir)):
-        raise HTTPException(status_code=400, detail="非法文件路径")
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="文件不存在")
-
-    return FileResponse(path=str(file_path), filename=safe_filename)
+    """旧文件下载接口已废弃。"""
+    raise HTTPException(status_code=410, detail="资源已改为数据库存储，请使用资源详情接口读取 content")
 
 
 @router.get("/resources/{resource_id}")
@@ -158,7 +144,21 @@ async def get_resource(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """查询资源详情。"""
+    """查询资源详情。
+
+    返回 ResourceBundle 结构：
+    - id: 资源包 ID
+    - task_id: 任务 ID
+    - title: 资源包标题
+    - task: 学习任务
+    - personalization: 个性化配置
+    - resources: 资源列表
+    - study_path: 学习路径
+    - review_result: 审查结果
+    - status: 状态
+    - created_at: 创建时间
+    - updated_at: 更新时间
+    """
     logger.info("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
 
     usecases = ResourceUsecases(session)
@@ -167,25 +167,47 @@ async def get_resource(
         logger.warning("[ResourceAPI] 资源不存在或无权限: user_id=%s resource_id=%s", current_user.id, resource_id)
         return HttpResponse.error(code=404, message="资源不存在")
 
-    data = {
-        "id": resource.id,
-        "course": resource.course,
-        "gap": resource.gap,
-        "need": resource.need,
+    topic = resource.topic or resource.course
+    db_items = await usecases.list_resource_items(current_user.id, resource_id)
+    resources: list[dict[str, Any]] = [
+        {
+            "id": item.id,
+            "type": item.resource_type,
+            "title": item.title,
+            "format": item.format,
+            "content": item.content_json if item.content_json is not None else item.content_text,
+            "summary": item.summary or "",
+            "metadata": item.metadata_json or {},
+            "status": item.status,
+            "error_message": item.error_message,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+        for item in db_items
+    ]
+
+    bundle = {
+        "id": str(resource.id),
+        "task_id": str(resource.id),
+        "title": f"{topic} 学习资源包",
+        "task": {
+            "course": resource.course,
+            "chapter": resource.chapter or "",
+            "topic": topic,
+            "weak_points": resource.weak_points or ([resource.gap] if resource.gap else []),
+            "learning_goal": resource.learning_goal or resource.need or "review",
+            "extra_requirement": resource.request_extra or "",
+        },
+        "personalization": resource.personalization or {},
+        "selected_agents": resource.selected_agents or [],
+        "resources": resources,
+        "study_path": [],
+        "review_result": None,
         "status": resource.status,
-        "request_extra": resource.request_extra,
-        "plan_result": resource.plan_result,
-        "results": {},
-        "created_at": resource.created_at,
+        "created_at": resource.created_at.isoformat() if resource.created_at else None,
+        "updated_at": resource.updated_at.isoformat() if resource.updated_at else None,
+        "metadata": {
+            "source": "database",
+        },
     }
-    visible_agents = _extract_visible_agents_from_plan(resource.plan_result)
-    for key in ("mindmap", "content", "code", "quiz", "reading", "ppt"):
-        if visible_agents is not None and key not in visible_agents:
-            continue
-        raw = getattr(resource, f"{key}_result")
-        if raw:
-            try:
-                data["results"][key] = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                data["results"][key] = raw
-    return HttpResponse.success(data=data)
+    return HttpResponse.success(data=bundle)

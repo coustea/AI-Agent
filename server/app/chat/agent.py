@@ -4,7 +4,7 @@
 当前工作流：
     START -> classify
       ├─ direct_answer (Spark MAX 直接回答) -> diagram_generate -> END
-      ├─ search_node (DeepSeek 搜索) -> spark_summary -> diagram_generate -> END
+      ├─ search_node (Spark MAX 搜索) -> spark_summary -> diagram_generate -> END
       └─ attachment_answer (Spark MAX 总结) -> diagram_generate -> END
 
 职责：
@@ -20,10 +20,11 @@ import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
-from app.chat.diagram_render import build_diagram_render
+from app.chat.diagram_render import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision, TutorState
 from app.shared.json_utils import parse_first_json_object
 from app.shared.request_context import runtime_context as chat_runtime_context
+from app.shared.paths import CHAT_DIR
 from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
 from app.chat.utils import (
     classify_route,
@@ -127,7 +128,7 @@ class TutorAgent:
 
     三种对话路径：
     1. direct_answer — Spark MAX 直接回答，无工具
-    2. search_node → spark_summary — DeepSeek 搜索后 Spark MAX 总结
+    2. search_node → spark_summary — Spark MAX 搜索后 Spark MAX 总结
     3. attachment_answer — Spark MAX 基于附件分析结果回答
     """
 
@@ -143,7 +144,6 @@ class TutorAgent:
         self.llm_manager = get_llm_manager()
         self.spark_model_kwargs = {"temperature": 0.7, "streaming": True}
         self.search_model_kwargs = {"temperature": 0.2, "streaming": False, "max_tokens": 1200}
-        # 图解生成模型 - 使用 deepseek-chat 因为 reasoner 模型不支持 tool_choice
         self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
         # 上下文服务
         self.memory_layer = MemoryLayer(module_name="mentor")
@@ -343,7 +343,7 @@ class TutorAgent:
     # ------------------------------------------------------------------
 
     async def _search_node(self, state: TutorState) -> dict[str, Any]:
-        """搜索节点：DeepSeek 使用搜索工具查找信息。
+        """搜索节点：Spark MAX 使用搜索工具查找信息。
 
         Args:
             state: LangGraph 状态。
@@ -368,7 +368,7 @@ class TutorAgent:
 
             # 绑定搜索工具
             llm_with_tools = self.llm_manager.bind_tools(
-                "deepseek",
+                "spark",
                 [duckduckgo_search, tavily_search],
                 model_kwargs=self.search_model_kwargs,
             )
@@ -377,10 +377,10 @@ class TutorAgent:
                 response = await self.llm_manager.ainvoke_runnable(
                     llm_with_tools,
                     full_messages,
-                    model_type="deepseek",
+                    model_type="spark",
                 )
             except Exception:
-                logger.exception("[TutorAgent] search_node DeepSeek 调用失败")
+                logger.exception("[TutorAgent] search_node Spark MAX 调用失败")
                 raise
 
             # 处理工具调用
@@ -666,7 +666,7 @@ class TutorAgent:
         model_cls: type[Any],
         messages: list[Any],
     ) -> Any:
-        """使用 DeepSeek strict function calling 调用图解模型并本地校验。
+        """使用 Spark MAX strict function calling 调用图解模型并本地校验。
 
         Args:
             model_cls: Pydantic 模型类。
@@ -677,7 +677,7 @@ class TutorAgent:
         """
         try:
             validated = await self.llm_manager.ainvoke_structured(
-                "deepseek",
+                "spark",
                 model_cls,
                 messages,
                 strict=True,
@@ -687,7 +687,7 @@ class TutorAgent:
         except Exception:
             # 兼容测试替身或历史宽松 payload，必要时退回普通 JSON 解析路径
             response = await self.llm_manager.ainvoke(
-                "deepseek",
+                "spark",
                 messages,
                 model_kwargs={
                     **self.diagram_model_kwargs,
@@ -809,19 +809,29 @@ class TutorAgent:
             f"学生问题：\n{question}\n\n"
             f"最终文字回答：\n{answer}\n\n"
             f"上下文：\n{context_text}\n\n"
-            "请严格生成指定 diagram_type 对应的结构化图解对象。"
+            "请直接生成指定 diagram_type 对应的 Mermaid 源码。"
+            "只输出 Mermaid 源码，不要输出解释、代码围栏或对象格式。"
+            "必须是完整知识图解，不是 demo；覆盖主要概念、关系、步骤、边界条件或易混点。"
+            "优先拆成 8 到 18 个原子知识节点。"
         )
 
         try:
-            validated = await self._ainvoke_diagram_model(
-                model_cls,
+            response = await self.llm_manager.ainvoke(
+                "spark",
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),
                 ],
+                model_kwargs=self.diagram_model_kwargs,
             )
-            rendered = validated.model_dump(by_alias=True)
-            rendered["render"] = build_diagram_render(rendered)
+            mermaid_source = normalize_message_content(getattr(response, "content", response))
+            rendered = {
+                "type": diagram_type,
+                "title": f"{diagram_type} 图解",
+                "summary": "Mermaid 知识图解",
+                "render": build_mermaid_render(mermaid_source),
+            }
+
             return rendered
         except Exception as exc:
             logger.warning("[TutorAgent] 图解生成失败 type=%s error=%s", diagram_type, exc)

@@ -222,6 +222,42 @@ async def get_diagram_file(
     return FileResponse(path=str(file_path), filename=filename)
 
 
+@router.get("/chat/files/{owner_id}/{session_id}/{filename}")
+async def get_chat_file(
+    owner_id: int,
+    session_id: str,
+    filename: str,
+    current_user: User = Depends(get_current_user),
+):
+    """读取聊天文件（如 diagram.png），带权限校验。
+
+    只允许文件所有者访问。
+
+    Args:
+        owner_id: 文件所有者ID。
+        session_id: 会话ID。
+        filename: 文件名（如 diagram.png）。
+        current_user: 当前登录用户。
+
+    Returns:
+        文件响应。
+
+    Raises:
+        HTTPException: 权限不足、文件不存在等错误。
+    """
+    from app.shared.paths import CHAT_DIR
+
+    # 权限校验：只允许所有者访问
+    if current_user.id != owner_id:
+        raise HTTPException(status_code=403, detail="无权访问此文件")
+
+    file_path = CHAT_DIR / str(owner_id) / str(session_id) / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    return FileResponse(path=str(file_path), filename=filename)
+
+
 @router.get("/chat/sessions")
 async def get_sessions(
     limit: int = Query(default=20, ge=1, le=100),

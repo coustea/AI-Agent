@@ -36,9 +36,14 @@ from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, UserProfile, UserProfileHistory
 from app.memory.memory_types import (
     MEMORY_TYPE_BACKGROUND,
+    MEMORY_TYPE_CONSTRAINT,
+    MEMORY_TYPE_CORRECTION,
     MEMORY_TYPE_FACT,
     MEMORY_TYPE_GOAL,
+    MEMORY_TYPE_INTERACTION,
     MEMORY_TYPE_PREFERENCE,
+    MEMORY_TYPE_STRATEGY,
+    MEMORY_TYPE_SUMMARY,
     MEMORY_TYPE_WEAKNESS,
 )
 from app.memory._store import MemoryStore, normalize_text
@@ -48,6 +53,7 @@ logger = get_logger(__name__)
 # 画像构建提示词：让大模型直接输出 Markdown
 PROFILE_BUILDING_PROMPT = """# 角色与目标
 你是学生画像构建器。请根据【旧画像】、【最近聊天记录】、【长期记忆】和【学习行为】生成一份完整的 Markdown 学生画像。
+这是一个“对话式学习画像自主构建”流程：不要要求学生填写传统繁琐表单，而是从自然语言对话中结合学生的专业、学习目标、学习历史、知识基础、认知风格、易错点、偏好和纠正记录自动更新动态画像，并支持画像随学随新。
 
 # 输出要求（严格遵守）
 1. 直接输出 Markdown 内容，不要有任何前言、解释、说明或后记。
@@ -55,26 +61,37 @@ PROFILE_BUILDING_PROMPT = """# 角色与目标
 3. 开头直接是 `# 学生画像`，结尾直接结束，不要有多余文字。
 4. 不要编造用户没有表达过的信息。
 5. 如果某一项信息不足，请写"暂无明显信息"，不要强行推断。
+6. 必须至少包含下方固定结构中的全部维度；优先保留用户明确纠正过的内容。
 
 # 固定结构（必须按此顺序输出）
 
 # 学生画像
 
-## 基础信息
+## 基础信息与专业背景
 
-## 当前学习/项目背景
+## 学习目标
 
-## 技术能力判断
+## 学习历史
+
+## 知识基础
+
+## 认知风格
 
 ## 学习偏好
 
-## 当前薄弱点
+## 易错点与薄弱点
 
-## 兴趣方向
+## 交互偏好与禁忌
+
+## AI 纠正记录
+
+## 当前学习状态
 
 ## 推荐辅导策略
 
 ## 最近变化
+
+## 不确定信息
 
 【旧画像】
 {current_profile}
@@ -108,6 +125,8 @@ MEMORY_STABLE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"我(?:在学|正在学|学过|以前学过|已经学过|准备|打算|想(?:学|考|准备|提高|练习))"),
     re.compile(r"我(?:下周|本学期|这学期|最近|目前|现在).*(?:学|补|复习|准备|做题|刷题|作业|实验|项目|考试)"),
     re.compile(r"(?:专业|年级|方向|课程|考试|证书|竞赛|实习|面试|项目|课设|论文)"),
+    re.compile(r"(?:你|ai|AI|助手).*(?:错了|理解错|误解|不对|遗漏|漏了|应该|不要|别|先问|记住|以后)"),
+    re.compile(r"(?:以后|下次|后续).*(?:不要|别|先|必须|应该|保持|沿用|避免)"),
 )
 _MEMORY_SIGNAL_PUNCT_RE: Final[re.Pattern[str]] = re.compile(r'[。！？!?；;，,、：:…""\'\'`（）()\[\]{}<>《》\s]+')
 
@@ -154,7 +173,8 @@ def build_chat_history_text(messages: list[ChatMessage]) -> str:
 
 
 async def build_memory_context_text(store: MemoryStore, user_id: int, module: str, per_type_limits: dict[str, int] | None = None) -> str:
-    """构建记忆上下文文本。  # 从长期记忆池提取各类型记忆并格式化
+    """构建记忆上下文文本。
+    # 从长期记忆池提取各类型记忆并格式化
 
     参数：
     - store: 存储层实例
@@ -166,15 +186,28 @@ async def build_memory_context_text(store: MemoryStore, user_id: int, module: st
     - 格式化的记忆上下文文本
     """
     default_limits = {
+        MEMORY_TYPE_CORRECTION: 2,
+        MEMORY_TYPE_CONSTRAINT: 2,
+        MEMORY_TYPE_INTERACTION: 2,
+        MEMORY_TYPE_STRATEGY: 2,
         MEMORY_TYPE_PREFERENCE: 2,
         MEMORY_TYPE_GOAL: 2,
         MEMORY_TYPE_WEAKNESS: 2,
         MEMORY_TYPE_FACT: 2,
         MEMORY_TYPE_BACKGROUND: 2,
+        MEMORY_TYPE_SUMMARY: 1,
     }
     if per_type_limits:
         default_limits.update(per_type_limits)
     memories_by_type = await store.get_user_context_memories(user_id=user_id, module=module, per_type_limits=default_limits)
+    summary_by_type = await store.get_user_context_memories(
+        user_id=user_id,
+        module=module,
+        memory_types=[MEMORY_TYPE_SUMMARY],
+        per_type_limits={MEMORY_TYPE_SUMMARY: default_limits[MEMORY_TYPE_SUMMARY]},
+        source=None,
+    )
+    memories_by_type.update(summary_by_type)
     lines: list[str] = []
     for memory_type, items in memories_by_type.items():
         if not items:
@@ -212,7 +245,8 @@ def normalize_signal_text(text: str) -> str:
 
 
 def is_memory_worthy_text(text: str) -> bool:
-    """判断文本是否值得记忆。  # 非纯提问且有稳定信号才值得记忆
+    """判断文本是否值得记忆。
+    # 非纯提问且有稳定信号才值得记忆
 
     参数：
     - text: 待判断的文本
@@ -372,7 +406,7 @@ class ProfileBuildingService:
     - build_profile(user_id, session_id) -> tuple[bool, bool]
 
     设计原则：
-    - 使用 DeepSeek 模型做特征提取
+    - 使用 Spark X 模型做特征提取
     - 直接输出 Markdown，不要求 JSON
     - 门控检查：无变化时不写入数据库
     """

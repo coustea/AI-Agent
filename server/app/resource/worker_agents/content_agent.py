@@ -6,18 +6,15 @@ Content Agent — 内容讲解 Agent。
 
 from __future__ import annotations
 
-import asyncio
 import re
 from pathlib import Path
-from typing import Any
 
 from langchain_core.messages import HumanMessage
 
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
-from app.resource.utils import write_agent_artifact, get_workspace_dir, read_agent_report
-from app.resource.worker_agents.reporter_agent import ReporterAgent
+from app.resource.worker_agents.utils import generate_execution_report
 
 logger = get_logger(__name__)
 
@@ -25,24 +22,31 @@ logger = get_logger(__name__)
 class ContentAgent:
     """内容讲解 Agent。"""
 
-    def __init__(self, user_id: int, resource_id: int):
+    def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
         self.resource_id = resource_id
+        self.emitter = emitter
         self.llm_manager = get_llm_manager()
         self.prompt_path = Path(__file__).parent.parent / "prompts" / "workers" / "content.md"
 
+    async def _emit_action(self, action: str, detail: str = "") -> None:
+        """发送 Agent 动作事件。"""
+        if self.emitter:
+            await self.emitter.emit_agent_action("content", action, detail)
+
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行内容生成。"""
-        logger.info("[ContentAgent] 开始执行: topic=%s", state.task.get("course", ""))
+        logger.info("[ContentAgent] 开始执行: topic=%s", state.task.get("topic", ""))
 
-        # 读取提示词
+        await self._emit_action("loading_prompt", "加载内容生成提示词")
         prompt = self._load_prompt()
 
-        # 构建输入（包含依赖报告）
+        await self._emit_action("building_input", "构建输入内容，整合任务信息和依赖报告")
         input_text = await self._build_input(state)
 
-        # 调用 LLM
         try:
+            await self._emit_action("calling_llm", "调用 spark_x 生成讲解内容")
+
             response = await self.llm_manager.ainvoke(
                 "spark_x",
                 [HumanMessage(content=f"{prompt}\n\n{input_text}")],
@@ -52,57 +56,37 @@ class ContentAgent:
             content = response.content if hasattr(response, "content") else str(response)
             content = self._clean_content(content)
 
-            # 写入产物
-            artifact_path = await write_agent_artifact(
-                self.user_id, self.resource_id, "content", content, file_type="md"
-            )
+            await self._emit_action("finalizing_result", f"生成讲解文档 ({len(content)} 字符)")
 
-            # 构建产物目录路径
-            artifact_dir = str(get_workspace_dir(self.user_id, self.resource_id))
-
-            # 后台异步生成执行报告
-            asyncio.create_task(
-                self._generate_report_async(state.task, content)
+            execution_report = generate_execution_report(
+                agent_type="content",
+                task=state.task,
+                content=content,
+                success=True,
             )
 
             return WorkerResult(
                 success=True,
                 content=content,
-                artifact_path=artifact_path,
-                artifact_dir=artifact_dir,
-                file_type="md",
+                file_type="markdown",
+                title=f"{state.task.get('topic', state.task.get('course', ''))} - 内容讲解",
+                summary="生成课程讲解文档",
+                execution_report=execution_report,
+                metadata={"engine": "markdown", "render_at": "frontend"},
             )
 
         except Exception as exc:
             logger.exception("[ContentAgent] 执行失败")
 
-            # 后台异步生成失败报告
-            asyncio.create_task(
-                self._generate_report_async(state.task, "", error=str(exc))
-            )
-
-            return WorkerResult(success=False, error=str(exc))
-
-    async def _generate_report_async(
-        self,
-        task: dict[str, Any],
-        content: str,
-        error: str | None = None,
-    ) -> None:
-        """后台异步生成执行报告。"""
-        try:
-            reporter = ReporterAgent()
-            report_path, _ = await reporter.generate_report(
-                user_id=self.user_id,
-                resource_id=self.resource_id,
+            execution_report = generate_execution_report(
                 agent_type="content",
-                task=task,
-                content=content,
-                error=error,
+                task=state.task,
+                content=None,
+                success=False,
+                error=str(exc),
             )
-            logger.info("[ContentAgent] 报告已生成: %s", report_path)
-        except Exception as exc:
-            logger.warning("[ContentAgent] 报告生成失败: %s", exc)
+
+            return WorkerResult(success=False, error=str(exc), execution_report=execution_report)
 
     def _load_prompt(self) -> str:
         """加载提示词。"""
@@ -117,33 +101,68 @@ class ContentAgent:
 4. 使用中文撰写"""
 
     async def _build_input(self, state: WorkerState) -> str:
-        """构建输入文本。"""
+        """构建输入文本。
+
+        使用新的 WorkerState 字段：
+        - task: 任务信息
+        - personalization: 个性化配置
+        - agent_config: Agent 专属配置
+        - learner_profile: 学习者画像
+        - upstream_results: 上游结果
+        - dependencies: 依赖的 Agent
+        """
         task = state.task
-        profile = state.profile
+        personalization = state.personalization
+        agent_config = state.agent_config
+        profile = state.learner_profile
 
         parts = [
-            f"## 课程信息",
-            f"- 主题: {task.get('course', '')}",
-            f"- 知识点: {task.get('gap', '')}",
-            f"- 需求类型: {task.get('need', 'review')}",
+            "## 课程信息",
+            f"- 课程: {task.get('course', '')}",
+            f"- 章节: {task.get('chapter', '')}",
+            f"- 学习主题: {task.get('topic', task.get('course', ''))}",
+            f"- 知识短板: {', '.join(task.get('weak_points', []))}",
+            f"- 学习目标: {task.get('learning_goal', '')}",
+            f"- 额外要求: {task.get('extra_requirement', '')}",
+            "",
+            "## 个性化配置",
+            f"- 当前水平: {personalization.get('current_level', 'basic')}",
+            f"- 目标水平: {personalization.get('target_level', 'understand')}",
+            f"- 讲解风格: {personalization.get('explanation_style', 'easy')}",
+            f"- 内容深度: {personalization.get('content_depth', 'standard')}",
+            f"- 示例偏好: {personalization.get('example_preference', 'visual')}",
+            f"- 输出语言: {personalization.get('output_language', 'zh')}",
+            "",
+            "## Agent 配置",
+            f"- 结构类型: {agent_config.get('structure', 'progressive')}",
+            f"- 包含总结: {agent_config.get('include_summary', True)}",
+            f"- 包含要点: {agent_config.get('include_key_points', True)}",
+            f"- 包含常见错误: {agent_config.get('include_common_mistakes', True)}",
+            f"- 包含记忆技巧: {agent_config.get('include_memory_tips', True)}",
+            f"- 包含示例: {agent_config.get('include_examples', True)}",
         ]
 
         if profile:
-            parts.append(f"\n## 学习者画像")
-            parts.append(profile.get("profile_markdown", "暂无"))
+            parts.append("")
+            parts.append("## 学习者画像")
+            profile_markdown = profile.get("profile_markdown", "")
+            if profile_markdown:
+                parts.append(profile_markdown)
+            else:
+                parts.append(f"- 专业: {profile.get('major', '未知')}")
+                parts.append(f"- 年级: {profile.get('grade', '未知')}")
+                parts.append(f"- 学校: {profile.get('school', '未知')}")
 
-        # 读取依赖 Agent 的报告
-        if state.dependencies:
-            parts.append(f"\n## 参考内容（来自前置 Agent 的执行报告）")
-            for dep_name in state.dependencies:
-                report = await read_agent_report(
-                    self.user_id, self.resource_id, dep_name
-                )
-                if report:
-                    parts.append(f"\n### {dep_name} 报告")
-                    parts.append(report)
+        # 上游结果摘要
+        if state.upstream_results:
+            parts.append("")
+            parts.append("## 上游结果摘要")
+            for agent_id, result in state.upstream_results.items():
+                content_preview = str(result.get("content", ""))[:300]
+                parts.append(f"- {agent_id}: {content_preview}...")
 
-        parts.append(f"\n请生成讲解文档。")
+        parts.append("")
+        parts.append("请生成讲解文档。")
         return "\n".join(parts)
 
     def _clean_content(self, content: str) -> str:

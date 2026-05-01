@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
-os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
+os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 

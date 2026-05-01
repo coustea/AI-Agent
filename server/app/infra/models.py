@@ -227,116 +227,73 @@ class UserProfileHistory(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class GeneratedResource(SQLModel, table=True):
-    """生成资源主表 — 记录每次多智能体资源生成的输入参数和整体状态"""
+    """生成资源主表 — 记录每次多智能体资源生成的输入参数。"""
     __tablename__ = "generated_resources"
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    course: str = Field(max_length=200)  # 课程/主题名称
-    gap: str = Field(sa_column=Column(Text))  # 知识缺口描述
-    need: str = Field(default="review", max_length=50)  # 需求类型（如 "review"、"learn"）
-    request_extra: str | None = Field(default=None, sa_column=Column(Text))  # 用户附加要求
-    status: str = Field(default="pending", max_length=50)  # 整体生成状态
-    plan_result: str | None = Field(default=None, sa_column=Column(Text))  # DAG 规划结果（JSON）
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
 
+    # 输入信息
+    course: str = Field(max_length=200)  # 课程名称
+    chapter: str | None = Field(default=None, max_length=200)  # 章节
+    topic: str | None = Field(default=None, max_length=200, index=True)  # 学习主题
+    weak_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 短板标签
+    learning_goal: str | None = Field(default=None, max_length=50)  # 学习目标
+    extra_requirement: str | None = Field(default=None, sa_column=Column(Text))  # 用户附加要求
 
-class ResourceMindmap(SQLModel, table=True):
-    """思维导图资源子表"""
-    __tablename__ = "resource_mindmaps"
+    # 配置信息
+    personalization: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    selected_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    agent_configs: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
-    id: int | None = Field(default=None, primary_key=True)
-    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
-    file_path: str | None = Field(default=None, max_length=500)  # HTML文件路径
-    content: str | None = Field(default=None, sa_column=Column(Text))  # Markdown原文
-    status: str = Field(default="pending", max_length=50)  # pending/success/failed
-    error: str | None = Field(default=None, sa_column=Column(Text))  # 错误信息
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-
-
-class ResourceContent(SQLModel, table=True):
-    """内容讲解资源子表"""
-    __tablename__ = "resource_contents"
-
-    id: int | None = Field(default=None, primary_key=True)
-    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
-    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
-    content: str | None = Field(default=None, sa_column=Column(Text))  # 内容文本
+    # 状态
     status: str = Field(default="pending", max_length=50)
-    error: str | None = Field(default=None, sa_column=Column(Text))
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+
     created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
 
 
-class ResourceQuiz(SQLModel, table=True):
-    """练习题资源子表"""
-    __tablename__ = "resource_quizzes"
+class GeneratedResourceItem(SQLModel, table=True):
+    """资源项明细表 — 每个 agent 生成一个资源项。"""
+    __tablename__ = "generated_resource_items"
+    __table_args__ = (
+        Index("ix_generated_resource_items_resource_agent", "resource_id", "agent_type"),
+        Index("ix_generated_resource_items_user_created_at", "user_id", "created_at"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     resource_id: int = Field(index=True, foreign_key="generated_resources.id")
-    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
-    content: str | None = Field(default=None, sa_column=Column(Text))  # 题目内容（JSON或文本）
+    user_id: int = Field(index=True)
+
+    # Agent 类型（content/mindmap/diagram/quiz/code/reading）
+    agent_type: str = Field(max_length=50, index=True)
+
+    # 内容格式（markdown/json/mermaid）
+    content_format: str = Field(default="json", max_length=50)
+
+    # 内容主体（根据 content_format 选择存储位置）
+    content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    content_text: str | None = Field(default=None, sa_column=Column(Text))
+
+    # Agent 执行报告
+    execution_report: str | None = Field(default=None, sa_column=Column(Text))
+
+    # 状态
     status: str = Field(default="pending", max_length=50)
-    error: str | None = Field(default=None, sa_column=Column(Text))
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
-
-
-class ResourceReading(SQLModel, table=True):
-    """延伸阅读资源子表"""
-    __tablename__ = "resource_readings"
-
-    id: int | None = Field(default=None, primary_key=True)
-    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
-    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
-    content: str | None = Field(default=None, sa_column=Column(Text))  # 阅读列表内容（JSON或文本）
-    status: str = Field(default="pending", max_length=50)
-    error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-
-
-class ResourceCode(SQLModel, table=True):
-    """代码实操资源子表"""
-    __tablename__ = "resource_codes"
-
-    id: int | None = Field(default=None, primary_key=True)
-    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
-    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
-    content: str | None = Field(default=None, sa_column=Column(Text))  # 分步讲解内容
-    full_code: str | None = Field(default=None, sa_column=Column(Text))  # 完整代码
-    language: str | None = Field(default=None, max_length=50)  # 编程语言
-    status: str = Field(default="pending", max_length=50)
-    error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-
-
-class ResourceMedia(SQLModel, table=True):
-    """多模态资源子表（PPT/图片/视频）"""
-    __tablename__ = "resource_media"
-
-    id: int | None = Field(default=None, primary_key=True)
-    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
-    media_type: str = Field(max_length=20, index=True)  # ppt/image/video
-    file_path: str | None = Field(default=None, max_length=500)  # 文件路径
-    status: str = Field(default="pending", max_length=50)
-    error: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(
+    updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
@@ -383,12 +340,7 @@ REGISTERED_MODELS = (
     UserProfile,
     UserProfileHistory,
     GeneratedResource,
-    ResourceMindmap,
-    ResourceContent,
-    ResourceQuiz,
-    ResourceReading,
-    ResourceCode,
-    ResourceMedia,
+    GeneratedResourceItem,
     LearningEvent,
     User,
 )

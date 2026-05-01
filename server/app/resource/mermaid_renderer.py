@@ -170,6 +170,7 @@ class MermaidRenderer:
 
             # 等待 Mermaid 渲染完成
             await page.wait_for_selector(".mermaid[data-processed='true']", timeout=10000)
+            await assert_no_mermaid_error(page)
 
             # 获取渲染后的 SVG 元素
             svg_element = await page.query_selector("#container svg")
@@ -240,7 +241,11 @@ class MermaidRenderer:
             try:
                 await page.wait_for_selector(".mermaid[data-processed='true']", timeout=10000)
             except Exception:
-                pass  # Ignore if no mermaid is found
+                if await page.query_selector(".mermaid"):
+                    raise RuntimeError("Mermaid 渲染超时，未完成语法解析")
+            await assert_no_mermaid_error(page)
+            if await page.query_selector(".mermaid") and await page.query_selector(".mermaid svg") is None:
+                raise RuntimeError("Mermaid 渲染失败，未找到 SVG 元素")
 
             # 稍微等待确保样式和字体完全应用
             await page.wait_for_timeout(500)
@@ -318,6 +323,7 @@ class MermaidRenderer:
 
             await page.set_content(html_content, wait_until="networkidle")
             await page.wait_for_selector(".mermaid[data-processed='true']", timeout=10000)
+            await assert_no_mermaid_error(page)
 
             svg_element = await page.query_selector("#container svg")
             if svg_element is None:
@@ -343,6 +349,27 @@ class MermaidRenderer:
             await self._playwright.stop()
             self._playwright = None
         logger.info("[MermaidRenderer] 浏览器已关闭")
+
+
+async def assert_no_mermaid_error(page: Any) -> None:
+    """Raise when Mermaid rendered an in-page syntax error instead of a diagram."""
+    error_text = await page.evaluate(
+        """() => {
+          const candidates = [
+            document.querySelector('[id^="dmermaid-error"]'),
+            document.querySelector('.error-text'),
+            document.querySelector('.mermaid .error-icon')?.closest('svg'),
+          ].filter(Boolean);
+          const text = candidates.map((el) => el.innerText || el.textContent || '').join('\\n').trim();
+          if (text) return text;
+          const bodyText = document.body?.innerText || document.body?.textContent || '';
+          return /syntax error in text|parse error|lexical error/i.test(bodyText) ? bodyText : null;
+        }"""
+    )
+    if not error_text:
+        return
+    compact = " ".join(str(error_text).split())
+    raise RuntimeError(f"Mermaid 语法错误: {compact[:500]}")
 
 
 async def render_mermaid_to_png(

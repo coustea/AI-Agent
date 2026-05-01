@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
-os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
+os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
@@ -107,31 +107,13 @@ def test_diagram_generate_node_skips_when_disabled():
 
 def test_diagram_generate_node_generates_sequence_when_requested():
     from app.chat.agent import TutorAgent
-    from app.chat.schemas import DiagramDecision, SequenceDiagram
+    from app.chat.schemas import DiagramDecision
 
     tutor = TutorAgent.__new__(TutorAgent)
     tutor.llm_manager = FakeLlmManager(
         [
             DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
-            {
-                "type": "sequence",
-                "title": "TCP三次握手",
-                "summary": "展示连接建立过程",
-                "spec": {
-                    "actors": [
-                        {"id": "client", "label": "客户端", "description": "发起连接"},
-                        {"id": "server", "label": "服务器", "description": "接受连接"},
-                    ],
-                    "messages": [
-                        {
-                            "from": "client",
-                            "to": "server",
-                            "label": "SYN",
-                            "description": "请求建立连接",
-                        }
-                    ],
-                },
-            },
+            "sequenceDiagram\n    participant client as 客户端\n    participant server as 服务器\n    client->>server: SYN",
         ]
     )
     tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
@@ -148,18 +130,16 @@ def test_diagram_generate_node_generates_sequence_when_requested():
 
     result = asyncio.run(tutor._diagram_generate_node(state))
 
-    assert SequenceDiagram is not None
-    assert tutor.llm_manager.calls[0]["model_type"] == "deepseek"
+    assert tutor.llm_manager.calls[0]["model_type"] == "spark"
     assert tutor.llm_manager.calls[0]["structured_kwargs"]["strict"] is True
-    assert tutor.llm_manager.calls[1]["structured_kwargs"]["strict"] is True
+    assert "structured_kwargs" not in tutor.llm_manager.calls[1]
     assert result["diagram"]["type"] == "sequence"
-    assert result["diagram"]["spec"]["messages"][0]["from"] == "client"
     assert result["diagram"]["render"]["engine"] == "mermaid"
     assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
     assert "client->>server: SYN" in result["diagram"]["render"]["source"]
 
 
-def test_diagram_generate_node_normalizes_hierarchy_nodes_payload():
+def test_diagram_generate_node_accepts_mermaid_fenced_output():
     from app.chat.agent import TutorAgent
     from app.chat.schemas import DiagramDecision
 
@@ -167,27 +147,7 @@ def test_diagram_generate_node_normalizes_hierarchy_nodes_payload():
     tutor.llm_manager = FakeLlmManager(
         [
             DiagramDecision(need_diagram=True, diagram_type="hierarchy", reason="适合层级图"),
-            RuntimeError("strict tool validation failed"),
-            {
-                "type": "hierarchy",
-                "title": "计算机网络",
-                "summary": "展示核心知识结构",
-                "nodes": [
-                    {
-                        "id": "root",
-                        "label": "计算机网络",
-                        "description": "核心主题",
-                        "children": [
-                            {
-                                "id": "tcpip",
-                                "label": "TCP/IP",
-                                "description": "协议体系",
-                                "children": [],
-                            }
-                        ],
-                    }
-                ],
-            },
+            "```mermaid\ngraph TD\n    root[计算机网络] --> tcpip[TCP/IP]\n```",
         ]
     )
     tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
@@ -205,8 +165,7 @@ def test_diagram_generate_node_normalizes_hierarchy_nodes_payload():
     result = asyncio.run(tutor._diagram_generate_node(state))
 
     assert result["diagram"]["type"] == "hierarchy"
-    assert result["diagram"]["spec"]["root"]["id"] == "root"
-    assert result["diagram"]["spec"]["root"]["children"][0]["id"] == "tcpip"
+    assert result["diagram"]["render"]["source"] == "graph TD\n    root[计算机网络] --> tcpip[TCP/IP]"
 
 
 def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
@@ -217,25 +176,7 @@ def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
     tutor.llm_manager = FakeLlmManager(
         [
             DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
-            {
-                "type": "sequence",
-                "title": "TCP三次握手",
-                "summary": "展示连接建立过程",
-                "spec": {
-                    "actors": [
-                        {"id": "client", "label": "客户端", "description": "发起连接"},
-                        {"id": "server", "label": "服务器", "description": "接受连接"},
-                    ],
-                    "messages": [
-                        {
-                            "from": "client",
-                            "to": "server",
-                            "label": "SYN",
-                            "description": "请求建立连接",
-                        }
-                    ],
-                },
-            },
+            "sequenceDiagram\n    client->>server: SYN",
         ]
     )
     tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
@@ -258,7 +199,7 @@ def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
     assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
 
 
-def test_diagram_generate_node_normalizes_sequence_message_lengths():
+def test_diagram_generate_node_keeps_llm_authored_mermaid_sequence():
     from app.chat.agent import TutorAgent
     from app.chat.schemas import DiagramDecision
 
@@ -266,38 +207,12 @@ def test_diagram_generate_node_normalizes_sequence_message_lengths():
     tutor.llm_manager = FakeLlmManager(
         [
             DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
-            RuntimeError("strict tool validation failed"),
-            {
-                "type": "sequence",
-                "title": "TCP三次握手",
-                "summary": "展示连接建立过程",
-                "spec": {
-                    "actors": [
-                        {"id": "client", "label": "客户端", "description": "发起连接"},
-                        {"id": "server", "label": "服务器", "description": "接受连接"},
-                    ],
-                    "messages": [
-                        {
-                            "from": "client",
-                            "to": "server",
-                            "label": "SYN (seq=x, flags=open)",
-                            "description": "客户端发送 SYN 报文，请求建立连接。",
-                        },
-                        {
-                            "from": "server",
-                            "to": "client",
-                            "label": "SYN+ACK (seq=y, ack=x+1)",
-                            "description": "服务器收到 SYN 后，返回 SYN+ACK，同时确认客户端初始序列号。",
-                        },
-                        {
-                            "from": "client",
-                            "to": "server",
-                            "label": "ACK (ack=y+1, established)",
-                            "description": "客户端发送 ACK，连接建立完成。",
-                        },
-                    ],
-                },
-            },
+            "sequenceDiagram\n"
+            "    participant client as 客户端\n"
+            "    participant server as 服务端\n"
+            "    client->>server: SYN seq=x 请求建立连接\n"
+            "    server->>client: SYN ACK seq=y ack=x+1\n"
+            "    client->>server: ACK ack=y+1 连接建立",
         ]
     )
     tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
@@ -315,10 +230,10 @@ def test_diagram_generate_node_normalizes_sequence_message_lengths():
     result = asyncio.run(tutor._diagram_generate_node(state))
 
     assert result["diagram"]["type"] == "sequence"
-    messages = result["diagram"]["spec"]["messages"]
-    assert len(messages[0]["label"]) <= 16
-    assert len(messages[1]["label"]) <= 16
-    assert len(messages[2]["label"]) <= 16
+    source = result["diagram"]["render"]["source"]
+    assert "SYN seq=x 请求建立连接" in source
+    assert "SYN ACK seq=y ack=x+1" in source
+    assert "ACK ack=y+1 连接建立" in source
 
 
 def test_decide_diagram_returns_none_when_user_requested_diagram_without_valid_type():
@@ -373,7 +288,7 @@ def test_diagram_generate_node_returns_none_when_tool_choice_is_unsupported():
     from app.chat.agent import TutorAgent
 
     tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager([RuntimeError("deepseek-reasoner does not support this tool_choice")])
+    tutor.llm_manager = FakeLlmManager([RuntimeError("spark does not support this tool_choice")])
     tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
 
     state = {
