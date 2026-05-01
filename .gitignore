@@ -52,3 +52,6 @@ server/tests/
 server/GEMINI.md
 server/mindmap.zip
 server/test_pdf_md.py
+
+# Worktrees
+.worktrees/
