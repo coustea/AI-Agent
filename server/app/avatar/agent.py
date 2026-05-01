@@ -21,7 +21,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from app.chat.diagram_render import build_mermaid_render
+from app.shared.diagram_render import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 from app.chat.utils import load_prompts, truncate
 from app.infra.logging import get_logger

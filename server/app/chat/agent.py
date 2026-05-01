@@ -20,7 +20,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
-from app.chat.diagram_render import build_mermaid_render
+from app.shared.diagram_render import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision, TutorState
 from app.shared.json_utils import parse_first_json_object
 from app.shared.request_context import runtime_context as chat_runtime_context

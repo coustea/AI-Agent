@@ -41,7 +41,7 @@ from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
 from app.resource.worker_agents.utils import generate_execution_report
-from app.chat.diagram_render import build_mermaid_render
+from app.shared.diagram_render import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 
 logger = get_logger(__name__)
