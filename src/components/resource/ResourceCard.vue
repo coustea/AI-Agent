@@ -41,7 +41,7 @@
         </div>
         <div class="ppt-titles" v-if="pptSlideTitles.length > 0">
           <div v-for="(title, idx) in pptSlideTitles.slice(0, 5)" :key="idx" class="ppt-title-item">
-            <span class="ppt-title-num">{{ idx + 1 }}</span>
+            <span class="ppt-title-num">{{ Number(idx) + 1 }}</span>
             <span class="ppt-title-text">{{ title }}</span>
           </div>
           <div v-if="pptSlideTitles.length > 5" class="ppt-title-more">
@@ -133,9 +133,10 @@ const imageUrl = computed(() => {
   return props.resultData.image_url || props.resultData.url || ''
 })
 
-const pptSlideCount = computed(() => {
+const pptSlideCount = computed<number>(() => {
   if (props.agentId !== 'ppt' || !props.resultData) return 0
-  return props.resultData.slide_count || 0
+  const count = props.resultData.slide_count
+  return typeof count === 'number' ? count : parseInt(String(count)) || 0
 })
 
 const pptSlideTitles = computed(() => {
