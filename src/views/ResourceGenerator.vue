@@ -7,7 +7,7 @@
         <p class="panel-subtitle">由多智能体协同，为您量身定制学习包</p>
       </div>
 
-      <div class="dynamic-summary-box">
+      <div class="dynamic-summary-box" aria-live="polite">
         <el-icon class="summary-icon"><Opportunity /></el-icon>
         <span v-if="!taskInput.course || !taskInput.topic" class="summary-text placeholder">
           请先填写课程和主题，我将为您实时生成任务摘要...
@@ -23,22 +23,22 @@
           
           <div class="form-row">
             <div class="form-item">
-              <label>所属课程 <span class="req">*</span></label>
-              <el-input v-model="taskInput.course" placeholder="如：计算机网络" />
+              <label for="course-input">所属课程 <span class="req">*</span></label>
+              <el-input id="course-input" v-model="taskInput.course" placeholder="如：计算机网络" />
             </div>
             <div class="form-item">
-              <label>所属章节</label>
-              <el-input v-model="taskInput.chapter" placeholder="如：传输层" />
+              <label for="chapter-input">所属章节</label>
+              <el-input id="chapter-input" v-model="taskInput.chapter" placeholder="如：传输层" />
             </div>
           </div>
 
           <div class="form-item">
-            <label>学习主题 <span class="req">*</span></label>
-            <el-input v-model="taskInput.topic" placeholder="如：TCP 三次握手" />
+            <label for="topic-input">学习主题 <span class="req">*</span></label>
+            <el-input id="topic-input" v-model="taskInput.topic" placeholder="如：TCP 三次握手" />
           </div>
 
           <div class="form-item">
-            <label>知识短板 <span class="sub-label">(输入后回车添加)</span></label>
+            <label for="weak-points-input">知识短板 <span class="sub-label">(输入后回车添加)</span></label>
             <div class="tags-input-container">
               <el-tag
                 v-for="(tag, index) in taskInput.weak_points"
@@ -50,9 +50,10 @@
                 {{ tag }}
               </el-tag>
               <el-input
+                id="weak-points-input"
                 v-model="weakPointInputValue"
                 class="weak-input"
-                placeholder="如：记不住状态流转过程..."
+                placeholder="如：记不住状态流转过程…"
                 @keyup.enter="addWeakPoint"
                 @blur="addWeakPoint"
               />
@@ -60,15 +61,15 @@
           </div>
 
           <div class="form-item">
-            <label>学习目标</label>
-            <el-select v-model="taskInput.learning_goal" class="w-full">
+            <label for="learning-goal-select">学习目标</label>
+            <el-select id="learning-goal-select" v-model="taskInput.learning_goal" class="w-full">
               <el-option v-for="opt in learningGoals" :key="opt.value" :label="opt.label" :value="opt.value" />
             </el-select>
           </div>
 
           <div class="form-item">
-            <label>补充要求</label>
-            <el-input v-model="taskInput.extra_requirement" type="textarea" :rows="2" placeholder="如：尽量多用生活中的例子解释..." />
+            <label for="extra-req-input">补充要求</label>
+            <el-input id="extra-req-input" v-model="taskInput.extra_requirement" type="textarea" :rows="2" placeholder="如：尽量多用生活中的例子解释…" />
           </div>
         </div>
 
@@ -77,14 +78,14 @@
           
           <div class="form-row">
             <div class="form-item">
-              <label>当前水平</label>
-              <el-select v-model="personalization.current_level">
+              <label for="current-level-select">当前水平</label>
+              <el-select id="current-level-select" v-model="personalization.current_level">
                 <el-option v-for="opt in currentLevels" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </div>
             <div class="form-item">
-              <label>目标水平</label>
-              <el-select v-model="personalization.target_level">
+              <label for="target-level-select">目标水平</label>
+              <el-select id="target-level-select" v-model="personalization.target_level">
                 <el-option v-for="opt in targetLevels" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </div>
@@ -92,14 +93,14 @@
 
           <div class="form-row">
             <div class="form-item">
-              <label>讲解风格</label>
-              <el-select v-model="personalization.explanation_style">
+              <label for="style-select">讲解风格</label>
+              <el-select id="style-select" v-model="personalization.explanation_style">
                 <el-option v-for="opt in explanationStyles" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </div>
             <div class="form-item">
-              <label>内容深度</label>
-              <el-select v-model="personalization.content_depth">
+              <label for="depth-select">内容深度</label>
+              <el-select id="depth-select" v-model="personalization.content_depth">
                 <el-option v-for="opt in contentDepths" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </div>
@@ -107,14 +108,14 @@
 
           <div class="form-row">
             <div class="form-item">
-              <label>示例偏好</label>
-              <el-select v-model="personalization.example_preference">
+              <label for="example-select">示例偏好</label>
+              <el-select id="example-select" v-model="personalization.example_preference">
                 <el-option v-for="opt in examplePreferences" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </div>
             <div class="form-item">
-              <label>输出语言</label>
-              <el-select v-model="personalization.output_language">
+              <label for="lang-select">输出语言</label>
+              <el-select id="lang-select" v-model="personalization.output_language">
                 <el-option v-for="opt in outputLanguages" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </div>
@@ -179,7 +180,7 @@
             <div class="node-icon"><el-icon><Guide /></el-icon></div>
             <div class="node-info">
               <span class="n-name">Coordinator Agent</span>
-              <span class="n-status">{{ getActionText('coordinator', workflow.states.coordinator, workflow.messages.coordinator) }}</span>
+              <span class="n-status">{{ getActionText(workflow.states.coordinator, workflow.messages.coordinator) }}</span>
             </div>
             <div class="node-badge" v-if="workflow.states.coordinator !== 'idle'">
               <el-icon v-if="workflow.states.coordinator === 'running'" class="is-loading"><Loading /></el-icon>
@@ -200,7 +201,7 @@
             <div class="node-icon"><el-icon><component :is="getAgentMeta(agentId).icon" /></el-icon></div>
             <div class="node-info">
               <span class="n-name">{{ getAgentMeta(agentId).name }}</span>
-              <span class="n-status">{{ getActionText(agentId, workflow.states[agentId], workflow.messages[agentId]) }}</span>
+              <span class="n-status">{{ getActionText(workflow.states[agentId], workflow.messages[agentId]) }}</span>
             </div>
             <div class="node-badge" v-if="(workflow.states[agentId] || 'idle') !== 'idle'">
                <el-icon v-if="workflow.states[agentId] === 'running'" class="is-loading"><Loading /></el-icon>
@@ -217,7 +218,7 @@
             <div class="node-icon"><el-icon><View /></el-icon></div>
             <div class="node-info">
               <span class="n-name">Reviewer Agent</span>
-              <span class="n-status">{{ getActionText('reviewer', workflow.states.reviewer, workflow.messages.reviewer) }}</span>
+              <span class="n-status">{{ getActionText(workflow.states.reviewer, workflow.messages.reviewer) }}</span>
             </div>
             <div class="node-badge" v-if="workflow.states.reviewer !== 'idle'">
               <el-icon v-if="workflow.states.reviewer === 'running'" class="is-loading"><Loading /></el-icon>
@@ -233,7 +234,7 @@
             <div class="node-icon"><el-icon><Box /></el-icon></div>
             <div class="node-info">
               <span class="n-name">Assembler Agent</span>
-              <span class="n-status">{{ getActionText('assembler', workflow.states.assembler, workflow.messages.assembler) }}</span>
+              <span class="n-status">{{ getActionText(workflow.states.assembler, workflow.messages.assembler) }}</span>
             </div>
             <div class="node-badge" v-if="workflow.states.assembler !== 'idle'">
               <el-icon v-if="workflow.states.assembler === 'running'" class="is-loading"><Loading /></el-icon>
@@ -497,6 +498,7 @@
     <el-dialog v-model="previewVisible" :title="previewData?.title || '预览'" width="78%" top="8vh">
       <div v-if="previewData" class="preview-dialog-body">
         <MindmapResourceView v-if="previewData.type === 'mindmap'" :result-data="previewData.content" />
+        <DiagramResourceView v-else-if="previewData.type === 'diagram'" :result-data="previewData.content" />
         <QuizResourceView v-else-if="previewData.type === 'quiz'" :result-data="previewData.content" />
         <MarkdownResourceView v-else :result-data="previewData.content" />
       </div>
@@ -517,11 +519,11 @@ import {
 import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
 import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
 import QuizResourceView from '@/components/resource/QuizResourceView.vue'
+import DiagramResourceView from '@/components/resource/DiagramResourceView.vue'
 
-import { generateResources, type ResourceGenerateRequest } from '@/api/resource'
+import { generateResources, type ResourceGenerationRequest, type ResourceGenerateEvent, type CurrentLevel, type TargetLevel, type ExplanationStyle, type ContentDepth, type ExamplePreference, type OutputLanguage, type ContentAgentConfig, type MindmapAgentConfig, type DiagramAgentConfig, type QuizAgentConfig, type ReadingAgentConfig, type CodeAgentConfig, type LearningGoal } from '@/api/resource'
 
 // ===================== 1. TypeScript 数据结构定义 =====================
-type ResourceAgentId = 'content' | 'mindmap' | 'diagram' | 'quiz' | 'reading' | 'code' | string;
 type AgentStatus = 'idle' | 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 
 const agentMetaList = [
@@ -599,11 +601,18 @@ const getOptionLabel = (options: any[], val: string) => {
 
 // ===================== 2. 表单与状态管理 =====================
 
-const taskInput = reactive({
+const taskInput = reactive<{
+  course: string
+  chapter: string
+  topic: string
+  weak_points: string[]
+  learning_goal: LearningGoal
+  extra_requirement: string
+}>({
   course: '',
   chapter: '',
   topic: '',
-  weak_points: [] as string[],
+  weak_points: [],
   learning_goal: 'review',
   extra_requirement: ''
 })
@@ -620,7 +629,14 @@ const removeWeakPoint = (idx: number) => {
   taskInput.weak_points.splice(idx, 1)
 }
 
-const personalization = reactive({
+const personalization = reactive<{
+  current_level: CurrentLevel
+  target_level: TargetLevel
+  explanation_style: ExplanationStyle
+  content_depth: ContentDepth
+  example_preference: ExamplePreference
+  output_language: OutputLanguage
+}>({
   current_level: 'normal',
   target_level: 'solve_problem',
   explanation_style: 'easy',
@@ -633,9 +649,16 @@ const selectedAgents = reactive<Record<string, boolean>>({
   content: true, mindmap: true, diagram: true, quiz: true, reading: false, code: false
 })
 
-const agentConfigs = reactive({
+const agentConfigs = reactive<{
+  content: ContentAgentConfig
+  mindmap: MindmapAgentConfig
+  diagram: DiagramAgentConfig
+  quiz: QuizAgentConfig
+  reading: ReadingAgentConfig
+  code: CodeAgentConfig
+}>({
   content: { structure: 'progressive', include_summary: true, include_key_points: true, include_common_mistakes: true, include_memory_tips: false, include_examples: true },
-  mindmap: { map_type: 'knowledge_tree', max_depth: 3, focus_on_weak_points: true, include_exam_points: true, include_common_mistakes: false, output_format: 'mermaid' },
+  mindmap: { map_type: 'knowledge_tree', max_depth: 3, focus_on_weak_points: true, include_exam_points: true, include_common_mistakes: false, output_format: 'markdown' },
   diagram: { diagram_type: 'auto', render_format: 'mermaid', visual_style: 'minimal', include_explanation: true, highlight_weak_points: true },
   quiz: { question_count: 5, question_types: ['choice', 'multiple_choice'], difficulty_mode: 'adaptive', focus_on_weak_points: true, include_answer: true, include_analysis: true, include_wrong_reason: true, include_knowledge_tags: false },
   reading: { reading_depth: 'course_extended', source_types: ['article', 'documentation'], max_items: 3, include_reason: true, include_reading_order: false },
@@ -644,7 +667,7 @@ const agentConfigs = reactive({
 
 const getAgentDynamicSummary = (agentId: string) => {
   if (agentId === 'content') return `采用「${getOptionLabel(explanationStyles, personalization.explanation_style)}」风格，${agentConfigs.content.structure}结构。`
-  if (agentId === 'mindmap') return `生成深度为 ${agentConfigs.mindmap.max_depth} 的${getOptionLabel([{value:'knowledge_tree',label:'知识树'},{value:'exam_map',label:'考点图'}], agentConfigs.mindmap.map_type) || '导图'}。`
+  if (agentId === 'mindmap') return `生成深度为 ${agentConfigs.mindmap.max_depth} 的${getOptionLabel([{value:'knowledge_tree',label:'知识树'},{value:'exam_map',label:'考点图'}], agentConfigs.mindmap.map_type || 'knowledge_tree') || '导图'}。`
   if (agentId === 'diagram') return `自动绘制${agentConfigs.diagram.diagram_type === 'auto' ? '最佳匹配' : agentConfigs.diagram.diagram_type}图解。`
   if (agentId === 'quiz') return `生成 ${agentConfigs.quiz.question_count} 道${agentConfigs.quiz.difficulty_mode === 'adaptive' ? '自适应' : ''}题，针对薄弱点训练。`
   if (agentId === 'reading') return `精选 ${agentConfigs.reading.max_items} 篇推荐阅读材料。`
@@ -664,7 +687,6 @@ const openAgentConfig = (agentId: string) => {
 
 const isGenerating = ref(false)
 const rightTab = ref('resources')
-let abortController: AbortController | null = null
 
 const workflow = reactive({
   globalStatus: 'idle' as 'idle' | 'running' | 'success' | 'failed',
@@ -711,9 +733,9 @@ const getGlobalStatusText = () => {
   if (workflow.globalStatus === 'failed') return '生成中断'
 }
 
-const getActionText = (agentId: string, status: AgentStatus, msg: string) => {
+const getActionText = (status: AgentStatus | undefined, msg: string | undefined) => {
   if (msg) return msg
-  if (status === 'idle') return '等待分配任务'
+  if (!status || status === 'idle') return '等待分配任务'
   if (status === 'pending') return '准备就绪'
   if (status === 'running') return '正在执行...'
   if (status === 'success') return '执行完毕'
@@ -746,84 +768,109 @@ const startGeneration = () => {
     workflow.states[id] = 'pending'
   })
 
-  // 构造新的 Request 格式
-  const reqPayload: any = { // 使用 any 以兼容原有 API 类型签名，内部结构为新的 ResourceGenerationRequest
-    task: { ...taskInput },
-    personalization: { ...personalization },
-    selected_agents: Object.keys(selectedAgents).map(id => ({ agent_id: id, enabled: selectedAgents[id], priority: 1 })),
-    agent_configs: { ...agentConfigs },
+  // 构造新版请求格式
+  const reqPayload: ResourceGenerationRequest = {
+    task: {
+      course: taskInput.course,
+      chapter: taskInput.chapter,
+      topic: taskInput.topic,
+      weak_points: taskInput.weak_points,
+      learning_goal: taskInput.learning_goal,
+      extra_requirement: taskInput.extra_requirement,
+    },
+    personalization: {
+      current_level: personalization.current_level,
+      target_level: personalization.target_level,
+      explanation_style: personalization.explanation_style,
+      content_depth: personalization.content_depth,
+      example_preference: personalization.example_preference,
+      output_language: personalization.output_language,
+    },
+    selected_agents: Object.keys(selectedAgents).map(id => ({
+      agent_id: id as any,
+      enabled: selectedAgents[id],
+      priority: 1,
+    })),
+    agent_configs: {
+      content: agentConfigs.content,
+      mindmap: agentConfigs.mindmap,
+      diagram: agentConfigs.diagram,
+      quiz: agentConfigs.quiz,
+      reading: agentConfigs.reading,
+      code: agentConfigs.code,
+    },
     output_options: {
       output_format: 'json',
       include_study_path: true,
       include_agent_trace: true,
-      include_review_result: true
-    }
+      include_review_result: true,
+    },
   }
 
-  // 兼容老版本的 template_id 与 selected_resources
-  reqPayload.learning_task = { ...taskInput, template_id: 'auto' }
-  reqPayload.selected_resources = enabledAgentIds.value
+  generateResources(
+    reqPayload,
+    (event: ResourceGenerateEvent) => {
+      const { event_type, stage, agent, status, message, progress, payload } = event
 
-  abortController = generateResources(
-    reqPayload as any,
-    (event: any) => {
-      // 兼容老版本 event (workflow/agent_status/artifact_ready/bundle_update)
-      // 和新版 event (event_type: 'workflow' | 'agent' | 'resource' | 'review' | 'bundle')
-      
-      const type = event.event_type || event.type
-      const agent = event.agent
-      const status = event.status
-      const msg = event.message || event.log
-
-      if (event.progress) {
-        workflow.progress = event.progress
+      // 更新进度
+      if (progress !== undefined) {
+        workflow.progress = progress
       }
 
       // Workflow 层级的更新
-      if (type === 'workflow') {
-        workflow.states.coordinator = 'success'
-        workflow.messages.coordinator = msg || '规划完毕，任务已分发'
-        if (event.stage === 'reviewing') workflow.states.reviewer = 'running'
-        if (event.stage === 'assembling') workflow.states.assembler = 'running'
+      if (event_type === 'workflow') {
+        workflow.states.coordinator = stage === 'planning' ? 'running' : 'success'
+        workflow.messages.coordinator = message || '规划完毕，任务已分发'
+        if (stage === 'reviewing') workflow.states.reviewer = 'running'
+        if (stage === 'assembling') workflow.states.assembler = 'running'
       }
 
       // 智能体状态更新
-      if ((type === 'agent' || type === 'agent_status') && agent) {
+      if (event_type === 'agent' && agent) {
         if (workflow.states[agent] !== undefined) {
           workflow.states[agent] = status || 'running'
-          if (msg) workflow.messages[agent] = msg
+          if (message) workflow.messages[agent] = message
         }
       }
 
       // 资源就绪
-      if ((type === 'resource' || type === 'artifact_ready') && agent) {
+      if (event_type === 'resource' && agent) {
         if (workflow.states[agent] !== undefined) {
           workflow.states[agent] = 'success'
           workflow.messages[agent] = '资源已产出'
         }
-        const artifact = event.payload || event.artifact
-        if (artifact) {
+        const resource = payload?.resource
+        if (resource) {
           generatedResources.value.push({
-            id: Date.now() + '_' + agent,
+            id: resource.id || Date.now() + '_' + agent,
             type: agent,
-            title: artifact.title || getAgentMeta(agent).name,
-            summary: artifact.summary || '',
-            content: artifact
+            title: resource.title || getAgentMeta(agent).name,
+            summary: resource.summary || '',
+            content: resource,
           })
         }
       }
 
       // Review
-      if (type === 'review' && event.payload) {
+      if (event_type === 'review') {
         workflow.states.reviewer = 'success'
-        reviewResult.value = event.payload
+        reviewResult.value = payload?.review_result
       }
 
       // Bundle (包含 study path)
-      if (type === 'bundle' || type === 'bundle_update') {
+      if (event_type === 'bundle') {
         workflow.states.assembler = 'success'
-        if (event.payload?.study_path) {
-          studyPath.value = event.payload.study_path
+        const bundle = payload?.bundle
+        if (bundle?.study_path) {
+          studyPath.value = bundle.study_path
+        }
+      }
+
+      // Error
+      if (event_type === 'error') {
+        if (agent && workflow.states[agent] !== undefined) {
+          workflow.states[agent] = 'failed'
+          workflow.messages[agent] = message
         }
       }
     },
@@ -834,7 +881,7 @@ const startGeneration = () => {
       workflow.states.assembler = 'success'
       ElMessage.success('个性化资源包生成完毕！')
     },
-    (err: any) => {
+    (err: Error) => {
       isGenerating.value = false
       workflow.globalStatus = 'failed'
       ElMessage.error(err.message || '生成过程遇到错误')
@@ -957,7 +1004,7 @@ const startGeneration = () => {
   border-radius: 12px;
   background: #FFFFFF;
   padding: 14px;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
 }
 .agent-config-card.is-disabled {
   border-color: #E2E8F0;
@@ -1020,7 +1067,7 @@ const startGeneration = () => {
   gap: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.02);
   position: relative;
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 .wf-node.system-node { width: 320px; border-width: 2px; }
 
@@ -1083,7 +1130,7 @@ const startGeneration = () => {
 .empty-state { padding-top: 40px; }
 
 .resources-list { display: flex; flex-direction: column; gap: 16px; }
-.result-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px; transition: all 0.2s; }
+.result-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
 .result-card:hover { border-color: #CBD5E1; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
 .res-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .res-icon { color: #4F46E5; font-size: 1.1rem; }
