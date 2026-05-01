@@ -166,156 +166,84 @@
       </div>
     </aside>
 
-    <main class="panel-middle">
-      <div class="board-header">
-        <h3>多智能体协同看板</h3>
-        <span class="status-badge" :class="workflow.globalStatus">{{ getGlobalStatusText() }}</span>
+        <main class="panel-right bento-workspace">
+      <div class="workspace-header">
+        <div class="header-titles">
+          <h2>多智能体协同工作台</h2>
+          <p>实时监控 Agent 执行进度与资源产出</p>
+        </div>
+        <div class="workflow-status" :class="workflow.globalStatus">
+          <span class="status-indicator"></span>
+          {{ getGlobalStatusText() }} ({{ workflow.progress }}%)
+        </div>
       </div>
 
-      <div class="workflow-graph">
-        
-        <div class="wf-node-wrapper">
-          <div class="wf-node system-node" :class="workflow.states.coordinator">
-            <div class="node-icon"><el-icon><Guide /></el-icon></div>
-            <div class="node-info">
-              <span class="n-name">Coordinator Agent</span>
-              <span class="n-status">{{ getActionText('coordinator', workflow.states.coordinator, workflow.messages.coordinator) }}</span>
+      <!-- Activity Timeline (Horizontal) -->
+      <div class="activity-timeline">
+        <div class="timeline-track">
+          <div class="timeline-progress" :style="{ width: workflow.progress + '%' }"></div>
+        </div>
+        <div class="timeline-steps">
+           <div class="step-label" :class="{ active: workflow.states.coordinator !== 'idle' }">规划编排</div>
+           <div class="step-label" :class="{ active: isAnyResourceDone }">资源生成</div>
+           <div class="step-label" :class="{ active: workflow.states.reviewer === 'success' }">质量审查</div>
+           <div class="step-label" :class="{ active: workflow.states.assembler === 'success' }">资源组装</div>
+        </div>
+        <div class="current-log" v-if="workflow.globalStatus === 'running'">
+          <el-icon class="is-loading"><Loading /></el-icon> {{ latestActivityLog }}
+        </div>
+      </div>
+
+      <!-- Bento Grid Area -->
+      <div class="bento-grid">
+        <!-- We will render a tile for every enabled agent -->
+        <div 
+          v-for="agentId in enabledAgentIds" 
+          :key="agentId"
+          class="bento-tile"
+          :class="[agentId, workflow.states[agentId] || 'idle']"
+          @click="openResourcePreview(agentId)"
+        >
+          <div class="tile-header">
+            <div class="tile-title">
+              <el-icon><component :is="getAgentMeta(agentId).icon" /></el-icon>
+              <span>{{ getAgentMeta(agentId).name }}</span>
             </div>
-            <div class="node-badge" v-if="workflow.states.coordinator !== 'idle'">
-              <el-icon v-if="workflow.states.coordinator === 'running'" class="is-loading"><Loading /></el-icon>
-              <el-icon v-else-if="workflow.states.coordinator === 'success'"><Select /></el-icon>
+            <div class="tile-status" :class="workflow.states[agentId] || 'idle'">
+              <el-icon v-if="workflow.states[agentId] === 'running'" class="is-loading"><Loading /></el-icon>
+              <el-icon v-else-if="workflow.states[agentId] === 'success'"><Select /></el-icon>
+              <el-icon v-else-if="workflow.states[agentId] === 'failed'"><Close /></el-icon>
+              <span v-else class="pending-dot"></span>
+            </div>
+          </div>
+          
+          <div class="tile-content">
+            <!-- State: Idle/Pending -->
+            <div v-if="(workflow.states[agentId] || 'idle') === 'idle' || workflow.states[agentId] === 'pending'" class="state-empty">
+              等待前置依赖...
+            </div>
+            <!-- State: Running -->
+            <div v-else-if="workflow.states[agentId] === 'running'" class="state-running">
+               <div class="pulse-skeleton"></div>
+               <div class="pulse-skeleton short"></div>
+               <p class="run-msg">{{ workflow.messages[agentId] }}</p>
+            </div>
+            <!-- State: Failed -->
+            <div v-else-if="workflow.states[agentId] === 'failed'" class="state-failed">
+               生成失败
+            </div>
+            <!-- State: Success -->
+            <div v-else-if="workflow.states[agentId] === 'success'" class="state-success">
+               <!-- Dynamically render the compact view based on agent type -->
+               <MindmapResourceView v-if="agentId === 'mindmap'" :result-data="getResourceData(agentId)" compact />
+               <DiagramResourceView v-else-if="agentId === 'diagram'" :result-data="getResourceData(agentId)" compact />
+               <QuizResourceView v-else-if="agentId === 'quiz'" :result-data="getResourceData(agentId)" compact />
+               <MarkdownResourceView v-else :result-data="getResourceData(agentId)" compact />
             </div>
           </div>
         </div>
-
-        <div class="wf-arrow" :class="{ 'active': workflow.states.coordinator === 'success' || workflow.states.coordinator === 'running' }"></div>
-
-        <div class="wf-agents-row">
-          <div 
-            v-for="agentId in enabledAgentIds" 
-            :key="agentId" 
-            class="wf-node resource-node" 
-            :class="workflow.states[agentId] || 'idle'"
-          >
-            <div class="node-icon"><el-icon><component :is="getAgentMeta(agentId).icon" /></el-icon></div>
-            <div class="node-info">
-              <span class="n-name">{{ getAgentMeta(agentId).name }}</span>
-              <span class="n-status">{{ getActionText(agentId, workflow.states[agentId], workflow.messages[agentId]) }}</span>
-            </div>
-            <div class="node-badge" v-if="(workflow.states[agentId] || 'idle') !== 'idle'">
-               <el-icon v-if="workflow.states[agentId] === 'running'" class="is-loading"><Loading /></el-icon>
-               <el-icon v-else-if="workflow.states[agentId] === 'success'"><Select /></el-icon>
-               <el-icon v-else-if="workflow.states[agentId] === 'failed'"><Close /></el-icon>
-            </div>
-          </div>
-        </div>
-
-        <div class="wf-arrow" :class="{ 'active': isAnyResourceDone }"></div>
-
-        <div class="wf-node-wrapper">
-          <div class="wf-node system-node" :class="workflow.states.reviewer">
-            <div class="node-icon"><el-icon><View /></el-icon></div>
-            <div class="node-info">
-              <span class="n-name">Reviewer Agent</span>
-              <span class="n-status">{{ getActionText('reviewer', workflow.states.reviewer, workflow.messages.reviewer) }}</span>
-            </div>
-            <div class="node-badge" v-if="workflow.states.reviewer !== 'idle'">
-              <el-icon v-if="workflow.states.reviewer === 'running'" class="is-loading"><Loading /></el-icon>
-              <el-icon v-else-if="workflow.states.reviewer === 'success'"><Select /></el-icon>
-            </div>
-          </div>
-        </div>
-
-        <div class="wf-arrow" :class="{ 'active': workflow.states.reviewer === 'success' }"></div>
-
-        <div class="wf-node-wrapper">
-          <div class="wf-node system-node" :class="workflow.states.assembler">
-            <div class="node-icon"><el-icon><Box /></el-icon></div>
-            <div class="node-info">
-              <span class="n-name">Assembler Agent</span>
-              <span class="n-status">{{ getActionText('assembler', workflow.states.assembler, workflow.messages.assembler) }}</span>
-            </div>
-            <div class="node-badge" v-if="workflow.states.assembler !== 'idle'">
-              <el-icon v-if="workflow.states.assembler === 'running'" class="is-loading"><Loading /></el-icon>
-              <el-icon v-else-if="workflow.states.assembler === 'success'"><Select /></el-icon>
-            </div>
-          </div>
-        </div>
-
       </div>
     </main>
-
-    <aside class="panel-right">
-      <div class="panel-header">
-        <h2 class="panel-title">资源包产出</h2>
-        <p class="panel-subtitle">
-          进度: {{ workflow.progress }}%
-        </p>
-      </div>
-
-      <el-tabs v-model="rightTab" class="custom-tabs">
-        <el-tab-pane label="学习资源" name="resources">
-          <div v-if="generatedResources.length === 0" class="empty-state">
-            <el-empty description="资源包生成中或暂无内容" :image-size="80" />
-          </div>
-          <div v-else class="resources-list">
-            <div v-for="res in generatedResources" :key="res.id" class="result-card">
-              <div class="res-header">
-                <el-icon class="res-icon"><component :is="getAgentMeta(res.type).icon" /></el-icon>
-                <span class="res-title">{{ res.title || getAgentMeta(res.type).name }}</span>
-              </div>
-              <div class="res-body">
-                <p class="res-summary">{{ res.summary || '已生成个性化内容，点击查看详情。' }}</p>
-              </div>
-              <div class="res-footer">
-                <el-button size="small" plain @click="handlePreview(res)">查看详情</el-button>
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="学习路径" name="path">
-          <div v-if="!studyPath || studyPath.length === 0" class="empty-state">
-            <el-empty description="等待 Assembler 生成最佳学习路径" :image-size="80" />
-          </div>
-          <div v-else class="study-path-container">
-            <el-steps direction="vertical" :active="studyPath.length">
-              <el-step v-for="step in studyPath" :key="step.order">
-                <template #title>
-                  <span class="step-title">{{ step.title }}</span>
-                </template>
-                <template #description>
-                  <div class="step-desc">
-                    <p>{{ step.reason }}</p>
-                    <span class="step-time" v-if="step.estimated_time">预计: {{ step.estimated_time }} 分钟</span>
-                  </div>
-                </template>
-              </el-step>
-            </el-steps>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="审查报告" name="review">
-          <div v-if="!reviewResult" class="empty-state">
-            <el-empty description="等待 Reviewer 提供审查报告" :image-size="80" />
-          </div>
-          <div v-else class="review-container">
-            <el-alert
-              :title="reviewResult.passed ? '质量审查通过' : '质量审查存在问题'"
-              :type="reviewResult.passed ? 'success' : 'warning'"
-              show-icon
-              :closable="false"
-            />
-            <div class="review-details" v-if="reviewResult.suggestions && reviewResult.suggestions.length">
-              <h4>优化建议：</h4>
-              <ul>
-                <li v-for="(sug, idx) in reviewResult.suggestions" :key="idx">{{ sug }}</li>
-              </ul>
-            </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </aside>
 
     <el-drawer
       v-model="drawerVisible"
@@ -698,7 +626,29 @@ const handlePreview = (res: any) => {
   previewVisible.value = true
 }
 
+
+const latestActivityLog = computed(() => {
+  const runningAgent = enabledAgentIds.value.find(id => workflow.states[id] === 'running')
+  if (runningAgent && workflow.messages[runningAgent]) {
+    return workflow.messages[runningAgent]
+  }
+  return workflow.messages.coordinator || '系统初始化中…'
+})
+
+const getResourceData = (agentId: string) => {
+  const res = generatedResources.value.find(r => r.type === agentId)
+  return res ? res.content : null
+}
+
+const openResourcePreview = (agentId: string) => {
+  const res = generatedResources.value.find(r => r.type === agentId)
+  if (res && workflow.states[agentId] === 'success') {
+    handlePreview(res)
+  }
+}
+
 // ===================== 4. 辅助函数 =====================
+
 
 const canGenerate = computed(() => {
   return taskInput.course.trim() !== '' && taskInput.topic.trim() !== '' && enabledAgentIds.value.length > 0
@@ -984,130 +934,184 @@ const startGeneration = () => {
 .panel-footer { padding: 20px 24px; background: #FFFFFF; border-top: 1px solid #E2E8F0; flex-shrink: 0; }
 .magic-submit-btn { width: 100%; height: 48px; font-size: 1.05rem; font-weight: 700; border-radius: 10px; }
 
-/* ================= 中间：工作流看板 ================= */
-.panel-middle {
-  flex: 1;
-  background: #F8FAFC;
-  padding: 0;
-}
-.board-header { padding: 20px 32px; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; }
-.board-header h3 { margin: 0; font-size: 1.15rem; color: #1E293B; }
-.status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
-.status-badge.idle { background: #E2E8F0; color: #64748B; }
-.status-badge.running { background: #DBEAFE; color: #1D4ED8; }
-.status-badge.success { background: #D1FAE5; color: #047857; }
-.status-badge.failed { background: #FEE2E2; color: #B91C1C; }
 
-.workflow-graph {
-  flex: 1;
-  overflow-y: auto;
-  padding: 40px;
+/* Update Layout */
+.resource-generator-layout {
+  display: flex;
+  height: calc(100vh - 60px);
+  background-color: #F8FAFC;
+  overflow: hidden;
+}
+.panel-left {
+  width: 400px;
+  background: #FFFFFF;
+  border-right: 1px solid #E2E8F0;
+  flex-shrink: 0;
+  z-index: 10;
   display: flex;
   flex-direction: column;
+}
+.bento-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #F1F5F9;
+  overflow: hidden;
+}
+.workspace-header {
+  padding: 20px 32px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.header-titles h2 { margin: 0 0 4px 0; font-size: 1.2rem; color: #1E293B; }
+.header-titles p { margin: 0; font-size: 0.85rem; color: #64748B; }
+
+/* Timeline */
+.activity-timeline {
+  padding: 16px 32px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+}
+.timeline-track {
+  height: 4px;
+  background: #E2E8F0;
+  border-radius: 2px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.timeline-progress {
+  height: 100%;
+  background: #4F46E5;
+  transition: width 0.3s ease;
+}
+.timeline-steps {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #94A3B8;
+  margin-bottom: 8px;
+}
+.step-label.active { color: #4F46E5; font-weight: 600; }
+.current-log {
+  font-size: 0.85rem;
+  color: #3B82F6;
+  display: flex;
   align-items: center;
+  gap: 6px;
+  background: #EFF6FF;
+  padding: 6px 12px;
+  border-radius: 6px;
+  width: fit-content;
 }
 
-.wf-node-wrapper { display: flex; justify-content: center; width: 100%; }
-
-.wf-node {
-  width: 280px;
+/* Bento Grid */
+.bento-grid {
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-auto-rows: minmax(240px, auto);
+  gap: 20px;
+  align-content: start;
+}
+.bento-tile {
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
   border-radius: 16px;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.bento-tile.success:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  border-color: #CBD5E1;
+}
+/* Optional: specific spanning rules for certain agents if you want a true masonry bento look */
+.bento-tile.content { grid-column: span 2; }
+@media (max-width: 1400px) {
+  .bento-tile.content { grid-column: span 1; }
+}
+
+.tile-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #F1F5F9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #FAFAF9;
+}
+.tile-title {
   display: flex;
   align-items: center;
-  gap: 12px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
-  position: relative;
-  transition: all 0.3s ease;
+  gap: 8px;
+  font-weight: 600;
+  color: #334155;
 }
-.wf-node.system-node { width: 320px; border-width: 2px; }
+.tile-title .el-icon { color: #4F46E5; }
+.tile-status { font-size: 1.1rem; }
+.tile-status.running { color: #3B82F6; }
+.tile-status.success { color: #10B981; }
+.tile-status.failed { color: #EF4444; }
+.pending-dot { display: block; width: 8px; height: 8px; background: #CBD5E1; border-radius: 50%; }
 
-/* 状态高亮 */
-.wf-node.running { border-color: #60A5FA; box-shadow: 0 8px 24px rgba(59,130,246,0.12); transform: translateY(-2px); }
-.wf-node.success { border-color: #34D399; }
-.wf-node.failed { border-color: #F87171; }
-.wf-node.pending { border-color: #CBD5E1; opacity: 0.8; }
-
-.node-icon { width: 40px; height: 40px; border-radius: 10px; background: #F1F5F9; color: #64748B; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
-.wf-node.running .node-icon { background: #EFF6FF; color: #3B82F6; }
-.wf-node.success .node-icon { background: #ECFDF5; color: #10B981; }
-
-.node-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.n-name { font-weight: 700; font-size: 0.95rem; color: #1E293B; margin-bottom: 2px; }
-.n-status { font-size: 0.75rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wf-node.running .n-status { color: #2563EB; font-weight: 600; }
-
-.node-badge { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; }
-.node-badge .is-loading { color: #3B82F6; }
-.node-badge .el-icon:not(.is-loading) { color: #10B981; }
-
-.wf-arrow {
-  width: 2px;
-  height: 30px;
-  background: #E2E8F0;
-  margin: 4px 0;
-  position: relative;
-}
-.wf-arrow.active { background: #60A5FA; }
-.wf-arrow::after {
-  content: ''; position: absolute; bottom: -4px; left: -4px;
-  border-width: 5px 5px 0 5px; border-style: solid; border-color: #E2E8F0 transparent transparent transparent;
-}
-.wf-arrow.active::after { border-color: #60A5FA transparent transparent transparent; }
-
-.wf-agents-row {
+.tile-content {
+  flex: 1;
+  padding: 16px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.state-empty, .state-failed {
+  flex: 1;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 20px;
-  max-width: 900px;
-  padding: 10px 0;
+  color: #94A3B8;
+  font-size: 0.9rem;
+}
+.state-failed { color: #EF4444; }
+.state-running {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pulse-skeleton {
+  height: 12px;
+  background: #E2E8F0;
+  border-radius: 4px;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.pulse-skeleton.short { width: 60%; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
+.run-msg {
+  font-size: 0.8rem;
+  color: #64748B;
+  margin-top: auto;
+}
+.state-success {
+  flex: 1;
+  overflow: hidden;
+  animation: fadeIn 0.4s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* ================= 右侧：预览区 ================= */
-.panel-right {
-  width: 400px;
-  background: #FFFFFF;
-  border-left: 1px solid #E2E8F0;
-  flex-shrink: 0;
-  z-index: 10;
-  box-shadow: -2px 0 12px rgba(0,0,0,0.02);
-}
 
-.custom-tabs { display: flex; flex-direction: column; height: 100%; }
-.custom-tabs :deep(.el-tabs__header) { padding: 0 20px; margin-bottom: 0; }
-.custom-tabs :deep(.el-tabs__content) { flex: 1; overflow-y: auto; padding: 20px; background: #F8FAFC; }
-
-.empty-state { padding-top: 40px; }
-
-.resources-list { display: flex; flex-direction: column; gap: 16px; }
-.result-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px; transition: all 0.2s; }
-.result-card:hover { border-color: #CBD5E1; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
-.res-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.res-icon { color: #4F46E5; font-size: 1.1rem; }
-.res-title { font-weight: 700; font-size: 0.95rem; color: #1E293B; }
-.res-summary { font-size: 0.85rem; color: #475569; margin: 0 0 12px 0; line-height: 1.5; }
-
-.study-path-container { padding: 10px 0; }
-.step-title { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
-.step-desc { font-size: 0.85rem; color: #64748B; margin-top: 4px; }
-.step-desc p { margin: 0 0 4px 0; line-height: 1.5; }
-.step-time { display: inline-block; background: #F1F5F9; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; color: #475569; }
-
-.review-container { display: flex; flex-direction: column; gap: 16px; }
-.review-details h4 { margin: 0 0 8px 0; font-size: 0.95rem; color: #1E293B; }
-.review-details ul { margin: 0; padding-left: 20px; color: #475569; font-size: 0.85rem; line-height: 1.6; }
-
-/* ================= Drawer 配置 ================= */
-.drawer-form { display: flex; flex-direction: column; gap: 20px; }
-.checkbox-group { display: flex; flex-direction: column; gap: 8px; background: #F8FAFC; padding: 12px; border-radius: 8px; }
-.checkbox-group :deep(.el-checkbox) { margin-right: 0; height: auto; }
-
-.preview-dialog-body { max-height: 70vh; overflow-y: auto; }
-
-/* 响应式调整 */
 @media (max-width: 1200px) {
   .panel-left { width: 340px; }
   .panel-right { width: 340px; }
