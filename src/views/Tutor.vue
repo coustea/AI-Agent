@@ -137,16 +137,19 @@
       <section class="chat-container">
 
         <div v-if="chatMode === 'digital_human'" class="digital-human-stage">
-          <div class="digital-human-canvas-placeholder">
-            <el-icon class="placeholder-icon"><Avatar /></el-icon>
-            <p>数字人形象预留位</p>
-          </div>
+          <DigitalHumanCanvas
+            :is-ready="isAvatarReady"
+            :is-connected="isAvatarConnected"
+            :audio-enabled="avatarAudioEnabled"
+            ref="canvasRef"
+            @enable-audio="enableAvatarAudio"
+          />
 
-          <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isSpeaking }">
-            <div class="speech-wave" v-if="isAIThinking || isSpeaking">
+          <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking }">
+            <div class="speech-wave" v-if="isAIThinking || isAvatarSpeaking">
               <span></span><span></span><span></span><span></span><span></span>
             </div>
-            <div class="status-badge">{{ (isAIThinking || isSpeaking) ? '正在多模态解答中...' : '倾听就绪' }}</div>
+            <div class="status-badge">{{ (isAIThinking || isAvatarSpeaking) ? '正在多模态解答中...' : '倾听就绪' }}</div>
           </div>
         </div>
 
@@ -542,6 +545,8 @@ import {
   type ChatSession,
 } from '@/api/chat'
 import { getMe } from '@/api/auth'
+import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
+import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
 
 // ==========================================
 // 3. 类型定义
@@ -596,7 +601,6 @@ mermaid.initialize({
 const chatMode = ref('standard')
 const userInput = ref('')
 const isAIThinking = ref(false)
-const isSpeaking = ref(false)
 const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
@@ -610,6 +614,53 @@ const hasToggledMedia = ref(false)
 // --- 语音相关 ---
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
+
+// --- 数字人 composable ---
+const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
+const {
+  isConnected: isAvatarConnected,
+  isAvatarReady,
+  isSpeaking: isAvatarSpeaking,
+  isListening: isVadListening,
+  audioEnabled: avatarAudioEnabled,
+  connect: connectAvatar,
+  disconnect: disconnectAvatar,
+  sendText: sendAvatarText,
+  startVad,
+  stopVad,
+  enableAudio: enableAvatarAudio,
+  setPlayerContainer,
+} = useDigitalHuman({
+  onAssistantChunk: (chunk) => {
+    if (streamingMsgId.value !== null) {
+      enqueueStreamChunk(streamingMsgId.value, chunk)
+    }
+  },
+  onAsrResult: (text) => {
+    // Show ASR result as a user message in the chat
+    if (text.trim()) {
+      messages.value.push({
+        id: Date.now(),
+        role: 'user',
+        content: text,
+        time: now(),
+      })
+      scrollToBottom()
+    }
+  },
+  onError: (msg) => {
+    ElMessage.error({ message: msg, plain: true })
+  },
+  onAvatarReady: () => {
+    // Wire up player container when canvas is mounted
+    nextTick(() => {
+      const container = canvasRef.value?.getContainer()
+      if (container) {
+        setPlayerContainer(container)
+      }
+    })
+  },
+})
 
 // --- 文件上传 ---
 const uploadingFile = ref(false)
@@ -1366,7 +1417,18 @@ const handleVideoToggle = () => {
 // ==========================================
 // 15. 语音相关函数
 // ==========================================
-const handleVoiceToggle = () => {
+const handleVoiceToggle = async () => {
+  if (chatMode.value === 'digital_human') {
+    if (isVadListening.value) {
+      stopVad()
+      isRecording.value = false
+    } else {
+      await startVad()
+      isRecording.value = true
+    }
+    return
+  }
+  // Standard mode: stub
   isRecording.value = !isRecording.value
   if (isRecording.value) {
     ElMessage.success({ message: '开始录音，请说话...', plain: true })
@@ -1375,12 +1437,23 @@ const handleVoiceToggle = () => {
   }
 }
 
-const handleVoiceChatToggle = () => {
+const handleVoiceChatToggle = async () => {
   if (!isVoiceChatting.value) {
     isVoiceChatting.value = true
     chatMode.value = 'digital_human'
+    await connectAvatar()
+    nextTick(() => {
+      const container = canvasRef.value?.getContainer()
+      if (container) {
+        setPlayerContainer(container)
+      }
+    })
+    await startVad()
+    isRecording.value = true
     ElMessage.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
+    stopVad()
+    isRecording.value = false
     isVoiceChatting.value = false
     ElMessage.info({ message: '已关闭语音通话模式', plain: true })
   }
@@ -1495,6 +1568,40 @@ const handleSend = async () => {
   messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
   streamingMsgId.value = aiMsgId
 
+  // --- Digital human mode: send via WebSocket ---
+  if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
+    sendAvatarText({
+      text: text || '请分析附件',
+      image_urls: imageUrls.length > 0 ? imageUrls : undefined,
+      file_urls: fileUrls.length > 0 ? fileUrls : undefined,
+    })
+    // Assistant chunks arrive via onAssistantChunk callback → enqueueStreamChunk
+    // Poll for completion — check when isAvatarSpeaking goes from true to false
+    // Use a simple timeout-based approach: the backend sends assistant chunks then speaks
+    // The isAvatarSpeaking ref in the composable tracks streaming state
+    const checkDone = () => {
+      setTimeout(() => {
+        if (!isAvatarSpeaking.value) {
+          flushPendingStreamText(true)
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (aiMsg) aiMsg.diagramGenerating = false
+          isAIThinking.value = false
+          streamingMsgId.value = null
+          scheduleProfilePoll()
+          if (currentSessionId.value) {
+            void refreshSessionTitleWithRetry(currentSessionId.value)
+          }
+        } else {
+          checkDone()
+        }
+      }, 200)
+    }
+    // Start checking after a small delay to let chunks arrive
+    setTimeout(() => checkDone(), 500)
+    return
+  }
+
+  // --- Standard mode: send via SSE ---
   abortController = streamChat(
       {
         message: text || '请分析附件',
@@ -1517,10 +1624,6 @@ const handleSend = async () => {
         }
         isAIThinking.value = false
         streamingMsgId.value = null
-        isSpeaking.value = chatMode.value === 'digital_human'
-        if (isSpeaking.value) {
-          setTimeout(() => { isSpeaking.value = false }, 3000)
-        }
         scheduleProfilePoll()
         abortController = null
         if (finishedSessionId) {
@@ -1581,11 +1684,19 @@ const handleSend = async () => {
 // ==========================================
 // 17. 监听器
 // ==========================================
-watch(chatMode, (newMode) => {
+watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
     sessionSidebarCollapsed.value = true
+    await connectAvatar()
+    nextTick(() => {
+      const container = canvasRef.value?.getContainer()
+      if (container) {
+        setPlayerContainer(container)
+      }
+    })
   } else if (newMode === 'standard') {
     sessionSidebarCollapsed.value = false
+    disconnectAvatar()
   }
 })
 
@@ -1619,6 +1730,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  disconnectAvatar()
   flushPendingStreamText()
   abortController?.abort()
   profilePollTimers.forEach(t => clearTimeout(t))

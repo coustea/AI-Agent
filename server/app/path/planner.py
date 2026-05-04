@@ -5,7 +5,15 @@ from math import ceil
 from typing import Iterable
 
 from app.path.schemas import Adjustment, PathNode, PathPlan, PathProgress, PathStage
-from app.resource.utils import CORE_AGENTS, ENHANCEMENT_AGENTS, PRESENTATION_AGENTS
+from app.resource.utils import (
+    CORE_AGENTS,
+    STRUCTURE_AGENTS,
+    PRACTICE_AGENTS,
+    EXTENSION_AGENTS,
+)
+
+ENHANCEMENT_AGENTS = STRUCTURE_AGENTS + PRACTICE_AGENTS + EXTENSION_AGENTS
+PRESENTATION_AGENTS: list[str] = []
 
 NODE_TITLES: dict[str, str] = {
     "content": "核心知识讲解",

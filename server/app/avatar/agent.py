@@ -13,6 +13,7 @@ AvatarAgent — 数字人独立 LangGraph 智能体
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
@@ -143,6 +144,7 @@ class AvatarAgent:
         attachment_analysis: dict[str, Any] | None = None,
         need_diagram: bool = False,
         enable_search: bool = False,
+        generate_video: bool = False,
     ):
         """流式生成 — yield 事件字典
 
@@ -405,11 +407,37 @@ class AvatarAgent:
             model_kwargs=self.tool_model_kwargs,
         )
 
-        response = await self.llm_manager.ainvoke_runnable(
-            llm_with_tools,
-            full_messages,
-            model_type="spark",
-        )
+        response = None
+        try:
+            response = await self.llm_manager.ainvoke_runnable(
+                llm_with_tools,
+                full_messages,
+                model_type="spark",
+            )
+        except Exception as exc:
+            # 讯飞 Spark 偶尔返回 tool_calls.args 为 JSON 字符串而非 dict，
+            # 导致 pydantic ValidationError。降级到无工具调用直接回答。
+            exc_name = type(exc).__name__
+            if "Validation" in exc_name or "validation" in str(exc).lower():
+                logger.warning("[AvatarAgent] Spark tool_calls 校验失败，降级直接回答: %s", exc)
+            else:
+                raise
+
+        if response is None:
+            # 降级：Spark tool_calls 校验失败，直接用关键词搜索
+            logger.info("[AvatarAgent] 降级搜索: 直接用 DuckDuckGo 查询")
+            try:
+                search_content = await duckduckgo_search.ainvoke({"query": user_msg})
+                return {"search_result": f"【duckduckgo_search】\n{search_content}"}
+            except Exception:
+                # 搜索也失败，降级到直接回答
+                response = await self.llm_manager.ainvoke(
+                    "spark",
+                    [SystemMessage(content=state["system_prompt"])] + list(messages),
+                    model_kwargs=self.spark_model_kwargs,
+                )
+                text = getattr(response, "content", "")
+                return {"messages": [response], "answer_text": text, "search_result": ""}
 
         # 处理工具调用
         search_result = getattr(response, "content", "")
@@ -420,6 +448,12 @@ class AvatarAgent:
             for tool_call in tool_calls:
                 tool_name = tool_call.get("name", "")
                 tool_args = tool_call.get("args", {})
+                # 兼容讯飞返回 args 为 JSON 字符串的情况
+                if isinstance(tool_args, str):
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except (json.JSONDecodeError, TypeError):
+                        tool_args = {}
                 try:
                     if tool_name == "duckduckgo_search":
                         result = await duckduckgo_search.ainvoke(tool_args)
