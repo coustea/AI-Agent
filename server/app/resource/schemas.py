@@ -342,6 +342,7 @@ class WorkerState(BaseModel):
     layer_index: int = Field(default=0, description="当前层索引")
     upstream_results: dict[str, Any] = Field(default_factory=dict, description="后端生成的上游 Agent 原始结果")
     dependency_reports: dict[str, Any] = Field(default_factory=dict, description="依赖 Agent 交接报告")
+    learning_scenario: str = Field(default="daily_review", description="学习场景")
 
 
 class WorkerResult(BaseModel):

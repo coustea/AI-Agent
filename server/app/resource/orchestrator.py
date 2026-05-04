@@ -51,11 +51,11 @@ logger = get_logger(__name__)
 
 AGENT_DEPENDENCIES: dict[str, list[str]] = {
     "content": [],
-    "mindmap": [],
-    "diagram": [],
-    "quiz": ["content", "code"],
+    "mindmap": ["content"],
+    "diagram": ["content"],
+    "quiz": ["content"],
     "code": [],
-    "reading": [],
+    "reading": ["content"],
 }
 
 # 学习路径默认顺序（按 Layer 0 → Layer 1 → Layer 2 排列）
@@ -639,6 +639,7 @@ class ResourceWorkflow:
             layer_index=layer_index,
             upstream_results=upstream_results,
             dependency_reports=dependency_reports,
+            learning_scenario=request.learning_scenario.value,
         )
 
         result = await worker.run(state)
