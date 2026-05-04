@@ -9,8 +9,7 @@
 ## 输入信息
 
 - Agent 名称：{{agent_name}}
-- 课程主题：{{course}}
-- 知识点：{{gap}}
+- 学习需求：{{learning_need}}
 - 生成内容：{{content}}
 
 ---
@@ -56,8 +55,7 @@
 ### 输入
 
 - Agent 名称: content
-- 课程主题: Python 编程基础
-- 知识点: 变量与数据类型
+- 学习需求: Python 编程基础中的变量与数据类型
 - 生成内容: (一份 2000 字的 Markdown 讲解文档)
 
 ### 输出

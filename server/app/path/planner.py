@@ -5,7 +5,7 @@ from math import ceil
 from typing import Iterable
 
 from app.path.schemas import Adjustment, PathNode, PathPlan, PathProgress, PathStage
-from app.resource.utils import CORE_AGENTS, ENHANCEMENT_AGENTS, PRESENTATION_AGENTS
+from app.resource.utils import CORE_AGENTS, STRUCTURE_AGENTS, PRACTICE_AGENTS, EXTENSION_AGENTS
 
 NODE_TITLES: dict[str, str] = {
     "content": "核心知识讲解",
@@ -20,8 +20,8 @@ NODE_TITLES: dict[str, str] = {
 
 STAGE_NODE_GROUPS: list[tuple[str, str, list[str]]] = [
     ("foundation", "基础阶段", list(CORE_AGENTS)),
-    ("enhancement", "强化阶段", list(ENHANCEMENT_AGENTS)),
-    ("application", "应用阶段", list(PRESENTATION_AGENTS)),
+    ("enhancement", "强化阶段", list(STRUCTURE_AGENTS + PRACTICE_AGENTS + EXTENSION_AGENTS)),
+    ("application", "应用阶段", []),
 ]
 
 

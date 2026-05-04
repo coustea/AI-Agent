@@ -1,4 +1,7 @@
+"""学习效果评估服务 — 记录学习事件并生成评估摘要。"""
+
 from __future__ import annotations
+
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
@@ -15,48 +18,47 @@ from app.evaluation.schemas import (
 from app.infra.logging import get_logger
 from app.infra.models import LearningEvent
 from app.memory import MemoryLayer
-from app.memory.memory_types import MEMORY_TYPE_PREFERENCE, MEMORY_TYPE_WEAKNESS
 
 logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
-class MemoryCandidate:
+class MemoryUpdateSignal:
     content: str
-    memory_type: str
+    dimension: str
 
 
-def derive_memory_candidates(event: LearningEventCreate) -> list[MemoryCandidate]:
-    """Translate high-signal learning events into long-term memory candidates."""
+def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal]:
+    """从学习事件中提取长期记忆更新信号。"""
     topic = event.topic or event.course or "当前主题"
-    candidates: list[MemoryCandidate] = []
+    signals: list[MemoryUpdateSignal] = []
 
     if event.event_type == "quiz_submitted" and event.score is not None and event.score < 65:
-        candidates.append(
-            MemoryCandidate(
+        signals.append(
+            MemoryUpdateSignal(
                 content=f"在「{topic}」练习中得分偏低（{event.score:.0f}分），需要加强针对性巩固。",
-                memory_type=MEMORY_TYPE_WEAKNESS,
+                dimension="weakness_points",
             )
         )
 
     feedback = (event.feedback or "").strip()
     if event.event_type in {"path_feedback", "resource_feedback"} and feedback:
         if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
-            candidates.append(
-                MemoryCandidate(
+            signals.append(
+                MemoryUpdateSignal(
                     content=f"学习「{topic}」时反馈：{feedback}",
-                    memory_type=MEMORY_TYPE_WEAKNESS,
+                    dimension="weakness_points",
                 )
             )
         if any(keyword in feedback for keyword in ("喜欢", "希望", "更想", "图解", "案例", "代码", "视频")):
-            candidates.append(
-                MemoryCandidate(
+            signals.append(
+                MemoryUpdateSignal(
                     content=f"学习资源偏好反馈：{feedback}",
-                    memory_type=MEMORY_TYPE_PREFERENCE,
+                    dimension="interaction_preference",
                 )
             )
 
-    return candidates[:2]
+    return signals[:2]
 
 
 def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummary:
@@ -139,7 +141,6 @@ class EvaluationService:
         await session.commit()
         await session.refresh(event)
         logger.info("[Evaluation] 学习事件已记录: user=%s type=%s event_id=%s", user_id, payload.event_type, event.id)
-        await self._persist_memory_candidates(user_id=user_id, event=event, payload=payload)
         return event
 
     async def get_summary(
@@ -157,25 +158,6 @@ class EvaluationService:
         )
         result = await session.exec(stmt)
         return build_summary_from_events(list(result.all()))
-
-    async def _persist_memory_candidates(
-        self,
-        *,
-        user_id: int,
-        event: LearningEvent,
-        payload: LearningEventCreate,
-    ) -> None:
-        memory_layer = MemoryLayer(module_name="mentor")
-        for candidate in derive_memory_candidates(payload):
-            try:
-                await memory_layer.upsert_long_term_fact(
-                    user_id=user_id,
-                    content_markdown=candidate.content,
-                    memory_type=candidate.memory_type,
-                    session_id=event.session_id,
-                )
-            except Exception:
-                logger.exception("[Evaluation] 学习事件写入长期记忆失败: event_id=%s", event.id)
 
 
 def _to_item(event: LearningEvent) -> LearningEventItem:

@@ -8,15 +8,12 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.infra.logging import get_logger
-from app.resource.registry import get_agent_registry
-from app.resource.schemas import ResourcePlan
-from app.shared.paths import WORKPLACE_DIR, RESOURCE_DIR
+from app.shared.paths import RESOURCE_DIR
 
 logger = get_logger(__name__)
 
@@ -29,35 +26,6 @@ STRUCTURE_AGENTS = ["diagram", "mindmap"]
 PRACTICE_AGENTS = ["code", "quiz"]
 EXTENSION_AGENTS = ["reading"]
 ALL_AGENTS = CORE_AGENTS + STRUCTURE_AGENTS + PRACTICE_AGENTS + EXTENSION_AGENTS
-
-DEFAULT_DEPENDENCIES: dict[str, list[str]] = {
-    "content": [],
-    "mindmap": ["content"],
-    "diagram": ["content"],
-    "quiz": ["content"],
-    "reading": ["content"],
-    "code": ["content"],
-}
-
-DEFAULT_EXECUTION_LAYER: dict[str, int] = {
-    "content": 0,
-    "diagram": 1,
-    "mindmap": 1,
-    "code": 2,
-    "quiz": 2,
-    "reading": 2,
-}
-
-DEFAULT_FAILURE_POLICY: dict[str, str] = {
-    "content": "independent_fail",
-    "diagram": "degraded_run",
-    "mindmap": "degraded_run",
-    "quiz": "degraded_run",
-    "reading": "degraded_run",
-    "code": "degraded_run",
-}
-
-FAILURE_POLICIES = {"independent_fail", "degraded_run", "skip_on_dependency_failed"}
 
 
 # =============================================================================
@@ -107,32 +75,6 @@ def parse_markdown_sections(markdown_text: str | None) -> dict[str, str]:
     return sections
 
 
-def append_context(
-    system_prompt: str,
-    *,
-    state: dict[str, Any],
-    format_user_profile: Callable[[dict[str, Any]], str] | None = None,
-    extract_memory: Callable[[dict[str, Any]], str] | None = None,
-) -> str:
-    """追加用户画像、协作上下文、知识库参考到系统提示。"""
-    profile = state.get("user_profile", {}) or {}
-    if format_user_profile:
-        profile_str = format_user_profile(profile)
-        if profile_str:
-            system_prompt += f"\n\n## [学习者画像]\n{profile_str}"
-
-    shared_memory = state.get("shared_memory", {}) or {}
-    if extract_memory:
-        memory_ctx = extract_memory(shared_memory)
-        if memory_ctx:
-            system_prompt += f"\n\n## [协作上下文]\n{memory_ctx}"
-
-    kb_context = state.get("knowledge_base_context", "")
-    if kb_context:
-        system_prompt += f"\n\n## [知识库参考]\n{kb_context}"
-    return system_prompt
-
-
 # =============================================================================
 # 文件保存与工具加载
 # =============================================================================
@@ -176,335 +118,6 @@ def save_resource_file(
 
     filepath.write_text(content, encoding="utf-8")
     return str(filepath)
-
-
-def save_to_workplace(sub_dir: str, topic: str, content: str, ext: str = "md") -> str:
-    """保存内容到 workplace 目录，返回文件路径。
-
-    已废弃：请使用 save_resource_file 统一保存到 workplace/{user_id}/{resource_id}/
-    """
-    safe_topic = re.sub(r'[\\/*?:"<>|]', "", topic).strip()[:50]
-    if not safe_topic:
-        safe_topic = "untitled"
-
-    target_dir = WORKPLACE_DIR / sub_dir
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    safe_filename = f"{safe_topic}.{ext}"
-    filepath = target_dir / safe_filename
-    filepath.write_text(content, encoding="utf-8")
-    return str(filepath)
-
-
-# =============================================================================
-# 资源计划构建
-# =============================================================================
-
-def expand_dependencies(selected: list[str], dependency_map: dict[str, list[str]]) -> list[str]:
-    """展开资源依赖闭包，并按系统固定顺序输出。
-
-    说明：
-    - 输入是用户显式选择的资源（可能是部分资源）
-    - 输出是"执行集合"：包含 selected 本身 + 所有递归依赖
-    - 顺序按半动态编排既有顺序（core -> structure -> practice -> extension）
-    """
-    if not selected:
-        return []
-
-    closure: set[str] = set()
-    stack = list(selected)
-    while stack:
-        current = stack.pop()
-        if current in closure:
-            continue
-        closure.add(current)
-        stack.extend(dependency_map.get(current, []))
-
-    ordered = [agent for agent in ALL_AGENTS if agent in closure]
-    for agent in selected:
-        if agent in closure and agent not in ordered:
-            ordered.append(agent)
-    return ordered
-
-
-def build_execution_groups(
-    execution_agents: list[str],
-    dependencies: dict[str, list[str]],
-) -> list[list[str]]:
-    """Build dependency-ordered parallel execution groups."""
-    execution_set = set(execution_agents)
-    remaining = list(execution_agents)
-    completed: set[str] = set()
-    groups: list[list[str]] = []
-
-    while remaining:
-        ready = [
-            agent
-            for agent in remaining
-            if all(dep in completed or dep not in execution_set for dep in dependencies.get(agent, []))
-        ]
-        if not ready:
-            logger.warning("[Planning] 依赖图存在环或缺口，剩余 Agent 将作为降级组执行: %s", remaining)
-            ready = list(remaining)
-        min_layer = min(DEFAULT_EXECUTION_LAYER.get(agent, 99) for agent in ready)
-        group = [agent for agent in ready if DEFAULT_EXECUTION_LAYER.get(agent, 99) == min_layer]
-        groups.append(group)
-        completed.update(group)
-        remaining = [agent for agent in remaining if agent not in set(group)]
-
-    return groups
-
-
-def execution_groups_follow_dependencies(
-    groups: list[list[str]],
-    dependencies: dict[str, list[str]],
-) -> bool:
-    """Return whether every dependency appears in an earlier group."""
-    group_index: dict[str, int] = {}
-    for index, group in enumerate(groups):
-        for agent in group:
-            group_index[agent] = index
-
-    for agent, deps in dependencies.items():
-        if agent not in group_index:
-            return False
-        for dep in deps:
-            if dep in group_index and group_index[dep] >= group_index[agent]:
-                return False
-    return True
-
-
-def build_default_resource_plan(
-    task: dict[str, Any],
-    allowed_agents: list[str] | None,
-) -> ResourcePlan:
-    """构建默认资源计划。"""
-    if allowed_agents:
-        requested_agents = [agent for agent in ALL_AGENTS if agent in set(allowed_agents)]
-        execution_agents = expand_dependencies(requested_agents, DEFAULT_DEPENDENCIES)
-        visible_agents = list(requested_agents)
-        hidden_dependency_agents = [agent for agent in execution_agents if agent not in set(visible_agents)]
-    else:
-        requested_agents = list(ALL_AGENTS)
-        execution_agents = list(ALL_AGENTS)
-        visible_agents = list(ALL_AGENTS)
-        hidden_dependency_agents = []
-
-    execution_set = set(execution_agents)
-    logger.info(
-        "[Planning] 构建默认资源计划: course=%r requested=%s execution=%s visible=%s hidden=%s",
-        task.get("course", ""),
-        requested_agents,
-        execution_agents,
-        visible_agents,
-        hidden_dependency_agents,
-    )
-
-    def _params() -> dict[str, Any]:
-        return {
-            "topic": task.get("course", ""),
-            "major": task.get("major", ""),
-            "course": task.get("course", ""),
-            "gap": task.get("gap", ""),
-            "need": task.get("need", "review"),
-            "extra": task.get("extra", ""),
-        }
-
-    dependencies = {
-        agent: [dep for dep in DEFAULT_DEPENDENCIES.get(agent, []) if dep in execution_set]
-        for agent in execution_agents
-    }
-    execution_groups = build_execution_groups(execution_agents, dependencies)
-
-    return ResourcePlan(
-        execution_groups=execution_groups,
-        failure_policy={
-            agent: DEFAULT_FAILURE_POLICY.get(agent, "independent_fail")
-            for agent in execution_agents
-        },
-        core_agents=[agent for agent in CORE_AGENTS if agent in execution_set],
-        enhancement_agents=[agent for agent in STRUCTURE_AGENTS + PRACTICE_AGENTS + EXTENSION_AGENTS if agent in execution_set],
-        presentation_agents=[],
-        requested_agents=requested_agents,
-        execution_agents=execution_agents,
-        visible_agents=visible_agents,
-        hidden_dependency_agents=hidden_dependency_agents,
-        dependencies=dependencies,
-        agent_parameters={agent: _params() for agent in execution_agents},
-    )
-
-
-def normalize_resource_plan(
-    plan: ResourcePlan,
-    allowed_agents: list[str] | None = None,
-) -> ResourcePlan:
-    """Normalize planner output into a safe executable plan."""
-    registry = get_agent_registry()
-    allowed_set = set(allowed_agents or ALL_AGENTS)
-
-    visible_agents: list[str] = []
-    for agent in plan.visible_agents or plan.requested_agents or []:
-        if agent in registry and agent in allowed_set and agent not in visible_agents:
-            visible_agents.append(agent)
-    if not visible_agents:
-        visible_agents = [agent for agent in ALL_AGENTS if agent in allowed_set]
-
-    execution_seed = plan.execution_agents or visible_agents
-    execution_agents = expand_dependencies(
-        [agent for agent in execution_seed if agent in registry and agent in allowed_set],
-        DEFAULT_DEPENDENCIES,
-    )
-    if not execution_agents:
-        execution_agents = expand_dependencies(visible_agents, DEFAULT_DEPENDENCIES)
-
-    execution_set = set(execution_agents)
-    visible_agents = [agent for agent in visible_agents if agent in execution_set]
-    hidden_dependency_agents = [agent for agent in execution_agents if agent not in set(visible_agents)]
-
-    dependencies: dict[str, list[str]] = {}
-    for agent in execution_agents:
-        raw_deps = plan.dependencies.get(agent, DEFAULT_DEPENDENCIES.get(agent, []))
-        dependencies[agent] = [
-            dep
-            for dep in raw_deps
-            if dep in execution_set and dep != agent
-        ]
-
-    groups: list[list[str]] = []
-    seen: set[str] = set()
-    for raw_group in plan.execution_groups:
-        group = [
-            agent
-            for agent in raw_group
-            if agent in execution_set and agent not in seen
-        ]
-        if group:
-            groups.append(group)
-            seen.update(group)
-    missing_agents = [agent for agent in execution_agents if agent not in seen]
-    if missing_agents:
-        generated_groups = build_execution_groups(missing_agents, dependencies)
-        groups.extend(generated_groups)
-    if not groups:
-        groups = build_execution_groups(execution_agents, dependencies)
-    elif not execution_groups_follow_dependencies(groups, dependencies):
-        logger.warning("[Planning] Planner 执行组不满足依赖顺序，将按依赖重建: %s", groups)
-        groups = build_execution_groups(execution_agents, dependencies)
-
-    failure_policy = {}
-    for agent in execution_agents:
-        policy = plan.failure_policy.get(agent) or DEFAULT_FAILURE_POLICY.get(agent, "independent_fail")
-        if policy not in FAILURE_POLICIES:
-            policy = DEFAULT_FAILURE_POLICY.get(agent, "independent_fail")
-        failure_policy[agent] = policy
-
-    return ResourcePlan(
-        execution_groups=groups,
-        failure_policy=failure_policy,
-        core_agents=[agent for agent in CORE_AGENTS if agent in execution_set],
-        enhancement_agents=[agent for agent in STRUCTURE_AGENTS + PRACTICE_AGENTS + EXTENSION_AGENTS if agent in execution_set],
-        presentation_agents=[],
-        requested_agents=visible_agents,
-        execution_agents=execution_agents,
-        visible_agents=visible_agents,
-        hidden_dependency_agents=hidden_dependency_agents,
-        dependencies=dependencies,
-        agent_parameters={
-            agent: plan.agent_parameters.get(agent, {})
-            for agent in execution_agents
-        },
-    )
-
-
-def merge_planned_tasks_into_plan(
-    plan: ResourcePlan,
-    tasks: list[dict[str, Any]],
-) -> ResourcePlan:
-    """将旧版 Planner 任务合并到资源计划。"""
-    for task in tasks:
-        agent = task.get("agent")
-        if agent not in plan.agent_parameters:
-            logger.warning("[Planning] 跳过未注册的 Planner 任务: agent=%r", agent)
-            continue
-        parameters = task.get("parameters") or {}
-        # 先保留默认参数，再用 planner 输出覆盖
-        merged = {**plan.agent_parameters[agent], **parameters}
-        plan.agent_parameters[agent] = merged
-        logger.info("[Planning] 已合并 Planner 参数: agent=%s keys=%s", agent, list(parameters.keys()))
-    return normalize_resource_plan(plan, plan.execution_agents)
-
-
-def merge_planner_plan_into_default(
-    default_plan: ResourcePlan,
-    planner_plan: ResourcePlan,
-) -> ResourcePlan:
-    """Merge explicit planner output with deterministic defaults."""
-    allowed = default_plan.execution_agents
-    normalized = normalize_resource_plan(planner_plan, allowed)
-    merged_parameters = {
-        agent: {
-            **default_plan.agent_parameters.get(agent, {}),
-            **normalized.agent_parameters.get(agent, {}),
-        }
-        for agent in normalized.execution_agents
-    }
-    normalized.agent_parameters = merged_parameters
-    normalized.requested_agents = [
-        agent for agent in normalized.visible_agents if agent in default_plan.visible_agents
-    ] or list(default_plan.visible_agents)
-    normalized.visible_agents = list(normalized.requested_agents)
-    normalized.hidden_dependency_agents = [
-        agent for agent in normalized.execution_agents if agent not in set(normalized.visible_agents)
-    ]
-    return normalize_resource_plan(normalized, allowed)
-
-
-def iter_plan_phases(plan: ResourcePlan) -> list[tuple[str, str, list[str]]]:
-    """按阶段迭代资源计划。"""
-    phases = [
-        ("core_generating", "核心资源生成", plan.core_agents),
-        ("structure_generating", "结构化资源生成", [a for a in plan.enhancement_agents if a in STRUCTURE_AGENTS]),
-        ("practice_generating", "实践资源生成", [a for a in plan.enhancement_agents if a in PRACTICE_AGENTS]),
-        ("extension_generating", "拓展资源生成", [a for a in plan.enhancement_agents if a in EXTENSION_AGENTS]),
-    ]
-    logger.info("[Planning] 阶段划分完成: %s", phases)
-    return phases
-
-
-# =============================================================================
-# 协调器辅助函数
-# =============================================================================
-
-def filter_tasks_by_selection(
-    tasks: list[dict],
-    allowed_agents: list[str] | None,
-) -> list[dict]:
-    """按选择的 Agent 过滤任务。"""
-    if allowed_agents is None:
-        return tasks
-    allowed_set = set(allowed_agents)
-    return [task for task in tasks if task.get("agent") in allowed_set]
-
-
-def merge_extra(existing_extra: str, personalized_context) -> str:
-    """合并额外参数与个性化上下文。"""
-    additions = []
-    if personalized_context.target_difficulty:
-        additions.append(f"推荐难度：{personalized_context.target_difficulty}")
-    if personalized_context.explanation_style:
-        additions.append(f"讲解风格：{'；'.join(personalized_context.explanation_style)}")
-    if personalized_context.emphasis:
-        additions.append(f"强调事项：{'；'.join(personalized_context.emphasis)}")
-    parts = [part for part in [existing_extra, " | ".join(additions)] if part]
-    return "\n".join(parts)
-
-
-def core_ready(plan: ResourcePlan, results: dict[str, dict]) -> bool:
-    """检查核心 Agent 是否全部完成。"""
-    for agent_name in plan.core_agents:
-        if not results.get(agent_name, {}).get("success"):
-            return False
-    return True
 
 
 # =============================================================================
@@ -568,77 +181,36 @@ async def load_profile_snapshot(user_id: int):
     return LearnerProfileSnapshot.from_sources(**data)
 
 
-def _parse_profile_markdown(profile_markdown: str | None) -> dict[str, str]:
-    """从画像 Markdown 中提取关键信息。
-
-    参数：
-    - profile_markdown: 画像 Markdown 文本
-
-    返回：
-    - 包含 knowledge_level、learning_goal、learning_pace、weakness、interest 等字段的字典
-    """
+def _parse_profile(profile) -> dict[str, str]:
+    """从画像中提取关键信息（支持新的 profile_json 和旧的 profile_markdown）。"""
     result: dict[str, str] = {}
-    if not profile_markdown:
+    if not profile:
         return result
 
-    sections = parse_markdown_sections(profile_markdown)
-    result = {
-        "技术能力判断": sections.get("技术能力判断", ""),
-        "当前学习/项目背景": sections.get("当前学习/项目背景", ""),
-        "学习偏好": sections.get("学习偏好", ""),
-        "当前薄弱点": sections.get("当前薄弱点", ""),
-        "兴趣方向": sections.get("兴趣方向", ""),
-        "推荐辅导策略": sections.get("推荐辅导策略", ""),
-    }
+    if hasattr(profile, "profile_json") and profile.profile_json and profile.profile_json.get("dimensions"):
+        dimensions = profile.profile_json.get("dimensions", {})
+        student_profile = profile.profile_json.get("student_profile", {})
+        result["技术能力判断"] = dimensions.get("knowledge_foundation", {}).get("summary", "")
+        result["当前学习/项目背景"] = dimensions.get("learning_goal", {}).get("summary", "")
+        result["学习偏好"] = dimensions.get("interaction_preference", {}).get("summary", "")
+        result["当前薄弱点"] = dimensions.get("weakness_points", {}).get("summary", "")
+        result["兴趣方向"] = ""
+        interests = student_profile.get("current_focus", [])
+        if isinstance(interests, list):
+            result["兴趣方向"] = ", ".join(interests)
+        strategies = profile.profile_json.get("recommended_strategy", [])
+        if isinstance(strategies, list):
+            result["推荐辅导策略"] = "\n".join(strategies)
+        return result
+
+    if hasattr(profile, "profile_markdown") and profile.profile_markdown:
+        sections = parse_markdown_sections(profile.profile_markdown)
+        result = {
+            "技术能力判断": sections.get("技术能力判断", ""),
+            "当前学习/项目背景": sections.get("当前学习/项目背景", ""),
+            "学习偏好": sections.get("学习偏好", ""),
+            "当前薄弱点": sections.get("当前薄弱点", ""),
+            "兴趣方向": sections.get("兴趣方向", ""),
+            "推荐辅导策略": sections.get("推荐辅导策略", ""),
+        }
     return result
-
-
-def build_personalized_context(snapshot, task: dict):
-    """构建个性化任务上下文。"""
-    from app.resource.schemas import PersonalizedTaskContext
-
-    need = task.get("need", "review")
-    difficulty = "intermediate"
-
-    # 从 profile_markdown 解析信息
-    profile_info = _parse_profile_markdown(snapshot.profile_markdown)
-    technical_ability = profile_info.get("技术能力判断", "")
-
-    # 根据知识水平文本判断难度
-    if "初级" in technical_ability or "入门" in technical_ability or "基础" in technical_ability:
-        difficulty = "basic"
-    elif "高级" in technical_ability or "精通" in technical_ability or "专家" in technical_ability:
-        difficulty = "advanced"
-
-    explanation_style: list[str] = []
-    learning_preference = profile_info.get("学习偏好", "")
-    if learning_preference:
-        explanation_style.append(learning_preference)
-    if need == "exam":
-        explanation_style.append("考点优先，短时高频强化")
-    elif need == "deep":
-        explanation_style.append("强调原理推导与工程细节")
-    else:
-        explanation_style.append("先图解梳理，再精讲与练习")
-
-    emphasis: list[str] = []
-    weakness = profile_info.get("当前薄弱点", "")
-    if weakness:
-        emphasis.append(f"重点纠偏：{weakness}")
-    interest = profile_info.get("兴趣方向", "")
-    if interest:
-        emphasis.append(f"案例偏好：{interest}")
-    if task.get("extra"):
-        emphasis.append(f"本次额外要求：{task['extra']}")
-
-    return PersonalizedTaskContext(
-        course=task.get("course", ""),
-        gap=task.get("gap", ""),
-        need=need,
-        extra=task.get("extra", ""),
-        target_difficulty=difficulty,
-        explanation_style=explanation_style,
-        emphasis=emphasis,
-        recommended_order=["content", "mindmap", "quiz", "reading", "code"],
-        profile_markdown=snapshot.profile_markdown,
-    )

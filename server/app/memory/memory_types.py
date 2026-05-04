@@ -1,88 +1,312 @@
-"""长期记忆类型常量与类型定义（单一真源）。  # 记忆类型字符串与类型别名的单一真源
+"""记忆与画像类型常量及默认结构定义。
 
 模块职责：
-- 定义所有记忆类型的字符串常量，确保下游（DB/JSON/前端/缓存/日志）引用一致
-- 提供类型别名用于静态类型检查和 Pydantic 校验
-- 区分"全部记忆类型"与"事实提取产出类型"
+- 定义画像 8 维度常量与默认 JSON 结构
+- 定义长期记忆默认 JSON 结构
+- 定义会话概要默认 JSON 结构
+- 提供 Markdown 渲染函数
 
 设计原则：
-- 这些字符串值会持久化到 DB/JSON，修改会引发历史数据兼容问题
-- 新增类型必须配套数据迁移，并同步更新 Literal 联合类型
-- fact agent 只产出 FACT_AGENT_MEMORY_TYPES 子集，summary 由压缩流程生成
-
-下游使用示例：
-- 存储层写入：memory_type=MEMORY_TYPE_PREFERENCE
-- 类型校验：memory_type in ALL_MEMORY_TYPES
-- FactAgent 输出约束：FactAgentMemoryType 类型注解
+- 画像维度固定为 8 个，每个维度包含 name/score/confidence/summary/evidence/updated_at
+- JSON 结构有默认值，确保新记录创建时字段完整
+- Markdown 由 JSON 渲染生成，保持一致性
 """
 
 from __future__ import annotations
 
-from typing import Final, Literal, TypeAlias
+from datetime import datetime, timezone
+from typing import Any, Final
 
-# NOTE: 这些字符串值会持久化到 DB/JSON（以及可能出现在前端/缓存/日志中）；修改/重命名会引发历史数据兼容问题，必须配套数据迁移，并同步更新下方 Literal 联合类型与所有调用方。
-# 数据库 user_memory.memory_type 的允许值（新增类型请先加常量，再更新 ALL_MEMORY_TYPES/MemoryType，并确认相关 agent/服务端逻辑是否需要支持）
 
-MEMORY_TYPE_PREFERENCE: Final[str] = "preference"  # 偏好类型：用户相对稳定的偏好（如学习/表达/反馈偏好），用于长期个性化
-MEMORY_TYPE_GOAL: Final[str] = "goal"  # 目标类型：用户阶段性或长期目标（如学习目标/计划意图），用于规划与提醒
-MEMORY_TYPE_WEAKNESS: Final[str] = "weakness"  # 薄弱点类型：用户知识或能力薄弱点（待补强点），用于诊断与练习推荐
-MEMORY_TYPE_FACT: Final[str] = "fact"  # 事实类型：与用户相关且相对稳定的事实信息（可验证/可复用），用于减少重复询问
-MEMORY_TYPE_BACKGROUND: Final[str] = "background"  # 背景类型：用户背景画像信息（如经历/上下文约束），用于更贴合语境的回答
-MEMORY_TYPE_SUMMARY: Final[str] = "summary"  # 摘要类型：对话压缩后的摘要性记忆（浓缩上下文），通常由压缩流程生成而非事实抽取
-MEMORY_TYPE_CORRECTION: Final[str] = "correction"  # 纠正类型：用户对 AI 回答的纠正/提醒，用于避免重复犯错
-MEMORY_TYPE_INTERACTION: Final[str] = "interaction"  # 互动偏好类型：用户希望 AI 如何提问、解释、推进节奏
-MEMORY_TYPE_CONSTRAINT: Final[str] = "constraint"  # 约束/禁忌类型：用户明确不希望 AI 做什么或必须遵守的边界
-MEMORY_TYPE_STRATEGY: Final[str] = "strategy"  # 辅导策略类型：对该用户已验证有效的教学/协作方式
+# ---------------------------------------------------------------------------
+# 画像维度常量（8 个固定维度）
+# ---------------------------------------------------------------------------
 
-ALL_MEMORY_TYPES: Final[tuple[str, ...]] = (  # 代码侧"支持的全部记忆类型"枚举：常用于遍历/校验/过滤；新增/删除类型时需与 MemoryType 保持一致
-    MEMORY_TYPE_PREFERENCE,
-    MEMORY_TYPE_GOAL,
-    MEMORY_TYPE_WEAKNESS,
-    MEMORY_TYPE_FACT,
-    MEMORY_TYPE_BACKGROUND,
-    MEMORY_TYPE_SUMMARY,
-    MEMORY_TYPE_CORRECTION,
-    MEMORY_TYPE_INTERACTION,
-    MEMORY_TYPE_CONSTRAINT,
-    MEMORY_TYPE_STRATEGY,
+PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION: Final[str] = "knowledge_foundation"  # 知识基础
+PROFILE_DIMENSION_LEARNING_GOAL: Final[str] = "learning_goal"  # 学习目标
+PROFILE_DIMENSION_COGNITIVE_STYLE: Final[str] = "cognitive_style"  # 认知风格
+PROFILE_DIMENSION_WEAKNESS_POINTS: Final[str] = "weakness_points"  # 薄弱点
+PROFILE_DIMENSION_MISTAKE_PREFERENCE: Final[str] = "mistake_preference"  # 易错点偏好
+PROFILE_DIMENSION_PRACTICE_ABILITY: Final[str] = "practice_ability"  # 实践能力
+PROFILE_DIMENSION_INTERACTION_PREFERENCE: Final[str] = "interaction_preference"  # 交互偏好
+PROFILE_DIMENSION_LEARNING_HISTORY: Final[str] = "learning_history"  # 学习历史
+
+ALL_PROFILE_DIMENSIONS: Final[tuple[str, ...]] = (
+    PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION,
+    PROFILE_DIMENSION_LEARNING_GOAL,
+    PROFILE_DIMENSION_COGNITIVE_STYLE,
+    PROFILE_DIMENSION_WEAKNESS_POINTS,
+    PROFILE_DIMENSION_MISTAKE_PREFERENCE,
+    PROFILE_DIMENSION_PRACTICE_ABILITY,
+    PROFILE_DIMENSION_INTERACTION_PREFERENCE,
+    PROFILE_DIMENSION_LEARNING_HISTORY,
 )
 
-# 事实提取流程（fact agent）产出这 6 类，不含 summary（summary 由对话压缩流程生成）
-FACT_AGENT_MEMORY_TYPES: Final[tuple[str, ...]] = (  # fact agent 允许写入/返回的记忆类型子集（用于约束 agent 输出与下游处理逻辑）
-    MEMORY_TYPE_PREFERENCE,
-    MEMORY_TYPE_GOAL,
-    MEMORY_TYPE_WEAKNESS,
-    MEMORY_TYPE_FACT,
-    MEMORY_TYPE_BACKGROUND,
-    MEMORY_TYPE_CORRECTION,
-    MEMORY_TYPE_INTERACTION,
-    MEMORY_TYPE_CONSTRAINT,
-    MEMORY_TYPE_STRATEGY,
+PROFILE_DIMENSION_NAMES: Final[dict[str, str]] = {
+    PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION: "知识基础",
+    PROFILE_DIMENSION_LEARNING_GOAL: "学习目标",
+    PROFILE_DIMENSION_COGNITIVE_STYLE: "认知风格",
+    PROFILE_DIMENSION_WEAKNESS_POINTS: "薄弱点",
+    PROFILE_DIMENSION_MISTAKE_PREFERENCE: "易错点偏好",
+    PROFILE_DIMENSION_PRACTICE_ABILITY: "实践能力",
+    PROFILE_DIMENSION_INTERACTION_PREFERENCE: "交互偏好",
+    PROFILE_DIMENSION_LEARNING_HISTORY: "学习历史",
+}
+
+PROFILE_MARKDOWN_SECTIONS: Final[tuple[str, ...]] = (
+    "基础信息与专业背景",
+    "学习目标",
+    "学习历史",
+    "知识基础",
+    "认知风格",
+    "学习偏好",
+    "易错点与薄弱点",
+    "交互偏好与禁忌",
+    "AI 纠正记录",
+    "当前学习状态",
+    "推荐辅导策略",
+    "最近变化",
+    "不确定信息",
 )
 
-# NOTE: Literal 联合会参与 FastAPI/Pydantic 的入参校验、类型提示与序列化；必须与常量值及 ALL_MEMORY_TYPES 完全一致，否则会出现"运行可写入但类型不允许/或反之"的偏差。
-MemoryType: TypeAlias = Literal[  # 记忆类型字符串的受限联合类型：用于在类型层面显式列出所有允许值
-    "preference",
-    "goal",
-    "weakness",
-    "fact",
-    "background",
-    "summary",
-    "correction",
-    "interaction",
-    "constraint",
-    "strategy",
-]
 
-# NOTE: fact agent 产出此子集（含 correction）；summary 由对话压缩流程生成。
-FactAgentMemoryType: TypeAlias = Literal[  # fact agent 记忆类型子集的类型别名：用于约束抽取结果/接口返回，避免输出 summary 等非抽取类类型
-    "preference",
-    "goal",
-    "weakness",
-    "fact",
-    "background",
-    "correction",
-    "interaction",
-    "constraint",
-    "strategy",
-]
+# ---------------------------------------------------------------------------
+# 默认 JSON 结构
+# ---------------------------------------------------------------------------
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def make_default_dimension_json(dimension_key: str) -> dict[str, Any]:
+    """创建单个维度的默认 JSON 结构。"""
+    return {
+        "name": PROFILE_DIMENSION_NAMES.get(dimension_key, dimension_key),
+        "score": 0,
+        "confidence": 0.0,
+        "summary": "",
+        "evidence": [],
+        "updated_at": _now_iso(),
+    }
+
+
+def make_default_profile_json() -> dict[str, Any]:
+    """创建画像的默认 JSON 结构（8 维度）。"""
+    dimensions = {key: make_default_dimension_json(key) for key in ALL_PROFILE_DIMENSIONS}
+    return {
+        "profile_version": 1,
+        "overall_confidence": 0.7,
+        "student_profile": {
+            "major": None,
+            "grade": None,
+            "learning_goals": [],
+            "current_focus": [],
+        },
+        "dimensions": dimensions,
+        "recommended_strategy": [],
+        "last_update_reason": "",
+    }
+
+
+def make_default_long_term_memory_json() -> dict[str, Any]:
+    """创建长期记忆的默认 JSON 结构。"""
+    return {
+        "learning_background": {
+            "major": None,
+            "grade": None,
+            "description": "",
+        },
+        "long_term_goals": [],
+        "learning_preferences": [],
+        "stable_weaknesses": [],
+        "project_context": [],
+        "interaction_rules": [],
+        "effective_strategies": [],
+        "corrections": [],
+        "recent_important_changes": [],
+    }
+
+
+def make_default_session_summary_json() -> dict[str, Any]:
+    """创建会话概要的默认 JSON 结构。"""
+    return {
+        "current_learning_task": "",
+        "original_user_questions": [],
+        "explained_content": [],
+        "current_understanding": [],
+        "current_confusions": [],
+        "teaching_methods_used": [],
+        "conversation_position": "",
+        "next_action": "",
+        "references": [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Markdown 渲染函数
+# ---------------------------------------------------------------------------
+
+def render_profile_markdown(profile_json: dict[str, Any]) -> str:
+    """从 profile_json 渲染 Markdown 文本。"""
+    if not profile_json:
+        return "# 学生画像\n\n暂无画像信息。"
+
+    lines = ["# 学生画像"]
+
+    student_profile = profile_json.get("student_profile", {})
+    if student_profile.get("major"):
+        lines.append(f"\n## 基础信息\n\n- 专业: {student_profile.get('major')}")
+        if student_profile.get("grade"):
+            lines.append(f"- 年级: {student_profile.get('grade')}")
+        if student_profile.get("current_focus"):
+            lines.append(f"- 当前重点: {', '.join(student_profile.get('current_focus', []))}")
+
+    dimensions = profile_json.get("dimensions", {})
+    for dim_key in ALL_PROFILE_DIMENSIONS:
+        dim_data = dimensions.get(dim_key, {})
+        dim_name = dim_data.get("name", PROFILE_DIMENSION_NAMES.get(dim_key, dim_key))
+        score = dim_data.get("score", 0)
+        confidence = dim_data.get("confidence", 0.0)
+        summary = dim_data.get("summary", "")
+        evidence = dim_data.get("evidence", [])
+
+        lines.append(f"\n## {dim_name}\n")
+        lines.append(f"- 评分: {score}/100")
+        lines.append(f"- 置信度: {confidence:.2f}")
+        if summary:
+            lines.append(f"\n{summary}")
+        if evidence:
+            lines.append("\n**证据:**")
+            for ev in evidence[:5]:
+                lines.append(f"- {ev}")
+
+    recommended_strategy = profile_json.get("recommended_strategy", [])
+    if recommended_strategy:
+        lines.append("\n## 推荐辅导策略\n")
+        for strategy in recommended_strategy:
+            lines.append(f"- {strategy}")
+
+    last_update_reason = profile_json.get("last_update_reason", "")
+    if last_update_reason:
+        lines.append(f"\n## 最近画像变化\n\n{last_update_reason}")
+
+    return "\n".join(lines)
+
+
+def render_long_term_memory_markdown(memory_json: dict[str, Any]) -> str:
+    """从 memory_json 渲染 Markdown 文本。"""
+    if not memory_json:
+        return "# 长期记忆\n\n暂无长期记忆信息。"
+
+    lines = ["# 长期记忆"]
+
+    background = memory_json.get("learning_background", {})
+    if background.get("description"):
+        lines.append("\n## 学习背景\n")
+        lines.append(background.get("description", ""))
+        if background.get("major"):
+            lines.append(f"\n- 专业: {background.get('major')}")
+        if background.get("grade"):
+            lines.append(f"- 年级: {background.get('grade')}")
+
+    long_term_goals = memory_json.get("long_term_goals", [])
+    if long_term_goals:
+        lines.append("\n## 长期目标\n")
+        for goal in long_term_goals:
+            lines.append(f"- {goal}")
+
+    learning_preferences = memory_json.get("learning_preferences", [])
+    if learning_preferences:
+        lines.append("\n## 学习偏好\n")
+        for pref in learning_preferences:
+            lines.append(f"- {pref}")
+
+    stable_weaknesses = memory_json.get("stable_weaknesses", [])
+    if stable_weaknesses:
+        lines.append("\n## 稳定薄弱点\n")
+        for weakness in stable_weaknesses:
+            lines.append(f"- {weakness}")
+
+    project_context = memory_json.get("project_context", [])
+    if project_context:
+        lines.append("\n## 项目背景\n")
+        for project in project_context:
+            lines.append(f"- {project}")
+
+    interaction_rules = memory_json.get("interaction_rules", [])
+    if interaction_rules:
+        lines.append("\n## 交互规则\n")
+        for rule in interaction_rules:
+            lines.append(f"- {rule}")
+
+    effective_strategies = memory_json.get("effective_strategies", [])
+    if effective_strategies:
+        lines.append("\n## 有效辅导策略\n")
+        for strategy in effective_strategies:
+            lines.append(f"- {strategy}")
+
+    corrections = memory_json.get("corrections", [])
+    if corrections:
+        lines.append("\n## 用户纠正记录\n")
+        for correction in corrections:
+            lines.append(f"- {correction}")
+
+    recent_changes = memory_json.get("recent_important_changes", [])
+    if recent_changes:
+        lines.append("\n## 最近重要变化\n")
+        for change in recent_changes:
+            lines.append(f"- {change}")
+
+    return "\n".join(lines)
+
+
+def render_session_summary_markdown(summary_json: dict[str, Any]) -> str:
+    """从 summary_json 渲染 Markdown 文本。"""
+    if not summary_json:
+        return "# 会话概要\n\n暂无概要信息。"
+
+    lines = ["# 会话概要"]
+
+    task = summary_json.get("current_learning_task", "")
+    if task:
+        lines.append(f"\n## 当前学习任务\n\n{task}")
+
+    questions = summary_json.get("original_user_questions", [])
+    if questions:
+        lines.append("\n## 用户原始问题\n")
+        for q in questions:
+            lines.append(f"- {q}")
+
+    explained = summary_json.get("explained_content", [])
+    if explained:
+        lines.append("\n## 已解释内容\n")
+        for content in explained:
+            lines.append(f"- {content}")
+
+    understanding = summary_json.get("current_understanding", [])
+    if understanding:
+        lines.append("\n## 当前理解状态\n")
+        for u in understanding:
+            lines.append(f"- {u}")
+
+    confusions = summary_json.get("current_confusions", [])
+    if confusions:
+        lines.append("\n## 当前困惑点\n")
+        for c in confusions:
+            lines.append(f"- {c}")
+
+    methods = summary_json.get("teaching_methods_used", [])
+    if methods:
+        lines.append("\n## 已使用教学方法\n")
+        for m in methods:
+            lines.append(f"- {m}")
+
+    position = summary_json.get("conversation_position", "")
+    if position:
+        lines.append(f"\n## 对话进度\n\n{position}")
+
+    next_action = summary_json.get("next_action", "")
+    if next_action:
+        lines.append(f"\n## 下一步行动\n\n{next_action}")
+
+    return "\n".join(lines)

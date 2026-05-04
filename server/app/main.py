@@ -22,6 +22,7 @@ from app.shared.storage import local_file_store
 from app.auth.security import decode_token
 from app.avatar.bridge.manager import avatar_bridge_manager
 from app.config import SERVER_HOST, SERVER_PORT
+from sqlalchemy.exc import OperationalError, DBAPIError
 
 logger = get_logger(__name__)
 
@@ -30,7 +31,21 @@ logger = get_logger(__name__)
 async def app_lifespan(app: FastAPI):
     setup_logging()
     logger.info("Application starting up")
-    await init_db()
+
+    try:
+        await init_db()
+    except (OperationalError, DBAPIError, ConnectionRefusedError, OSError) as exc:
+        logger.error(
+            "[Startup] 数据库初始化失败，应用无法启动: error_type=%s error=%s\n"
+            "请检查数据库服务是否运行，以及 .env 中的数据库配置是否正确。",
+            type(exc).__name__,
+            exc,
+        )
+        raise
+    except Exception as exc:
+        logger.exception("[Startup] 数据库初始化发生未知异常: %s", exc)
+        raise
+
     local_file_store.ensure_roots()
     try:
         yield
@@ -118,7 +133,6 @@ def main() -> None:
     """统一后端启动入口函数。"""
     host = SERVER_HOST
     port = SERVER_PORT
-    # 使用我们自己的 Loguru 配置，避免 uvicorn 覆盖 logging 配置导致重复输出
     uvicorn.run(app, host=host, port=port, log_config=None)
 
 

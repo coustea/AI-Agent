@@ -4,19 +4,28 @@
 所有数据库表集中在此文件中定义，按功能域分组：
   - User       用户基础信息
   - Auth       JWT Token 白名单
-  - Chat       会话与消息（短期记忆）
-  - Memory     长期记忆
+  - Chat       会话与消息
+  - Memory     长期记忆（用户级单条）
+  - Summary    会话概要（上下文压缩）
   - Profile    用户画像及历史快照
   - Resource   生成资源记录
+  - Event      学习行为事件
 
 新表应添加到 REGISTERED_MODELS 元组中，以便 init_db() 自动创建。
+
+重构说明（v2）：
+- 删除 UserMemory（多条记忆模式）
+- 新增 UserLongTermMemory（用户级单条长期记忆）
+- 新增 ChatSessionSummary（会话概要）
+- 修改 UserProfile（增加 profile_json、module 字段）
+- 修改 UserProfileHistory（增加 profile_json、module 字段）
 """
 
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import ARRAY, Integer, Text, Column, Index
+from sqlalchemy import ARRAY, Integer, Text, Column, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlmodel import SQLModel, Field
 
@@ -70,7 +79,7 @@ class ActiveToken(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Chat — 会话与消息（短期记忆载体）
+# Chat — 会话与消息
 # ---------------------------------------------------------------------------
 
 class ChatSession(SQLModel, table=True):
@@ -79,7 +88,7 @@ class ChatSession(SQLModel, table=True):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)  # UUID 字符串主键
     user_id: int = Field(index=True)
-    module: str = Field(index=True)  # 所属功能模块（如 "profile_builder"）
+    module: str = Field(index=True)  # 所属功能模块（如 "mentor"）
     title: str = Field(default="新对话", max_length=100)  # 会话标题（取首条消息前 20 字符）
     is_archived: bool = Field(default=False)  # 软删除标记
 
@@ -91,12 +100,12 @@ class ChatSession(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
-    memory_token_count: int = Field(default=0)  # 记忆提取 token 累计（达到阈值触发记忆抽取）
-    profile_token_count: int = Field(default=0)  # 画像更新 token 累计（达到阈值触发画像构建）
+    # 会话概要触发计数器
+    summary_token_count: int = Field(default=0)  # 累计 token 数，达到阈值触发会话概要生成
 
 
 class ChatMessage(SQLModel, table=True):
-    """聊天消息表 — 保存用户与助手的原始聊天记录，是短期记忆、长期记忆抽取和画像更新的事实来源"""
+    """聊天消息表 — 保存用户与助手的原始聊天记录"""
     __tablename__ = "chat_messages"
     __table_args__ = (
         Index("ix_chat_messages_user_session_module_created_at", "user_id", "session_id", "module", "created_at"),
@@ -105,7 +114,7 @@ class ChatMessage(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     session_id: str = Field(index=True)  # 关联 ChatSession
-    module: str = Field(default="profile_builder", index=True)
+    module: str = Field(default="mentor", index=True)
     role: str  # 消息角色："user" | "assistant" | "system" | "tool"
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
@@ -118,42 +127,78 @@ class ChatMessage(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Memory — 长期记忆
+# Summary — 会话概要（上下文压缩）
 # ---------------------------------------------------------------------------
 
-class UserMemory(SQLModel, table=True):
-    """长期记忆表 — 存储经过提炼的 Markdown 记忆内容。
-
-    注意：
-    - 长期记忆主体只保存 Markdown。
-    - 不保存 content_json / memory_json。
-    - JSONB 只用于附件等程序元数据。
-    """
-    __tablename__ = "user_memory"
+class ChatSessionSummary(SQLModel, table=True):
+    """会话概要表 — 保存上下文压缩结果，一个会话可以有多个概要"""
+    __tablename__ = "chat_session_summaries"
     __table_args__ = (
-        Index("ix_user_memory_context_lookup", "user_id", "module", "memory_type", "last_seen_at"),
+        Index("ix_chat_session_summaries_user_session_created_at", "user_id", "session_id", "created_at"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    session_id: str = Field(default="", index=True)  # 来源会话
-    module: str = Field(default="mentor", index=True)  # 所属功能模块（"mentor" | "avatar"），用于长期记忆隔离
+    session_id: str = Field(index=True)  # 关联 ChatSession
+    module: str = Field(default="mentor", index=True)  # 所属功能模块
 
-    title: str | None = Field(default=None, max_length=200)  # 记忆标题
-    content_markdown: str = Field(sa_column=Column(Text))  # 记忆主体 Markdown
+    summary_markdown: str = Field(sa_column=Column(Text))  # 概要主体 Markdown
+    summary_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 结构化概要
 
-    memory_type: str = Field(index=True)  # 类型：preference | goal | weakness | fact | background | summary
-    dimension: str | None = None  # 可选维度标签（画像维度关联）
-    importance: float = Field(default=0.5)  # 重要性评分 0.0~1.0
-    source: str = Field(default="conversation", index=True)  # 来源："memory_extraction" | "conversation" | module名
-    source_message_count: int = Field(default=0)  # 来源消息条数（用于压缩溯源）
-    expires_at: datetime | None = Field(default=None)  # 过期时间（null 表示永不过期）
-    evidence_count: int = Field(default=1)  # 该记忆被观察到的次数（去重累加）
-    last_seen_at: datetime = Field(
+    summary_type: str = Field(default="incremental", max_length=50)  # 概要类型：incremental | full
+    version: int = Field(default=1)  # 概要版本号
+
+    start_message_id: int | None = Field(default=None)  # 起始消息 ID
+    end_message_id: int | None = Field(default=None)  # 结束消息 ID
+    summarized_message_count: int = Field(default=0)  # 已压缩消息数量
+
+    current_topic: str | None = Field(default=None, max_length=200)  # 当前话题
+    current_goal: str | None = Field(default=None, max_length=200)  # 当前目标
+    current_status: str | None = Field(default=None, sa_column=Column(Text))  # 当前状态
+    next_action: str | None = Field(default=None, sa_column=Column(Text))  # 下一步行动
+
+    created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
-    attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+
+
+# ---------------------------------------------------------------------------
+# Memory — 长期记忆（用户级单条）
+# ---------------------------------------------------------------------------
+
+class UserLongTermMemory(SQLModel, table=True):
+    """用户长期记忆表 — 一个用户在一个 module 下只有一条长期记忆
+    
+    设计原则：
+    - 只保存长期稳定、未来可复用的信息
+    - 不保存当前会话临时状态、一次性作业中间状态
+    - 同时保存 Markdown 和 JSONB 格式
+    """
+    __tablename__ = "user_long_term_memories"
+    __table_args__ = (
+        UniqueConstraint("user_id", "module", name="uq_user_long_term_memory_user_module"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    module: str = Field(default="mentor", index=True)  # 所属功能模块
+
+    memory_markdown: str = Field(sa_column=Column(Text))  # 记忆主体 Markdown
+    memory_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 结构化记忆
+
+    version: int = Field(default=1)  # 记忆版本号
+    confidence: float = Field(default=0.7)  # 记忆置信度
+
+    source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
+    source_message_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源消息 ID 列表
+    source_summary_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源概要 ID 列表
+    updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 更新原因
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -169,24 +214,33 @@ class UserMemory(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class UserProfile(SQLModel, table=True):
-    """用户画像表 — 存储当前学生画像 Markdown。
-
-    主键为 user_id，与 User 表一对一。
-    画像主体由大模型生成 Markdown。
-    前端可直接渲染 Markdown，或按二级标题 `##` 切分为画像卡片。
+    """用户画像表 — 一个用户在一个 module 下只有一条当前画像
+    
+    设计原则：
+    - 同时保存 Markdown 和 JSONB 格式
+    - profile_markdown 是用户画像正文
+    - profile_json 保存 Markdown 画像的快照评分与元信息；旧数据可能仍包含 8 维结构
     """
     __tablename__ = "user_profiles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "module", name="uq_user_profile_user_module"),
+    )
 
-    user_id: int = Field(primary_key=True)  # 与 User.id 一对一
+    id: int | None = Field(default=None, primary_key=True)  # 改为 id 主键
+    user_id: int = Field(index=True)
+    module: str = Field(default="mentor", index=True)  # 所属功能模块
 
     profile_markdown: str = Field(sa_column=Column(Text))  # 画像主体 Markdown
+    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 画像快照评分/元信息
 
-    version: int = Field(default=1, index=True)  # 画像版本号
-    confidence: float = Field(default=0.7)  # 画像置信度
+    version: int = Field(default=1)  # 画像版本号
+    confidence: float = Field(default=0.7)  # 画像整体置信度
 
+    source_memory_version: int | None = Field(default=None)  # 来源长期记忆版本
     source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
-    source_memory_ids: list[int] | None = Field(default=None, sa_column=Column(ARRAY(Integer)))  # 触发画像更新的长期记忆 ID
-    updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 画像更新原因
+    source_summary_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源概要 ID 列表
+    source_event_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源学习事件 ID 列表
+    updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 更新原因
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -199,22 +253,27 @@ class UserProfile(SQLModel, table=True):
 
 
 class UserProfileHistory(SQLModel, table=True):
-    """用户画像历史表 — 保存每次画像变更的 Markdown 快照"""
+    """用户画像历史表 — 保存每次画像变更的快照"""
     __tablename__ = "user_profile_history"
     __table_args__ = (
-        Index("ix_user_profile_history_user_version", "user_id", "version"),
+        Index("ix_user_profile_history_user_module_version", "user_id", "module", "version"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
+    module: str = Field(default="mentor", index=True)  # 所属功能模块
 
     version: int = Field(index=True)  # 版本号，每次更新递增
 
     profile_markdown: str = Field(sa_column=Column(Text))  # 画像快照 Markdown
+    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 画像快照 JSON
 
-    change_reason: str | None = Field(default=None, sa_column=Column(Text))  # 变更原因（如"系统自动更新"）
+    change_reason: str | None = Field(default=None, sa_column=Column(Text))  # 变更原因
+
+    source_memory_version: int | None = Field(default=None)  # 来源长期记忆版本
     source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
-    source_memory_ids: list[int] | None = Field(default=None, sa_column=Column(ARRAY(Integer)))  # 触发变更的记忆 ID 列表
+    source_summary_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源概要 ID 列表
+    source_event_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源学习事件 ID 列表
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -233,13 +292,8 @@ class GeneratedResource(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
 
-    # 输入信息
-    course: str = Field(max_length=200)  # 课程名称
-    chapter: str | None = Field(default=None, max_length=200)  # 章节
-    topic: str | None = Field(default=None, max_length=200, index=True)  # 学习主题
-    weak_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 短板标签
-    learning_goal: str | None = Field(default=None, max_length=50)  # 学习目标
-    extra_requirement: str | None = Field(default=None, sa_column=Column(Text))  # 用户附加要求
+    # 输入信息 — 用户自然语言描述
+    learning_need: str | None = Field(default=None, sa_column=Column(Text))
 
     # 配置信息
     personalization: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
@@ -336,7 +390,8 @@ REGISTERED_MODELS = (
     ActiveToken,
     ChatSession,
     ChatMessage,
-    UserMemory,
+    ChatSessionSummary,
+    UserLongTermMemory,
     UserProfile,
     UserProfileHistory,
     GeneratedResource,

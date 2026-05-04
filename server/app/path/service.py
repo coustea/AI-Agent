@@ -48,7 +48,7 @@ class PathService:
         completed_node_ids = self._extract_completed_node_ids(resource)
 
         # 从画像 Markdown 中提取信息
-        profile_info = self._parse_profile_markdown(profile.profile_markdown if profile else None)
+        profile_info = self._parse_profile(profile)
 
         plan = build_initial_plan(
             knowledge_level=profile_info.get("技术能力判断"),
@@ -131,10 +131,8 @@ class PathService:
             profile_info = self._parse_profile_markdown(profile.profile_markdown)
             if profile_info.get("当前薄弱点"):
                 texts.append(profile_info["当前薄弱点"])
-        if resource and resource.gap:
-            texts.append(resource.gap)
-        if resource and resource.need:
-            texts.append(resource.need)
+        if resource and resource.learning_need:
+            texts.append(resource.learning_need)
         merged_text = " ".join(texts).lower()
 
         keyword_mapping: dict[str, str] = {
@@ -162,9 +160,8 @@ class PathService:
             if node_id in ALL_NODE_IDS:
                 inferred.append(node_id)
 
-        # 从画像 Markdown 中提取学习目标
-        if not inferred and profile and profile.profile_markdown:
-            profile_info = self._parse_profile_markdown(profile.profile_markdown)
+        if not inferred and profile:
+            profile_info = self._parse_profile(profile)
             goal = (profile_info.get("当前学习/项目背景") or "").lower()
             if "exam" in goal or "考试" in goal:
                 inferred.append("quiz")
@@ -174,23 +171,29 @@ class PathService:
         ordered = [node_id for node_id in ALL_NODE_IDS if node_id in set(inferred)]
         return ordered
 
-    def _parse_profile_markdown(self, profile_markdown: str | None) -> dict[str, str]:
-        """从画像 Markdown 中提取关键信息。
-
-        参数：
-        - profile_markdown: 画像 Markdown 文本
-
-        返回：
-        - 包含 knowledge_level、learning_goal、learning_pace、weakness 等字段的字典
-        """
+    def _parse_profile(self, profile) -> dict[str, str]:
+        """从画像中提取关键信息（支持新的 profile_json 和旧的 profile_markdown）。"""
         result: dict[str, str] = {}
-        if not profile_markdown:
+        if not profile:
             return result
 
-        sections = parse_markdown_sections(profile_markdown)
-        for name in ("技术能力判断", "当前学习/项目背景", "学习偏好", "当前薄弱点", "兴趣方向"):
-            if sections.get(name):
-                result[name] = sections[name]
+        if profile.profile_json:
+            dimensions = profile.profile_json.get("dimensions", {})
+            student_profile = profile.profile_json.get("student_profile", {})
+            result["技术能力判断"] = dimensions.get("knowledge_foundation", {}).get("summary", "")
+            result["当前学习/项目背景"] = dimensions.get("learning_goal", {}).get("summary", "")
+            result["学习偏好"] = dimensions.get("interaction_preference", {}).get("summary", "")
+            result["当前薄弱点"] = dimensions.get("weakness_points", {}).get("summary", "")
+            result["兴趣方向"] = student_profile.get("current_focus", [])
+            if isinstance(result["兴趣方向"], list):
+                result["兴趣方向"] = ", ".join(result["兴趣方向"])
+            return result
+
+        if profile.profile_markdown:
+            sections = parse_markdown_sections(profile.profile_markdown)
+            for name in ("技术能力判断", "当前学习/项目背景", "学习偏好", "当前薄弱点", "兴趣方向"):
+                if sections.get(name):
+                    result[name] = sections[name]
         return result
 
     def _compute_confidence(

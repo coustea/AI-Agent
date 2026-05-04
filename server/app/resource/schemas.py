@@ -2,18 +2,18 @@
 资源生成模块 Schema 定义。
 
 包含：
-- 枚举类型定义（ResourceAgentId, LearningGoal 等）
+- 枚举类型定义（ResourceAgentId 等）
 - 请求结构（ResourceGenerationRequest）
 - Agent 配置结构（ContentAgentConfig, DiagramAgentConfig 等）
 - 输出结构（GeneratedResourceItem, ResourceBundle）
-- 工作流状态（WorkerState, WorkerResult, WorkflowState）
+- 工作流状态（WorkerState, WorkerResult）
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -33,70 +33,6 @@ class ResourceAgentId(str, Enum):
     CODE = "code"
 
 
-class LearningGoal(str, Enum):
-    """学习目标枚举。"""
-    PREVIEW = "preview"
-    REVIEW = "review"
-    EXAM = "exam"
-    HOMEWORK = "homework"
-    PRACTICE = "practice"
-    DEEP_UNDERSTANDING = "deep_understanding"
-    PROJECT_APPLICATION = "project_application"
-    INTERVIEW = "interview"
-
-
-class CurrentLevel(str, Enum):
-    """当前水平枚举。"""
-    ZERO = "zero"
-    BASIC = "basic"
-    NORMAL = "normal"
-    GOOD = "good"
-    ADVANCED = "advanced"
-
-
-class TargetLevel(str, Enum):
-    """目标水平枚举。"""
-    UNDERSTAND = "understand"
-    SOLVE_PROBLEM = "solve_problem"
-    WRITE_CODE = "write_code"
-    EXPLAIN_TO_OTHERS = "explain_to_others"
-    APPLY_IN_PROJECT = "apply_in_project"
-
-
-class ExplanationStyle(str, Enum):
-    """讲解风格枚举。"""
-    EASY = "easy"
-    EXAM = "exam"
-    TEXTBOOK = "textbook"
-    PRACTICE = "practice"
-    ANALOGY = "analogy"
-    INTERVIEW = "interview"
-
-
-class ContentDepth(str, Enum):
-    """内容深度枚举。"""
-    QUICK = "quick"
-    STANDARD = "standard"
-    STEP_BY_STEP = "step_by_step"
-    DEEP = "deep"
-
-
-class ExamplePreference(str, Enum):
-    """示例偏好枚举。"""
-    REAL_WORLD = "real_world"
-    CODE = "code"
-    EXAM = "exam"
-    ENGINEERING = "engineering"
-    VISUAL = "visual"
-
-
-class OutputLanguage(str, Enum):
-    """输出语言枚举。"""
-    ZH = "zh"
-    EN = "en"
-    BILINGUAL = "bilingual"
-
-
 class AgentStatus(str, Enum):
     """Agent 执行状态枚举。"""
     PENDING = "pending"
@@ -110,41 +46,6 @@ class AgentStatus(str, Enum):
 # 请求结构
 # =============================================================================
 
-class LearningTaskInput(BaseModel):
-    """学习任务输入。"""
-    course: str = Field(min_length=1, description="课程名称，不能为空")
-    chapter: str = Field(default="", description="章节")
-    topic: str = Field(min_length=1, description="学习主题，不能为空")
-    weak_points: list[str] = Field(default_factory=list, description="知识短板标签列表")
-    learning_goal: LearningGoal = Field(default=LearningGoal.REVIEW, description="学习目标")
-    extra_requirement: str = Field(default="", description="用户补充要求")
-
-    @field_validator("course", "topic")
-    @classmethod
-    def validate_required_text(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("course 和 topic 不能为空字符串")
-        return value
-
-    @field_validator("weak_points", mode="before")
-    @classmethod
-    def validate_weak_points(cls, value: Any) -> list[str]:
-        if value is None:
-            return []
-        return value
-
-
-class PersonalizationConfig(BaseModel):
-    """个性化配置。"""
-    current_level: CurrentLevel = Field(default=CurrentLevel.BASIC, description="当前水平")
-    target_level: TargetLevel = Field(default=TargetLevel.UNDERSTAND, description="目标水平")
-    explanation_style: ExplanationStyle = Field(default=ExplanationStyle.EASY, description="讲解风格")
-    content_depth: ContentDepth = Field(default=ContentDepth.STANDARD, description="内容深度")
-    example_preference: ExamplePreference = Field(default=ExamplePreference.VISUAL, description="示例偏好")
-    output_language: OutputLanguage = Field(default=OutputLanguage.ZH, description="输出语言")
-
-
 class AgentSelection(BaseModel):
     """Agent 选择项。"""
     agent_id: ResourceAgentId = Field(description="Agent ID")
@@ -154,86 +55,89 @@ class AgentSelection(BaseModel):
 
 class ContentAgentConfig(BaseModel):
     """内容讲解 Agent 配置。"""
-    structure: str = Field(default="progressive", description="结构类型: progressive/summary_first/qa/exam_points/case_driven")
-    include_summary: bool = Field(default=True, description="是否包含总结")
-    include_key_points: bool = Field(default=True, description="是否包含要点")
+    model_config = ConfigDict(extra="forbid")
+
+    structure: Literal["progressive", "summary_first", "exam_points", "case_driven"] = Field(
+        default="progressive",
+        description="结构类型: progressive/summary_first/exam_points/case_driven",
+    )
     include_common_mistakes: bool = Field(default=True, description="是否包含常见错误")
-    include_memory_tips: bool = Field(default=True, description="是否包含记忆技巧")
     include_examples: bool = Field(default=True, description="是否包含示例")
 
 
 class MindmapAgentConfig(BaseModel):
     """思维导图 Agent 配置。"""
-    map_type: str = Field(default="knowledge_tree", description="导图类型: knowledge_tree/exam_map/flow_map/comparison_map/review_outline")
+    model_config = ConfigDict(extra="forbid")
+
+    map_type: Literal["knowledge_tree", "exam_map", "comparison_map"] = Field(
+        default="knowledge_tree",
+        description="导图类型: knowledge_tree/exam_map/comparison_map",
+    )
     max_depth: int = Field(default=4, ge=2, le=5, description="最大深度，范围 2-5")
-    focus_on_weak_points: bool = Field(default=True, description="是否聚焦短板")
-    include_exam_points: bool = Field(default=True, description="是否包含考点")
-    include_common_mistakes: bool = Field(default=True, description="是否包含常见错误")
-    output_format: str = Field(default="markdown", description="输出格式")
+    highlight_weak: bool = Field(default=True, description="是否高亮短板")
 
 
 class DiagramAgentConfig(BaseModel):
     """知识图解 Agent 配置。"""
-    diagram_type: str = Field(default="auto", description="图解类型: auto/concept_map/flowchart/sequence/state_transition/structure/comparison")
-    render_format: str = Field(default="mermaid", description="渲染格式")
-    visual_style: str = Field(default="minimal", description="视觉风格: minimal/blackboard/infographic/exam")
-    include_explanation: bool = Field(default=True, description="是否包含说明")
-    highlight_weak_points: bool = Field(default=True, description="是否高亮短板")
+    model_config = ConfigDict(extra="forbid")
+
+    diagram_type: Literal[
+        "auto",
+        "hierarchy",
+        "flow",
+        "compare",
+        "relation",
+        "state",
+        "class",
+        "block",
+        "packet",
+        "sequence",
+        "activity",
+        "component",
+    ] = Field(
+        default="auto",
+        description="图解类型: auto/hierarchy/flow/compare/relation/state/class/block/packet/sequence/activity/component",
+    )
+    visual_style: Literal["minimal", "exam"] = Field(default="minimal", description="视觉风格: minimal/exam")
 
 
 class QuizAgentConfig(BaseModel):
     """习题 Agent 配置。"""
-    question_count: int = Field(default=10, ge=1, le=50, description="题目数量，范围 1-50")
-    question_types: list[str] = Field(
-        default_factory=lambda: ["choice", "blank", "short_answer"],
-        description="题型列表: choice/multiple_choice/true_false/blank/short_answer/coding/case_analysis"
-    )
-    difficulty_mode: str = Field(default="adaptive", description="难度模式: basic/standard/exam/adaptive")
-    difficulty_distribution: dict[str, int] = Field(
-        default_factory=lambda: {"easy": 4, "medium": 4, "hard": 2},
-        description="难度分布"
-    )
-    focus_on_weak_points: bool = Field(default=True, description="是否聚焦短板")
-    include_answer: bool = Field(default=True, description="是否包含答案")
-    include_analysis: bool = Field(default=True, description="是否包含解析")
-    include_wrong_reason: bool = Field(default=True, description="是否包含错误原因")
-    include_knowledge_tags: bool = Field(default=True, description="是否包含知识点标签")
+    model_config = ConfigDict(extra="forbid")
+
+    question_count: int = Field(default=10, ge=1, le=20, description="题目数量，范围 1-20")
+    difficulty_mode: Literal["basic", "adaptive", "exam"] = Field(default="adaptive", description="难度模式: basic/adaptive/exam")
 
 
 class ReadingAgentConfig(BaseModel):
     """拓展阅读 Agent 配置。"""
-    reading_depth: str = Field(
+    model_config = ConfigDict(extra="forbid")
+
+    reading_depth: Literal["course_extended", "engineering", "frontier"] = Field(
         default="course_extended",
-        description="阅读深度: introductory/course_extended/exam/engineering/frontier"
+        description="阅读深度: course_extended/engineering/frontier"
     )
-    source_types: list[str] = Field(
-        default_factory=lambda: ["textbook", "article", "documentation"],
-        description="来源类型: textbook/article/documentation/paper/practice_project"
-    )
-    max_items: int = Field(default=5, ge=1, le=20, description="最大条目数，范围 1-20")
-    include_reason: bool = Field(default=True, description="是否包含推荐理由")
-    include_reading_order: bool = Field(default=True, description="是否包含阅读顺序")
+    max_items: int = Field(default=5, ge=1, le=10, description="最大条目数，范围 1-10")
 
 
 class CodeAgentConfig(BaseModel):
     """代码实操 Agent 配置。"""
-    programming_language: str = Field(
-        default="cpp",
-        description="编程语言: c/cpp/java/python/go/javascript"
+    model_config = ConfigDict(extra="forbid")
+
+    programming_language: Literal["python", "cpp", "java", "go", "javascript"] = Field(
+        default="python",
+        description="编程语言: python/cpp/java/go/javascript"
     )
-    case_type: str = Field(
+    case_type: Literal["basic_demo", "algorithm_template", "debug_demo"] = Field(
         default="basic_demo",
-        description="案例类型: basic_demo/algorithm_template/experiment_task/debug_demo/mini_project"
+        description="案例类型: basic_demo/algorithm_template/debug_demo"
     )
-    include_comments: bool = Field(default=True, description="是否包含注释")
-    include_input_output: bool = Field(default=True, description="是否包含输入输出示例")
-    include_complexity: bool = Field(default=True, description="是否包含复杂度分析")
-    include_debug_tips: bool = Field(default=True, description="是否包含调试技巧")
-    include_exercises: bool = Field(default=True, description="是否包含练习题")
 
 
 class AgentConfigs(BaseModel):
     """Agent 配置集合。"""
+    model_config = ConfigDict(extra="forbid")
+
     content: ContentAgentConfig = Field(default_factory=ContentAgentConfig)
     mindmap: MindmapAgentConfig = Field(default_factory=MindmapAgentConfig)
     diagram: DiagramAgentConfig = Field(default_factory=DiagramAgentConfig)
@@ -252,12 +156,12 @@ class OutputOptions(BaseModel):
 
 
 # Agent 默认排序顺序
-AGENT_DEFAULT_ORDER = ["content", "diagram", "mindmap", "code", "quiz", "reading"]
+AGENT_DEFAULT_ORDER = ["content", "mindmap", "diagram", "code", "quiz", "reading"]
 
 DEFAULT_SELECTED_AGENT_IDS = [
     ResourceAgentId.CONTENT,
-    ResourceAgentId.DIAGRAM,
     ResourceAgentId.MINDMAP,
+    ResourceAgentId.DIAGRAM,
     ResourceAgentId.CODE,
     ResourceAgentId.QUIZ,
     ResourceAgentId.READING,
@@ -266,11 +170,20 @@ DEFAULT_SELECTED_AGENT_IDS = [
 
 class ResourceGenerationRequest(BaseModel):
     """资源生成请求。"""
-    task: LearningTaskInput = Field(description="学习任务")
-    personalization: PersonalizationConfig = Field(default_factory=PersonalizationConfig, description="个性化配置")
+    model_config = ConfigDict(extra="forbid")
+
+    learning_need: str = Field(min_length=1, description="用户自然语言输入的学习需求，包含课程、主题、薄弱点等所有信息")
     selected_agents: list[AgentSelection] = Field(default_factory=list, description="选中的 Agent")
     agent_configs: AgentConfigs = Field(default_factory=AgentConfigs, description="Agent 配置")
     output_options: OutputOptions = Field(default_factory=OutputOptions, description="输出选项")
+
+    @field_validator("learning_need")
+    @classmethod
+    def validate_learning_need(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("学习需求不能为空")
+        return value
 
     @model_validator(mode="after")
     def validate_selection(self) -> "ResourceGenerationRequest":
@@ -346,8 +259,7 @@ class ResourceBundle(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     task_id: str = Field(description="任务 ID")
     title: str = Field(description="资源包标题")
-    task: LearningTaskInput = Field(description="学习任务")
-    personalization: PersonalizationConfig = Field(description="个性化配置")
+    learning_need: str = Field(description="学习需求")
     selected_agents: list[AgentSelection] = Field(default_factory=list, description="选中的 Agent")
     resources: list[GeneratedResourceItem] = Field(default_factory=list, description="资源列表")
     study_path: list[StudyPathStep] = Field(default_factory=list, description="学习路径")
@@ -370,19 +282,12 @@ class WorkerState(BaseModel):
     resource_id: int | str = Field(default=0, description="资源 ID")
     agent_name: str = Field(description="Agent 名称")
     task: dict[str, Any] = Field(default_factory=dict, description="任务参数")
-    learner_profile: dict[str, Any] = Field(default_factory=dict, description="学习者画像")
-    personalization: dict[str, Any] = Field(default_factory=dict, description="个性化配置")
+    learner_profile: dict[str, Any] = Field(default_factory=dict, description="后端加载的学习者画像")
     agent_config: dict[str, Any] = Field(default_factory=dict, description="当前 Agent 专属配置")
     workflow_plan: list[dict[str, Any]] = Field(default_factory=list, description="工作流计划")
-    dependencies: list[str] = Field(default_factory=list, description="依赖的 Agent")
-    upstream_results: dict[str, Any] = Field(default_factory=dict, description="上游结果")
-    dependency_reports: dict[str, Any] = Field(default_factory=dict, description="依赖报告")
     layer_index: int = Field(default=0, description="当前层索引")
-
-    # 兼容旧字段
-    profile: dict[str, Any] = Field(default_factory=dict, description="学习者画像（兼容旧字段）")
-    parameters: dict[str, Any] = Field(default_factory=dict, description="Agent 参数（兼容旧字段）")
-    dependency_artifacts: dict[str, str] = Field(default_factory=dict, description="依赖产物（兼容旧字段）")
+    upstream_results: dict[str, Any] = Field(default_factory=dict, description="后端生成的上游 Agent 原始结果")
+    dependency_reports: dict[str, Any] = Field(default_factory=dict, description="依赖 Agent 交接报告")
 
 
 class WorkerResult(BaseModel):
@@ -394,7 +299,6 @@ class WorkerResult(BaseModel):
     file_type: str = Field(default="json", description="文件类型")
     title: str | None = Field(default=None, description="资源标题")
     summary: str = Field(default="", description="资源摘要")
-    execution_report: str | None = Field(default=None, description="Agent 执行报告")
     metadata: dict[str, Any] = Field(default_factory=dict, description="资源元数据")
     error: str | None = Field(default=None, description="错误信息")
 
@@ -429,73 +333,39 @@ class LearnerProfileSnapshot(BaseModel):
         return cls.model_validate(merged)
 
     def as_agent_profile(self) -> dict[str, Any]:
+        """返回 Agent 可用的画像字典。"""
         return self.model_dump(exclude_none=True)
 
 
+# =============================================================================
+# 动态规划数据结构
+# =============================================================================
+
+class AgentTask(BaseModel):
+    """单个 Agent 的任务描述。"""
+    agent_id: str = Field(description="Agent ID")
+    task_description: str = Field(description="给该 Agent 的具体任务描述")
+    depends_on: list[str] = Field(default_factory=list, description="依赖的上游 Agent")
+    is_explicit: bool = Field(default=True, description="是否用户显式选择 (决定是否返回给前端)")
+    priority: int = Field(default=0, description="执行优先级")
+    config: dict[str, Any] = Field(default_factory=dict, description="Agent 专属配置")
+
+
 class LayerPlan(BaseModel):
-    """分层规划结构。"""
-    model_config = ConfigDict(extra="allow")
-
-    layer_index: int = Field(default=0, description="层索引")
-    reason: str = Field(default="", description="为什么执行这一层")
-    agents: list[str] = Field(default_factory=list, description="当前层执行的 Agent")
-    dependencies: dict[str, list[str]] = Field(default_factory=dict, description="依赖关系")
-    agent_parameters: dict[str, dict[str, Any]] = Field(default_factory=dict, description="Agent 参数")
-    expected_outputs: dict[str, str] = Field(default_factory=dict, description="每个 Agent 要做什么")
-    visible_agents: list[str] = Field(default_factory=list, description="对用户可见的 Agent")
-    hidden_dependency_agents: list[str] = Field(default_factory=list, description="依赖补全的隐藏 Agent")
-    failure_policy: dict[str, str] = Field(default_factory=dict, description="失败策略")
-    stop_after_this_layer: bool = Field(default=False, description="是否在当前层后停止")
+    """单层执行计划。"""
+    layer: int = Field(description="层索引 (0, 1, 2)")
+    agents: list[AgentTask] = Field(default_factory=list, description="本层要执行的 Agent 任务列表")
+    reasoning: str = Field(default="", description="LLM 规划理由")
 
 
-class WorkflowState(BaseModel):
-    """主流程状态。"""
-    model_config = ConfigDict(extra="allow")
+class PlanningContext(BaseModel):
+    """MasterAgent 规划输入上下文。"""
+    layer: int = Field(description="当前层 (0, 1, 2)")
+    question: "ResourceGenerationRequest" = Field(description="用户原始请求")
+    user_explicit_selection: list[str] = Field(default_factory=list, description="用户显式选择的 Agent ID")
+    implicit_dependencies: list[str] = Field(default_factory=list, description="系统识别的隐式依赖")
+    upstream_results: dict[str, Any] = Field(default_factory=dict, description="上游执行结果")
+    upstream_reports: dict[str, str] = Field(default_factory=dict, description="上游 Agent 执行报告")
 
-    user_id: int = Field(default=0)
-    task_id: str = Field(default="")
-    resource_id: int | str | None = Field(default=None)
-    request: ResourceGenerationRequest | None = Field(default=None)
-    task: LearningTaskInput | None = Field(default=None)
-    personalization: PersonalizationConfig | None = Field(default=None)
-    selected_agents: list[AgentSelection] = Field(default_factory=list)
-    agent_configs: AgentConfigs | None = Field(default=None)
-    output_options: OutputOptions | None = Field(default=None)
-    learner_profile: dict[str, Any] = Field(default_factory=dict)
-    workflow_plan: list[dict[str, Any]] = Field(default_factory=list)
-    current_layer: int = Field(default=0)
-    completed_agents: list[str] = Field(default_factory=list)
-    failed_agents: list[str] = Field(default_factory=list)
-    skipped_agents: list[str] = Field(default_factory=list)
-    resources: list[GeneratedResourceItem] = Field(default_factory=list)
-    upstream_results: dict[str, Any] = Field(default_factory=dict)
-    review_result: ReviewResult | None = Field(default=None)
-    bundle: ResourceBundle | None = Field(default=None)
-    errors: list[str] = Field(default_factory=list)
-    status: str = Field(default="pending")
-
-
-class ResourcePlan(BaseModel):
-    """资源计划。"""
-    execution_groups: list[list[str]] = Field(default_factory=list)
-    failure_policy: dict[str, str] = Field(default_factory=dict)
-    core_agents: list[str] = Field(default_factory=list)
-    enhancement_agents: list[str] = Field(default_factory=list)
-    presentation_agents: list[str] = Field(default_factory=list)
-    requested_agents: list[str] = Field(default_factory=list)
-    execution_agents: list[str] = Field(default_factory=list)
-    visible_agents: list[str] = Field(default_factory=list)
-    hidden_dependency_agents: list[str] = Field(default_factory=list)
-    dependencies: dict[str, list[str]] = Field(default_factory=dict)
-    agent_parameters: dict[str, dict[str, Any]] = Field(default_factory=dict)
-
-    @property
-    def ordered_agents(self) -> list[str]:
-        if self.execution_groups:
-            ordered: list[str] = []
-            for group in self.execution_groups:
-                for agent in group:
-                    if agent not in ordered:
-                        ordered.append(agent)
-            return ordered
-        return self.core_agents + self.enhancement_agents + self.presentation_agents
+# 更新前向引用
+ResourceGenerationRequest.model_rebuild()

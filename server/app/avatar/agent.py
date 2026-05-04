@@ -304,7 +304,7 @@ class AvatarAgent:
         try:
             classifier_prompt = _get_prompt("classifier")
             result = await self.llm_manager.ainvoke(
-                "spark",
+                "spark_max",
                 classifier_prompt.format(
                     user_message=user_msg,
                     has_attachments="是" if (file_urls or image_urls) else "否",
@@ -333,7 +333,7 @@ class AvatarAgent:
         """直接回答路径"""
         messages = [SystemMessage(content=state["system_prompt"])] + state["messages"]
         response = await self.llm_manager.ainvoke(
-            "spark",
+            "spark_max",
             messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -378,7 +378,7 @@ class AvatarAgent:
 
         full_messages = [SystemMessage(content=state["system_prompt"]), HumanMessage(content=answer_prompt)]
         response = await self.llm_manager.ainvoke(
-            "spark",
+            "spark_max",
             full_messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -400,7 +400,7 @@ class AvatarAgent:
 
         # 绑定搜索工具
         llm_with_tools = self.llm_manager.bind_tools(
-            "spark",
+            "spark_max",
             AVATAR_TOOLS,
             model_kwargs=self.tool_model_kwargs,
         )
@@ -408,7 +408,7 @@ class AvatarAgent:
         response = await self.llm_manager.ainvoke_runnable(
             llm_with_tools,
             full_messages,
-            model_type="spark",
+            model_type="spark_max",
         )
 
         # 处理工具调用
@@ -458,7 +458,7 @@ class AvatarAgent:
         ]
 
         response = await self.llm_manager.ainvoke(
-            "spark",
+            "spark_max",
             full_messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -516,7 +516,7 @@ class AvatarAgent:
 
         try:
             decision = await self.llm_manager.ainvoke_structured(
-                "spark",
+                "spark_max",
                 DiagramDecision,
                 [
                     SystemMessage(content=_get_prompt("diagram_decision_system")),
@@ -558,7 +558,7 @@ class AvatarAgent:
 
         try:
             response = await self.llm_manager.ainvoke(
-                "spark",
+                "spark_max",
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),

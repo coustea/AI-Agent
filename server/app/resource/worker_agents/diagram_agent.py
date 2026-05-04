@@ -32,6 +32,7 @@ LLM 直接生成 Mermaid 源码，前端负责渲染。
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +41,30 @@ from langchain_core.messages import HumanMessage
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
-from app.resource.worker_agents.utils import generate_execution_report
+from app.resource.worker_agents.utils import (
+    append_backend_context_for_prompt,
+    extract_markdown_from_llm_output,
+    learning_need_from_task,
+    title_from_learning_need,
+)
 from app.shared.diagram_render import build_mermaid_render
-from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision
+from app.chat.schemas import DIAGRAM_MODEL_MAP
 
 logger = get_logger(__name__)
 
-SUPPORTED_DIAGRAM_TYPES = list(DIAGRAM_MODEL_MAP.keys())
+SUPPORTED_DIAGRAM_TYPES = [
+    "hierarchy",
+    "flow",
+    "compare",
+    "relation",
+    "state",
+    "class",
+    "block",
+    "packet",
+    "sequence",
+    "activity",
+    "component",
+]
 
 DIAGRAM_TYPE_DESCRIPTIONS = {
     "hierarchy": "层级结构，用于知识点组成、分类、结构拆解",
@@ -94,6 +112,8 @@ MERMAID_DIAGRAM_KEYWORDS = {
 class DiagramAgent:
     """知识图解 Agent。"""
 
+    STEPS = ["识别核心时序/流程", "设计 Mermaid 图表结构", "生成可视化渲染脚本", "校验图表语法及表现"]
+
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
         self.resource_id = resource_id
@@ -102,19 +122,46 @@ class DiagramAgent:
         self.prompt_path = Path(__file__).parent.parent / "prompts" / "workers" / "diagram.md"
         self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 4000}
 
-    async def _emit_action(self, action: str, detail: str = "") -> None:
+    async def _emit_action(
+        self,
+        action: str,
+        detail: str = "",
+        current_step: int = 0,
+        total_steps: int = 0,
+        step_label: str = "",
+    ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
-            await self.emitter.emit_agent_action("diagram", action, detail)
+            await self.emitter.emit_agent_action(
+                "diagram",
+                action,
+                detail,
+                current_step=current_step,
+                total_steps=total_steps,
+                step_label=step_label,
+            )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行知识图解生成。"""
-        logger.info("[DiagramAgent] 开始执行: topic=%s", state.task.get("topic", ""))
+        logger.info("[DiagramAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
+        total = len(self.STEPS)
 
-        await self._emit_action("loading_prompt", "加载知识图解生成提示词")
+        await self._emit_action(
+            "loading_prompt",
+            "正在加载图解生成提示词...",
+            current_step=1,
+            total_steps=total,
+            step_label=self.STEPS[0],
+        )
         prompt = self._load_prompt()
 
-        await self._emit_action("building_input", "构建输入内容")
+        await self._emit_action(
+            "building_input",
+            "正在识别核心逻辑并设计 Mermaid 图表结构...",
+            current_step=2,
+            total_steps=total,
+            step_label=self.STEPS[1],
+        )
         input_text = await self._build_input(state)
 
         # 从 agent_config 获取 diagram_type
@@ -123,24 +170,32 @@ class DiagramAgent:
             diagram_type = None
 
         try:
-            if not diagram_type:
-                await self._emit_action("deciding_type", "决策最适合的图解类型")
-                diagram_type = await self._decide_diagram_type(prompt, input_text, state)
-                if not diagram_type:
-                    logger.info("[DiagramAgent] 不需要生成图解")
-                    return WorkerResult(
-                        success=True,
-                        content="",
-                        error="当前内容不适合生成图解",
-                    )
+            requested_type = diagram_type
+            action_detail = f"正在为你生成 {requested_type} 类型图解..." if requested_type else "正在自动选择图解类型并生成 Mermaid..."
+            await self._emit_action(
+                "calling_llm",
+                action_detail,
+                current_step=3,
+                total_steps=total,
+                step_label=self.STEPS[2],
+            )
+            generation = await self._generate_mermaid_single_shot(requested_type, prompt, input_text)
+            if generation is None:
+                return WorkerResult(success=False, error="图解生成失败")
 
+            diagram_type, mermaid_source = generation
             logger.info("[DiagramAgent] 选择图解类型: %s", diagram_type)
-
-            await self._emit_action("calling_llm", f"调用 Spark X 生成 {diagram_type} 类型图解")
-            mermaid_source = await self._generate_mermaid(diagram_type, prompt, input_text, state)
 
             if not mermaid_source:
                 return WorkerResult(success=False, error="图解生成失败")
+
+            await self._emit_action(
+                "finalizing_result",
+                f"正在校验图表语法并完成生成 ({len(mermaid_source)} 字符)...",
+                current_step=4,
+                total_steps=total,
+                step_label=self.STEPS[3],
+            )
 
             content = {
                 "diagram_type": diagram_type,
@@ -149,20 +204,12 @@ class DiagramAgent:
                 "description": "知识图解",
             }
 
-            execution_report = generate_execution_report(
-                agent_type="diagram",
-                task=state.task,
-                content=content,
-                success=True,
-            )
-
             return WorkerResult(
                 success=True,
                 content=content,
                 file_type="mermaid",
-                title=f"{state.task.get('topic', '')} - 知识图解",
+                title=title_from_learning_need(state.task, "知识图解"),
                 summary="生成 Mermaid 知识图解",
-                execution_report=execution_report,
                 metadata={
                     "engine": "mermaid",
                     "render_at": "frontend",
@@ -172,75 +219,45 @@ class DiagramAgent:
 
         except Exception as exc:
             logger.exception("[DiagramAgent] 执行失败")
+            return WorkerResult(success=False, error=str(exc))
 
-            execution_report = generate_execution_report(
-                agent_type="diagram",
-                task=state.task,
-                content=None,
-                success=False,
-                error=str(exc),
-            )
-
-            return WorkerResult(success=False, error=str(exc), execution_report=execution_report)
-
-    async def _decide_diagram_type(
+    async def _generate_mermaid_single_shot(
         self,
+        requested_type: str | None,
         prompt: str,
         input_text: str,
-        state: WorkerState,
-    ) -> str | None:
-        """决策图解类型。"""
-        decision_prompt = f"""{prompt}
+    ) -> tuple[str, str] | None:
+        """一次 LLM 调用内完成图解类型选择和 Mermaid 源码生成。"""
+        if requested_type and requested_type not in SUPPORTED_DIAGRAM_TYPES:
+            logger.warning("[DiagramAgent] 不支持的图解类型: %s", requested_type)
+            requested_type = None
 
-## 输入内容
-{input_text}
-
-请根据上面的"支持的图解类型"列表，判断是否需要生成图解，并选择最合适的图解类型。如果内容不适合生成图解，请将 need_diagram 设为 false。"""
-
-        try:
-            messages = [HumanMessage(content=decision_prompt)]
-            validated = await self.llm_manager.ainvoke_structured(
-                "spark_x",
-                DiagramDecision,
-                messages,
-                strict=True,
-                model_kwargs=self.diagram_model_kwargs,
+        if requested_type:
+            type_instruction = (
+                f"用户指定图解类型: {requested_type} — {DIAGRAM_TYPE_DESCRIPTIONS.get(requested_type, '')}\n"
+                f"Mermaid 第一行必须是: {MERMAID_DIAGRAM_KEYWORDS.get(requested_type, 'graph TD')}"
             )
-            if validated.need_diagram and validated.diagram_type in DIAGRAM_MODEL_MAP:
-                return validated.diagram_type
-            return None
-        except Exception as exc:
-            logger.warning("[DiagramAgent] 图解类型决策失败: %s", exc)
-            return "hierarchy"
-
-    async def _generate_mermaid(
-        self,
-        diagram_type: str,
-        prompt: str,
-        input_text: str,
-        state: WorkerState,
-    ) -> str | None:
-        """生成 Mermaid 源码。"""
-        if diagram_type not in DIAGRAM_MODEL_MAP:
-            logger.warning("[DiagramAgent] 不支持的图解类型: %s", diagram_type)
-            return None
-
-        type_desc = DIAGRAM_TYPE_DESCRIPTIONS.get(diagram_type, "")
-        mermaid_keyword = MERMAID_DIAGRAM_KEYWORDS.get(diagram_type, "graph TD")
+        else:
+            type_instruction = (
+                "图解类型为 auto。请先在支持的图解类型中选择最适合教学表达的一种，"
+                "再直接生成对应 Mermaid 源码。"
+            )
 
         generation_prompt = f"""{prompt}
 
-## 图解类型
-{diagram_type} — {type_desc}
+## Single-Shot 输出要求
+本次请求必须一次完成“选择图解类型”和“生成 Mermaid 源码”，不要要求二次确认。
 
-## Mermaid 声明
-第一行必须是: {mermaid_keyword}
+{type_instruction}
 
 ## 输入内容
 {input_text}
 
-请生成 {diagram_type} 类型对应的完整 Mermaid 源码。
-只输出 Mermaid 源码，不要输出解释、代码围栏或 JSON 对象格式。
+## 输出格式
+第一行输出: DIAGRAM_TYPE: <类型英文 id>
+第二行输出: REASON: <一句话选择理由>
+随后输出完整 Mermaid 源码。可以使用 ```mermaid 代码围栏，但不要输出 JSON。
+
 生成完整知识图解，不是 demo、占位示意或两三个节点的简化样例。
 覆盖输入中的主要概念、关系、步骤、边界条件或易混点。
 节点和连线文本只能使用简短自然语言，不要输出 Markdown、HTML、竖线 `|`、尖括号 `< >`。
@@ -255,128 +272,51 @@ class DiagramAgent:
                 model_kwargs=self.diagram_model_kwargs,
             )
             content = response.content if hasattr(response, "content") else str(response)
-            return build_mermaid_render(content).get("source")
+            mermaid_source = self._extract_mermaid_source(content)
+            if not mermaid_source:
+                return None
+            diagram_type = self._extract_diagram_type(content, mermaid_source, requested_type)
+            return diagram_type, mermaid_source
         except Exception as exc:
             logger.warning("[DiagramAgent] Mermaid 图解生成失败: %s", exc)
             return None
 
-    def _build_html_content(self, diagram_data: dict[str, Any]) -> str:
-        """构建 HTML 内容。"""
-        title = diagram_data.get("title", "知识图解")
-        summary = diagram_data.get("summary", "")
-        mermaid_source = diagram_data.get("render", {}).get("source", "")
-        diagram_type = diagram_data.get("type", "hierarchy")
+    def _extract_mermaid_source(self, raw_content: str) -> str:
+        """从 single-shot 响应中提取 Mermaid，容忍类型说明前缀。"""
+        try:
+            return build_mermaid_render(raw_content).get("source", "")
+        except ValueError:
+            lines = str(raw_content or "").splitlines()
+            for index, line in enumerate(lines):
+                if re.match(
+                    r"^\s*(flowchart|graph|sequenceDiagram|stateDiagram-v2|classDiagram|erDiagram|block-beta|packet-beta|gitGraph)\b",
+                    line,
+                    re.IGNORECASE,
+                ):
+                    return build_mermaid_render("\n".join(lines[index:])).get("source", "")
+            raise
 
-        height_map = {
-            "sequence": "500px",
-            "git": "600px",
-            "er": "600px",
-            "class": "600px",
-            "packet": "300px",
-        }
-        container_height = height_map.get(diagram_type, "500px")
+    def _extract_diagram_type(self, raw_content: str, mermaid_source: str, requested_type: str | None) -> str:
+        """从 single-shot 响应或 Mermaid 声明中恢复图解类型。"""
+        if requested_type in SUPPORTED_DIAGRAM_TYPES:
+            return requested_type
 
-        return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title}</title>
-  <style>
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: #f8fafc;
-      background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
-      background-size: 20px 20px;
-      min-height: 100vh;
-      padding: 40px;
-      color: #1e293b;
-      display: inline-block;
-      min-width: 100%;
-    }}
-    .container {{
-      display: inline-block;
-      min-width: 600px;
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      border-radius: 24px;
-      padding: 30px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02);
-      margin-bottom: 40px;
-      margin-right: 40px;
-    }}
-    .diagram-container {{
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: {container_height};
-      overflow: visible;
-      padding: 10px;
-      background: white;
-      border-radius: 16px;
-      box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
-      border: 1px solid #f1f5f9;
-    }}
-    .mermaid {{
-      max-width: none;
-    }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="diagram-container">
-      <pre class="mermaid">
-{mermaid_source}
-      </pre>
-    </div>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-  <script>
-    mermaid.initialize({{
-      startOnLoad: true,
-      theme: 'base',
-      themeVariables: {{
-        primaryColor: '#e0e7ff',
-        primaryTextColor: '#3730a3',
-        primaryBorderColor: '#a5b4fc',
-        lineColor: '#6366f1',
-        secondaryColor: '#f3e8ff',
-        tertiaryColor: '#ede9fe',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-        fontSize: '14px',
-        nodeBorder: 'rgba(165, 180, 252, 0.8)'
-      }},
-      securityLevel: 'loose',
-      flowchart: {{
-        useMaxWidth: false,
-        htmlLabels: true,
-        curve: 'monotoneX',
-        padding: 20
-      }},
-      sequence: {{
-        useMaxWidth: false,
-        wrap: true,
-        actorMargin: 50
-      }},
-      state: {{
-        useMaxWidth: false,
-        nodeSpacing: 50
-      }},
-      er: {{
-        useMaxWidth: false
-      }},
-      class: {{
-        useMaxWidth: false
-      }},
-      gitGraph: {{
-        useMaxWidth: false
-      }}
-    }});
-  </script>
-</body>
-</html>"""
+        match = re.search(r"(?im)^\s*DIAGRAM_TYPE\s*[:：]\s*([a-z_][\w-]*)\s*$", raw_content or "")
+        if match:
+            candidate = match.group(1).strip().lower().replace("-", "_")
+            if candidate in SUPPORTED_DIAGRAM_TYPES:
+                return candidate
+
+        first_line = (mermaid_source or "").strip().splitlines()[0].strip().lower()
+        keyword_type_pairs = sorted(
+            MERMAID_DIAGRAM_KEYWORDS.items(),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        )
+        for diagram_type, keyword in keyword_type_pairs:
+            if first_line.startswith(keyword.lower()):
+                return diagram_type
+        return "hierarchy"
 
     def _load_prompt(self) -> str:
         """加载 prompt 模板。"""
@@ -417,43 +357,18 @@ class DiagramAgent:
     async def _build_input(self, state: WorkerState) -> str:
         """构建输入内容。"""
         task = state.task
-        personalization = state.personalization
         agent_config = state.agent_config
-        profile = state.learner_profile
 
         parts = [
-            "## 课程信息",
-            f"- 课程: {task.get('course', '')}",
-            f"- 章节: {task.get('chapter', '')}",
-            f"- 学习主题: {task.get('topic', task.get('course', ''))}",
-            f"- 知识短板: {', '.join(task.get('weak_points', []))}",
-            f"- 学习目标: {task.get('learning_goal', '')}",
-            "",
-            "## 个性化配置",
-            f"- 当前水平: {personalization.get('current_level', 'basic')}",
-            f"- 目标水平: {personalization.get('target_level', 'understand')}",
-            f"- 讲解风格: {personalization.get('explanation_style', 'easy')}",
+            "## 学习需求",
+            learning_need_from_task(task),
             "",
             "## Agent 配置",
             f"- 图解类型: {agent_config.get('diagram_type', 'auto')}",
             f"- 视觉风格: {agent_config.get('visual_style', 'minimal')}",
-            f"- 包含说明: {agent_config.get('include_explanation', True)}",
-            f"- 高亮短板: {agent_config.get('highlight_weak_points', True)}",
         ]
 
-        if profile:
-            parts.append("")
-            parts.append("## 学习者画像")
-            profile_markdown = profile.get("profile_markdown", "")
-            if profile_markdown:
-                parts.append(profile_markdown)
-
-        if state.upstream_results:
-            parts.append("")
-            parts.append("## 上游结果摘要")
-            for agent_id, result in state.upstream_results.items():
-                content_preview = str(result.get("content", ""))[:300]
-                parts.append(f"- {agent_id}: {content_preview}...")
+        append_backend_context_for_prompt(parts, state)
 
         parts.append("")
         parts.append("请生成合适的知识图解。")

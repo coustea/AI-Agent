@@ -122,7 +122,7 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { RadarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
-import { getProfile } from '@/api/ai'
+import { getProfile, getProfileScore } from '@/api/ai'
 
 use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
 
@@ -249,13 +249,33 @@ const trendOption = computed(() => ({
 
 onMounted(async () => {
   try {
-    const res = await getProfile()
-    const data = res.data.data
+    const [profileRes, scoreRes] = await Promise.allSettled([
+      getProfile(),
+      getProfileScore(),
+    ])
+    if (scoreRes.status === 'fulfilled') {
+      const score = scoreRes.value.data.data
+      const metrics = score.metrics
+      profileScores.value = [
+        metrics.section_coverage ?? 55,
+        metrics.evidence_quality ?? 55,
+        metrics.uncertainty_handling ?? 55,
+        score.score ?? 55,
+        score.confidence == null ? 55 : Math.round(score.confidence * 100),
+        metrics.content_richness ?? 55,
+        metrics.section_coverage ?? 55,
+        score.score ?? 55,
+      ]
+    }
+    if (profileRes.status !== 'fulfilled') return
+    const data = profileRes.value.data.data
     if (data) {
       const markdown = (data.profile_markdown || '').trim()
       if (markdown) {
         const sections = parseProfileSections(markdown)
-        profileScores.value = PROFILE_SECTIONS.map((title) => scoreFromSection(sections[title]))
+        if (scoreRes.status !== 'fulfilled' || scoreRes.value.data.data.score == null) {
+          profileScores.value = PROFILE_SECTIONS.map((title) => scoreFromSection(sections[title]))
+        }
 
         const insight = sections['推荐辅导策略'] || sections['最近变化'] || sections['当前薄弱点']
         if (insight && !insight.includes('暂无明显信息')) {
