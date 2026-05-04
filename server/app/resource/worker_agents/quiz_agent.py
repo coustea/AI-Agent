@@ -217,6 +217,9 @@ class QuizAgent:
             "## Agent 配置",
             f"- 题目数量: {agent_config.get('question_count', 10)}",
             f"- 难度模式: {agent_config.get('difficulty_mode', 'adaptive')}",
+            f"- 薄弱点权重: {agent_config.get('weak_point_weight', 50)}%",
+            f"- 考试风格: {agent_config.get('exam_style', 'school')}",
+            f"- 包含解析: {agent_config.get('include_analysis', True)}",
         ]
 
         append_backend_context_for_prompt(parts, state)

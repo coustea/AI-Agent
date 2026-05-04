@@ -57,6 +57,17 @@
             <p>请为即将出场的 AI 智能体配置加工参数，您的输入指令将作为最高优先级要求贯穿全局。</p>
           </div>
 
+          <div class="scenario-selector">
+            <label>学习场景</label>
+            <el-select v-model="learningScenario" @change="applyScenarioDefaults" size="small">
+              <el-option label="🎯 考试备考" value="exam_prep" />
+              <el-option label="📚 日常学习" value="daily_review" />
+              <el-option label="💻 项目实践" value="project_practice" />
+              <el-option label="📖 预习自学" value="self_study" />
+            </el-select>
+            <span class="hint">切换场景会自动调整下方配置，您仍可手动修改</span>
+          </div>
+
           <div class="config-section">
             <div class="agent-configs-grid">
               
@@ -306,16 +317,98 @@ import CodeResourceView from '@/components/resource/CodeResourceView.vue'
 import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
 import AgentCollaborationUniverse from '@/components/resource/AgentCollaborationUniverse.vue'
 
-import { generateResources, type ResourceAgentId } from '@/api/resource'
+import { generateResources, type ResourceAgentId, type LearningScenario } from '@/api/resource'
 
 const router = useRouter()
 
+// ===================== 场景默认配置 =====================
+// 定义宽松类型以支持不同场景的配置值
+type AnyAgentConfigs = {
+  content: {
+    structure: string
+    include_common_mistakes: boolean
+    include_examples: boolean
+    focus_mode: string
+    depth_level: string
+  }
+  mindmap: {
+    map_type: string
+    max_depth: number
+    highlight_weak: boolean
+    expand_weak_points: boolean
+    include_prerequisites: boolean
+  }
+  diagram: {
+    diagram_type: string
+    visual_style: string
+    highlight_mode: string
+    detail_level: string
+  }
+  quiz: {
+    question_count: number
+    difficulty_mode: string
+    weak_point_weight: number
+    exam_style: string
+    include_analysis: boolean
+  }
+  code: {
+    programming_language: string
+    case_type: string
+    comment_level: string
+    include_test: boolean
+    difficulty: string
+  }
+  reading: {
+    reading_depth: string
+    max_items: number
+    resource_quality: string
+    include_practice: boolean
+    language_preference: string
+  }
+}
+
+const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
+  exam_prep: {
+    content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' },
+    quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 70, exam_style: '考研', include_analysis: true },
+    diagram: { diagram_type: 'auto', visual_style: 'exam', highlight_mode: 'weak_points', detail_level: 'standard' },
+    mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false },
+    code: { programming_language: 'python', case_type: 'algorithm_template', comment_level: 'standard', include_test: false, difficulty: 'intermediate' },
+    reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'classic', include_practice: false, language_preference: 'chinese' },
+  },
+  daily_review: {
+    content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' },
+    quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true },
+    diagram: { diagram_type: 'auto', visual_style: 'minimal', highlight_mode: 'key_points', detail_level: 'concise' },
+    mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false },
+    code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: false, difficulty: 'beginner' },
+    reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' },
+  },
+  project_practice: {
+    content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' },
+    quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 30, exam_style: 'school', include_analysis: true },
+    diagram: { diagram_type: 'auto', visual_style: 'minimal', highlight_mode: 'all', detail_level: 'detailed' },
+    mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true },
+    code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: true, difficulty: 'intermediate' },
+    reading: { reading_depth: 'engineering', max_items: 5, resource_quality: 'latest', include_practice: true, language_preference: 'chinese' },
+  },
+  self_study: {
+    content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' },
+    quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true },
+    diagram: { diagram_type: 'auto', visual_style: 'minimal', highlight_mode: 'key_points', detail_level: 'standard' },
+    mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true },
+    code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'verbose', include_test: false, difficulty: 'beginner' },
+    reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' },
+  },
+}
+
 // ===================== 1. 核心状态 =====================
 type Phase = 'input' | 'personalize' | 'generating' | 'results'
-const currentPhase = ref<Phase>('input') 
+const currentPhase = ref<Phase>('input')
 
 const naturalInput = ref('')
 const isInputFocused = ref(false)
+const learningScenario = ref<LearningScenario>('daily_review')
 
 const quickPrompts = [
   "复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题",
@@ -337,13 +430,63 @@ const enabledAgentIds = computed(() => ['content', 'mindmap', 'diagram', 'code',
 
 // ===================== 2. 参数配置状态 =====================
 const agentConfigs = reactive({
-  content: { structure: 'progressive' as const, include_common_mistakes: true, include_examples: true },
-  mindmap: { map_type: 'knowledge_tree' as const, max_depth: 3, highlight_weak: true },
-  diagram: { diagram_type: 'auto' as const, visual_style: 'minimal' as const },
-  quiz: { question_count: 5, difficulty_mode: 'adaptive' as const },
-  code: { programming_language: 'python' as const, case_type: 'basic_demo' as const },
-  reading: { reading_depth: 'course_extended' as const, max_items: 3 }
+  content: {
+    structure: 'progressive' as const,
+    include_common_mistakes: true,
+    include_examples: true,
+    focus_mode: 'full_coverage' as const,
+    depth_level: 'standard' as const,
+  },
+  mindmap: {
+    map_type: 'knowledge_tree' as const,
+    max_depth: 3,
+    highlight_weak: true,
+    expand_weak_points: false,
+    include_prerequisites: false,
+  },
+  diagram: {
+    diagram_type: 'auto' as const,
+    visual_style: 'minimal' as const,
+    highlight_mode: 'key_points' as const,
+    detail_level: 'standard' as const,
+  },
+  quiz: {
+    question_count: 5,
+    difficulty_mode: 'adaptive' as const,
+    weak_point_weight: 50,
+    exam_style: 'school' as const,
+    include_analysis: true,
+  },
+  code: {
+    programming_language: 'python' as const,
+    case_type: 'basic_demo' as const,
+    comment_level: 'standard' as const,
+    include_test: false,
+    difficulty: 'beginner' as const,
+  },
+  reading: {
+    reading_depth: 'course_extended' as const,
+    max_items: 3,
+    resource_quality: 'balanced' as const,
+    include_practice: false,
+    language_preference: 'chinese' as const,
+  },
 })
+
+// 场景切换函数
+const applyScenarioDefaults = (scenario: LearningScenario) => {
+  const defaults = SCENARIO_DEFAULTS[scenario]
+  if (!defaults) return
+
+  // 深度合并，保留用户可能已修改的其他字段
+  Object.keys(defaults).forEach((key) => {
+    const agentKey = key as keyof typeof agentConfigs
+    const agentDefaults = defaults[agentKey]
+    if (agentDefaults) {
+      Object.assign(agentConfigs[agentKey], agentDefaults)
+    }
+  })
+}
 
 // 无解析，直接切换页面
 const goToPersonalize = () => {
@@ -399,9 +542,10 @@ const startGeneration = async () => {
   // 调用 API
   generateResources(
     {
-      learning_need: naturalInput.value,  // 用户输入的整段话，不解析，直接传给后端
+      learning_need: naturalInput.value,
+      learning_scenario: learningScenario.value,
       selected_agents: enabledAgentIds.value.map(id => ({ agent_id: id as ResourceAgentId, enabled: true, priority: 1 })),
-      agent_configs: agentConfigs,  // 直接传递对象格式，与后端 AgentConfigs schema 匹配
+      agent_configs: agentConfigs,
       output_options: { output_format: 'json' }
     },
     (event: any) => {
@@ -541,6 +685,27 @@ const handlePreview = (data: any) => {
 .view-header { text-align: center; margin-bottom: 10px; }
 .view-header h2 { font-size: 2rem; font-weight: 800; color: #0F172A; margin: 0 0 12px; }
 .view-header p { font-size: 1.05rem; color: #64748B; margin: 0; }
+
+.scenario-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  background: #F0F9FF;
+  border-radius: 12px;
+  border: 1px solid #BAE6FD;
+}
+.scenario-selector label {
+  font-weight: 700;
+  color: #0369A1;
+  font-size: 0.95rem;
+}
+.scenario-selector .hint {
+  font-size: 0.85rem;
+  color: #64748B;
+  margin-left: auto;
+}
 
 .config-section { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
 .agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }

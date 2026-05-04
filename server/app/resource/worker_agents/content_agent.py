@@ -142,6 +142,8 @@ class ContentAgent:
             f"- 结构类型: {agent_config.get('structure', 'progressive')}",
             f"- 包含常见错误: {agent_config.get('include_common_mistakes', True)}",
             f"- 包含示例: {agent_config.get('include_examples', True)}",
+            f"- 聚焦模式: {agent_config.get('focus_mode', 'full_coverage')}",
+            f"- 深度级别: {agent_config.get('depth_level', 'standard')}",
         ]
 
         append_backend_context_for_prompt(parts, state)

@@ -147,6 +147,8 @@ class MindmapAgent:
             f"- 导图类型: {agent_config.get('map_type', 'knowledge_tree')}",
             f"- 最大深度: {agent_config.get('max_depth', 4)}",
             f"- 高亮短板: {agent_config.get('highlight_weak', True)}",
+            f"- 展开薄弱点: {agent_config.get('expand_weak_points', False)}",
+            f"- 包含前置知识: {agent_config.get('include_prerequisites', False)}",
         ]
 
         append_backend_context_for_prompt(parts, state)

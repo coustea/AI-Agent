@@ -153,6 +153,9 @@ class CodeAgent:
             "## Agent 配置",
             f"- 编程语言: {agent_config.get('programming_language', 'python')}",
             f"- 案例类型: {agent_config.get('case_type', 'basic_demo')}",
+            f"- 注释详细程度: {agent_config.get('comment_level', 'standard')}",
+            f"- 包含测试用例: {agent_config.get('include_test', False)}",
+            f"- 代码难度: {agent_config.get('difficulty', 'beginner')}",
         ]
 
         append_backend_context_for_prompt(parts, state)

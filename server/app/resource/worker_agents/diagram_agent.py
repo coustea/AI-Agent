@@ -366,6 +366,8 @@ class DiagramAgent:
             "## Agent 配置",
             f"- 图解类型: {agent_config.get('diagram_type', 'auto')}",
             f"- 视觉风格: {agent_config.get('visual_style', 'minimal')}",
+            f"- 高亮模式: {agent_config.get('highlight_mode', 'key_points')}",
+            f"- 细节级别: {agent_config.get('detail_level', 'standard')}",
         ]
 
         append_backend_context_for_prompt(parts, state)

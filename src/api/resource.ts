@@ -17,8 +17,11 @@ function parseSseFrames(raw: string): { frames: string[]; rest: string } {
 
 export type ResourceAgentId = 'content' | 'mindmap' | 'diagram' | 'quiz' | 'reading' | 'code'
 
+export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study'
+
 interface ResourceGenerationRequest {
   learning_need: string
+  learning_scenario: LearningScenario
   selected_agents: {
     agent_id: ResourceAgentId
     enabled: boolean
@@ -29,11 +32,15 @@ interface ResourceGenerationRequest {
       structure: 'progressive' | 'summary_first' | 'exam_points' | 'case_driven'
       include_common_mistakes: boolean
       include_examples: boolean
+      focus_mode: 'weak_points' | 'key_concepts' | 'full_coverage'
+      depth_level: 'quick' | 'standard' | 'deep'
     }
     mindmap: {
       map_type: 'knowledge_tree' | 'exam_map' | 'comparison_map'
       max_depth: number
       highlight_weak: boolean
+      expand_weak_points: boolean
+      include_prerequisites: boolean
     }
     diagram: {
       diagram_type:
@@ -50,18 +57,29 @@ interface ResourceGenerationRequest {
         | 'activity'
         | 'component'
       visual_style: 'minimal' | 'exam'
+      highlight_mode: 'weak_points' | 'key_points' | 'all'
+      detail_level: 'concise' | 'standard' | 'detailed'
     }
     quiz: {
       question_count: number
       difficulty_mode: 'basic' | 'adaptive' | 'exam'
+      weak_point_weight: number
+      exam_style: 'school' | '考研' | '考证' | 'interview'
+      include_analysis: boolean
     }
     code: {
       programming_language: 'python' | 'cpp' | 'java' | 'go' | 'javascript'
       case_type: 'basic_demo' | 'algorithm_template' | 'debug_demo'
+      comment_level: 'minimal' | 'standard' | 'verbose'
+      include_test: boolean
+      difficulty: 'beginner' | 'intermediate' | 'advanced'
     }
     reading: {
       reading_depth: 'course_extended' | 'engineering' | 'frontier'
       max_items: number
+      resource_quality: 'classic' | 'latest' | 'balanced'
+      include_practice: boolean
+      language_preference: 'chinese' | 'english' | 'both'
     }
   }
   output_options: {

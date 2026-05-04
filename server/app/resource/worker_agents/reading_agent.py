@@ -148,6 +148,9 @@ class ReadingAgent:
             "## Agent 配置",
             f"- 阅读深度: {agent_config.get('reading_depth', 'course_extended')}",
             f"- 最大条目数: {agent_config.get('max_items', 5)}",
+            f"- 资源时效偏好: {agent_config.get('resource_quality', 'balanced')}",
+            f"- 包含实践资源: {agent_config.get('include_practice', False)}",
+            f"- 语言偏好: {agent_config.get('language_preference', 'chinese')}",
         ]
 
         append_backend_context_for_prompt(parts, state)
