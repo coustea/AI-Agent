@@ -39,19 +39,18 @@ class ResourceUsecases:
         """创建资源记录。"""
         resource = GeneratedResource(
             user_id=user_id,
-            course=request.task.course,
-            chapter=request.task.chapter,
-            topic=request.task.topic,
-            weak_points=request.task.weak_points,
-            learning_goal=request.task.learning_goal.value,
-            extra_requirement=request.task.extra_requirement,
-            personalization=request.personalization.model_dump(mode="json"),
+            learning_need=request.learning_need,
+            personalization={},
             selected_agents=request.enabled_agent_ids(),
             agent_configs=request.agent_configs.model_dump(mode="json"),
             status="pending",
         )
         self.session.add(resource)
-        await self.session.commit()
+        try:
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
         await self.session.refresh(resource)
         return resource
 
@@ -65,7 +64,11 @@ class ResourceUsecases:
         if resource:
             resource.status = status
             resource.updated_at = datetime.now(timezone.utc)
-            await self.session.commit()
+            try:
+                await self.session.commit()
+            except Exception:
+                await self.session.rollback()
+                raise
             await self.session.refresh(resource)
 
     async def save_resource_item(
@@ -88,7 +91,11 @@ class ResourceUsecases:
             updated_at=datetime.now(timezone.utc),
         )
         self.session.add(resource_item)
-        await self.session.commit()
+        try:
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
         await self.session.refresh(resource_item)
         return resource_item
 
@@ -206,7 +213,7 @@ class ResourceUsecases:
         raw_content = result.get("content")
         return schemas.GeneratedResourceItem(
             type=schemas.ResourceAgentId(agent_name),
-            title=f"{resource.topic or resource.course} - {agent_name}",
+            title=f"学习资源 - {agent_name}",
             format=str(result.get("file_type") or "json"),
             content=raw_content,
             summary=f"{agent_name} 资源已生成",

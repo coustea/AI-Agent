@@ -2,8 +2,8 @@
 资源生成编排器。
 
 实现完整的资源生成工作流：
-1. load_profile - 加载学习者画像
-2. create_task - 创建任务记录
+1. create_task - 创建任务记录
+2. load_profile - 加载后端学习者画像
 3. plan_workflow - MasterAgent 规划工作流
 4. execute_layer - 分层执行各 Worker Agent
 5. review_resources - ReviewerAgent 审查资源
@@ -22,18 +22,21 @@ from uuid import uuid4
 from app.infra.logging import get_logger
 from app.resource.events import AgentEventEmitter
 from app.resource.registry import ensure_initialized, get_agent_entry
+from app.resource.utils import load_profile_snapshot
 from app.resource.schemas import (
+    AgentTask,
     AgentSelection,
     GeneratedResourceItem,
-    ResourceAgentId,
+    LayerPlan,
+    PlanningContext,
     ResourceBundle,
     ResourceGenerationRequest,
+    ResourceAgentId,
     ReviewIssue,
     ReviewResult,
     StudyPathStep,
     WorkerState,
 )
-from app.resource.utils import load_profile_snapshot
 from app.resource.worker_agents import (
     CodeAgent,
     ContentAgent,
@@ -45,18 +48,18 @@ from app.resource.worker_agents import (
 
 logger = get_logger(__name__)
 
-# Agent 依赖关系（仅用于同层排序，不阻塞执行）
+
 AGENT_DEPENDENCIES: dict[str, list[str]] = {
     "content": [],
-    "mindmap": ["content"],
-    "diagram": ["content"],
-    "quiz": ["content"],
-    "code": ["content"],
-    "reading": ["content"],
+    "mindmap": [],
+    "diagram": [],
+    "quiz": ["content", "code"],
+    "code": [],
+    "reading": [],
 }
 
-# 学习路径默认顺序
-STUDY_PATH_ORDER = ["content", "diagram", "mindmap", "code", "quiz", "reading"]
+# 学习路径默认顺序（按 Layer 0 → Layer 1 → Layer 2 排列）
+STUDY_PATH_ORDER = ["content", "mindmap", "diagram", "code", "quiz", "reading"]
 
 # 学习路径预计时间（分钟）
 STUDY_PATH_ESTIMATED_TIME = {
@@ -80,101 +83,100 @@ AGENT_CLASS_MAP = {
 
 
 class MasterAgent:
-    """工作流规划 Agent。
+    """工作流动态规划 Agent。使用 LLM 每层执行前重新规划。"""
 
-    职责：
-    1. 读取 ResourceGenerationRequest
-    2. 根据 selected_agents.enabled=true 得到目标 Agent
-    3. 根据 registry 中的依赖关系和 priority 生成 workflow_plan
-    4. 按层规划执行
-    """
+    LAYER_AGENTS: dict[int, list[str]] = {
+        0: ["content", "mindmap", "diagram"],
+        1: ["code", "reading"],
+        2: ["quiz"],
+    }
 
-    def build_workflow_plan(self, request: ResourceGenerationRequest) -> list[dict[str, Any]]:
-        """构建工作流计划。
+    def __init__(self) -> None:
+        from app.infra.llm import get_llm_manager
+        self.llm = get_llm_manager().get_model("spark_max")
 
-        返回结构：
-        [
-            {
-                "agent_id": "content",
-                "agent_name": "ContentAgent",
-                "resource_type": "content",
-                "layer": 0,
-                "depends_on": [],
-                "reason": "先生成课程讲解文档，为其他资源提供基础上下文",
-                "visible": true
-            },
-            ...
-        ]
-        """
-        selected_agents = request.selected_agents
-        enabled = [x for x in selected_agents if x.enabled]
-        if not enabled:
-            return []
+    async def plan_layer(self, context: PlanningContext) -> LayerPlan:
+        """根据当前上下文规划下一层执行计划。"""
+        layer_agents = self.LAYER_AGENTS.get(context.layer, [])
+        candidates = [a for a in layer_agents if a in context.user_explicit_selection]
 
-        priority_map = {item.agent_id.value: item.priority for item in enabled}
-        selected_order = request.enabled_agent_ids()
-        selected_set = set(selected_order)
-        content_enabled = "content" in selected_set
+        if not candidates:
+            return LayerPlan(layer=context.layer, agents=[], reasoning="本层无待执行 Agent")
 
-        layers: dict[int, list[str]] = {0: [], 1: [], 2: []}
-        if content_enabled:
-            if "content" in selected_set:
-                layers[0].append("content")
-            for agent_id in ("diagram", "mindmap"):
-                if agent_id in selected_set:
-                    layers[1].append(agent_id)
-            for agent_id in ("code", "quiz", "reading"):
-                if agent_id in selected_set:
-                    layers[2].append(agent_id)
-        else:
-            # 没有 content 时，所有 Agent 在同一层并行执行
-            layers = {0: [agent_id for agent_id in selected_order if agent_id != "content"]}
+        agent_tasks = await self._generate_agent_tasks(
+            context=context,
+            candidates=candidates,
+            explicit_set=set(context.user_explicit_selection),
+        )
 
-        for agent_ids in layers.values():
-            agent_ids.sort(key=lambda agent_id: priority_map.get(agent_id, 0))
+        return LayerPlan(
+            layer=context.layer,
+            agents=agent_tasks,
+            reasoning=f"本层执行 {len(agent_tasks)} 个 Agent",
+        )
 
-        workflow_plan: list[dict[str, Any]] = []
-        for layer_idx, agent_ids in sorted(layers.items()):
-            for agent_id in agent_ids:
-                entry = get_agent_entry(agent_id)
-                if entry is None:
-                    continue
-                depends_on = [dep for dep in entry.dependencies if dep in selected_set]
-                workflow_plan.append(
-                    {
-                        "agent_id": agent_id,
-                        "agent_name": entry.agent_class.__name__,
-                        "resource_type": agent_id,
-                        "layer": layer_idx,
-                        "depends_on": depends_on,
-                        "reason": self._get_agent_reason(agent_id),
-                        "visible": True,
-                    }
-                )
+    async def _generate_agent_tasks(
+        self,
+        context: PlanningContext,
+        candidates: list[str],
+        explicit_set: set[str],
+    ) -> list[AgentTask]:
+        """确定性生成任务描述。"""
+        return self._default_agent_tasks(candidates, explicit_set, context)
 
-        return workflow_plan
+    def _default_agent_tasks(
+        self,
+        candidates: list[str],
+        explicit_set: set[str],
+        context: PlanningContext,
+    ) -> list[AgentTask]:
+        """默认 Agent 任务规划。"""
+        learning_need = context.question.learning_need
 
-    def _get_agent_reason(self, agent_id: str) -> str:
-        """获取 Agent 执行原因。"""
-        reasons = {
-            "content": "先生成课程讲解文档，为其他资源提供基础上下文",
-            "diagram": "基于讲解内容生成知识图解，帮助理解复杂概念",
-            "mindmap": "基于讲解内容生成思维导图，梳理知识结构",
-            "code": "基于讲解内容生成代码实操案例，加深理解",
-            "quiz": "基于讲解内容生成练习题，检验学习效果",
-            "reading": "基于讲解内容推荐拓展阅读，扩展知识面",
+        tasks = []
+        for i, agent_id in enumerate(candidates):
+            agent_config = context.question.agent_configs.model_dump().get(agent_id, {})
+            task_desc = self._build_default_task_description(agent_id, learning_need)
+
+            tasks.append(AgentTask(
+                agent_id=agent_id,
+                task_description=task_desc,
+                depends_on=[],
+                is_explicit=agent_id in explicit_set,
+                priority=i,
+                config=agent_config,
+            ))
+
+        return tasks
+
+    def _build_default_task_description(
+        self,
+        agent_id: str,
+        learning_need: str,
+    ) -> str:
+        """构建默认任务描述。"""
+        base_desc = f"根据用户学习需求生成{self._get_agent_name(agent_id)}。"
+
+        if learning_need:
+            base_desc = f"根据用户需求「{learning_need[:100]}」生成{self._get_agent_name(agent_id)}。"
+
+        return base_desc
+
+    def _get_agent_name(self, agent_id: str) -> str:
+        """获取 Agent 中文名称。"""
+        names = {
+            "content": "课程讲解文档",
+            "diagram": "知识图解",
+            "mindmap": "思维导图",
+            "quiz": "练习题",
+            "reading": "拓展阅读推荐",
+            "code": "代码实操案例",
         }
-        return reasons.get(agent_id, "基于学习任务与个性化配置生成资源")
+        return names.get(agent_id, agent_id)
 
 
 class ReviewerAgent:
-    """资源审查 Agent。
-
-    职责：
-    1. 检查资源完整性
-    2. 检查资源质量
-    3. 生成审查报告
-    """
+    """资源审查 Agent。检查完整性、质量并生成审查报告。"""
 
     def review(
         self,
@@ -183,12 +185,12 @@ class ReviewerAgent:
         failed_agents: list[str],
         errors: list[str],
     ) -> ReviewResult:
-        """执行资源审查。"""
+        """执行资源审查，返回评分和问题列表。"""
         issues: list[ReviewIssue] = []
         suggestions: list[str] = []
         selected_agents = request.enabled_agent_ids()
 
-        # 检查资源是否为空
+        # 空资源检查
         if not resources:
             issues.append(ReviewIssue(
                 level="error",
@@ -197,10 +199,10 @@ class ReviewerAgent:
             ))
             return ReviewResult(passed=False, score=0, issues=issues, suggestions=suggestions)
 
-        # 构建资源映射
+        # 构建资源类型到资源的映射
         resource_map = {res.type.value: res for res in resources}
 
-        # 检查每个启用的 Agent 是否有结果
+        # 检查启用但未产出的 Agent
         for agent_id in selected_agents:
             if agent_id not in resource_map and agent_id not in failed_agents:
                 issues.append(ReviewIssue(
@@ -231,14 +233,13 @@ class ReviewerAgent:
                         message=f"quiz 题量为 {len(questions)}，与请求数量 {expected} 差距较大",
                         suggestion="按 question_count 重新生成练习题",
                     ))
-            elif isinstance(content, str):
-                if not content:
-                    issues.append(ReviewIssue(
-                        resource_type="quiz",
-                        level="warning",
-                        message="quiz 内容为空",
-                        suggestion="检查习题生成逻辑",
-                    ))
+            elif isinstance(content, str) and not content:
+                issues.append(ReviewIssue(
+                    resource_type="quiz",
+                    level="warning",
+                    message="quiz 内容为空",
+                    suggestion="检查习题生成逻辑",
+                ))
 
         # 检查 diagram
         diagram = resource_map.get("diagram")
@@ -296,7 +297,7 @@ class ReviewerAgent:
         for error in errors:
             suggestions.append(error)
 
-        # 计算评分
+        # 计算评分：基于成功数、错误数、警告数
         success_count = len(resources)
         total_count = len(selected_agents)
         error_count = sum(1 for i in issues if i.level == "error")
@@ -329,16 +330,7 @@ class ReviewerAgent:
 
 
 class AssemblerAgent:
-    """资源包组装 Agent。
-
-    职责：
-    1. 生成 ResourceBundle
-    2. 生成资源包标题
-    3. 生成推荐学习路径
-    4. 整合 resources
-    5. 附加 review_result
-    6. 计算最终 status
-    """
+    """资源包组装 Agent。整合资源、生成学习路径、计算最终状态。"""
 
     def assemble(
         self,
@@ -349,20 +341,18 @@ class AssemblerAgent:
         review_result: ReviewResult,
         failed_agents: list[str],
     ) -> ResourceBundle:
-        """组装资源包。"""
-        # 生成标题
+        """组装资源包，生成最终输出结构。"""
+        # 生成标题（优先使用请求中的标题）
         title = request.output_options.final_bundle_title
         if not title:
-            course = request.task.course
-            topic = request.task.topic
-            title = f"{course} - {topic} 个性化学习资源包"
+            title = "个性化学习资源包"
 
-        # 生成学习路径
+        # 构建学习路径（按固定顺序）
         study_path: list[StudyPathStep] = []
         if request.output_options.include_study_path:
             study_path = self._build_study_path(resources)
 
-        # 计算状态
+        # 计算最终状态：全部成功/部分失败/全部失败
         if not resources:
             status = "failed"
         elif failed_agents:
@@ -377,8 +367,7 @@ class AssemblerAgent:
             id=str(resource_id),
             task_id=task_id,
             title=title,
-            task=request.task,
-            personalization=request.personalization,
+            learning_need=request.learning_need,
             selected_agents=selected_agents,
             resources=resources,
             study_path=study_path,
@@ -429,7 +418,7 @@ class AssemblerAgent:
 
 
 class ResourceWorkflow:
-    """资源生成工作流。"""
+    """资源生成工作流。协调 MasterAgent、WorkerAgents、ReviewerAgent、AssemblerAgent。"""
 
     def __init__(self, emitter: AgentEventEmitter, resource_store: Any):
         self.emitter = emitter
@@ -439,34 +428,29 @@ class ResourceWorkflow:
         self.assembler_agent = AssemblerAgent()
 
     async def run(self, user_id: int, request: ResourceGenerationRequest) -> dict[str, Any]:
-        """执行资源生成工作流。"""
+        """执行资源生成工作流，每层动态规划。"""
         ensure_initialized()
-        enabled_agent_ids = request.enabled_agent_ids()
+        user_explicit_selection = request.enabled_agent_ids()
         task_id = str(uuid4())
         self.emitter.bind_task(task_id)
 
-        # 1. workflow created
         await self.emitter.emit_workflow(
             stage="created",
             status="pending",
             message="资源生成任务已创建",
-            payload={"selected_agents": enabled_agent_ids},
+            payload={"selected_agents": user_explicit_selection},
             progress=0,
         )
 
         try:
-            # 2. load_profile
-            snapshot = await load_profile_snapshot(user_id)
-            learner_profile = snapshot.as_agent_profile()
-
-            # 3. create_task
             resource_record = await self.resource_store.create_resource(
                 user_id=user_id,
                 request=request,
             )
             resource_id = resource_record.id
+            snapshot = await load_profile_snapshot(user_id)
+            learner_profile = snapshot.as_agent_profile()
 
-            # 4. plan_workflow
             await self.emitter.emit_workflow(
                 stage="planning",
                 status="running",
@@ -474,155 +458,89 @@ class ResourceWorkflow:
                 progress=5,
             )
 
-            workflow_plan = self.master_agent.build_workflow_plan(request)
-
-            await self.emitter.emit_workflow(
-                stage="planning",
-                status="success",
-                message="工作流规划完成",
-                payload={"workflow_plan": workflow_plan},
-                progress=10,
-            )
-
-            # 5. execute_layer
             agent_context = {
-                "task": request.task.model_dump(),
-                "personalization": request.personalization.model_dump(),
+                "learning_need": request.learning_need,
                 "agent_configs": request.agent_configs.model_dump(),
-                "selected_agents": enabled_agent_ids,
+                "selected_agents": user_explicit_selection,
                 "learner_profile": learner_profile,
             }
 
             raw_results: dict[str, dict[str, Any]] = {}
-            resources: list[GeneratedResourceItem] = []
+            all_resources: list[GeneratedResourceItem] = []
             failed_agents: list[str] = []
             errors: list[str] = []
-            upstream_results: dict[str, Any] = {}
+            content_markdown: str | None = None
+            code_content: Any = None
+            total_layers = 3
+            completed_layers = 0
 
-            # 按层执行
-            layers = self._group_by_layer(workflow_plan)
-            total_agents = len(workflow_plan)
-            completed_count = 0
-
-            for layer_idx, layer_agents in layers.items():
-                # 过滤出本层可以执行的 Agent（依赖满足或依赖不在选中列表中）
-                ready_plans: list[dict[str, Any]] = []
-                for plan in layer_agents:
-                    selected_dependencies = [dep for dep in plan.get("depends_on", []) if dep in enabled_agent_ids]
-                    blocking_dependencies = [
-                        dep for dep in selected_dependencies
-                        if dep not in upstream_results and dep not in failed_agents
-                    ]
-                    if blocking_dependencies:
-                        continue
-                    ready_plans.append(plan)
-
-                async def run_plan(plan: dict[str, Any]) -> tuple[str, dict[str, Any], list[str]]:
-                    agent_id = plan["agent_id"]
-                    dependencies = [dep for dep in plan.get("depends_on", []) if dep in enabled_agent_ids]
-                    available_dependencies = [dep for dep in dependencies if dep in upstream_results]
-                    await self.emitter.emit_agent(
-                        agent=agent_id,
-                        status="running",
-                        message=f"{agent_id} 正在生成",
-                        payload={"depends_on": available_dependencies, "layer": layer_idx},
-                        progress=min(10 + int(completed_count / max(total_agents, 1) * 75), 85),
-                    )
-                    result = await self._run_agent(
-                        user_id=user_id,
-                        resource_id=resource_id,
-                        agent_id=agent_id,
-                        request=request,
-                        agent_context=agent_context,
-                        workflow_plan=workflow_plan,
-                        upstream_results=upstream_results,
-                        dependencies=dependencies,
-                        layer_index=layer_idx,
-                    )
-                    return agent_id, result, available_dependencies
-
-                layer_results = await asyncio.gather(
-                    *(run_plan(plan) for plan in ready_plans),
-                    return_exceptions=True,
+            for layer in range(total_layers):
+                planning_context = PlanningContext(
+                    layer=layer,
+                    question=request,
+                    user_explicit_selection=user_explicit_selection,
+                    implicit_dependencies=[],
+                    upstream_results={},
+                    upstream_reports={},
                 )
 
-                for item_result in layer_results:
-                    completed_count += 1
-                    if isinstance(item_result, Exception):
-                        message = str(item_result)
-                        errors.append(message)
-                        await self.emitter.emit_error(stage="generating", message=message)
-                        continue
+                layer_plan = await self.master_agent.plan_layer(planning_context)
 
-                    agent_id, result, depends_on = item_result
-                    raw_results[agent_id] = result
+                await self.emitter.emit_workflow(
+                    stage=f"planning_layer_{layer}",
+                    status="success",
+                    message=f"Layer {layer} 规划完成: {len(layer_plan.agents)} 个 Agent",
+                    payload={"layer_plan": layer_plan.model_dump(mode="json")},
+                    progress=10 + int(completed_layers / total_layers * 5),
+                )
 
-                    if result.get("success"):
-                        resource_item = self._build_resource_item(
-                            agent_id=agent_id,
-                            result=result,
-                            depends_on=depends_on,
+                if not layer_plan.agents:
+                    completed_layers += 1
+                    continue
+
+                layer_tasks = []
+                for agent_task in layer_plan.agents:
+                    layer_tasks.append(
+                        self._execute_agent_task(
+                            agent_task=agent_task,
+                            user_id=user_id,
+                            resource_id=resource_id,
                             request=request,
+                            agent_context=agent_context,
+                            upstream_results=raw_results,
+                            layer_index=layer,
                         )
-                        try:
-                            saved_item = await self.resource_store.save_resource_item(
-                                resource_id=resource_id,
-                                user_id=user_id,
-                                item=resource_item,
-                            )
-                        except Exception as save_exc:
-                            logger.exception("[ResourceWorkflow] 资源项保存失败: agent=%s", agent_id)
-                            failed_agents.append(agent_id)
-                            message = f"{agent_id} 数据库保存失败: {save_exc}"
-                            errors.append(message)
-                            await self.emitter.emit_agent(
-                                agent=agent_id,
-                                status="failed",
-                                message=message,
-                                payload={"error": str(save_exc), "stage": "save_resource_item"},
-                            )
-                            await self.emitter.emit_error(
-                                stage="generating",
-                                agent=agent_id,
-                                message=message,
-                            )
-                            continue
+                    )
 
-                        if saved_item.id is not None:
-                            resource_item.id = str(saved_item.id)
-                        resources.append(resource_item)
-                        upstream_results[agent_id] = resource_item.model_dump(mode="json")
-                        await self.emitter.emit_agent(
-                            agent=agent_id,
-                            status="success",
-                            message=f"{agent_id} 生成完成",
-                            payload={"resource": resource_item.model_dump(mode="json")},
-                            progress=min(10 + int(completed_count / max(total_agents, 1) * 75), 90),
-                        )
-                        await self.emitter.emit_resource(
-                            agent=agent_id,
-                            resource=resource_item,
-                            message=f"{agent_id} 生成完成",
-                            payload={"db_item_id": saved_item.id},
-                            progress=min(10 + int(completed_count / max(total_agents, 1) * 75), 90),
-                        )
-                    else:
-                        failed_agents.append(agent_id)
-                        message = f"{agent_id} 生成失败: {result.get('error', 'unknown error')}"
-                        errors.append(message)
-                        await self.emitter.emit_agent(
-                            agent=agent_id,
-                            status="failed",
-                            message=message,
-                            payload={"error": result.get("error")},
-                        )
-                        await self.emitter.emit_error(
-                            stage="generating",
-                            agent=agent_id,
-                            message=message,
-                        )
+                layer_results = await asyncio.gather(*layer_tasks, return_exceptions=True)
 
-            # 6. review_resources
+                content_markdown, code_content = await self._finalize_layer_results(
+                    layer_results=layer_results,
+                    resource_id=resource_id,
+                    user_id=user_id,
+                    request=request,
+                    raw_results=raw_results,
+                    all_resources=all_resources,
+                    content_markdown=content_markdown,
+                    code_content=code_content,
+                    failed_agents=failed_agents,
+                    errors=errors,
+                )
+
+                completed_layers += 1
+                progress = 10 + int(completed_layers / total_layers * 80)
+                await self.emitter.emit_workflow(
+                    stage=f"layer_{layer}_done",
+                    status="success",
+                    message=f"Layer {layer} 执行完成",
+                    progress=min(progress, 90),
+                )
+
+            explicit_resources = [
+                r for r in all_resources
+                if r.type.value in user_explicit_selection
+            ]
+
             await self.emitter.emit_event(
                 event_type="review",
                 stage="reviewing",
@@ -634,17 +552,13 @@ class ResourceWorkflow:
 
             review_result = self.reviewer_agent.review(
                 request=request,
-                resources=resources,
+                resources=explicit_resources,
                 failed_agents=failed_agents,
                 errors=errors,
             )
 
-            await self.emitter.emit_review(
-                review_result=review_result,
-                progress=95,
-            )
+            await self.emitter.emit_review(review_result=review_result, progress=95)
 
-            # 7. assemble_bundle
             await self.emitter.emit_event(
                 event_type="bundle",
                 stage="assembling",
@@ -658,7 +572,7 @@ class ResourceWorkflow:
                 task_id=task_id,
                 resource_id=str(resource_id),
                 request=request,
-                resources=resources,
+                resources=explicit_resources,
                 review_result=review_result,
                 failed_agents=failed_agents,
             )
@@ -668,13 +582,7 @@ class ResourceWorkflow:
                 status=bundle.status,
             )
 
-            # emit bundle success
-            await self.emitter.emit_bundle(
-                bundle=bundle,
-                progress=100,
-            )
-
-            # 8. finalize
+            await self.emitter.emit_bundle(bundle=bundle, progress=100)
             await self.emitter.emit_done(bundle=bundle)
 
             return {"success": bundle.status != "failed", "results": raw_results, "bundle": bundle.model_dump(mode="json")}
@@ -684,74 +592,179 @@ class ResourceWorkflow:
             await self.emitter.emit_error(message=str(exc))
             return {"success": False, "results": {}, "error": str(exc)}
 
-    def _group_by_layer(self, workflow_plan: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
-        """按层分组。"""
-        layers: dict[int, list[dict[str, Any]]] = {}
-        for plan in workflow_plan:
-            layer = plan.get("layer", 0)
-            if layer not in layers:
-                layers[layer] = []
-            layers[layer].append(plan)
-        return layers
-
-    async def _run_agent(
+    async def _execute_agent_task(
         self,
         *,
+        agent_task: AgentTask,
         user_id: int,
         resource_id: int,
-        agent_id: str,
         request: ResourceGenerationRequest,
         agent_context: dict[str, Any],
-        workflow_plan: list[dict[str, Any]],
-        upstream_results: dict[str, Any],
-        dependencies: list[str],
+        upstream_results: dict[str, dict[str, Any]],
         layer_index: int,
-    ) -> dict[str, Any]:
-        """执行单个 Agent。"""
+    ) -> tuple[str, dict[str, Any], bool]:
+        """执行单个 AgentTask 并返回结果。"""
+        agent_id = agent_task.agent_id
         agent_cls = AGENT_CLASS_MAP.get(agent_id)
         if agent_cls is None:
-            return {"success": False, "error": f"Unknown agent: {agent_id}"}
+            return agent_id, {"success": False, "error": f"Unknown agent: {agent_id}"}, agent_task.is_explicit
+
+        await self.emitter.emit_agent(
+            agent=agent_id,
+            status="running",
+            message=f"{agent_id} 正在生成",
+            payload={"task_description": agent_task.task_description[:100], "layer": layer_index},
+        )
 
         worker = agent_cls(user_id, resource_id, emitter=self.emitter)
 
-        # 构建任务负载
         task_payload = {
-            "course": request.task.course,
-            "chapter": request.task.chapter,
-            "topic": request.task.topic,
-            "weak_points": request.task.weak_points,
-            "learning_goal": request.task.learning_goal.value,
-            "extra_requirement": request.task.extra_requirement,
-            "resource_generation": {
-                "task": request.task.model_dump(),
-                "personalization": request.personalization.model_dump(),
-                "agent_context": agent_context,
-                "workflow_plan": workflow_plan,
-                "upstream_results": upstream_results,
-            },
+            "learning_need": request.learning_need,
+            "task_description": agent_task.task_description,
+        }
+        dependency_reports = {
+            dep: upstream_results[dep].get("execution_report") or upstream_results[dep].get("summary", "")
+            for dep in AGENT_DEPENDENCIES.get(agent_id, [])
+            if dep in upstream_results
         }
 
-        # 获取 Agent 专属配置
-        agent_config = request.agent_configs.model_dump().get(agent_id, {})
-
-        # 构建 WorkerState
         state = WorkerState(
             user_id=user_id,
             resource_id=resource_id,
             agent_name=agent_id,
             task=task_payload,
             learner_profile=agent_context.get("learner_profile", {}),
-            personalization=request.personalization.model_dump(),
-            agent_config=agent_config,
-            workflow_plan=workflow_plan,
-            dependencies=dependencies,
-            upstream_results=upstream_results,
-            dependency_reports={},
+            agent_config=agent_task.config,
+            workflow_plan=[],
             layer_index=layer_index,
+            upstream_results=upstream_results,
+            dependency_reports=dependency_reports,
         )
 
         result = await worker.run(state)
-        return result.model_dump() if hasattr(result, "model_dump") else dict(result)
+        return agent_id, result.model_dump() if hasattr(result, "model_dump") else dict(result), agent_task.is_explicit
+
+    async def _finalize_layer_results(
+        self,
+        *,
+        layer_results: list[Any],
+        resource_id: int,
+        user_id: int,
+        request: ResourceGenerationRequest,
+        all_resources: list[GeneratedResourceItem],
+        content_markdown: str | None,
+        code_content: Any,
+        failed_agents: list[str],
+        errors: list[str],
+        raw_results: dict[str, dict[str, Any]] | None = None,
+    ) -> tuple[str | None, Any]:
+        """并发保存同一层成功产物，并收集失败信息。"""
+        save_inputs = []
+
+        for item_result in layer_results:
+            if isinstance(item_result, Exception):
+                errors.append(str(item_result))
+                await self.emitter.emit_error(stage="generating", message=str(item_result))
+                continue
+
+            agent_id, result, is_explicit = item_result
+            if raw_results is not None:
+                raw_results[agent_id] = result
+
+            if result.get("success"):
+                save_inputs.append(
+                    (
+                        agent_id,
+                        result,
+                        is_explicit,
+                    )
+                )
+                continue
+
+            failed_agents.append(agent_id)
+            errors.append(f"{agent_id} 生成失败: {result.get('error', 'unknown')}")
+            await self.emitter.emit_agent(
+                agent=agent_id,
+                status="failed",
+                message=f"{agent_id} 生成失败",
+            )
+
+        saved_results = []
+        for agent_id, result, is_explicit in save_inputs:
+            try:
+                saved_item = await self._save_successful_agent_result(
+                    agent_id=agent_id,
+                    result=result,
+                    is_explicit=is_explicit,
+                    resource_id=resource_id,
+                    user_id=user_id,
+                    request=request,
+                )
+                saved_results.append((agent_id, saved_item, None))
+            except Exception as exc:
+                saved_results.append((agent_id, None, str(exc)))
+
+        for agent_id, resource_item, error in saved_results:
+            if error:
+                errors.append(error)
+                await self.emitter.emit_error(stage="saving", message=error)
+                continue
+            if resource_item is None:
+                failed_agents.append(agent_id)
+                continue
+            all_resources.append(resource_item)
+            # 提取 content 和 code 的结果供 quiz 使用
+            if agent_id == "content":
+                content_markdown = resource_item.content if isinstance(resource_item.content, str) else None
+            elif agent_id == "code":
+                code_content = resource_item.content
+
+        return content_markdown, code_content
+
+    async def _save_successful_agent_result(
+        self,
+        *,
+        agent_id: str,
+        result: dict[str, Any],
+        is_explicit: bool,
+        resource_id: int,
+        user_id: int,
+        request: ResourceGenerationRequest,
+    ) -> GeneratedResourceItem | None:
+        """保存单个成功 Agent 的产物并发出完成事件。"""
+        resource_item = self._build_resource_item(
+            agent_id=agent_id,
+            result=result,
+            depends_on=AGENT_DEPENDENCIES.get(agent_id, []),
+            request=request,
+        )
+        try:
+            saved_item = await self.resource_store.save_resource_item(
+                resource_id=resource_id,
+                user_id=user_id,
+                item=resource_item,
+            )
+            if saved_item.id is not None:
+                resource_item.id = str(saved_item.id)
+            await self.emitter.emit_agent(
+                agent=agent_id,
+                status="success",
+                message=f"{agent_id} 生成完成",
+                payload={"resource": resource_item.model_dump(mode="json"), "is_explicit": is_explicit},
+            )
+            await self.emitter.emit_resource(
+                agent=agent_id,
+                resource=resource_item,
+                message=f"{agent_id} 生成完成",
+            )
+            return resource_item
+        except Exception as save_exc:
+            await self.emitter.emit_agent(
+                agent=agent_id,
+                status="failed",
+                message=f"{agent_id} 数据库保存失败",
+            )
+            raise RuntimeError(f"{agent_id} 保存失败: {save_exc}") from save_exc
 
     def _build_resource_item(
         self,
@@ -761,11 +774,12 @@ class ResourceWorkflow:
         depends_on: list[str],
         request: ResourceGenerationRequest,
     ) -> GeneratedResourceItem:
-        """构建资源项。"""
+        """构建资源项，标准化不同类型的内容格式。"""
         raw_content = result.get("content", "")
         parsed_content: Any = raw_content
         fmt = self._infer_format(agent_id, result)
 
+        # 根据类型解析和标准化内容
         if agent_id == "diagram":
             parsed_content = self._normalize_diagram_content(raw_content, request)
             fmt = "mermaid" if parsed_content.get("render_format") == "mermaid" else "json"
@@ -781,6 +795,7 @@ class ResourceWorkflow:
             except Exception:
                 parsed_content = {"raw": raw_content}
 
+        # 构建元数据
         summary = f"{agent_id} 资源已生成"
         metadata = dict(result.get("metadata") or {})
         metadata.update({
@@ -791,7 +806,7 @@ class ResourceWorkflow:
         })
         return GeneratedResourceItem(
             type=ResourceAgentId(agent_id),
-            title=result.get("title") or f"{request.task.topic} - {agent_id}",
+            title=result.get("title") or f"学习资源 - {agent_id}",
             format=fmt,
             content=parsed_content,
             summary=result.get("summary") or summary,
@@ -800,7 +815,7 @@ class ResourceWorkflow:
         )
 
     def _infer_format(self, agent_id: str, result: dict[str, Any]) -> str:
-        """推断资源格式。"""
+        """根据 Agent 类型和结果推断资源格式。"""
         if agent_id in {"content", "mindmap"}:
             return "markdown"
         if agent_id == "diagram":
@@ -818,6 +833,7 @@ class ResourceWorkflow:
         return "json"
 
     def _normalize_diagram_content(self, raw_content: Any, request: ResourceGenerationRequest) -> dict[str, Any]:
+        """标准化 diagram 内容为统一格式 {diagram_type, render_format, source, description}。"""
         if isinstance(raw_content, dict):
             if "source" in raw_content:
                 return raw_content
@@ -848,6 +864,7 @@ class ResourceWorkflow:
         }
 
     def _normalize_code_content(self, raw_content: Any, request: ResourceGenerationRequest) -> dict[str, Any]:
+        """标准化 code 内容为统一格式 {language, code, explanation, ...}。"""
         if isinstance(raw_content, dict):
             return raw_content
         if isinstance(raw_content, str):
@@ -881,6 +898,7 @@ class ResourceWorkflow:
         }
 
     def _normalize_reading_content(self, raw_content: Any) -> dict[str, Any]:
+        """标准化 reading 内容为统一格式 {items: [...]}。"""
         if isinstance(raw_content, dict):
             if "items" in raw_content:
                 return raw_content

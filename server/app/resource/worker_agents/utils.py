@@ -1,44 +1,23 @@
 """
 Worker Agent 工具函数集合。
-
-包含：
-- Markdown 清理工具
-- 执行报告生成工具
 """
 
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from typing import Any
 
-from app.infra.logging import get_logger
-
-logger = get_logger(__name__)
-
-
-# =============================================================================
-# Markdown 清理工具
-# =============================================================================
 
 # Markdown 代码块匹配
 _MARKDOWN_FENCE_RE = re.compile(r"```(?:markdown|md)?\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 
 
 def extract_markdown_from_llm_output(content: str) -> str:
-    """从 LLM 输出中提取 Markdown 内容。
-
-    Args:
-        content: LLM 返回的原始内容
-
-    Returns:
-        提取并规范化后的 Markdown 文本
-    """
+    """从 LLM 输出中提取 Markdown 内容。"""
     raw = (content or "").strip()
     if not raw:
         return ""
 
-    # 尝试从代码块中提取
     match = _MARKDOWN_FENCE_RE.search(raw)
     if match:
         raw = match.group(1).strip()
@@ -70,106 +49,103 @@ def _normalize_markdown_indent(markdown_text: str) -> str:
     return "\n".join(normalized).strip()
 
 
-# =============================================================================
-# 执行报告生成工具
-# =============================================================================
+def format_dependency_reports_for_prompt(dependency_reports: dict[str, Any] | None) -> str:
+    """Format compact upstream execution reports for downstream agent prompts."""
+    if not dependency_reports:
+        return ""
 
-def generate_execution_report(
-    agent_type: str,
-    task: dict[str, Any],
-    content: str | dict[str, Any] | None,
-    success: bool = True,
-    error: str | None = None,
+    sections: list[str] = []
+    for agent, report in dependency_reports.items():
+        if not report:
+            continue
+        sections.append(f"### {agent}")
+        sections.append(str(report).strip())
+    return "\n".join(sections).strip()
+
+
+def format_upstream_results_for_prompt(
+    upstream_results: dict[str, Any] | None,
+    *,
+    skip_agents: dict[str, Any] | None = None,
+    max_chars_per_agent: int = 900,
 ) -> str:
-    """生成 Agent 执行报告。
+    """Format short upstream result previews without flooding the prompt."""
+    if not upstream_results:
+        return ""
 
-    Args:
-        agent_type: Agent 类型（如 "content", "mindmap", "diagram"）
-        task: 任务信息
-        content: 生成的内容
-        success: 是否成功
-        error: 错误信息
-
-    Returns:
-        Markdown 格式的执行报告
-    """
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    if not success:
-        return _generate_failure_report(agent_type, task, error or "未知错误", timestamp)
-
-    return _generate_success_report(agent_type, task, content, timestamp)
+    skipped = set((skip_agents or {}).keys())
+    sections: list[str] = []
+    for agent, result in upstream_results.items():
+        if agent in skipped:
+            continue
+        preview = _preview_value(result, max_chars=max_chars_per_agent)
+        if not preview:
+            continue
+        sections.append(f"### {agent}")
+        sections.append(preview)
+    return "\n".join(sections).strip()
 
 
-def _generate_failure_report(
-    agent_type: str,
-    task: dict[str, Any],
-    error: str,
-    timestamp: str,
-) -> str:
-    """生成失败报告。"""
-    lines = [
-        f"# {agent_type} Agent 执行报告",
-        "",
-        f"**执行状态**: ❌ 失败",
-        f"**执行时间**: {timestamp}",
-        "",
-        "## 任务信息",
-        "",
-        f"- **课程主题**: {task.get('course', '未知')}",
-        f"- **学习主题**: {task.get('topic', task.get('gap', '未知'))}",
-        f"- **学习目标**: {task.get('learning_goal', task.get('need', 'review'))}",
-        "",
-        "## 错误信息",
-        "",
-        f"```\n{error}\n```",
-        "",
-        "## 影响",
-        "",
-        f"由于 {agent_type} Agent 执行失败，依赖此产物的后续 Agent 可能无法正常执行。",
-    ]
-    return "\n".join(lines)
+def _preview_value(value: Any, *, max_chars: int) -> str:
+    if isinstance(value, dict):
+        for key in ("summary", "execution_report", "title", "content"):
+            if key in value and value[key]:
+                return _preview_value(value[key], max_chars=max_chars)
+        return str(value)[:max_chars].strip()
+    if isinstance(value, list):
+        return str(value[:3])[:max_chars].strip()
+    return str(value or "")[:max_chars].strip()
 
 
-def _generate_success_report(
-    agent_type: str,
-    task: dict[str, Any],
-    content: str | dict[str, Any] | None,
-    timestamp: str,
-) -> str:
-    """生成成功报告。"""
-    content_preview = ""
-    if content:
-        if isinstance(content, dict):
-            content_preview = f"```json\n{content}\n```"
-        else:
-            preview = str(content)[:500]
-            if len(str(content)) > 500:
-                preview += "..."
-            content_preview = preview
+def format_learner_profile_for_prompt(learner_profile: dict[str, Any] | None) -> str:
+    """Format backend-loaded learner profile for worker prompts."""
+    if not learner_profile:
+        return ""
 
-    lines = [
-        f"# {agent_type} Agent 执行报告",
-        "",
-        f"**执行状态**: ✅ 成功",
-        f"**执行时间**: {timestamp}",
-        "",
-        "## 任务信息",
-        "",
-        f"- **课程主题**: {task.get('course', '未知')}",
-        f"- **学习主题**: {task.get('topic', task.get('gap', '未知'))}",
-        f"- **学习目标**: {task.get('learning_goal', task.get('need', 'review'))}",
-        "",
-        "## 执行摘要",
-        "",
-        f"{agent_type} Agent 成功完成资源生成任务。",
-        "",
-        "## 内容预览",
-        "",
-        content_preview or "无内容",
-        "",
-        "---",
-        "",
-        "*此报告由系统自动生成。*",
-    ]
-    return "\n".join(lines)
+    profile_markdown = str(learner_profile.get("profile_markdown") or "").strip()
+    if profile_markdown:
+        return profile_markdown
+
+    lines: list[str] = []
+    for key, label in (
+        ("major", "专业"),
+        ("grade", "年级"),
+        ("school", "学校"),
+        ("current_focus", "当前关注"),
+        ("learning_style", "学习偏好"),
+    ):
+        value = learner_profile.get(key)
+        if value:
+            lines.append(f"- {label}: {value}")
+    return "\n".join(lines).strip()
+
+
+def append_backend_context_for_prompt(parts: list[str], state: Any) -> None:
+    """Append backend-only context that is not part of the frontend request body."""
+    profile_text = format_learner_profile_for_prompt(getattr(state, "learner_profile", {}))
+    if profile_text:
+        parts.extend(["", "## 学习者画像", profile_text])
+
+    dependency_report_text = format_dependency_reports_for_prompt(getattr(state, "dependency_reports", {}))
+    if dependency_report_text:
+        parts.extend(["", "## 依赖交接报告", dependency_report_text])
+
+    upstream_preview = format_upstream_results_for_prompt(
+        getattr(state, "upstream_results", {}),
+        skip_agents=getattr(state, "dependency_reports", {}),
+    )
+    if upstream_preview:
+        parts.extend(["", "## 上游结果摘要", upstream_preview])
+
+
+def learning_need_from_task(task: dict[str, Any]) -> str:
+    """Return the frontend natural-language learning need from a worker task."""
+    return str(task.get("learning_need") or "未说明").strip() or "未说明"
+
+
+def title_from_learning_need(task: dict[str, Any], suffix: str, *, max_chars: int = 32) -> str:
+    """Build a stable resource title from the frontend learning_need only."""
+    learning_need = learning_need_from_task(task)
+    if len(learning_need) > max_chars:
+        learning_need = f"{learning_need[:max_chars]}..."
+    return f"{learning_need} - {suffix}"

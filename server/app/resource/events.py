@@ -250,15 +250,31 @@ class AgentEventEmitter:
         task_id = str(meta.pop("task_id", self._resolve_task_id()))
         await self.emit_agent(task_id=task_id, agent=agent, status=status, message=message, payload=meta)
 
-    async def emit_agent_action(self, agent: str, action: str, detail: str = "", **meta: Any) -> None:
+    async def emit_agent_action(
+        self,
+        agent: str,
+        action: str,
+        detail: str = "",
+        current_step: int = 0,
+        total_steps: int = 0,
+        step_label: str = "",
+        **meta: Any,
+    ) -> None:
         """兼容旧接口：发送 Agent 动作事件。"""
         task_id = str(meta.pop("task_id", self._resolve_task_id()))
+        payload = {
+            "action": action,
+            "current_step": current_step,
+            "total_steps": total_steps,
+            "step_label": step_label,
+            **meta,
+        }
         await self.emit_agent(
             task_id=task_id,
             agent=agent,
             status="running",
             message=detail or action,
-            payload={"action": action, **meta},
+            payload=payload,
         )
 
     async def emit_artifact_ready(self, agent: str, artifact: dict[str, Any]) -> None:

@@ -1,1112 +1,614 @@
 <template>
-  <div class="resource-generator-layout">
-    
-    <aside class="panel-left">
-      <div class="panel-header">
-        <h2 class="panel-title">个性化学习资源生成</h2>
-        <p class="panel-subtitle">由多智能体协同，为您量身定制学习包</p>
-      </div>
-
-      <div class="dynamic-summary-box">
-        <el-icon class="summary-icon"><Opportunity /></el-icon>
-        <span v-if="!taskInput.course || !taskInput.topic" class="summary-text placeholder">
-          请先填写课程和主题，我将为您实时生成任务摘要...
-        </span>
-        <span v-else class="summary-text">
-          正在为「<strong>{{ taskInput.course }}</strong>{{ taskInput.chapter ? ' / ' + taskInput.chapter : '' }} / <strong>{{ taskInput.topic }}</strong>」生成适合「<strong>{{ getOptionLabel(currentLevels, personalization.current_level) }} → {{ getOptionLabel(targetLevels, personalization.target_level) }}</strong>」的个性化学习资源包。
-        </span>
-      </div>
-
-      <div class="form-container">
-        <div class="section-block">
-          <div class="section-title"><el-icon><CollectionTag /></el-icon> 学习任务配置</div>
-          
-          <div class="form-row">
-            <div class="form-item">
-              <label>所属课程 <span class="req">*</span></label>
-              <el-input v-model="taskInput.course" placeholder="如：计算机网络" />
-            </div>
-            <div class="form-item">
-              <label>所属章节</label>
-              <el-input v-model="taskInput.chapter" placeholder="如：传输层" />
-            </div>
+  <div class="elegant-generator-layout">
+    <transition name="page-slide" mode="out-in">
+      
+      <div v-if="currentPhase === 'input'" class="phase-view input-view" key="input">
+        <div class="input-container">
+          <div class="welcome-header">
+            <div class="sparkle-icon"><el-icon><MagicStick /></el-icon></div>
+            <h1 class="greeting-title">今天想学点什么？</h1>
+            <p class="greeting-subtitle">
+              请用自然语言描述你的学习需求，系统将直接向多智能体发送指令。
+            </p>
           </div>
 
-          <div class="form-item">
-            <label>学习主题 <span class="req">*</span></label>
-            <el-input v-model="taskInput.topic" placeholder="如：TCP 三次握手" />
-          </div>
-
-          <div class="form-item">
-            <label>知识短板 <span class="sub-label">(输入后回车添加)</span></label>
-            <div class="tags-input-container">
-              <el-tag
-                v-for="(tag, index) in taskInput.weak_points"
-                :key="index"
-                closable
-                @close="removeWeakPoint(index)"
-                class="weak-tag"
+          <div class="search-box-wrapper" :class="{ 'is-focused': isInputFocused }">
+            <el-input
+              v-model="naturalInput"
+              type="textarea"
+              :autosize="{ minRows: 4, maxRows: 8 }"
+              placeholder="例如：我是软件工程大二学生，明天考《操作系统》。我搞不懂死锁的四个必要条件，我喜欢看图解，请帮我生成复习资料和几道自测题..."
+              class="elegant-textarea"
+              @focus="isInputFocused = true"
+              @blur="isInputFocused = false"
+              @keydown.enter.exact.prevent="goToPersonalize"
+            />
+            <div class="search-actions">
+              <div class="action-left">
+                <span class="ai-hint"><el-icon><Cpu /></el-icon> 多智能体协同，全自动构建个性化资源流</span>
+              </div>
+              <el-button 
+                type="primary" 
+                class="generate-btn" 
+                round 
+                :disabled="!naturalInput.trim()"
+                @click="goToPersonalize"
               >
-                {{ tag }}
+                下一步：配置智能体 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+              </el-button>
+            </div>
+          </div>
+
+          <div class="suggestion-area">
+            <span class="suggestion-label">快捷指令：</span>
+            <div class="suggestion-tags">
+              <el-tag v-for="(prompt, index) in quickPrompts" :key="index" class="s-tag" effect="plain" round @click="naturalInput = prompt">
+                {{ prompt }}
               </el-tag>
-              <el-input
-                v-model="weakPointInputValue"
-                class="weak-input"
-                placeholder="如：记不住状态流转过程..."
-                @keyup.enter="addWeakPoint"
-                @blur="addWeakPoint"
-              />
-            </div>
-          </div>
-
-          <div class="form-item">
-            <label>学习目标</label>
-            <el-select v-model="taskInput.learning_goal" class="w-full">
-              <el-option v-for="opt in learningGoals" :key="opt.value" :label="opt.label" :value="opt.value" />
-            </el-select>
-          </div>
-
-          <div class="form-item">
-            <label>补充要求</label>
-            <el-input v-model="taskInput.extra_requirement" type="textarea" :rows="2" placeholder="如：尽量多用生活中的例子解释..." />
-          </div>
-        </div>
-
-        <div class="section-block">
-          <div class="section-title"><el-icon><User /></el-icon> 个性化偏好</div>
-          
-          <div class="form-row">
-            <div class="form-item">
-              <label>当前水平</label>
-              <el-select v-model="personalization.current_level">
-                <el-option v-for="opt in currentLevels" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
-            </div>
-            <div class="form-item">
-              <label>目标水平</label>
-              <el-select v-model="personalization.target_level">
-                <el-option v-for="opt in targetLevels" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-item">
-              <label>讲解风格</label>
-              <el-select v-model="personalization.explanation_style">
-                <el-option v-for="opt in explanationStyles" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
-            </div>
-            <div class="form-item">
-              <label>内容深度</label>
-              <el-select v-model="personalization.content_depth">
-                <el-option v-for="opt in contentDepths" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-item">
-              <label>示例偏好</label>
-              <el-select v-model="personalization.example_preference">
-                <el-option v-for="opt in examplePreferences" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
-            </div>
-            <div class="form-item">
-              <label>输出语言</label>
-              <el-select v-model="personalization.output_language">
-                <el-option v-for="opt in outputLanguages" :key="opt.value" :label="opt.label" :value="opt.value" />
-              </el-select>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="section-block">
-          <div class="section-title"><el-icon><Cpu /></el-icon> 资源智能体编排</div>
-          
-          <div class="agent-cards-grid">
-            <div 
-              v-for="agent in agentMetaList" 
-              :key="agent.id" 
-              class="agent-config-card" 
-              :class="{ 'is-disabled': !selectedAgents[agent.id] }"
-            >
-              <div class="agent-card-header">
-                <div class="agent-name-wrap">
-                  <el-icon class="agent-icon"><component :is="agent.icon" /></el-icon>
-                  <span class="agent-name">{{ agent.name }}</span>
-                </div>
-                <el-switch v-model="selectedAgents[agent.id]" />
-              </div>
+      <div v-else-if="currentPhase === 'personalize'" class="phase-view personalize-view" key="personalize">
+        <div class="personalize-container">
+          <div class="view-header">
+            <h2>多智能体参数定制中心</h2>
+            <p>请为即将出场的 AI 智能体配置加工参数，您的输入指令将作为最高优先级要求贯穿全局。</p>
+          </div>
+
+          <div class="config-section">
+            <div class="agent-configs-grid">
               
-              <div class="agent-card-body">
-                <p class="agent-desc">{{ agent.desc }}</p>
-                <div class="agent-summary-text" v-if="selectedAgents[agent.id]">
-                  {{ getAgentDynamicSummary(agent.id) }}
+              <div class="config-card">
+                <div class="cc-header">
+                  <el-icon class="text-blue"><Document /></el-icon> 核心知识讲解
+                </div>
+                <div class="cc-body">
+                  <div class="ctrl-group">
+                    <label>讲解结构</label>
+                    <el-select v-model="agentConfigs.content.structure" size="small" class="w-full">
+                      <el-option label="渐进式引导 (Progressive)" value="progressive" />
+                      <el-option label="先总后分 (Summary First)" value="summary_first" />
+                      <el-option label="考点驱动 (Exam Points)" value="exam_points" />
+                      <el-option label="案例驱动 (Case Driven)" value="case_driven" />
+                    </el-select>
+                  </div>
+                  <div class="ctrl-group ctrl-switch-group">
+                    <div class="ctrl-switch"><label>涵盖易错点解析</label><el-switch v-model="agentConfigs.content.include_common_mistakes" /></div>
+                    <div class="ctrl-switch"><label>丰富生活化示例</label><el-switch v-model="agentConfigs.content.include_examples" /></div>
+                  </div>
                 </div>
               </div>
 
-              <div class="agent-card-footer" v-if="selectedAgents[agent.id]">
-                <el-button size="small" link type="primary" @click="openAgentConfig(agent.id)">
-                  <el-icon><Setting /></el-icon> 专属配置
-                </el-button>
+              <div class="config-card">
+                <div class="cc-header">
+                  <el-icon class="text-orange"><Monitor /></el-icon> 原理可视化图解
+                </div>
+                <div class="cc-body">
+                  <div class="ctrl-group">
+                    <label>图解渲染范式</label>
+                    <el-select v-model="agentConfigs.diagram.diagram_type" size="small" class="w-full">
+                      <el-option label="💡 智能自动判断 (Auto)" value="auto" />
+                      <el-option-group label="通用基础图解">
+                        <el-option label="层级结构图 (Hierarchy)" value="hierarchy" />
+                        <el-option label="顺序流程图 (Flow)" value="flow" />
+                        <el-option label="对比结构图 (Compare)" value="compare" />
+                        <el-option label="因果关系图 (Relation)" value="relation" />
+                        <el-option label="状态转移图 (State)" value="state" />
+                      </el-option-group>
+                      <el-option-group label="计算机学科专用">
+                        <el-option label="类继承图 (Class)" value="class" />
+                        <el-option label="系统方块图 (Block)" value="block" />
+                        <el-option label="网络包格式图 (Packet)" value="packet" />
+                      </el-option-group>
+                      <el-option-group label="软件工程图表">
+                        <el-option label="交互时序图 (Sequence)" value="sequence" />
+                        <el-option label="活动图 (Activity)" value="activity" />
+                        <el-option label="组件图 (Component)" value="component" />
+                      </el-option-group>
+                    </el-select>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>视觉呈现风格</label>
+                    <el-radio-group v-model="agentConfigs.diagram.visual_style" size="small" class="w-full-radios">
+                      <el-radio-button label="minimal">极简纯净</el-radio-button>
+                      <el-radio-button label="exam">严肃应试</el-radio-button>
+                    </el-radio-group>
+                  </div>
+                </div>
               </div>
+
+              <div class="config-card">
+                <div class="cc-header">
+                  <el-icon class="text-purple"><Share /></el-icon> 知识结构图谱
+                </div>
+                <div class="cc-body">
+                  <div class="ctrl-group">
+                    <label>导图生成策略</label>
+                    <el-select v-model="agentConfigs.mindmap.map_type" size="small" class="w-full">
+                      <el-option label="核心知识树 (Knowledge Tree)" value="knowledge_tree" />
+                      <el-option label="高频考点图 (Exam Map)" value="exam_map" />
+                      <el-option label="对比复习图 (Comparison)" value="comparison_map" />
+                    </el-select>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>节点发散层级: <b>{{ agentConfigs.mindmap.max_depth }} 层</b></label>
+                    <el-slider v-model="agentConfigs.mindmap.max_depth" :min="2" :max="5" :step="1" class="custom-slider" show-stops />
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-card">
+                <div class="cc-header">
+                  <el-icon class="text-red"><Cpu /></el-icon> 实战代码沙箱
+                </div>
+                <div class="cc-body">
+                  <div class="ctrl-group">
+                    <label>编程语言目标</label>
+                    <el-select v-model="agentConfigs.code.programming_language" size="small" class="w-full">
+                      <el-option label="Python" value="python" />
+                      <el-option label="C++" value="cpp" />
+                      <el-option label="Java" value="java" />
+                      <el-option label="Go" value="go" />
+                      <el-option label="JavaScript" value="javascript" />
+                    </el-select>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>案例交付形态</label>
+                    <el-radio-group v-model="agentConfigs.code.case_type" size="small" class="w-full-radios">
+                      <el-radio-button label="basic_demo">基础教学</el-radio-button>
+                      <el-radio-button label="algorithm_template">算法模板</el-radio-button>
+                      <el-radio-button label="debug_demo">调试排错</el-radio-button>
+                    </el-radio-group>
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-card">
+                <div class="cc-header">
+                  <el-icon class="text-emerald"><Edit /></el-icon> 自适应强化题库
+                </div>
+                <div class="cc-body">
+                  <div class="ctrl-group">
+                    <label>测验难度引擎</label>
+                    <el-radio-group v-model="agentConfigs.quiz.difficulty_mode" size="small" class="w-full-radios">
+                      <el-radio-button label="basic">基础巩固</el-radio-button>
+                      <el-radio-button label="adaptive">动态自适应</el-radio-button>
+                      <el-radio-button label="exam">硬核考研</el-radio-button>
+                    </el-radio-group>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>生成题目数量: <b>{{ agentConfigs.quiz.question_count }} 道</b></label>
+                    <el-slider v-model="agentConfigs.quiz.question_count" :min="1" :max="20" :step="1" class="custom-slider" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-card">
+                <div class="cc-header">
+                  <el-icon class="text-indigo"><Collection /></el-icon> 前沿学术延展
+                </div>
+                <div class="cc-body">
+                  <div class="ctrl-group">
+                    <label>阅读文献深度</label>
+                    <el-select v-model="agentConfigs.reading.reading_depth" size="small" class="w-full">
+                      <el-option label="课程内延展 (Course Extended)" value="course_extended" />
+                      <el-option label="工程化实践 (Engineering)" value="engineering" />
+                      <el-option label="前沿学术论文 (Frontier)" value="frontier" />
+                    </el-select>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>文献推送数量: <b>{{ agentConfigs.reading.max_items }} 篇</b></label>
+                    <el-slider v-model="agentConfigs.reading.max_items" :min="1" :max="10" :step="1" class="custom-slider" />
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
-        </div>
 
+          <div class="personalize-footer">
+            <el-button plain round size="large" @click="currentPhase = 'input'">返回修改需求</el-button>
+            <el-button type="primary" round size="large" class="launch-btn" @click="startGeneration">
+              确认配置，启动多智能体加工 <el-icon class="el-icon--right"><VideoPlay /></el-icon>
+            </el-button>
+          </div>
+        </div>
       </div>
 
-      <div class="panel-footer">
-        <el-button class="magic-submit-btn" type="primary" :disabled="!canGenerate || isGenerating" @click="startGeneration">
-          <el-icon v-if="!isGenerating" class="mr-2"><VideoPlay /></el-icon>
-          <el-icon v-else class="mr-2 is-loading"><Loading /></el-icon>
-          {{ isGenerating ? '多智能体编排中...' : '开始生成资源包' }}
-        </el-button>
-      </div>
-    </aside>
-
-        <main class="panel-right bento-workspace">
-      <div class="workspace-header">
-        <div class="header-titles">
-          <h2>多智能体协同工作台</h2>
-          <p>实时监控 Agent 执行进度与资源产出</p>
-        </div>
-        <div class="workflow-status" :class="workflow.globalStatus">
-          <span class="status-indicator"></span>
-          {{ getGlobalStatusText() }} ({{ workflow.progress }}%)
-        </div>
-      </div>
-
-      <!-- Activity Timeline (Horizontal) -->
-      <div class="activity-timeline">
-        <div class="timeline-track">
-          <div class="timeline-progress" :style="{ width: workflow.progress + '%' }"></div>
-        </div>
-        <div class="timeline-steps">
-           <div class="step-label" :class="{ active: workflow.states.coordinator !== 'idle' }">规划编排</div>
-           <div class="step-label" :class="{ active: isAnyResourceDone }">资源生成</div>
-           <div class="step-label" :class="{ active: workflow.states.reviewer === 'success' }">质量审查</div>
-           <div class="step-label" :class="{ active: workflow.states.assembler === 'success' }">资源组装</div>
-        </div>
-        <div class="current-log" v-if="workflow.globalStatus === 'running'">
-          <el-icon class="is-loading"><Loading /></el-icon> {{ latestActivityLog }}
-        </div>
-      </div>
-
-      <!-- Bento Grid Area -->
-      <div class="bento-grid">
-        <!-- We will render a tile for every enabled agent -->
-        <div 
-          v-for="agentId in enabledAgentIds" 
-          :key="agentId"
-          class="bento-tile"
-          :class="[agentId, workflow.states[agentId] || 'idle']"
-          @click="openResourcePreview(agentId)"
-        >
-          <div class="tile-header">
-            <div class="tile-title">
-              <el-icon><component :is="getAgentMeta(agentId).icon" /></el-icon>
-              <span>{{ getAgentMeta(agentId).name }}</span>
-            </div>
-            <div class="tile-status" :class="workflow.states[agentId] || 'idle'">
-              <el-icon v-if="workflow.states[agentId] === 'running'" class="is-loading"><Loading /></el-icon>
-              <el-icon v-else-if="workflow.states[agentId] === 'success'"><Select /></el-icon>
-              <el-icon v-else-if="workflow.states[agentId] === 'failed'"><Close /></el-icon>
-              <span v-else class="pending-dot"></span>
-            </div>
+      <div v-else-if="currentPhase === 'generating'" class="phase-view generating-view" key="generating">
+        <div class="working-container">
+          <div class="working-header">
+            <h2>AI 矩阵正在执行生成任务</h2>
+            <p class="status-text">{{ currentStatusMessage }}</p>
           </div>
-          
-          <div class="tile-content">
-            <!-- State: Idle/Pending -->
-            <div v-if="(workflow.states[agentId] || 'idle') === 'idle' || workflow.states[agentId] === 'pending'" class="state-empty">
-              等待前置依赖...
-            </div>
-            <!-- State: Running -->
-            <div v-else-if="workflow.states[agentId] === 'running'" class="state-running">
-               <div class="pulse-skeleton"></div>
-               <div class="pulse-skeleton short"></div>
-               <p class="run-msg">{{ workflow.messages[agentId] }}</p>
-            </div>
-            <!-- State: Failed -->
-            <div v-else-if="workflow.states[agentId] === 'failed'" class="state-failed">
-               生成失败
-            </div>
-            <!-- State: Success -->
-            <div v-else-if="workflow.states[agentId] === 'success'" class="state-success">
-               <!-- Dynamically render the compact view based on agent type -->
-               <MindmapResourceView v-if="agentId === 'mindmap'" :result-data="getResourceData(agentId)" compact />
-               <DiagramResourceView v-else-if="agentId === 'diagram'" :result-data="getResourceData(agentId)" compact />
-               <QuizResourceView v-else-if="agentId === 'quiz'" :result-data="getResourceData(agentId)" compact />
-               <MarkdownResourceView v-else :result-data="getResourceData(agentId)" compact />
-            </div>
+          <div class="collaboration-stage">
+            <AgentCollaborationUniverse 
+              :worker-agents="enabledAgentIds"
+              :states="workflow.states"
+              :messages="workflow.messages"
+              :payloads="workflow.payloads"
+              :orchestrator-message="currentStatusMessage"
+              :get-agent-meta="getAgentMeta"
+              :results="generatedResourcesMap"
+            />
           </div>
         </div>
       </div>
-    </main>
 
-    <el-drawer
-      v-model="drawerVisible"
-      :title="`${getAgentMeta(currentConfigAgent).name} - 专属配置`"
-      size="360px"
-      class="agent-config-drawer"
-    >
-      <div v-if="currentConfigAgent" class="drawer-form">
-        
-        <template v-if="currentConfigAgent === 'content'">
-          <div class="form-item">
-            <label>讲解结构</label>
-            <el-select v-model="agentConfigs.content.structure" class="w-full">
-              <el-option label="由浅入深" value="progressive" />
-              <el-option label="先总后分" value="summary_first" />
-              <el-option label="问答式" value="qa" />
-              <el-option label="考点式" value="exam_points" />
-              <el-option label="案例驱动" value="case_driven" />
-            </el-select>
+      <div v-else-if="currentPhase === 'results'" class="phase-view results-view" key="results">
+        <header class="results-header glass-nav">
+          <div class="nav-brand">
+            <el-icon class="success-icon"><CircleCheckFilled /></el-icon>
+            <div class="nav-titles">
+              <h2>个性化学习包已就绪</h2>
+              <p>智能体团队已按照您的个性化配置生成了 {{ generatedResources.length }} 项定制资料</p>
+            </div>
           </div>
-          <div class="checkbox-group">
-            <el-checkbox v-model="agentConfigs.content.include_summary">包含内容摘要</el-checkbox>
-            <el-checkbox v-model="agentConfigs.content.include_key_points">提取核心要点</el-checkbox>
-            <el-checkbox v-model="agentConfigs.content.include_common_mistakes">包含易错点辨析</el-checkbox>
-            <el-checkbox v-model="agentConfigs.content.include_memory_tips">提供记忆口诀/技巧</el-checkbox>
-            <el-checkbox v-model="agentConfigs.content.include_examples">使用丰富示例</el-checkbox>
+          <div class="nav-actions">
+            <el-button plain round @click="resetGenerator" class="back-btn">
+              <el-icon><RefreshLeft /></el-icon> 新建任务
+            </el-button>
+            <el-button type="primary" round @click="pushToLearningPath" class="path-btn">
+              加入学习路线 <el-icon class="el-icon--right"><Position /></el-icon>
+            </el-button>
           </div>
-        </template>
+        </header>
 
-        <template v-if="currentConfigAgent === 'mindmap'">
-          <div class="form-item">
-            <label>导图类型</label>
-            <el-select v-model="agentConfigs.mindmap.map_type" class="w-full">
-              <el-option label="知识树" value="knowledge_tree" />
-              <el-option label="考点导图" value="exam_map" />
-              <el-option label="流程导图" value="flow_map" />
-              <el-option label="对比导图" value="comparison_map" />
-              <el-option label="复习提纲" value="review_outline" />
-            </el-select>
+        <div class="results-body">
+          <div class="bento-grid-container">
+            <ResourceCard 
+              v-for="res in sortedResources" 
+              :key="res.id"
+              :agent-id="res.type"
+              :meta="getAgentMeta(res.type)"
+              topic="个性化生成"
+              :result-data="res.content"
+              :class="getBentoClass(res.type)"
+              @preview="handlePreview"
+            />
           </div>
-          <div class="form-item">
-            <label>最大展开深度: {{ agentConfigs.mindmap.max_depth }}</label>
-            <el-slider v-model="agentConfigs.mindmap.max_depth" :min="2" :max="5" :step="1" show-stops />
-          </div>
-          <div class="checkbox-group">
-            <el-checkbox v-model="agentConfigs.mindmap.focus_on_weak_points">重点标注知识短板</el-checkbox>
-            <el-checkbox v-model="agentConfigs.mindmap.include_exam_points">标出必考点</el-checkbox>
-            <el-checkbox v-model="agentConfigs.mindmap.include_common_mistakes">包含易错提示</el-checkbox>
-          </div>
-        </template>
-
-        <template v-if="currentConfigAgent === 'diagram'">
-          <div class="form-item">
-            <label>图解类型</label>
-            <el-select v-model="agentConfigs.diagram.diagram_type" class="w-full">
-              <el-option label="自动推荐" value="auto" />
-              <el-option label="概念关系图" value="concept_map" />
-              <el-option label="流程图" value="flowchart" />
-              <el-option label="时序图" value="sequence" />
-              <el-option label="状态转换图" value="state_transition" />
-              <el-option label="结构图" value="structure" />
-              <el-option label="对比图" value="comparison" />
-            </el-select>
-          </div>
-          <div class="form-item">
-            <label>视觉风格</label>
-            <el-select v-model="agentConfigs.diagram.visual_style" class="w-full">
-              <el-option label="极简风" value="minimal" />
-              <el-option label="板书风" value="blackboard" />
-              <el-option label="信息图" value="infographic" />
-              <el-option label="考试复习" value="exam" />
-            </el-select>
-          </div>
-          <div class="checkbox-group">
-            <el-checkbox v-model="agentConfigs.diagram.include_explanation">配详细图文解说</el-checkbox>
-            <el-checkbox v-model="agentConfigs.diagram.highlight_weak_points">高亮薄弱环节</el-checkbox>
-          </div>
-        </template>
-
-        <template v-if="currentConfigAgent === 'quiz'">
-          <div class="form-item">
-            <label>生成题数: {{ agentConfigs.quiz.question_count }}</label>
-            <el-slider v-model="agentConfigs.quiz.question_count" :min="1" :max="30" />
-          </div>
-          <div class="form-item">
-            <label>难度模式</label>
-            <el-select v-model="agentConfigs.quiz.difficulty_mode" class="w-full">
-              <el-option label="基础巩固" value="basic" />
-              <el-option label="标准训练" value="standard" />
-              <el-option label="考试强化" value="exam" />
-              <el-option label="自适应难度" value="adaptive" />
-            </el-select>
-          </div>
-          <div class="form-item">
-            <label>题型偏好 (多选)</label>
-            <el-select v-model="agentConfigs.quiz.question_types" multiple class="w-full">
-              <el-option label="单选题" value="choice" />
-              <el-option label="多选题" value="multiple_choice" />
-              <el-option label="判断题" value="true_false" />
-              <el-option label="填空题" value="blank" />
-              <el-option label="简答题" value="short_answer" />
-              <el-option label="编程题" value="coding" />
-              <el-option label="案例分析" value="case_analysis" />
-            </el-select>
-          </div>
-          <div class="checkbox-group">
-            <el-checkbox v-model="agentConfigs.quiz.focus_on_weak_points">优先针对短板出题</el-checkbox>
-            <el-checkbox v-model="agentConfigs.quiz.include_analysis">包含深度解析</el-checkbox>
-            <el-checkbox v-model="agentConfigs.quiz.include_wrong_reason">包含错项排雷</el-checkbox>
-            <el-checkbox v-model="agentConfigs.quiz.include_knowledge_tags">附带知识点标签</el-checkbox>
-          </div>
-        </template>
-
-        <template v-if="currentConfigAgent === 'reading'">
-          <div class="form-item">
-            <label>阅读深度</label>
-            <el-select v-model="agentConfigs.reading.reading_depth" class="w-full">
-              <el-option label="入门补充" value="introductory" />
-              <el-option label="课程拓展" value="course_extended" />
-              <el-option label="考试强化" value="exam" />
-              <el-option label="工程实践" value="engineering" />
-              <el-option label="前沿延伸" value="frontier" />
-            </el-select>
-          </div>
-          <div class="form-item">
-            <label>推荐来源 (多选)</label>
-            <el-select v-model="agentConfigs.reading.source_types" multiple class="w-full">
-              <el-option label="教材章节" value="textbook" />
-              <el-option label="精选文章" value="article" />
-              <el-option label="官方文档" value="documentation" />
-              <el-option label="学术论文" value="paper" />
-              <el-option label="开源实践项目" value="practice_project" />
-            </el-select>
-          </div>
-          <div class="form-item">
-            <label>推荐数量上限: {{ agentConfigs.reading.max_items }}</label>
-            <el-slider v-model="agentConfigs.reading.max_items" :min="1" :max="10" />
-          </div>
-          <div class="checkbox-group">
-            <el-checkbox v-model="agentConfigs.reading.include_reason">说明推荐理由</el-checkbox>
-            <el-checkbox v-model="agentConfigs.reading.include_reading_order">提供阅读顺序建议</el-checkbox>
-          </div>
-        </template>
-
-        <template v-if="currentConfigAgent === 'code'">
-          <div class="form-item">
-            <label>编程语言</label>
-            <el-select v-model="agentConfigs.code.programming_language" class="w-full">
-              <el-option label="C" value="c" />
-              <el-option label="C++" value="cpp" />
-              <el-option label="Java" value="java" />
-              <el-option label="Python" value="python" />
-              <el-option label="Go" value="go" />
-              <el-option label="JavaScript" value="javascript" />
-            </el-select>
-          </div>
-          <div class="form-item">
-            <label>案例类型</label>
-            <el-select v-model="agentConfigs.code.case_type" class="w-full">
-              <el-option label="基础演示" value="basic_demo" />
-              <el-option label="算法模板" value="algorithm_template" />
-              <el-option label="实验任务" value="experiment_task" />
-              <el-option label="调试示例" value="debug_demo" />
-              <el-option label="项目小案例" value="mini_project" />
-            </el-select>
-          </div>
-          <div class="checkbox-group">
-            <el-checkbox v-model="agentConfigs.code.include_comments">包含详尽行内注释</el-checkbox>
-            <el-checkbox v-model="agentConfigs.code.include_input_output">提供测试输入输出</el-checkbox>
-            <el-checkbox v-model="agentConfigs.code.include_complexity">包含时空复杂度分析</el-checkbox>
-            <el-checkbox v-model="agentConfigs.code.include_debug_tips">附带常见Bug避坑指南</el-checkbox>
-            <el-checkbox v-model="agentConfigs.code.include_exercises">附带举一反三练习</el-checkbox>
-          </div>
-        </template>
-
+        </div>
       </div>
-    </el-drawer>
 
-    <el-dialog v-model="previewVisible" :title="previewData?.title || '预览'" width="78%" top="8vh">
+    </transition>
+
+    <el-dialog v-model="previewVisible" :title="previewData?.title || '资源预览'" width="78%" top="6vh" destroy-on-close class="elegant-dialog">
       <div v-if="previewData" class="preview-dialog-body">
-        <MindmapResourceView v-if="previewData.type === 'mindmap'" :result-data="previewData.content" />
-        <QuizResourceView v-else-if="previewData.type === 'quiz'" :result-data="previewData.content" />
-        <MarkdownResourceView v-else :result-data="previewData.content" />
+        <MindmapResourceView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
+        <QuizResourceView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
+        <DiagramResourceView v-else-if="previewData.agentId === 'diagram'" :result-data="previewData.resultData" />
+        <CodeResourceView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
+        <ReadingResourceView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
+        <MarkdownResourceView v-else :result-data="previewData.resultData" />
       </div>
     </el-dialog>
-
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  Cpu, Document, Edit, Collection, Share, Monitor, Setting,
-  Loading, Select, Close, User, CollectionTag, VideoPlay, Opportunity
+  MagicStick, ArrowRight, Cpu, 
+  CircleCheckFilled, RefreshLeft, Position, VideoPlay,
+  Document, Share, Monitor, Edit, Collection
 } from '@element-plus/icons-vue'
 
-// 复用原有预览组件
+import ResourceCard from '@/components/resource/ResourceCard.vue'
 import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
 import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
 import QuizResourceView from '@/components/resource/QuizResourceView.vue'
+import DiagramResourceView from '@/components/resource/DiagramResourceView.vue'
+import CodeResourceView from '@/components/resource/CodeResourceView.vue'
+import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
+import AgentCollaborationUniverse from '@/components/resource/AgentCollaborationUniverse.vue'
 
-import { generateResources } from '@/api/resource'
+import { generateResources, type ResourceAgentId } from '@/api/resource'
 
-// ===================== 1. TypeScript 数据结构定义 =====================
-type AgentStatus = 'idle' | 'pending' | 'running' | 'success' | 'failed' | 'skipped'
+const router = useRouter()
+
+// ===================== 1. 核心状态 =====================
+type Phase = 'input' | 'personalize' | 'generating' | 'results'
+const currentPhase = ref<Phase>('input') 
+
+const naturalInput = ref('')
+const isInputFocused = ref(false)
+
+const quickPrompts = [
+  "复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题",
+  "零基础学习 Python 多线程，需要底层原理图解和带详细注释的代码",
+  "考研冲刺《数据结构》二叉树，帮我精简思维导图，重点标注高频考点"
+]
 
 const agentMetaList = [
-  { id: 'content', name: '核心讲解', desc: '生成渐进式理论讲解与概念辨析', icon: Document },
-  { id: 'mindmap', name: '思维导图', desc: '构建清晰的知识树与考点网络', icon: Share },
-  { id: 'diagram', name: '知识图解', desc: '渲染流程图、时序图与对比图表', icon: Monitor },
-  { id: 'quiz', name: '专项题库', desc: '针对薄弱点生成自适应强化练习', icon: Edit },
-  { id: 'reading', name: '拓展阅读', desc: '推荐教材、文档及前沿实践文章', icon: Collection },
-  { id: 'code', name: '代码实操', desc: '编写带详尽注释与测试用例的代码', icon: Cpu },
+  { id: 'content', name: '核心知识讲解', icon: Document },
+  { id: 'mindmap', name: '知识结构图谱', icon: Share },
+  { id: 'diagram', name: '原理解析图解', icon: Monitor },
+  { id: 'code', name: '实战代码沙箱', icon: Cpu },
+  { id: 'quiz', name: '自适应强化题库', icon: Edit },
+  { id: 'reading', name: '前沿学术延展', icon: Collection }
 ]
 
 const getAgentMeta = (id: string) => agentMetaList.find(a => a.id === id) || { name: id, icon: Document }
+const enabledAgentIds = computed(() => ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading'])
 
-// 选项字典
-const learningGoals = [
-  { label: '课前预习', value: 'preview' },
-  { label: '课后复习', value: 'review' },
-  { label: '考试备考', value: 'exam' },
-  { label: '作业辅导', value: 'homework' },
-  { label: '实验实践', value: 'practice' },
-  { label: '深度理解', value: 'deep_understanding' },
-  { label: '项目应用', value: 'project_application' },
-  { label: '面试准备', value: 'interview' }
-]
-
-const currentLevels = [
-  { label: '零基础', value: 'zero' },
-  { label: '基础薄弱', value: 'basic' },
-  { label: '一般掌握', value: 'normal' },
-  { label: '较熟练', value: 'good' },
-  { label: '想进阶', value: 'advanced' }
-]
-
-const targetLevels = [
-  { label: '能听懂', value: 'understand' },
-  { label: '能做题', value: 'solve_problem' },
-  { label: '能写代码', value: 'write_code' },
-  { label: '能讲给别人听', value: 'explain_to_others' },
-  { label: '能用于项目', value: 'apply_in_project' }
-]
-
-const explanationStyles = [
-  { label: '通俗易懂', value: 'easy' },
-  { label: '考试复习', value: 'exam' },
-  { label: '严谨教材', value: 'textbook' },
-  { label: '项目实践', value: 'practice' },
-  { label: '生活类比', value: 'analogy' },
-  { label: '面试问答', value: 'interview' }
-]
-
-const contentDepths = [
-  { label: '快速理解', value: 'quick' },
-  { label: '标准学习', value: 'standard' },
-  { label: '逐步拆解', value: 'step_by_step' },
-  { label: '深入拓展', value: 'deep' }
-]
-
-const examplePreferences = [
-  { label: '生活类比', value: 'real_world' },
-  { label: '代码示例', value: 'code' },
-  { label: '考试题型', value: 'exam' },
-  { label: '工程场景', value: 'engineering' },
-  { label: '图解演示', value: 'visual' }
-]
-
-const outputLanguages = [
-  { label: '中文', value: 'zh' },
-  { label: '英文', value: 'en' },
-  { label: '中英双语', value: 'bilingual' }
-]
-
-const getOptionLabel = (options: any[], val: string) => {
-  return options.find(o => o.value === val)?.label || val
-}
-
-// ===================== 2. 表单与状态管理 =====================
-
-const taskInput = reactive({
-  course: '',
-  chapter: '',
-  topic: '',
-  weak_points: [] as string[],
-  learning_goal: 'review',
-  extra_requirement: ''
-})
-
-const weakPointInputValue = ref('')
-const addWeakPoint = () => {
-  const val = weakPointInputValue.value.trim()
-  if (val && !taskInput.weak_points.includes(val)) {
-    taskInput.weak_points.push(val)
-  }
-  weakPointInputValue.value = ''
-}
-const removeWeakPoint = (idx: number) => {
-  taskInput.weak_points.splice(idx, 1)
-}
-
-const personalization = reactive({
-  current_level: 'normal',
-  target_level: 'solve_problem',
-  explanation_style: 'easy',
-  content_depth: 'standard',
-  example_preference: 'real_world',
-  output_language: 'zh'
-})
-
-const selectedAgents = reactive<Record<string, boolean>>({
-  content: true, mindmap: true, diagram: true, quiz: true, reading: false, code: false
-})
-
+// ===================== 2. 参数配置状态 =====================
 const agentConfigs = reactive({
-  content: { structure: 'progressive', include_summary: true, include_key_points: true, include_common_mistakes: true, include_memory_tips: false, include_examples: true },
-  mindmap: { map_type: 'knowledge_tree', max_depth: 3, focus_on_weak_points: true, include_exam_points: true, include_common_mistakes: false, output_format: 'mermaid' },
-  diagram: { diagram_type: 'auto', render_format: 'mermaid', visual_style: 'minimal', include_explanation: true, highlight_weak_points: true },
-  quiz: { question_count: 5, question_types: ['choice', 'multiple_choice'], difficulty_mode: 'adaptive', focus_on_weak_points: true, include_answer: true, include_analysis: true, include_wrong_reason: true, include_knowledge_tags: false },
-  reading: { reading_depth: 'course_extended', source_types: ['article', 'documentation'], max_items: 3, include_reason: true, include_reading_order: false },
-  code: { programming_language: 'python', case_type: 'basic_demo', include_comments: true, include_input_output: true, include_complexity: false, include_debug_tips: false, include_exercises: false }
+  content: { structure: 'progressive' as const, include_common_mistakes: true, include_examples: true },
+  mindmap: { map_type: 'knowledge_tree' as const, max_depth: 3, highlight_weak: true },
+  diagram: { diagram_type: 'auto' as const, visual_style: 'minimal' as const },
+  quiz: { question_count: 5, difficulty_mode: 'adaptive' as const },
+  code: { programming_language: 'python' as const, case_type: 'basic_demo' as const },
+  reading: { reading_depth: 'course_extended' as const, max_items: 3 }
 })
 
-const getAgentDynamicSummary = (agentId: string) => {
-  if (agentId === 'content') return `采用「${getOptionLabel(explanationStyles, personalization.explanation_style)}」风格，${agentConfigs.content.structure}结构。`
-  if (agentId === 'mindmap') return `生成深度为 ${agentConfigs.mindmap.max_depth} 的${getOptionLabel([{value:'knowledge_tree',label:'知识树'},{value:'exam_map',label:'考点图'}], agentConfigs.mindmap.map_type) || '导图'}。`
-  if (agentId === 'diagram') return `自动绘制${agentConfigs.diagram.diagram_type === 'auto' ? '最佳匹配' : agentConfigs.diagram.diagram_type}图解。`
-  if (agentId === 'quiz') return `生成 ${agentConfigs.quiz.question_count} 道${agentConfigs.quiz.difficulty_mode === 'adaptive' ? '自适应' : ''}题，针对薄弱点训练。`
-  if (agentId === 'reading') return `精选 ${agentConfigs.reading.max_items} 篇推荐阅读材料。`
-  if (agentId === 'code') return `输出基于 ${agentConfigs.code.programming_language} 的可运行案例。`
-  return ''
+// 无解析，直接切换页面
+const goToPersonalize = () => {
+  if (!naturalInput.value.trim()) return
+  currentPhase.value = 'personalize'
 }
 
-// Drawer
-const drawerVisible = ref(false)
-const currentConfigAgent = ref('')
-const openAgentConfig = (agentId: string) => {
-  currentConfigAgent.value = agentId
-  drawerVisible.value = true
-}
-
-// ===================== 3. 工作流与产出状态 =====================
-
-const isGenerating = ref(false)
-
-const workflow = reactive({
-  globalStatus: 'idle' as 'idle' | 'running' | 'success' | 'failed',
-  progress: 0,
-  states: {
-    coordinator: 'idle' as AgentStatus,
-    reviewer: 'idle' as AgentStatus,
-    assembler: 'idle' as AgentStatus,
-    content: 'idle' as AgentStatus,
-    mindmap: 'idle' as AgentStatus,
-    diagram: 'idle' as AgentStatus,
-    quiz: 'idle' as AgentStatus,
-    reading: 'idle' as AgentStatus,
-    code: 'idle' as AgentStatus,
-  } as Record<string, AgentStatus>,
-  messages: {} as Record<string, string>
+// ===================== 3. 工作流与生成逻辑 =====================
+const currentStatusMessage = ref('')
+const workflow = reactive({ 
+  states: {} as Record<string, string>,
+  messages: {} as Record<string, string>,
+  payloads: {} as Record<string, any>
 })
-
-const enabledAgentIds = computed(() => agentMetaList.map(a => a.id).filter(id => selectedAgents[id]))
-const isAnyResourceDone = computed(() => enabledAgentIds.value.some(id => workflow.states[id] === 'success'))
-
 const generatedResources = ref<any[]>([])
-const studyPath = ref<any[]>([])
-const reviewResult = ref<any>(null)
 
-const previewVisible = ref(false)
-const previewData = ref<any>(null)
-
-const handlePreview = (res: any) => {
-  previewData.value = res
-  previewVisible.value = true
-}
-
-
-const latestActivityLog = computed(() => {
-  const runningAgent = enabledAgentIds.value.find(id => workflow.states[id] === 'running')
-  if (runningAgent && workflow.messages[runningAgent]) {
-    return workflow.messages[runningAgent]
-  }
-  return workflow.messages.coordinator || '系统初始化中…'
+const generatedResourcesMap = computed(() => {
+  const map: Record<string, any> = {}
+  generatedResources.value.forEach(r => map[r.type] = r.content)
+  return map
 })
 
-const getResourceData = (agentId: string) => {
-  const res = generatedResources.value.find(r => r.type === agentId)
-  return res ? res.content : null
-}
-
-const openResourcePreview = (agentId: string) => {
-  const res = generatedResources.value.find(r => r.type === agentId)
-  if (res && workflow.states[agentId] === 'success') {
-    handlePreview(res)
-  }
-}
-
-// ===================== 4. 辅助函数 =====================
-
-
-const canGenerate = computed(() => {
-  return taskInput.course.trim() !== '' && taskInput.topic.trim() !== '' && enabledAgentIds.value.length > 0
+const sortedResources = computed(() => {
+  const order = ['content', 'diagram', 'mindmap', 'code', 'quiz', 'reading']
+  return [...generatedResources.value].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
 })
 
-const getGlobalStatusText = () => {
-  if (workflow.globalStatus === 'idle') return '等待启动'
-  if (workflow.globalStatus === 'running') return '智能编排中'
-  if (workflow.globalStatus === 'success') return '生成完毕'
-  if (workflow.globalStatus === 'failed') return '生成中断'
+const getBentoClass = (type: string) => {
+  if (type === 'content') return 'bento-main'
+  if (['diagram', 'mindmap'].includes(type)) return 'bento-side'
+  return 'bento-small'
 }
 
+const friendlyMessageMap: Record<string, string> = {
+  'content': '正在应用选定的【讲解结构】策略撰写核心图文...',
+  'mindmap': '正在严格按照【层级深度限制】构建知识网络...',
+  'diagram': '正在调用专业渲染引擎绘制指定类型的图表...',
+  'code': '正在构建对应语言环境的带注释实操沙箱...',
+  'quiz': '正在调取题库引擎，自适应装配试卷...',
+  'reading': '正在跨学术库匹配契合该深度的拓展资料...'
+}
 
-const resetWorkflow = () => {
-  workflow.globalStatus = 'idle'
-  workflow.progress = 0
+const startGeneration = async () => {
+  currentPhase.value = 'generating'
   generatedResources.value = []
-  studyPath.value = []
-  reviewResult.value = null
-  Object.keys(workflow.states).forEach(key => { workflow.states[key] = 'idle' })
-  Object.keys(workflow.messages).forEach(key => { workflow.messages[key] = '' })
-}
-
-// ===================== 5. 核心逻辑：发起请求与 SSE 处理 =====================
-
-const startGeneration = () => {
-  if (!canGenerate.value) return
-  resetWorkflow()
-  isGenerating.value = true
-  workflow.globalStatus = 'running'
-  workflow.states.coordinator = 'running'
-  workflow.messages.coordinator = '正在拆解学习目标，规划资源生成树...'
-
+  currentStatusMessage.value = '正在将配置参数打包并发送至后端集群...'
+  
   enabledAgentIds.value.forEach(id => {
     workflow.states[id] = 'pending'
+    workflow.messages[id] = ''
   })
 
-  // 构造新的 Request 格式
-  const reqPayload: any = { // 使用 any 以兼容原有 API 类型签名，内部结构为新的 ResourceGenerationRequest
-    task: { ...taskInput },
-    personalization: { ...personalization },
-    selected_agents: Object.keys(selectedAgents).map(id => ({ agent_id: id, enabled: selectedAgents[id], priority: 1 })),
-    agent_configs: { ...agentConfigs },
-    output_options: {
-      output_format: 'json',
-      include_study_path: true,
-      include_agent_trace: true,
-      include_review_result: true
-    }
-  }
-
-  // 兼容老版本的 template_id 与 selected_resources
-  reqPayload.learning_task = { ...taskInput, template_id: 'auto' }
-  reqPayload.selected_resources = enabledAgentIds.value
-
+  // 调用 API
   generateResources(
-    reqPayload as any,
+    {
+      learning_need: naturalInput.value,  // 用户输入的整段话，不解析，直接传给后端
+      selected_agents: enabledAgentIds.value.map(id => ({ agent_id: id as ResourceAgentId, enabled: true, priority: 1 })),
+      agent_configs: agentConfigs,  // 直接传递对象格式，与后端 AgentConfigs schema 匹配
+      output_options: { output_format: 'json' }
+    },
     (event: any) => {
-      // 兼容老版本 event (workflow/agent_status/artifact_ready/bundle_update)
-      // 和新版 event (event_type: 'workflow' | 'agent' | 'resource' | 'review' | 'bundle')
-      
       const type = event.event_type || event.type
       const agent = event.agent
-      const status = event.status
-      const msg = event.message || event.log
-
-      if (event.progress) {
-        workflow.progress = event.progress
-      }
-
-      // Workflow 层级的更新
-      if (type === 'workflow') {
-        workflow.states.coordinator = 'success'
-        workflow.messages.coordinator = msg || '规划完毕，任务已分发'
-        if (event.stage === 'reviewing') workflow.states.reviewer = 'running'
-        if (event.stage === 'assembling') workflow.states.assembler = 'running'
-      }
-
-      // 智能体状态更新
+      
       if ((type === 'agent' || type === 'agent_status') && agent) {
-        if (workflow.states[agent] !== undefined) {
-          workflow.states[agent] = status || 'running'
-          if (msg) workflow.messages[agent] = msg
+        workflow.states[agent] = event.status || 'running'
+        if (event.status === 'running') {
+          currentStatusMessage.value = friendlyMessageMap[agent] || 'AI 导师正在高速生成资料...'
         }
       }
-
-      // 资源就绪
+      
       if ((type === 'resource' || type === 'artifact_ready') && agent) {
-        if (workflow.states[agent] !== undefined) {
-          workflow.states[agent] = 'success'
-          workflow.messages[agent] = '资源已产出'
-        }
-        const artifact = event.payload || event.artifact
-        if (artifact) {
-          generatedResources.value.push({
-            id: Date.now() + '_' + agent,
-            type: agent,
-            title: artifact.title || getAgentMeta(agent).name,
-            summary: artifact.summary || '',
-            content: artifact
+        workflow.states[agent] = 'success'
+        const res = event.payload?.resource || event.payload || event.artifact
+        if (res) {
+          generatedResources.value.push({ 
+            id: Date.now() + '_' + agent, 
+            type: agent, 
+            title: res.title || getAgentMeta(agent).name, 
+            content: res.content || res 
           })
         }
       }
-
-      // Review
-      if (type === 'review' && event.payload) {
-        workflow.states.reviewer = 'success'
-        reviewResult.value = event.payload
-      }
-
-      // Bundle (包含 study path)
-      if (type === 'bundle' || type === 'bundle_update') {
-        workflow.states.assembler = 'success'
-        if (event.payload?.study_path) {
-          studyPath.value = event.payload.study_path
-        }
-      }
     },
-    () => {
-      isGenerating.value = false
-      workflow.globalStatus = 'success'
-      workflow.progress = 100
-      workflow.states.assembler = 'success'
-      ElMessage.success('个性化资源包生成完毕！')
+    () => { 
+      currentStatusMessage.value = '全部指令执行完毕，排版引擎介入中...'
+      setTimeout(() => { currentPhase.value = 'results' }, 1500) 
     },
-    (err: any) => {
-      isGenerating.value = false
-      workflow.globalStatus = 'failed'
-      ElMessage.error(err.message || '生成过程遇到错误')
-      console.error(err)
+    (err: any) => { 
+      currentPhase.value = 'personalize'
+      ElMessage.error(err.message || '生成中断，请稍后重试') 
     }
   )
+}
+
+// ===================== 4. UI 交互 =====================
+const resetGenerator = () => {
+  naturalInput.value = ''
+  currentPhase.value = 'input'
+}
+
+const pushToLearningPath = () => {
+  ElMessage.success('已无缝衔接至学习路线图！')
+  router.push('/path-planner')
+}
+
+const previewVisible = ref(false)
+const previewData = ref<any>(null)
+const handlePreview = (data: any) => {
+  previewData.value = data
+  previewVisible.value = true
 }
 </script>
 
 <style scoped>
-.resource-generator-layout {
-  display: flex;
-  height: calc(100vh - 60px);
-  background-color: #F8FAFC;
-  overflow: hidden;
-  font-family: 'Inter', system-ui, sans-serif;
-  color: #0F172A;
-}
-
-/* ================= 基础滚动与布局 ================= */
-.panel-left, .panel-middle, .panel-right {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; /* 由内部控制滚动 */
-}
-
-.panel-header {
-  padding: 20px 24px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E2E8F0;
-  flex-shrink: 0;
-}
-.panel-title { margin: 0 0 6px 0; font-size: 1.15rem; font-weight: 700; color: #1E293B; }
-.panel-subtitle { margin: 0; font-size: 0.8rem; color: #64748B; }
-
-/* ================= 左侧：配置区 ================= */
-.panel-left {
-  width: 400px;
-  background: #FFFFFF;
-  border-right: 1px solid #E2E8F0;
-  flex-shrink: 0;
-  z-index: 10;
-  box-shadow: 2px 0 12px rgba(0,0,0,0.02);
-}
-
-.dynamic-summary-box {
-  background: #EEF2FF;
-  padding: 12px 20px;
-  font-size: 0.85rem;
-  color: #3730A3;
-  display: flex;
-  gap: 10px;
-  border-bottom: 1px solid #E0E7FF;
-}
-.summary-icon { font-size: 1.2rem; color: #4F46E5; margin-top: 2px; }
-.summary-text { line-height: 1.5; }
-.summary-text.placeholder { color: #818CF8; }
-.summary-text strong { font-weight: 700; color: #312E81; }
-
-.form-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #1E293B;
-  margin-bottom: 16px;
-}
-.section-title .el-icon { color: #4F46E5; font-size: 1.2rem; }
-
-.form-row {
-  display: flex;
-  gap: 12px;
-}
-.form-row .form-item { flex: 1; min-width: 0; }
-
-.form-item { margin-bottom: 16px; }
-.form-item label {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
-  margin-bottom: 8px;
-}
-.req { color: #EF4444; }
-.sub-label { font-size: 0.75rem; color: #94A3B8; font-weight: normal; }
-
-.w-full { width: 100%; }
-
-.tags-input-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  background: #F8FAFC;
-}
-.tags-input-container:focus-within {
-  border-color: #4F46E5;
-  background: #FFFFFF;
-}
-.weak-tag { border-radius: 6px; }
-.weak-input { flex: 1; min-width: 120px; }
-.weak-input :deep(.el-input__wrapper) { box-shadow: none !important; background: transparent !important; padding: 0 8px; }
-
-/* 智能体卡片 */
-.agent-cards-grid { display: flex; flex-direction: column; gap: 12px; }
-.agent-config-card {
-  border: 1px solid #CBD5E1;
-  border-radius: 12px;
-  background: #FFFFFF;
-  padding: 14px;
-  transition: all 0.2s ease;
-}
-.agent-config-card.is-disabled {
-  border-color: #E2E8F0;
-  background: #F8FAFC;
-  opacity: 0.7;
-}
-.agent-config-card:not(.is-disabled) {
-  border-color: #818CF8;
-  box-shadow: 0 2px 10px rgba(79,70,229,0.05);
-}
-
-.agent-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.agent-name-wrap { display: flex; align-items: center; gap: 8px; }
-.agent-icon { font-size: 1.1rem; color: #4F46E5; }
-.is-disabled .agent-icon { color: #94A3B8; }
-.agent-name { font-weight: 700; font-size: 0.95rem; color: #1E293B; }
-
-.agent-card-body { margin-bottom: 8px; }
-.agent-desc { margin: 0 0 6px 0; font-size: 0.8rem; color: #64748B; }
-.agent-summary-text { font-size: 0.75rem; color: #4338CA; background: #EEF2FF; padding: 6px 10px; border-radius: 6px; }
-
-.agent-card-footer { border-top: 1px dashed #E2E8F0; padding-top: 8px; text-align: right; }
-
-.panel-footer { padding: 20px 24px; background: #FFFFFF; border-top: 1px solid #E2E8F0; flex-shrink: 0; }
-.magic-submit-btn { width: 100%; height: 48px; font-size: 1.05rem; font-weight: 700; border-radius: 10px; }
-
-
-/* Update Layout */
-.resource-generator-layout {
-  display: flex;
-  height: calc(100vh - 60px);
-  background-color: #F8FAFC;
-  overflow: hidden;
-}
-.panel-left {
-  width: 400px;
-  background: #FFFFFF;
-  border-right: 1px solid #E2E8F0;
-  flex-shrink: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-}
-.bento-workspace {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: #F1F5F9;
-  overflow: hidden;
-}
-.workspace-header {
-  padding: 20px 32px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E2E8F0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-.header-titles h2 { margin: 0 0 4px 0; font-size: 1.2rem; color: #1E293B; }
-.header-titles p { margin: 0; font-size: 0.85rem; color: #64748B; }
-
-/* Timeline */
-.activity-timeline {
-  padding: 16px 32px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E2E8F0;
-}
-.timeline-track {
-  height: 4px;
-  background: #E2E8F0;
-  border-radius: 2px;
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-.timeline-progress {
-  height: 100%;
-  background: #4F46E5;
-  transition: width 0.3s ease;
-}
-.timeline-steps {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  color: #94A3B8;
-  margin-bottom: 8px;
-}
-.step-label.active { color: #4F46E5; font-weight: 600; }
-.current-log {
-  font-size: 0.85rem;
-  color: #3B82F6;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #EFF6FF;
-  padding: 6px 12px;
-  border-radius: 6px;
-  width: fit-content;
-}
-
-/* Bento Grid */
-.bento-grid {
-  flex: 1;
-  padding: 32px;
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  grid-auto-rows: minmax(240px, auto);
-  gap: 20px;
-  align-content: start;
-}
-.bento-tile {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  cursor: pointer;
-}
-.bento-tile.success:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  border-color: #CBD5E1;
-}
-/* Optional: specific spanning rules for certain agents if you want a true masonry bento look */
-.bento-tile.content { grid-column: span 2; }
-@media (max-width: 1400px) {
-  .bento-tile.content { grid-column: span 1; }
-}
-
-.tile-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid #F1F5F9;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #FAFAF9;
-}
-.tile-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: #334155;
-}
-.tile-title .el-icon { color: #4F46E5; }
-.tile-status { font-size: 1.1rem; }
-.tile-status.running { color: #3B82F6; }
-.tile-status.success { color: #10B981; }
-.tile-status.failed { color: #EF4444; }
-.pending-dot { display: block; width: 8px; height: 8px; background: #CBD5E1; border-radius: 50%; }
-
-.tile-content {
-  flex: 1;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.elegant-generator-layout {
+  width: 100%;
+  height: calc(100vh - 64px);
+  background: #FCFDFE;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
   position: relative;
 }
-.state-empty, .state-failed {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94A3B8;
-  font-size: 0.9rem;
-}
-.state-failed { color: #EF4444; }
-.state-running {
-  flex: 1;
+
+.phase-view {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.pulse-skeleton {
-  height: 12px;
-  background: #E2E8F0;
-  border-radius: 4px;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-.pulse-skeleton.short { width: 60%; }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .5; }
-}
-.run-msg {
-  font-size: 0.8rem;
-  color: #64748B;
-  margin-top: auto;
-}
-.state-success {
-  flex: 1;
-  overflow: hidden;
-  animation: fadeIn 0.4s ease;
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  background: #FCFDFE;
 }
 
+/* 滑动转场动画 */
+.page-slide-enter-active, .page-slide-leave-active {
+  transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
+.page-slide-leave-to { opacity: 0; transform: translateY(-30px) scale(1.02); }
+
+/* ================= Phase 1: Input View ================= */
+.input-view {
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background-image: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.03) 0%, transparent 60%);
+}
+
+.input-container { width: 100%; max-width: 800px; display: flex; flex-direction: column; align-items: center; margin-top: -8vh; }
+.welcome-header { text-align: center; margin-bottom: 2.5rem; }
+.sparkle-icon {
+  display: inline-flex; justify-content: center; align-items: center;
+  width: 56px; height: 56px; background: #EFF6FF; color: #3B82F6; font-size: 1.8rem;
+  border-radius: 20px; margin-bottom: 1.5rem; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15);
+}
+.greeting-title { font-size: 2.5rem; font-weight: 800; color: #0F172A; margin: 0 0 1rem; letter-spacing: -0.02em; }
+.greeting-subtitle { font-size: 1.05rem; color: #64748B; line-height: 1.7; max-width: 660px; margin: 0 auto; }
+
+.search-box-wrapper {
+  width: 100%; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 28px;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.05); padding: 8px; transition: all 0.3s ease;
+}
+.search-box-wrapper.is-focused { border-color: #3B82F6; box-shadow: 0 15px 50px rgba(59, 130, 246, 0.1); transform: translateY(-2px); }
+
+.elegant-textarea :deep(.el-textarea__inner) {
+  border: none; background: transparent; box-shadow: none !important;
+  font-size: 1.15rem; color: #1E293B; padding: 20px 24px; line-height: 1.6; resize: none;
+}
+.elegant-textarea :deep(.el-textarea__inner)::placeholder { color: #94A3B8; font-weight: 400; }
+
+.search-actions { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px 8px 24px; }
+.ai-hint { font-size: 0.85rem; color: #94A3B8; display: flex; align-items: center; gap: 6px; }
+.ai-hint .el-icon { color: #3B82F6; font-size: 1rem; }
+
+.generate-btn {
+  padding: 12px 28px; font-size: 1.05rem; font-weight: 700; border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25); transition: transform 0.2s ease;
+}
+.generate-btn:hover:not(:disabled) { transform: scale(1.03); }
+
+.suggestion-area { margin-top: 2.5rem; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.suggestion-label { font-size: 0.85rem; color: #94A3B8; font-weight: 600; }
+.suggestion-tags { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.s-tag {
+  cursor: pointer; background: #F8FAFC !important; border-color: #E2E8F0 !important;
+  color: #475569 !important; padding: 8px 16px; height: auto; font-size: 0.9rem; transition: all 0.2s ease;
+}
+.s-tag:hover { background: #EFF6FF !important; border-color: #BFDBFE !important; color: #3B82F6 !important; }
+
+/* ================= Phase 2: Personalize View ================= */
+.personalize-view { background: #FCFDFE; align-items: center; overflow-y: auto; padding: 40px 20px; }
+.personalize-container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 32px; }
+
+.view-header { text-align: center; margin-bottom: 10px; }
+.view-header h2 { font-size: 2rem; font-weight: 800; color: #0F172A; margin: 0 0 12px; }
+.view-header p { font-size: 1.05rem; color: #64748B; margin: 0; }
+
+.config-section { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
+.agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.config-card { border: 1px solid #F1F5F9; border-radius: 16px; background: #F8FAFC; overflow: hidden; display: flex; flex-direction: column; }
+.cc-header { padding: 16px 20px; font-weight: 800; font-size: 0.95rem; color: #0F172A; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #F1F5F9; background: #FFFFFF; }
+
+.text-blue { color: #3B82F6; } .text-emerald { color: #10B981; } .text-purple { color: #8B5CF6; } 
+.text-orange { color: #F59E0B; } .text-red { color: #EF4444; } .text-indigo { color: #6366F1; }
+
+.cc-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; flex: 1; }
+.ctrl-group { display: flex; flex-direction: column; gap: 10px; }
+.ctrl-switch-group { gap: 12px; }
+.ctrl-switch { display: flex; justify-content: space-between; align-items: center; }
+.ctrl-group label { font-size: 0.85rem; color: #64748B; font-weight: 600; }
+.ctrl-group label b { color: #3B82F6; }
+.custom-slider { margin-top: -6px; padding: 0 10px; }
+
+:deep(.w-full) { width: 100%; }
+:deep(.w-full-radios) { display: flex; width: 100%; }
+:deep(.w-full-radios .el-radio-button) { flex: 1; }
+:deep(.w-full-radios .el-radio-button__inner) { width: 100%; padding: 8px 0; }
+
+:deep(.el-radio-button__inner) { border-radius: 8px !important; border: 1px solid #E2E8F0 !important; margin-right: 6px; background: #FFFFFF; box-shadow: none !important; color: #64748B; font-size: 0.8rem; }
+:deep(.el-radio-button:last-child .el-radio-button__inner) { margin-right: 0; }
+:deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) { background-color: #EEF2FF !important; color: #3B82F6 !important; border-color: #BFDBFE !important; font-weight: 700; }
+
+.personalize-footer { display: flex; justify-content: center; gap: 20px; margin-top: 10px; padding-bottom: 20px; }
+.launch-btn { font-weight: 800; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); transition: transform 0.2s; }
+.launch-btn:hover { transform: translateY(-2px); }
+
+/* ================= Phase 3: Generating View ================= */
+.generating-view { justify-content: flex-start; align-items: center; padding-top: 60px; overflow-y: auto; }
+.working-header { text-align: center; display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; }
+.working-header h2 { font-size: 1.8rem; font-weight: 800; color: #0F172A; margin: 0 0 0.8rem; }
+.status-text { font-size: 1.1rem; color: #3B82F6; margin: 0; font-weight: 600; }
+.collaboration-stage { width: 100%; max-width: 1200px; background: #FFFFFF; border-radius: 32px; padding: 40px; box-shadow: 0 0 0 1px #F1F5F9, 0 20px 40px rgba(0,0,0,0.02); }
+
+/* ================= Phase 4: Results View ================= */
+.results-view { background: #F8FAFC; overflow-y: auto; }
+.results-header { position: sticky; top: 0; z-index: 50; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(226, 232, 240, 0.6); }
+.glass-nav { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(16px); }
+.nav-brand { display: flex; align-items: center; gap: 16px; }
+.success-icon { font-size: 2.2rem; color: #10B981; }
+.nav-titles h2 { margin: 0 0 4px; font-size: 1.25rem; font-weight: 800; color: #0F172A; }
+.nav-titles p { margin: 0; font-size: 0.9rem; color: #64748B; }
+.nav-actions { display: flex; gap: 12px; }
+.back-btn { border: none !important; background: #F1F5F9 !important; color: #475569 !important; font-weight: 600; }
+.back-btn:hover { background: #E2E8F0 !important; color: #0F172A !important; }
+.path-btn { font-weight: 700; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+
+.results-body { padding: 40px; }
+.bento-grid-container { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: minmax(180px, auto); gap: 24px; max-width: 1600px; margin: 0 auto; }
+:deep(.bento-main) { grid-column: span 2; grid-row: span 2; }
+:deep(.bento-side) { grid-column: span 2; grid-row: span 1; }
+:deep(.bento-small) { grid-column: span 1; grid-row: span 1; }
 
 @media (max-width: 1200px) {
-  .panel-left { width: 340px; }
-  .panel-right { width: 340px; }
-  .wf-agents-row { flex-direction: column; align-items: center; }
+  .bento-grid-container { grid-template-columns: repeat(2, 1fr); }
+  :deep(.bento-main), :deep(.bento-side) { grid-column: span 2; }
+  :deep(.bento-small) { grid-column: span 1; }
+  .agent-configs-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 900px) {
-  .resource-generator-layout { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
-  .panel-left, .panel-middle, .panel-right { width: 100%; border: none; overflow: visible; }
-  .panel-middle { border-top: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
+@media (max-width: 768px) {
+  .agent-configs-grid { grid-template-columns: 1fr; }
 }
+
+.elegant-dialog :deep(.el-dialog) { border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+.elegant-dialog :deep(.el-dialog__header) { padding: 24px 32px 20px; margin-right: 0; border-bottom: 1px solid #F1F5F9; }
+.elegant-dialog :deep(.el-dialog__title) { font-weight: 800; font-size: 1.2rem; color: #0F172A; }
+.elegant-dialog :deep(.el-dialog__body) { padding: 32px; background: #F8FAFC; }
 </style>

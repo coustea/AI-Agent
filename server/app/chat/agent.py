@@ -300,7 +300,7 @@ class TutorAgent:
 
             try:
                 response = await self.llm_manager.ainvoke(
-                    "spark",
+                    "spark_max",
                     full_messages,
                     model_kwargs=self.spark_model_kwargs,
                 )
@@ -317,7 +317,7 @@ class TutorAgent:
                 ]
                 try:
                     retry_response = await self.llm_manager.ainvoke(
-                        "spark",
+                        "spark_max",
                         retry_messages,
                         model_kwargs=self.spark_model_kwargs,
                     )
@@ -368,7 +368,7 @@ class TutorAgent:
 
             # 绑定搜索工具
             llm_with_tools = self.llm_manager.bind_tools(
-                "spark",
+                "spark_max",
                 [duckduckgo_search, tavily_search],
                 model_kwargs=self.search_model_kwargs,
             )
@@ -377,7 +377,7 @@ class TutorAgent:
                 response = await self.llm_manager.ainvoke_runnable(
                     llm_with_tools,
                     full_messages,
-                    model_type="spark",
+                    model_type="spark_max",
                 )
             except Exception:
                 logger.exception("[TutorAgent] search_node Spark MAX 调用失败")
@@ -449,7 +449,7 @@ class TutorAgent:
 
             try:
                 response = await self.llm_manager.ainvoke(
-                    "spark",
+                    "spark_max",
                     full_messages,
                     model_kwargs=self.spark_model_kwargs,
                 )
@@ -466,7 +466,7 @@ class TutorAgent:
                 ]
                 try:
                     retry_response = await self.llm_manager.ainvoke(
-                        "spark",
+                        "spark_max",
                         retry_messages,
                         model_kwargs=self.spark_model_kwargs,
                     )
@@ -551,7 +551,7 @@ class TutorAgent:
 
             try:
                 response = await self.llm_manager.ainvoke(
-                    "spark",
+                    "spark_max",
                     full_messages,
                     model_kwargs=self.spark_model_kwargs,
                 )
@@ -568,7 +568,7 @@ class TutorAgent:
                 ]
                 try:
                     retry_response = await self.llm_manager.ainvoke(
-                        "spark",
+                        "spark_max",
                         retry_messages,
                         model_kwargs=self.spark_model_kwargs,
                     )
@@ -677,7 +677,7 @@ class TutorAgent:
         """
         try:
             validated = await self.llm_manager.ainvoke_structured(
-                "spark",
+                "spark_max",
                 model_cls,
                 messages,
                 strict=True,
@@ -687,7 +687,7 @@ class TutorAgent:
         except Exception:
             # 兼容测试替身或历史宽松 payload，必要时退回普通 JSON 解析路径
             response = await self.llm_manager.ainvoke(
-                "spark",
+                "spark_max",
                 messages,
                 model_kwargs={
                     **self.diagram_model_kwargs,
@@ -817,7 +817,7 @@ class TutorAgent:
 
         try:
             response = await self.llm_manager.ainvoke(
-                "spark",
+                "spark_max",
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),

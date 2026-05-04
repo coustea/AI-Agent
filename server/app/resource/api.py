@@ -37,16 +37,14 @@ async def generate_resources(
     """生成资源包（SSE 流式）。
 
     请求体：ResourceGenerationRequest
-    - task: LearningTaskInput（course, chapter, topic, weak_points, learning_goal, extra_requirement）
-    - personalization: PersonalizationConfig
+    - learning_need: 用户自然语言学习需求
     - selected_agents: list[AgentSelection]
     - agent_configs: AgentConfigs
     - output_options: OutputOptions
     """
     logger.info(
-        "[ResourceAPI] 收到生成请求: user_id=%s course=%r selected_agents=%s",
+        "[ResourceAPI] 收到生成请求: user_id=%s selected_agents=%s",
         current_user.id,
-        req.task.course,
         req.enabled_agent_ids(),
     )
 
@@ -107,7 +105,7 @@ async def list_resources(
     resources = await usecases.list_resources(current_user.id, limit)
     type_summary = await usecases.list_resource_type_summary(
         user_id=current_user.id,
-        task_ids=[value.id for value in resources if value.id is not None],
+        resource_ids=[value.id for value in resources if value.id is not None],
     )
 
     items: list[dict[str, Any]] = []
@@ -115,10 +113,7 @@ async def list_resources(
         items.append(
             {
                 "id": value.id,
-                "course": value.course,
-                "chapter": value.chapter or "",
-                "topic": value.topic or "",
-                "learning_goal": value.learning_goal or value.need,
+                "learning_need": value.learning_need or "",
                 "status": value.status,
                 "resource_types": type_summary.get(value.id or 0, []),
                 "created_at": value.created_at,
@@ -150,8 +145,7 @@ async def get_resource(
     - id: 资源包 ID
     - task_id: 任务 ID
     - title: 资源包标题
-    - task: 学习任务
-    - personalization: 个性化配置
+    - learning_need: 学习需求
     - resources: 资源列表
     - study_path: 学习路径
     - review_result: 审查结果
@@ -167,7 +161,6 @@ async def get_resource(
         logger.warning("[ResourceAPI] 资源不存在或无权限: user_id=%s resource_id=%s", current_user.id, resource_id)
         return HttpResponse.error(code=404, message="资源不存在")
 
-    topic = resource.topic or resource.course
     db_items = await usecases.list_resource_items(current_user.id, resource_id)
     resources: list[dict[str, Any]] = [
         {
@@ -189,16 +182,8 @@ async def get_resource(
     bundle = {
         "id": str(resource.id),
         "task_id": str(resource.id),
-        "title": f"{topic} 学习资源包",
-        "task": {
-            "course": resource.course,
-            "chapter": resource.chapter or "",
-            "topic": topic,
-            "weak_points": resource.weak_points or ([resource.gap] if resource.gap else []),
-            "learning_goal": resource.learning_goal or resource.need or "review",
-            "extra_requirement": resource.request_extra or "",
-        },
-        "personalization": resource.personalization or {},
+        "title": "个性化学习资源包",
+        "learning_need": resource.learning_need or "",
         "selected_agents": resource.selected_agents or [],
         "resources": resources,
         "study_path": [],

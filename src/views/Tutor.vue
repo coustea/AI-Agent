@@ -380,11 +380,6 @@
           </div>
         </div>
 
-        <div class="profile-radar-section" v-if="profileCards.length > 0">
-          <div class="radar-bg"></div>
-          <v-chart class="radar-chart" :option="profileOption" autoresize />
-        </div>
-
         <div class="profile-cards-container" v-if="profileCards.length > 0">
           <div
             v-for="card in profileCards"
@@ -506,9 +501,7 @@
 </template>
 
 <script setup lang="ts">
-// ==========================================
-// 1. 导入
-// ==========================================
+
 import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
@@ -522,18 +515,10 @@ import { ElMessage } from 'element-plus'
 import 'github-markdown-css/github-markdown-light.css'
 import 'highlight.js/styles/github.css'
 import mermaid from 'mermaid'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { RadarChart } from 'echarts/charts'
-import { TooltipComponent } from 'echarts/components'
 import { getErrorMessage } from '@/utils/http'
 import TutorMessageContent from '@/components/TutorMessageContent.vue'
 
-use([CanvasRenderer, RadarChart, TooltipComponent])
-import {
-  getProfile,
-} from '@/api/ai'
+import { getProfile } from '@/api/ai'
 import {
   streamChat,
   uploadFile,
@@ -548,11 +533,19 @@ import { getMe } from '@/api/auth'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
 
-// ==========================================
 // 3. 类型定义
-// ==========================================
-interface PendingFile { file?: File; url?: string; fileType: string; name: string }
-interface Attachment { url: string; type: string; name: string }
+interface PendingFile {
+  file?: File;
+  url?: string;
+  fileType: string;
+  name: string
+}
+interface Attachment {
+  url: string;
+  type: string;
+  name: string
+}
+// 知识图解
 interface DiagramData {
   type: string
   title: string
@@ -685,92 +678,6 @@ const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
 const profileCards = ref<ProfileCard[]>([])
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
-const profileScores = ref([60, 60, 60, 60, 60, 60, 60, 60])
-const PROFILE_SECTIONS = [
-  '基础信息',
-  '当前学习/项目背景',
-  '技术能力判断',
-  '学习偏好',
-  '当前薄弱点',
-  '兴趣方向',
-  '推荐辅导策略',
-  '最近变化',
-] as const
-
-const scoreFromSection = (content?: string) => {
-  if (!content) return 55
-  const compact = content.replace(/\s+/g, '')
-  if (!compact || compact.includes('暂无明显信息')) return 55
-  return Math.min(88, Math.max(65, 60 + Math.floor(compact.length / 20)))
-}
-
-const profileOption = computed(() => ({
-  radar: {
-    indicator: [
-      { name: '基础', max: 100 },
-      { name: '背景', max: 100 },
-      { name: '能力', max: 100 },
-      { name: '偏好', max: 100 },
-      { name: '薄弱', max: 100 },
-      { name: '兴趣', max: 100 },
-      { name: '策略', max: 100 },
-      { name: '动态', max: 100 },
-    ],
-    center: ['50%', '50%'],
-    radius: '65%',
-    splitNumber: 4,
-    shape: 'circle',
-    axisName: {
-      color: '#94A3B8',
-      fontSize: 10,
-      fontWeight: 500
-    },
-    splitLine: {
-      lineStyle: {
-        color: 'rgba(148, 163, 184, 0.1)'
-      }
-    },
-    splitArea: {
-      show: false
-    },
-    axisLine: {
-      lineStyle: {
-        color: 'rgba(148, 163, 184, 0.1)'
-      }
-    }
-  },
-  series: [
-    {
-      type: 'radar',
-      data: [
-        {
-          value: profileScores.value,
-          name: '学习画像',
-          symbol: 'none',
-          itemStyle: {
-            color: '#4F46E5'
-          },
-          areaStyle: {
-            color: {
-              type: 'radial',
-              x: 0.5,
-              y: 0.5,
-              r: 0.5,
-              colorStops: [
-                { offset: 0, color: 'rgba(79, 70, 229, 0.4)' },
-                { offset: 1, color: 'rgba(79, 70, 229, 0.05)' }
-              ]
-            }
-          },
-          lineStyle: {
-            width: 2,
-            color: '#4F46E5'
-          }
-        }
-      ]
-    }
-  ]
-}))
 
 // --- FAB 悬浮按钮 ---
 const fabPos = ref({ x: 16, y: 0 })
@@ -1258,12 +1165,6 @@ const fetchProfile = async () => {
     const nextCards = markdown ? parseProfileMarkdown(markdown) : []
     const changed = JSON.stringify(nextCards) !== JSON.stringify(profileCards.value)
     profileCards.value = nextCards
-
-    if (markdown) {
-      const sections: Record<string, string> = {}
-      nextCards.forEach(c => { sections[c.title] = c.content })
-      profileScores.value = PROFILE_SECTIONS.map((title) => scoreFromSection(sections[title]))
-    }
 
     if (changed) {
       profileUpdated.value = true
@@ -3023,33 +2924,6 @@ onBeforeUnmount(() => {
   0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
   70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
-/* Radar Chart Section */
-.profile-radar-section {
-  position: relative;
-  background: #FFFFFF;
-  border-radius: 16px;
-  padding: 12px;
-  border: 1px solid #E2E8F0;
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.radar-bg {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, #F1F5F9 0%, transparent 70%);
-  opacity: 0.5;
-}
-
-.radar-chart {
-  width: 100%;
-  height: 100%;
-  z-index: 1;
 }
 
 /* Insight Cards */

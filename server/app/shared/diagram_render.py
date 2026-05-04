@@ -71,4 +71,13 @@ def extract_mermaid_source(text: Any) -> str:
     if source.startswith("{") or '"type"' in source[:200]:
         raise ValueError("LLM 返回了对象数据而不是 Mermaid 源码")
 
+    # 防御性修复：针对 LLM 容易产生的 Mermaid 语法错误进行后处理
+    # 1. 修复 sequenceDiagram 中不支持的 note across: 语法，尝试退化为 note over
+    if "sequenceDiagram" in source:
+        # 如果发现 note across，将其退化为兼容性更好的 note over
+        # note over ActorA, ActorB: message 是 Mermaid 标准语法
+        source = re.sub(r"note\s+across\s+", "note over ", source, flags=re.IGNORECASE)
+        # 2. 修复行尾莫名出现的 n 字符（可能是转义失败残留）
+        source = re.sub(r"([^\w])n\s*$", r"\1", source, flags=re.MULTILINE)
+
     return source

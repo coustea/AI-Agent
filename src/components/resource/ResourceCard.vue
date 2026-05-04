@@ -2,6 +2,7 @@
   <el-card shadow="never" class="resource-card slide-up-anim">
     <div class="res-header">
       <div class="res-type">
+        <div class="res-step-badge" v-if="stepNumber">STEP {{ stepNumber }}</div>
         <span class="res-icon" aria-hidden="true">
           <el-icon><component :is="meta.icon" /></el-icon>
         </span>
@@ -21,8 +22,23 @@
         :result-data="resultData"
         compact
       />
+      <DiagramResourceView
+        v-else-if="agentId === 'diagram' || agentId === 'image'"
+        :result-data="resultData"
+        compact
+      />
       <QuizResourceView
         v-else-if="agentId === 'quiz'"
+        :result-data="resultData"
+        compact
+      />
+      <CodeResourceView
+        v-else-if="agentId === 'code'"
+        :result-data="resultData"
+        compact
+      />
+      <ReadingResourceView
+        v-else-if="agentId === 'reading'"
         :result-data="resultData"
         compact
       />
@@ -45,7 +61,7 @@
             <span class="ppt-title-text">{{ title }}</span>
           </div>
           <div v-if="pptSlideTitles.length > 5" class="ppt-title-more">
-            ...还有 {{ pptSlideTitles.length - 5 }} 页
+            …还有 {{ pptSlideTitles.length - 5 }} 页
           </div>
         </div>
       </div>
@@ -106,6 +122,9 @@ import { recordLearningEvent } from '@/api/ai'
 import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
 import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
 import QuizResourceView from '@/components/resource/QuizResourceView.vue'
+import DiagramResourceView from '@/components/resource/DiagramResourceView.vue'
+import CodeResourceView from '@/components/resource/CodeResourceView.vue'
+import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
 import {
   getFileCategory,
   getFileName,
@@ -120,6 +139,12 @@ const props = defineProps<{
   gap?: string
   resultData?: any
 }>()
+
+const stepOrder = ['content', 'diagram', 'mindmap', 'code', 'quiz', 'reading']
+const stepNumber = computed(() => {
+  const idx = stepOrder.indexOf(props.agentId)
+  return idx !== -1 ? idx + 1 : null
+})
 
 const emit = defineEmits(['preview'])
 
@@ -247,39 +272,55 @@ const handleDownload = () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  border: 1px solid #E2E8F0;
+  border-radius: 24px;
+  background: #FFFFFF;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s, box-shadow 0.4s;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .resource-card:hover {
-  transform: translateY(-2px);
-  border-color: #cbd5e1;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+  transform: translateY(-8px);
+  border-color: #3B82F6;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .res-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid #eef2f7;
+  padding: 24px;
+  border-bottom: 1px solid #F1F5F9;
 }
 
 .res-type {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
-  color: #0f172a;
-  font-weight: 700;
+  color: #0F172A;
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.025em;
+}
+
+.res-step-badge {
+  background: #EFF6FF;
+  color: #3B82F6;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.05em;
+  border: 1px solid #DBEAFE;
 }
 
 .res-icon {
   display: inline-flex;
   flex: 0 0 auto;
-  color: #475569;
+  color: #3B82F6;
+  font-size: 1.5rem;
 }
 
 .res-name {
@@ -293,104 +334,104 @@ const handleDownload = () => {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
-  min-height: 230px;
-  padding: 16px;
+  gap: 20px;
+  padding: 24px;
   overflow: hidden;
+  color: #475569;
 }
 
 .ai-badge {
   align-self: flex-start;
   max-width: 100%;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: #f1f5f9;
-  color: #334155;
-  font-size: 0.75rem;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: #F8FAFC;
+  color: #64748B;
+  font-size: 0.85rem;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border: 1px solid #F1F5F9;
 }
+
+/* Bento 适配调整 */
+.bento-main .res-body { min-height: 420px; }
+.bento-side .res-body { min-height: 200px; }
+.bento-small .res-body { min-height: 140px; }
 
 .fallback-json {
   margin: 0;
-  padding: 12px;
-  border-radius: 8px;
-  background: #1e293b;
-  color: #e2e8f0;
+  padding: 20px;
+  border-radius: 16px;
+  background: #F8FAFC;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
   overflow: auto;
 }
 
 .ppt-card-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .ppt-info-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .ppt-file-icon {
-  font-size: 2rem;
-  color: #6366f1;
+  font-size: 2.2rem;
+  color: #EE4444;
   flex-shrink: 0;
 }
 
 .ppt-file-name {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0F172A;
   word-break: break-all;
 }
 
 .ppt-meta {
-  font-size: 0.85rem;
-  color: #64748b;
+  font-size: 0.9rem;
+  color: #64748B;
   font-weight: 600;
 }
 
 .ppt-titles {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 .ppt-title-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .ppt-title-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #eef2ff;
-  color: #6366f1;
-  font-size: 0.75rem;
-  font-weight: 700;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 0.8rem;
+  font-weight: 800;
   flex-shrink: 0;
 }
 
 .ppt-title-text {
-  font-size: 0.85rem;
-  color: #334155;
+  font-size: 0.9rem;
+  color: #475569;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.ppt-title-more {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  padding-left: 30px;
 }
 
 .image-card-body {
@@ -402,134 +443,102 @@ const handleDownload = () => {
 .image-preview-container {
   flex: 1;
   width: 100%;
-  border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #F8FAFC;
+  border: 1px solid #F1F5F9;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 180px;
+  min-height: 200px;
 }
 
 .res-image-preview {
   width: 100%;
   height: 100%;
   cursor: pointer;
-  transition: transform 0.3s ease;
+  transition: transform 0.5s ease;
 }
 
 .res-image-preview:hover {
   transform: scale(1.02);
 }
 
-.image-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  color: #94a3b8;
-  font-size: 0.85rem;
-}
-
-.image-placeholder .el-icon {
-  font-size: 1.5rem;
-}
-
-.video-card-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
 .video-preview-placeholder {
   flex: 1;
   position: relative;
   width: 100%;
-  border-radius: 8px;
-  background: #0f172a;
+  border-radius: 16px;
+  background: #0F172A;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 180px;
-}
-
-.video-bg-icon {
-  font-size: 3.5rem;
-  color: #334155;
-  opacity: 0.4;
-}
-
-.video-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-
-.play-icon {
-  font-size: 3rem;
-  color: #ffffff;
-  opacity: 0.8;
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.video-preview-placeholder:hover .play-icon {
-  transform: scale(1.15);
-  opacity: 1;
-}
-
-.video-badge {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  backdrop-filter: blur(4px);
+  min-height: 200px;
 }
 
 .res-footer {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: 16px;
   margin-top: auto;
-  padding: 12px 16px;
-  border-top: 1px solid #eef2f7;
+  padding: 24px;
+  border-top: 1px solid #F1F5F9;
+  background: #FAFAFA;
 }
 
 .res-action {
   flex: 1;
-  min-height: 40px;
+  min-height: 48px;
   margin-left: 0;
-  border-radius: 6px;
+  border-radius: 14px;
+  font-weight: 700;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
 }
 
-.res-action:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.22);
-  outline-offset: 2px;
+.res-action:first-child {
+  background: #3B82F6;
+  border: none;
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
 }
+.res-action:first-child:hover { background: #2563EB; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3); }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.res-action:last-child {
+  background: #FFFFFF;
+  border: 2px solid #F1F5F9;
+  color: #64748B;
+}
+.res-action:last-child:hover { border-color: #E2E8F0; color: #0F172A; background: #F8FAFC; }
+
+@keyframes flyInBento {
+  0% { opacity: 0; transform: translateY(40px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 .slide-up-anim {
-  animation: slideUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: flyInBento 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resource-card,
+  .slide-up-anim {
+    animation: none;
+    transition: none;
+  }
+
+  .resource-card:hover {
+    transform: none;
+  }
+}
+
+@keyframes flyInBento {
+  0% { opacity: 0; transform: translateY(40px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.slide-up-anim {
+  animation: flyInBento 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,302 +1,203 @@
+"""长期记忆更新服务 — 从对话中提取并更新用户长期记忆。
+
+模块职责：
+- 判断是否需要更新长期记忆
+- 从对话中提取长期稳定信息
+- 更新 UserLongTermMemory 的 memory_json 和 memory_markdown
+
+设计原则：
+- 只沉淀长期稳定信息
+- 不保存会话临时状态、一次性作业中间状态
+- 合并相似信息，保留用户明确表达的偏好/目标/纠正
+"""
+
 from __future__ import annotations
 
-from datetime import timedelta
+import re
+from datetime import datetime, timezone
+from typing import Any
+
+from langchain_core.prompts import ChatPromptTemplate
 
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.memory._profile import (
-    build_chat_history_text,
-    build_memory_context_text,
-    has_extractable_signal,
-    normalize_signal_text,
-    select_dialogue_messages,
-    MEMORY_NON_SIGNIFICANT_TEXTS,
-)
 from app.memory._store import MemoryStore, now
 
 logger = get_logger(__name__)
 
-# 长期记忆提取提示词：让大模型输出 Markdown 格式的记忆
-FACT_EXTRACTION_PROMPT = """# 角色与目标
-你是一个专业的长期记忆提取器。你的唯一任务是从用户的对话记录中，提取值得写入【长期记忆池】的成长型记忆候选，让聊天智能体越用越了解用户。
+MEMORY_UPDATE_PROMPT = """# 角色与目标
+你是一个专业的长期记忆更新器。请根据【当前用户消息】【助手回复】【会话概要】和【旧长期记忆】，判断是否需要更新长期记忆，并输出更新后的内容。
 
-# 只提取这些长期记忆
-1. 用户明确表达的稳定偏好。
-2. 用户明确提出的长期或阶段性目标。
-3. 用户自身相关、后续对话可复用的稳定事实或背景。
-4. 用户反复暴露或明确承认的稳定薄弱点。
-5. **用户对 AI 的纠正、补充、提醒（重要！）**：
-   - 用户指出 AI 说错了什么
-   - 用户补充了 AI 遗漏的信息
-   - 用户提醒 AI 需要注意的事项（如"不要..."、"你应该..."）
-   - 用户对 AI 行为的反馈
-6. 用户希望 AI 如何互动、解释、提问或控制节奏（interaction）。
-7. 用户明确禁止、排斥或要求避免的回答方式（constraint）。
-8. 已经证明对该用户有效的辅导或协作策略（strategy）。
+# 只保存这些长期稳定信息
+1. 用户明确表达的学习背景（专业、年级、学校、技术栈）
+2. 用户明确表达的长期目标（考试、证书、项目、职业规划）
+3. 用户反复暴露的稳定薄弱点（长期不熟悉的知识区域）
+4. 用户明确表达的交互偏好（喜欢的回答风格、详细程度、语言）
+5. 用户对 AI 的纠正、约束、禁忌
+6. 已验证有效的辅导策略
 
-# 不提取这些内容
-1. 不提取助手的建议、解释、评价、计划或总结。
-2. 不提取普通闲聊、寒暄、临时情绪、一次性问题或当前轮任务请求。
-3. 不根据对话推断画像，不输出学习风格、能力评估、性格判断等非长期记忆内容。
-4. 不重复已有长期记忆；只有更具体、更准确或明显更新时才输出。
+# 不保存这些内容
+1. 当前会话临时状态（进行到哪一步、当前报错）
+2. 一次性作业中间状态
+3. 普通问答细节
+4. 会话摘要（由会话概要系统处理）
 
-# 输出要求（严格遵守）
-1. 如果没有值得保存的信息，只输出：NO_MEMORY
-2. 如果有记忆，直接输出 Markdown 格式的记忆内容，每条记忆用分隔线 `---` 分开。
-3. 不要输出 JSON，不要包裹在代码块中，不要添加 ```markdown 标记。
-4. 不要有任何前言、解释、说明或后记，直接开始输出记忆内容。
-5. 每条记忆最多 3 条，格式如下：
+# 输出要求
+1. 如果不需要更新，只输出：NO_UPDATE
+2. 如果需要更新，输出 JSON 格式：
+```json
+{
+  "need_update": true,
+  "update_reason": "更新原因",
+  "memory_json": {
+    "learning_background": {
+      "major": null,
+      "grade": null,
+      "description": "学习背景描述"
+    },
+    "long_term_goals": ["目标1", "目标2"],
+    "learning_preferences": ["偏好1", "偏好2"],
+    "stable_weaknesses": ["薄弱点1", "薄弱点2"],
+    "project_context": ["项目背景1"],
+    "interaction_rules": ["交互规则1"],
+    "effective_strategies": ["有效策略1"],
+    "corrections": ["用户纠正1"],
+    "recent_important_changes": ["最近重要变化1"]
+  }
+}
+```
 
-# 记忆标题
+【当前用户消息】
+{user_message}
 
-类型：preference | goal | weakness | fact | background | correction | interaction | constraint | strategy
-重要度：0.0 到 1.0（correction 和 constraint 建议 0.85 以上）
-稳定性：短期 | 阶段性 | 长期
-置信度：低 | 中 | 高
+【助手回复】
+{assistant_reply}
 
-## 内容
+【会话概要】
+{session_summary}
 
-这里写完整的 Markdown 记忆内容。
-
-## 用户原意
-
-说明用户真正希望 AI 记住什么。
-
-## AI 应遵守的规则
-
-- 对于 correction/interaction/constraint/strategy，必须写出后续 AI 应如何做或避免什么。
-- 对于其它类型，如果没有明确规则，写“暂无明确规则”。
-
-## 适用场景
-
-说明这条记忆在后续什么场景下应该被使用。
-
-## 证据
-
-用简短自然语言说明这条记忆来自最近哪些对话表现，不要复制大段原文。
-
-## 更新关系
-
-新增 / 修正旧记忆 / 强化已有记忆。
-
----
-
-# 已有长期记忆：
-{memory_context}
-
-# 最新对话记录：
-{chat_history}
+【旧长期记忆】
+{old_memory}
 """
 
+STABLE_SIGNAL_PATTERNS = (
+    re.compile(r"我(?:总是|经常|一直|老是|反复).*(?:出错|不会|卡住|卡在|记不住|搞不清|混淆|薄弱|边界)"),
+    re.compile(r"我(?:喜欢|不喜欢|更喜欢|偏好|习惯)"),
+    re.compile(r"我(?:在学|正在学|学过|以前学过|已经学过|准备|打算|想(?:学|考|准备|提高|练习))"),
+    re.compile(r"(?:专业|年级|方向|课程|考试|证书|竞赛|实习|面试|项目)"),
+    re.compile(r"(?:你|ai|AI|助手).*(?:错了|理解错|误解|不对|遗漏|应该|不要|别|记住|以后)"),
+    re.compile(r"(?:以后|下次|后续).*(?:不要|别|先|必须|应该|保持|沿用|避免)"),
+)
 
-class FactExtractionService:
-    """事实提取服务。  # 从会话消息中抽取长期事实，并写入 MemoryStore 的用户事实池
+NON_SIGNIFICANT_TEXTS = frozenset({
+    "谢谢", "好的", "收到", "明白了", "继续", "再来一道题", "ok", "OK"
+})
 
-    职责：
-    - 从最近对话中提取可长期复用的用户信息
-    - 使用启发式门控避免无意义的 LLM 调用
-    - 将 Markdown 结果写入长期记忆池
 
-    调用入口：
-    - extract_and_save(user_id, session_id) -> bool
+def has_stable_signal(text: str) -> bool:
+    normalized = " ".join((text or "").strip().lower().split())
+    if not normalized:
+        return False
+    if normalized in NON_SIGNIFICANT_TEXTS:
+        return False
+    return any(pattern.search(normalized) for pattern in STABLE_SIGNAL_PATTERNS)
 
-    设计原则：
-    - module_name 参与存储分区键，决定读写哪个模块的长期记忆池
-    - 使用 Spark X 模型做抽取，低温度减少发散
-    - 尽力而为处理：大多数"无事可做"返回 True，只有真正异常才返回 False
-    """
 
-    def __init__(self, *, module_name: str = "mentor",
-                 store: MemoryStore | None = None,
-                 profile_service: object | None = None) -> None:
-        """初始化事实提取服务。
+class LongTermMemoryUpdateService:
+    """长期记忆更新服务 — 判断并更新用户长期记忆。"""
 
-        参数：
-        - module_name: 模块名，参与存储分区键
-        - store: 存储层实例，None 时使用默认 MemoryStore
-        - profile_service: 画像服务实例（当前未使用）
-        """
-        self.module_name = module_name  # module_name 会参与存储分区键：它决定读写哪个"模块/场景"的长期记忆池
+    def __init__(
+        self,
+        *,
+        module_name: str = "mentor",
+        store: MemoryStore | None = None,
+    ) -> None:
+        self.module_name = module_name
         self.store = store or MemoryStore()
         self.llm_manager = get_llm_manager()
         self.model_kwargs = {"temperature": 0.1, "streaming": False}
 
-    async def extract_and_save(self, user_id: int, session_id: str) -> bool:
-        """从会话中提取事实并保存。
-
-        参数：
-        - user_id: 用户ID
-        - session_id: 会话ID
-
-        返回：
-        - True: 提取成功或无内容可提取
-        - False: 出现异常
-
-        流程：
-        1. 获取最近 20 条消息
-        2. 筛选可用对话消息
-        3. 启发式门控检查是否有可提取信号
-        4. 构建上下文并调用 LLM
-        5. 解析 Markdown 输出并写入存储
-        """
-        #  获取最近 20 条消息作为抽取窗口
-        recent_msgs = await self.store.get_recent_messages(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module_name,
-            limit=20,
-        )
-        if not recent_msgs:
+    async def should_update_memory(
+        self,
+        user_message: str,
+        assistant_reply: str,
+    ) -> bool:
+        if has_stable_signal(user_message):
             return True
-
-        dialogue_msgs = select_dialogue_messages(recent_msgs)  # 筛选"可用于抽取"的对话消息
-        if not dialogue_msgs:
+        if has_stable_signal(assistant_reply):
             return True
+        return False
 
-        user_texts = self._collect_user_texts(dialogue_msgs)  # 收集用户侧文本片段，用于后续"是否值得抽取"的门控
-        # 先做一个廉价的启发式门控：当用户没说任何稳定/可复用信息时，避免触发昂贵的大模型调用。
-        if not has_extractable_signal(user_texts):  # 检查是否存在可长期记忆的信号；没有则直接返回
-            return True
+    async def update_long_term_memory(
+        self,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        assistant_reply: str,
+    ) -> bool:
+        if not await self.should_update_memory(user_message, assistant_reply):
+            return False
 
-        chat_history = build_chat_history_text(dialogue_msgs)  # 构建对话历史文本：提供给模型作为"最新对话记录"上下文
-        memory_context = await build_memory_context_text(self.store, user_id, self.module_name)  # 构建已有长期记忆文本：指导模型避免重复输出
+        old_memory = await self.store.get_or_create_long_term_memory(user_id, self.module_name)
+        session_summary = await self.store.get_latest_session_summary(user_id, session_id, self.module_name)
+
+        summary_text = session_summary.summary_markdown if session_summary else "暂无会话概要。"
+        old_memory_text = old_memory.memory_markdown if old_memory else "暂无长期记忆。"
 
         try:
-            prompt_text = FACT_EXTRACTION_PROMPT.format(
-                memory_context=memory_context,
-                chat_history=chat_history,
+            prompt_text = MEMORY_UPDATE_PROMPT.format(
+                user_message=user_message[:1000],
+                assistant_reply=assistant_reply[:1000],
+                session_summary=summary_text[:2000],
+                old_memory=old_memory_text[:3000],
             )
-            response = await self.llm_manager.ainvoke(  # 调用大模型进行抽取
+            response = await self.llm_manager.ainvoke(
                 "spark_x",
                 prompt_text,
                 model_kwargs=self.model_kwargs,
             )
-            # 获取响应文本
             response_text = response.content if isinstance(response.content, str) else str(response.content)
-            # 解析并保存记忆
-            memories = self._parse_memory_output(response_text)
-            if not memories:
-                return True  # 无记忆可保存
-            for memory_data in memories[:3]:  # 最多保存 3 条
-                expires_at = None
-                if memory_data.get("is_time_sensitive") and memory_data.get("expires_in_days"):
-                    try:
-                        expires_at = now() + timedelta(days=int(memory_data["expires_in_days"]))
-                    except (ValueError, TypeError):
-                        pass
-                try:
-                    await self.store.save_user_fact(
-                        user_id=user_id,
-                        content_markdown=memory_data["content_markdown"],
-                        memory_type=memory_data["memory_type"],
-                        session_id=session_id,
-                        expires_at=expires_at,
-                        module=self.module_name,
-                        importance=memory_data.get("importance"),
-                    )
-                except ValueError:
-                    # 存储层校验/唯一性冲突等 ValueError 不应导致整次抽取失败：跳过该条，继续处理其它事实。
-                    continue
-            return True
         except Exception as exc:
-            logger.error("[FactExtraction] 事实提炼失败: %s", str(exc))
+            logger.error("[LongTermMemory] LLM 调用失败: %s", str(exc))
             return False
 
-    def _collect_user_texts(self, messages: list) -> list[str]:
-        """收集用户文本。  # 仅保留最近若干条 user 消息，并过滤可预期的无意义短语
+        if "NO_UPDATE" in response_text.upper():
+            return False
 
-        参数：
-        - messages: 消息列表
+        memory_json = self._parse_memory_json(response_text)
+        if not memory_json:
+            return False
 
-        返回：
-        - 清理后的用户文本列表
+        from app.memory.memory_types import render_long_term_memory_markdown
+        memory_markdown = render_long_term_memory_markdown(memory_json)
 
-        设计原则：
-        - 只看最近 6 条，控制噪声与上下文长度
-        - 过滤预置的无意义短语（如"谢谢"、"好的"）
-        - 使用 getattr 保持消息对象类型兼容性
-        """
-        user_texts: list[str] = []
-        ignore = {normalize_signal_text(text) for text in MEMORY_NON_SIGNIFICANT_TEXTS}  # 预置无意义短语集合（先做同样的归一化，便于快速命中过滤）
-        # 只看最近 6 条：控制噪声与上下文长度，优先抓取最新的用户陈述；更早的内容通常已在长期记忆上下文里体现。
-        for msg in messages[-6:]:
-            if getattr(msg, "role", "") != "user":
-                continue
-            cleaned = normalize_signal_text(getattr(msg, "content", ""))
-            if not cleaned or cleaned in ignore:
-                continue
-            user_texts.append(cleaned)
-        return user_texts
+        try:
+            await self.store.update_long_term_memory(
+                user_id=user_id,
+                module=self.module_name,
+                memory_markdown=memory_markdown,
+                memory_json=memory_json,
+                updated_reason="基于对话更新长期记忆",
+                source_session_ids=[session_id],
+            )
+            return True
+        except Exception as exc:
+            logger.error("[LongTermMemory] 更新长期记忆失败: %s", str(exc))
+            return False
 
-    def _parse_memory_output(self, response_text: str) -> list[dict]:
-        """解析 LLM 输出的记忆内容。
-
-        参数：
-        - response_text: LLM 响应文本
-
-        返回：
-        - 解析出的记忆列表，每条记忆包含 title、content_markdown、memory_type、importance 等字段
-        """
-        if not response_text or not response_text.strip():
-            return []
-        # 检查是否为 NO_MEMORY
-        if "NO_MEMORY" in response_text.upper():
-            return []
-        memories = []
-        # 按 --- 分割（新格式使用 --- 作为分隔线）
-        blocks = response_text.split("---")
-        for block in blocks:
-            block = block.strip()
-            if not block:
-                continue
-            memory_data = self._parse_single_memory(block)
-            if memory_data:
-                memories.append(memory_data)
-        return memories
-
-    def _parse_single_memory(self, memory_text: str) -> dict | None:
-        """解析单条记忆。
-
-        参数：
-        - memory_text: 单条记忆文本（纯 Markdown）
-
-        返回：
-        - 解析出的记忆字典，或 None（解析失败）
-        """
-        text = memory_text.strip()
-        if not text:
-            return None
-
-        lines = text.split("\n")
-        title = None
-        memory_type = "fact"
-        importance = 0.5
-
-        # 从 Markdown 中提取标题（第一个 # 标题）
-        for line in lines:
-            line = line.strip()
-            if line.startswith("# ") and not title:
-                title = line[2:].strip()
-            elif line.startswith("类型：") or line.startswith("类型:"):
-                type_str = line.split("：")[-1].split(":")[-1].strip().lower()
-                if type_str in {"preference", "goal", "weakness", "fact", "background", "summary", "correction", "interaction", "constraint", "strategy"}:
-                    memory_type = type_str
-            elif line.startswith("重要度：") or line.startswith("重要度:"):
-                try:
-                    importance_str = line.split("：")[-1].split(":")[-1].strip()
-                    importance = float(importance_str)
-                    importance = max(0.0, min(1.0, importance))
-                except (ValueError, TypeError):
-                    importance = 0.5
-
-        # 整个文本作为 content_markdown
-        content_markdown = text
-        if not content_markdown:
-            return None
-
-        return {
-            "title": title,
-            "content_markdown": content_markdown,
-            "memory_type": memory_type,
-            "importance": importance,
-        }
+    def _parse_memory_json(self, response_text: str) -> dict[str, Any] | None:
+        import json
+        text = response_text.strip()
+        if text.startswith("```json"):
+            text = text[len("```json"):].strip()
+        if text.startswith("```"):
+            text = text[3:].strip()
+        if text.endswith("```"):
+            text = text[:-3].strip()
+        try:
+            data = json.loads(text)
+            if data.get("need_update") and data.get("memory_json"):
+                return data["memory_json"]
+        except json.JSONDecodeError:
+            pass
+        return None

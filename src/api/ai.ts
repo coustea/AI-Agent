@@ -8,11 +8,29 @@ import type { ApiResponse } from '@/api/auth'
 export interface ProfileData {
   user_id: number | null
   profile_markdown: string | null
+  profile_json?: Record<string, unknown> | null
   version: number | null
   confidence: number | null
   source_session_ids: string[] | null
   source_memory_ids: number[] | null
   updated_reason: string | null
+  updated_at: string | null
+}
+
+export interface ProfileScoreData {
+  user_id: number | null
+  module: string | null
+  version: number | null
+  score: number | null
+  confidence: number | null
+  metrics: {
+    section_coverage?: number | null
+    evidence_quality?: number | null
+    uncertainty_handling?: number | null
+    content_richness?: number | null
+  }
+  missing_sections: string[]
+  scored_at: string | null
   updated_at: string | null
 }
 
@@ -168,6 +186,11 @@ export function getEvaluationSummary(limit = 100) {
 export function getProfile(userId?: number | string) {
   const path = userId ? `/ai/profile/${userId}` : '/ai/profile'
   return http.get<{ code: number; message: string; data: ProfileData }>(path)
+}
+
+export function getProfileScore(userId?: number | string) {
+  const path = userId ? `/ai/profile/${userId}/score` : '/ai/profile/score'
+  return http.get<{ code: number; message: string; data: ProfileScoreData }>(path)
 }
 
 export function getProfileHistory(limit = 20, userId?: number | string) {

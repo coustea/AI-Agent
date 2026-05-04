@@ -1,12 +1,24 @@
-from __future__ import annotations
+"""记忆存储层 — 封装数据库 CRUD 操作。
 
+模块职责：
+- 会话管理：ChatSession CRUD
+- 短期记忆：ChatMessage CRUD
+- 会话概要：ChatSessionSummary CRUD
+- 长期记忆：UserLongTermMemory CRUD（用户级单条）
+- 用户画像：UserProfile CRUD
+
+设计原则：
+- 一个用户一个 module 下只有一条长期记忆
+- 一个用户一个 module 下只有一条当前画像
+- 会话概要不写入长期记忆
+"""
+
+from __future__ import annotations
 
 import asyncio
 import re
-from collections import defaultdict
-from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Iterable
+from typing import Any
 
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
@@ -16,106 +28,30 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.database import engine
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.infra.models import ChatMessage, ChatSession, UserMemory
+from app.infra.models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionSummary,
+    UserLongTermMemory,
+    UserProfile,
+    UserProfileHistory,
+)
 from app.memory.memory_types import (
-    FACT_AGENT_MEMORY_TYPES,
-    MEMORY_TYPE_BACKGROUND,
-    MEMORY_TYPE_CONSTRAINT,
-    MEMORY_TYPE_CORRECTION,
-    MEMORY_TYPE_FACT,
-    MEMORY_TYPE_GOAL,
-    MEMORY_TYPE_INTERACTION,
-    MEMORY_TYPE_PREFERENCE,
-    MEMORY_TYPE_STRATEGY,
-    MEMORY_TYPE_SUMMARY,
-    MEMORY_TYPE_WEAKNESS,
+    make_default_long_term_memory_json,
+    make_default_profile_json,
+    make_default_session_summary_json,
+    render_long_term_memory_markdown,
+    render_profile_markdown,
+    render_session_summary_markdown,
 )
 
 logger = get_logger(__name__)
 llm_manager = get_llm_manager()
 
-SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7  # 短期记忆消息默认保留天数（用于最近消息查询/清理过期消息的截止时间计算）
-MEMORY_COMPRESSION_TOKEN_THRESHOLD = 150  # 触发"对话摘要压缩"的token阈值（达到阈值后可将旧消息压缩为长期摘要）
-MEMORY_EXTRACTION_TOKEN_THRESHOLD = 80  # 触发"事实提取"流程的token阈值（基于会话累积计数器判断是否需要抽取事实）
-PROFILE_UPDATE_TOKEN_THRESHOLD = 120  # 触发"画像更新"流程的token阈值（基于会话累积计数器判断是否需要更新画像）
+SHORT_TERM_MESSAGE_EXPIRE_DAYS = 7
+SESSION_SUMMARY_TOKEN_THRESHOLD = 150
 
-DEFAULT_MEMORY_TYPE_LIMITS: dict[str, int] = {  # 获取上下文记忆时，各 memory_type 的默认返回上限（用于控制提示词注入的长度）
-    MEMORY_TYPE_CORRECTION: 3,
-    MEMORY_TYPE_CONSTRAINT: 3,
-    MEMORY_TYPE_INTERACTION: 2,
-    MEMORY_TYPE_STRATEGY: 2,
-    MEMORY_TYPE_PREFERENCE: 3,
-    MEMORY_TYPE_GOAL: 2,
-    MEMORY_TYPE_WEAKNESS: 3,
-    MEMORY_TYPE_FACT: 3,
-    MEMORY_TYPE_BACKGROUND: 2,
-    MEMORY_TYPE_SUMMARY: 2,
-}
-
-COMPRESSION_PROMPT = """你是一个专业的对话上下文恢复压缩引擎。请将以下对话记录压缩为可恢复上下文的 Markdown 摘要。
-直接输出 Markdown 内容，不要有任何前言、解释、说明或后记。
-不要输出 JSON，不要包裹在代码块中，不要添加 ```markdown 标记。
-
-## 格式要求
-
-# 对话压缩摘要
-
-## 本段对话核心结论
-保留已经讲清楚、达成共识、后续仍可能需要引用的结论。
-
-## 用户明确纠正
-记录用户指出 AI 错在哪里、正确说法是什么、以后要避免什么。
-
-## 用户画像增量
-记录本段对话新增的专业背景、学习目标、学习历史、知识基础、认知风格、偏好、薄弱点或禁忌。
-
-## 已完成事项
-列出已经解决的问题或已经完成的任务。
-
-## 未完成事项
-列出下一轮需要继续的任务、开放问题、用户等待的结果。
-
-## 当前学习状态
-记录用户当前主题、掌握程度、卡点和下一步最自然的推进方向。
-
-## 后续回复约束
-记录下一轮 AI 必须遵守的上下文，例如不要重复解释、继续某个方案、沿用某个格式。
-
-## 可丢弃内容
-说明哪些寒暄、重复解释、临时细节可以不再保留。
-
-## 输出原则
-1. 只保留对后续对话恢复有价值的内容。
-2. 用户纠正、禁忌、未完成事项和后续约束优先保留。
-3. 如果某类信息不足，请写“暂无明显信息”。
-4. 保持简洁，但不要丢失能影响下一轮回答的上下文。
-"""
-
-_TERM_PATTERN = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]+", re.IGNORECASE)  # 轻量分词正则：将英文/数字连串与中文连续片段拆成"术语块"用于重叠度计算
-_SOURCE_WEIGHTS: dict[str, float] = {"fact_agent": 1.0, "conversation": 0.94}  # 记忆来源权重：用于在相同内容下微调重要性/排序（更信任 fact_agent）
-_INITIAL_IMPORTANCE_BY_TYPE: dict[str, float] = {  # 新写入记忆的类型基准重要性（后续会结合来源权重与证据次数逐步抬升）
-    "preference": 0.66,
-    "goal": 0.7,
-    "weakness": 0.62,
-    "fact": 0.58,
-    "background": 0.54,
-    "summary": 0.68,
-    "correction": 0.88,
-    "interaction": 0.74,
-    "constraint": 0.9,
-    "strategy": 0.72,
-}
-_MIN_OVERLAP_BY_TYPE: dict[str, float] = {  # 判定"内容足够相似可合并"的最小重叠阈值（不同类型容忍度不同）
-    "preference": 0.4,
-    "goal": 0.4,
-    "weakness": 0.4,
-    "fact": 0.45,
-    "background": 0.45,
-    "correction": 0.35,
-    "interaction": 0.4,
-    "constraint": 0.35,
-    "strategy": 0.4,
-}
+_TERM_PATTERN = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 
 
 class SessionTitleOutput(BaseModel):
@@ -123,16 +59,23 @@ class SessionTitleOutput(BaseModel):
     title: str = Field(description="会话标题，不超过15个字")
 
 
-def _normalize_session_title(title: Any, fallback: str = "新对话") -> str:
-    text = str(title or "").strip()
-    if not text:
-        return fallback
-    return text[:15] if len(text) > 15 else text
-
-
 def normalize_text(content: str) -> str:
-    # 规范化文本：去首尾空白、统一小写、合并多余空白（用于去重/重叠度/包含关系判断）
     return " ".join((content or "").strip().lower().split())
+
+
+def now() -> datetime:
+    return datetime.now()
+
+
+def message_expire_cutoff(days: int = SHORT_TERM_MESSAGE_EXPIRE_DAYS) -> datetime:
+    return now() - timedelta(days=max(days, 0))
+
+
+def estimate_token_count(text: str) -> int:
+    stripped = (text or "").strip()
+    if not stripped:
+        return 0
+    return max(max(1, len(stripped) // 4), len(stripped.split()))
 
 
 def _strip_markdown_fence(content: str) -> str:
@@ -146,244 +89,24 @@ def _strip_markdown_fence(content: str) -> str:
     return text
 
 
-def now() -> datetime:
-    # 获取当前本地时间（统一出口，便于测试/替换）
-    return datetime.now()
+def _normalize_session_title(title: Any, fallback: str = "新对话") -> str:
+    text = str(title or "").strip()
+    if not text:
+        return fallback
+    return text[:15] if len(text) > 15 else text
 
 
-def message_expire_cutoff(days: int = SHORT_TERM_MESSAGE_EXPIRE_DAYS) -> datetime:
-    # 计算短期消息的"仍然有效"截止时间点（days<=0 时按 0 处理，避免出现未来时间）
-    return now() - timedelta(days=max(days, 0))
+class MemoryStore:
+    """记忆存储核心类 — 封装所有数据库 CRUD 操作。"""
 
-
-def estimate_token_count(text: str) -> int:
-    # 粗略估算文本 token 数（启发式，仅用于阈值/计数器，不用于计费或严格 tokenization）
-    stripped = (text or "").strip()
-    if not stripped:
-        return 0
-    # 仅启发式估算：这里的 token 计数用于触发阈值/累积计数器，精度不要求与真实分词器一致（不要用于计费或精确配额）。
-    return max(max(1, len(stripped) // 4), len(stripped.split()))
-
-
-@dataclass(frozen=True, slots=True)
-class MergeDecision:
-    # 记忆合并决策结构：candidate 为候选记忆对象；match_score 为综合匹配分；relation 为关系类型标签
-    candidate: Any
-    match_score: float
-    relation: str
-
-
-def clamp_importance(value: float | None, *, default: float = 0.5) -> float:
-    # 将 importance 夹紧到 [0,1]（None 时回退到默认值，避免数据库/上游异常值污染排序）
-    if value is None:
-        return default
-    return max(0.0, min(1.0, float(value)))
-
-
-def source_weight(source: str | None) -> float:
-    # 根据 source 获取权重系数（未知/缺失来源使用保守默认值，避免把未知来源抬得过高或过低）
-    if not source:
-        return 1.0
-    return _SOURCE_WEIGHTS.get(source.strip().lower(), 0.96)
-
-
-def initial_fact_importance(memory_type: str, source: str | None = "fact_agent") -> float:
-    # 计算新写入记忆的初始重要性（按类型基准分 * 来源权重，再做 [0,1] 夹紧）
-    base = _INITIAL_IMPORTANCE_BY_TYPE.get((memory_type or "").strip().lower(), 0.55)
-    return clamp_importance(base * source_weight(source))
-
-
-def _extract_terms(content: str | None) -> set[str]:
-    # 从文本提取"术语集合"（用于 overlap/Jaccard，相比直接比字符串更稳健）
-    normalized = normalize_text(content or "")
-    if not normalized:
-        return set()
-    terms: set[str] = set()
-    for chunk in _TERM_PATTERN.findall(normalized):
-        if not chunk:
-            continue
-        if chunk.isascii() or len(chunk) == 1:
-            terms.add(chunk)
-            continue
-        terms.add(chunk)
-        # 对中文连续片段额外抽取相邻二字片段（bigram），提升"部分重叠/改写表达"场景下的召回与相似度稳定性。
-        terms.update(chunk[index : index + 2] for index in range(len(chunk) - 1))  # 中文额外抽取二字片段（bigram）
-    return terms
-
-
-def content_information_score(content: str | None) -> float:
-    # 计算内容信息量分数（用于合并时选择更"信息密度高/细节更多"的那段内容）
-    normalized = normalize_text(content or "")
-    if not normalized:
-        return 0.0
-    terms = _extract_terms(normalized)
-    alpha_bonus = sum(1 for char in normalized if char.isalpha())
-    digit_bonus = sum(1 for char in normalized if char.isdigit())
-    return float(len(normalized) + len(terms) * 4 + alpha_bonus * 0.5 + digit_bonus)
-
-
-def choose_more_informative_content(existing_content: str | None, new_content: str | None) -> str:
-    # 在两段内容中选择更信息丰富的一段（用于合并后更新 candidate.content）
-    existing = existing_content or ""
-    incoming = new_content or ""
-    if content_information_score(incoming) > content_information_score(existing):
-        return incoming
-    return existing
-
-
-def memory_overlap_score(new_text: str | None, existing_text: str | None) -> float:
-    # 计算两段文本"术语集合"的 Jaccard 重叠度（用于判断是否足够相似）
-    normalized_new = normalize_text(new_text or "")
-    normalized_existing = normalize_text(existing_text or "")
-    if not normalized_new or not normalized_existing:
-        return 0.0
-    if normalized_new == normalized_existing:
-        return 1.0
-
-    new_terms = _extract_terms(normalized_new)
-    existing_terms = _extract_terms(normalized_existing)
-    if not new_terms or not existing_terms:
-        return 0.0
-
-    intersection = new_terms & existing_terms
-    union = new_terms | existing_terms
-    return len(intersection) / len(union)
-
-
-def classify_merge_relation(memory_type: str, new_text: str | None, existing_text: str | None) -> tuple[str, float]:
-    # 分类两条记忆关系：完全相同(exact)/包含(containment)/重叠(overlap)/无关(none)
-    normalized_new = normalize_text(new_text or "")
-    normalized_existing = normalize_text(existing_text or "")
-    if not normalized_new or not normalized_existing:
-        return "none", 0.0
-    if normalized_new == normalized_existing:
-        return "exact", 1.0
-    if normalized_new in normalized_existing or normalized_existing in normalized_new:
-        return "containment", 0.95
-
-    overlap = memory_overlap_score(normalized_new, normalized_existing)
-    threshold = _MIN_OVERLAP_BY_TYPE.get((memory_type or "").strip().lower(), 0.55)
-    if overlap >= threshold:
-        return "overlap", 0.7 + overlap * 0.25
-    return "none", 0.0
-
-
-def score_merge_candidate(memory_type: str, new_text: str | None, candidate: Any) -> MergeDecision | None:  # 为单个候选记忆计算合并匹配分（relation 为主，importance/证据/新鲜度仅作极弱的平局裁决）
-    relation, relation_score = classify_merge_relation(memory_type, new_text, getattr(candidate, "content_markdown", None))
-    if relation_score <= 0:
-        return None
-
-    candidate_importance = clamp_importance(getattr(candidate, "importance", None))
-    evidence_count = max(1, int(getattr(candidate, "evidence_count", 1) or 1))
-    last_seen_at = getattr(candidate, "last_seen_at", None) or getattr(candidate, "created_at", None)
-    recency_score = last_seen_at.timestamp() if isinstance(last_seen_at, datetime) else 0.0
-    # 新鲜度 recency_score 只是弱信号：这里用很大的缩放系数把 timestamp 压到极小量级，避免"时间新"凌驾于"内容相似"之上。
-    # 平局裁决项刻意压得很小：确保 relation_score（相似/包含关系）主导合并行为，避免重要性/新鲜度"压过"内容相似度。
-    tiebreak_score = candidate_importance * 0.05 + min(evidence_count, 10) * 0.03 + recency_score / 1_000_000_000_000
-    return MergeDecision(candidate=candidate, match_score=relation_score + tiebreak_score, relation=relation)
-
-
-def rank_merge_candidates(memory_type: str, new_text: str | None, candidates: Iterable[Any]) -> list[MergeDecision]:  # 对全部候选记忆打分并排序（返回从最可能合并到最不可能的顺序）
-    ranked = [decision for candidate in candidates if (decision := score_merge_candidate(memory_type, new_text, candidate))]
-    ranked.sort(
-        key=lambda item: (
-            item.match_score,
-            clamp_importance(getattr(item.candidate, "importance", None)),
-            max(1, int(getattr(item.candidate, "evidence_count", 1) or 1)),
-            (getattr(item.candidate, "last_seen_at", None) or getattr(item.candidate, "created_at", None) or datetime.min),
-            len(normalize_text(getattr(item.candidate, "content_markdown", None) or "")),
-        ),
-        reverse=True,
-    )
-    return ranked
-
-
-def bump_importance(  # 合并/重复命中时提升记忆 importance（综合来源权重、证据次数、匹配分，并做 [0,1] 夹紧）
-    importance: float | None,
-    *,
-    source: str | None = None,
-    evidence_count: int = 1,
-    match_score: float = 0.0,
-) -> float:
-    base = clamp_importance(importance) * source_weight(source)
-    evidence_bonus = min(max(evidence_count - 1, 0), 6) * 0.04
-    match_bonus = max(0.0, min(1.0, match_score)) * 0.08
-    return clamp_importance(base + evidence_bonus + match_bonus)
-
-
-def rank_context_memory(memory: Any) -> tuple[float, int, datetime]:  # 计算记忆用于上下文注入时的排序键（质量分、证据数、最近出现时间）
-    importance = clamp_importance(getattr(memory, "importance", None))
-    evidence_count = max(1, int(getattr(memory, "evidence_count", 1) or 1))
-    quality = importance * source_weight(getattr(memory, "source", None)) + min(max(evidence_count - 1, 0), 6) * 0.06
-    last_seen_at = getattr(memory, "last_seen_at", None) or getattr(memory, "created_at", None) or datetime.min
-    return quality, evidence_count, last_seen_at
-
-
-class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期记忆的 CRUD 以及触发阈值、合并去重与摘要压缩
     def __init__(self) -> None:
         self.engine = engine
 
-    async def _get_owned_session(  # 校验会话是否属于指定 user_id（可选 module 约束），用于写入前的权限与归属验证
-        self,
-        session: AsyncSession,
-        user_id: int,
-        session_id: str,
-        module: str | None = None,
-    ) -> ChatSession | None:
-        stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)  # 通过 id+user_id 双条件查询，避免越权访问他人会话
-        if module is not None:
-            stmt = stmt.where(ChatSession.module == module)
-        result = await session.exec(stmt)
-        return result.first()
+    # ------------------------------------------------------------------
+    # 会话管理
+    # ------------------------------------------------------------------
 
-    async def _update_session_title(self, session: AsyncSession, chat_session: ChatSession, title: str) -> None:  # 更新会话标题（内部方法，用于标题生成后更新）
-        chat_session.title = title[:100] if len(title) > 100 else title  # 截断到 100 字符上限
-        session.add(chat_session)
-        await session.commit()
-
-    async def _generate_session_title(self, user_message: str) -> str:  # 用轻量级 LLM 从用户首条消息提取会话标题
-        from langchain_core.prompts import ChatPromptTemplate
-        model_kwargs = {"temperature": 0.1, "max_tokens": 80}
-        prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                "你是一个标题生成助手。请根据用户的第一条消息，生成一个简短的会话标题。"
-                "标题应该简洁明了，能够概括对话主题。"
-                "你必须只返回一个合法 JSON 对象，不要输出 Markdown 代码块，不要添加解释文字。"
-                '格式必须是：{{"title":"会话标题"}}，标题不超过15个字。',
-            ),
-            ("human", "{user_message}"),
-        ])
-        messages = prompt.invoke({"user_message": user_message[:500]})
-        try:
-            result = await llm_manager.ainvoke_structured(
-                "spark_x",
-                SessionTitleOutput,
-                messages,
-                strict=True,
-                model_kwargs=model_kwargs,
-            )
-            title = _normalize_session_title(result.title)
-            logger.info("[MemoryStore] title.llm_response title=%r", title)
-            return title
-        except Exception:
-            logger.exception("[MemoryStore] title_generation.failed")
-            raise
-
-    async def _generate_and_update_title_background(self, session_id: str, user_message: str) -> None:  # 后台任务：生成标题并更新数据库（不阻塞主流程）
-        """后台异步生成标题并更新会话。此方法通过 asyncio.create_task 调用，不阻塞消息保存。"""
-        try:
-            new_title = await self._generate_session_title(user_message)
-            async with AsyncSession(self.engine) as title_session:
-                stmt = select(ChatSession).where(ChatSession.id == session_id)
-                target_session = (await title_session.exec(stmt)).first()
-                if target_session and target_session.title == "新对话":  # 再次检查避免并发冲突
-                    await self._update_session_title(title_session, target_session, new_title)
-                    logger.info("[MemoryStore] title.generated session=%s title=%s", session_id, new_title)
-        except Exception:
-            logger.exception("[MemoryStore] title_generation.update.failed session=%s", session_id)
-
-    async def create_chat_session(self, user_id: int, module: str, title: str = "新对话") -> ChatSession:  # 创建新的聊天会话记录（写入 ChatSession 并返回持久化后的对象）
+    async def create_chat_session(self, user_id: int, module: str, title: str = "新对话") -> ChatSession:
         async with AsyncSession(self.engine) as session:
             chat_session = ChatSession(user_id=user_id, module=module, title=title)
             session.add(chat_session)
@@ -391,12 +114,12 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             await session.refresh(chat_session)
             return chat_session
 
-    async def get_chat_session(self, session_id: str) -> ChatSession | None:  # 按 session_id 获取会话（不做 user/module 归属校验）
+    async def get_chat_session(self, session_id: str) -> ChatSession | None:
         async with AsyncSession(self.engine) as session:
             stmt = select(ChatSession).where(ChatSession.id == session_id)
             return (await session.exec(stmt)).first()
 
-    async def get_user_chat_sessions(self, user_id: int, module: str | None = None, limit: int = 20) -> list[ChatSession]:  # 获取用户会话列表（默认排除已归档，按 updated_at 倒序）
+    async def get_user_chat_sessions(self, user_id: int, module: str | None = None, limit: int = 20) -> list[ChatSession]:
         async with AsyncSession(self.engine) as session:
             stmt = select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_archived == False)  # noqa: E712
             if module:
@@ -404,7 +127,7 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             stmt = stmt.order_by(ChatSession.updated_at.desc()).limit(limit)
             return list((await session.exec(stmt)).all())
 
-    async def archive_chat_session(self, session_id: str, user_id: int) -> bool:  # 归档会话（软删除）：仅标记 is_archived，不物理删除历史消息
+    async def archive_chat_session(self, session_id: str, user_id: int) -> bool:
         async with AsyncSession(self.engine) as session:
             stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
             chat_session = (await session.exec(stmt)).first()
@@ -415,7 +138,11 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             await session.commit()
             return True
 
-    async def save_message(  # 保存单条聊天消息到短期存储（同时更新/创建会话元信息，并返回该会话当前消息总数）
+    # ------------------------------------------------------------------
+    # 短期记忆（消息）
+    # ------------------------------------------------------------------
+
+    async def save_message(
         self,
         user_id: int,
         session_id: str,
@@ -426,7 +153,6 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
         tool_calls: str | None = None,
         diagram: dict | None = None,
     ) -> int:
-        should_generate_title = False  # 标记是否需要生成标题（首条用户消息且标题为"新对话"）
         async with AsyncSession(self.engine) as session:
             session_stmt = select(ChatSession).where(ChatSession.id == session_id)
             chat_session = (await session.exec(session_stmt)).first()
@@ -434,15 +160,8 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                 if chat_session.user_id != user_id or chat_session.module != module:
                     raise PermissionError("会话不属于当前用户或模块，禁止写入")
                 chat_session.updated_at = now()
-                # 检查是否是首条用户消息且标题仍为默认值
-                if role == "user" and chat_session.title == "新对话":
-                    existing_count = await self.get_message_count(user_id, session_id, module)
-                    if existing_count == 0:  # 这是第一条用户消息
-                        should_generate_title = True
             else:
                 chat_session = ChatSession(id=session_id, user_id=user_id, module=module, title="新对话")
-                if role == "user":  # 新会话的首条用户消息
-                    should_generate_title = True
             session.add(chat_session)
             session.add(
                 ChatMessage(
@@ -456,19 +175,10 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
                     diagram=diagram,
                 )
             )
-            # 单次 commit 同时持久化"会话元数据更新"和"消息新增"，尽量保证写入原子性，避免出现只写消息或只改会话的中间态。
             await session.commit()
-
-        # 使用 asyncio.create_task 在后台异步生成标题，不阻塞主流程
-        if should_generate_title:
-            try:
-                asyncio.create_task(self._generate_and_update_title_background(session_id, content))
-            except Exception:
-                logger.exception("[MemoryStore] title_task.create.failed session=%s", session_id)
-
         return await self.get_message_count(user_id, session_id, module)
 
-    async def get_recent_messages(  # 获取会话最近消息列表（可按过期策略过滤；limit 表示返回最后 N 条，但保持时间正序）
+    async def get_recent_messages(
         self,
         user_id: int,
         session_id: str,
@@ -481,15 +191,13 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             filters = [ChatMessage.user_id == user_id, ChatMessage.session_id == session_id, ChatMessage.module == module]
             if only_unexpired:
                 filters.append(ChatMessage.created_at >= message_expire_cutoff(days))
-            # 这里用"count + offset"的两次查询实现取最后 N 条：在并发写入时可能有轻微错位，但对 UI 展示而言是最佳努力且可接受。
             total = (await session.exec(select(func.count()).where(*filters))).one()
-            # 先按时间正序排序，再通过 offset 只取最后 N 条，确保返回列表顺序符合对话时间线展示。
             stmt = select(ChatMessage).where(*filters).order_by(ChatMessage.created_at.asc())
             if limit is not None and limit > 0 and total > limit:
                 stmt = stmt.offset(total - limit)
             return list((await session.exec(stmt)).all())
 
-    async def get_message_count(self, user_id: int, session_id: str, module: str) -> int:  # 获取会话消息总数（按 user/session/module 三元组计数）
+    async def get_message_count(self, user_id: int, session_id: str, module: str) -> int:
         async with AsyncSession(self.engine) as session:
             stmt = select(func.count()).where(
                 ChatMessage.user_id == user_id,
@@ -498,18 +206,11 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             )
             return (await session.exec(stmt)).one()
 
-    async def get_message_token_count(  # 计算会话消息总 token 数（基于启发式估算，用于阈值判断与计数器）
-        self,
-        user_id: int,
-        session_id: str,
-        module: str,
-        days: int = SHORT_TERM_MESSAGE_EXPIRE_DAYS,
-        only_unexpired: bool = True,
-    ) -> int:
-        messages = await self.get_recent_messages(user_id, session_id, module, None, days, only_unexpired)
+    async def get_message_token_count(self, user_id: int, session_id: str, module: str) -> int:
+        messages = await self.get_recent_messages(user_id, session_id, module, None)
         return sum(estimate_token_count(getattr(msg, "content", "")) for msg in messages)
 
-    async def delete_old_messages(self, user_id: int, session_id: str, module: str, keep_recent: int = 10) -> int:  # 删除旧消息，仅保留最近 keep_recent 条（用于摘要压缩后清理）
+    async def delete_old_messages(self, user_id: int, session_id: str, module: str, keep_recent: int = 10) -> int:
         async with AsyncSession(self.engine) as session:
             total = (
                 await session.exec(
@@ -522,7 +223,6 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             ).one()
             if total <= keep_recent:
                 return 0
-            # 用消息 id 作为删除边界：假设 id 随插入单调递增；这样能稳定保留"最近 N 条"对应的那一段消息。
             cutoff_id = (
                 await session.exec(
                     select(ChatMessage.id)
@@ -554,395 +254,396 @@ class MemoryStore:  # 记忆存储核心类：封装会话/短期消息/长期�
             await session.commit()
             return deleted
 
-    async def cleanup_expired_short_term_messages(  # 清理过期短期消息：删除 created_at 早于 cutoff 的记录并返回删除数量
+    # ------------------------------------------------------------------
+    # 会话概要
+    # ------------------------------------------------------------------
+
+    async def get_or_create_session_summary(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str = "mentor",
+    ) -> ChatSessionSummary:
+        async with AsyncSession(self.engine) as session:
+            stmt = select(ChatSessionSummary).where(
+                ChatSessionSummary.user_id == user_id,
+                ChatSessionSummary.session_id == session_id,
+                ChatSessionSummary.module == module,
+            ).order_by(ChatSessionSummary.created_at.desc())
+            existing = (await session.exec(stmt)).first()
+            if existing:
+                return existing
+            summary = ChatSessionSummary(
+                user_id=user_id,
+                session_id=session_id,
+                module=module,
+                summary_markdown="# 会话概要\n\n暂无概要信息。",
+                summary_json=make_default_session_summary_json(),
+            )
+            session.add(summary)
+            await session.commit()
+            await session.refresh(summary)
+            return summary
+
+    async def create_session_summary(
         self,
         user_id: int,
         session_id: str,
         module: str,
-        days: int = SHORT_TERM_MESSAGE_EXPIRE_DAYS,
-    ) -> int:
-        cutoff = message_expire_cutoff(days)
+        summary_markdown: str,
+        summary_json: dict[str, Any] | None,
+        start_message_id: int | None = None,
+        end_message_id: int | None = None,
+        summarized_message_count: int = 0,
+        current_topic: str | None = None,
+        current_goal: str | None = None,
+        current_status: str | None = None,
+        next_action: str | None = None,
+    ) -> ChatSessionSummary:
         async with AsyncSession(self.engine) as session:
-            expired_msgs = list(
-                (
-                    await session.exec(
-                        select(ChatMessage).where(
-                            ChatMessage.user_id == user_id,
-                            ChatMessage.session_id == session_id,
-                            ChatMessage.module == module,
-                            ChatMessage.created_at < cutoff,
-                        )
-                    )
-                ).all()
-            )
-            for msg in expired_msgs:
-                await session.delete(msg)
-            if expired_msgs:
-                await session.commit()
-            return len(expired_msgs)
-
-    async def clear_session_messages(self, user_id: int, session_id: str, module: str) -> int:  # 清空会话所有消息（物理删除 ChatMessage，返回删除条数）
-        async with AsyncSession(self.engine) as session:
-            messages = list(
-                (
-                    await session.exec(
-                        select(ChatMessage).where(
-                            ChatMessage.user_id == user_id,
-                            ChatMessage.session_id == session_id,
-                            ChatMessage.module == module,
-                        )
-                    )
-                ).all()
-            )
-            deleted = len(messages)
-            for msg in messages:
-                await session.delete(msg)
-            if deleted:
-                await session.commit()
-            return deleted
-
-    async def should_summarize(self, user_id: int, session_id: str, module: str, threshold: int = MEMORY_COMPRESSION_TOKEN_THRESHOLD) -> bool:  # 判断是否需要做摘要压缩（会话 token 总量达到阈值则返回 True）
-        return await self.get_message_token_count(user_id, session_id, module) >= threshold
-
-    async def accumulate_session_tokens(self, user_id: int, session_id: str, module: str, content: str) -> tuple[int, int]:  # 累加会话 token 计数器（分别用于记忆提取与画像更新的触发阈值判断）
-        token_delta = estimate_token_count(content)
-        async with AsyncSession(self.engine) as session:
-            chat_session = await self._get_owned_session(session, user_id, session_id, module)
-            if not chat_session:
-                chat_session = ChatSession(id=session_id, user_id=user_id, module=module, title="新对话")
-            memory_token_count = max(0, chat_session.memory_token_count + token_delta)
-            profile_token_count = max(0, chat_session.profile_token_count + token_delta)
-            chat_session.memory_token_count = memory_token_count
-            chat_session.profile_token_count = profile_token_count
-            chat_session.updated_at = now()
-            session.add(chat_session)
-            await session.commit()
-            return memory_token_count, profile_token_count
-
-    async def get_session_token_counters(self, user_id: int, session_id: str, module: str) -> tuple[int, int]:  # 获取会话 token 计数器（memory_token_count, profile_token_count）
-        async with AsyncSession(self.engine) as session:
-            chat_session = await self._get_owned_session(session, user_id, session_id, module)
-            if not chat_session:
-                return 0, 0
-            return chat_session.memory_token_count, chat_session.profile_token_count
-
-    async def should_trigger_memory_extraction(self, user_id: int, session_id: str, module: str, threshold: int = MEMORY_EXTRACTION_TOKEN_THRESHOLD) -> bool:  # 判断是否应触发事实提取（基于 memory_token_count 与阈值比较）
-        memory_tokens, _ = await self.get_session_token_counters(user_id, session_id, module)
-        return memory_tokens >= threshold
-
-    async def reset_memory_extraction_counter(self, user_id: int, session_id: str, module: str) -> None:  # 重置事实提取计数器（将 memory_token_count 清零）
-        async with AsyncSession(self.engine) as session:
-            chat_session = await self._get_owned_session(session, user_id, session_id, module)
-            if not chat_session:
-                return
-            chat_session.memory_token_count = 0
-            session.add(chat_session)
-            await session.commit()
-
-    async def reset_profile_update_counter(self, user_id: int, session_id: str, module: str) -> None:  # 重置画像更新计数器（将 profile_token_count 清零）
-        async with AsyncSession(self.engine) as session:
-            chat_session = await self._get_owned_session(session, user_id, session_id, module)
-            if not chat_session:
-                return
-            chat_session.profile_token_count = 0
-            session.add(chat_session)
-            await session.commit()
-
-    async def get_long_term_memories(self, user_id: int, module: str | None = None, limit: int = 10, only_unexpired: bool = True) -> list[UserMemory]:  # 获取用户长期记忆列表（可按 module 过滤，默认仅取未过期记录）
-        async with AsyncSession(self.engine) as session:
-            stmt = select(UserMemory).where(UserMemory.user_id == user_id)
-            if module is not None:
-                stmt = stmt.where(UserMemory.module == module)
-            if only_unexpired:
-                _now = now()
-                stmt = stmt.where(or_(UserMemory.expires_at == None, UserMemory.expires_at > _now))  # noqa: E711
-            stmt = stmt.order_by(UserMemory.created_at.desc()).limit(limit)
-            return list((await session.exec(stmt)).all())
-
-    async def get_long_term_memory_by_id(self, memory_id: int, *, user_id: int | None = None, module: str | None = None) -> UserMemory | None:  # 按 memory_id 获取单条长期记忆（可选 user/module 过滤用于权限约束）
-        async with AsyncSession(self.engine) as session:
-            memory = await session.get(UserMemory, memory_id)
-            if memory is None:
-                return None
-            if user_id is not None and memory.user_id != user_id:
-                return None
-            if module is not None and memory.module != module:
-                return None
-            return memory
-
-    async def save_user_fact(  # 写入"用户事实"长期记忆（对 fact_agent 来源做去重与近似合并，尽量避免重复条目）
-        self,
-        user_id: int,
-        content_markdown: str,
-        memory_type: str,
-        session_id: str | None = None,
-        expires_at=None,
-        module: str = "mentor",
-        importance: float | None = None,
-    ) -> UserMemory:
-        normalized_type = (memory_type or MEMORY_TYPE_FACT).strip().lower()
-        if normalized_type not in FACT_AGENT_MEMORY_TYPES:
-            normalized_type = MEMORY_TYPE_FACT
-        cleaned_content = (content_markdown or "").strip()
-        normalized_content = normalize_text(cleaned_content)
-        if not normalized_content:
-            raise ValueError("记忆内容不能为空")
-
-        async with AsyncSession(self.engine) as session:
-            _now = now()
-            # 这里是"尽力而为"的合并：没有数据库层唯一约束/锁；并发写入时仍可能产生近似重复，但能覆盖大多数串行写入场景。
-            exact_stmt = (
-                select(UserMemory)
-                .where(
-                    UserMemory.user_id == user_id,
-                    UserMemory.module == module,
-                    UserMemory.source == "fact_agent",
-                    UserMemory.memory_type == normalized_type,
-                    or_(UserMemory.expires_at == None, UserMemory.expires_at > _now),  # noqa: E711
-                )
-                .order_by(UserMemory.created_at.desc())
-            )
-            candidates = list((await session.exec(exact_stmt)).all())
-            for duplicate in candidates:
-                if normalize_text(duplicate.content_markdown) == normalized_content:
-                    duplicate.evidence_count = max(1, duplicate.evidence_count) + 1
-                    duplicate.last_seen_at = _now
-                    duplicate.session_id = session_id or duplicate.session_id
-                    if expires_at:
-                        duplicate.expires_at = expires_at
-                    duplicate.importance = bump_importance(
-                        max(clamp_importance(duplicate.importance), clamp_importance(importance, default=0.0)),
-                        source=duplicate.source,
-                        evidence_count=duplicate.evidence_count,
-                        match_score=1.0,
-                    )
-                    session.add(duplicate)
-                    await session.commit()
-                    await session.refresh(duplicate)
-                    return duplicate
-
-            # 没有完全相同内容时，才按相似/包含/重叠关系挑选最优候选合并（并用更信息丰富的文本覆盖 content_markdown）。
-            ranked_candidates = rank_merge_candidates(normalized_type, cleaned_content, candidates)
-            if ranked_candidates:
-                best_match = ranked_candidates[0]
-                candidate = best_match.candidate
-                candidate.content_markdown = choose_more_informative_content(candidate.content_markdown, cleaned_content)
-                candidate.evidence_count = max(1, candidate.evidence_count) + 1
-                candidate.last_seen_at = _now
-                candidate.session_id = session_id or candidate.session_id
-                if expires_at:
-                    candidate.expires_at = expires_at
-                candidate.importance = bump_importance(
-                    max(clamp_importance(candidate.importance), clamp_importance(importance, default=0.0)),
-                    source=candidate.source,
-                    evidence_count=candidate.evidence_count,
-                    match_score=best_match.match_score,
-                )
-                session.add(candidate)
-                await session.commit()
-                await session.refresh(candidate)
-                return candidate
-
-            memory = UserMemory(
-                user_id=user_id,
-                session_id=session_id or "",
-                module=module,
-                title=None,
-                content_markdown=cleaned_content,
-                memory_type=normalized_type,
-                source="fact_agent",
-                expires_at=expires_at,
-                evidence_count=1,
-                last_seen_at=_now,
-                importance=clamp_importance(
-                    importance,
-                    default=initial_fact_importance(normalized_type, source="fact_agent"),
-                ),
-            )
-            session.add(memory)
-            await session.commit()
-            await session.refresh(memory)
-            return memory
-
-    async def get_user_context_memories(  # 获取用于上下文注入的用户记忆（按类型分组、去重、排序，并按每类上限截断）
-        self,
-        user_id: int,
-        memory_types: Iterable[str] | None = None,
-        per_type_limits: dict[str, int] | None = None,
-        only_unexpired: bool = True,
-        source: str | None = "fact_agent",
-        module: str | None = None,
-    ) -> dict[str, list[UserMemory]]:
-        target_types = list(memory_types) if memory_types else list(DEFAULT_MEMORY_TYPE_LIMITS.keys())
-        limits = dict(DEFAULT_MEMORY_TYPE_LIMITS)
-        if per_type_limits:
-            limits.update(per_type_limits)
-
-        async with AsyncSession(self.engine) as session:
-            _now = now()
-            stmt = select(UserMemory).where(UserMemory.user_id == user_id)
-            if source is not None:
-                stmt = stmt.where(UserMemory.source == source)
-            if module is not None:
-                stmt = stmt.where(UserMemory.module == module)
-            if target_types:
-                stmt = stmt.where(UserMemory.memory_type.in_(target_types))
-            if only_unexpired:
-                stmt = stmt.where(or_(UserMemory.expires_at == None, UserMemory.expires_at > _now))  # noqa: E711
-            stmt = stmt.order_by(UserMemory.last_seen_at.desc(), UserMemory.created_at.desc())
-            memories = list((await session.exec(stmt)).all())
-
-        # 查询后再做分组/去重：把纯内存处理移到 DB session 之外，缩短事务窗口，减少长事务带来的并发与锁风险。
-        grouped: dict[str, list[UserMemory]] = defaultdict(list)
-        seen_by_type: dict[str, set[str]] = defaultdict(set)
-        for item in memories:
-            m_type = item.memory_type or MEMORY_TYPE_FACT
-            if m_type not in target_types:
-                continue
-            normalized = normalize_text(item.content_markdown)
-            if not normalized or normalized in seen_by_type[m_type]:
-                continue
-            seen_by_type[m_type].add(normalized)
-            grouped[m_type].append(item)
-
-        for m_type, items in grouped.items():
-            items.sort(key=rank_context_memory, reverse=True)
-            grouped[m_type] = items[: max(0, limits.get(m_type, 2))]
-
-        return {m_type: grouped.get(m_type, []) for m_type in target_types}
-
-    async def save_long_term_memory(  # 直接新增一条长期记忆（不做去重/合并；适用于摘要等"必然新增"的场景）
-        self,
-        user_id: int,
-        session_id: str,
-        content_markdown: str,
-        memory_type: str,
-        dimension: str | None = None,
-        importance: float = 0.5,
-        source: str = "conversation",
-        source_message_count: int = 0,
-        module: str = "mentor",
-        title: str | None = None,
-    ) -> UserMemory:
-        async with AsyncSession(self.engine) as session:
-            memory = UserMemory(
+            summary = ChatSessionSummary(
                 user_id=user_id,
                 session_id=session_id,
                 module=module,
-                title=title,
-                content_markdown=content_markdown,
-                memory_type=memory_type,
-                dimension=dimension,
-                importance=clamp_importance(importance),
-                source=source,
-                source_message_count=source_message_count,
-                evidence_count=1,
-                last_seen_at=now(),
+                summary_markdown=summary_markdown,
+                summary_json=summary_json or make_default_session_summary_json(),
+                start_message_id=start_message_id,
+                end_message_id=end_message_id,
+                summarized_message_count=summarized_message_count,
+                current_topic=current_topic,
+                current_goal=current_goal,
+                current_status=current_status,
+                next_action=next_action,
+            )
+            session.add(summary)
+            await session.commit()
+            await session.refresh(summary)
+            return summary
+
+    async def list_session_summaries(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str = "mentor",
+        limit: int = 3,
+    ) -> list[ChatSessionSummary]:
+        async with AsyncSession(self.engine) as session:
+            stmt = select(ChatSessionSummary).where(
+                ChatSessionSummary.user_id == user_id,
+                ChatSessionSummary.session_id == session_id,
+                ChatSessionSummary.module == module,
+            ).order_by(ChatSessionSummary.created_at.desc()).limit(limit)
+            return list((await session.exec(stmt)).all())
+
+    async def get_latest_session_summary(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str = "mentor",
+    ) -> ChatSessionSummary | None:
+        summaries = await self.list_session_summaries(user_id, session_id, module, limit=1)
+        return summaries[0] if summaries else None
+
+    async def update_session_summary(
+        self,
+        summary_id: int,
+        summary_markdown: str | None = None,
+        summary_json: dict[str, Any] | None = None,
+        current_topic: str | None = None,
+        current_goal: str | None = None,
+        current_status: str | None = None,
+        next_action: str | None = None,
+    ) -> ChatSessionSummary | None:
+        async with AsyncSession(self.engine) as session:
+            summary = await session.get(ChatSessionSummary, summary_id)
+            if not summary:
+                return None
+            if summary_markdown is not None:
+                summary.summary_markdown = summary_markdown
+            if summary_json is not None:
+                summary.summary_json = summary_json
+            if current_topic is not None:
+                summary.current_topic = current_topic
+            if current_goal is not None:
+                summary.current_goal = current_goal
+            if current_status is not None:
+                summary.current_status = current_status
+            if next_action is not None:
+                summary.next_action = next_action
+            summary.updated_at = now()
+            session.add(summary)
+            await session.commit()
+            await session.refresh(summary)
+            return summary
+
+    # ------------------------------------------------------------------
+    # 长期记忆（用户级单条）
+    # ------------------------------------------------------------------
+
+    async def get_or_create_long_term_memory(
+        self,
+        user_id: int,
+        module: str = "mentor",
+    ) -> UserLongTermMemory:
+        async with AsyncSession(self.engine) as session:
+            stmt = select(UserLongTermMemory).where(
+                UserLongTermMemory.user_id == user_id,
+                UserLongTermMemory.module == module,
+            )
+            existing = (await session.exec(stmt)).first()
+            if existing:
+                return existing
+            memory = UserLongTermMemory(
+                user_id=user_id,
+                module=module,
+                memory_markdown="# 长期记忆\n\n暂无长期记忆信息。",
+                memory_json=make_default_long_term_memory_json(),
             )
             session.add(memory)
             await session.commit()
             await session.refresh(memory)
             return memory
 
-    async def update_long_term_memory(  # 更新长期记忆字段（带 user/module 约束；更新后会刷新 last_seen_at）
+    async def get_long_term_memory(
         self,
-        memory_id: int,
-        *,
-        user_id: int | None = None,
-        module: str | None = None,
-        content_markdown: str | None = None,
-        memory_type: str | None = None,
-        dimension: str | None = None,
-        importance: float | None = None,
-        expires_at=None,
-        source: str | None = None,
-    ) -> UserMemory | None:
+        user_id: int,
+        module: str = "mentor",
+    ) -> UserLongTermMemory | None:
         async with AsyncSession(self.engine) as session:
-            memory = await session.get(UserMemory, memory_id)
-            if memory is None:
-                return None
-            if user_id is not None and memory.user_id != user_id:
-                return None
-            if module is not None and memory.module != module:
-                return None
-            if content_markdown is not None:
-                cleaned_content = content_markdown.strip()
-                if not normalize_text(cleaned_content):
-                    raise ValueError("记忆内容不能为空")
-                memory.content_markdown = cleaned_content
-            if memory_type is not None:
-                normalized_type = memory_type.strip().lower()
-                if normalized_type not in FACT_AGENT_MEMORY_TYPES:
-                    normalized_type = MEMORY_TYPE_FACT
-                memory.memory_type = normalized_type
-            if dimension is not None:
-                memory.dimension = dimension
-            if importance is not None:
-                memory.importance = clamp_importance(importance)
-            if source is not None:
-                memory.source = source
-            if expires_at is not None:
-                memory.expires_at = expires_at
-            memory.last_seen_at = now()
+            stmt = select(UserLongTermMemory).where(
+                UserLongTermMemory.user_id == user_id,
+                UserLongTermMemory.module == module,
+            )
+            return (await session.exec(stmt)).first()
+
+    async def update_long_term_memory(
+        self,
+        user_id: int,
+        module: str,
+        memory_markdown: str,
+        memory_json: dict[str, Any] | None = None,
+        updated_reason: str | None = None,
+        source_session_ids: list[str] | None = None,
+        source_message_ids: list[int] | None = None,
+        source_summary_ids: list[int] | None = None,
+    ) -> UserLongTermMemory:
+        async with AsyncSession(self.engine) as session:
+            stmt = select(UserLongTermMemory).where(
+                UserLongTermMemory.user_id == user_id,
+                UserLongTermMemory.module == module,
+            )
+            memory = (await session.exec(stmt)).first()
+            if not memory:
+                memory = UserLongTermMemory(
+                    user_id=user_id,
+                    module=module,
+                    memory_markdown=memory_markdown,
+                    memory_json=memory_json or make_default_long_term_memory_json(),
+                )
+            else:
+                memory.memory_markdown = memory_markdown
+                if memory_json is not None:
+                    memory.memory_json = memory_json
+                memory.version = (memory.version or 1) + 1
+            if updated_reason:
+                memory.updated_reason = updated_reason
+            if source_session_ids:
+                memory.source_session_ids = source_session_ids
+            if source_message_ids:
+                memory.source_message_ids = source_message_ids
+            if source_summary_ids:
+                memory.source_summary_ids = source_summary_ids
+            memory.updated_at = now()
             session.add(memory)
             await session.commit()
             await session.refresh(memory)
             return memory
 
-    async def delete_long_term_memory(self, memory_id: int, *, user_id: int | None = None, module: str | None = None) -> bool:  # 删除长期记忆（带 user/module 约束；物理删除记录）
+    # ------------------------------------------------------------------
+    # 用户画像
+    # ------------------------------------------------------------------
+
+    async def get_or_create_user_profile(
+        self,
+        user_id: int,
+        module: str = "mentor",
+    ) -> UserProfile:
         async with AsyncSession(self.engine) as session:
-            memory = await session.get(UserMemory, memory_id)
-            if memory is None:
-                return False
-            if user_id is not None and memory.user_id != user_id:
-                return False
-            if module is not None and memory.module != module:
-                return False
-            await session.delete(memory)
+            stmt = select(UserProfile).where(
+                UserProfile.user_id == user_id,
+                UserProfile.module == module,
+            )
+            existing = (await session.exec(stmt)).first()
+            if existing:
+                return existing
+            profile = UserProfile(
+                user_id=user_id,
+                module=module,
+                profile_markdown="# 学生画像\n\n暂无画像信息。",
+                profile_json=make_default_profile_json(),
+            )
+            session.add(profile)
             await session.commit()
-            return True
+            await session.refresh(profile)
+            return profile
 
-    async def summarize_and_compress(self, user_id: int, session_id: str, module: str, threshold: int = MEMORY_COMPRESSION_TOKEN_THRESHOLD, keep_recent: int = 10) -> None:  # 将旧消息压缩为摘要写入长期记忆，并清理已压缩的历史消息（保留最近 keep_recent 条）
-        if not await self.should_summarize(user_id, session_id, module, threshold):
-            return
-        recent_msgs = await self.get_recent_messages(user_id, session_id, module)
-        if not recent_msgs:
-            return
-        chat_text = "\n".join(
-            f"[{m.created_at.strftime('%m-%d %H:%M')}] {m.role}: {m.content}"
-            for m in recent_msgs[:-keep_recent]
-        )
-        if not chat_text.strip():
-            return
+    async def get_user_profile(
+        self,
+        user_id: int,
+        module: str = "mentor",
+    ) -> UserProfile | None:
+        async with AsyncSession(self.engine) as session:
+            stmt = select(UserProfile).where(
+                UserProfile.user_id == user_id,
+                UserProfile.module == module,
+            )
+            return (await session.exec(stmt)).first()
 
-        from langchain_core.prompts import ChatPromptTemplate
+    async def update_user_profile(
+        self,
+        user_id: int,
+        module: str,
+        profile_markdown: str,
+        profile_json: dict[str, Any] | None = None,
+        updated_reason: str | None = None,
+        source_memory_version: int | None = None,
+        source_session_ids: list[str] | None = None,
+        source_summary_ids: list[int] | None = None,
+        source_event_ids: list[int] | None = None,
+        confidence: float = 0.7,
+    ) -> UserProfile:
+        async with AsyncSession(self.engine) as session:
+            async with session.begin():
+                stmt = select(UserProfile).where(
+                    UserProfile.user_id == user_id,
+                    UserProfile.module == module,
+                )
+                profile = (await session.exec(stmt)).first()
+                if not profile:
+                    profile = UserProfile(
+                        user_id=user_id,
+                        module=module,
+                        profile_markdown=profile_markdown,
+                        profile_json=profile_json or make_default_profile_json(),
+                        confidence=confidence,
+                    )
+                else:
+                    profile.profile_markdown = profile_markdown
+                    if profile_json is not None:
+                        profile.profile_json = profile_json
+                    profile.version = (profile.version or 1) + 1
+                    profile.confidence = confidence
+                if updated_reason:
+                    profile.updated_reason = updated_reason
+                if source_memory_version is not None:
+                    profile.source_memory_version = source_memory_version
+                if source_session_ids:
+                    profile.source_session_ids = source_session_ids
+                if source_summary_ids:
+                    profile.source_summary_ids = source_summary_ids
+                if source_event_ids:
+                    profile.source_event_ids = source_event_ids
+                session.add(profile)
+                await session.flush()
 
-        summarize_prompt = ChatPromptTemplate.from_messages([
-            ("system", COMPRESSION_PROMPT),
-            ("human", "{chat_text}"),
-        ])
-        result = await llm_manager.ainvoke(
-            "spark_x",
-            summarize_prompt.invoke({"chat_text": chat_text}),
-            model_kwargs={"temperature": 0.1},
-        )
-        summarized_ids = [m.id for m in recent_msgs[:-keep_recent]]
-        summary_markdown = result.content if isinstance(result.content, str) else str(result.content)
-        summary_markdown = _strip_markdown_fence(summary_markdown)
-        if not normalize_text(summary_markdown):
-            return
-        # 先落库摘要再删旧消息：即使清理过程中途失败，也能保证摘要已保存，避免"删了但没存摘要"的数据丢失。
-        await self.save_long_term_memory(
-            user_id=user_id,
-            session_id=session_id,
-            content_markdown=summary_markdown,
-            memory_type=MEMORY_TYPE_SUMMARY,
-            source=module,
-            source_message_count=len(summarized_ids),
-            module=module,
-            title="对话摘要",
-        )
-        await self.delete_old_messages(user_id, session_id, module, keep_recent)
+                latest_version = (
+                    await session.exec(
+                        select(func.max(UserProfileHistory.version)).where(
+                            UserProfileHistory.user_id == user_id,
+                            UserProfileHistory.module == module,
+                        )
+                    )
+                ).one()
+                history = UserProfileHistory(
+                    user_id=user_id,
+                    module=module,
+                    version=0 if latest_version is None else int(latest_version) + 1,
+                    profile_markdown=profile_markdown,
+                    profile_json=profile_json or make_default_profile_json(),
+                    change_reason=updated_reason,
+                    source_memory_version=source_memory_version,
+                    source_session_ids=source_session_ids,
+                    source_summary_ids=source_summary_ids,
+                    source_event_ids=source_event_ids,
+                )
+                session.add(history)
+            await session.refresh(profile)
+            return profile
+
+    async def get_profile_history(
+        self,
+        user_id: int,
+        module: str = "mentor",
+        limit: int = 20,
+    ) -> list[UserProfileHistory]:
+        async with AsyncSession(self.engine) as session:
+            stmt = (
+                select(UserProfileHistory)
+                .where(UserProfileHistory.user_id == user_id, UserProfileHistory.module == module)
+                .order_by(UserProfileHistory.created_at.desc())
+                .limit(limit)
+            )
+            return list((await session.exec(stmt)).all())
+
+    # ------------------------------------------------------------------
+    # 会话 Token 计数
+    # ------------------------------------------------------------------
+
+    async def accumulate_session_tokens(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str,
+        content: str,
+    ) -> int:
+        token_delta = estimate_token_count(content)
+        async with AsyncSession(self.engine) as session:
+            stmt = select(ChatSession).where(
+                ChatSession.id == session_id,
+                ChatSession.user_id == user_id,
+                ChatSession.module == module,
+            )
+            chat_session = (await session.exec(stmt)).first()
+            if not chat_session:
+                chat_session = ChatSession(id=session_id, user_id=user_id, module=module, title="新对话")
+            chat_session.summary_token_count = max(0, (chat_session.summary_token_count or 0) + token_delta)
+            chat_session.updated_at = now()
+            session.add(chat_session)
+            new_count = chat_session.summary_token_count
+            await session.commit()
+            return new_count
+
+    async def get_session_token_count(self, user_id: int, session_id: str, module: str) -> int:
+        async with AsyncSession(self.engine) as session:
+            stmt = select(ChatSession).where(
+                ChatSession.id == session_id,
+                ChatSession.user_id == user_id,
+                ChatSession.module == module,
+            )
+            chat_session = (await session.exec(stmt)).first()
+            return chat_session.summary_token_count if chat_session else 0
+
+    async def reset_session_token_count(self, user_id: int, session_id: str, module: str) -> None:
+        async with AsyncSession(self.engine) as session:
+            stmt = select(ChatSession).where(
+                ChatSession.id == session_id,
+                ChatSession.user_id == user_id,
+                ChatSession.module == module,
+            )
+            chat_session = (await session.exec(stmt)).first()
+            if chat_session:
+                chat_session.summary_token_count = 0
+                session.add(chat_session)
+                await session.commit()
+
+    async def should_create_session_summary(
+        self,
+        user_id: int,
+        session_id: str,
+        module: str,
+        threshold: int = SESSION_SUMMARY_TOKEN_THRESHOLD,
+    ) -> bool:
+        return await self.get_session_token_count(user_id, session_id, module) >= threshold
 
 
-memory_store = MemoryStore()  # 模块级单例：作为全局共享入口使用（避免在各处重复构建 Store）
+memory_store = MemoryStore()

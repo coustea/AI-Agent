@@ -14,13 +14,20 @@ from langchain_core.messages import HumanMessage
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
-from app.resource.worker_agents.utils import generate_execution_report
+from app.resource.worker_agents.utils import (
+    append_backend_context_for_prompt,
+    extract_markdown_from_llm_output,
+    learning_need_from_task,
+    title_from_learning_need,
+)
 
 logger = get_logger(__name__)
 
 
 class CodeAgent:
     """代码示例 Agent。"""
+
+    STEPS = ["解析代码示例逻辑", "生成带详尽注释的源码", "编写逐行原理解析", "验证代码运行可行性"]
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
@@ -29,23 +36,56 @@ class CodeAgent:
         self.llm_manager = get_llm_manager()
         self.prompt_path = Path(__file__).parent.parent / "prompts" / "workers" / "code.md"
 
-    async def _emit_action(self, action: str, detail: str = "") -> None:
+    async def _emit_action(
+        self,
+        action: str,
+        detail: str = "",
+        current_step: int = 0,
+        total_steps: int = 0,
+        step_label: str = "",
+    ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
-            await self.emitter.emit_agent_action("code", action, detail)
+            await self.emitter.emit_agent_action(
+                "code",
+                action,
+                detail,
+                current_step=current_step,
+                total_steps=total_steps,
+                step_label=step_label,
+            )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行代码生成。"""
-        logger.info("[CodeAgent] 开始执行: topic=%s", state.task.get("topic", ""))
+        logger.info("[CodeAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
+        total = len(self.STEPS)
 
-        await self._emit_action("loading_prompt", "加载代码示例生成提示词")
+        await self._emit_action(
+            "loading_prompt",
+            "加载代码示例生成提示词...",
+            current_step=1,
+            total_steps=total,
+            step_label=self.STEPS[0],
+        )
         prompt = self._load_prompt()
 
-        await self._emit_action("building_input", "构建输入内容，整合任务信息和依赖报告")
+        await self._emit_action(
+            "building_input",
+            "正在解析代码示例逻辑并构建输入...",
+            current_step=2,
+            total_steps=total,
+            step_label=self.STEPS[1],
+        )
         input_text = await self._build_input(state)
 
         try:
-            await self._emit_action("calling_llm", "调用 spark_x 生成代码示例")
+            await self._emit_action(
+                "calling_llm",
+                "正在为你生成带详尽注释的源码...",
+                current_step=3,
+                total_steps=total,
+                step_label=self.STEPS[2],
+            )
 
             response = await self.llm_manager.ainvoke(
                 "spark_x",
@@ -55,7 +95,7 @@ class CodeAgent:
 
             content = response.content if hasattr(response, "content") else str(response)
             content = self._clean_content(content)
-            language = state.agent_config.get("programming_language", "cpp")
+            language = state.agent_config.get("programming_language", "python")
             code_data = {
                 "language": language,
                 "code": content,
@@ -68,37 +108,26 @@ class CodeAgent:
                 "exercises": [],
             }
 
-            await self._emit_action("finalizing_result", f"生成代码示例 ({len(content)} 字符)")
-
-            execution_report = generate_execution_report(
-                agent_type="code",
-                task=state.task,
-                content=code_data,
-                success=True,
+            await self._emit_action(
+                "finalizing_result",
+                f"正在验证代码运行可行性并生成结果 ({len(content)} 字符)...",
+                current_step=4,
+                total_steps=total,
+                step_label=self.STEPS[3],
             )
 
             return WorkerResult.model_construct(
                 success=True,
                 content=code_data,
                 file_type="json",
-                title=f"{state.task.get('topic', state.task.get('course', ''))} - 代码实操案例",
+                title=title_from_learning_need(state.task, "代码实操案例"),
                 summary="生成代码实操案例",
-                execution_report=execution_report,
                 metadata={"language": language},
             )
 
         except Exception as exc:
             logger.exception("[CodeAgent] 执行失败")
-
-            execution_report = generate_execution_report(
-                agent_type="code",
-                task=state.task,
-                content=None,
-                success=False,
-                error=str(exc),
-            )
-
-            return WorkerResult(success=False, error=str(exc), execution_report=execution_report)
+            return WorkerResult(success=False, error=str(exc))
 
     def _load_prompt(self) -> str:
         """加载提示词。"""
@@ -115,46 +144,18 @@ class CodeAgent:
     async def _build_input(self, state: WorkerState) -> str:
         """构建输入内容。"""
         task = state.task
-        personalization = state.personalization
         agent_config = state.agent_config
-        profile = state.learner_profile
 
         parts = [
-            "## 课程信息",
-            f"- 课程: {task.get('course', '')}",
-            f"- 章节: {task.get('chapter', '')}",
-            f"- 学习主题: {task.get('topic', task.get('course', ''))}",
-            f"- 知识短板: {', '.join(task.get('weak_points', []))}",
-            f"- 学习目标: {task.get('learning_goal', '')}",
-            "",
-            "## 个性化配置",
-            f"- 当前水平: {personalization.get('current_level', 'basic')}",
-            f"- 目标水平: {personalization.get('target_level', 'understand')}",
-            f"- 示例偏好: {personalization.get('example_preference', 'visual')}",
+            "## 学习需求",
+            learning_need_from_task(task),
             "",
             "## Agent 配置",
-            f"- 编程语言: {agent_config.get('programming_language', 'cpp')}",
+            f"- 编程语言: {agent_config.get('programming_language', 'python')}",
             f"- 案例类型: {agent_config.get('case_type', 'basic_demo')}",
-            f"- 包含注释: {agent_config.get('include_comments', True)}",
-            f"- 包含输入输出示例: {agent_config.get('include_input_output', True)}",
-            f"- 包含复杂度分析: {agent_config.get('include_complexity', True)}",
-            f"- 包含调试技巧: {agent_config.get('include_debug_tips', True)}",
-            f"- 包含练习题: {agent_config.get('include_exercises', True)}",
         ]
 
-        if profile:
-            parts.append("")
-            parts.append("## 学习者画像")
-            profile_markdown = profile.get("profile_markdown", "")
-            if profile_markdown:
-                parts.append(profile_markdown)
-
-        if state.upstream_results:
-            parts.append("")
-            parts.append("## 上游结果摘要")
-            for agent_id, result in state.upstream_results.items():
-                content_preview = str(result.get("content", ""))[:300]
-                parts.append(f"- {agent_id}: {content_preview}...")
+        append_backend_context_for_prompt(parts, state)
 
         parts.append("")
         parts.append("请生成代码示例。")
