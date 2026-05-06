@@ -15,7 +15,12 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:9999',
         changeOrigin: true,
-      }
+      },
+      '/ws': {
+        target: 'ws://localhost:9999',
+        ws: true,
+        changeOrigin: true,
+      },
     },
     watch: {
       ignored: ['**/server/**'],
