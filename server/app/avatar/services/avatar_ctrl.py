@@ -237,42 +237,8 @@ class AvatarController:
         """
         # Check connection, reconnect if needed
         if not self.ws or self._ws_closed:
-            logger.warning("Avatar connection lost, attempting reconnection...")
-            try:
-                # Reset state
-                self.is_ready = False
-
-                # Reconnect
-                await self.connect(on_reconnect_callback=self._on_reconnect_callback)
-
-                # Restart message receiver
-                if self._event_callback:
-                    asyncio.create_task(self.receive_messages(self._event_callback))
-
-                # Wait for connection ready (stream_info event)
-                retry_count = 0
-                max_retries = 40  # Max wait 20 seconds
-                while not self.is_ready and retry_count < max_retries:
-                    await asyncio.sleep(0.5)
-                    retry_count += 1
-
-                if not self.is_ready:
-                    raise RuntimeError("Avatar not ready after reconnection")
-
-                logger.info("Avatar reconnected successfully")
-
-                # Notify frontend to update video stream
-                if self._on_reconnect_callback and self._last_stream_info:
-                    await self._on_reconnect_callback(self._last_stream_info)
-
-                # Restart queue processing if there are pending sentences
-                if not self.sentence_queue.empty():
-                    logger.info(f"Reconnected, {self.sentence_queue.qsize()} sentences pending")
-                    if self._playback_task is None or self._playback_task.done():
-                        self._playback_task = asyncio.create_task(self._process_queue())
-
-            except Exception as e:
-                raise RuntimeError(f"Avatar reconnection failed: {e}")
+            logger.warning("Avatar connection lost, skipping speech (no auto-reconnect)")
+            raise RuntimeError("Avatar connection lost, cannot send speech command")
 
         # Send speech command
         text_msg = {
@@ -295,6 +261,9 @@ class AvatarController:
             logger.info(f"Avatar speaking: {text[:50]}...")
         except Exception as e:
             logger.error(f"Failed to send speech command: {e}")
+            # 连接已断开，清空 ws 引用
+            self.ws = None
+            self.is_ready = False
             raise RuntimeError(f"Failed to send speech command: {e}")
 
     async def stop(self):

@@ -67,6 +67,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def rtc_logging_collect_bypass(request: Request, call_next):
+    if request.url.path == "/api/v1/logging/collect/list":
+        return JSONResponse({"code": 0, "message": "ok", "data": []})
+    return await call_next(request)
+
 # Mount feature module routers
 from app.auth.api import router as auth_router
 from app.chat.api import router as chat_router
@@ -103,6 +110,16 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/")
 async def root():
     return {"message": "AI Learning Platform is running"}
+
+
+# Compatibility endpoint for third-party RTC SDK telemetry polling.
+# Some RTCPlayer builds repeatedly call this path with various methods.
+@app.api_route(
+    "/api/v1/logging/collect/list",
+    methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+)
+async def rtc_logging_collect_list():
+    return {"code": 0, "message": "ok", "data": []}
 
 
 @app.websocket("/ws/avatar")

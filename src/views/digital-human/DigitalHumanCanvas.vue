@@ -1,11 +1,26 @@
 <template>
   <div class="digital-human-canvas">
     <div ref="videoContainer" class="video-container"></div>
+
+    <!-- Not ready states (connecting / disconnected) -->
     <div v-if="!isReady" class="placeholder">
-      <div v-if="isConnected" class="spinner"></div>
-      <el-icon v-else class="placeholder-icon"><Avatar /></el-icon>
-      <p>{{ isConnected ? '等待数字人上线...' : '数字人未连接' }}</p>
+      <template v-if="isConnected">
+        <div class="spinner"></div>
+        <p>等待数字人上线...</p>
+      </template>
+      <template v-else>
+        <el-icon class="placeholder-icon"><Avatar /></el-icon>
+        <p>数字人未连接</p>
+        <button class="reconnect-btn" @click="$emit('reconnect')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          重新连接
+        </button>
+      </template>
     </div>
+
     <!-- Audio enable button -->
     <div v-if="isReady && !audioEnabled" class="audio-enable-overlay">
       <button class="audio-enable-btn" @click="$emit('enable-audio')">
@@ -15,6 +30,20 @@
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
         </svg>
         点击启用音频
+      </button>
+    </div>
+
+    <!-- Disconnect button + idle countdown -->
+    <div v-if="isConnected" class="disconnect-bar">
+      <span v-if="idleCountdown > 0 && idleCountdown <= 10" class="idle-hint">
+        {{ idleCountdown }}s 后自动断开
+      </span>
+      <button class="disconnect-btn" @click="$emit('disconnect')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+        断开连接
       </button>
     </div>
   </div>
@@ -28,10 +57,13 @@ defineProps<{
   isReady: boolean
   isConnected: boolean
   audioEnabled: boolean
+  idleCountdown: number
 }>()
 
 defineEmits<{
   'enable-audio': []
+  'disconnect': []
+  'reconnect': []
 }>()
 
 const videoContainer = ref<HTMLElement | null>(null)
@@ -103,6 +135,26 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
+.reconnect-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: #4F46E5;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reconnect-btn:hover {
+  background: #4338CA;
+  transform: scale(1.05);
+}
+
 .audio-enable-overlay {
   position: absolute;
   top: 50%;
@@ -136,5 +188,51 @@ onBeforeUnmount(() => {
 @keyframes pulse-btn {
   0%, 100% { box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4); }
   50% { box-shadow: 0 4px 24px rgba(79, 70, 229, 0.8); }
+}
+
+.disconnect-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+.idle-hint {
+  font-size: 0.7rem;
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 500;
+  animation: idle-pulse 1s infinite;
+}
+
+@keyframes idle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.disconnect-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.disconnect-btn:hover {
+  background: rgba(239, 68, 68, 1);
+  transform: scale(1.05);
 }
 </style>

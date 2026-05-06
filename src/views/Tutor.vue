@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div :class="['tutor-dashboard', `mode-${chatMode}`]">
 
     <main class="dashboard-main">
@@ -141,15 +141,18 @@
             :is-ready="isAvatarReady"
             :is-connected="isAvatarConnected"
             :audio-enabled="avatarAudioEnabled"
+            :idle-countdown="avatarIdleCountdown"
             ref="canvasRef"
             @enable-audio="enableAvatarAudio"
+            @disconnect="disconnectAvatar"
+            @reconnect="handleAvatarReconnect"
           />
 
-          <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking }">
+          <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking || isVadListening }">
             <div class="speech-wave" v-if="isAIThinking || isAvatarSpeaking">
               <span></span><span></span><span></span><span></span><span></span>
             </div>
-            <div class="status-badge">{{ (isAIThinking || isAvatarSpeaking) ? '正在多模态解答中...' : '倾听就绪' }}</div>
+            <div class="status-badge">{{ digitalHumanStatusText }}</div>
           </div>
         </div>
 
@@ -220,7 +223,7 @@
                   </div>
                   <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
 
-                  <!-- 优先展示 PNG 图片 -->
+                  <!-- 浼樺厛灞曠ず PNG 鍥剧墖 -->
                   <img
                       v-if="msg.diagram.image_url"
                       :src="msg.diagram.image_url"
@@ -228,7 +231,7 @@
                       class="diagram-image"
                   />
 
-                  <!-- 降级到 SVG 渲染 -->
+                  <!-- 闄嶇骇鍒?SVG 娓叉煋 -->
                   <div
                       v-else
                       class="diagram-svg-container"
@@ -243,7 +246,7 @@
               <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
               <div class="thinking-bubble">
                 <el-icon class="is-loading thinking-spinner"><Loading /></el-icon>
-                <span class="thinking-text">正在思考...</span>
+                <span class="thinking-text">姝ｅ湪鎬濊€?..</span>
               </div>
             </div>
           </div>
@@ -269,7 +272,7 @@
                   :show-arrow="false"
                 >
                   <template #reference>
-                    <button class="standard-plus-btn" :disabled="uploadingFile" title="更多功能">
+                    <button class="standard-plus-btn" :disabled="uploadingFile" title="鏇村鍔熻兘">
                       <el-icon><Plus /></el-icon>
                     </button>
                   </template>
@@ -421,11 +424,11 @@
           </div>
           <div class="empty-text-wrap">
             <h4>待捕获画像特征</h4>
-            <p>由于对话样本较少，您的动态学习画像仍在孕育中。多跟我聊聊，我将为您精准画像。</p>
+            <p>由于对话样本较少，您的动态学习画像仍在生成中。多和我交流，我会为您建立更精准的画像。</p>
           </div>
           <div class="empty-hints">
-            <div class="hint-item"><el-icon><ChatLineRound /></el-icon> <span>深度交流</span></div>
-            <div class="hint-item"><el-icon><Aim /></el-icon> <span>定位痛点</span></div>
+            <div class="hint-item"><el-icon><ChatLineRound /></el-icon> <span>娣卞害浜ゆ祦</span></div>
+            <div class="hint-item"><el-icon><Aim /></el-icon> <span>瀹氫綅鐥涚偣</span></div>
             <div class="hint-item"><el-icon><TrendCharts /></el-icon> <span>反馈进度</span></div>
           </div>
         </div>
@@ -437,7 +440,7 @@
               <el-icon class="info-icon"><InfoFilled /></el-icon>
             </div>
             <div class="memory-switch-wrap">
-              <span class="switch-status">{{ memoryEnabled ? '已启用' : '未使用' }}</span>
+              <span class="switch-status">{{ memoryEnabled ? '已启用' : '未启用' }}</span>
               <el-switch v-model="memoryEnabled" size="small" />
             </div>
           </div>
@@ -533,7 +536,7 @@ import { getMe } from '@/api/auth'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
 
-// 3. 类型定义
+// 3. 绫诲瀷瀹氫箟
 interface PendingFile {
   file?: File;
   url?: string;
@@ -545,7 +548,7 @@ interface Attachment {
   type: string;
   name: string
 }
-// 知识图解
+// 鐭ヨ瘑图解
 interface DiagramData {
   type: string
   title: string
@@ -556,7 +559,7 @@ interface DiagramData {
     format: string
     source: string
   }
-  image_url?: string  // PNG 图片 URL（前端渲染后上传）
+  image_url?: string  // PNG 鍥剧墖 URL锛堝墠绔覆鏌撳悗涓婁紶锛?
 }
 interface ChatMsg {
   id: number
@@ -578,7 +581,7 @@ const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 
 // ==========================================
-// 4. Mermaid 初始化
+// 4. Mermaid 鍒濆鍖?
 // ==========================================
 mermaid.initialize({
   startOnLoad: false,
@@ -587,10 +590,10 @@ mermaid.initialize({
 })
 
 // ==========================================
-// 5. 响应式状态
+// 5. 鍝嶅簲寮忕姸鎬?
 // ==========================================
 
-// --- 聊天模式与输入 ---
+// --- 鑱婂ぉ妯″紡涓庤緭鍏?---
 const chatMode = ref('standard')
 const userInput = ref('')
 const isAIThinking = ref(false)
@@ -598,17 +601,18 @@ const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
-// --- 媒体生成/联网搜索开关 ---
+// --- 濯掍綋鐢熸垚/联网搜索寮€鍏?---
 const enableWebSearch = ref(false) 
 const needDiagram = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
 
-// --- 语音相关 ---
+// --- 璇煶鐩稿叧 ---
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
+const lastAsrText = ref('')
 
-// --- 数字人 composable ---
+// --- 鏁板瓧浜?composable ---
 const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
 const {
   isConnected: isAvatarConnected,
@@ -616,6 +620,7 @@ const {
   isSpeaking: isAvatarSpeaking,
   isListening: isVadListening,
   audioEnabled: avatarAudioEnabled,
+  idleCountdown: avatarIdleCountdown,
   connect: connectAvatar,
   disconnect: disconnectAvatar,
   sendText: sendAvatarText,
@@ -625,11 +630,32 @@ const {
   setPlayerContainer,
 } = useDigitalHuman({
   onAssistantChunk: (chunk) => {
+    if (streamingMsgId.value === null) {
+      const aiMsgId = Date.now() + 1
+      messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
+      streamingMsgId.value = aiMsgId
+      isAIThinking.value = true
+    }
     if (streamingMsgId.value !== null) {
       enqueueStreamChunk(streamingMsgId.value, chunk)
     }
   },
+  onDiagram: (diagram) => {
+    if (!diagram || streamingMsgId.value === null) return
+    const aiMsg = messages.value.find(m => m.id === streamingMsgId.value)
+    if (!aiMsg) return
+    aiMsg.diagram = diagram as DiagramData
+    aiMsg.diagramGenerating = false
+    scrollToBottom()
+  },
+  onAssistantComplete: () => {
+    flushPendingStreamText(true)
+    isAIThinking.value = false
+    streamingMsgId.value = null
+    scheduleProfilePoll()
+  },
   onAsrResult: (text) => {
+    lastAsrText.value = text.trim()
     // Show ASR result as a user message in the chat
     if (text.trim()) {
       messages.value.push({
@@ -638,7 +664,18 @@ const {
         content: text,
         time: now(),
       })
+      if (streamingMsgId.value === null) {
+        const aiMsgId = Date.now() + 1
+        messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
+        streamingMsgId.value = aiMsgId
+      }
+      isAIThinking.value = true
       scrollToBottom()
+    }
+  },
+  onVadStateChange: (listening) => {
+    if (!listening) {
+      lastAsrText.value = ''
     }
   },
   onError: (msg) => {
@@ -655,12 +692,12 @@ const {
   },
 })
 
-// --- 文件上传 ---
+// --- 鏂囦欢涓婁紶 ---
 const uploadingFile = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
 
-// --- 会话管理 ---
+// --- 浼氳瘽绠＄悊 ---
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
@@ -668,25 +705,25 @@ const currentUserId = ref<string | number | null>(null)
 const searchPopoverVisible = ref(false)
 const searchKeyword = ref('')
 
-// --- 消息列表 ---
+// --- 娑堟伅鍒楄〃 ---
 const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
 let abortController: AbortController | null = null
 
-// --- 画像相关 ---
+// --- 鐢诲儚鐩稿叧 ---
 const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
 const profileCards = ref<ProfileCard[]>([])
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
 
-// --- FAB 悬浮按钮 ---
+// --- FAB 鎮诞鎸夐挳 ---
 const fabPos = ref({ x: 16, y: 0 })
 const isDragging = ref(false)
 const showFabMenu = ref(false)
 const isDimmed = ref(false)
 const isStickRight = computed(() => fabPos.value.x > window.innerWidth / 2)
 
-// --- FAB 拖拽状态 ---
+// --- FAB 鎷栨嫿鐘舵€?---
 let dragStartX = 0
 let dragStartY = 0
 let dragInitialX = 0
@@ -694,11 +731,11 @@ let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
 
-// --- 图解渲染 ---
+// --- 图解娓叉煋 ---
 let diagramRenderSeq = 0
 const diagramSvgCache = ref<Map<string, string>>(new Map())
 
-// --- 滚动状态 ---
+// --- 婊氬姩鐘舵€?---
 let scrollPending = false
 let streamFlushHandle: number | null = null
 let pendingStreamText = ''
@@ -708,7 +745,7 @@ let lastAutoScrollAt = 0
 const STREAM_SCROLL_INTERVAL_MS = 64
 
 // ==========================================
-// 6. 计算属性
+// 6. 璁＄畻灞炴€?
 // ==========================================
 const filteredSessions = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
@@ -727,9 +764,15 @@ const showThinkingIndicator = computed(() => {
 })
 
 const isStreamingMessage = (msg: ChatMsg) => msg.id === streamingMsgId.value && isAIThinking.value
+const digitalHumanStatusText = computed(() => {
+  if (isAIThinking.value || isAvatarSpeaking.value) return '正在多模态解答中...'
+  if (isVadListening.value && lastAsrText.value) return `已识别：${lastAsrText.value.slice(0, 24)}`
+  if (isVadListening.value) return '正在识别语音...'
+  return '倾听就绪'
+})
 
 // ==========================================
-// 7. 工具函数
+// 7. 宸ュ叿鍑芥暟
 // ==========================================
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
@@ -742,7 +785,7 @@ const copyToClipboard = async (text: string) => {
   }
 }
 
-// 代理事件委托：用于捕获由 v-html 渲染出来的“复制代码”按钮点击事件
+// 浠ｇ悊浜嬩欢濮旀墭锛氱敤浜庢崟鑾风敱 v-html 娓叉煋鍑烘潵鐨勨€滃鍒朵唬鐮佲€濇寜閽偣鍑讳簨浠?
 const handleMessageClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (target && target.classList.contains('copy-code-btn')) {
@@ -750,7 +793,7 @@ const handleMessageClick = (e: MouseEvent) => {
     if (code != null) {
       copyToClipboard(code)
       
-      // 添加临时的视觉反馈
+      // 娣诲姞涓存椂鐨勮瑙夊弽棣?
       const originalText = target.innerText
       target.innerText = '已复制'
       target.classList.add('copied')
@@ -830,7 +873,7 @@ const resolveIllustrationUrl = (path: string) => {
 }
 
 // ==========================================
-// 8. 滚动机制优化 (利用 rAF 让流式输出彻底丝滑)
+// 8. 婊氬姩鏈哄埗浼樺寲 (鍒╃敤 rAF 璁╂祦寮忚緭鍑哄交搴曚笣婊?
 // ==========================================
 const scrollToBottom = () => {
   if (scrollPending) return
@@ -909,7 +952,7 @@ const autoResize = () => {
 }
 
 // ==========================================
-// 9. 图解渲染函数
+// 9. 图解娓叉煋鍑芥暟
 // ==========================================
 const renderMermaid = async (source: string): Promise<string> => {
   try {
@@ -917,16 +960,16 @@ const renderMermaid = async (source: string): Promise<string> => {
     const { svg } = await mermaid.render(`mermaid-${Date.now()}-${diagramRenderSeq}`, source)
     return svg
   } catch {
-    return `<pre class="mermaid-error">图解渲染失败</pre>`
+    return `<pre class="mermaid-error">图解娓叉煋澶辫触</pre>`
   }
 }
 
 /**
- * 将 SVG 字符串转换为 PNG Blob
+ * 灏?SVG 瀛楃涓茶浆鎹负 PNG Blob
  */
 const svgToPng = (svgString: string): Promise<Blob> => {
   return new Promise((resolve, reject) => {
-    // 创建临时容器获取 SVG 尺寸
+    // 鍒涘缓涓存椂瀹瑰櫒鑾峰彇 SVG 灏哄
     const tempDiv = document.createElement('div')
     tempDiv.style.position = 'absolute'
     tempDiv.style.visibility = 'hidden'
@@ -941,11 +984,11 @@ const svgToPng = (svgString: string): Promise<Blob> => {
       return
     }
 
-    // 获取 SVG 尺寸
+    // 鑾峰彇 SVG 灏哄
     let width = svgElement.clientWidth || svgElement.getBoundingClientRect().width || 600
     let height = svgElement.clientHeight || svgElement.getBoundingClientRect().height || 400
 
-    // 限制最大尺寸
+    // 闄愬埗鏈€澶у昂瀵?
     const maxWidth = 800
     const maxHeight = 600
     if (width > maxWidth) {
@@ -959,7 +1002,7 @@ const svgToPng = (svgString: string): Promise<Blob> => {
 
     document.body.removeChild(tempDiv)
 
-    // 创建 Canvas
+    // 鍒涘缓 Canvas
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
     if (!ctx) {
@@ -967,16 +1010,16 @@ const svgToPng = (svgString: string): Promise<Blob> => {
       return
     }
 
-    // 2x 分辨率
+    // 2x 鍒嗚鲸鐜?
     canvas.width = width * 2
     canvas.height = height * 2
     ctx.scale(2, 2)
 
-    // 白色背景
+    // 鐧借壊鑳屾櫙
     ctx.fillStyle = '#FFFFFF'
     ctx.fillRect(0, 0, width, height)
 
-    // SVG 转 Data URL
+    // SVG 杞?Data URL
     const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(svgBlob)
 
@@ -1002,7 +1045,7 @@ const svgToPng = (svgString: string): Promise<Blob> => {
 }
 
 /**
- * 上传图解 PNG 到后端
+ * 涓婁紶图解 PNG 鍒板悗绔?
  */
 const uploadDiagramPng = async (sessionId: string, pngBlob: Blob): Promise<string | null> => {
   try {
@@ -1024,13 +1067,13 @@ const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
   diagramSvgCache.value = new Map(diagramSvgCache.value)
   scrollToBottom()
 
-  // 异步上传 PNG（不阻塞渲染）
+  // 寮傛涓婁紶 PNG锛堜笉闃诲娓叉煋锛?
   if (currentSessionId.value) {
     svgToPng(svg)
       .then((pngBlob) => uploadDiagramPng(currentSessionId.value!, pngBlob))
       .then((imageUrl) => {
         if (imageUrl && diagram) {
-          // 更新 diagram 的 image_url
+          // 鏇存柊 diagram 鐨?image_url
           diagram.image_url = imageUrl
         }
       })
@@ -1043,7 +1086,7 @@ const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
 }
 
 // ==========================================
-// 10. FAB 悬浮按钮函数
+// 10. FAB 鎮诞鎸夐挳鍑芥暟
 // ==========================================
 const getPointerPosition = (e: MouseEvent | TouchEvent) => {
   if (e instanceof MouseEvent) {
@@ -1153,7 +1196,7 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
 }
 
 // ==========================================
-// 11. 画像加载与轮询
+// 11. 鐢诲儚鍔犺浇涓庤疆璇?
 // ==========================================
 const fetchProfile = async () => {
   try {
@@ -1196,7 +1239,7 @@ const fetchCurrentUser = async () => {
 }
 
 // ==========================================
-// 12. 会话管理函数
+// 12. 浼氳瘽绠＄悊鍑芥暟
 // ==========================================
 const loadSessions = async () => {
   try {
@@ -1269,7 +1312,7 @@ const archiveSession = async (sessionId: string) => {
 }
 
 // ==========================================
-// 13. 文件上传函数
+// 13. 鏂囦欢涓婁紶鍑芥暟
 // ==========================================
 const triggerFileUpload = () => fileInput.value?.click()
 
@@ -1293,7 +1336,7 @@ const removeAttachment = (idx: number) => {
 }
 
 // ==========================================
-// 14. 媒体生成开关函数
+// 14. 濯掍綋鐢熸垚寮€鍏冲嚱鏁?
 // ==========================================
 const handleImageToggle = () => {
   hasToggledMedia.value = true
@@ -1316,7 +1359,7 @@ const handleVideoToggle = () => {
 }
 
 // ==========================================
-// 15. 语音相关函数
+// 15. 璇煶鐩稿叧鍑芥暟
 // ==========================================
 const handleVoiceToggle = async () => {
   if (chatMode.value === 'digital_human') {
@@ -1360,8 +1403,19 @@ const handleVoiceChatToggle = async () => {
   }
 }
 
+const handleAvatarReconnect = async () => {
+  disconnectAvatar()
+  await connectAvatar()
+  nextTick(() => {
+    const container = canvasRef.value?.getContainer()
+    if (container) {
+      setPlayerContainer(container)
+    }
+  })
+}
+
 // ==========================================
-// 16. 发送消息函数
+// 16. 鍙戦€佹秷鎭嚱鏁?
 // ==========================================
 const handleSend = async () => {
   const text = userInput.value.trim()
@@ -1471,34 +1525,16 @@ const handleSend = async () => {
 
   // --- Digital human mode: send via WebSocket ---
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
+    const aiMsg = messages.value.find(m => m.id === aiMsgId)
+    if (aiMsg) {
+      aiMsg.diagramGenerating = shouldGenerateDiagram
+    }
     sendAvatarText({
       text: text || '请分析附件',
+      need_diagram: shouldGenerateDiagram,
       image_urls: imageUrls.length > 0 ? imageUrls : undefined,
       file_urls: fileUrls.length > 0 ? fileUrls : undefined,
     })
-    // Assistant chunks arrive via onAssistantChunk callback → enqueueStreamChunk
-    // Poll for completion — check when isAvatarSpeaking goes from true to false
-    // Use a simple timeout-based approach: the backend sends assistant chunks then speaks
-    // The isAvatarSpeaking ref in the composable tracks streaming state
-    const checkDone = () => {
-      setTimeout(() => {
-        if (!isAvatarSpeaking.value) {
-          flushPendingStreamText(true)
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (aiMsg) aiMsg.diagramGenerating = false
-          isAIThinking.value = false
-          streamingMsgId.value = null
-          scheduleProfilePoll()
-          if (currentSessionId.value) {
-            void refreshSessionTitleWithRetry(currentSessionId.value)
-          }
-        } else {
-          checkDone()
-        }
-      }, 200)
-    }
-    // Start checking after a small delay to let chunks arrive
-    setTimeout(() => checkDone(), 500)
     return
   }
 
@@ -1583,7 +1619,7 @@ const handleSend = async () => {
 }
 
 // ==========================================
-// 17. 监听器
+// 17. 鐩戝惉鍣?
 // ==========================================
 watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
@@ -1614,7 +1650,7 @@ watch(
 )
 
 // ==========================================
-// 18. 生命周期钩子
+// 18. 鐢熷懡鍛ㄦ湡閽╁瓙
 // ==========================================
 onMounted(async () => {
   fabPos.value = { x: 16, y: window.innerHeight - 150 }
@@ -2290,7 +2326,7 @@ onBeforeUnmount(() => {
   color: #0F172A;
 }
 
-/* markdown 渲染样式 - 特别针对代码块优化 */
+/* markdown 娓叉煋鏍峰紡 - 鐗瑰埆閽堝浠ｇ爜鍧椾紭鍖?*/
 :deep(.markdown-body) {
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 0.95rem !important;
@@ -2482,7 +2518,7 @@ onBeforeUnmount(() => {
   100% { opacity: 0.6; }
 }
 
-/* ================= 针对输入框的优化 ================= */
+/* ================= 閽堝杈撳叆妗嗙殑浼樺寲 ================= */
 .input-panel {
   padding: 0 24px 20px 24px; 
   display: flex;
@@ -3332,7 +3368,7 @@ onBeforeUnmount(() => {
   transform: scale(0.95) translateY(10px);
 }
 
-/* 弹出菜单项样式 */
+/* 寮瑰嚭鑿滃崟椤规牱寮?*/
 .action-menu {
   display: flex;
   flex-direction: column;
@@ -3372,3 +3408,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
 }
 </style>
+
+
+

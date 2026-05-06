@@ -213,6 +213,7 @@ class AvatarAgent:
 
         full_response = ""
         diagram_data = None
+        yield_count = 0
 
         async for event in self._graph.astream_events(
             initial_state,
@@ -225,6 +226,8 @@ class AvatarAgent:
                 chunk = event.get("data", {}).get("chunk")
                 if chunk and hasattr(chunk, "content") and chunk.content:
                     full_response += chunk.content
+                    yield_count += 1
+                    logger.info("[AvatarAgent] yield text_chunk #%d len=%d", yield_count, len(chunk.content))
                     yield {"type": "text_chunk", "content": chunk.content}
 
             elif kind == "on_chain_end":
@@ -232,10 +235,17 @@ class AvatarAgent:
                 if name in ("vision_answer", "direct_answer", "attachment_answer", "spark_summary"):
                     output = event.get("data", {}).get("output", {})
                     msgs = output.get("messages", []) if isinstance(output, dict) else []
+                    logger.info("[AvatarAgent] on_chain_end name=%s msgs_count=%d full_response_len=%d output_keys=%s",
+                                name, len(msgs), len(full_response),
+                                list(output.keys()) if isinstance(output, dict) else "N/A")
                     if msgs:
                         last = msgs[-1]
+                        content_preview = str(getattr(last, "content", ""))[:100]
+                        logger.info("[AvatarAgent] last_msg type=%s content_preview=%s", type(last).__name__, content_preview)
                         if hasattr(last, "content") and last.content and not full_response:
                             full_response = last.content
+                            yield_count += 1
+                            logger.info("[AvatarAgent] yield text_chunk (fallback) #%d len=%d", yield_count, len(last.content))
                             yield {"type": "text_chunk", "content": last.content}
                 elif name == "diagram_generate":
                     output = event.get("data", {}).get("output", {})
@@ -266,6 +276,7 @@ class AvatarAgent:
                     "data": str(event.get("data", {}).get("error", "工具调用失败")),
                 }
 
+        logger.info("[AvatarAgent] stream complete yields=%d full_response_len=%d", yield_count, len(full_response))
         yield {"type": "complete", "full_response": full_response, "diagram": diagram_data}
 
     # ---- 节点方法 ----
@@ -306,7 +317,7 @@ class AvatarAgent:
         try:
             classifier_prompt = _get_prompt("classifier")
             result = await self.llm_manager.ainvoke(
-                "spark",
+                "spark_max",
                 classifier_prompt.format(
                     user_message=user_msg,
                     has_attachments="是" if (file_urls or image_urls) else "否",
@@ -335,7 +346,7 @@ class AvatarAgent:
         """直接回答路径"""
         messages = [SystemMessage(content=state["system_prompt"])] + state["messages"]
         response = await self.llm_manager.ainvoke(
-            "spark",
+            "spark_max",
             messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -380,7 +391,7 @@ class AvatarAgent:
 
         full_messages = [SystemMessage(content=state["system_prompt"]), HumanMessage(content=answer_prompt)]
         response = await self.llm_manager.ainvoke(
-            "spark",
+            "spark_max",
             full_messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -402,7 +413,7 @@ class AvatarAgent:
 
         # 绑定搜索工具
         llm_with_tools = self.llm_manager.bind_tools(
-            "spark",
+            "spark_max",
             AVATAR_TOOLS,
             model_kwargs=self.tool_model_kwargs,
         )
@@ -412,7 +423,7 @@ class AvatarAgent:
             response = await self.llm_manager.ainvoke_runnable(
                 llm_with_tools,
                 full_messages,
-                model_type="spark",
+                model_type="spark_max",
             )
         except Exception as exc:
             # 讯飞 Spark 偶尔返回 tool_calls.args 为 JSON 字符串而非 dict，
@@ -432,7 +443,7 @@ class AvatarAgent:
             except Exception:
                 # 搜索也失败，降级到直接回答
                 response = await self.llm_manager.ainvoke(
-                    "spark",
+                    "spark_max",
                     [SystemMessage(content=state["system_prompt"])] + list(messages),
                     model_kwargs=self.spark_model_kwargs,
                 )
@@ -492,7 +503,7 @@ class AvatarAgent:
         ]
 
         response = await self.llm_manager.ainvoke(
-            "spark",
+            "spark_max",
             full_messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -550,7 +561,7 @@ class AvatarAgent:
 
         try:
             decision = await self.llm_manager.ainvoke_structured(
-                "spark",
+                "spark_max",
                 DiagramDecision,
                 [
                     SystemMessage(content=_get_prompt("diagram_decision_system")),
@@ -592,7 +603,7 @@ class AvatarAgent:
 
         try:
             response = await self.llm_manager.ainvoke(
-                "spark",
+                "spark_max",
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),

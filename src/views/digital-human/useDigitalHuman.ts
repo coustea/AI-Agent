@@ -1,4 +1,4 @@
-import { ref, nextTick } from 'vue'
+﻿import { ref, nextTick } from 'vue'
 
 // ==========================================
 // Types
@@ -6,6 +6,7 @@ import { ref, nextTick } from 'vue'
 
 export interface TextMessageParams {
   text: string
+  need_diagram?: boolean
   image_urls?: string[]
   file_urls?: string[]
   attachments?: Array<{ url: string; type: string }>
@@ -19,6 +20,8 @@ export interface StreamExtend {
 
 export interface DigitalHumanCallbacks {
   onAssistantChunk?: (chunk: string) => void
+  onAssistantComplete?: () => void
+  onDiagram?: (diagram: unknown) => void
   onAsrResult?: (text: string) => void
   onError?: (msg: string) => void
   onConnectionChange?: (connected: boolean) => void
@@ -43,6 +46,11 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
   const error = ref<string | null>(null)
   const audioEnabled = ref(false)
 
+  // --- Idle auto-disconnect ---
+  const IDLE_TIMEOUT_MS = 60_000 // 60 seconds
+  const idleCountdown = ref(0) // seconds remaining until auto-disconnect
+  let idleTimer: ReturnType<typeof setInterval> | null = null
+
   // --- Internal state (not reactive, not exposed) ---
   let ws: WebSocket | null = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,10 +59,40 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
   let audioStream: MediaStream | null = null
   let audioMonitor: ReturnType<typeof setInterval> | null = null
   let vadActive = false
+  let backendVadReady = false
   let playerContainer: HTMLElement | null = null
   // Pending stream data: saved when stream_info arrives before container is ready
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let pendingStreamData: { url: string; extend: Record<string, any> } | null = null
+
+  // ==========================================
+  // Idle auto-disconnect timer
+  // ==========================================
+
+  /** Reset the idle countdown to 60s. Call on any user interaction or server message. */
+  function resetIdleTimer(): void {
+    if (idleTimer) clearInterval(idleTimer)
+    idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
+
+    idleTimer = setInterval(() => {
+      idleCountdown.value--
+      if (idleCountdown.value <= 0) {
+        clearInterval(idleTimer!)
+        idleTimer = null
+        console.log('[DH] idle timeout, auto-disconnecting')
+        disconnect()
+        callbacks?.onError?.('杩炴帴宸插洜闀挎椂闂存棤浜掑姩鑷姩鏂紑')
+      }
+    }, 1000)
+  }
+
+  function stopIdleTimer(): void {
+    if (idleTimer) {
+      clearInterval(idleTimer)
+      idleTimer = null
+    }
+    idleCountdown.value = 0
+  }
 
   // ==========================================
   // WebSocket connection
@@ -80,6 +118,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       isConnected.value = true
       error.value = null
       callbacks?.onConnectionChange?.(true)
+      resetIdleTimer()
       console.log('[DH] connected')
     }
 
@@ -87,6 +126,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       try {
         const data = JSON.parse(event.data)
         handleMessage(data)
+        resetIdleTimer() // server activity resets idle
       } catch (e) {
         console.error('[DH] failed to parse message:', e)
       }
@@ -96,20 +136,24 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       isConnected.value = false
       callbacks?.onConnectionChange?.(false)
       if (event.code === 4001) {
-        error.value = '认证失败，请重新登录'
+        error.value = '璁よ瘉澶辫触锛岃閲嶆柊鐧诲綍'
         callbacks?.onError?.(error.value)
       }
       console.log('[DH] disconnected, code:', event.code)
     }
 
     ws.onerror = () => {
-      error.value = 'WebSocket 连接失败'
+      error.value = 'WebSocket 杩炴帴澶辫触'
       callbacks?.onError?.(error.value)
     }
   }
 
   function disconnect(): void {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'stop_speaking' }))
+    }
     stopVad()
+    stopIdleTimer()
     destroyPlayer()
 
     if (audioMonitor) {
@@ -127,6 +171,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     isAvatarReady.value = false
     isSpeaking.value = false
     isListening.value = false
+    backendVadReady = false
     streamUrl.value = null
     streamExtend.value = null
     audioEnabled.value = false
@@ -153,16 +198,20 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       callbacks?.onAssistantChunk?.(data.content || '')
     } else if (type === 'assistant_complete') {
       isSpeaking.value = false
+      callbacks?.onAssistantComplete?.()
+    } else if (type === 'diagram') {
+      callbacks?.onDiagram?.(data.data)
     } else if (type === 'avatar_stopped') {
       isSpeaking.value = false
     } else if (type === 'vad_state') {
       const state = data.data?.listening ?? (data.state === 'listening' || data.state === 'speaking')
+      backendVadReady = !!state
       isListening.value = !!state
       callbacks?.onVadStateChange?.(!!state)
     } else if (type === 'history_cleared') {
       callbacks?.onHistoryCleared?.(data.data)
     } else if (type === 'error') {
-      error.value = data.content || data.message || '未知错误'
+      error.value = data.content || data.message || '鏈煡閿欒'
       callbacks?.onError?.(error.value!)
     }
   }
@@ -219,7 +268,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     }
 
     if (!playerContainer) {
-      // Container not ready yet — save stream data and init later when container arrives
+      // Container not ready yet 鈥?save stream data and init later when container arrives
       console.log('[DH] player container not ready, saving stream data for later')
       pendingStreamData = { url, extend }
       return
@@ -343,11 +392,13 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return
 
     const msg: Record<string, unknown> = { type: 'text_input', text: params.text }
+    if (typeof params.need_diagram === 'boolean') msg.need_diagram = params.need_diagram
     if (params.image_urls?.length) msg.image_urls = params.image_urls
     if (params.file_urls?.length) msg.file_urls = params.file_urls
     if (params.attachments?.length) msg.attachments = params.attachments
 
     ws.send(JSON.stringify(msg))
+    resetIdleTimer()
 
     // Auto-enable audio on first text send
     if (!audioEnabled.value && isAvatarReady.value) {
@@ -361,8 +412,17 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
   async function startVad(): Promise<void> {
     if (vadActive) return
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      error.value = '数字人未连接，无法开启语音输入'
+      callbacks?.onError?.(error.value)
+      return
+    }
 
     try {
+      // Tell backend to prepare VAD/ASR queue before sending audio chunks.
+      backendVadReady = false
+      ws.send(JSON.stringify({ type: 'start_vad' }))
+
       audioStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 16000,
@@ -377,7 +437,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       const processor = audioContext.createScriptProcessor(4096, 1, 1)
 
       processor.onaudioprocess = (e) => {
-        if (!vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
+        if (!vadActive || !backendVadReady || !ws || ws.readyState !== WebSocket.OPEN) return
 
         const inputData = e.inputBuffer.getChannelData(0)
         const pcmData = new Int16Array(inputData.length)
@@ -400,13 +460,17 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       source.connect(processor)
       processor.connect(audioContext.destination)
 
+      const waitStart = Date.now()
+      while (!backendVadReady && Date.now() - waitStart < 1500) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      if (!backendVadReady) {
+        throw new Error('VAD backend ack timeout')
+      }
+
       vadActive = true
       isListening.value = true
-
-      // Send start_vad to backend
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'start_vad' }))
-      }
+      resetIdleTimer()
 
       // Auto-enable audio
       if (!audioEnabled.value && isAvatarReady.value) {
@@ -414,7 +478,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       }
     } catch (err) {
       console.error('[DH] mic error:', err)
-      error.value = '无法访问麦克风，请检查权限设置'
+      backendVadReady = false
+      error.value = '无法访问麦克风或语音服务未就绪，请检查权限并重试'
       callbacks?.onError?.(error.value)
     }
   }
@@ -441,6 +506,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     vadActive = false
     isListening.value = false
+    backendVadReady = false
     asrText.value = ''
   }
 
@@ -472,6 +538,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     asrText,
     error,
     audioEnabled,
+    idleCountdown,
 
     // Methods
     connect,
@@ -485,3 +552,4 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     setPlayerContainer,
   }
 }
+
