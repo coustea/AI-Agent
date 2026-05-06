@@ -343,6 +343,12 @@ class WorkerState(BaseModel):
     upstream_results: dict[str, Any] = Field(default_factory=dict, description="后端生成的上游 Agent 原始结果")
     dependency_reports: dict[str, Any] = Field(default_factory=dict, description="依赖 Agent 交接报告")
     learning_scenario: str = Field(default="daily_review", description="学习场景")
+    planner_input_params: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 规划的动态输入参数")
+    output_requirements: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 规划的输出要求")
+    personalized_constraints: list[str] = Field(default_factory=list, description="结合学习者画像生成的个性化约束")
+    degraded: bool = Field(default=False, description="是否因依赖缺失而降级执行")
+    missing_dependencies: list[str] = Field(default_factory=list, description="降级执行时缺失的依赖 Agent")
+    failed_dependencies: list[str] = Field(default_factory=list, description="降级执行时失败的依赖 Agent")
 
 
 class WorkerResult(BaseModel):
@@ -369,7 +375,8 @@ class LearnerProfileSnapshot(BaseModel):
     major: str | None = None
     grade: str | None = None
     school: str | None = None
-    profile_markdown: str | None = None
+    profile_json: dict[str, Any] | None = None
+    profile_score_json: dict[str, Any] | None = None
     version: int | None = None
     confidence: float | None = None
     updated_at: str | None = None
@@ -399,11 +406,23 @@ class LearnerProfileSnapshot(BaseModel):
 class AgentTask(BaseModel):
     """单个 Agent 的任务描述。"""
     agent_id: str = Field(description="Agent ID")
+    layer: int = Field(default=0, description="所属规划层索引")
+    layer_name: str | None = Field(default=None, description="所属规划层名称")
     task_description: str = Field(description="给该 Agent 的具体任务描述")
     depends_on: list[str] = Field(default_factory=list, description="依赖的上游 Agent")
     is_explicit: bool = Field(default=True, description="是否用户显式选择 (决定是否返回给前端)")
     priority: int = Field(default=0, description="执行优先级")
     config: dict[str, Any] = Field(default_factory=dict, description="Agent 专属配置")
+    enabled: bool = Field(default=True, description="是否启用")
+    resource_type: str | None = Field(default=None, description="资源类型")
+    input_params: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 为 WorkerAgent 规划的输入参数")
+    output_requirements: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 对输出格式和内容的要求")
+    personalized_constraints: list[str] = Field(default_factory=list, description="个性化生成约束")
+    planning_reason: str | None = Field(default=None, description="规划该 Agent 的理由")
+    failure_policy: Literal["skip_on_dependency_failed", "degraded_run", "ignore_dependency"] = Field(
+        default="skip_on_dependency_failed",
+        description="依赖失败时的执行策略",
+    )
 
 
 class LayerPlan(BaseModel):
@@ -411,6 +430,7 @@ class LayerPlan(BaseModel):
     layer: int = Field(description="层索引 (0, 1, 2)")
     agents: list[AgentTask] = Field(default_factory=list, description="本层要执行的 Agent 任务列表")
     reasoning: str = Field(default="", description="LLM 规划理由")
+    fallback_used: bool = Field(default=False, description="是否使用规则兜底规划")
 
 
 class PlanningContext(BaseModel):

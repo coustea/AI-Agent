@@ -39,9 +39,9 @@ from app.infra.models import (
 from app.memory.memory_types import (
     make_default_long_term_memory_json,
     make_default_profile_json,
+    make_default_profile_score_json,
     make_default_session_summary_json,
     render_long_term_memory_markdown,
-    render_profile_markdown,
     render_session_summary_markdown,
 )
 
@@ -134,6 +134,28 @@ class MemoryStore:
             if not chat_session:
                 return False
             chat_session.is_archived = True
+            session.add(chat_session)
+            await session.commit()
+            return True
+
+    async def update_chat_session_title(self, session_id: str, user_id: int, title: str) -> bool:
+        """更新会话标题。
+
+        Args:
+            session_id: 会话ID。
+            user_id: 用户ID。
+            title: 新标题。
+
+        Returns:
+            操作是否成功。
+        """
+        async with AsyncSession(self.engine) as session:
+            stmt = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+            chat_session = (await session.exec(stmt)).first()
+            if not chat_session:
+                return False
+            # 标题长度限制为100字符
+            chat_session.title = title[:100] if len(title) > 100 else title
             session.add(chat_session)
             await session.commit()
             return True
@@ -479,8 +501,8 @@ class MemoryStore:
             profile = UserProfile(
                 user_id=user_id,
                 module=module,
-                profile_markdown="# 学生画像\n\n暂无画像信息。",
                 profile_json=make_default_profile_json(),
+                profile_score_json=make_default_profile_score_json(),
             )
             session.add(profile)
             await session.commit()
@@ -503,8 +525,8 @@ class MemoryStore:
         self,
         user_id: int,
         module: str,
-        profile_markdown: str,
         profile_json: dict[str, Any] | None = None,
+        profile_score_json: dict[str, Any] | None = None,
         updated_reason: str | None = None,
         source_memory_version: int | None = None,
         source_session_ids: list[str] | None = None,
@@ -523,14 +545,15 @@ class MemoryStore:
                     profile = UserProfile(
                         user_id=user_id,
                         module=module,
-                        profile_markdown=profile_markdown,
                         profile_json=profile_json or make_default_profile_json(),
+                        profile_score_json=profile_score_json or make_default_profile_score_json(),
                         confidence=confidence,
                     )
                 else:
-                    profile.profile_markdown = profile_markdown
                     if profile_json is not None:
                         profile.profile_json = profile_json
+                    if profile_score_json is not None:
+                        profile.profile_score_json = profile_score_json
                     profile.version = (profile.version or 1) + 1
                     profile.confidence = confidence
                 if updated_reason:
@@ -558,8 +581,8 @@ class MemoryStore:
                     user_id=user_id,
                     module=module,
                     version=0 if latest_version is None else int(latest_version) + 1,
-                    profile_markdown=profile_markdown,
                     profile_json=profile_json or make_default_profile_json(),
+                    profile_score_json=profile_score_json or make_default_profile_score_json(),
                     change_reason=updated_reason,
                     source_memory_version=source_memory_version,
                     source_session_ids=source_session_ids,

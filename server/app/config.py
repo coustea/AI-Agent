@@ -53,32 +53,13 @@ JWT_SECRET_KEY: str = _env("JWT_SECRET_KEY", "")
 JWT_ALGORITHM: str = _env("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_DAYS: int = _env_int("JWT_EXPIRE_DAYS", 7)
 
-# LLM
-OPENAI_API_KEY: str = _env("OPENAI_API_KEY", "")
-OPENAI_MODEL: str = _env("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_API_BASE: str = _env("OPENAI_API_BASE", "")
-
-# GLM
-GLM_MODEL: str = _env("GLM_MODEL", "glm-4.7")
-
-# Spark LLM (星火大模型 WebSocket API)
-SPARK_APP_ID: str = _env("SPARK_APP_ID", "")
-SPARK_API_KEY: str = _env("SPARK_API_KEY", "")
-SPARK_API_SECRET: str = _env("SPARK_API_SECRET", "")
-
 # Vision
 GLM_VISION_MODEL: str = _env("GLM_VISION_MODEL", "glm-4v-flash")
 GLM_API_KEY: str = _env("GLM_API_KEY", "")
 
 # Agent
 LLM_TIMEOUT: int = _env_int("LLM_TIMEOUT", 300)
-MAX_MESSAGE_HISTORY: int = _env_int("MAX_MESSAGE_HISTORY", 20)
 PROFILE_GATE_EVERY_N_ASSISTANT_TURNS: int = _env_int("PROFILE_GATE_EVERY_N_ASSISTANT_TURNS", 2)
-CONTENT_AGENT_TIMEOUT_SECONDS: int = _env_int("CONTENT_AGENT_TIMEOUT_SECONDS", 360)
-CONTENT_LLM_TIMEOUT: int = _env_int("CONTENT_LLM_TIMEOUT", 180)
-MULTIMODAL_DOC_ENABLED: bool = _env_bool(
-
-    "MULTIMODAL_DOC_ENABLED", True)
 
 # Debug
 APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
@@ -89,16 +70,15 @@ LANGCHAIN_VERBOSE: bool = _env_bool("LANGCHAIN_VERBOSE", False)
 LANGGRAPH_DEBUG: bool = _env_bool("LANGGRAPH_DEBUG", False)
 DEEPAGENTS_DEBUG: bool = _env_bool("DEEPAGENTS_DEBUG", False)
 
-# Spark Vision (星火图片理解) — 复用 Spark LLM 凭证
+# Spark LLM (星火大模型 WebSocket API) — 用于 Spark Vision 默认值
+SPARK_APP_ID: str = _env("SPARK_APP_ID", "")
+SPARK_API_KEY: str = _env("SPARK_API_KEY", "")
+SPARK_API_SECRET: str = _env("SPARK_API_SECRET", "")
+
+# Spark Vision (星火图片理解) — 默认复用 Spark LLM 凭证
 SPARK_VISION_APPID: str = _env("SPARK_VISION_APPID", SPARK_APP_ID)
 SPARK_VISION_API_KEY: str = _env("SPARK_VISION_API_KEY", SPARK_API_KEY)
 SPARK_VISION_API_SECRET: str = _env("SPARK_VISION_API_SECRET", SPARK_API_SECRET)
-
-# Spark Image Generation (星火图片生成) - 复用相同凭证
-SPARK_IMAGE_APPID: str = _env("APPID", "")
-SPARK_IMAGE_API_KEY: str = _env("APIKey", "")
-SPARK_IMAGE_API_SECRET: str = _env("APISecret", "")
-SPARK_IMAGE_PATCH_ID: str = _env("SPARK_IMAGE_PATCH_ID", "")
 
 # Avatar (数字人)
 AVATAR_ASR_APP_ID: str = _env("AVATAR_ASR_APP_ID", "")
@@ -123,16 +103,14 @@ WORKPLACE_DIR: str = _env("WORKPLACE_DIR", "workplace")
 LOGS_DIR: str = _env("LOGS_DIR", "logs")
 KNOWLEDGE_BASE_DIR: str = _env("KNOWLEDGE_BASE_DIR", "data")
 
-# ChatDoc RAG (讯飞文档问答) — 复用 Spark Vision 凭证
-CHATDOC_APP_ID: str = _env("CHATDOC_APP_ID", SPARK_VISION_APPID)
-CHATDOC_API_SECRET: str = _env("CHATDOC_API_SECRET", SPARK_VISION_API_SECRET)
-CHATDOC_ENABLED: bool = _env_bool("CHATDOC_ENABLED", False)
-
 TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
 
 # Spark X (星火X模型 OpenAI兼容API)
 SPARK_X_API_PASSWORD: str = _env("SPARK_X_API_PASSWORD", "")
 SPARK_X_API_BASE: str = _env("SPARK_X_API_BASE", "https://spark-api-open.xf-yun.com/v2")
+
+SPARK_X2_FLASH_API_PASSWORD: str = _env("SPARK_X2_FLASH_API_PASSWORD", "")
+SPARK_X2_FLASH_API_BASE: str = _env("SPARK_X2_FLASH_API_BASE", "https://spark-api-open.xf-yun.com/agent/v1/chat/completions")
 
 # Spark Max (星火语言模型 OpenAI兼容API，OpenAI SDK base_url 使用 /v1)
 SPARK_MAX_API_PASSWORD: str = _env("SPARK_MAX_API_PASSWORD", "")

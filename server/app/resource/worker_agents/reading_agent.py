@@ -27,7 +27,8 @@ logger = get_logger(__name__)
 class ReadingAgent:
     """拓展阅读 Agent。"""
 
-    STEPS = ["筛选高价值延伸资料", "匹配学习需求", "生成精简阅读导引", "标注内容关联性"]
+    STEPS = ["分析输入", "融合画像与依赖", "生成内容", "整理输出"]
+    ROLE_NAME = "拓展阅读推荐智能体"
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
@@ -38,53 +39,71 @@ class ReadingAgent:
 
     async def _emit_action(
         self,
+        state: WorkerState,
         action: str,
         detail: str = "",
         current_step: int = 0,
         total_steps: int = 0,
         step_label: str = "",
+        current_action: str = "",
+        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
             await self.emitter.emit_agent_action(
-                "reading",
+                state.agent_name,
                 action,
                 detail,
                 current_step=current_step,
                 total_steps=total_steps,
                 step_label=step_label,
+                current_action=current_action,
+                output_preview=output_preview,
+                layer=state.layer_index,
+                layer_name="实践拓展层",
+                agent_role=self.ROLE_NAME,
+                resource_type=state.agent_name,
             )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行拓展阅读生成。"""
         logger.info("[ReadingAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
-        total = len(self.STEPS)
+        total = 5
 
         await self._emit_action(
-            "loading_prompt",
-            "加载拓展阅读推荐提示词...",
-            current_step=1,
+            state,
+            "analyze_input",
+            "拓展阅读推荐智能体正在分析阅读需求",
+            current_step=2,
             total_steps=total,
             step_label=self.STEPS[0],
+            current_action="分析拓展阅读需求",
+            output_preview="正在识别主题边界、阅读深度和资源偏好",
         )
         prompt = self._load_prompt()
 
         await self._emit_action(
-            "building_input",
-            "正在根据学习需求筛选高价值延伸资料...",
-            current_step=2,
+            state,
+            "merge_profile_dependencies",
+            "拓展阅读推荐智能体正在融合画像和上游内容",
+            current_step=3,
             total_steps=total,
             step_label=self.STEPS[1],
+            current_action="融合画像与依赖",
+            output_preview="正在结合 ContentAgent 主题重点、学习偏好和阅读配置筛选方向",
         )
         input_text = await self._build_input(state)
 
         try:
             await self._emit_action(
-                "calling_llm",
-                "正在为你生成精简阅读导引...",
-                current_step=3,
+                state,
+                "generate_content",
+                "拓展阅读推荐智能体正在生成阅读导引",
+                current_step=4,
                 total_steps=total,
                 step_label=self.STEPS[2],
+                current_action="生成阅读推荐",
+                output_preview="正在生成阅读材料、推荐理由、阅读顺序和关联说明",
             )
 
             response = await self.llm_manager.ainvoke(
@@ -102,11 +121,14 @@ class ReadingAgent:
                 content = {"error": "解析失败", "raw_content": self._clean_content(raw_content)}
 
             await self._emit_action(
-                "finalizing_result",
-                "正在标注内容关联性并生成推荐列表...",
-                current_step=4,
+                state,
+                "finalize_output",
+                "拓展阅读推荐智能体正在整理输出",
+                current_step=5,
                 total_steps=total,
                 step_label=self.STEPS[3],
+                current_action="整理阅读资源",
+                output_preview=str(content)[:240],
             )
 
             return WorkerResult.model_construct(

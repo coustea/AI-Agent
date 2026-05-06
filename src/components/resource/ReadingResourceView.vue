@@ -1,47 +1,69 @@
 <template>
   <div class="reading-resource" :class="{ compact }">
-    <div v-if="readingData" class="reading-list">
+    <div v-if="readingData" class="technical-frame reading-container">
+      <div class="frame-corners top-left"></div>
+      <div class="frame-corners top-right"></div>
+      <div class="frame-corners bottom-left"></div>
+      <div class="frame-corners bottom-right"></div>
+
+      <div class="frame-header">
+        <div class="status-indicator"></div>
+        <span class="technical-label">READING_ARTIFACT // EXTENDED_LEARNING // MODULE_ALPHA</span>
+      </div>
+
       <div v-if="!compact && readingData.summary" class="reading-summary">
-        {{ readingData.summary }}
+        <div class="summary-icon"><el-icon><Reading /></el-icon></div>
+        <div class="summary-text">{{ readingData.summary }}</div>
       </div>
       
-      <article v-for="(resource, index) in visibleResources" :key="resource.id || index" class="reading-item">
-        <div class="reading-header">
-          <span class="reading-type">{{ getResourceTypeText(resource.type) }}</span>
-          <span class="reading-title">{{ resource.title || '推荐资源' }}</span>
-        </div>
-        <div class="reading-meta" v-if="!compact">
-          <span v-if="resource.authors && resource.authors.length">
-            <el-icon><User /></el-icon> {{ resource.authors.join(', ') }}
-          </span>
-          <span v-if="resource.difficulty" class="difficulty-badge" :class="resource.difficulty">
-            难度: {{ getDifficultyText(resource.difficulty) }}
-          </span>
-        </div>
-        <div class="reading-reason" v-if="resource.recommend_reason && !compact">
-          <div class="reason-label">推荐理由</div>
-          {{ resource.recommend_reason }}
-        </div>
-        <div class="reading-desc" v-if="resource.description && !compact">
-          {{ resource.description }}
-        </div>
-      </article>
+      <div class="reading-list">
+        <article v-for="(resource, index) in visibleResources" :key="resource.id || index" class="reading-item">
+          <div class="reading-header">
+            <span class="reading-type">{{ getResourceTypeText(resource.type) }}</span>
+            <span class="reading-title">{{ resource.title || '推荐资源' }}</span>
+          </div>
+          <div class="reading-meta" v-if="!compact">
+            <span v-if="resource.authors && resource.authors.length">
+              <el-icon><User /></el-icon> {{ resource.authors.join(', ') }}
+            </span>
+            <span v-if="resource.difficulty" class="difficulty-tag" :class="resource.difficulty">
+              {{ getDifficultyText(resource.difficulty) }}
+            </span>
+          </div>
+          <div class="reading-reason" v-if="resource.recommend_reason && !compact">
+            <div class="reason-label">RECOMMEND_REASON //</div>
+            {{ resource.recommend_reason }}
+          </div>
+          <div class="reading-desc" v-if="resource.description && !compact">
+            {{ resource.description }}
+          </div>
+        </article>
+      </div>
 
       <div v-if="compact && resources.length > visibleResources.length" class="reading-more">
-        <el-button type="primary" link size="small">
-          查看全部 {{ resources.length }} 份推荐阅读 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+        <el-button type="primary" link class="more-btn-hud">
+          ACCESS_ALL_MODULES ({{ resources.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
         </el-button>
       </div>
+
+      <div class="frame-footer">
+        <span class="mono-tag">KNOWLEDGE_SYNC_COMPLETE</span>
+        <div class="footer-line"></div>
+      </div>
     </div>
-    <div v-else class="reading-empty">
-      <el-empty description="暂未收到可展示的拓展阅读内容" :image-size="60" />
+    
+    <div v-else class="reading-empty-hud">
+      <div class="empty-frame">
+        <div class="empty-icon">NULL</div>
+        <p>NO_READING_CONTENT_DETECTED</p>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { User, ArrowRight } from '@element-plus/icons-vue'
+import { User, ArrowRight, Reading } from '@element-plus/icons-vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -97,7 +119,7 @@ const getResourceTypeText = (type?: string) => {
     paper: '论文',
     article: '文章',
     documentation: '文档',
-    practice_project: '实践项目'
+    practice_project: '项目'
   }
   return map[type || ''] || '资源'
 }
@@ -113,39 +135,141 @@ const getDifficultyText = (difficulty?: string) => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 .reading-resource {
   width: 100%;
+  --primary: #6366F1;
+  --bg: #F5F3FF;
+  --fg: #1E1B4B;
+  --border: #E0E7FF;
+  --accent: #059669;
 }
 
-.reading-list {
+/* 技术框架样式 */
+.technical-frame {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 44px 32px 32px;
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
+.frame-corners {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+}
+
+.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+/* 头部 HUD */
+.frame-header {
+  position: absolute;
+  top: 12px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.technical-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--primary);
+  letter-spacing: 1px;
+}
+
+/* 底部 HUD */
+.frame-footer {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mono-tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.footer-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--border), transparent);
+}
+
 .reading-summary {
-  padding: 20px 24px;
-  background: #F8FAFC;
-  border-radius: 16px;
-  color: #334155;
-  font-size: 1rem;
-  line-height: 1.8;
-  border-left: 4px solid #3B82F6;
-  margin-bottom: 12px;
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+}
+
+.summary-icon {
+  font-size: 1.5rem;
+  color: var(--primary);
+  opacity: 0.8;
+}
+
+.summary-text {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.95rem;
+  color: var(--fg);
+  line-height: 1.6;
+}
+
+.reading-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .reading-item {
   padding: 20px;
-  border: 1px solid #E2E8F0;
-  border-radius: 16px;
-  background: #FFFFFF;
-  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .reading-item:hover {
-  border-color: #3B82F6;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.05);
+  transform: translateX(4px);
 }
 
 .reading-header {
@@ -156,30 +280,29 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .reading-type {
-  padding: 3px 10px;
-  border-radius: 8px;
-  background: #F0F7FF;
-  color: #3B82F6;
-  font-size: 0.75rem;
-  font-weight: 800;
-  white-space: nowrap;
-  letter-spacing: 0.05em;
-  border: 1px solid #DBEAFE;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  background: var(--primary);
+  color: white;
+  border-radius: 2px;
+  letter-spacing: 1px;
 }
 
 .reading-title {
+  font-family: 'Fira Code', monospace;
   font-size: 1.1rem;
-  font-weight: 800;
-  color: #0F172A;
+  font-weight: 700;
+  color: var(--fg);
   line-height: 1.4;
-  letter-spacing: -0.01em;
 }
 
 .reading-meta {
   display: flex;
   align-items: center;
   gap: 20px;
-  font-size: 0.9rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
   color: #64748B;
   margin-bottom: 16px;
 }
@@ -187,68 +310,101 @@ const getDifficultyText = (difficulty?: string) => {
 .reading-meta span {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.difficulty-badge {
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: #F1F5F9;
+.difficulty-tag {
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border: 1px solid #CBD5E1;
+  border-radius: 2px;
+  color: #64748B;
 }
 
-.difficulty-badge.basic { color: #10B981; background: #F0FDF4; }
-.difficulty-badge.medium { color: #F59E0B; background: #FFFBEB; }
-.difficulty-badge.advanced { color: #EF4444; background: #FEF2F2; }
+.difficulty-tag.basic { color: var(--accent); border-color: var(--accent); }
+.difficulty-tag.medium { color: #F59E0B; border-color: #F59E0B; }
+.difficulty-tag.advanced { color: #DC2626; border-color: #DC2626; }
 
 .reading-reason {
-  font-size: 0.95rem;
-  color: #1E293B;
-  background: #F8FAFC;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
+  color: var(--fg);
+  background: rgba(99, 102, 241, 0.03);
   padding: 16px;
-  border-radius: 12px;
+  border-radius: 4px;
   margin-bottom: 16px;
-  line-height: 1.7;
-  border: 1px solid #F1F5F9;
+  line-height: 1.6;
+  border: 1px solid var(--border);
 }
 
 .reason-label {
+  font-family: 'Share Tech Mono', monospace;
   font-size: 0.75rem;
-  font-weight: 900;
-  color: #64748B;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-  letter-spacing: 0.05em;
+  font-weight: bold;
+  color: var(--primary);
+  margin-bottom: 8px;
 }
 
 .reading-desc {
-  font-size: 0.95rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
   color: #475569;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .reading-more {
   display: flex;
   justify-content: center;
-  padding: 12px 0;
 }
 
-.reading-empty {
-  padding: 40px;
+.more-btn-hud {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
 }
 
-.compact .reading-item {
-  padding: 14px;
+.reading-empty-hud {
+  padding: 60px;
+  display: flex;
+  justify-content: center;
 }
 
-.compact .reading-header {
-  margin-bottom: 0;
+.empty-frame {
+  text-align: center;
+  border: 1px dashed var(--border);
+  padding: 40px 60px;
+  border-radius: 4px;
 }
 
-.compact .reading-title {
-  font-size: 0.95rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.empty-icon {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 2rem;
+  color: var(--primary);
+  opacity: 0.3;
+  margin-bottom: 12px;
 }
+
+.empty-frame p {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  color: #94A3B8;
+  letter-spacing: 1px;
+}
+
+/* 紧凑模式 */
+.compact .technical-frame {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.compact .frame-corners,
+.compact .frame-header,
+.compact .frame-footer {
+  display: none;
+}
+.compact .reading-list { gap: 12px; }
+.compact .reading-item { padding: 12px; }
+.compact .reading-header { margin-bottom: 0; }
+.compact .reading-title { font-size: 0.9rem; }
 </style>

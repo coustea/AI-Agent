@@ -20,9 +20,9 @@ from app.memory.memory_types import (
     ALL_PROFILE_DIMENSIONS,
     PROFILE_DIMENSION_NAMES,
     make_default_profile_json,
+    make_default_profile_score_json,
     make_default_long_term_memory_json,
     make_default_session_summary_json,
-    render_profile_markdown,
     render_long_term_memory_markdown,
     render_session_summary_markdown,
 )
@@ -36,9 +36,9 @@ __all__ = [
     "ALL_PROFILE_DIMENSIONS",
     "PROFILE_DIMENSION_NAMES",
     "make_default_profile_json",
+    "make_default_profile_score_json",
     "make_default_long_term_memory_json",
     "make_default_session_summary_json",
-    "render_profile_markdown",
     "render_long_term_memory_markdown",
     "render_session_summary_markdown",
 ]

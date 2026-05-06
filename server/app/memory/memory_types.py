@@ -4,12 +4,12 @@
 - 定义画像 8 维度常量与默认 JSON 结构
 - 定义长期记忆默认 JSON 结构
 - 定义会话概要默认 JSON 结构
-- 提供 Markdown 渲染函数
+- 提供长期记忆和会话概要的 Markdown 渲染函数
 
 设计原则：
-- 画像维度固定为 8 个，每个维度包含 name/score/confidence/summary/evidence/updated_at
-- JSON 结构有默认值，确保新记录创建时字段完整
-- Markdown 由 JSON 渲染生成，保持一致性
+- 画像维度固定为 8 个，每个文字维度包含 name/confidence/summary/evidence/updated_at
+- 没有证据的画像维度使用 summary=None、evidence=[]
+- profile_json 是文字画像权威来源，profile_score_json 是评分画像权威来源
 """
 
 from __future__ import annotations
@@ -82,11 +82,10 @@ def make_default_dimension_json(dimension_key: str) -> dict[str, Any]:
     """创建单个维度的默认 JSON 结构。"""
     return {
         "name": PROFILE_DIMENSION_NAMES.get(dimension_key, dimension_key),
-        "score": 0,
         "confidence": 0.0,
-        "summary": "",
+        "summary": None,
         "evidence": [],
-        "updated_at": _now_iso(),
+        "updated_at": None,
     }
 
 
@@ -94,17 +93,28 @@ def make_default_profile_json() -> dict[str, Any]:
     """创建画像的默认 JSON 结构（8 维度）。"""
     dimensions = {key: make_default_dimension_json(key) for key in ALL_PROFILE_DIMENSIONS}
     return {
-        "profile_version": 1,
-        "overall_confidence": 0.7,
-        "student_profile": {
-            "major": None,
-            "grade": None,
-            "learning_goals": [],
-            "current_focus": [],
-        },
+        "profile_version": 3,
+        "format": "json",
+        "overall_confidence": 0.0,
+        "student_profile": None,
         "dimensions": dimensions,
         "recommended_strategy": [],
         "last_update_reason": "",
+    }
+
+
+def make_default_profile_score_json() -> dict[str, Any]:
+    """创建画像评分的默认 JSON 结构。"""
+    return {
+        "profile_score_version": 1,
+        "format": "profile_score_json",
+        "overall_score": None,
+        "confidence": 0.0,
+        "dimension_scores": {key: None for key in ALL_PROFILE_DIMENSIONS},
+        "section_coverage": 0,
+        "evidence_quality": 0,
+        "missing_sections": list(ALL_PROFILE_DIMENSIONS),
+        "scored_at": None,
     }
 
 
@@ -140,57 +150,6 @@ def make_default_session_summary_json() -> dict[str, Any]:
         "next_action": "",
         "references": [],
     }
-
-
-# ---------------------------------------------------------------------------
-# Markdown 渲染函数
-# ---------------------------------------------------------------------------
-
-def render_profile_markdown(profile_json: dict[str, Any]) -> str:
-    """从 profile_json 渲染 Markdown 文本。"""
-    if not profile_json:
-        return "# 学生画像\n\n暂无画像信息。"
-
-    lines = ["# 学生画像"]
-
-    student_profile = profile_json.get("student_profile", {})
-    if student_profile.get("major"):
-        lines.append(f"\n## 基础信息\n\n- 专业: {student_profile.get('major')}")
-        if student_profile.get("grade"):
-            lines.append(f"- 年级: {student_profile.get('grade')}")
-        if student_profile.get("current_focus"):
-            lines.append(f"- 当前重点: {', '.join(student_profile.get('current_focus', []))}")
-
-    dimensions = profile_json.get("dimensions", {})
-    for dim_key in ALL_PROFILE_DIMENSIONS:
-        dim_data = dimensions.get(dim_key, {})
-        dim_name = dim_data.get("name", PROFILE_DIMENSION_NAMES.get(dim_key, dim_key))
-        score = dim_data.get("score", 0)
-        confidence = dim_data.get("confidence", 0.0)
-        summary = dim_data.get("summary", "")
-        evidence = dim_data.get("evidence", [])
-
-        lines.append(f"\n## {dim_name}\n")
-        lines.append(f"- 评分: {score}/100")
-        lines.append(f"- 置信度: {confidence:.2f}")
-        if summary:
-            lines.append(f"\n{summary}")
-        if evidence:
-            lines.append("\n**证据:**")
-            for ev in evidence[:5]:
-                lines.append(f"- {ev}")
-
-    recommended_strategy = profile_json.get("recommended_strategy", [])
-    if recommended_strategy:
-        lines.append("\n## 推荐辅导策略\n")
-        for strategy in recommended_strategy:
-            lines.append(f"- {strategy}")
-
-    last_update_reason = profile_json.get("last_update_reason", "")
-    if last_update_reason:
-        lines.append(f"\n## 最近画像变化\n\n{last_update_reason}")
-
-    return "\n".join(lines)
 
 
 def render_long_term_memory_markdown(memory_json: dict[str, Any]) -> str:

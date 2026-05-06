@@ -7,12 +7,14 @@ import type { ApiResponse } from '@/api/auth'
 
 export interface ProfileData {
   user_id: number | null
-  profile_markdown: string | null
-  profile_json?: Record<string, unknown> | null
+  module: string | null
+  profile_json: Record<string, unknown> | null
+  profile_score_json: Record<string, unknown> | null
   version: number | null
   confidence: number | null
   source_session_ids: string[] | null
-  source_memory_ids: number[] | null
+  source_summary_ids: number[] | null
+  source_event_ids: number[] | null
   updated_reason: string | null
   updated_at: string | null
 }
@@ -24,6 +26,7 @@ export interface ProfileScoreData {
   score: number | null
   confidence: number | null
   metrics: {
+    dimension_scores?: Record<string, number | null>
     section_coverage?: number | null
     evidence_quality?: number | null
     uncertainty_handling?: number | null
@@ -37,11 +40,14 @@ export interface ProfileScoreData {
 export interface ProfileHistoryItem {
   id: number
   user_id: number
+  module: string
   version: number
-  profile_markdown: string | null
+  profile_json: Record<string, unknown> | null
+  profile_score_json: Record<string, unknown> | null
   change_reason: string | null
   source_session_ids: string[] | null
-  source_memory_ids: number[] | null
+  source_summary_ids: number[] | null
+  source_event_ids: number[] | null
   created_at: string | null
 }
 

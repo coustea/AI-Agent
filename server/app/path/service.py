@@ -18,7 +18,6 @@ from app.path.planner import (
 )
 from app.path.repository import PathRepository
 from app.path.schemas import PathInsight, PathPlan, PathPlanData, PathPlanMeta, PathSummary
-from app.resource.utils import parse_markdown_sections
 
 
 class PathService:
@@ -47,7 +46,6 @@ class PathService:
         inferred_weak_points = self._extract_weak_points(profile, resource, weak_points)
         completed_node_ids = self._extract_completed_node_ids(resource)
 
-        # 从画像 Markdown 中提取信息
         profile_info = self._parse_profile(profile)
 
         plan = build_initial_plan(
@@ -126,9 +124,8 @@ class PathService:
         extra_weak_points: list[str] | None,
     ) -> list[str]:
         texts: list[str] = []
-        # 从画像 Markdown 中提取薄弱点
-        if profile and profile.profile_markdown:
-            profile_info = self._parse_profile_markdown(profile.profile_markdown)
+        if profile and profile.profile_json:
+            profile_info = self._parse_profile(profile)
             if profile_info.get("当前薄弱点"):
                 texts.append(profile_info["当前薄弱点"])
         if resource and resource.learning_need:
@@ -172,28 +169,20 @@ class PathService:
         return ordered
 
     def _parse_profile(self, profile) -> dict[str, str]:
-        """从画像中提取关键信息（支持新的 profile_json 和旧的 profile_markdown）。"""
+        """从 JSON 画像中提取学习路径规划需要的关键信息。"""
         result: dict[str, str] = {}
-        if not profile:
+        if not profile or not profile.profile_json:
             return result
 
-        if profile.profile_json:
-            dimensions = profile.profile_json.get("dimensions", {})
-            student_profile = profile.profile_json.get("student_profile", {})
-            result["技术能力判断"] = dimensions.get("knowledge_foundation", {}).get("summary", "")
-            result["当前学习/项目背景"] = dimensions.get("learning_goal", {}).get("summary", "")
-            result["学习偏好"] = dimensions.get("interaction_preference", {}).get("summary", "")
-            result["当前薄弱点"] = dimensions.get("weakness_points", {}).get("summary", "")
-            result["兴趣方向"] = student_profile.get("current_focus", [])
-            if isinstance(result["兴趣方向"], list):
-                result["兴趣方向"] = ", ".join(result["兴趣方向"])
-            return result
-
-        if profile.profile_markdown:
-            sections = parse_markdown_sections(profile.profile_markdown)
-            for name in ("技术能力判断", "当前学习/项目背景", "学习偏好", "当前薄弱点", "兴趣方向"):
-                if sections.get(name):
-                    result[name] = sections[name]
+        dimensions = profile.profile_json.get("dimensions", {})
+        student_profile = profile.profile_json.get("student_profile") or {}
+        result["技术能力判断"] = dimensions.get("knowledge_foundation", {}).get("summary") or ""
+        result["当前学习/项目背景"] = dimensions.get("learning_goal", {}).get("summary") or ""
+        result["学习偏好"] = dimensions.get("interaction_preference", {}).get("summary") or ""
+        result["当前薄弱点"] = dimensions.get("weakness_points", {}).get("summary") or ""
+        result["兴趣方向"] = student_profile.get("current_focus", [])
+        if isinstance(result["兴趣方向"], list):
+            result["兴趣方向"] = ", ".join(result["兴趣方向"])
         return result
 
     def _compute_confidence(

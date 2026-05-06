@@ -63,7 +63,8 @@ class QuizPayload(BaseModel):
 class QuizAgent:
     """习题 Agent。"""
 
-    STEPS = ["分析知识点覆盖范围", "针对性设计评估题目", "生成详细解析与误区提示", "验证试题难度及分布"]
+    STEPS = ["分析输入", "融合画像与依赖", "生成内容", "整理输出"]
+    ROLE_NAME = "自测题训练智能体"
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
@@ -74,64 +75,85 @@ class QuizAgent:
 
     async def _emit_action(
         self,
+        state: WorkerState,
         action: str,
         detail: str = "",
         current_step: int = 0,
         total_steps: int = 0,
         step_label: str = "",
+        current_action: str = "",
+        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
             await self.emitter.emit_agent_action(
-                "quiz",
+                state.agent_name,
                 action,
                 detail,
                 current_step=current_step,
                 total_steps=total_steps,
                 step_label=step_label,
+                current_action=current_action,
+                output_preview=output_preview,
+                layer=state.layer_index,
+                layer_name="检测巩固层",
+                agent_role=self.ROLE_NAME,
+                resource_type=state.agent_name,
             )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行习题生成。"""
         logger.info("[QuizAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
-        total = len(self.STEPS)
+        total = 5
 
         await self._emit_action(
-            "loading_prompt",
-            "正在加载习题生成提示词...",
-            current_step=1,
+            state,
+            "analyze_input",
+            "自测题训练智能体正在分析检测目标",
+            current_step=2,
             total_steps=total,
             step_label=self.STEPS[0],
+            current_action="分析测评需求",
+            output_preview="正在识别需要检测的知识点、题型数量和难度分布",
         )
         prompt = self._load_prompt()
 
         await self._emit_action(
-            "building_input",
-            "正在分析知识点覆盖范围并构建输入...",
-            current_step=2,
+            state,
+            "merge_profile_dependencies",
+            "自测题训练智能体正在读取上游资源和画像",
+            current_step=3,
             total_steps=total,
             step_label=self.STEPS[1],
+            current_action="融合画像与依赖",
+            output_preview="正在结合 ContentAgent 与 CodeAgent 结果、薄弱点权重和考试风格",
         )
         input_text = await self._build_input(state)
 
         try:
             await self._emit_action(
-                "calling_llm",
-                "正在为你针对性设计评估题目...",
-                current_step=3,
+                state,
+                "generate_content",
+                "自测题训练智能体正在生成练习题",
+                current_step=4,
                 total_steps=total,
                 step_label=self.STEPS[2],
+                current_action="生成自测题与解析",
+                output_preview="正在生成题干、选项、答案、解析和易错点提示",
             )
             quiz_payload = await self._invoke_quiz_payload(prompt, input_text)
 
             quiz_json = quiz_payload.model_dump(mode="json", exclude_none=True)
 
             await self._emit_action(
-                "finalizing_result",
-                "正在验证试题难度分布并生成结果...",
-                current_step=4,
+                state,
+                "finalize_output",
+                "自测题训练智能体正在整理输出",
+                current_step=5,
                 total_steps=total,
                 step_label=self.STEPS[3],
+                current_action="整理测评资源",
+                output_preview=quiz_payload.summary or str(quiz_json)[:240],
             )
             questions = quiz_json.get("questions", [])
             question_count = len(questions) if isinstance(questions, list) else 0

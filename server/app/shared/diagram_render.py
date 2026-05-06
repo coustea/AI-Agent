@@ -65,11 +65,19 @@ def extract_mermaid_source(text: Any) -> str:
 
     # 验证是否以合法的 Mermaid 关键词开头
     if not _MERMAID_START_RE.match(source):
-        raise ValueError("LLM 未返回合法 Mermaid 源码")
+        # 提供更详细的错误信息
+        first_line = source.split('\n')[0][:50] if source else '(empty)'
+        raise ValueError(f"LLM 未返回合法 Mermaid 源码，首行: {first_line}")
 
     # 拒绝 JSON 对象格式
     if source.startswith("{") or '"type"' in source[:200]:
         raise ValueError("LLM 返回了对象数据而不是 Mermaid 源码")
+
+    # 基本语法验证：检查引号匹配（括号在 Mermaid 中有特殊含义，不强制匹配）
+    # 检查引号是否成对出现
+    quote_count = source.count('"')
+    if quote_count % 2 != 0:
+        raise ValueError("Mermaid 源码引号不匹配：双引号数量为奇数")
 
     # 防御性修复：针对 LLM 容易产生的 Mermaid 语法错误进行后处理
     # 1. 修复 sequenceDiagram 中不支持的 note across: 语法，尝试退化为 note over
@@ -79,5 +87,47 @@ def extract_mermaid_source(text: Any) -> str:
         source = re.sub(r"note\s+across\s+", "note over ", source, flags=re.IGNORECASE)
         # 2. 修复行尾莫名出现的 n 字符（可能是转义失败残留）
         source = re.sub(r"([^\w])n\s*$", r"\1", source, flags=re.MULTILINE)
+
+    # 3. 修复 flowchart/graph 中常见的问题
+    # 修复未加引号的特殊字符标签（包含空格、括号、特殊符号的标签）
+    # 匹配模式: nodeID[Label with special chars] -> nodeID["Label with special chars"]
+    def quote_labels(match: re.Match) -> str:
+        node_id = match.group(1)
+        label = match.group(2)
+        # 如果标签已经用引号包裹，直接返回
+        if label.startswith('"') and label.endswith('"'):
+            return match.group(0)
+        # 如果标签包含特殊字符（空格、括号、尖括号、竖线等），添加引号
+        if re.search(r'[\s()<>|{}[\]]', label):
+            return f'{node_id}["{label}"]'
+        return match.group(0)
+
+    # 匹配节点定义: nodeID[Label] 或 nodeID(Label) 或 nodeID{Label}
+    source = re.sub(
+        r'(\w+)\[([^\]]+)\]',
+        quote_labels,
+        source
+    )
+    source = re.sub(
+        r'(\w+)\(([^)]+)\)',
+        quote_labels,
+        source
+    )
+    source = re.sub(
+        r'(\w+)\{([^}]+)\}',
+        quote_labels,
+        source
+    )
+
+    # 4. 修复箭头语法问题
+    # 修复常见的错误箭头: --> -> -->, <-> <->, etc.
+    source = re.sub(r'-->', '-->', source)  # 标准化长箭头
+    source = re.sub(r'->', '->', source)    # 标准化短箭头
+
+    # 5. 移除行内注释（Mermaid 不支持 # 注释）
+    source = re.sub(r'#[^\n]*', '', source)
+
+    # 6. 修复多余的空行（保留一个空行用于可读性）
+    source = re.sub(r'\n{3,}', '\n\n', source)
 
     return source

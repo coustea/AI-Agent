@@ -30,11 +30,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections import OrderedDict
 from functools import lru_cache
 from typing import Any, AsyncIterator, Hashable
 
 from langchain_openai import ChatOpenAI
+from pydantic import ValidationError
 
 from app.config import (
     GLM_API_KEY,
@@ -44,8 +46,11 @@ from app.config import (
     SPARK_MAX_API_BASE,
     SPARK_X_API_PASSWORD,
     SPARK_X_API_BASE,
+    SPARK_X2_FLASH_API_PASSWORD,
+    SPARK_X2_FLASH_API_BASE,
 )
 from app.infra.logging import get_logger
+from app.shared.json_utils import parse_first_json_object, preview_for_log
 
 logger = get_logger(__name__)
 
@@ -56,6 +61,34 @@ logger = get_logger(__name__)
 
 class LLMConcurrencyBusyError(Exception):
     """并发超限时抛出。"""
+
+
+class LLMStructuredOutputError(Exception):
+    """结构化输出解析或校验失败时抛出。"""
+
+    def __init__(
+        self,
+        *,
+        model_type: str,
+        schema_name: str,
+        function_name: str,
+        stage: str,
+        message: str,
+        payload: Any = None,
+    ) -> None:
+        payload_text = ""
+        if payload is not None:
+            payload_text = f", payload={preview_for_log(payload)}"
+        super().__init__(
+            f"LLM structured output failed: model_type={model_type}, "
+            f"schema={schema_name}, function_name={function_name}, "
+            f"stage={stage}, error={message}{payload_text}"
+        )
+        self.model_type = model_type
+        self.schema_name = schema_name
+        self.function_name = function_name
+        self.stage = stage
+        self.payload = payload
 
 
 # ----------------------------
@@ -123,6 +156,22 @@ class LlmFactory:
                 **kwargs,
             )
 
+        # spark_x2_flash: 讯飞星火 spark-x2-flash（轻量快速模型，用于标题生成等）
+        if model_type == "spark_x2_flash":
+            cls._require_non_empty("SPARK_X2_FLASH_API_PASSWORD", SPARK_X2_FLASH_API_PASSWORD)
+            cls._require_non_empty("SPARK_X2_FLASH_API_BASE", SPARK_X2_FLASH_API_BASE)
+            return ChatOpenAI(
+                model="spark-x2-flash",
+                api_key=SPARK_X2_FLASH_API_PASSWORD,
+                base_url=SPARK_X2_FLASH_API_BASE,
+                temperature=temperature,
+                streaming=streaming,
+                max_tokens=max_tokens,
+                max_retries=max_retries,
+                timeout=timeout,
+                **kwargs,
+            )
+
         # glm_vision: 智谱 GLM 视觉模型（图像理解）
         if model_type == "glm_vision":
             cls._require_non_empty("GLM_API_KEY", GLM_API_KEY)
@@ -156,6 +205,7 @@ class LlmManager:
     DEFAULT_CONCURRENCY_LIMITS: dict[str, int] = {
         "spark_max": 10,  # 主力模型，并发较低
         "spark_x": 20,    # 高并发场景
+        "spark_x2_flash": 30,  # 轻量模型，高并发
     }
 
     def __init__(
@@ -363,6 +413,84 @@ class LlmManager:
         llm = self.get_model(model_type, **(model_kwargs or {}))
         return llm.with_structured_output(schema, **kwargs)
 
+    @staticmethod
+    def _tool_call_name(tool_call: Any) -> str | None:
+        """兼容 LangChain/OpenAI 常见 tool_call 结构，提取函数名。"""
+        if isinstance(tool_call, dict):
+            if isinstance(tool_call.get("name"), str):
+                return tool_call["name"]
+            function = tool_call.get("function")
+            if isinstance(function, dict) and isinstance(function.get("name"), str):
+                return function["name"]
+            return None
+        name = getattr(tool_call, "name", None)
+        return name if isinstance(name, str) else None
+
+    @staticmethod
+    def _tool_call_args(tool_call: Any) -> Any:
+        """兼容 LangChain/OpenAI 常见 tool_call 结构，提取函数参数。"""
+        if isinstance(tool_call, dict):
+            if "args" in tool_call:
+                return tool_call.get("args")
+            function = tool_call.get("function")
+            if isinstance(function, dict):
+                return function.get("arguments")
+            return None
+        if hasattr(tool_call, "args"):
+            return getattr(tool_call, "args")
+        function = getattr(tool_call, "function", None)
+        if function is not None:
+            return getattr(function, "arguments", None)
+        return None
+
+    @staticmethod
+    def _coerce_structured_payload(raw_payload: Any) -> dict[str, Any]:
+        """把模型返回的工具参数转换为 dict；字符串走非正则 JSON 解析。"""
+        if isinstance(raw_payload, dict):
+            return raw_payload
+        if isinstance(raw_payload, str):
+            return parse_first_json_object(raw_payload)
+        if raw_payload is None:
+            return {}
+        if hasattr(raw_payload, "model_dump"):
+            dumped = raw_payload.model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        if isinstance(raw_payload, bytes):
+            return parse_first_json_object(raw_payload.decode("utf-8"))
+        raise TypeError(f"expected structured payload dict or JSON string, got {type(raw_payload).__name__}")
+
+    def _select_tool_call(self, tool_calls: list[Any], tool_name: str) -> Any | None:
+        """优先按函数名选择 tool_call，缺少 name 时回退第一个。"""
+        for tool_call in tool_calls:
+            if self._tool_call_name(tool_call) == tool_name:
+                return tool_call
+        if len(tool_calls) == 1:
+            return tool_calls[0]
+        return None
+
+    def _validate_structured_payload(
+        self,
+        *,
+        schema: type[Any],
+        payload: Any,
+        model_type: str,
+        tool_name: str,
+        stage: str,
+    ) -> Any:
+        try:
+            coerced = self._coerce_structured_payload(payload)
+            return schema.model_validate(coerced)
+        except (json.JSONDecodeError, TypeError, ValueError, ValidationError) as exc:
+            raise LLMStructuredOutputError(
+                model_type=model_type,
+                schema_name=schema.__name__,
+                function_name=tool_name,
+                stage=stage,
+                message=str(exc),
+                payload=payload,
+            ) from exc
+
     async def ainvoke_structured(
         self,
         model_type: str,
@@ -373,16 +501,18 @@ class LlmManager:
         strict: bool = True,
         function_name: str | None = None,
         function_description: str | None = None,
+        fallback_to_json: bool = True,
         model_kwargs: dict[str, Any] | None = None,
         **invoke_kwargs: Any,
     ) -> Any:
         """使用 function calling 获取结构化输出（JSON）。
 
-        通过 bind_tools + tool_choice="required" 强制模型调用指定函数，
-        然后将 tool_calls 的 args 解析为 schema 实例。
+        通过 bind_tools + tool_choice="required" 强制模型调用指定函数。
+        若 provider 没有返回 tool_calls，默认退回普通 JSON 文本解析。
         """
         semaphore = await self._acquire(model_type, timeout=timeout)
-        llm = self._get_model(model_type, **(model_kwargs or {}))
+        base_model_kwargs = dict(model_kwargs or {})
+        llm = self._get_model(model_type, **base_model_kwargs)
 
         # 构建 function calling 工具定义
         tool_name = function_name or schema.__name__
@@ -400,13 +530,87 @@ class LlmManager:
         ]
 
         try:
-            runnable = llm.bind_tools(tools, tool_choice="required")
-            response = await runnable.ainvoke(input_data, **invoke_kwargs)
-            tool_calls = getattr(response, "tool_calls", []) or []
-            if not tool_calls:
-                raise ValueError("model returned no tool_calls for structured output")
-            payload = tool_calls[0].get("args") or {}
-            return schema.model_validate(payload)
+            structured_error: LLMStructuredOutputError | None = None
+            try:
+                runnable = llm.bind_tools(tools, tool_choice="required")
+                response = await runnable.ainvoke(input_data, **invoke_kwargs)
+                tool_calls = getattr(response, "tool_calls", []) or []
+                selected_tool_call = self._select_tool_call(tool_calls, tool_name)
+                if selected_tool_call is not None:
+                    payload = self._tool_call_args(selected_tool_call)
+                    try:
+                        return self._validate_structured_payload(
+                            schema=schema,
+                            payload=payload,
+                            model_type=model_type,
+                            tool_name=tool_name,
+                            stage="tool_args",
+                        )
+                    except LLMStructuredOutputError as exc:
+                        structured_error = exc
+                else:
+                    # 某些模型（如讯飞星火）即使设置了 tool_choice="required" 也不返回
+                    # tool_calls，而是直接将 JSON 放在 response.content 中。先尝试从
+                    # content 提取 JSON 作为快速回退，避免多一次网络调用。
+                    response_content = getattr(response, "content", "") or ""
+                    content_parsed = parse_first_json_object(response_content)
+                    if content_parsed:
+                        try:
+                            return self._validate_structured_payload(
+                                schema=schema,
+                                payload=content_parsed,
+                                model_type=model_type,
+                                tool_name=tool_name,
+                                stage="content_json",
+                            )
+                        except LLMStructuredOutputError as exc:
+                            structured_error = exc
+                    else:
+                        structured_error = LLMStructuredOutputError(
+                            model_type=model_type,
+                            schema_name=schema.__name__,
+                            function_name=tool_name,
+                            stage="no_tool_calls",
+                            message="model returned no matching tool_calls for structured output",
+                            payload=tool_calls,
+                        )
+            except Exception as exc:
+                structured_error = LLMStructuredOutputError(
+                    model_type=model_type,
+                    schema_name=schema.__name__,
+                    function_name=tool_name,
+                    stage="tool_call_failed",
+                    message=str(exc),
+                )
+
+            if not fallback_to_json:
+                raise structured_error
+
+            fallback_model_kwargs = {
+                **base_model_kwargs,
+                "streaming": False,
+                "response_format": {"type": "json_object"},
+            }
+            fallback_llm = self._get_model(model_type, **fallback_model_kwargs)
+            fallback_response = await fallback_llm.ainvoke(input_data, **invoke_kwargs)
+            raw_content = getattr(fallback_response, "content", fallback_response)
+            try:
+                return self._validate_structured_payload(
+                    schema=schema,
+                    payload=raw_content,
+                    model_type=model_type,
+                    tool_name=tool_name,
+                    stage="json_fallback",
+                )
+            except LLMStructuredOutputError as exc:
+                raise LLMStructuredOutputError(
+                    model_type=model_type,
+                    schema_name=schema.__name__,
+                    function_name=tool_name,
+                    stage="fallback_failed",
+                    message=f"{structured_error}; {exc}",
+                    payload=raw_content,
+                ) from exc
         finally:
             if semaphore is not None:
                 semaphore.release()

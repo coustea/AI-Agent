@@ -150,50 +150,34 @@ const multimodalResources = ref([
 // --- 4. 画像与评估数据 ---
 const profileScores = ref([60, 60, 60, 60, 60, 60, 60, 60]) // 默认分值
 
-const PROFILE_SECTIONS = [
-  '基础信息',
-  '当前学习/项目背景',
-  '技术能力判断',
-  '学习偏好',
-  '当前薄弱点',
-  '兴趣方向',
-  '推荐辅导策略',
-  '最近变化',
+const PROFILE_SCORE_KEYS = [
+  'knowledge_foundation',
+  'cognitive_style',
+  'mistake_preference',
+  'learning_goal',
+  'learning_history',
+  'interaction_preference',
+  'practice_ability',
+  'weakness_points',
 ] as const
 
-const parseProfileSections = (profileMarkdown: string) => {
-  const sections: Record<string, string> = {}
-  let currentSection = ''
-  const currentContent: string[] = []
-  const lines = profileMarkdown.split('\n')
-
-  const flush = () => {
-    if (currentSection) {
-      sections[currentSection] = currentContent.join('\n').trim()
-    }
-  }
-
-  for (const line of lines) {
-    const heading = line.match(/^##\s+(.+?)\s*$/)
-    if (heading) {
-      flush()
-      currentSection = (heading[1] ?? '').trim()
-      currentContent.length = 0
-      continue
-    }
-    if (currentSection) {
-      currentContent.push(line)
-    }
-  }
-  flush()
-  return sections
+const getProfileDimensions = (profileJson?: Record<string, unknown> | null) => {
+  const dimensions = profileJson?.dimensions
+  return dimensions && typeof dimensions === 'object'
+    ? dimensions as Record<string, Record<string, unknown>>
+    : {}
 }
 
-const scoreFromSection = (content?: string) => {
-  if (!content) return 55
-  const compact = content.replace(/\s+/g, '')
-  if (!compact || compact.includes('暂无明显信息')) return 55
-  return Math.min(88, Math.max(65, 60 + Math.floor(compact.length / 20)))
+const getProfileDimensionScores = (scoreJson?: Record<string, unknown> | null) => {
+  const scores = scoreJson?.dimension_scores
+  return scores && typeof scores === 'object'
+    ? scores as Record<string, number | null>
+    : {}
+}
+
+const scoreFromScoreJson = (scores: Record<string, number | null>, key: string) => {
+  const score = scores[key]
+  return typeof score === 'number' ? Math.max(0, Math.min(100, Math.round(score))) : 55
 }
 
 const profileOption = computed(() => ({
@@ -270,16 +254,21 @@ onMounted(async () => {
     if (profileRes.status !== 'fulfilled') return
     const data = profileRes.value.data.data
     if (data) {
-      const markdown = (data.profile_markdown || '').trim()
-      if (markdown) {
-        const sections = parseProfileSections(markdown)
+      const dimensions = getProfileDimensions(data.profile_json)
+      if (Object.keys(dimensions).length > 0) {
         if (scoreRes.status !== 'fulfilled' || scoreRes.value.data.data.score == null) {
-          profileScores.value = PROFILE_SECTIONS.map((title) => scoreFromSection(sections[title]))
+          const dimensionScores = getProfileDimensionScores(data.profile_score_json)
+          profileScores.value = PROFILE_SCORE_KEYS.map((key) => scoreFromScoreJson(dimensionScores, key))
         }
 
-        const insight = sections['推荐辅导策略'] || sections['最近变化'] || sections['当前薄弱点']
-        if (insight && !insight.includes('暂无明显信息')) {
-          aiInsight.value = insight.split('\n').filter(Boolean)[0] || aiInsight.value
+        const strategies = Array.isArray(data.profile_json?.recommended_strategy)
+          ? data.profile_json.recommended_strategy.filter((item): item is string => typeof item === 'string')
+          : []
+        const insight = strategies[0]
+          || (dimensions.weakness_points?.summary as string | undefined)
+          || (dimensions.learning_goal?.summary as string | undefined)
+        if (insight) {
+          aiInsight.value = insight
         }
       }
     }

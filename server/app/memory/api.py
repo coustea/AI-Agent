@@ -37,8 +37,8 @@ def _profile_payload(profile) -> dict:
         return {
             "user_id": None,
             "module": None,
-            "profile_markdown": None,
             "profile_json": None,
+            "profile_score_json": None,
             "version": None,
             "confidence": None,
             "source_session_ids": None,
@@ -50,8 +50,8 @@ def _profile_payload(profile) -> dict:
     return {
         "user_id": profile.user_id,
         "module": profile.module,
-        "profile_markdown": profile.profile_markdown,
         "profile_json": profile.profile_json,
+        "profile_score_json": profile.profile_score_json,
         "version": profile.version,
         "confidence": profile.confidence,
         "source_session_ids": profile.source_session_ids,
@@ -76,22 +76,22 @@ def _profile_score_payload(profile) -> dict:
             "updated_at": None,
         }
 
-    profile_json = profile.profile_json or {}
-    snapshot_score = profile_json.get("snapshot_score") or {}
+    score_json = profile.profile_score_json or {}
     return {
         "user_id": profile.user_id,
         "module": profile.module,
         "version": profile.version,
-        "score": snapshot_score.get("overall_score"),
-        "confidence": snapshot_score.get("confidence", profile.confidence),
+        "score": score_json.get("overall_score"),
+        "confidence": score_json.get("confidence", profile.confidence),
         "metrics": {
-            "section_coverage": snapshot_score.get("section_coverage"),
-            "evidence_quality": snapshot_score.get("evidence_quality"),
-            "uncertainty_handling": snapshot_score.get("uncertainty_handling"),
-            "content_richness": snapshot_score.get("content_richness"),
+            "dimension_scores": score_json.get("dimension_scores") or {},
+            "section_coverage": score_json.get("section_coverage"),
+            "evidence_quality": score_json.get("evidence_quality"),
+            "uncertainty_handling": score_json.get("uncertainty_handling"),
+            "content_richness": score_json.get("content_richness"),
         },
-        "missing_sections": snapshot_score.get("missing_sections") or [],
-        "scored_at": snapshot_score.get("scored_at"),
+        "missing_sections": score_json.get("missing_sections") or [],
+        "scored_at": score_json.get("scored_at"),
         "updated_at": profile.updated_at,
     }
 
@@ -149,8 +149,8 @@ def _profile_history_payload(history) -> dict:
         "user_id": history.user_id,
         "module": history.module,
         "version": history.version,
-        "profile_markdown": history.profile_markdown,
         "profile_json": history.profile_json,
+        "profile_score_json": history.profile_score_json,
         "change_reason": history.change_reason,
         "source_session_ids": history.source_session_ids,
         "source_summary_ids": history.source_summary_ids,

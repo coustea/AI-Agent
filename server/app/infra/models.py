@@ -17,8 +17,8 @@
 - 删除 UserMemory（多条记忆模式）
 - 新增 UserLongTermMemory（用户级单条长期记忆）
 - 新增 ChatSessionSummary（会话概要）
-- 修改 UserProfile（增加 profile_json、module 字段）
-- 修改 UserProfileHistory（增加 profile_json、module 字段）
+- 修改 UserProfile（增加 profile_json、profile_score_json、module 字段）
+- 修改 UserProfileHistory（增加 profile_json、profile_score_json、module 字段）
 """
 
 import uuid
@@ -217,9 +217,8 @@ class UserProfile(SQLModel, table=True):
     """用户画像表 — 一个用户在一个 module 下只有一条当前画像
     
     设计原则：
-    - 同时保存 Markdown 和 JSONB 格式
-    - profile_markdown 是用户画像正文
-    - profile_json 保存 Markdown 画像的快照评分与元信息；旧数据可能仍包含 8 维结构
+    - profile_json 是文字画像权威来源
+    - profile_score_json 是评分画像权威来源
     """
     __tablename__ = "user_profiles"
     __table_args__ = (
@@ -230,8 +229,8 @@ class UserProfile(SQLModel, table=True):
     user_id: int = Field(index=True)
     module: str = Field(default="mentor", index=True)  # 所属功能模块
 
-    profile_markdown: str = Field(sa_column=Column(Text))  # 画像主体 Markdown
-    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 画像快照评分/元信息
+    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 文字画像 JSON
+    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 分数画像 JSON
 
     version: int = Field(default=1)  # 画像版本号
     confidence: float = Field(default=0.7)  # 画像整体置信度
@@ -265,8 +264,8 @@ class UserProfileHistory(SQLModel, table=True):
 
     version: int = Field(index=True)  # 版本号，每次更新递增
 
-    profile_markdown: str = Field(sa_column=Column(Text))  # 画像快照 Markdown
-    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 画像快照 JSON
+    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 文字画像快照 JSON
+    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 分数画像快照 JSON
 
     change_reason: str | None = Field(default=None, sa_column=Column(Text))  # 变更原因
 

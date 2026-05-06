@@ -27,7 +27,8 @@ logger = get_logger(__name__)
 class CodeAgent:
     """代码示例 Agent。"""
 
-    STEPS = ["解析代码示例逻辑", "生成带详尽注释的源码", "编写逐行原理解析", "验证代码运行可行性"]
+    STEPS = ["分析输入", "融合画像与依赖", "生成内容", "整理输出"]
+    ROLE_NAME = "实战代码沙箱智能体"
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
@@ -38,53 +39,71 @@ class CodeAgent:
 
     async def _emit_action(
         self,
+        state: WorkerState,
         action: str,
         detail: str = "",
         current_step: int = 0,
         total_steps: int = 0,
         step_label: str = "",
+        current_action: str = "",
+        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
             await self.emitter.emit_agent_action(
-                "code",
+                state.agent_name,
                 action,
                 detail,
                 current_step=current_step,
                 total_steps=total_steps,
                 step_label=step_label,
+                current_action=current_action,
+                output_preview=output_preview,
+                layer=state.layer_index,
+                layer_name="实践拓展层",
+                agent_role=self.ROLE_NAME,
+                resource_type=state.agent_name,
             )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行代码生成。"""
         logger.info("[CodeAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
-        total = len(self.STEPS)
+        total = 5
 
         await self._emit_action(
-            "loading_prompt",
-            "加载代码示例生成提示词...",
-            current_step=1,
+            state,
+            "analyze_input",
+            "实战代码沙箱智能体正在分析实践任务",
+            current_step=2,
             total_steps=total,
             step_label=self.STEPS[0],
+            current_action="分析代码实践需求",
+            output_preview="正在识别编程语言、案例目标、难度和关键知识点",
         )
         prompt = self._load_prompt()
 
         await self._emit_action(
-            "building_input",
-            "正在解析代码示例逻辑并构建输入...",
-            current_step=2,
+            state,
+            "merge_profile_dependencies",
+            "实战代码沙箱智能体正在读取上游讲解重点",
+            current_step=3,
             total_steps=total,
             step_label=self.STEPS[1],
+            current_action="融合画像与依赖",
+            output_preview="正在结合 ContentAgent 输出、学习画像和代码配置构建提示词",
         )
         input_text = await self._build_input(state)
 
         try:
             await self._emit_action(
-                "calling_llm",
-                "正在为你生成带详尽注释的源码...",
-                current_step=3,
+                state,
+                "generate_content",
+                "实战代码沙箱智能体正在生成代码案例",
+                current_step=4,
                 total_steps=total,
                 step_label=self.STEPS[2],
+                current_action="生成代码与讲解",
+                output_preview="正在编写可运行代码、关键注释、运行步骤和练习任务",
             )
 
             response = await self.llm_manager.ainvoke(
@@ -109,11 +128,14 @@ class CodeAgent:
             }
 
             await self._emit_action(
-                "finalizing_result",
-                f"正在验证代码运行可行性并生成结果 ({len(content)} 字符)...",
-                current_step=4,
+                state,
+                "finalize_output",
+                f"实战代码沙箱智能体正在整理输出 ({len(content)} 字符)",
+                current_step=5,
                 total_steps=total,
                 step_label=self.STEPS[3],
+                current_action="整理代码资源",
+                output_preview=content[:240],
             )
 
             return WorkerResult.model_construct(
@@ -133,13 +155,15 @@ class CodeAgent:
         """加载提示词。"""
         if self.prompt_path.exists():
             return self.prompt_path.read_text(encoding="utf-8")
-        return """你是一位编程教育专家。请根据给定的主题，生成代码示例。
-
-要求：
-1. 代码可运行，有详细注释
-2. 包含讲解说明
-3. 使用 Markdown 代码块格式
-4. 适合学习者理解"""
+        prompt = """你是一位编程教育专家。请根据给定的主题，生成代码示例。
+                
+                要求：
+                1. 代码可运行，有详细注释
+                2. 包含讲解说明
+                3. 使用 Markdown 代码块格式
+                4. 适合学习者理解
+                """
+        return prompt
 
     async def _build_input(self, state: WorkerState) -> str:
         """构建输入内容。"""

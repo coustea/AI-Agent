@@ -26,7 +26,8 @@ logger = get_logger(__name__)
 class MindmapAgent:
     """思维导图 Agent。"""
 
-    STEPS = ["梳理知识逻辑架构", "提取核心概念节点", "构建多级思维导图", "优化可视化层级关系"]
+    STEPS = ["分析输入", "融合画像与依赖", "生成内容", "整理输出"]
+    ROLE_NAME = "知识结构图谱智能体"
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
@@ -37,53 +38,71 @@ class MindmapAgent:
 
     async def _emit_action(
         self,
+        state: WorkerState,
         action: str,
         detail: str = "",
         current_step: int = 0,
         total_steps: int = 0,
         step_label: str = "",
+        current_action: str = "",
+        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
             await self.emitter.emit_agent_action(
-                "mindmap",
+                state.agent_name,
                 action,
                 detail,
                 current_step=current_step,
                 total_steps=total_steps,
                 step_label=step_label,
+                current_action=current_action,
+                output_preview=output_preview,
+                layer=state.layer_index,
+                layer_name="认知建构层",
+                agent_role=self.ROLE_NAME,
+                resource_type=state.agent_name,
             )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行思维导图生成。"""
         logger.info("[MindmapAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
-        total = len(self.STEPS)
+        total = 5
 
         await self._emit_action(
-            "loading_prompt",
-            "加载思维导图生成提示词...",
-            current_step=1,
+            state,
+            "analyze_input",
+            "知识结构图谱智能体正在分析学习需求",
+            current_step=2,
             total_steps=total,
             step_label=self.STEPS[0],
+            current_action="分析知识结构需求",
+            output_preview="正在识别核心概念、层级关系和知识组织目标",
         )
         prompt = self._load_prompt()
 
         await self._emit_action(
-            "building_input",
-            "正在提取核心概念并构建知识图谱...",
-            current_step=2,
+            state,
+            "merge_profile_dependencies",
+            "知识结构图谱智能体正在融合画像和依赖信息",
+            current_step=3,
             total_steps=total,
             step_label=self.STEPS[1],
+            current_action="融合画像与依赖",
+            output_preview="正在结合学习短板、前置知识和规划参数梳理导图范围",
         )
         input_text = await self._build_input(state)
 
         try:
             await self._emit_action(
-                "calling_llm",
-                "正在为你构建多级思维导图结构...",
-                current_step=3,
+                state,
+                "generate_content",
+                "知识结构图谱智能体正在生成思维导图",
+                current_step=4,
                 total_steps=total,
                 step_label=self.STEPS[2],
+                current_action="生成多级思维导图",
+                output_preview="正在构建主题节点、一级分支和关键概念层级",
             )
 
             response = await self.llm_manager.ainvoke(
@@ -96,11 +115,14 @@ class MindmapAgent:
             markdown_content = extract_markdown_from_llm_output(content)
 
             await self._emit_action(
-                "finalizing_result",
-                f"正在优化可视化层级关系并生成 Markdown ({len(markdown_content)} 字符)...",
-                current_step=4,
+                state,
+                "finalize_output",
+                f"知识结构图谱智能体正在整理输出 ({len(markdown_content)} 字符)",
+                current_step=5,
                 total_steps=total,
                 step_label=self.STEPS[3],
+                current_action="整理导图结构",
+                output_preview=markdown_content[:240],
             )
 
             return WorkerResult(

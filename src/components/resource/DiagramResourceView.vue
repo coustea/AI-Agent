@@ -1,16 +1,24 @@
 <template>
   <div class="diagram-resource" :class="{ compact }">
-    <div v-if="mermaidSource" class="diagram-container">
+    <div v-if="mermaidSource" class="technical-frame diagram-container">
+      <div class="frame-corners top-left"></div>
+      <div class="frame-corners top-right"></div>
+      <div class="frame-corners bottom-left"></div>
+      <div class="frame-corners bottom-right"></div>
+
+      <div class="frame-header">
+        <div class="status-indicator"></div>
+        <span class="technical-label">SCHEMATIC_RENDER // SYSTEM_DIAGRAM // MODE_VECTOR</span>
+      </div>
+
       <!-- 隐藏原生 Mermaid 的 SVG 渲染容器，只作提取用 -->
-      <!-- 使用 visibility:hidden + absolute 代替 v-show="false"，
-           避免 display:none 导致 getBoundingClientRect 返回 0 -->
       <div
         ref="mermaidHiddenShell"
         class="mermaid-shell mermaid-offscreen"
         v-html="renderedMermaid"
       ></div>
 
-      <!-- 图片预览区域：使用 Element Plus Image 组件支持放大 -->
+      <!-- 图片预览区域 -->
       <div v-if="imageUrl" class="diagram-image-wrapper">
         <el-image
           class="diagram-image"
@@ -20,18 +28,30 @@
           hide-on-click-modal
         />
         <div class="diagram-actions">
-           <el-button @click="downloadImage" size="small" type="primary" plain>下载图解</el-button>
+           <button class="hud-btn-small" @click="downloadImage">
+             DOWNLOAD_SCHEMATIC
+           </button>
         </div>
       </div>
-      <div v-else-if="renderingError" class="error-box">
-        <el-alert type="error" :title="renderingError" show-icon />
+      <div v-else-if="renderingError" class="error-box-hud">
+        <div class="error-icon">!</div>
+        <div class="error-text">RENDER_EXCEPTION: {{ renderingError }}</div>
       </div>
-      <div v-else class="loading-box">
-        <el-icon class="is-loading"><Loading /></el-icon> 正在渲染图解…
+      <div v-else class="loading-box-hud">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>INITIALIZING_RENDER_ENGINE...</span>
+      </div>
+
+      <div class="frame-footer">
+        <span class="mono-tag">VECTOR_DATA_READY</span>
+        <div class="footer-line"></div>
       </div>
     </div>
-    <div v-else class="empty-state">
-      <el-empty description="暂无图解数据" />
+    <div v-else class="empty-state-hud">
+      <div class="empty-frame">
+        <div class="empty-icon">NULL</div>
+        <p>NO_SCHEMATIC_DATA_DETECTED</p>
+      </div>
     </div>
   </div>
 </template>
@@ -59,11 +79,15 @@ const mermaidSource = computed<string>(() => {
   if (typeof props.resultData === 'string') return props.resultData
 
   let data: any = props.resultData
+  
+  // 1. 处理 resource 包装层
   if (data.resource && typeof data.resource === 'object') {
     data = data.resource
   }
 
   const content = data.content
+  
+  // 2. content 是字符串
   if (typeof content === 'string' && content.trim()) {
     const parsed = parseJsonObject(content)
     if (parsed) {
@@ -73,13 +97,18 @@ const mermaidSource = computed<string>(() => {
     return content
   }
 
+  // 3. content 是对象
   if (typeof content === 'object' && content !== null) {
     if (content.mermaid) return content.mermaid
     if (content.source) return content.source
+    if (content.mermaid_source) return content.mermaid_source
+    if (content.code) return content.code
   }
 
+  // 4. 回退到 data 第一层字段
   if (data.mermaid) return data.mermaid
   if (data.source) return data.source
+  if (data.mermaid_source) return data.mermaid_source
 
   return ''
 })
@@ -89,7 +118,7 @@ mermaid.initialize({
   startOnLoad: false,
   theme: 'default',
   securityLevel: 'loose',
-  fontFamily: 'Inter, system-ui, sans-serif'
+  fontFamily: 'Fira Code, monospace'
 })
 
 // 将 SVG 转换为 PNG
@@ -97,7 +126,6 @@ const convertSvgToPng = async (svgElement: SVGSVGElement): Promise<string> => {
   return new Promise((resolve, reject) => {
     try {
       const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement
-      
       let svgWidth = 0
       let svgHeight = 0
       
@@ -108,30 +136,13 @@ const convertSvgToPng = async (svgElement: SVGSVGElement): Promise<string> => {
       } else {
         const attrWidth = parseFloat(svgElement.getAttribute('width') || '0')
         const attrHeight = parseFloat(svgElement.getAttribute('height') || '0')
-        if (attrWidth > 0 && attrHeight > 0) {
-          svgWidth = attrWidth
-          svgHeight = attrHeight
-        } else {
-          const viewBox = svgElement.getAttribute('viewBox')
-          if (viewBox) {
-            const parts = viewBox.split(/[\s,]+/).map(Number)
-            const vbW = parts[2] ?? 0
-            const vbH = parts[3] ?? 0
-            if (parts.length >= 4 && vbW > 0 && vbH > 0) {
-              svgWidth = vbW
-              svgHeight = vbH
-            }
-          }
-        }
+        svgWidth = attrWidth || 800
+        svgHeight = attrHeight || 600
       }
       
       const padding = 20
       svgWidth += padding * 2
       svgHeight += padding * 2
-
-      if (svgWidth <= padding * 2 || svgHeight <= padding * 2) {
-        throw new Error('无效的 SVG 尺寸')
-      }
 
       clonedSvg.setAttribute('width', svgWidth.toString())
       clonedSvg.setAttribute('height', svgHeight.toString())
@@ -153,19 +164,16 @@ const convertSvgToPng = async (svgElement: SVGSVGElement): Promise<string> => {
         const scale = 2
         canvas.width = svgWidth * scale
         canvas.height = svgHeight * scale
-        
         const ctx = canvas.getContext('2d')
         if (!ctx) {
           URL.revokeObjectURL(blobURL)
           reject(new Error('Canvas context is null'))
           return
         }
-        
         ctx.scale(scale, scale)
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, svgWidth, svgHeight)
         ctx.drawImage(img, 0, 0, svgWidth, svgHeight)
-        
         const pngUrl = canvas.toDataURL('image/png')
         URL.revokeObjectURL(blobURL)
         resolve(pngUrl)
@@ -181,7 +189,6 @@ const convertSvgToPng = async (svgElement: SVGSVGElement): Promise<string> => {
   })
 }
 
-// 渲染 Mermaid
 const renderDiagram = async () => {
   const source = mermaidSource.value
   if (!source) return
@@ -194,7 +201,6 @@ const renderDiagram = async () => {
     const id = `mermaid-${Date.now()}`
     const { svg } = await mermaid.render(id, source)
     renderedMermaid.value = svg
-
     await nextTick()
 
     if (mermaidHiddenShell.value) {
@@ -202,24 +208,18 @@ const renderDiagram = async () => {
       if (svgElement) {
         const pngDataUrl = await convertSvgToPng(svgElement)
         imageUrl.value = pngDataUrl
-      } else {
-        throw new Error('未生成 SVG 元素')
       }
     }
   } catch (err: any) {
     console.error('[DiagramResourceView] Render error:', err)
-    renderingError.value = `图解渲染失败: ${err.message || String(err)}`
+    renderingError.value = err.message || String(err)
   }
 }
 
-watch(mermaidSource, () => {
-  renderDiagram()
-}, { immediate: true })
+watch(mermaidSource, () => { renderDiagram() }, { immediate: true })
 
 onMounted(() => {
-  if (mermaidSource.value) {
-    renderDiagram()
-  }
+  if (mermaidSource.value) { renderDiagram() }
 })
 
 const downloadImage = () => {
@@ -234,13 +234,101 @@ const downloadImage = () => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 .diagram-resource {
   width: 100%;
+  --primary: #6366F1;
+  --bg: #F5F3FF;
+  --fg: #1E1B4B;
+  --border: #E0E7FF;
+  --accent: #059669;
+}
+
+/* 技术框架样式 */
+.technical-frame {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 44px 32px 32px;
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.frame-corners {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+}
+
+.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+/* 头部 HUD */
+.frame-header {
+  position: absolute;
+  top: 12px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.technical-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--primary);
+  letter-spacing: 1px;
+}
+
+/* 底部 HUD */
+.frame-footer {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mono-tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.footer-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--border), transparent);
 }
 
 .diagram-container {
   width: 100%;
-  position: relative;
 }
 
 .mermaid-offscreen {
@@ -251,20 +339,24 @@ const downloadImage = () => {
 }
 
 .diagram-image-wrapper {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
+  background-image: 
+    linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .diagram-image {
   max-width: 100%;
   max-height: 500px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .diagram-actions {
@@ -273,24 +365,88 @@ const downloadImage = () => {
   width: 100%;
 }
 
-.error-box, .loading-box, .empty-state {
-  padding: 24px;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
+.hud-btn-small {
+  background: transparent;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  padding: 4px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 1px;
+}
+
+.hud-btn-small:hover {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+
+.error-box-hud, .loading-box-hud {
+  padding: 40px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  text-align: center;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #64748B;
+}
+
+.error-box-hud {
+  background: rgba(220, 38, 38, 0.05);
+  border-color: rgba(220, 38, 38, 0.2);
+  color: #DC2626;
+}
+
+.error-icon {
+  font-size: 1.5rem;
+  opacity: 0.8;
+}
+
+.empty-state-hud {
+  padding: 40px;
   display: flex;
   justify-content: center;
-  align-items: center;
-  color: #64748b;
 }
 
-.error-box {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #991b1b;
+.empty-frame {
+  text-align: center;
+  border: 1px dashed var(--border);
+  padding: 40px 60px;
+  border-radius: 4px;
 }
 
-.compact .diagram-image {
-  max-height: 240px;
+.empty-icon {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 2rem;
+  color: var(--primary);
+  opacity: 0.3;
+  margin-bottom: 12px;
+}
+
+.empty-frame p {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  color: #94A3B8;
+  letter-spacing: 1px;
+}
+
+.compact .diagram-image { max-height: 240px; }
+.compact .technical-frame {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.compact .frame-corners,
+.compact .frame-header,
+.compact .frame-footer {
+  display: none;
 }
 </style>

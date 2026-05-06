@@ -112,7 +112,8 @@ MERMAID_DIAGRAM_KEYWORDS = {
 class DiagramAgent:
     """知识图解 Agent。"""
 
-    STEPS = ["识别核心时序/流程", "设计 Mermaid 图表结构", "生成可视化渲染脚本", "校验图表语法及表现"]
+    STEPS = ["分析输入", "融合画像与依赖", "生成内容", "整理输出"]
+    ROLE_NAME = "原理可视化图解智能体"
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
@@ -124,43 +125,58 @@ class DiagramAgent:
 
     async def _emit_action(
         self,
+        state: WorkerState,
         action: str,
         detail: str = "",
         current_step: int = 0,
         total_steps: int = 0,
         step_label: str = "",
+        current_action: str = "",
+        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
             await self.emitter.emit_agent_action(
-                "diagram",
+                state.agent_name,
                 action,
                 detail,
                 current_step=current_step,
                 total_steps=total_steps,
                 step_label=step_label,
+                current_action=current_action,
+                output_preview=output_preview,
+                layer=state.layer_index,
+                layer_name="认知建构层",
+                agent_role=self.ROLE_NAME,
+                resource_type=state.agent_name,
             )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行知识图解生成。"""
         logger.info("[DiagramAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
-        total = len(self.STEPS)
+        total = 5
 
         await self._emit_action(
-            "loading_prompt",
-            "正在加载图解生成提示词...",
-            current_step=1,
+            state,
+            "analyze_input",
+            "原理可视化图解智能体正在分析学习需求",
+            current_step=2,
             total_steps=total,
             step_label=self.STEPS[0],
+            current_action="分析图解目标",
+            output_preview="正在识别适合图解表达的结构、流程、关系或状态变化",
         )
         prompt = self._load_prompt()
 
         await self._emit_action(
-            "building_input",
-            "正在识别核心逻辑并设计 Mermaid 图表结构...",
-            current_step=2,
+            state,
+            "merge_profile_dependencies",
+            "原理可视化图解智能体正在融合画像和依赖信息",
+            current_step=3,
             total_steps=total,
             step_label=self.STEPS[1],
+            current_action="融合画像与依赖",
+            output_preview="正在结合学习偏好、规划要求和上游重点选择图表表达方式",
         )
         input_text = await self._build_input(state)
 
@@ -173,11 +189,14 @@ class DiagramAgent:
             requested_type = diagram_type
             action_detail = f"正在为你生成 {requested_type} 类型图解..." if requested_type else "正在自动选择图解类型并生成 Mermaid..."
             await self._emit_action(
-                "calling_llm",
+                state,
+                "generate_content",
                 action_detail,
-                current_step=3,
+                current_step=4,
                 total_steps=total,
                 step_label=self.STEPS[2],
+                current_action="生成 Mermaid 图解",
+                output_preview="正在生成可渲染的 Mermaid 图表源码",
             )
             generation = await self._generate_mermaid_single_shot(requested_type, prompt, input_text)
             if generation is None:
@@ -190,11 +209,14 @@ class DiagramAgent:
                 return WorkerResult(success=False, error="图解生成失败")
 
             await self._emit_action(
-                "finalizing_result",
-                f"正在校验图表语法并完成生成 ({len(mermaid_source)} 字符)...",
-                current_step=4,
+                state,
+                "finalize_output",
+                f"原理可视化图解智能体正在整理输出 ({len(mermaid_source)} 字符)",
+                current_step=5,
                 total_steps=total,
                 step_label=self.STEPS[3],
+                current_action="整理图解资源",
+                output_preview=mermaid_source[:240],
             )
 
             content = {

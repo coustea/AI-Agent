@@ -1,13 +1,24 @@
 <template>
   <div class="quiz-resource" :class="{ compact }">
     <div v-if="questions.length" class="quiz-list">
-      <article v-for="(question, index) in visibleQuestions" :key="index" class="quiz-item">
+      <article v-for="(question, index) in visibleQuestions" :key="index" class="technical-frame quiz-item">
+        <div class="frame-corners top-left"></div>
+        <div class="frame-corners top-right"></div>
+        <div class="frame-corners bottom-left"></div>
+        <div class="frame-corners bottom-right"></div>
+
+        <div class="frame-header">
+          <div class="status-indicator"></div>
+          <span class="technical-label">TECHNICAL_QUIZ // MODULE_{{ (index + 1).toString().padStart(2, '0') }}</span>
+        </div>
+
         <div class="quiz-stem">
           <span class="quiz-index">Q{{ index + 1 }}</span>
           <div class="quiz-title">
-            <span class="quiz-meta">
-              {{ getDifficultyText(question.difficulty) }} · {{ getQuestionTypeText(question.type || question.question_type) }}
-            </span>
+            <div class="quiz-meta-row">
+              <span class="quiz-meta">{{ getQuestionTypeText(question.type || question.question_type) }}</span>
+              <span class="quiz-difficulty" :class="question.difficulty?.toLowerCase()">{{ getDifficultyText(question.difficulty) }}</span>
+            </div>
             <span class="quiz-text">{{ question.stem || question.question || '题目内容' }}</span>
           </div>
         </div>
@@ -25,26 +36,44 @@
             }"
             @click="!showAnswers[index] && !compact && toggleOption(index, option, question)"
           >
-            <span class="option-label" v-if="option.label">{{ option.label }}.</span>
+            <div class="option-check">
+              <div class="check-box"></div>
+              <span class="option-label" v-if="option.label">{{ option.label }}</span>
+            </div>
             <span class="option-content">{{ typeof option === 'string' ? option : option.content }}</span>
-            <el-icon v-if="showAnswers[index] && isCorrectOption(option, question)" class="status-icon correct-icon"><Select /></el-icon>
-            <el-icon v-if="showAnswers[index] && isSelected(index, option, question) && !isCorrectOption(option, question)" class="status-icon wrong-icon"><Close /></el-icon>
+            
+            <div class="option-status-wrap" v-if="showAnswers[index]">
+              <el-icon v-if="isCorrectOption(option, question)" class="status-icon correct"><Select /></el-icon>
+              <el-icon v-if="isSelected(index, option, question) && !isCorrectOption(option, question)" class="status-icon wrong"><Close /></el-icon>
+            </div>
           </div>
         </div>
 
         <!-- 作答区与查看答案按钮 -->
         <div v-if="!compact && !showAnswers[index]" class="quiz-actions">
-          <div class="hint-text" v-if="isChoiceType(question) && !hasSelected(index)">请选择您认为正确的选项</div>
-          <div class="hint-text" v-else-if="!isChoiceType(question)">请独立思考后再查看参考答案</div>
-          <el-button type="primary" round @click="showAnswers[index] = true" :disabled="isChoiceType(question) && !hasSelected(index)">
-            <el-icon><Check /></el-icon> {{ isChoiceType(question) ? '提交并查看答案' : '查看答案解析' }}
-          </el-button>
+          <div class="action-footer">
+            <div class="hint-text" v-if="isChoiceType(question) && !hasSelected(index)">
+              <span class="mono-blink">_</span> AWAITING_SELECTION...
+            </div>
+            <div class="hint-text active" v-else-if="isChoiceType(question) && hasSelected(index)">
+              SYSTEM_READY: SUBMIT_AUTHORIZED
+            </div>
+            
+            <button 
+              class="hud-btn-primary" 
+              @click="showAnswers[index] = true" 
+              :disabled="isChoiceType(question) && !hasSelected(index)"
+            >
+              {{ isChoiceType(question) ? 'EXECUTE: SUBMIT' : 'EXECUTE: REVEAL_ANALYSIS' }}
+            </button>
+          </div>
         </div>
 
         <template v-if="!compact && showAnswers[index]">
           <div v-if="question.answer" class="quiz-answer">
             <div class="answer-header">
-              <el-icon><Select /></el-icon> 正确答案
+              <span class="header-tag">TARGET_VALUE</span>
+              <span class="header-text">正确答案</span>
             </div>
             <div class="answer-content">
               {{ Array.isArray(question.answer) ? question.answer.join(', ') : question.answer }}
@@ -53,12 +82,13 @@
 
           <div v-if="question.explanation || question.analysis || question.reference_answer" class="quiz-explanation">
             <div class="explanation-header">
-              <el-icon><Reading /></el-icon> 答案解析
+              <span class="header-tag analysis">SYSTEM_LOG</span>
+              <span class="header-text">解析报告</span>
             </div>
             <div class="explanation-content">
               <div v-if="question.reference_answer" class="ref-answer">
-                <div class="ref-label">参考代码 / 要点</div>
-                <pre>{{ question.reference_answer }}</pre>
+                <div class="ref-label">REFERENCE_ARTIFACT:</div>
+                <pre><code>{{ question.reference_answer }}</code></pre>
               </div>
               <div class="analysis-text">{{ question.explanation || question.analysis }}</div>
             </div>
@@ -67,23 +97,24 @@
       </article>
       
       <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
-        <el-button type="primary" link size="small" class="more-btn">
-          查看全部 {{ questions.length }} 道专项练习题 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+        <el-button type="primary" link class="more-btn-hud">
+          ACCESS_ALL_MODULES ({{ questions.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
         </el-button>
       </div>
     </div>
-    <div v-else-if="!questions.length && fallbackJson !== '{}'" class="quiz-json">
-      <pre><code>{{ fallbackJson }}</code></pre>
-    </div>
-    <div v-else class="quiz-empty">
-      <el-empty description="暂未生成练习题数据" :image-size="60" />
+    
+    <div v-else class="quiz-empty-hud">
+      <div class="empty-frame">
+        <div class="empty-icon">NULL</div>
+        <p>NO_QUIZ_DATA_FOUND</p>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Select, Reading, ArrowRight, Check, Close } from '@element-plus/icons-vue'
+import { Select, ArrowRight, Close } from '@element-plus/icons-vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -120,7 +151,6 @@ const questions = computed<Record<string, any>[]>(() => {
 })
 
 const visibleQuestions = computed(() => props.compact ? questions.value.slice(0, 2) : questions.value)
-const fallbackJson = computed(() => JSON.stringify(props.resultData || {}, null, 2))
 
 // --- 交互与作答状态 ---
 const userAnswers = ref<Record<number, any>>({})
@@ -173,7 +203,6 @@ const isCorrectOption = (option: any, question: any) => {
   }
   return String(question.answer).toLowerCase() === String(val).toLowerCase()
 }
-// --- 状态结束 ---
 
 const getDifficultyText = (difficulty?: string) => {
   switch (difficulty?.toLowerCase()) {
@@ -191,226 +220,424 @@ const getDifficultyText = (difficulty?: string) => {
 const getQuestionTypeText = (questionType?: string) => {
   switch (questionType?.toLowerCase()) {
     case 'single_choice':
-    case 'choice': return '单选题'
-    case 'multiple_choice': return '多选题'
-    case 'true_false': return '判断题'
-    case 'blank': return '填空题'
-    case 'short_answer': return '简答题'
+    case 'choice': return '单选'
+    case 'multiple_choice': return '多选'
+    case 'true_false': return '判断'
+    case 'blank': return '填空'
+    case 'short_answer': return '简答'
     default: return '题目'
   }
 }
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 .quiz-resource {
   width: 100%;
+  --primary: #6366F1;
+  --bg: #F5F3FF;
+  --fg: #1E1B4B;
+  --border: #E0E7FF;
+  --accent: #059669;
 }
 
 .quiz-list {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
 }
 
-.quiz-item {
-  padding: 28px;
-  border: 1px solid #E2E8F0;
-  border-radius: 20px;
-  background: #FFFFFF;
-  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* 技术框架样式 */
+.technical-frame {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 40px 32px 32px;
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  transition: all 0.3s ease;
 }
 
-.quiz-item:hover {
-  border-color: #3B82F6;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-  transform: translateX(4px);
+.frame-corners {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
 }
 
+.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+.frame-header {
+  position: absolute;
+  top: 12px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.technical-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--primary);
+  letter-spacing: 1px;
+}
+
+/* 题目干样式 */
 .quiz-stem {
   display: flex;
-  gap: 20px;
-  color: #0F172A;
-  font-size: 1.15rem;
-  line-height: 1.6;
-  margin-bottom: 24px;
-}
-
-.quiz-title {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-}
-
-.quiz-meta {
-  align-self: flex-start;
-  padding: 4px 12px;
-  background: #F0F7FF;
-  border-radius: 8px;
-  color: #3B82F6;
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  border: 1px solid #DBEAFE;
-}
-
-.quiz-text {
-  font-weight: 700;
+  gap: 24px;
+  margin-bottom: 28px;
 }
 
 .quiz-index {
-  flex: 0 0 auto;
-  color: #3B82F6;
-  font-size: 1.5rem;
-  font-weight: 900;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 1.8rem;
+  font-weight: normal;
+  color: var(--primary);
+  line-height: 1;
+  opacity: 0.8;
 }
 
+.quiz-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quiz-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quiz-meta, .quiz-difficulty {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 2px;
+  letter-spacing: 1px;
+}
+
+.quiz-meta {
+  background: var(--primary);
+  color: white;
+}
+
+.quiz-difficulty {
+  border: 1px solid var(--primary);
+  color: var(--primary);
+}
+
+.quiz-difficulty.hard, .quiz-difficulty.challenge {
+  border-color: #DC2626;
+  color: #DC2626;
+}
+
+.quiz-text {
+  font-family: 'Fira Code', monospace;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--fg);
+  line-height: 1.6;
+}
+
+/* 选项样式 */
 .quiz-options {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-left: 52px;
+  margin-left: 56px;
 }
 
 .quiz-option-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 16px 24px;
-  border: 2px solid #F1F5F9;
-  border-radius: 14px;
-  background: #FAFAFA;
-  color: #475569;
-  font-size: 1.05rem;
-  line-height: 1.5;
-  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 14px 20px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .quiz-option-item:not(.is-readonly):hover {
-  background: #F0F7FF;
-  border-color: #3B82F6;
-  color: #0F172A;
+  background: rgba(99, 102, 241, 0.03);
+  border-color: var(--primary);
+  transform: translateX(4px);
 }
 
 .quiz-option-item.is-selected {
-  background: #EFF6FF;
-  border-color: #3B82F6;
-  color: #0F172A;
-  font-weight: 700;
+  background: rgba(99, 102, 241, 0.05);
+  border-color: var(--primary);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.1);
 }
 
-.quiz-option-item.is-correct {
-  background: #F0FDF4;
-  border-color: #10B981;
-  color: #065F46;
-  font-weight: 700;
-}
-
-.quiz-option-item.is-wrong {
-  background: #FEF2F2;
-  border-color: #EF4444;
-  color: #991B1B;
-  font-weight: 700;
-}
-
-.quiz-answer {
-  margin-top: 28px;
-  padding-top: 28px;
-  border-top: 2px dashed #F1F5F9;
-}
-
-.answer-header {
+.option-check {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #10B981;
-  font-size: 1rem;
-  font-weight: 900;
-  margin-bottom: 16px;
+}
+
+.check-box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+
+.is-selected .check-box {
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+}
+
+.option-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: var(--primary);
+}
+
+.option-content {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.95rem;
+  color: var(--fg);
+  flex: 1;
+}
+
+/* 状态样式 */
+.quiz-option-item.is-correct {
+  border-color: var(--accent);
+  background: rgba(5, 150, 105, 0.05);
+}
+.is-correct .check-box { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+.quiz-option-item.is-wrong {
+  border-color: #DC2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+.is-wrong .check-box { background: #DC2626; border-color: #DC2626; box-shadow: 0 0 8px #DC2626; }
+
+.option-status-wrap {
+  display: flex;
+  align-items: center;
+  font-size: 1.2rem;
+}
+.correct { color: var(--accent); }
+.wrong { color: #DC2626; }
+
+/* 动作区 */
+.quiz-actions {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px dashed var(--border);
+}
+
+.action-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hint-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  color: #64748B;
+  letter-spacing: 1px;
+}
+
+.hint-text.active {
+  color: var(--accent);
+}
+
+.mono-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.hud-btn-primary {
+  background: var(--primary);
+  color: white;
+  border: none;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  padding: 10px 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 1px;
+}
+
+.hud-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+}
+
+.hud-btn-primary:disabled {
+  background: #E2E8F0;
+  cursor: not-allowed;
+  color: #94A3B8;
+}
+
+/* 答案与解析 */
+.quiz-answer {
+  margin-top: 28px;
+  padding: 20px;
+  background: rgba(5, 150, 105, 0.03);
+  border: 1px solid rgba(5, 150, 105, 0.1);
+  border-radius: 4px;
+}
+
+.header-tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  background: var(--accent);
+  color: white;
+  padding: 2px 6px;
+  margin-right: 10px;
+}
+
+.header-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--fg);
+  font-weight: bold;
 }
 
 .answer-content {
-  color: #065F46;
+  margin-top: 12px;
+  margin-left: 20px;
+  font-family: 'Fira Code', monospace;
   font-size: 1.1rem;
-  font-weight: 800;
-  margin-left: 36px;
-  background: #DCFCE7;
-  display: inline-block;
-  padding: 8px 20px;
-  border-radius: 10px;
+  color: var(--accent);
+  font-weight: bold;
 }
 
 .quiz-explanation {
-  margin-top: 24px;
-  padding: 24px;
-  background: #F8FAFC;
-  border-radius: 16px;
-  border: 1px solid #E2E8F0;
+  margin-top: 16px;
+  padding: 20px;
+  background: rgba(99, 102, 241, 0.03);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  border-radius: 4px;
 }
 
-.explanation-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #3B82F6;
-  font-size: 1rem;
-  font-weight: 900;
-  margin-bottom: 16px;
+.header-tag.analysis {
+  background: var(--primary);
 }
 
 .explanation-content {
+  margin-top: 12px;
   color: #475569;
-  font-size: 1.05rem;
-  line-height: 1.7;
+}
+
+.ref-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--primary);
+  margin-bottom: 8px;
 }
 
 .ref-answer pre {
   margin: 0 0 16px 0;
-  padding: 20px;
-  background: #F1F5F9;
-  border: 1px solid #E2E8F0;
-  border-radius: 14px;
+  padding: 16px;
+  background: #0F172A;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  overflow: auto;
+}
+
+.ref-answer code {
+  font-family: 'Fira Code', monospace;
+  color: #E2E8F0;
+  font-size: 0.85rem;
+}
+
+.analysis-text {
+  font-family: 'Fira Code', monospace;
   font-size: 0.95rem;
-  color: #1E293B;
-  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.6;
 }
 
-.quiz-json {
-  margin: 0;
-  padding: 24px;
-  border-radius: 16px;
-  background: #F8FAFC;
-  color: #64748B;
-  border: 1px solid #E2E8F0;
+/* 更多按钮 */
+.more-btn-hud {
+  width: 100%;
+  margin-top: 16px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
 }
 
-.quiz-empty {
-  padding: 40px;
+/* 空状态 */
+.quiz-empty-hud {
+  padding: 60px;
+  display: flex;
+  justify-content: center;
 }
 
-.compact .quiz-item {
-  padding: 20px;
+.empty-frame {
+  text-align: center;
+  border: 1px dashed var(--border);
+  padding: 40px 60px;
+  border-radius: 4px;
 }
 
-.compact .quiz-stem {
-  margin-bottom: 16px;
-  font-size: 1rem;
+.empty-icon {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 2rem;
+  color: var(--primary);
+  opacity: 0.3;
+  margin-bottom: 12px;
 }
 
-.compact .quiz-index {
-  font-size: 1.2rem;
+.empty-frame p {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  color: #94A3B8;
+  letter-spacing: 1px;
 }
 
-.compact .quiz-options {
-  margin-left: 36px;
-  gap: 8px;
+/* 紧凑模式 */
+.compact .technical-frame {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
-
-.compact .quiz-option-item {
-  padding: 10px 16px;
-  font-size: 0.9rem;
+.compact .frame-corners,
+.compact .frame-header {
+  display: none;
 }
+.compact .quiz-stem { gap: 16px; margin-bottom: 16px; }
+.compact .quiz-index { font-size: 1.4rem; }
+.compact .quiz-options { margin-left: 36px; gap: 8px; }
+.compact .quiz-option-item { padding: 10px 16px; font-size: 0.85rem; }
 </style>
