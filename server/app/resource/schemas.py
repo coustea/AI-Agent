@@ -42,6 +42,14 @@ class AgentStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class LearningScenario(str, Enum):
+    """学习场景枚举。"""
+    EXAM_PREP = "exam_prep"
+    DAILY_REVIEW = "daily_review"
+    PROJECT_PRACTICE = "project_practice"
+    SELF_STUDY = "self_study"
+
+
 # =============================================================================
 # 请求结构
 # =============================================================================
@@ -63,6 +71,14 @@ class ContentAgentConfig(BaseModel):
     )
     include_common_mistakes: bool = Field(default=True, description="是否包含常见错误")
     include_examples: bool = Field(default=True, description="是否包含示例")
+    focus_mode: Literal["weak_points", "key_concepts", "full_coverage"] = Field(
+        default="full_coverage",
+        description="聚焦模式: weak_points/key_concepts/full_coverage",
+    )
+    depth_level: Literal["quick", "standard", "deep"] = Field(
+        default="standard",
+        description="深度级别: quick/standard/deep",
+    )
 
 
 class MindmapAgentConfig(BaseModel):
@@ -75,6 +91,8 @@ class MindmapAgentConfig(BaseModel):
     )
     max_depth: int = Field(default=4, ge=2, le=5, description="最大深度，范围 2-5")
     highlight_weak: bool = Field(default=True, description="是否高亮短板")
+    expand_weak_points: bool = Field(default=False, description="是否展开薄弱点分支")
+    include_prerequisites: bool = Field(default=False, description="是否包含前置知识")
 
 
 class DiagramAgentConfig(BaseModel):
@@ -99,6 +117,14 @@ class DiagramAgentConfig(BaseModel):
         description="图解类型: auto/hierarchy/flow/compare/relation/state/class/block/packet/sequence/activity/component",
     )
     visual_style: Literal["minimal", "exam"] = Field(default="minimal", description="视觉风格: minimal/exam")
+    highlight_mode: Literal["weak_points", "key_points", "all"] = Field(
+        default="key_points",
+        description="高亮模式",
+    )
+    detail_level: Literal["concise", "standard", "detailed"] = Field(
+        default="standard",
+        description="细节级别",
+    )
 
 
 class QuizAgentConfig(BaseModel):
@@ -107,6 +133,12 @@ class QuizAgentConfig(BaseModel):
 
     question_count: int = Field(default=10, ge=1, le=20, description="题目数量，范围 1-20")
     difficulty_mode: Literal["basic", "adaptive", "exam"] = Field(default="adaptive", description="难度模式: basic/adaptive/exam")
+    weak_point_weight: int = Field(default=50, ge=0, le=100, description="薄弱点出题权重 0-100")
+    exam_style: Literal["school", "考研", "考证", "interview"] = Field(
+        default="school",
+        description="考试风格",
+    )
+    include_analysis: bool = Field(default=True, description="是否包含详细解析")
 
 
 class ReadingAgentConfig(BaseModel):
@@ -118,6 +150,15 @@ class ReadingAgentConfig(BaseModel):
         description="阅读深度: course_extended/engineering/frontier"
     )
     max_items: int = Field(default=5, ge=1, le=10, description="最大条目数，范围 1-10")
+    resource_quality: Literal["classic", "latest", "balanced"] = Field(
+        default="balanced",
+        description="资源时效偏好",
+    )
+    include_practice: bool = Field(default=False, description="是否包含实践资源")
+    language_preference: Literal["chinese", "english", "both"] = Field(
+        default="chinese",
+        description="语言偏好",
+    )
 
 
 class CodeAgentConfig(BaseModel):
@@ -131,6 +172,15 @@ class CodeAgentConfig(BaseModel):
     case_type: Literal["basic_demo", "algorithm_template", "debug_demo"] = Field(
         default="basic_demo",
         description="案例类型: basic_demo/algorithm_template/debug_demo"
+    )
+    comment_level: Literal["minimal", "standard", "verbose"] = Field(
+        default="standard",
+        description="注释详细程度",
+    )
+    include_test: bool = Field(default=False, description="是否包含测试用例")
+    difficulty: Literal["beginner", "intermediate", "advanced"] = Field(
+        default="beginner",
+        description="代码难度",
     )
 
 
@@ -173,6 +223,10 @@ class ResourceGenerationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     learning_need: str = Field(min_length=1, description="用户自然语言输入的学习需求，包含课程、主题、薄弱点等所有信息")
+    learning_scenario: LearningScenario = Field(
+        default=LearningScenario.DAILY_REVIEW,
+        description="学习场景",
+    )
     selected_agents: list[AgentSelection] = Field(default_factory=list, description="选中的 Agent")
     agent_configs: AgentConfigs = Field(default_factory=AgentConfigs, description="Agent 配置")
     output_options: OutputOptions = Field(default_factory=OutputOptions, description="输出选项")
@@ -288,6 +342,13 @@ class WorkerState(BaseModel):
     layer_index: int = Field(default=0, description="当前层索引")
     upstream_results: dict[str, Any] = Field(default_factory=dict, description="后端生成的上游 Agent 原始结果")
     dependency_reports: dict[str, Any] = Field(default_factory=dict, description="依赖 Agent 交接报告")
+    learning_scenario: str = Field(default="daily_review", description="学习场景")
+    planner_input_params: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 规划的动态输入参数")
+    output_requirements: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 规划的输出要求")
+    personalized_constraints: list[str] = Field(default_factory=list, description="结合学习者画像生成的个性化约束")
+    degraded: bool = Field(default=False, description="是否因依赖缺失而降级执行")
+    missing_dependencies: list[str] = Field(default_factory=list, description="降级执行时缺失的依赖 Agent")
+    failed_dependencies: list[str] = Field(default_factory=list, description="降级执行时失败的依赖 Agent")
 
 
 class WorkerResult(BaseModel):
@@ -314,7 +375,8 @@ class LearnerProfileSnapshot(BaseModel):
     major: str | None = None
     grade: str | None = None
     school: str | None = None
-    profile_markdown: str | None = None
+    profile_json: dict[str, Any] | None = None
+    profile_score_json: dict[str, Any] | None = None
     version: int | None = None
     confidence: float | None = None
     updated_at: str | None = None
@@ -344,11 +406,23 @@ class LearnerProfileSnapshot(BaseModel):
 class AgentTask(BaseModel):
     """单个 Agent 的任务描述。"""
     agent_id: str = Field(description="Agent ID")
+    layer: int = Field(default=0, description="所属规划层索引")
+    layer_name: str | None = Field(default=None, description="所属规划层名称")
     task_description: str = Field(description="给该 Agent 的具体任务描述")
     depends_on: list[str] = Field(default_factory=list, description="依赖的上游 Agent")
     is_explicit: bool = Field(default=True, description="是否用户显式选择 (决定是否返回给前端)")
     priority: int = Field(default=0, description="执行优先级")
     config: dict[str, Any] = Field(default_factory=dict, description="Agent 专属配置")
+    enabled: bool = Field(default=True, description="是否启用")
+    resource_type: str | None = Field(default=None, description="资源类型")
+    input_params: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 为 WorkerAgent 规划的输入参数")
+    output_requirements: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 对输出格式和内容的要求")
+    personalized_constraints: list[str] = Field(default_factory=list, description="个性化生成约束")
+    planning_reason: str | None = Field(default=None, description="规划该 Agent 的理由")
+    failure_policy: Literal["skip_on_dependency_failed", "degraded_run", "ignore_dependency"] = Field(
+        default="skip_on_dependency_failed",
+        description="依赖失败时的执行策略",
+    )
 
 
 class LayerPlan(BaseModel):
@@ -356,6 +430,7 @@ class LayerPlan(BaseModel):
     layer: int = Field(description="层索引 (0, 1, 2)")
     agents: list[AgentTask] = Field(default_factory=list, description="本层要执行的 Agent 任务列表")
     reasoning: str = Field(default="", description="LLM 规划理由")
+    fallback_used: bool = Field(default=False, description="是否使用规则兜底规划")
 
 
 class PlanningContext(BaseModel):

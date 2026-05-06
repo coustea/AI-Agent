@@ -450,6 +450,66 @@ class ConversationStore:
         memory_layer = MemoryLayer(module_name=module_name)
         return await memory_layer.archive_session(user_id=user_id, session_id=session_id)
 
+    async def update_session_title(self, user_id: int, session_id: str, title: str, module_name: str = CHAT_MODULE_NAME) -> bool:
+        """更新会话标题。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 会话ID。
+            title: 新标题。
+            module_name: 模块名称。
+
+        Returns:
+            操作是否成功。
+        """
+        memory_layer = MemoryLayer(module_name=module_name)
+        return await memory_layer.update_session_title(user_id=user_id, session_id=session_id, title=title)
+
+    async def generate_session_title(self, user_id: int, session_id: str, first_message: str, module_name: str = CHAT_MODULE_NAME) -> str | None:
+        """使用 spark-x2-flash 生成会话标题。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 会话ID。
+            first_message: 用户的第一条消息。
+            module_name: 模块名称。
+
+        Returns:
+            生成的标题，失败返回 None。
+        """
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from app.infra.llm import get_llm_manager
+
+        try:
+            llm_manager = get_llm_manager()
+            prompt = f"""请根据用户的第一条消息生成一个简短的会话标题（10字以内）。
+
+用户消息：{first_message[:200]}
+
+要求：
+1. 标题要简洁，概括主题
+2. 不超过10个字
+3. 只输出标题，不要其他内容"""
+
+            response = await llm_manager.ainvoke(
+                "spark_x2_flash",
+                [
+                    SystemMessage(content="你是一个会话标题生成助手。"),
+                    HumanMessage(content=prompt),
+                ],
+                model_kwargs={"temperature": 0.3, "max_tokens": 20},
+            )
+            title = str(response.content).strip()
+            # 限制标题长度
+            if len(title) > 15:
+                title = title[:15]
+            # 更新数据库
+            await self.update_session_title(user_id, session_id, title, module_name)
+            return title
+        except Exception as e:
+            logger.warning(f"生成会话标题失败: {e}")
+            return None
+
     async def get_history(
         self,
         *,
@@ -645,6 +705,7 @@ class ChatUseCases:
         need_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
+        enable_long_term_memory: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
@@ -660,6 +721,7 @@ class ChatUseCases:
             need_diagram: 是否生成图解。
             generate_video: 是否生成视频。
             enable_search: 是否启用搜索。
+            enable_long_term_memory: 是否启用长期记忆读写。
             attachment_analysis: 可选的附件预分析结果。
             stream_runner: 可选的流式运行器。
             input_source: 输入来源标识。
@@ -693,6 +755,7 @@ class ChatUseCases:
             "file_urls": merged_file_urls,
             "need_diagram": bool(need_diagram),
             "generate_video": bool(generate_video),
+            "enable_long_term_memory": bool(enable_long_term_memory),
             "attachment_analysis": prepared_attachment_analysis,
         }
         if enable_search:
@@ -842,6 +905,7 @@ class ChatUseCases:
         need_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
+        enable_long_term_memory: bool = False,
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
@@ -857,6 +921,7 @@ class ChatUseCases:
             need_diagram: 是否生成图解。
             generate_video: 是否生成视频。
             enable_search: 是否启用搜索。
+            enable_long_term_memory: 是否启用长期记忆读写。
             attachment_analysis: 可选的附件预分析结果。
             stream_runner: 可选的流式运行器。
             input_source: 输入来源标识。
@@ -873,6 +938,7 @@ class ChatUseCases:
             need_diagram=need_diagram,
             generate_video=generate_video,
             enable_search=enable_search,
+            enable_long_term_memory=enable_long_term_memory,
             attachment_analysis=attachment_analysis,
             stream_runner=stream_runner,
             input_source=input_source,
@@ -1026,6 +1092,19 @@ class ChatUseCases:
             操作是否成功。
         """
         return await self.conversation_store.archive_session(user_id, session_id, module_name=self.module_name)
+
+    async def update_session_title(self, user_id: int, session_id: str, title: str) -> bool:
+        """更新会话标题。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 会话ID。
+            title: 新标题。
+
+        Returns:
+            操作是否成功。
+        """
+        return await self.conversation_store.update_session_title(user_id, session_id, title, module_name=self.module_name)
 
     async def get_history(
         self,

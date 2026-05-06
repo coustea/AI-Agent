@@ -4,6 +4,7 @@ Worker Agent 工具函数集合。
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -102,9 +103,9 @@ def format_learner_profile_for_prompt(learner_profile: dict[str, Any] | None) ->
     if not learner_profile:
         return ""
 
-    profile_markdown = str(learner_profile.get("profile_markdown") or "").strip()
-    if profile_markdown:
-        return profile_markdown
+    profile_json = learner_profile.get("profile_json")
+    if isinstance(profile_json, dict):
+        return json.dumps(profile_json, ensure_ascii=False, indent=2)
 
     lines: list[str] = []
     for key, label in (

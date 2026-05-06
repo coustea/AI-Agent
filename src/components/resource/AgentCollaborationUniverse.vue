@@ -1,5 +1,5 @@
 <template>
-  <div class="collaboration-universe light-theme">
+  <div class="collaboration-universe technical-theme">
     <!-- 背景装饰：网格 -->
     <div class="universe-background">
       <div class="blueprint-grid"></div>
@@ -10,8 +10,8 @@
       <defs>
         <!-- 连线渐变 -->
         <linearGradient id="beam-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stop-color="rgba(59, 130, 246, 0.4)" />
-          <stop offset="100%" stop-color="rgba(59, 130, 246, 0.05)" />
+          <stop offset="0%" stop-color="rgba(99, 102, 241, 0.4)" />
+          <stop offset="100%" stop-color="rgba(99, 102, 241, 0.05)" />
         </linearGradient>
         
         <!-- 活跃状态流光过滤器 -->
@@ -32,10 +32,10 @@
           :class="{ 'is-active': states[agentId] === 'running' || states[agentId] === 'success' }"
         />
         <!-- 流动的光束粒子 -->
-        <circle v-if="states[agentId] === 'running'" r="4" fill="#3B82F6" filter="url(#glow)">
+        <circle v-if="states[agentId] === 'running'" r="3" fill="#6366F1" filter="url(#glow)">
           <animateMotion 
             :path="getLinkPath(agentId)" 
-            dur="1.2s" 
+            dur="1.5s" 
             repeatCount="indefinite" 
             rotate="auto"
           />
@@ -50,6 +50,11 @@
       <div class="orchestrator-section">
         <div class="master-node-wrapper" ref="masterRef">
           <div class="master-core pulse-glow">
+            <div class="frame-corners-small top-left"></div>
+            <div class="frame-corners-small top-right"></div>
+            <div class="frame-corners-small bottom-left"></div>
+            <div class="frame-corners-small bottom-right"></div>
+            
             <div class="core-inner">
               <el-icon class="core-icon"><Operation /></el-icon>
             </div>
@@ -58,7 +63,7 @@
             </div>
           </div>
           <div class="master-info">
-            <h3 class="master-title">SYSTEM ORCHESTRATOR</h3>
+            <h3 class="master-title">CORE_ORCHESTRATOR // ALPHA</h3>
             <p class="master-status">{{ orchestratorMessage }}</p>
           </div>
         </div>
@@ -73,6 +78,11 @@
           :class="[states[agentId] || 'pending', { 'has-artifact': results[agentId] }]"
         >
           <div class="worker-node-box">
+            <div class="frame-corners-tiny top-left"></div>
+            <div class="frame-corners-tiny top-right"></div>
+            <div class="frame-corners-tiny bottom-left"></div>
+            <div class="frame-corners-tiny bottom-right"></div>
+
             <!-- 状态指示灯 -->
             <div class="status-indicator"></div>
             
@@ -85,22 +95,22 @@
               </div>
               <div class="worker-info">
                 <div class="wi-top">
-                  <span class="wi-name">{{ getAgentMeta(agentId).name }}</span>
+                  <span class="wi-name">{{ getAgentMeta(agentId).name.toUpperCase() }}</span>
                   <span class="wi-step" v-if="getProgress(agentId).total > 0">
-                    {{ getProgress(agentId).current }}/{{ getProgress(agentId).total }}
+                    [{{ getProgress(agentId).current }}/{{ getProgress(agentId).total }}]
                   </span>
                 </div>
-                <div class="wi-label">{{ getProgress(agentId).label || '等待指令…' }}</div>
+                <div class="wi-label">{{ getProgress(agentId).label || 'WAITING_CMD...' }}</div>
               </div>
             </div>
 
-            <!-- 实时思考流 (仅在运行时显示) -->
+            <!-- 实时思考流 -->
             <div class="thinking-stream" v-if="states[agentId] === 'running'">
               <div class="stream-line"></div>
-              <div class="stream-text">{{ getProgress(agentId).detail || '正在处理上下文数据…' }}</div>
+              <div class="stream-text">LOG_STREAM: {{ getProgress(agentId).detail || 'PROCESSING_CONTEXT_DATA...' }}</div>
             </div>
 
-            <!-- 进度条 (底部) -->
+            <!-- 进度条 -->
             <div class="worker-progress-bar">
               <div class="bar-fill" :style="getBarWidth(agentId)"></div>
             </div>
@@ -136,16 +146,14 @@ const props = defineProps<{
 const svgRef = ref<SVGSVGElement | null>(null)
 const containerSize = reactive({ width: 0, height: 0 })
 
-// 获取连线路径 (垂直布局：从顶部中心到各节点)
+// 获取连线路径
 const getLinkPath = (agentId: string) => {
   const idx = props.workerAgents.indexOf(agentId)
   if (idx === -1 || !containerSize.width) return ''
   
-  // 假设 Orchestrator 在 (width/2, 120)
   const startX = containerSize.width / 2
   const startY = 120
   
-  // 获取 Worker 节点位置
   const total = props.workerAgents.length
   const cols = total > 3 ? 3 : total
   const col = idx % cols
@@ -154,8 +162,7 @@ const getLinkPath = (agentId: string) => {
   const endX = (containerSize.width / (cols + 1)) * (col + 1)
   const endY = 320 + row * 180
   
-  // 贝塞尔曲线，增加科技感
-  const cp1y = startY + (endY - startY) * 0.5
+  const cp1y = startY + (endY - startY) * 0.4
   return `M ${startX} ${startY} C ${startX} ${cp1y}, ${endX} ${cp1y}, ${endX} ${endY}`
 }
 
@@ -194,14 +201,18 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 .collaboration-universe {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 700px;
-  background: #FFFFFF;
+  background: #F5F3FF;
   overflow-y: auto;
   overflow-x: hidden;
+  --primary: #6366F1;
+  --accent: #059669;
 }
 
 /* 蓝图网格背景 */
@@ -215,11 +226,10 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   background-image: 
-    radial-gradient(#E2E8F0 1.5px, transparent 1.5px),
-    linear-gradient(rgba(226, 232, 240, 0.4) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 232, 240, 0.4) 1px, transparent 1px);
-  background-size: 40px 40px, 40px 40px, 40px 40px;
-  opacity: 0.6;
+    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 1;
 }
 
 /* 连线层 */
@@ -227,38 +237,55 @@ onUnmounted(() => {
   position: absolute;
   top: 0; left: 0;
   width: 100%;
-  height: 1000px;
+  height: 1200px;
   z-index: 2;
   pointer-events: none;
 }
 
 .connection-path {
   fill: none;
-  stroke: #E2E8F0;
-  stroke-width: 2;
-  stroke-dasharray: 6, 6;
-  transition: stroke 1s ease, stroke-width 1s ease, stroke-dasharray 1s ease, opacity 1s ease;
+  stroke: rgba(99, 102, 241, 0.15);
+  stroke-width: 1.5;
+  stroke-dasharray: 4, 4;
+  transition: all 1s ease;
 }
 
 .connection-path.is-active {
-  stroke: #3B82F6;
+  stroke: var(--primary);
   stroke-dasharray: none;
-  stroke-width: 2.5;
-  opacity: 0.4;
+  stroke-width: 2;
+  opacity: 0.3;
 }
 
 /* 布局结构 */
 .blueprint-layout {
   position: relative;
   z-index: 10;
-  max-width: 1200px;
+  width: 100%;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 60px 20px;
+  padding: 80px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 80px;
+  gap: 100px;
 }
+
+/* 拐角装饰 */
+.frame-corners-small, .frame-corners-tiny {
+  position: absolute;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.frame-corners-small { width: 12px; height: 12px; }
+.frame-corners-tiny { width: 8px; height: 8px; border-width: 1.5px; }
+
+.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 
 /* Orchestrator */
 .orchestrator-section {
@@ -271,107 +298,105 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
   text-align: center;
 }
 
 .master-core {
   position: relative;
-  width: 100px;
-  height: 100px;
-  background: #0F172A;
-  border-radius: 28px;
+  width: 90px;
+  height: 90px;
+  background: #1E1B4B;
+  border-radius: 4px;
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
 }
 
 .core-inner {
-  width: 60px;
-  height: 60px;
+  width: 54px;
+  height: 54px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 18px;
+  border-radius: 2px;
   display: flex;
   justify-content: center;
   align-items: center;
   color: #FFFFFF;
-  font-size: 2.2rem;
+  font-size: 2rem;
 }
 
 .core-waves span {
   position: absolute;
-  inset: -10px;
-  border: 2px solid rgba(59, 130, 246, 0.4);
-  border-radius: 36px;
-  animation: waveRipple 3s infinite cubic-bezier(0, 0.2, 0.8, 1);
+  inset: -15px;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 4px;
+  animation: waveRipple 4s infinite cubic-bezier(0, 0.2, 0.8, 1);
 }
-.core-waves span:nth-child(2) { animation-delay: -1s; }
-.core-waves span:nth-child(3) { animation-delay: -2s; }
+.core-waves span:nth-child(2) { animation-delay: -1.3s; }
+.core-waves span:nth-child(3) { animation-delay: -2.6s; }
 
 @keyframes waveRipple {
-  0% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(1.6); opacity: 0; }
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
 }
 
 .master-title {
-  font-size: 1.1rem;
-  font-weight: 900;
-  color: #0F172A;
-  letter-spacing: 0.15em;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 1.2rem;
+  font-weight: normal;
+  color: #1E1B4B;
+  letter-spacing: 2px;
   margin: 0;
 }
 
 .master-status {
-  font-size: 0.95rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
   color: #64748B;
-  margin: 8px 0 0;
-  max-width: 400px;
-  font-weight: 500;
+  margin: 10px 0 0;
+  max-width: 450px;
+  line-height: 1.5;
 }
 
 /* Workers Grid */
 .workers-grid-layout {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 40px 30px;
+  gap: 40px 32px;
   width: 100%;
-}
-
-.worker-node-container {
-  perspective: 1000px;
 }
 
 .worker-node-box {
   position: relative;
   background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 24px;
+  border: 1px solid #E0E7FF;
+  border-radius: 4px;
   padding: 24px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s, background-color 0.4s, box-shadow 0.4s, opacity 0.4s;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.05);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
 
-.pending .worker-node-box { opacity: 0.6; transform: scale(0.95); background: #F8FAFC; }
+.pending .worker-node-box { opacity: 0.5; transform: scale(0.98); }
 .running .worker-node-box { 
-  border-color: #3B82F6; 
-  box-shadow: 0 20px 25px -5px rgba(59, 130, 246, 0.1); 
-  transform: translateY(-5px);
+  border-color: var(--primary); 
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.15); 
+  transform: translateY(-8px);
 }
-.success .worker-node-box { border-color: #10B981; background: #F0FDF4; }
+.success .worker-node-box { border-color: var(--accent); background: rgba(5, 150, 105, 0.02); }
 
 /* 状态灯 */
 .status-indicator {
   position: absolute;
-  top: 24px; right: 24px;
-  width: 8px; height: 8px;
+  top: 16px; right: 16px;
+  width: 6px; height: 6px;
   border-radius: 50%;
   background: #CBD5E1;
 }
-.running .status-indicator { background: #3B82F6; box-shadow: 0 0 10px #3B82F6; animation: blink 1s infinite; }
-.success .status-indicator { background: #10B981; }
+.running .status-indicator { background: var(--primary); box-shadow: 0 0 8px var(--primary); animation: blink 1s infinite; }
+.success .status-indicator { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
@@ -383,39 +408,40 @@ onUnmounted(() => {
 }
 
 .worker-icon-box {
-  width: 52px; height: 52px;
+  width: 48px; height: 48px;
   background: #F1F5F9;
-  border-radius: 16px;
+  border-radius: 4px;
   display: flex;
   justify-content: center;
   align-items: center;
   color: #64748B;
-  font-size: 1.5rem;
-  transition: background-color 0.3s, color 0.3s;
+  font-size: 1.4rem;
+  transition: all 0.3s;
 }
-.running .worker-icon-box { background: #3B82F6; color: #FFFFFF; }
-.success .worker-icon-box { background: #10B981; color: #FFFFFF; }
+.running .worker-icon-box { background: var(--primary); color: #FFFFFF; box-shadow: 0 0 15px rgba(99, 102, 241, 0.3); }
+.success .worker-icon-box { background: var(--accent); color: #FFFFFF; }
 
 .worker-info { flex: 1; min-width: 0; }
-.wi-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
-.wi-name { font-weight: 800; font-size: 1.05rem; color: #0F172A; }
-.wi-step { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #3B82F6; font-weight: 700; }
-.wi-label { font-size: 0.9rem; color: #64748B; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.running .wi-label { color: #3B82F6; }
+.wi-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.wi-name { font-family: 'Share Tech Mono', monospace; font-weight: normal; font-size: 1rem; color: #1E1B4B; letter-spacing: 1px; }
+.wi-step { font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; color: var(--primary); }
+.wi-label { font-family: 'Fira Code', monospace; font-size: 0.8rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.running .wi-label { color: var(--primary); }
 
 /* 思考流动效 */
 .thinking-stream {
   margin-top: 16px;
-  padding: 12px;
+  padding: 10px 12px;
   background: #F8FAFC;
-  border-radius: 12px;
+  border-radius: 2px;
   position: relative;
+  border-left: 2px solid var(--primary);
 }
 
 .stream-line {
   position: absolute;
-  top: 0; left: 12px; right: 12px; height: 2px;
-  background: linear-gradient(90deg, transparent, #3B82F6, transparent);
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
   animation: streamMove 2s infinite linear;
 }
 
@@ -425,35 +451,34 @@ onUnmounted(() => {
 }
 
 .stream-text {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #475569;
   line-height: 1.4;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Fira Code', monospace;
+  text-transform: uppercase;
 }
 
 /* 进度条 */
 .worker-progress-bar {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 4px;
+  height: 2px;
   background: #F1F5F9;
 }
 .bar-fill {
   height: 100%;
-  background: #3B82F6;
-  transition: width 0.5s ease;
+  background: var(--primary);
+  transition: width 0.6s ease;
+  box-shadow: 0 0 10px var(--primary);
 }
-.success .bar-fill { background: #10B981; }
-
-.icon-fade-enter-active, .icon-fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
-.icon-fade-enter-from, .icon-fade-leave-to { opacity: 0; transform: scale(0.5) rotate(-45deg); }
+.success .bar-fill { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 
 .pulse-glow {
-  animation: masterPulse 4s infinite ease-in-out;
+  animation: masterPulse 5s infinite ease-in-out;
 }
 @keyframes masterPulse {
-  0%, 100% { box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1); }
-  50% { box-shadow: 0 10px 50px rgba(59, 130, 246, 0.2); }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
 }
 
 @media (max-width: 900px) {

@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
@@ -26,9 +27,18 @@ from app.config import PROFILE_GATE_EVERY_N_ASSISTANT_TURNS
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, ChatSessionSummary, UserLongTermMemory, UserProfile, UserProfileHistory
 from app.memory._fact import LongTermMemoryUpdateService
+from app.memory._policy import (
+    RECENT_CHAT_MESSAGE_LIMIT,
+    SUMMARY_CHAR_BUDGET,
+    render_priority_long_term_memory,
+    render_recent_chat_context,
+    select_recent_chat_messages,
+    should_include_session_summary,
+    truncate_text,
+)
 from app.memory._profile import ProfileBuildingService
 from app.memory._store import MemoryStore, SESSION_SUMMARY_TOKEN_THRESHOLD
-from app.memory.memory_types import render_profile_markdown, render_long_term_memory_markdown, render_session_summary_markdown
+from app.memory.memory_types import render_session_summary_markdown
 
 logger = get_logger(__name__)
 
@@ -57,6 +67,19 @@ class MemoryLayer:
 
     async def archive_session(self, *, user_id: int, session_id: str) -> bool:
         return await self.store.archive_chat_session(session_id=session_id, user_id=user_id)
+
+    async def update_session_title(self, *, user_id: int, session_id: str, title: str) -> bool:
+        """更新会话标题。
+
+        Args:
+            user_id: 用户ID。
+            session_id: 会话ID。
+            title: 新标题。
+
+        Returns:
+            操作是否成功。
+        """
+        return await self.store.update_chat_session_title(session_id=session_id, user_id=user_id, title=title)
 
     # ------------------------------------------------------------------
     # 短期记忆（消息）
@@ -161,10 +184,9 @@ class MemoryLayer:
         profile = await self.get_profile(user_id=user_id)
         if not profile:
             return "暂无画像信息（新用户），请直接开始对话。"
-        if profile.profile_markdown:
-            return profile.profile_markdown
         if profile.profile_json and profile.profile_json.get("dimensions"):
-            return render_profile_markdown(profile.profile_json)
+            context_json = dict(profile.profile_json)
+            return json.dumps(context_json, ensure_ascii=False, indent=2)
         return "暂无画像信息（新用户），请直接开始对话。"
 
     async def build_long_term_memory_context(self, user_id: int) -> str:
@@ -172,8 +194,10 @@ class MemoryLayer:
         if not memory:
             return "暂无长期记忆。"
         if memory.memory_json:
-            return render_long_term_memory_markdown(memory.memory_json)
-        return memory.memory_markdown or "暂无长期记忆。"
+            return render_priority_long_term_memory(memory.memory_json)
+        if memory.memory_markdown:
+            return truncate_text(memory.memory_markdown, 1600)
+        return "暂无长期记忆。"
 
     def build_file_context(self, image_urls: list[str], file_urls: list[str]) -> str:
         """构建文件/图片附件上下文。
@@ -224,7 +248,6 @@ class MemoryLayer:
     ) -> str:
         profile_context = await self.build_profile_context(user_id)
         memory_context = await self.build_long_term_memory_context(user_id)
-        summary_context = await self.build_session_summary_context(user_id, session_id)
         recent_msgs = await self.list_short_term_messages(user_id=user_id, session_id=session_id, limit=recent_limit)
         recent_lines = [
             f"- {msg.role}: {msg.content[:200]}..."
@@ -236,7 +259,6 @@ class MemoryLayer:
         return "\n\n".join([
             f"# 用户画像\n{profile_context}",
             f"# 用户长期记忆\n{memory_context}",
-            f"# 当前会话概要\n{summary_context}",
             f"# 最近对话\n{recent_context}",
         ])
 
@@ -250,22 +272,31 @@ class MemoryLayer:
         file_urls: list[str] | None = None,
     ) -> tuple[list[AnyMessage], str]:
         initial_messages: list[AnyMessage] = []
-        recent_lines: list[str] = []
-        recent_msgs = await self.list_short_term_messages(user_id=user_id, session_id=session_id, limit=10)
-        for msg in recent_msgs[:-1]:
+        recent_msgs = await self.list_short_term_messages(
+            user_id=user_id,
+            session_id=session_id,
+            limit=RECENT_CHAT_MESSAGE_LIMIT,
+        )
+        selected_recent_msgs = select_recent_chat_messages(recent_msgs, user_message=user_message)
+        for msg in selected_recent_msgs:
             if msg.role == "user":
                 initial_messages.append(HumanMessage(content=msg.content))
-                recent_lines.append(f"- 用户: {msg.content}")
             elif msg.role == "assistant":
                 initial_messages.append(AIMessage(content=msg.content))
-                recent_lines.append(f"- 助手: {msg.content}")
         content = user_message
         if image_urls:
             content += f"\n[Attached Images: {', '.join(image_urls)}]"
         if file_urls:
             content += f"\n[Attached Files: {', '.join(file_urls)}]"
         initial_messages.append(HumanMessage(content=content))
-        recent_context = "\n".join(recent_lines) if recent_lines else "最近 7 天暂无历史对话。"
+        recent_context = render_recent_chat_context(selected_recent_msgs)
+        if should_include_session_summary(user_message):
+            summary_context = await self.build_session_summary_context(user_id, session_id)
+            if summary_context != "暂无会话概要。":
+                recent_context = "\n\n".join([
+                    f"# 会话概要\n{truncate_text(summary_context, SUMMARY_CHAR_BUDGET)}",
+                    f"# 最近对话\n{recent_context}",
+                ])
         return initial_messages, recent_context
 
     async def build_context_preview(self, *, user_id: int, session_id: str, recent_limit: int = 10) -> str:
@@ -282,6 +313,7 @@ class MemoryLayer:
         session_id: str,
         user_message: str,
         assistant_reply: str,
+        enable_long_term_memory: bool = True,
     ) -> None:
         await self.store.accumulate_session_tokens(
             user_id=user_id,
@@ -300,12 +332,13 @@ class MemoryLayer:
             await self._create_session_summary(user_id, session_id)
             await self.store.reset_session_token_count(user_id, session_id, self.module_name)
 
-        memory_updated = await self.memory_update_service.update_long_term_memory(
-            user_id=user_id,
-            session_id=session_id,
-            user_message=user_message,
-            assistant_reply=assistant_reply,
-        )
+        if enable_long_term_memory:
+            await self.memory_update_service.update_long_term_memory(
+                user_id=user_id,
+                session_id=session_id,
+                user_message=user_message,
+                assistant_reply=assistant_reply,
+            )
 
         recent_msgs = await self.list_short_term_messages(user_id=user_id, session_id=session_id, limit=80)
         assistant_turns = sum(1 for msg in recent_msgs if msg.role == "assistant")
@@ -342,10 +375,19 @@ class PostChatMemoryOrchestrator:
     def __init__(self, *, module_name: str = "mentor") -> None:
         self.layer = MemoryLayer(module_name=module_name)
 
-    async def run(self, *, user_id: int, session_id: str, user_message: str, assistant_reply: str) -> None:
+    async def run(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        assistant_reply: str,
+        enable_long_term_memory: bool = True,
+    ) -> None:
         await self.layer.post_turn_pipeline(
             user_id=user_id,
             session_id=session_id,
             user_message=user_message,
             assistant_reply=assistant_reply,
+            enable_long_term_memory=enable_long_term_memory,
         )

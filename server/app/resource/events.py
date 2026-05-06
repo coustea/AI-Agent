@@ -43,6 +43,7 @@ class AgentEventEmitter:
     def __init__(self, task_id: str | None = None):
         self._queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue(maxsize=DEFAULT_QUEUE_SIZE)
         self._task_id = task_id or ""
+        self._agent_stages: dict[str, str] = {}
 
     def bind_task(self, task_id: str) -> None:
         """绑定任务 ID，后续便捷方法可省略 task_id。"""
@@ -50,6 +51,10 @@ class AgentEventEmitter:
 
     def _resolve_task_id(self, task_id: str | None = None) -> str:
         return task_id or self._task_id or "unknown"
+
+    def bind_agent_stage(self, agent: str, stage: str) -> None:
+        """记录 Agent 当前所属 workflow stage，供 Worker 内部事件复用。"""
+        self._agent_stages[agent] = stage
 
     async def emit_event(
         self,
@@ -125,12 +130,13 @@ class AgentEventEmitter:
         payload: dict[str, Any] | None = None,
         progress: int | None = None,
         task_id: str | None = None,
+        stage: str | None = None,
     ) -> None:
         """发送 agent 事件。"""
         await self.emit_event(
             task_id=task_id,
             event_type="agent",
-            stage="generating",
+            stage=stage or self._agent_stages.get(agent, "planning"),
             status=status,
             message=message,
             agent=agent,
@@ -146,6 +152,7 @@ class AgentEventEmitter:
         progress: int | None = None,
         payload: dict[str, Any] | None = None,
         task_id: str | None = None,
+        stage: str | None = None,
     ) -> None:
         """发送 resource 事件。"""
         resource_payload = resource.model_dump() if hasattr(resource, "model_dump") else resource
@@ -155,7 +162,7 @@ class AgentEventEmitter:
         await self.emit_event(
             task_id=task_id,
             event_type="resource",
-            stage="generating",
+            stage=stage or self._agent_stages.get(agent, "planning"),
             status="success",
             message=message or f"{agent} 资源生成完成",
             agent=agent,
@@ -240,6 +247,7 @@ class AgentEventEmitter:
             payload=payload,
             progress=100,
         )
+        await self.close()
 
     # =========================================================================
     # 兼容旧接口
@@ -262,11 +270,16 @@ class AgentEventEmitter:
     ) -> None:
         """兼容旧接口：发送 Agent 动作事件。"""
         task_id = str(meta.pop("task_id", self._resolve_task_id()))
+        stage = str(meta.pop("stage", self._agent_stages.get(agent, "planning")))
+        current_action = str(meta.pop("current_action", None) or detail or action)
+        output_preview = str(meta.pop("output_preview", "") or "")
         payload = {
             "action": action,
+            "current_action": current_action,
             "current_step": current_step,
             "total_steps": total_steps,
             "step_label": step_label,
+            "output_preview": output_preview,
             **meta,
         }
         await self.emit_agent(
@@ -275,6 +288,7 @@ class AgentEventEmitter:
             status="running",
             message=detail or action,
             payload=payload,
+            stage=stage,
         )
 
     async def emit_artifact_ready(self, agent: str, artifact: dict[str, Any]) -> None:
@@ -282,7 +296,7 @@ class AgentEventEmitter:
         await self.emit_event(
             task_id=self._resolve_task_id(),
             event_type="resource",
-            stage="generating",
+            stage=self._agent_stages.get(agent, "planning"),
             status="success",
             message=f"{agent} 产物就绪",
             agent=agent,
@@ -295,6 +309,11 @@ class AgentEventEmitter:
 
     async def close(self) -> None:
         """关闭事件流。"""
+        if self._queue.full():
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
         await self._queue.put(None)
 
     async def stream(self) -> AsyncGenerator[str, None]:
@@ -302,7 +321,7 @@ class AgentEventEmitter:
         while True:
             event = await self._queue.get()
             if event is None:
+                yield "event: close\ndata: {}\n\n"
                 break
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-            if event.get("event_type") == "done":
-                break
+            event_type = str(event.get("event_type") or "message")
+            yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"

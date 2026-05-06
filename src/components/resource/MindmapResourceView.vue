@@ -1,9 +1,29 @@
 <template>
   <div class="mindmap-resource" :class="{ compact }">
-    <div v-if="markdownContent" class="mindmap-container">
+    <div v-if="markdownContent" class="technical-frame mindmap-container">
+      <div class="frame-corners top-left"></div>
+      <div class="frame-corners top-right"></div>
+      <div class="frame-corners bottom-left"></div>
+      <div class="frame-corners bottom-right"></div>
+
+      <div class="frame-header">
+        <div class="status-indicator"></div>
+        <span class="technical-label">LOGIC_TOPOLOGY // KNOWLEDGE_MAPPING // SEQ_{{ Math.floor(Math.random() * 9999) }}</span>
+      </div>
+
       <div ref="markmapRef" class="markmap-shell"></div>
+
+      <div class="frame-footer">
+        <span class="mono-tag">MAP_SYNC_LIVE</span>
+        <div class="footer-line"></div>
+      </div>
     </div>
-    <div v-else class="mindmap-empty">暂未收到可展示的思维导图内容</div>
+    <div v-else class="mindmap-empty-hud">
+      <div class="empty-frame">
+        <div class="empty-icon">NULL</div>
+        <p>NO_TOPOLOGY_DATA_FOUND</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -37,27 +57,32 @@ const markdownContent = computed<string>(() => {
   // 2. 从 data 或 data.content 中提取 markdown 字符串
   const content = data.content
   
+  // 2.1 content 是字符串（可能是 JSON 字符串或直接的 Markdown）
   if (typeof content === 'string' && content.trim()) {
-    // 可能是 JSON 字符串，尝试解析一下看看内部是否有 markdown_content
+    // 尝试解析 JSON 字符串
     const parsed = parseJsonObject(content)
     if (parsed) {
       if (parsed.markdown_content) return parsed.markdown_content
       if (parsed.outline) return parsed.outline
       if (parsed.source) return parsed.source
     }
+    // 如果不是 JSON，直接返回（可能是直接的 Markdown）
     return content
   }
 
+  // 2.2 content 是对象（后端返回的嵌套结构）
   if (typeof content === 'object' && content !== null) {
     if (content.markdown_content) return content.markdown_content
     if (content.outline) return content.outline
     if (content.source) return content.source
+    if (content.markdown) return content.markdown
   }
 
   // 3. 回退策略：直接在 data 第一层找
   if (data.markdown_content) return data.markdown_content
   if (data.outline) return data.outline
   if (data.source) return data.source
+  if (data.markdown) return data.markdown
 
   return ''
 })
@@ -86,14 +111,24 @@ const renderMarkmap = async (content: string) => {
         paddingX: 30, // 增加水平间距
         style: (id) => `
           .${id}-g {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: 'Fira Code', monospace;
             font-size: 15px;
           }
           .${id}-g foreignObject {
             overflow: visible;
           }
           .${id}-g .markmap-node text {
-            color: #334155;
+            fill: #1E1B4B;
+          }
+          .${id}-g .markmap-link {
+            stroke: #6366F1;
+            stroke-width: 1.5px;
+            opacity: 0.6;
+          }
+          .${id}-g .markmap-node circle {
+            fill: #FFFFFF;
+            stroke: #6366F1;
+            stroke-width: 2px;
           }
         `
       })
@@ -102,8 +137,10 @@ const renderMarkmap = async (content: string) => {
     markmapInstance.setData(root)
   } catch (err) {
     console.error('[MindmapResourceView] Markmap render error:', err)
+    
+    const errorMsg = err instanceof Error ? err.message : String(err)
     if (markmapRef.value) {
-      markmapRef.value.innerHTML = `<pre class="markmap-error">思维导图渲染失败: ${err}</pre>`
+      markmapRef.value.innerHTML = `<pre class="markmap-error">SYSTEM_RENDER_FAIL: ${errorMsg}</pre>`
     }
   }
 }
@@ -120,35 +157,115 @@ onMounted(() => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 .mindmap-resource {
   width: 100%;
+  --primary: #6366F1;
+  --bg: #F5F3FF;
+  --fg: #1E1B4B;
+  --border: #E0E7FF;
+  --accent: #059669;
 }
 
-.mindmap-container {
-  width: 100%;
+/* 技术框架样式 */
+.technical-frame {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 44px 32px 32px;
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.frame-corners {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+}
+
+.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+/* 头部 HUD */
+.frame-header {
+  position: absolute;
+  top: 12px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.technical-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--primary);
+  letter-spacing: 1px;
+}
+
+/* 底部 HUD */
+.frame-footer {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mono-tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.footer-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--border), transparent);
 }
 
 .markmap-shell {
   width: 100%;
   min-height: 420px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   overflow: hidden;
-  /* 添加细腻的点状网格背景以增加高级感 */
-  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 .markmap-shell :deep(svg) {
   width: 100%;
   height: 500px;
-}
-
-/* 优化 SVG 内部节点及连接线样式 */
-.markmap-shell :deep(.markmap-link) {
-  stroke: #94a3b8; /* 更柔和的连线颜色 */
-  stroke-width: 2px;
 }
 
 .markmap-shell :deep(.markmap-node) {
@@ -157,69 +274,77 @@ onMounted(() => {
 }
 
 .markmap-shell :deep(.markmap-node:hover) {
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
-.markmap-shell :deep(.markmap-node circle) {
-  fill: #ffffff;
-  stroke-width: 2.5px;
-}
-
-.markmap-shell :deep(.markmap-node text) {
-  font-weight: 500;
-  fill: #1e293b;
-}
-
-/* 一级节点的字体加大 */
 .markmap-shell :deep(.markmap-node[data-depth="0"] text) {
-  font-size: 1.25rem;
+  font-size: 1.3rem;
   font-weight: 700;
-  fill: #0f172a;
+  fill: var(--primary) !important;
 }
 
 .markmap-error {
-  padding: 12px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  color: #991b1b;
+  padding: 20px;
+  background: rgba(220, 38, 38, 0.05);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 4px;
+  color: #DC2626;
+  font-family: 'Share Tech Mono', monospace;
   font-size: 0.85rem;
-  overflow: auto;
 }
 
+.compact .technical-frame {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.compact .frame-corners,
+.compact .frame-header,
+.compact .frame-footer {
+  display: none;
+}
 .compact .markmap-shell {
   min-height: 240px;
-  background-size: 16px 16px;
+  background-size: 20px 20px;
 }
 
 .compact .markmap-shell :deep(svg) {
   height: 240px;
 }
 
-.mindmap-empty {
-  padding: 16px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #64748b;
-  font-size: 0.9rem;
+.mindmap-empty-hud {
+  padding: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.empty-frame {
+  text-align: center;
+  border: 1px dashed var(--border);
+  padding: 40px 60px;
+  border-radius: 4px;
+}
+
+.empty-icon {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 2rem;
+  color: var(--primary);
+  opacity: 0.3;
+  margin-bottom: 12px;
+}
+
+.empty-frame p {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  color: #94A3B8;
+  letter-spacing: 1px;
 }
 
 @media (max-width: 768px) {
-  .markmap-shell {
-    min-height: 320px;
-  }
-
-  .markmap-shell :deep(svg) {
-    height: 320px;
-  }
-
-  .compact .markmap-shell {
-    min-height: 180px;
-  }
-
-  .compact .markmap-shell :deep(svg) {
-    height: 180px;
-  }
+  .markmap-shell { min-height: 320px; }
+  .markmap-shell :deep(svg) { height: 320px; }
+  .compact .markmap-shell { min-height: 180px; }
+  .compact .markmap-shell :deep(svg) { height: 180px; }
 }
 </style>

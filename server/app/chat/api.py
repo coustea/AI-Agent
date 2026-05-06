@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
@@ -23,45 +21,33 @@ router = APIRouter()
 async def mentor_chat_stream(
     message: str = Form(...),
     session_id: str | None = Form(default=None),
-    files: list[UploadFile] = File(default=[]),
-    file: UploadFile | None = File(default=None),
     image_urls: str | None = Form(default=None),
     file_urls: str | None = Form(default=None),
     need_diagram: bool = Form(default=False),
     generate_video: bool = Form(default=False),
     enable_search: bool = Form(default=False),
+    enable_long_term_memory: bool = Form(default=False),
     current_user: User = Depends(get_current_user),
 ):
     """SSE 流式对话主入口。
 
-    兼容多种附件传参方式：files/file/image_urls/file_urls。
+    附件由前端先上传到 /chat/upload，再通过 image_urls/file_urls 传入。
 
     Args:
         message: 用户消息内容。
         session_id: 可选的会话ID。
-        files: 上传文件列表（多文件）。
-        file: 上传文件（单文件）。
         image_urls: 图片URL字符串（逗号分隔）。
         file_urls: 文件URL字符串（逗号分隔）。
         need_diagram: 是否生成图解。
         generate_video: 是否生成视频。
+        enable_search: 是否启用联网搜索。
+        enable_long_term_memory: 是否启用长期记忆读写。
         current_user: 当前登录用户。
 
     Returns:
         SSE 流式响应。
     """
     uc = get_chat_usecases()
-    upload_payloads: list[tuple[str, bytes]] = []
-    # 合并 files 和 file 参数
-    all_uploads = list(files)
-    if file is not None:
-        all_uploads.append(file)
-
-    # 读取上传文件内容
-    for upload in all_uploads:
-        if not upload.filename:
-            raise HTTPException(status_code=400, detail="文件名不能为空")
-        upload_payloads.append((upload.filename, await upload.read()))
 
     # 解析逗号分隔的URL字符串
     parsed_image_urls: list[str] = []
@@ -71,19 +57,7 @@ async def mentor_chat_stream(
     if file_urls:
         parsed_file_urls = [u.strip() for u in file_urls.split(",") if u.strip()]
 
-    # 处理上传文件
-    try:
-        effective_session, uploaded_image_urls, uploaded_file_urls = await uc.prepare_uploads(
-            files=upload_payloads,
-            user_id=current_user.id,
-            session_id=session_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    # 合并上传的URL和传入的URL
-    merged_image_urls = uploaded_image_urls + parsed_image_urls
-    merged_file_urls = uploaded_file_urls + parsed_file_urls
+    effective_session = session_id or uc.default_session_id(current_user.id)
 
     # 返回 SSE 流式响应
     return StreamingResponse(
@@ -91,11 +65,12 @@ async def mentor_chat_stream(
             user_id=current_user.id,
             user_message=message,
             session_id=effective_session,
-            image_urls=merged_image_urls or None,
-            file_urls=merged_file_urls or None,
+            image_urls=parsed_image_urls or None,
+            file_urls=parsed_file_urls or None,
             need_diagram=need_diagram,
             generate_video=generate_video,
             enable_search=enable_search,
+            enable_long_term_memory=enable_long_term_memory,
         ),
         media_type="text/event-stream",
         headers={
@@ -313,6 +288,29 @@ async def delete_session(
     if not success:
         return HttpResponse.error(code=404, message="会话不存在或无权操作")
     return HttpResponse.success(message="会话已归档")
+
+
+@router.patch("/chat/sessions/{session_id}")
+async def update_session(
+    session_id: str,
+    title: str = Form(...),
+    current_user: User = Depends(get_current_user),
+):
+    """更新会话标题。
+
+    Args:
+        session_id: 会话ID。
+        title: 新标题。
+        current_user: 当前登录用户。
+
+    Returns:
+        操作结果。
+    """
+    uc = get_chat_usecases()
+    success = await uc.update_session_title(current_user.id, session_id, title)
+    if not success:
+        return HttpResponse.error(code=404, message="会话不存在或无权操作")
+    return HttpResponse.success(message="标题已更新")
 
 
 @router.get("/chat/history")

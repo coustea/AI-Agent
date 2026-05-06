@@ -29,6 +29,7 @@ class MentorChatRequest(BaseModel):
     need_diagram: Optional[bool] = False  # 是否生成图解（Mermaid SVG）
     generate_video: Optional[bool] = False  # 是否生成视频
     enable_search: Optional[bool] = False  # 是否启用联网搜索
+    enable_long_term_memory: Optional[bool] = False  # 是否启用长期记忆读写
 
 
 class AttachmentInfo(BaseModel):
@@ -108,6 +109,7 @@ class TutorState(TypedDict, total=False):
     generate_video: bool  # 是否生成视频
     request_generate_video: bool  # 请求生成视频标志
     enable_search: bool  # 是否启用搜索
+    enable_long_term_memory: bool  # 是否启用长期记忆读写
     diagram: Optional[dict[str, Any]]  # 生成的图解数据
     diagram_error: Optional[str]  # 图解生成错误信息
 

@@ -27,7 +27,8 @@ logger = get_logger(__name__)
 class ContentAgent:
     """内容讲解 Agent。"""
 
-    STEPS = ["深度解析学习画像", "整合上游知识产物", "撰写个性化讲解方案", "核验内容学术准确性"]
+    STEPS = ["分析输入", "融合画像与依赖", "生成内容", "整理输出"]
+    ROLE_NAME = "课程讲解智能体"
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
         self.user_id = user_id
@@ -38,53 +39,71 @@ class ContentAgent:
 
     async def _emit_action(
         self,
+        state: WorkerState,
         action: str,
         detail: str = "",
         current_step: int = 0,
         total_steps: int = 0,
         step_label: str = "",
+        current_action: str = "",
+        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
             await self.emitter.emit_agent_action(
-                "content",
+                state.agent_name,
                 action,
                 detail,
                 current_step=current_step,
                 total_steps=total_steps,
                 step_label=step_label,
+                current_action=current_action,
+                output_preview=output_preview,
+                layer=state.layer_index,
+                layer_name="认知建构层",
+                agent_role=self.ROLE_NAME,
+                resource_type=state.agent_name,
             )
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行内容生成。"""
         logger.info("[ContentAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
-        total = len(self.STEPS)
+        total = 5
 
         await self._emit_action(
-            "loading_prompt",
-            "正在加载内容生成提示词...",
-            current_step=1,
+            state,
+            "analyze_input",
+            "课程讲解智能体正在分析学习需求",
+            current_step=2,
             total_steps=total,
             step_label=self.STEPS[0],
+            current_action="分析学习需求",
+            output_preview="正在识别课程主题、知识短板和资源目标",
         )
         prompt = self._load_prompt()
 
         await self._emit_action(
-            "building_input",
-            "正在整合学习需求和讲解配置...",
-            current_step=2,
+            state,
+            "merge_profile_dependencies",
+            "课程讲解智能体正在融合学习画像和上游信息",
+            current_step=3,
             total_steps=total,
             step_label=self.STEPS[1],
+            current_action="融合画像与依赖",
+            output_preview="正在读取个性化约束、学习偏好和 MasterAgent 输入参数",
         )
         input_text = await self._build_input(state)
 
         try:
             await self._emit_action(
-                "calling_llm",
-                "正在为你撰写个性化讲解方案...",
-                current_step=3,
+                state,
+                "generate_content",
+                "课程讲解智能体正在生成讲解内容",
+                current_step=4,
                 total_steps=total,
                 step_label=self.STEPS[2],
+                current_action="生成课程讲解",
+                output_preview="正在组织概念解释、示例、易错点和复习重点",
             )
 
             response = await self.llm_manager.ainvoke(
@@ -97,11 +116,14 @@ class ContentAgent:
             content = self._clean_content(content)
 
             await self._emit_action(
-                "finalizing_result",
-                f"正在核验内容准确性并生成文档 (约 {len(content)} 字符)...",
-                current_step=4,
+                state,
+                "finalize_output",
+                f"课程讲解智能体正在整理输出 (约 {len(content)} 字符)",
+                current_step=5,
                 total_steps=total,
                 step_label=self.STEPS[3],
+                current_action="整理讲解文档",
+                output_preview=content[:240],
             )
 
             return WorkerResult(
@@ -138,10 +160,15 @@ class ContentAgent:
             "## 学习需求",
             learning_need_from_task(task),
             "",
+            "## 学习场景",
+            f"- 场景类型: {state.learning_scenario}",
+            "",
             "## Agent 配置",
             f"- 结构类型: {agent_config.get('structure', 'progressive')}",
             f"- 包含常见错误: {agent_config.get('include_common_mistakes', True)}",
             f"- 包含示例: {agent_config.get('include_examples', True)}",
+            f"- 聚焦模式: {agent_config.get('focus_mode', 'full_coverage')}",
+            f"- 深度级别: {agent_config.get('depth_level', 'standard')}",
         ]
 
         append_backend_context_for_prompt(parts, state)

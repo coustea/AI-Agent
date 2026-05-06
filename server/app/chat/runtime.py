@@ -140,6 +140,7 @@ async def prepare_tutor_turn(
     image_urls: list[str] | None,
     file_urls: list[str] | None,
     enable_search: bool,
+    enable_long_term_memory: bool,
     need_diagram: bool | None,
     attachment_analysis: dict[str, Any] | None,
 ) -> PreparedTutorTurn:
@@ -172,11 +173,14 @@ async def prepare_tutor_turn(
         file_urls=normalized_file_urls,
     )
 
-    # 并行构建画像和长期记忆上下文
-    profile_str, fact_str = await asyncio.gather(
-        ctx_service.build_profile_context(user_id),
-        ctx_service.build_long_term_memory_context(user_id),
-    )
+    if enable_long_term_memory:
+        profile_str, fact_str = await asyncio.gather(
+            ctx_service.build_profile_context(user_id),
+            ctx_service.build_long_term_memory_context(user_id),
+        )
+    else:
+        profile_str = await ctx_service.build_profile_context(user_id)
+        fact_str = "长期记忆未启用。"
     file_info_str = ctx_service.build_file_context(normalized_image_urls, normalized_file_urls)
     attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
     # 构建近期对话上下文
@@ -195,7 +199,7 @@ async def prepare_tutor_turn(
         else ""
     )
     # 格式化系统提示词
-    system_prompt = prompts["direct_system"].format(
+    system_prompt = prompts["tutor_system"].format(
         profile_context=profile_str,
         fact_context=fact_str,
         recent_chat_context=recent_chat_context,
@@ -209,6 +213,7 @@ async def prepare_tutor_turn(
         "file_urls": normalized_file_urls,
         "resource_mode": "none",
         "enable_search": bool(enable_search),
+        "enable_long_term_memory": bool(enable_long_term_memory),
         "need_diagram": need_diagram,
         "diagram": None,
         "diagram_error": None,

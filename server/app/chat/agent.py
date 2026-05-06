@@ -4,7 +4,7 @@
 当前工作流：
     START -> classify
       ├─ direct_answer (Spark MAX 直接回答) -> diagram_generate -> END
-      ├─ search_node (Spark MAX 搜索) -> spark_summary -> diagram_generate -> END
+      ├─ search_node (Spark MAX 搜索，可结合附件预分析上下文) -> spark_summary -> diagram_generate -> END
       └─ attachment_answer (Spark MAX 总结) -> diagram_generate -> END
 
 职责：
@@ -155,12 +155,6 @@ class TutorAgent:
 
         logger.info("[TutorAgent] 初始化完成")
 
-    @staticmethod
-    def _merge_system_prompts(*prompts: str) -> str:
-        """合并多个系统提示词，生成单个 SystemMessage 内容。"""
-        parts = [str(p).strip() for p in prompts if str(p).strip()]
-        return "\n\n".join(parts)
-
     @classmethod
     def get_shared(cls) -> "TutorAgent":
         """获取全局单例。
@@ -225,8 +219,8 @@ class TutorAgent:
         """分类节点：区分 direct / search / attachment_needed。
 
         路由规则：
-        1. 有附件 → attachment_answer
-        2. 无附件 + 启用搜索 → search_node
+        1. 启用搜索 → search_node（可同时结合附件预分析上下文）
+        2. 有附件 → attachment_answer
         3. 无附件 + 无搜索 → direct_answer
 
         Args:
@@ -245,7 +239,18 @@ class TutorAgent:
         user_message = extract_question(messages)
 
         with node_timer("classify", user=user_id, session=session_id):
-            # 路径1：附件优先
+            # 路径1：搜索优先，支持与附件预分析上下文组合
+            if enable_search:
+                execution_mode = "attachment_search" if (file_urls or image_urls) else "search"
+                logger.debug(
+                    "[TutorAgent] 路由分类 route=search reason=enable_search question=%s attachments(images=%s,files=%s)",
+                    truncate(user_message, 120),
+                    len(image_urls),
+                    len(file_urls),
+                )
+                return {"route": "search", "execution_mode": execution_mode}
+
+            # 路径2：仅附件
             if file_urls or image_urls:
                 logger.debug(
                     "[TutorAgent] 路由分类 route=attachment_needed reason=attachments_present images=%s files=%s resource_mode=%s",
@@ -254,14 +259,6 @@ class TutorAgent:
                     resource_mode,
                 )
                 return {"route": "attachment_needed", "execution_mode": "attachment"}
-
-            # 路径2：需要搜索
-            if enable_search:
-                logger.debug(
-                    "[TutorAgent] 路由分类 route=search reason=enable_search question=%s",
-                    truncate(user_message, 120),
-                )
-                return {"route": "search", "execution_mode": "search"}
 
             # 路径3：直接回答
             logger.debug(
@@ -287,16 +284,13 @@ class TutorAgent:
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         system_prompt = state.get("system_prompt", "")
+        attachment_context = str(state.get("attachment_analysis_context", "")).strip()
         question = extract_question(messages)
 
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
 
-            merged_system_prompt = self._merge_system_prompts(
-                _get_prompt("direct_answer_system"),
-                system_prompt,
-            )
-            full_messages = build_messages(merged_system_prompt, list(messages))
+            full_messages = build_messages(system_prompt, list(messages))
 
             try:
                 response = await self.llm_manager.ainvoke(
@@ -356,15 +350,24 @@ class TutorAgent:
         session_id = state.get("session_id")
         system_prompt = state.get("system_prompt", "")
         question = extract_question(messages)
+        attachment_context = str(state.get("attachment_analysis_context", "")).strip()
 
         with node_timer("search_node", user=user_id, session=session_id):
             logger.info("[TutorAgent] 搜索节点 question=%s", truncate(question, 180))
 
-            merged_system_prompt = self._merge_system_prompts(
-                _get_prompt("search_node_system"),
-                system_prompt,
+            search_instruction = HumanMessage(
+                content=(
+                    "请根据用户最新问题调用搜索工具查找必要信息，只整理与问题直接相关的事实、"
+                    "来源线索和不足之处。若本轮包含附件预分析上下文，请围绕附件内容和用户问题补充检索。"
+                    "不要生成最终教学回答。"
+                    + (
+                        f"\n\n附件预分析上下文：\n{attachment_context}"
+                        if attachment_context
+                        else ""
+                    )
+                )
             )
-            full_messages = build_messages(merged_system_prompt, list(messages))
+            full_messages = build_messages(system_prompt, list(messages) + [search_instruction])
 
             # 绑定搜索工具
             llm_with_tools = self.llm_manager.bind_tools(
@@ -431,6 +434,7 @@ class TutorAgent:
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         search_result = state.get("search_result", "")
+        system_prompt = state.get("system_prompt", "")
         question = extract_question(messages)
 
         with node_timer("spark_summary", user=user_id, session=session_id):
@@ -443,7 +447,7 @@ class TutorAgent:
             )
 
             full_messages = [
-                SystemMessage(content=_get_prompt("spark_summary_system")),
+                SystemMessage(content=system_prompt),
                 HumanMessage(content=prompt),
             ]
 
@@ -543,11 +547,7 @@ class TutorAgent:
                 "回答要清晰、分点、适合教学场景。"
             )
 
-            merged_system_prompt = self._merge_system_prompts(
-                _get_prompt("direct_answer_system"),
-                system_prompt,
-            )
-            full_messages = build_messages(merged_system_prompt, [HumanMessage(content=answer_prompt)])
+            full_messages = build_messages(system_prompt, [HumanMessage(content=answer_prompt)])
 
             try:
                 response = await self.llm_manager.ainvoke(
@@ -941,6 +941,7 @@ class TutorAgent:
         need_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
+        enable_long_term_memory: bool = False,
         resource_mode: Optional[str] = None,
         attachment_analysis: Optional[dict[str, Any]] = None,
     ):
@@ -955,6 +956,7 @@ class TutorAgent:
             need_diagram: 是否生成图解。
             generate_video: 是否生成视频。
             enable_search: 是否启用搜索。
+            enable_long_term_memory: 是否启用长期记忆读写。
             resource_mode: 资源模式。
             attachment_analysis: 附件预分析结果。
 
@@ -1008,6 +1010,7 @@ class TutorAgent:
             image_urls=requested_image_urls,
             file_urls=requested_file_urls,
             enable_search=enable_search,
+            enable_long_term_memory=enable_long_term_memory,
             need_diagram=need_diagram,
             attachment_analysis=attachment_analysis,
         )
@@ -1126,6 +1129,7 @@ class TutorAgent:
                     session_id=effective_session,
                     user_message=user_message,
                     assistant_reply=full_reply,
+                    enable_long_term_memory=enable_long_term_memory,
                 ),
                 task_name="post_chat_pipeline",
             )

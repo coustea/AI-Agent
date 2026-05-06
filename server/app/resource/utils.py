@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -50,29 +51,6 @@ def format_profile_fields(profile: dict[str, Any], fields: list[tuple[str, str]]
         if value:
             parts.append(f"- {label}: {value}")
     return "\n".join(parts)
-
-
-def parse_markdown_sections(markdown_text: str | None) -> dict[str, str]:
-    """按二级标题解析 Markdown 文本。"""
-    sections: dict[str, str] = {}
-    if not markdown_text:
-        return sections
-
-    current_section: str | None = None
-    current_content: list[str] = []
-    for raw_line in markdown_text.split("\n"):
-        heading = re.match(r"^##\s+(.+?)\s*$", raw_line)
-        if heading:
-            if current_section is not None:
-                sections[current_section] = "\n".join(current_content).strip()
-            current_section = heading.group(1).strip()
-            current_content = []
-            continue
-        if current_section is not None:
-            current_content.append(raw_line)
-    if current_section is not None:
-        sections[current_section] = "\n".join(current_content).strip()
-    return sections
 
 
 # =============================================================================
@@ -182,18 +160,18 @@ async def load_profile_snapshot(user_id: int):
 
 
 def _parse_profile(profile) -> dict[str, str]:
-    """从画像中提取关键信息（支持新的 profile_json 和旧的 profile_markdown）。"""
+    """从 JSON 画像中提取资源生成需要的关键信息。"""
     result: dict[str, str] = {}
     if not profile:
         return result
 
     if hasattr(profile, "profile_json") and profile.profile_json and profile.profile_json.get("dimensions"):
         dimensions = profile.profile_json.get("dimensions", {})
-        student_profile = profile.profile_json.get("student_profile", {})
-        result["技术能力判断"] = dimensions.get("knowledge_foundation", {}).get("summary", "")
-        result["当前学习/项目背景"] = dimensions.get("learning_goal", {}).get("summary", "")
-        result["学习偏好"] = dimensions.get("interaction_preference", {}).get("summary", "")
-        result["当前薄弱点"] = dimensions.get("weakness_points", {}).get("summary", "")
+        student_profile = profile.profile_json.get("student_profile") or {}
+        result["技术能力判断"] = dimensions.get("knowledge_foundation", {}).get("summary") or ""
+        result["当前学习/项目背景"] = dimensions.get("learning_goal", {}).get("summary") or ""
+        result["学习偏好"] = dimensions.get("interaction_preference", {}).get("summary") or ""
+        result["当前薄弱点"] = dimensions.get("weakness_points", {}).get("summary") or ""
         result["兴趣方向"] = ""
         interests = student_profile.get("current_focus", [])
         if isinstance(interests, list):
@@ -201,16 +179,12 @@ def _parse_profile(profile) -> dict[str, str]:
         strategies = profile.profile_json.get("recommended_strategy", [])
         if isinstance(strategies, list):
             result["推荐辅导策略"] = "\n".join(strategies)
-        return result
-
-    if hasattr(profile, "profile_markdown") and profile.profile_markdown:
-        sections = parse_markdown_sections(profile.profile_markdown)
-        result = {
-            "技术能力判断": sections.get("技术能力判断", ""),
-            "当前学习/项目背景": sections.get("当前学习/项目背景", ""),
-            "学习偏好": sections.get("学习偏好", ""),
-            "当前薄弱点": sections.get("当前薄弱点", ""),
-            "兴趣方向": sections.get("兴趣方向", ""),
-            "推荐辅导策略": sections.get("推荐辅导策略", ""),
-        }
     return result
+
+
+def format_profile_json_for_prompt(profile_json: dict[str, Any] | None) -> str:
+    """Format JSON-first learner profile for prompts without Markdown conversion."""
+    if not profile_json:
+        return ""
+    payload = dict(profile_json)
+    return json.dumps(payload, ensure_ascii=False, indent=2)

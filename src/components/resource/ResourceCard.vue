@@ -1,21 +1,26 @@
 <template>
-  <el-card shadow="never" class="resource-card slide-up-anim">
+  <div class="technical-frame resource-card slide-up-anim">
+    <div class="frame-corners top-left"></div>
+    <div class="frame-corners top-right"></div>
+    <div class="frame-corners bottom-left"></div>
+    <div class="frame-corners bottom-right"></div>
+
     <div class="res-header">
       <div class="res-type">
-        <div class="res-step-badge" v-if="stepNumber">STEP {{ stepNumber }}</div>
+        <div class="res-step-badge" v-if="stepNumber">STAGE_{{ stepNumber.toString().padStart(2, '0') }}</div>
         <span class="res-icon" aria-hidden="true">
           <el-icon><component :is="meta.icon" /></el-icon>
         </span>
-        <span class="res-name">{{ meta.name }}</span>
+        <span class="res-name">{{ meta.name.toUpperCase() }}</span>
       </div>
-      <el-tag size="small" type="success" effect="plain" round>
-        <el-icon><Check /></el-icon>
-        <span>已就绪</span>
-      </el-tag>
+      <div class="status-tag">
+        <div class="status-dot"></div>
+        <span>LIVE_SYNC</span>
+      </div>
     </div>
 
     <div class="res-body">
-      <div class="ai-badge">{{ badgeText }}</div>
+      <div class="ai-badge-hud">{{ badgeText.toUpperCase() }}</div>
 
       <MindmapResourceView
         v-if="agentId === 'mindmap'"
@@ -53,20 +58,17 @@
           <span class="ppt-file-name">{{ pptFileName }}</span>
         </div>
         <div class="ppt-meta" v-if="pptSlideCount > 0">
-          共 {{ pptSlideCount }} 页幻灯片
+          SYSTEM_SLIDES: {{ pptSlideCount }} TOTAL
         </div>
         <div class="ppt-titles" v-if="pptSlideTitles.length > 0">
           <div v-for="(title, idx) in pptSlideTitles.slice(0, 5)" :key="idx" class="ppt-title-item">
-            <span class="ppt-title-num">{{ Number(idx) + 1 }}</span>
+            <span class="ppt-title-num">{{ (Number(idx) + 1).toString().padStart(2, '0') }}</span>
             <span class="ppt-title-text">{{ title }}</span>
-          </div>
-          <div v-if="pptSlideTitles.length > 5" class="ppt-title-more">
-            …还有 {{ pptSlideTitles.length - 5 }} 页
           </div>
         </div>
       </div>
       <div v-else-if="agentId === 'image'" class="image-card-body">
-        <div class="image-preview-container">
+        <div class="image-preview-container-hud">
           <el-image 
             v-if="imageUrl" 
             :src="imageUrl" 
@@ -81,43 +83,36 @@
           </el-image>
           <div v-else class="image-placeholder empty">
             <el-icon><Picture /></el-icon>
-            <span>图片渲染中</span>
+            <span>RENDER_PENDING</span>
           </div>
         </div>
       </div>
       <div v-else-if="agentId === 'video'" class="video-card-body">
-        <div class="video-preview-placeholder">
+        <div class="video-preview-placeholder-hud">
           <div class="video-overlay">
             <el-icon class="play-icon"><VideoPlay /></el-icon>
           </div>
           <el-icon class="video-bg-icon"><VideoCamera /></el-icon>
-          <div class="video-badge">视频脚本与素材已就绪</div>
+          <div class="video-badge-hud">SEQUENCE_SYNC_READY</div>
         </div>
       </div>
-      <pre v-else class="fallback-json"><code>{{ JSON.stringify(resultData || {}, null, 2) }}</code></pre>
+      <pre v-else class="fallback-json-hud"><code>{{ JSON.stringify(resultData || {}, null, 2) }}</code></pre>
     </div>
 
     <div class="res-footer">
-      <el-button
-        class="res-action"
-        type="primary"
-        plain
-        @click="handlePreview"
-      >
-        <el-icon><View /></el-icon>
-        在线预览
-      </el-button>
-      <el-button class="res-action" @click="handleDownload">
-        <el-icon><Download /></el-icon>
-        下载
-      </el-button>
+      <button class="hud-btn-primary" @click="handlePreview">
+        EXECUTE_PREVIEW
+      </button>
+      <button class="hud-btn-secondary" @click="handleDownload">
+        DOWNLOAD_DATA
+      </button>
     </div>
-  </el-card>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Check, Download, View, DataBoard, Picture, VideoCamera, VideoPlay, Loading } from '@element-plus/icons-vue'
+import { Download, View, DataBoard, Picture, VideoCamera, VideoPlay, Loading } from '@element-plus/icons-vue'
 import { recordLearningEvent } from '@/api/ai'
 import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
 import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
@@ -186,22 +181,22 @@ const readingCount = computed(() => {
 
 const badgeText = computed(() => {
   if (props.agentId === 'ppt') {
-    return pptSlideCount.value > 0 ? `已生成 ${pptSlideCount.value} 页演示文稿` : '演示文稿已生成'
+    return pptSlideCount.value > 0 ? `SLIDES_${pptSlideCount.value}_SYNC` : 'SLIDES_SYNC'
   }
   if (props.agentId === 'mindmap') {
-    return fileCategory.value === 'html' ? '动态 HTML 导图已就绪' : '知识拓扑提取完成'
+    return fileCategory.value === 'html' ? 'TOPOLOGY_HTML_READY' : 'TOPOLOGY_COMPLETE'
   }
   if (props.agentId === 'quiz') {
-    return `已生成 ${quizCount.value || '专属'} 道练习`
+    return `QUIZ_BLOCKS_${quizCount.value || 'AUTO'}`
   }
   if (props.agentId === 'reading') {
-    return `已匹配 ${readingCount.value || '多条'} 条拓展阅读`
+    return `KNOWLEDGE_NODES_${readingCount.value || 'MULTI'}`
   }
   if (props.agentId === 'code' && props.resultData?.detected_language) {
-    return `实操代码 · ${props.resultData.detected_language}`
+    return `RUNTIME_${props.resultData.detected_language.toUpperCase()}`
   }
-  if (fileCategory.value === 'markdown') return `${fileName.value} · Markdown`
-  return '学习资源已生成'
+  if (fileCategory.value === 'markdown') return `MD_${fileName.value.toUpperCase()}`
+  return 'RESOURCE_SYNC_OK'
 })
 
 const handlePreview = () => {
@@ -268,30 +263,53 @@ const handleDownload = () => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 .resource-card {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border: 1px solid #E2E8F0;
-  border-radius: 24px;
   background: #FFFFFF;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s, box-shadow 0.4s;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  --primary: #6366F1;
+  --accent: #059669;
+  --border: #E0E7FF;
 }
+
+/* 技术框架扩展 */
+.technical-frame {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.frame-corners {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 
 .resource-card:hover {
   transform: translateY(-8px);
-  border-color: #3B82F6;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-color: var(--primary);
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.1);
 }
 
 .res-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px;
-  border-bottom: 1px solid #F1F5F9;
+  padding: 20px 24px;
+  border-bottom: 1px dashed var(--border);
 }
 
 .res-type {
@@ -299,74 +317,90 @@ const handleDownload = () => {
   align-items: center;
   gap: 12px;
   min-width: 0;
-  color: #0F172A;
-  font-weight: 800;
-  font-size: 1.15rem;
-  letter-spacing: -0.025em;
 }
 
 .res-step-badge {
-  background: #EFF6FF;
-  color: #3B82F6;
-  font-size: 0.7rem;
-  font-weight: 900;
-  padding: 4px 10px;
-  border-radius: 8px;
-  letter-spacing: 0.05em;
-  border: 1px solid #DBEAFE;
+  font-family: 'Share Tech Mono', monospace;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 2px;
+  letter-spacing: 1px;
 }
 
 .res-icon {
   display: inline-flex;
-  flex: 0 0 auto;
-  color: #3B82F6;
-  font-size: 1.5rem;
+  color: var(--primary);
+  font-size: 1.25rem;
+  opacity: 0.8;
 }
 
 .res-name {
-  min-width: 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  color: #1E1B4B;
+  letter-spacing: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.status-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--accent);
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
 }
 
 .res-body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   padding: 24px;
   overflow: hidden;
-  color: #475569;
 }
 
-.ai-badge {
+.ai-badge-hud {
   align-self: flex-start;
-  max-width: 100%;
-  padding: 6px 14px;
-  border-radius: 10px;
-  background: #F8FAFC;
+  padding: 4px 10px;
+  border-radius: 2px;
+  background: rgba(99, 102, 241, 0.03);
   color: #64748B;
-  font-size: 0.85rem;
-  font-weight: 700;
-  border: 1px solid #F1F5F9;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  border: 1px solid rgba(99, 102, 241, 0.05);
 }
 
-/* Bento 适配调整 */
-.bento-main .res-body { min-height: 420px; }
-.bento-side .res-body { min-height: 200px; }
-.bento-small .res-body { min-height: 140px; }
-
-.fallback-json {
+.fallback-json-hud {
   margin: 0;
-  padding: 20px;
-  border-radius: 16px;
-  background: #F8FAFC;
-  color: #64748B;
-  border: 1px solid #E2E8F0;
-  font-size: 0.85rem;
-  font-family: 'JetBrains Mono', monospace;
+  padding: 16px;
+  background: #0F172A;
+  color: #E2E8F0;
+  border: 1px solid #334155;
+  font-size: 0.75rem;
+  font-family: 'Fira Code', monospace;
   overflow: auto;
+  border-radius: 4px;
 }
 
 .ppt-card-body {
@@ -382,75 +416,60 @@ const handleDownload = () => {
 }
 
 .ppt-file-icon {
-  font-size: 2.2rem;
+  font-size: 2rem;
   color: #EE4444;
-  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .ppt-file-name {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #0F172A;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
+  color: #1E1B4B;
   word-break: break-all;
 }
 
 .ppt-meta {
-  font-size: 0.9rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
   color: #64748B;
-  font-weight: 600;
-}
-
-.ppt-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .ppt-title-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .ppt-title-num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: #F1F5F9;
-  color: #64748B;
-  font-size: 0.8rem;
-  font-weight: 800;
-  flex-shrink: 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+  padding: 1px 4px;
 }
 
 .ppt-title-text {
-  font-size: 0.9rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8rem;
   color: #475569;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.image-card-body {
+.image-preview-container-hud {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.image-preview-container {
-  flex: 1;
-  width: 100%;
-  border-radius: 16px;
+  border-radius: 4px;
   background: #F8FAFC;
-  border: 1px solid #F1F5F9;
+  border: 1px solid var(--border);
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
+  min-height: 180px;
+  background-image: linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .res-image-preview {
@@ -460,76 +479,64 @@ const handleDownload = () => {
   transition: transform 0.5s ease;
 }
 
-.res-image-preview:hover {
-  transform: scale(1.02);
-}
-
-.video-preview-placeholder {
+.video-preview-placeholder-hud {
   flex: 1;
   position: relative;
-  width: 100%;
-  border-radius: 16px;
+  border-radius: 4px;
   background: #0F172A;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
+  min-height: 180px;
+}
+
+.video-badge-hud {
+  position: absolute;
+  bottom: 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 1px;
 }
 
 .res-footer {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: auto;
-  padding: 24px;
-  border-top: 1px solid #F1F5F9;
-  background: #FAFAFA;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 24px 24px;
+  background: rgba(255, 255, 255, 0.5);
 }
 
-.res-action {
-  flex: 1;
-  min-height: 48px;
-  margin-left: 0;
-  border-radius: 14px;
-  font-weight: 700;
-  transition: background-color 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+.hud-btn-primary, .hud-btn-secondary {
+  width: 100%;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  padding: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 1px;
 }
 
-.res-action:first-child {
-  background: #3B82F6;
-  border: none;
+.hud-btn-primary {
+  background: var(--primary);
   color: white;
-  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+  border: none;
 }
-.res-action:first-child:hover { background: #2563EB; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3); }
+.hud-btn-primary:hover {
+  background: #4F46E5;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+}
 
-.res-action:last-child {
-  background: #FFFFFF;
-  border: 2px solid #F1F5F9;
+.hud-btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
   color: #64748B;
 }
-.res-action:last-child:hover { border-color: #E2E8F0; color: #0F172A; background: #F8FAFC; }
-
-@keyframes flyInBento {
-  0% { opacity: 0; transform: translateY(40px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-.slide-up-anim {
-  animation: flyInBento 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .resource-card,
-  .slide-up-anim {
-    animation: none;
-    transition: none;
-  }
-
-  .resource-card:hover {
-    transform: none;
-  }
+.hud-btn-secondary:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 @keyframes flyInBento {
@@ -542,14 +549,9 @@ const handleDownload = () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .resource-card,
-  .slide-up-anim {
+  .resource-card, .slide-up-anim {
     animation: none;
     transition: none;
-  }
-
-  .resource-card:hover {
-    transform: none;
   }
 }
 </style>

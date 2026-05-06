@@ -1,31 +1,14 @@
+// src/utils/markdown.ts
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 
 const markdownUtils = MarkdownIt().utils
 const escapeHtml = (value: string): string => markdownUtils.escapeHtml(value)
+
 const copiedCodeLanguages = new Set([
-  'bash',
-  'c',
-  'cpp',
-  'c++',
-  'css',
-  'go',
-  'html',
-  'java',
-  'javascript',
-  'js',
-  'json',
-  'jsx',
-  'python',
-  'py',
-  'sql',
-  'ts',
-  'tsx',
-  'typescript',
-  'vue',
-  'xml',
-  'yaml',
-  'yml',
+  'bash', 'c', 'cpp', 'c++', 'css', 'go', 'html', 'java', 'javascript',
+  'js', 'json', 'jsx', 'python', 'py', 'sql', 'ts', 'tsx', 'typescript',
+  'vue', 'xml', 'yaml', 'yml',
 ])
 
 const markdown = new MarkdownIt({
@@ -159,67 +142,6 @@ export function renderTutorMarkdown(text: string, isStreaming = false): string {
   return normalized ? markdown.render(normalized) : ''
 }
 
-function normalizeCodeLineBreaks(code: string): string {
-  return code.replace(/\r\n/g, '\n')
-}
-
-function isLikelyCodeLine(line: string): boolean {
-  const trimmed = line.trim()
-  if (!trimmed) return false
-  if (/^#{1,6}\s/.test(trimmed)) return false
-  if (/^[-*]\s/.test(trimmed)) return false
-  if (/^\d+\.\s/.test(trimmed)) return false
-  if (/^[\u4e00-\u9fa5].*[。！？；]$/.test(trimmed) && !trimmed.includes(':')) return false
-
-  return (
-    /^(```|~~~)/.test(trimmed)
-    || /^(def|class|if|elif|else:|for|while|try:|except|finally:|return|continue|break|pass|import|from)\b/.test(trimmed)
-    || /^#/.test(trimmed)
-    || /[{}[\]()=:]/.test(trimmed)
-    || /^\s{2,}\S/.test(line)
-  )
-}
-
-function foldHeuristicCodeBlocks(text: string): string {
-  const lines = text.replace(/\r\n/g, '\n').split('\n')
-  const output: string[] = []
-  let index = 0
-
-  while (index < lines.length) {
-    if (!isLikelyCodeLine(lines[index] ?? '')) {
-      output.push(lines[index] ?? '')
-      index += 1
-      continue
-    }
-
-    const candidate: string[] = []
-    let cursor = index
-    while (cursor < lines.length) {
-      const line = lines[cursor] ?? ''
-      if (!line.trim()) {
-        candidate.push(line)
-        cursor += 1
-        continue
-      }
-      if (!isLikelyCodeLine(line)) break
-      candidate.push(line)
-      cursor += 1
-    }
-
-    const meaningfulLines = candidate.filter((line) => line.trim())
-    if (meaningfulLines.length >= 2) {
-      output.push('```text')
-      output.push(...candidate)
-      output.push('```')
-    } else {
-      output.push(...candidate)
-    }
-    index = cursor
-  }
-
-  return output.join('\n')
-}
-
 function pushMarkdownBlock(blocks: TutorContentBlock[], text: string): void {
   const normalized = text.trim()
   if (!normalized) return
@@ -268,7 +190,7 @@ function parseFenceBlock(source: string, startIndex: number): { block: FenceBloc
 }
 
 export function parseTutorContentBlocks(text: string, options: ParseTutorContentOptions = {}): TutorContentBlock[] {
-  const normalized = foldHeuristicCodeBlocks(normalizeStreamingMarkdown(text, Boolean(options.isStreaming)))
+  const normalized = normalizeStreamingMarkdown(text, Boolean(options.isStreaming))
   const blocks: TutorContentBlock[] = []
   let cursor = 0
 
@@ -289,7 +211,7 @@ export function parseTutorContentBlocks(text: string, options: ParseTutorContent
     }
 
     const normalizedLanguage = parsed.block.language || 'text'
-    const code = normalizeCodeLineBreaks(parsed.block.code.trimEnd())
+    const code = parsed.block.code.replace(/\r\n/g, '\n').trimEnd()
     blocks.push({
       type: 'code',
       code,
@@ -300,5 +222,7 @@ export function parseTutorContentBlocks(text: string, options: ParseTutorContent
     })
     cursor = parsed.nextIndex
   }
-  return blocks.length > 0 ? blocks : [{ type: 'markdown', html: '' }]
+  
+  const filtered = blocks.filter(b => b.type === 'code' || (b.type === 'markdown' && b.html?.trim() !== ''))
+  return filtered.length > 0 ? filtered : [{ type: 'markdown', html: '' }]
 }

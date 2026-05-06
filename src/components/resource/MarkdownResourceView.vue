@@ -1,15 +1,35 @@
 <template>
-  <div class="markdown-resource" :class="{ compact }">
-    <div v-if="content" class="markdown-body markdown-shell" v-html="renderMarkdown(content)"></div>
-    <div v-else class="markdown-empty">暂未收到可展示的 Markdown 内容</div>
+  <div class="markdown-resource" :class="{ compact }" @click="handleMessageClick">
+    <div v-if="content" class="technical-frame">
+      <div class="frame-corners top-left"></div>
+      <div class="frame-corners top-right"></div>
+      <div class="frame-corners bottom-left"></div>
+      <div class="frame-corners bottom-right"></div>
+      
+      <div class="frame-header">
+        <div class="status-indicator"></div>
+        <span class="technical-label">RESOURCE_CONTENT // VERSION 2.0</span>
+      </div>
+
+      <div class="markdown-body markdown-shell" v-html="renderMarkdown(content)"></div>
+      
+      <div class="frame-footer">
+        <span class="mono-tag">EOF_READY</span>
+        <div class="footer-line"></div>
+      </div>
+    </div>
+    <div v-else class="markdown-empty">
+      <div class="empty-icon">!</div>
+      <div class="empty-text">NULL_CONTENT: NO_MARKDOWN_RECEIVED</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import 'github-markdown-css/github-markdown-dark.css'
 import { computed, onMounted, nextTick, watch } from 'vue'
 import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'
+import 'highlight.js/styles/github-dark.css'
+import { ElMessage } from 'element-plus'
 import { getMarkdownContent, renderMarkdown, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -21,7 +41,51 @@ const content = computed(() => getMarkdownContent(props.resultData))
 
 const performHighlight = async () => {
   await nextTick()
-  hljs.highlightAll()
+  if (typeof document !== 'undefined') {
+    const preBlocks = document.querySelectorAll('.markdown-shell pre')
+    preBlocks.forEach((pre) => {
+      const code = pre.querySelector('code')
+      if (code) {
+        hljs.highlightElement(code as HTMLElement)
+        
+        // 如果还没有复制按钮，则添加一个
+        if (!pre.querySelector('.copy-code-btn')) {
+          const btn = document.createElement('button')
+          btn.className = 'copy-code-btn'
+          btn.type = 'button'
+          btn.innerText = '复制'
+          btn.setAttribute('data-code', code.innerText)
+          pre.appendChild(btn)
+        }
+      }
+    })
+  }
+}
+
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success({ message: '代码已复制', plain: true })
+  } catch (err) {
+    ElMessage.error({ message: '复制失败，请重试', plain: true })
+  }
+}
+
+const handleMessageClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (target && target.classList.contains('copy-code-btn')) {
+    const code = target.getAttribute('data-code')
+    if (code) {
+      copyToClipboard(code)
+      const originalText = target.innerText
+      target.innerText = '已复制'
+      target.classList.add('copied')
+      setTimeout(() => {
+        target.innerText = originalText
+        target.classList.remove('copied')
+      }, 2000)
+    }
+  }
 }
 
 onMounted(performHighlight)
@@ -29,99 +93,244 @@ watch(content, performHighlight)
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 .markdown-resource {
   min-width: 0;
   width: 100%;
+  --primary: #6366F1;
+  --bg: #F5F3FF;
+  --fg: #1E1B4B;
+  --border: #E0E7FF;
+  --accent: #059669;
 }
 
+/* 技术框架样式 */
+.technical-frame {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 40px 32px 32px;
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  transition: all 0.3s ease;
+}
+
+/* 拐角装饰 */
+.frame-corners {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+}
+
+.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+/* 头部 HUD */
+.frame-header {
+  position: absolute;
+  top: 12px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.technical-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--primary);
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
+/* 底部 HUD */
+.frame-footer {
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mono-tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.footer-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--border), transparent);
+}
+
+/* Markdown 内容样式 */
 .markdown-shell {
-  color: #334155;
-  line-height: 1.8;
+  color: var(--fg);
+  line-height: 1.7;
   overflow-wrap: anywhere;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.95rem;
 }
 
 /* 标题优化 */
 .markdown-shell :deep(h1),
 .markdown-shell :deep(h2),
 .markdown-shell :deep(h3) {
-  color: #0F172A;
-  border-bottom: 2px solid #F1F5F9;
-  padding-bottom: 0.3em;
-  margin-top: 1.6em;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--fg);
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 0.5em;
+  margin-top: 2em;
+  margin-bottom: 1em;
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.markdown-shell :deep(h1)::before,
+.markdown-shell :deep(h2)::before {
+  content: '>';
+  color: var(--primary);
+  font-weight: bold;
 }
 
 /* 代码块优化 */
 .markdown-shell :deep(pre) {
-  border-radius: 16px;
-  background: #F8FAFC !important;
-  border: 1px solid #E2E8F0;
-  padding: 24px;
+  border-radius: 8px;
+  background: #0F172A !important; /* 深色终端背景 */
+  border: 1px solid #334155;
+  padding: 20px;
   margin: 1.5em 0;
   overflow: auto;
+  position: relative;
+}
+
+/* 终端装饰点 */
+.markdown-shell :deep(pre)::before {
+  content: '•••';
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  color: #334155;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+
+/* 复制按钮样式 */
+.markdown-shell :deep(.copy-code-btn) {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: var(--primary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 10;
+  opacity: 0;
+}
+
+.markdown-shell :deep(pre:hover .copy-code-btn) {
+  opacity: 1;
+}
+
+.markdown-shell :deep(.copy-code-btn:hover) {
+  background: var(--primary);
+  color: white;
+}
+
+.markdown-shell :deep(.copy-code-btn.copied) {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }
 
 .markdown-shell :deep(code) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.9em;
-  color: #1E293B;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.85em;
+  background: transparent;
+  padding: 0;
 }
 
 .markdown-shell :deep(p > code),
 .markdown-shell :deep(li > code) {
-  background: #F1F5F9;
-  padding: 0.2em 0.5em;
-  border-radius: 6px;
-  color: #3B82F6;
-  font-weight: 600;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  color: var(--primary);
+  font-weight: 500;
 }
 
 /* 引用样式 */
 .markdown-shell :deep(blockquote) {
-  border-left: 4px solid #3B82F6;
-  background: #F0F7FF;
-  padding: 16px 24px;
+  border-left: 3px solid var(--primary);
+  background: rgba(99, 102, 241, 0.03);
+  padding: 12px 20px;
   margin: 1.5em 0;
-  border-radius: 0 12px 12px 0;
+  border-radius: 2px;
   color: #475569;
   font-style: italic;
 }
 
-/* 表格优化 */
-.markdown-shell :deep(table) {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 1.5em 0;
-  border-radius: 12px;
-  border: 1px solid #E2E8F0;
-  overflow: hidden;
+/* 列表样式 */
+.markdown-shell :deep(ul),
+.markdown-shell :deep(ol) {
+  padding-left: 1.5em;
+  margin: 1em 0;
 }
 
-.markdown-shell :deep(th) {
-  background: #F8FAFC;
-  font-weight: 700;
-  color: #0F172A;
-}
-
-.markdown-shell :deep(td),
-.markdown-shell :deep(th) {
-  padding: 14px 20px;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-.markdown-shell :deep(tr:last-child td) {
-  border-bottom: none;
+.markdown-shell :deep(li) {
+  margin-bottom: 0.5em;
 }
 
 /* 紧凑模式 */
+.compact .technical-frame {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.compact .frame-corners,
+.compact .frame-header,
+.compact .frame-footer {
+  display: none;
+}
+
 .compact .markdown-shell {
-  max-height: 220px;
+  max-height: 300px;
   overflow: hidden;
-  font-size: 0.9rem;
-  mask-image: linear-gradient(to bottom, #000 75%, transparent 100%);
+  font-size: 0.85rem;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
 }
 
 .compact .markdown-shell :deep(h1),
@@ -129,15 +338,32 @@ watch(content, performHighlight)
 .compact .markdown-shell :deep(h3) {
   margin-top: 1em;
   border-bottom: 0;
-  font-size: 1.15rem;
 }
 
 .markdown-empty {
-  padding: 32px;
-  border: 2px dashed #E2E8F0;
-  border-radius: 16px;
-  background: #F8FAFC;
-  color: #94A3B8;
+  padding: 48px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--primary);
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-icon {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
 }
 </style>
+
+

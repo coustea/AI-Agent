@@ -22,15 +22,7 @@ export interface ChatMessageItem {
   content: string
   attachments: AttachmentInfo[] | null
   tool_calls: ToolCallRecord[] | null
-  created_at: string | null
-}
-
-export interface RecentChatMemoryItem {
-  id: number | null
-  role: string
-  content: string
-  attachments: AttachmentInfo[] | null
-  tool_calls: ToolCallRecord[] | null
+  diagram: Record<string, unknown> | null
   created_at: string | null
 }
 
@@ -55,37 +47,13 @@ export interface StreamChatParams {
   need_diagram?: boolean
   generate_video?: boolean
   enable_search?: boolean
-  files?: File[]
+  enable_long_term_memory?: boolean
 }
 
 export interface StreamChatEvent {
   event: string
   data: unknown
 }
-
-export interface RecentChatMemoryParams {
-  userId: number | string
-  sessionId: string
-  limit?: number
-}
-
-// ==========================================
-// 近期聊天记忆 API
-// ==========================================
-
-export function getRecentChatMemory(params: RecentChatMemoryParams) {
-  return http.get<{ code: number; message: string; data: RecentChatMemoryItem[] }>('/ai/memory/recent-chat', {
-    params: {
-      user_id: params.userId,
-      session_id: params.sessionId,
-      limit: params.limit ?? 10,
-    },
-  })
-}
-
-// ==========================================
-// 聊天历史 API
-// ==========================================
 
 export function getChatHistory(sessionId?: string, limit = 50) {
   return http.get<{ code: number; message: string; data: ChatMessageItem[] }>('/ai/chat/history', {
@@ -109,6 +77,12 @@ export function createSession() {
 
 export function deleteSession(sessionId: string) {
   return http.delete<{ code: number; message: string }>(`/ai/chat/sessions/${sessionId}`)
+}
+
+export function updateSessionTitle(sessionId: string, title: string) {
+  const formData = new FormData()
+  formData.append('title', title)
+  return http.patch<{ code: number; message: string }>(`/ai/chat/sessions/${sessionId}`, formData)
 }
 
 // ==========================================
@@ -197,8 +171,8 @@ export function streamChat(
   if (params.enable_search != null) {
     formData.append('enable_search', String(Boolean(params.enable_search)))
   }
-  if (params.files && params.files.length > 0) {
-    params.files.forEach((file) => formData.append('files', file))
+  if (params.enable_long_term_memory != null) {
+    formData.append('enable_long_term_memory', String(Boolean(params.enable_long_term_memory)))
   }
 
   fetch('/api/v1/ai/chat/stream', {

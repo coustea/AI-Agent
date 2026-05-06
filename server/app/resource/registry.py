@@ -167,7 +167,7 @@ def _init_default_agents() -> None:
 
     registry._agents = {}
 
-    # Layer 0: content（基础内容，其他 Agent 依赖它）
+    # Layer 0: 认知建构层
     register_agent(
         name="content",
         role="内容讲解 Agent",
@@ -178,45 +178,34 @@ def _init_default_agents() -> None:
         failure_policy="independent_fail",
     )
 
-    # Layer 1: diagram, mindmap（可视化资源，依赖 content）
-    register_agent(
-        name="diagram",
-        role="知识图解 Agent",
-        description="生成 Mermaid 知识图解，支持 18 种图解类型",
-        agent_class=DiagramAgent,
-        dependencies=["content"],
-        execution_layer=1,
-        failure_policy="degraded_run",
-    )
-
     register_agent(
         name="mindmap",
         role="思维导图 Agent",
         description="生成知识点思维导图，使用 markmap 渲染",
         agent_class=MindmapAgent,
-        dependencies=["content"],
-        execution_layer=1,
+        dependencies=[],
+        execution_layer=0,
         failure_policy="degraded_run",
     )
 
-    # Layer 2: code, quiz, reading（应用资源，依赖 content）
+    register_agent(
+        name="diagram",
+        role="知识图解 Agent",
+        description="生成 Mermaid 知识图解，支持 18 种图解类型",
+        agent_class=DiagramAgent,
+        dependencies=[],
+        execution_layer=0,
+        failure_policy="degraded_run",
+    )
+
+    # Layer 1: 实践拓展层
     register_agent(
         name="code",
         role="代码实操 Agent",
         description="生成代码实操案例，包含注释、讲解、调试技巧",
         agent_class=CodeAgent,
         dependencies=["content"],
-        execution_layer=2,
-        failure_policy="degraded_run",
-    )
-
-    register_agent(
-        name="quiz",
-        role="习题 Agent",
-        description="生成个性化练习题，支持多种题型和难度",
-        agent_class=QuizAgent,
-        dependencies=["content"],
-        execution_layer=2,
+        execution_layer=1,
         failure_policy="degraded_run",
     )
 
@@ -226,6 +215,17 @@ def _init_default_agents() -> None:
         description="生成拓展阅读建议，推荐相关书籍、文章、文档",
         agent_class=ReadingAgent,
         dependencies=["content"],
+        execution_layer=1,
+        failure_policy="degraded_run",
+    )
+
+    # Layer 2: 检测巩固层
+    register_agent(
+        name="quiz",
+        role="习题 Agent",
+        description="生成个性化练习题，支持多种题型和难度",
+        agent_class=QuizAgent,
+        dependencies=["content", "code"],
         execution_layer=2,
         failure_policy="degraded_run",
     )

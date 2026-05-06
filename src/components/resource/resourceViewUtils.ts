@@ -67,6 +67,59 @@ export function parseJsonObject(value: unknown): Record<string, any> | null {
   }
 }
 
+/**
+ * 通用的资源内容提取函数，支持多种数据结构格式
+ * 用于从后端返回的嵌套数据结构中提取实际内容
+ */
+export function extractResourceContent(
+  resultData: ResourceArtifactLike,
+  contentKeys: string[] = ['content', 'markdown_content', 'source', 'mermaid', 'outline']
+): string {
+  if (!resultData) return ''
+  if (typeof resultData === 'string') return resultData
+  
+  let data = resultData as Record<string, any>
+  
+  // 处理 resource 包装层
+  if (data.resource && typeof data.resource === 'object') {
+    data = data.resource
+  }
+  
+  // 从 content 字段提取
+  const content = data.content
+  
+  // content 是字符串
+  if (typeof content === 'string' && content.trim()) {
+    const parsed = parseJsonObject(content)
+    if (parsed) {
+      for (const key of contentKeys) {
+        if (parsed[key] && typeof parsed[key] === 'string') {
+          return parsed[key]
+        }
+      }
+    }
+    return content
+  }
+  
+  // content 是对象
+  if (typeof content === 'object' && content !== null) {
+    for (const key of contentKeys) {
+      if (content[key] && typeof content[key] === 'string') {
+        return content[key]
+      }
+    }
+  }
+  
+  // 回退到 data 第一层
+  for (const key of contentKeys) {
+    if (data[key] && typeof data[key] === 'string') {
+      return data[key]
+    }
+  }
+  
+  return ''
+}
+
 export function renderReadingRecommendations(recommendations: unknown[]): string {
   const lines = ['# 拓展阅读', '']
   recommendations.forEach((item, index) => {
