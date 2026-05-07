@@ -8,6 +8,7 @@ import type { ApiResponse } from '@/api/auth'
 export interface ProfileData {
   user_id: number | null
   module: string | null
+  profile_markdown: string | null
   profile_json: Record<string, unknown> | null
   profile_score_json: Record<string, unknown> | null
   version: number | null

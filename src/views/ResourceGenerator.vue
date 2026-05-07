@@ -307,18 +307,19 @@
                       </div>
                     </div>
 
-                    <div class="node-stage">
-                      {{ getNodeCurrentStage(node.id, node.status) }}
-                    </div>
-
-                    <div v-if="getNodeBubbles(node.id, 2).length" class="node-inline-logs">
-                      <p
-                        v-for="bubble in getNodeBubbles(node.id, 2)"
-                        :key="bubble.id"
+                    <transition name="log-fade" mode="out-in">
+                      <div
+                        :key="getLatestNodeBubble(node.id)?.id || `${node.id}-${node.status}`"
+                        class="node-live-log"
                       >
-                        {{ formatFlowLogMessage(bubble) }}
-                      </p>
-                    </div>
+                        <div class="node-live-log-meta">
+                          <span>{{ getFlowLogTypeLabel(getLatestNodeBubble(node.id)?.event_type) }}</span>
+                          <em v-if="getLatestNodeBubble(node.id)?.timestamp">{{ formatEventTime(getLatestNodeBubble(node.id)?.timestamp || '') }}</em>
+                          <em v-else>{{ getStatusLabel(node.status) }}</em>
+                        </div>
+                        <p>{{ getNodeProcessMessage(node.id, node.status) }}</p>
+                      </div>
+                    </transition>
 
                     <div v-if="node.status === 'running'" class="node-progress" aria-hidden="true">
                       <span></span>
@@ -343,19 +344,37 @@
 
           </div>
 
-          <section class="resource-summary-card">
-            <div class="panel-title">已生成资源轻量摘要</div>
-            <div v-if="resourceStatusSummary.length" class="resource-status-grid">
-              <article v-for="resource in resourceStatusSummary" :key="resource.key" class="resource-status-item">
-                <el-tag size="small" effect="plain">{{ resource.type }}</el-tag>
-                <div>
-                  <h4>{{ resource.title }}</h4>
-                  <p>{{ resource.summary }}</p>
+          <section class="resource-summary-card interactive-resources-panel">
+            <div class="panel-title">
+              <span>已生成资源</span>
+              <el-tag size="small" effect="plain" round v-if="generatedResources.length">{{ generatedResources.length }} 项可查看</el-tag>
+            </div>
+            <div v-if="generatedResources.length" class="generated-resource-grid">
+              <article
+                v-for="resource in sortedGeneratedResources"
+                :key="resource.id || resource.type"
+                class="generated-resource-card"
+                :class="getResourceToneClass(resource.type)"
+                @click="previewGeneratedResource(resource)"
+              >
+                <div class="resource-card-icon">
+                  <el-icon><component :is="getAgentMeta(resource.type).icon" /></el-icon>
                 </div>
-                <el-tag size="small" type="success" effect="light">{{ resource.status }}</el-tag>
+                <div class="resource-card-info">
+                  <el-tag size="small" effect="plain" round>{{ getResourceTypeLabel(resource.type) }}</el-tag>
+                  <h4>{{ resource.title || getResourceTypeLabel(resource.type) }}</h4>
+                  <p>{{ stringifyCompact(resource.summary || '资源已生成，点击查看详情', 48) }}</p>
+                </div>
+                <div class="resource-card-action">
+                  <el-icon><Position /></el-icon>
+                  <span>查看</span>
+                </div>
               </article>
             </div>
-            <div v-else class="side-empty compact">资源会随着 WorkerAgent 完成而流式出现</div>
+            <div v-else class="side-empty compact">
+              <el-icon class="empty-icon"><Collection /></el-icon>
+              <span>资源会随着 Agent 完成而逐个出现，完成后可点击查看</span>
+            </div>
           </section>
 
           <el-collapse class="workbench-collapse">
@@ -375,44 +394,97 @@
               </div>
               <div v-else class="side-empty">等待 MasterAgent 返回规划结果</div>
             </el-collapse-item>
-            <el-collapse-item title="调试信息：SSE 原始事件日志" name="events">
-              <div class="event-log-list">
-                <div v-for="log in visibleEventLogs" :key="log.event_id" class="event-log-row">
-                  <span>{{ formatEventTime(log.timestamp) }}</span>
-                  <el-tag size="small" effect="plain">{{ log.event_type }}</el-tag>
-                  <b>{{ log.agent || '-' }}</b>
-                  <el-tag size="small" :type="getStatusTagType(log.status)" effect="light">{{ getStatusLabel(log.status) }}</el-tag>
-                  <p>{{ log.message }}</p>
-                </div>
-              </div>
-            </el-collapse-item>
           </el-collapse>
         </div>
       </div>
 
-      <div v-else-if="currentPhase === 'result'" class="phase-view results-view" key="result">
-        <header class="results-header glass-nav">
-          <div class="nav-brand">
-            <el-icon class="success-icon"><CircleCheckFilled /></el-icon>
-            <div class="nav-titles">
-              <h2>{{ finalBundle?.title || '个性化学习资源包已就绪' }}</h2>
-              <p>生成状态：{{ finalBundle?.status || 'success' }} · 共 {{ resultResources.length }} 项定制资料</p>
+      <div v-else-if="currentPhase === 'result'" class="phase-view results-view result-dashboard-view" key="result">
+        <header class="result-hero glass-nav">
+          <div class="result-hero-main">
+            <div class="result-status-line">
+              <span class="result-success-badge"><el-icon><CircleCheckFilled /></el-icon> 生成完成</span>
+              <span class="result-soft-meta">{{ getBundleStatusLabel(finalBundle?.status) }} · {{ resultResources.length }} 项资源 · {{ involvedAgentCount }} 个智能体参与</span>
+            </div>
+            <h1>{{ finalBundle?.title || '个性化学习资源包已就绪' }}</h1>
+            <p class="result-hero-desc">系统已将本次学习需求拆解为讲解、结构化、图解、实践、检测与拓展资源，建议按照下方学习顺序完成复习。</p>
+            <div class="result-context-panel">
+              <div>
+                <span>学习主题</span>
+                <strong>{{ resultTopicSummary }}</strong>
+              </div>
+              <div>
+                <span>学习需求 / 薄弱点</span>
+                <strong>{{ resultNeedSummary }}</strong>
+              </div>
             </div>
           </div>
-          <div class="nav-actions">
+          <div class="result-hero-actions">
             <el-button plain round @click="resetGenerator" class="back-btn">
               <el-icon><RefreshLeft /></el-icon> 新建任务
             </el-button>
             <el-button type="primary" round @click="pushToLearningPath" class="path-btn">
-              基于本次资源规划学习路径 <el-icon class="el-icon--right"><Position /></el-icon>
+              规划学习路径 <el-icon class="el-icon--right"><Position /></el-icon>
             </el-button>
           </div>
         </header>
 
-        <div class="results-body">
-          <section class="review-summary-card" v-if="reviewResult">
-            <div class="panel-title">ReviewerAgent 审查结果</div>
-            <p>{{ reviewResult.summary || reviewResult.message || '资源质量审查已完成。' }}</p>
+        <main class="results-body result-dashboard-body">
+          <section class="resource-overview-grid">
+            <article class="overview-card">
+              <span>资源总数</span>
+              <strong>{{ resultResources.length }}</strong>
+              <p>覆盖理解、图解、练习与拓展资料</p>
+            </article>
+            <article class="overview-card">
+              <span>参与智能体</span>
+              <strong>{{ involvedAgentCount }}</strong>
+              <p>多个 Agent 按依赖关系协作完成</p>
+            </article>
+            <article class="overview-card">
+              <span>学习阶段</span>
+              <strong>{{ learningSequenceResources.length }}</strong>
+              <p>已整理为推荐使用顺序</p>
+            </article>
+            <article class="overview-card">
+              <span>质量审查</span>
+              <strong>{{ reviewResult ? '已完成' : '待同步' }}</strong>
+              <p>ReviewerAgent 汇总资源质量与匹配度</p>
+            </article>
+          </section>
+
+          <section class="learning-sequence-card">
+            <div class="section-heading">
+              <span>RECOMMENDED FLOW</span>
+              <h2>推荐学习顺序</h2>
+              <p>先建立概念理解，再通过图解和导图整理结构，最后用代码案例与自测题巩固。</p>
+            </div>
+            <div v-if="learningSequenceResources.length" class="sequence-track">
+              <article
+                v-for="(res, index) in learningSequenceResources"
+                :key="res.id || `${res.type}-${index}`"
+                class="sequence-node"
+                @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
+              >
+                <span class="sequence-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                <div class="sequence-icon" :class="getResourceToneClass(res.type)">
+                  <el-icon><component :is="getAgentMeta(res.type).icon" /></el-icon>
+                </div>
+                <div>
+                  <strong>{{ getResourceTypeLabel(res.type) }}</strong>
+                  <p>{{ stringifyCompact(res.title || getResourceUsageHint(res.type), 42) }}</p>
+                </div>
+              </article>
+            </div>
+            <div v-else class="side-empty compact">暂无可排序资源</div>
+          </section>
+
+          <section class="review-report-card" v-if="reviewResult">
+            <div class="review-icon"><el-icon><CircleCheckFilled /></el-icon></div>
+            <div class="review-content">
+              <span>ReviewerAgent Quality Report</span>
+              <h2>资源质量审查已完成</h2>
+              <p>{{ reviewResult.summary || reviewResult.message || '资源质量审查已完成，可进入学习与复习阶段。' }}</p>
+            </div>
           </section>
 
           <div class="result-resource-groups">
@@ -421,48 +493,75 @@
                 <div>
                   <span class="layer-index">{{ group.badge }}</span>
                   <h3>{{ group.label }}</h3>
+                  <p>{{ group.description }}</p>
                 </div>
-                <el-tag effect="plain">{{ group.resources.length }} 项</el-tag>
+                <el-tag effect="plain" round>{{ group.resources.length }} 项资源</el-tag>
               </header>
 
               <div v-if="group.resources.length" class="result-resource-grid">
-                <article v-for="res in group.resources" :key="res.id || res.title" class="result-resource-card">
-                  <div class="result-card-header">
-                    <div>
-                      <el-tag effect="plain">{{ res.type }}</el-tag>
-                      <h3>{{ res.title || '未命名资源' }}</h3>
+                <article
+                  v-for="res in group.resources"
+                  :key="res.id || res.title"
+                  class="result-resource-card enhanced-resource-card"
+                >
+                  <div class="resource-card-top">
+                    <div class="resource-type-mark" :class="getResourceToneClass(res.type)">
+                      <el-icon><component :is="getAgentMeta(res.type).icon" /></el-icon>
                     </div>
-                    <span>{{ res.format || 'json' }}</span>
+                    <div class="resource-title-block">
+                      <div class="resource-type-row">
+                        <el-tag size="small" effect="plain" round>{{ getResourceTypeLabel(res.type) }}</el-tag>
+                        <span>{{ res.format || getDefaultResourceFormat(res.type) }}</span>
+                      </div>
+                      <h3>{{ res.title || getResourceTypeLabel(res.type) }}</h3>
+                    </div>
                   </div>
-                  <p>{{ res.summary || '暂无摘要' }}</p>
-                  <div class="result-meta-grid">
-                    <span><b>Agent</b>{{ res.metadata?.agent_role || getAgentMeta(res.type).name }}</span>
-                    <span><b>难度</b>{{ res.metadata?.difficulty || 'basic' }}</span>
-                    <span><b>阶段</b>{{ res.metadata?.suitable_stage || 'resource_generation' }}</span>
-                    <span><b>时长</b>{{ res.metadata?.estimated_time || '待评估' }}</span>
+
+                  <p class="resource-summary">{{ res.summary || getResourceUsageHint(res.type) }}</p>
+
+                  <div class="resource-usage-card">
+                    <b>使用建议</b>
+                    <span>{{ getResourceUsageHint(res.type) }}</span>
                   </div>
-                  <div class="tag-row" v-if="normalizeList(res.metadata?.knowledge_points).length">
+
+                  <div class="result-meta-grid resource-meta-grid">
+                    <span><b>生成 Agent</b>{{ res.metadata?.agent_role || getAgentMeta(res.type).name }}</span>
+                    <span><b>学习难度</b>{{ getDifficultyLabel(res.metadata?.difficulty) }}</span>
+                    <span><b>适合阶段</b>{{ res.metadata?.suitable_stage || getResourceStageLabel(res.type) }}</span>
+                    <span><b>预计时长</b>{{ res.metadata?.estimated_time || getEstimatedTime(res.type) }}</span>
+                  </div>
+
+                  <div class="resource-knowledge-tags" v-if="normalizeList(res.metadata?.knowledge_points).length">
                     <el-tag
-                      v-for="point in normalizeList(res.metadata?.knowledge_points)"
+                      v-for="point in normalizeList(res.metadata?.knowledge_points).slice(0, 6)"
                       :key="point"
                       size="small"
                       effect="plain"
+                      round
                     >
                       {{ point }}
                     </el-tag>
                   </div>
-                  <div class="personalized-reason" v-if="res.metadata?.personalized_reason">
-                    {{ res.metadata.personalized_reason }}
+
+                  <div class="personalized-reason">
+                    <b>个性化匹配</b>
+                    <span>{{ res.metadata?.personalized_reason || getPersonalizedFallback(res.type) }}</span>
                   </div>
-                  <el-button plain round @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })">
-                    查看详情
-                  </el-button>
+
+                  <div class="resource-card-actions">
+                    <el-button type="primary" plain round @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })">
+                      查看资源详情
+                    </el-button>
+                    <el-button text round @click="pushToLearningPath">
+                      加入学习路径
+                    </el-button>
+                  </div>
                 </article>
               </div>
               <div v-else class="side-empty compact">本组暂无资源</div>
             </section>
           </div>
-        </div>
+        </main>
       </div>
 
     </transition>
@@ -482,16 +581,26 @@
           </div>
           <div>
             <h3>{{ focusedAgent.agent_role || getAgentMeta(focusedAgent.id).name }}</h3>
-            <p>{{ getStatusLabel(focusedAgent.status) }} · {{ focusedAgent.layer_name || '多智能体工作流' }}</p>
+            <p>{{ getRuntimeStatusLabel(focusedAgent.status) }} · {{ focusedAgent.layer_name || '多智能体工作流' }}</p>
           </div>
         </div>
+
+        <section class="drawer-section">
+          <h4>当前阶段</h4>
+          <p>{{ focusedAgent.layer_name || '多智能体工作流' }}</p>
+        </section>
 
         <section class="drawer-section">
           <h4>当前动作</h4>
           <p>{{ focusedAgent.current_action || focusedAgent.step_label || focusedAgent.message || '暂无当前动作' }}</p>
         </section>
 
-        <section class="drawer-section" v-if="focusedAgent.current_step || focusedAgent.total_steps || (focusedAgent.progress !== null && focusedAgent.progress !== undefined)">
+        <section class="drawer-section">
+          <h4>当前状态消息</h4>
+          <p>{{ focusedAgent.message || '暂无状态消息' }}</p>
+        </section>
+
+        <section class="drawer-section" v-if="focusedAgent.current_step || focusedAgent.total_steps">
           <h4>步骤进度</h4>
           <div class="drawer-progress-row">
             <span>{{ focusedAgent.current_step || 0 }} / {{ focusedAgent.total_steps || '-' }}</span>
@@ -499,72 +608,25 @@
           </div>
         </section>
 
-        <section class="drawer-section" v-if="focusedAgent.task_description">
-          <h4>任务描述</h4>
-          <p>{{ focusedAgent.task_description }}</p>
-        </section>
-
-        <section class="drawer-section" v-if="focusedAgent.planning_reason">
-          <h4>规划理由</h4>
-          <p>{{ focusedAgent.planning_reason }}</p>
-        </section>
-
-        <section class="drawer-section" v-if="normalizeList(focusedAgent.depends_on || focusedAgent.upstream_agents).length">
-          <h4>依赖关系</h4>
-          <div class="drawer-tags">
-            <el-tag
-              v-for="dependency in normalizeList(focusedAgent.depends_on || focusedAgent.upstream_agents)"
-              :key="dependency"
-              size="small"
-              effect="plain"
-            >
-              {{ getAgentMeta(dependency).name }}
-            </el-tag>
-          </div>
-        </section>
-
-        <section class="drawer-section" v-if="normalizeList(focusedAgent.personalized_constraints).length">
-          <h4>个性化约束</h4>
-          <ul>
-            <li v-for="item in normalizeList(focusedAgent.personalized_constraints)" :key="item">{{ item }}</li>
-          </ul>
-        </section>
-
-        <section class="drawer-section" v-if="hasEntries(focusedAgent.input_params)">
-          <h4>输入参数</h4>
+        <section class="drawer-section">
+          <h4>时间信息</h4>
           <div class="drawer-kv-list">
-            <div v-for="item in kvEntries(focusedAgent.input_params)" :key="item.key">
-              <span>{{ item.key }}</span>
-              <b>{{ item.value }}</b>
-            </div>
+            <div><span>开始时间</span><b>{{ focusedAgent.startedAt ? formatEventTime(focusedAgent.startedAt) : '-' }}</b></div>
+            <div><span>最近更新时间</span><b>{{ focusedAgent.updated_at ? formatEventTime(focusedAgent.updated_at) : '-' }}</b></div>
+            <div><span>耗时</span><b>{{ formatElapsedMs(focusedAgent.elapsedMs || 0) }}</b></div>
           </div>
         </section>
 
-        <section class="drawer-section" v-if="hasEntries(focusedAgent.output_requirements)">
-          <h4>输出要求</h4>
-          <div class="drawer-kv-list">
-            <div v-for="item in kvEntries(focusedAgent.output_requirements)" :key="item.key">
-              <span>{{ item.key }}</span>
-              <b>{{ item.value }}</b>
-            </div>
-          </div>
-        </section>
-
-        <section class="drawer-section" v-if="focusedAgent.output_preview || focusedAgent.summary">
-          <h4>输出预览</h4>
-          <p>{{ focusedAgent.output_preview || focusedAgent.summary }}</p>
-        </section>
-
-        <section class="drawer-section" v-if="getNodeBubbles(focusedAgent.id, 8).length">
+        <section class="drawer-section" v-if="focusedAgent.recentLogs?.length">
           <h4>最近执行日志</h4>
           <div class="drawer-log-list">
             <div
-              v-for="log in getNodeBubbles(focusedAgent.id, 8)"
+              v-for="log in focusedAgent.recentLogs"
               :key="log.id"
               class="drawer-log-item"
             >
-              <span></span>
-              <p>{{ formatFlowLogMessage(log) }}</p>
+              <span>{{ formatEventTime(log.time) }} | {{ getRuntimeStatusLabel(log.status) }}</span>
+              <p>{{ log.message }}</p>
             </div>
           </div>
         </section>
@@ -587,7 +649,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -603,39 +665,33 @@ import DiagramResourceView from '@/components/resource/DiagramResourceView.vue'
 import CodeResourceView from '@/components/resource/CodeResourceView.vue'
 import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
 
-import { generateResources, type ResourceAgentId, type LearningScenario } from '@/api/resource'
+import { generateResources, type ResourceAgentId, type LearningScenario, type ResourceGenerateEvent } from '@/api/resource'
 
 const router = useRouter()
 
 type WorkflowStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 
-type ResourceGenerateEvent = {
-  event_id: string
-  task_id: string
-  event_type: 'workflow' | 'planning' | 'agent' | 'resource' | 'review' | 'bundle' | 'error' | 'done'
-  stage: string
-  agent?: string | null
-  status: WorkflowStatus
-  message: string
-  progress?: number | null
-  payload: Record<string, any>
-  timestamp: string
-}
+// Use ResourceGenerateEvent from api/resource.ts - local type not needed
 
-type AgentStepRecord = {
+type AgentRuntimeStatus = 'waiting' | 'running' | 'success' | 'failed' | 'skipped'
+
+type AgentLogItem = {
+  id: string
+  time: string
+  eventType: string
+  stage?: string
+  status: AgentRuntimeStatus
+  message: string
   action?: string
-  step_label?: string
-  current_step?: number
-  total_steps?: number
-  message?: string
-  output_preview?: string
-  timestamp?: string
+  stepLabel?: string
+  currentStep?: number
+  totalSteps?: number
 }
 
 type AgentRuntimeState = {
   id: string
   agent_role?: string
-  status: WorkflowStatus
+  status: AgentRuntimeStatus
   layer?: number
   layer_name?: string
   resource_type?: string
@@ -653,13 +709,16 @@ type AgentRuntimeState = {
   input_params?: Record<string, any>
   output_requirements?: Record<string, any>
   personalized_constraints?: string[]
-  output_preview?: string
   resource_id?: string
   title?: string
   summary?: string
   progress?: number | null
   updated_at?: string
-  step_history?: AgentStepRecord[]
+  startedAt?: string
+  finishedAt?: string
+  elapsedMs: number
+  recentLogs: AgentLogItem[]
+  resourceGenerated?: boolean
 }
 
 type FlowEventBubble = {
@@ -767,7 +826,6 @@ const goToPersonalize = () => {
 // ===================== 3. 工作流与生成逻辑 =====================
 const totalProgress = ref(0)
 const currentMessage = ref('')
-const eventLogs = ref<ResourceGenerateEvent[]>([])
 const activeAgents = reactive<Record<string, AgentRuntimeState>>({})
 const generatedResources = ref<any[]>([])
 const reviewResult = ref<any | null>(null)
@@ -793,7 +851,7 @@ const createWorkflowStages = (): WorkflowStage[] => [
 
 const workflowStages = reactive<WorkflowStage[]>(createWorkflowStages())
 
-const focusedAgent = computed<AgentRuntimeState | null>(() => {
+const focusedAgent = computed(() => {
   if (focusedAgentId.value && activeAgents[focusedAgentId.value]) {
     return activeAgents[focusedAgentId.value]
   }
@@ -803,12 +861,14 @@ const focusedAgent = computed<AgentRuntimeState | null>(() => {
       return {
         id: node.id,
         agent_role: node.label,
-        status: node.status,
+        status: node.status === 'pending' ? 'waiting' : node.status,
         current_action: getNodeCurrentStage(node.id, node.status),
         message: getNodeCurrentStage(node.id, node.status),
         layer_name: '多智能体流程节点',
         updated_at: new Date().toISOString(),
-      }
+        elapsedMs: 0,
+        recentLogs: [],
+      } as AgentRuntimeState
     }
   }
   const running = Object.values(activeAgents).find(agent => agent.status === 'running')
@@ -886,26 +946,163 @@ const flowConnections = computed(() => rawFlowEdges.map(([from, to]) => {
   }
 }))
 
-const visibleEventLogs = computed(() => eventLogs.value.slice(-80).reverse())
+const getLatestNodeBubble = (nodeId: string) => {
+  const logs = getNodeBubbles(nodeId, 1)
+  return logs[logs.length - 1] || null
+}
+
 
 const resultResources = computed(() => {
   const resources = finalBundle.value?.resources
   return Array.isArray(resources) && resources.length ? resources : generatedResources.value
 })
 
-const resourceStatusSummary = computed(() => generatedResources.value.map((resource, index) => ({
-  key: resource.id || `${resource.type}-${index}`,
-  type: resource.type || 'resource',
-  status: '已生成',
-  title: resource.title || '未命名资源',
-  summary: stringifyCompact(resource.summary || resource.metadata?.summary || '资源已生成，等待摘要写入。', 96),
-})))
+const resultTopicSummary = computed(() => (
+  finalBundle.value?.topic
+  || finalBundle.value?.metadata?.topic
+  || finalBundle.value?.metadata?.course
+  || stringifyCompact(naturalInput.value, 42)
+  || '本次个性化学习任务'
+))
+
+const resultNeedSummary = computed(() => (
+  finalBundle.value?.gap
+  || finalBundle.value?.metadata?.gap
+  || finalBundle.value?.metadata?.learning_need
+  || finalBundle.value?.metadata?.weak_points
+  || stringifyCompact(naturalInput.value, 86)
+  || '系统已根据你的输入生成学习资源。'
+))
+
+const involvedAgentCount = computed(() => new Set(resultResources.value.map(resource => resource.type).filter(Boolean)).size)
+
+const sequenceOrder = ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading', 'video']
+
+const learningSequenceResources = computed(() => {
+  const resourceMap = new Map<string, any>()
+  resultResources.value.forEach((resource) => {
+    if (resource?.type && !resourceMap.has(resource.type)) resourceMap.set(resource.type, resource)
+  })
+  return sequenceOrder.map(type => resourceMap.get(type)).filter(Boolean)
+})
+
+const getResourceTypeLabel = (type: string) => {
+  const labelMap: Record<string, string> = {
+    content: '专业讲解',
+    mindmap: '知识导图',
+    diagram: '知识图解',
+    code: '代码案例',
+    quiz: '自测题',
+    reading: '拓展阅读',
+    video: '视频脚本',
+    reviewer: '质量审查',
+  }
+  return labelMap[type] || getAgentMeta(type).name || type
+}
+
+const getResourceUsageHint = (type: string) => {
+  const hintMap: Record<string, string> = {
+    content: '先阅读讲解，建立基础概念和关键术语理解。',
+    mindmap: '用于梳理知识层级、概念关系和复习框架。',
+    diagram: '用图解理解流程、结构、状态变化或核心机制。',
+    code: '通过代码案例把知识点落到实践，适合边运行边理解。',
+    quiz: '完成自测题，检查掌握情况并定位仍然薄弱的知识点。',
+    reading: '用于课后拓展和深入理解，适合完成基础资源后阅读。',
+    video: '可作为后续视频或动画讲解的脚本基础。',
+  }
+  return hintMap[type] || '建议结合本次学习目标使用该资源。'
+}
+
+const getResourceStageLabel = (type: string) => {
+  const stageMap: Record<string, string> = {
+    content: '概念理解',
+    mindmap: '结构梳理',
+    diagram: '原理可视化',
+    code: '实践验证',
+    quiz: '检测巩固',
+    reading: '拓展提升',
+    video: '讲解呈现',
+  }
+  return stageMap[type] || '资源学习'
+}
+
+const getDefaultResourceFormat = (type: string) => {
+  const formatMap: Record<string, string> = {
+    content: 'Markdown',
+    mindmap: 'Markdown / Tree',
+    diagram: 'Diagram Source',
+    code: 'Code',
+    quiz: 'Quiz JSON',
+    reading: 'Reading List',
+    video: 'Script',
+  }
+  return formatMap[type] || 'Resource'
+}
+
+const getEstimatedTime = (type: string) => {
+  const timeMap: Record<string, string> = {
+    content: '10-15 分钟',
+    mindmap: '5-8 分钟',
+    diagram: '6-10 分钟',
+    code: '15-25 分钟',
+    quiz: '10-20 分钟',
+    reading: '20-30 分钟',
+    video: '3-5 分钟',
+  }
+  return timeMap[type] || '待评估'
+}
+
+const getDifficultyLabel = (difficulty?: string) => {
+  const difficultyMap: Record<string, string> = {
+    basic: '基础',
+    beginner: '入门',
+    intermediate: '进阶',
+    advanced: '提高',
+    hard: '挑战',
+    exam: '考试强化',
+  }
+  return difficultyMap[String(difficulty || '').toLowerCase()] || difficulty || '自适应'
+}
+
+const getResourceToneClass = (type: string) => {
+  const toneMap: Record<string, string> = {
+    content: 'tone-blue',
+    mindmap: 'tone-purple',
+    diagram: 'tone-amber',
+    code: 'tone-rose',
+    quiz: 'tone-emerald',
+    reading: 'tone-indigo',
+    video: 'tone-slate',
+  }
+  return toneMap[type] || 'tone-blue'
+}
+
+const getPersonalizedFallback = (_type: string) => `该资源围绕”${resultTopicSummary.value}”生成，适合结合你的学习需求进行针对性复习。`
+
+// 资源排序顺序：按学习路径顺序排列
+const RESOURCE_ORDER = ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading']
+
+// 运行中已生成资源列表（按学习路径顺序排序）
+const sortedGeneratedResources = computed(() => {
+  return [...generatedResources.value].sort((a, b) => {
+    return RESOURCE_ORDER.indexOf(a.type) - RESOURCE_ORDER.indexOf(b.type)
+  })
+})
+
+// 预览运行中已生成的单个资源
+const previewGeneratedResource = (resource: any) => {
+  handlePreview({
+    agentId: resource.type,
+    resultData: resource.content,
+    title: resource.title || getResourceTypeLabel(resource.type)
+  })
+}
 
 const groupedResultResources = computed(() => {
   const groups = [
-    { key: 'basic', badge: 'FOUNDATION', label: '基础理解类', types: ['content', 'mindmap', 'diagram'], resources: [] as any[] },
-    { key: 'practice', badge: 'PRACTICE', label: '实践拓展类', types: ['code', 'reading', 'video'], resources: [] as any[] },
-    { key: 'assessment', badge: 'ASSESSMENT', label: '检测巩固类', types: ['quiz'], resources: [] as any[] },
+    { key: 'basic', badge: 'FOUNDATION', label: '基础理解类', description: '用于快速建立概念理解、知识结构和核心关系。', types: ['content', 'mindmap', 'diagram'], resources: [] as any[] },
+    { key: 'practice', badge: 'PRACTICE', label: '实践拓展类', description: '用于通过代码、案例和延伸阅读加深掌握。', types: ['code', 'reading', 'video'], resources: [] as any[] },
+    { key: 'assessment', badge: 'ASSESSMENT', label: '检测巩固类', description: '用于检验掌握程度，发现仍然薄弱的知识点。', types: ['quiz'], resources: [] as any[] },
   ]
   resultResources.value.forEach((resource) => {
     const group = groups.find(item => item.types.includes(resource.type)) ?? groups[0]!
@@ -958,7 +1155,6 @@ const startGeneration = async () => {
 const resetGenerationState = () => {
   totalProgress.value = 0
   currentMessage.value = ''
-  eventLogs.value = []
   Object.keys(activeAgents).forEach(key => delete activeAgents[key])
   generatedResources.value = []
   reviewResult.value = null
@@ -973,10 +1169,79 @@ const resetGenerationState = () => {
   workflowStages.splice(0, workflowStages.length, ...createWorkflowStages())
 }
 
+const normalizeRuntimeStatus = (status?: string, fallback: AgentRuntimeStatus = 'waiting'): AgentRuntimeStatus => {
+  if (status === 'running' || status === 'success' || status === 'failed' || status === 'skipped') return status
+  if (status === 'pending') return 'waiting'
+  return fallback
+}
+
+const ensureAgentRuntime = (agentId: string) => {
+  const previous = activeAgents[agentId]
+  if (previous) return previous
+  const runtime: AgentRuntimeState = {
+    id: agentId,
+    status: 'waiting',
+    current_action: '',
+    current_step: undefined,
+    total_steps: undefined,
+    elapsedMs: 0,
+    recentLogs: [],
+  }
+  activeAgents[agentId] = runtime
+  return runtime
+}
+
+const calculateElapsedMs = (start?: string, end?: string) => {
+  if (!start || !end) return 0
+  const startMs = new Date(start).getTime()
+  const endMs = new Date(end).getTime()
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return 0
+  return Math.max(0, endMs - startMs)
+}
+
+const appendEventToAgentRuntime = (event: ResourceGenerateEvent) => {
+  const agentId = resolveEventAgentId(event)
+  if (!agentId) return
+  const runtime = ensureAgentRuntime(agentId)
+  const time = event.timestamp || new Date().toISOString()
+  const status = normalizeRuntimeStatus(event.status, runtime.status)
+  const logItem: AgentLogItem = {
+    id: `${Date.now()}-${Math.random()}`,
+    time,
+    eventType: event.event_type,
+    stage: event.stage,
+    status,
+    message: event.message || runtime.message || '',
+    action: event.payload?.action,
+    stepLabel: event.payload?.step_label,
+    currentStep: event.payload?.current_step,
+    totalSteps: event.payload?.total_steps,
+  }
+  runtime.status = status
+  runtime.layer_name = (event.payload?.layer_name as string | undefined) || runtime.layer_name
+  runtime.layer = event.payload?.layer ?? runtime.layer
+  runtime.agent_role = (event.payload?.agent_role as string | undefined) || runtime.agent_role
+  runtime.current_action = (event.payload?.action as string | undefined) || runtime.current_action || ''
+  runtime.message = event.message || runtime.message
+  runtime.current_step = event.payload?.current_step ?? runtime.current_step
+  runtime.total_steps = event.payload?.total_steps ?? runtime.total_steps
+  runtime.updated_at = time
+  if (status === 'running' && !runtime.startedAt) runtime.startedAt = time
+  if (status === 'success' || status === 'failed' || status === 'skipped') runtime.finishedAt = time
+  runtime.elapsedMs = calculateElapsedMs(runtime.startedAt, runtime.finishedAt || runtime.updated_at)
+  runtime.recentLogs.unshift(logItem)
+  runtime.recentLogs = runtime.recentLogs.slice(0, 8)
+}
+
+const resolveEventAgentId = (event: ResourceGenerateEvent): string | undefined => {
+  if (event.agent) return event.agent
+  const payloadAgent = event.payload?.agent_id
+  return typeof payloadAgent === 'string' ? payloadAgent : undefined
+}
+
 const handleSseEvent = (event: ResourceGenerateEvent) => {
   if (!event?.event_type) return
 
-  eventLogs.value.push(event)
   if (event.progress !== null && event.progress !== undefined) {
     totalProgress.value = Math.max(0, Math.min(100, event.progress))
   }
@@ -995,76 +1260,27 @@ const handleSseEvent = (event: ResourceGenerateEvent) => {
       planningHistory.value.push(event.payload)
       ;(event.payload?.agents || []).forEach((agent: any) => {
         if (!agent.agent_id) return
-        const previous = activeAgents[agent.agent_id] || { id: agent.agent_id, status: 'pending' as WorkflowStatus }
-        activeAgents[agent.agent_id] = {
-          ...previous,
-          id: agent.agent_id,
-          status: previous.status,
-          layer: event.payload.layer,
-          layer_name: event.payload.layer_name,
-          agent_role: agent.agent_role || getAgentMeta(agent.agent_id).name,
-          task_description: agent.task_description,
-          planning_reason: agent.planning_reason,
-          depends_on: agent.depends_on || [],
-          resource_type: agent.resource_type,
-          input_params: agent.input_params || {},
-          output_requirements: agent.output_requirements || {},
-          personalized_constraints: agent.personalized_constraints || [],
-          updated_at: event.timestamp,
-        }
+        const runtime = ensureAgentRuntime(agent.agent_id)
+        runtime.layer = event.payload.layer
+        runtime.layer_name = event.payload.layer_name
+        runtime.agent_role = agent.agent_role || getAgentMeta(agent.agent_id).name
+        runtime.task_description = agent.task_description
+        runtime.planning_reason = agent.planning_reason
+        runtime.depends_on = agent.depends_on || []
+        runtime.resource_type = agent.resource_type
+        runtime.input_params = agent.input_params || {}
+        runtime.output_requirements = agent.output_requirements || {}
+        runtime.personalized_constraints = agent.personalized_constraints || []
+        runtime.updated_at = event.timestamp
       })
     }
   }
 
-  if (event.event_type === 'agent' && event.agent) {
-    const payload = event.payload || {}
-    const previous = activeAgents[event.agent] || { id: event.agent, status: 'pending' as WorkflowStatus }
-    const stepHistory = [...(previous.step_history || [])]
-    if (payload.current_step !== undefined || payload.step_label) {
-      stepHistory.push({
-        action: payload.action,
-        step_label: payload.step_label,
-        current_step: payload.current_step,
-        total_steps: payload.total_steps,
-        message: event.message,
-        output_preview: payload.output_preview,
-        timestamp: event.timestamp,
-      })
-    }
-    activeAgents[event.agent] = {
-      ...previous,
-      ...pickDefined({
-        id: event.agent,
-        status: event.status,
-        message: event.message,
-        action: payload.action,
-        progress: event.progress,
-        layer: payload.layer,
-        layer_name: payload.layer_name,
-        agent_role: payload.agent_role,
-        current_action: payload.current_action,
-        current_step: payload.current_step,
-        total_steps: payload.total_steps,
-        step_label: payload.step_label,
-        task_description: payload.task_description,
-        planning_reason: payload.planning_reason,
-        depends_on: payload.depends_on,
-        upstream_agents: payload.upstream_agents,
-        has_profile: payload.has_profile,
-        input_params: payload.input_params,
-        output_requirements: payload.output_requirements,
-        personalized_constraints: payload.personalized_constraints,
-        output_preview: payload.output_preview,
-        resource_id: payload.resource_id,
-        resource_type: payload.resource_type,
-        title: payload.title,
-        summary: payload.summary,
-        updated_at: event.timestamp,
-      }),
-      step_history: stepHistory,
-    }
-    if (event.status === 'running') {
-      focusedAgentId.value = event.agent
+  if ((event.event_type === 'agent_step' || event.event_type === 'agent') && resolveEventAgentId(event)) {
+    appendEventToAgentRuntime(event)
+    const agentId = resolveEventAgentId(event)!
+    if (normalizeRuntimeStatus(event.status) === 'running') {
+      focusedAgentId.value = agentId
     }
   }
 
@@ -1072,18 +1288,12 @@ const handleSseEvent = (event: ResourceGenerateEvent) => {
     const resource = event.payload?.resource
     if (resource) {
       upsertResource(resource)
-      if (event.agent && activeAgents[event.agent]) {
-        const existingAgent = activeAgents[event.agent]!
-        activeAgents[event.agent] = {
-          ...existingAgent,
-          id: event.agent,
-          status: 'success',
-          resource_id: resource.id,
-          title: resource.title,
-          summary: resource.summary,
-          output_preview: resource.summary || existingAgent.output_preview,
-          updated_at: event.timestamp,
-        }
+      const agentId = (resource.type as string) || resolveEventAgentId(event)
+      if (agentId) {
+        const runtime = ensureAgentRuntime(agentId)
+        runtime.resourceGenerated = true
+        runtime.updated_at = event.timestamp || new Date().toISOString()
+        runtime.message = `${runtime.agent_role || getAgentMeta(agentId).name}资源已生成`
       }
     }
   }
@@ -1160,6 +1370,7 @@ const resolveEventNodeId = (event: ResourceGenerateEvent): string => {
   if (event.event_type === 'review') return 'reviewer'
   if (event.event_type === 'bundle') return 'assembler'
   if (event.event_type === 'resource' && event.agent) return event.agent
+  if (event.event_type === 'agent_step' && event.agent) return event.agent
   if (event.event_type === 'agent' && event.agent) return event.agent
   if (event.stage === 'created') return 'master'
   if (event.stage === 'profile') return 'master'
@@ -1179,18 +1390,7 @@ const pushFlowEventBubble = (event: ResourceGenerateEvent) => {
     timestamp: event.timestamp,
   }
 
-  const next = [...flowEventBubbles.value, bubble]
-  const perNodeCount = new Map<string, number>()
-  flowEventBubbles.value = next
-    .reverse()
-    .filter((item) => {
-      const count = perNodeCount.get(item.nodeId) || 0
-      if (count >= 2) return false
-      perNodeCount.set(item.nodeId, count + 1)
-      return true
-    })
-    .reverse()
-    .slice(-12)
+  flowEventBubbles.value = [...flowEventBubbles.value, bubble].slice(-80)
 }
 
 const getNodeBubbles = (nodeId: string, limit = 2) => {
@@ -1211,7 +1411,8 @@ const getNodeCurrentStage = (nodeId: string, status: WorkflowStatus) => {
   if (agent?.step_label) return agent.step_label
   if (agent?.message) return agent.message
 
-  const latestBubble = getNodeBubbles(nodeId).at(-1)
+  const bubbles = getNodeBubbles(nodeId)
+  const latestBubble = bubbles[bubbles.length - 1]
   if (latestBubble?.message) return latestBubble.message
 
   if (status === 'success') return '已完成当前阶段'
@@ -1222,11 +1423,28 @@ const getNodeCurrentStage = (nodeId: string, status: WorkflowStatus) => {
 }
 
 const formatFlowLogMessage = (log: FlowEventBubble) => {
-  return stringifyCompact(log.message || getStatusLabel(log.status) || '正在处理任务', 54)
+  return stringifyCompact(log.message || getStatusLabel(log.status) || '正在处理任务', 72)
 }
 
-const pickDefined = <T extends Record<string, any>>(value: T): Partial<T> => {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>
+const getNodeProcessMessage = (nodeId: string, status: WorkflowStatus) => {
+  const latestBubble = getLatestNodeBubble(nodeId)
+  if (latestBubble) return formatFlowLogMessage(latestBubble)
+  return stringifyCompact(getNodeCurrentStage(nodeId, status), 72)
+}
+
+const getFlowLogTypeLabel = (type?: string) => {
+  const labels: Record<string, string> = {
+    workflow: '流程',
+    planning: '规划',
+    agent_step: '执行步骤',
+    agent: 'Agent',
+    resource: '资源',
+    review: '审查',
+    bundle: '组装',
+    error: '异常',
+    done: '完成',
+  }
+  return labels[type || ''] || type || '事件'
 }
 
 const stringifyCompact = (value: any, maxLength = 80): string => {
@@ -1238,13 +1456,6 @@ const stringifyCompact = (value: any, maxLength = 80): string => {
   }
   const text = String(value)
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text
-}
-
-const hasEntries = (value?: Record<string, any>) => Boolean(value && Object.keys(value).length)
-
-const kvEntries = (value?: Record<string, any>) => {
-  if (!value) return []
-  return Object.entries(value).map(([key, item]) => ({ key, value: stringifyCompact(item, 72) }))
 }
 
 const normalizeList = (value: any): string[] => {
@@ -1264,22 +1475,38 @@ const getStatusLabel = (status: WorkflowStatus) => {
   return labels[status]
 }
 
-const getStatusTagType = (status: WorkflowStatus) => {
-  const types: Record<WorkflowStatus, 'primary' | 'success' | 'info' | 'warning' | 'danger'> = {
-    pending: 'info',
-    running: 'primary',
-    success: 'success',
-    failed: 'danger',
-    skipped: 'warning',
+const getRuntimeStatusLabel = (status: AgentRuntimeStatus) => {
+  const labels: Record<AgentRuntimeStatus, string> = {
+    waiting: '等待',
+    running: '运行中',
+    success: '完成',
+    failed: '失败',
+    skipped: '跳过',
   }
-  return types[status]
+  return labels[status]
 }
 
-const getAgentProgress = (status: WorkflowStatus) => {
+const getBundleStatusLabel = (status?: string) => {
+  const labels: Record<string, string> = {
+    completed: '生成完成',
+    completed_with_warnings: '完成但有提醒',
+    partial_completed: '部分完成',
+    failed: '生成失败',
+  }
+  return labels[status || ''] || '生成完成'
+}
+
+const getAgentProgress = (status: WorkflowStatus | AgentRuntimeStatus) => {
+  if (status === 'waiting') return 0
   if (status === 'success') return 100
   if (status === 'running') return 58
   if (status === 'failed') return 100
   return 0
+}
+
+const formatElapsedMs = (elapsedMs: number) => {
+  if (!elapsedMs || elapsedMs <= 0) return '0s'
+  return `${Math.floor(elapsedMs / 1000)}s`
 }
 
 const getFlowNodeStatus = (nodeId: string): WorkflowStatus => {
@@ -1292,7 +1519,9 @@ const getFlowNodeStatus = (nodeId: string): WorkflowStatus => {
     if (finalBundle.value) return 'success'
     return getStageStatus('assembling')
   }
-  return activeAgents[nodeId]?.status || 'pending'
+  const status = activeAgents[nodeId]?.status
+  if (!status || status === 'waiting') return 'pending'
+  return status
 }
 
 const getStageStatus = (stage: string): WorkflowStatus => {
@@ -1329,6 +1558,10 @@ const formatEventTime = (timestamp: string) => {
     second: '2-digit',
   }).format(new Date(timestamp))
 }
+
+onBeforeUnmount(() => {
+  closeSseConnection()
+})
 
 // ===================== 4. UI 交互 =====================
 const resetGenerator = () => {
@@ -1549,22 +1782,26 @@ const handlePreview = (data: any) => {
 .flow-edge.failed { stroke: #EF4444; opacity: 0.9; }
 .flow-edge.running, .flow-edge.active { stroke: #2563EB; stroke-dasharray: 10 10; animation: flowDash 1.2s linear infinite; opacity: 1; }
 @keyframes flowDash { to { stroke-dashoffset: -20; } }
-.flow-node { position: absolute; z-index: 5; transform: translate(-50%, -50%); width: 186px; min-height: 132px; border: 1px solid #CBD5E1; border-radius: 18px; background: rgba(255, 255, 255, 0.96); display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; cursor: pointer; color: #475569; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07); padding: 12px; text-align: left; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
+.flow-node { position: absolute; z-index: 5; transform: translate(-50%, -50%); width: 186px; min-height: 112px; border: 1px solid #CBD5E1; border-radius: 18px; background: rgba(255, 255, 255, 0.96); display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; cursor: pointer; color: #475569; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07); padding: 12px; text-align: left; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
 .flow-node:hover, .flow-node.focused { transform: translate(-50%, -50%) translateY(-3px); border-color: #2563EB; box-shadow: 0 16px 30px rgba(37, 99, 235, 0.16); }
 .node-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .flow-node .node-icon { width: 34px; height: 34px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #F1F5F9; color: #64748B; flex: 0 0 auto; }
 .node-title-group { min-width: 0; flex: 1; }
 .flow-node .node-label { display: block; font-weight: 850; color: #1E293B; font-size: 0.9rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-node small { display: block; margin-top: 2px; color: #94A3B8; font-weight: 700; font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-stage { min-height: 38px; border-radius: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; color: #334155; font-size: 0.76rem; font-weight: 760; line-height: 1.35; padding: 8px 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.node-inline-logs { display: grid; gap: 4px; }
-.node-inline-logs p { position: relative; margin: 0; padding-left: 12px; color: #64748B; font-size: 0.7rem; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-inline-logs p::before { content: ''; position: absolute; left: 2px; top: 0.55em; width: 5px; height: 5px; border-radius: 999px; background: #94A3B8; }
+.node-live-log { border: 1px solid #E2E8F0; background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); border-radius: 14px; padding: 9px 10px; min-height: 64px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+.node-live-log-meta { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 4px; }
+.node-live-log-meta span { color: #2563EB; font-size: 0.66rem; font-weight: 850; letter-spacing: 0.05em; }
+.node-live-log-meta em { color: #94A3B8; font-size: 0.66rem; font-style: normal; font-variant-numeric: tabular-nums; }
+.node-live-log p { margin: 0; color: #475569; font-size: 0.72rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.log-fade-enter-active, .log-fade-leave-active { transition: opacity 0.22s ease, transform 0.22s ease; }
+.log-fade-enter-from { opacity: 0; transform: translateY(6px); }
+.log-fade-leave-to { opacity: 0; transform: translateY(-6px); }
 .node-progress { position: relative; height: 3px; margin-top: auto; overflow: hidden; border-radius: 999px; background: #E2E8F0; }
 .node-progress span { position: absolute; inset: 0 auto 0 0; width: 45%; border-radius: inherit; background: #2563EB; animation: nodeProgressMove 1.35s ease-in-out infinite; }
 .flow-node.is-running { border-color: #60A5FA; box-shadow: 0 0 0 6px rgba(96, 165, 250, 0.14), 0 18px 32px rgba(37, 99, 235, 0.16); animation: nodePulse 1.4s ease-in-out infinite; }
 .flow-node.is-running .node-icon { background: #DBEAFE; color: #2563EB; }
-.flow-node.is-running .node-inline-logs p::before { background: #2563EB; }
+.flow-node.is-running .node-live-log { border-color: #BFDBFE; background: #EFF6FF; }
 .flow-node.is-success { border-color: #86EFAC; }
 .flow-node.is-success .node-icon { background: #DCFCE7; color: #16A34A; }
 .flow-node.is-failed { border-color: #FCA5A5; }
@@ -1589,33 +1826,181 @@ const handlePreview = (data: any) => {
 .side-empty.compact { padding: 14px; }
 
 /* ================= Phase 4: Results View ================= */
-.results-view { background: #F8FAFC; overflow-y: auto; }
-.results-header { position: sticky; top: 0; z-index: 50; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(226, 232, 240, 0.6); }
-.glass-nav { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(16px); }
-.nav-brand { display: flex; align-items: center; gap: 16px; }
-.success-icon { font-size: 2.2rem; color: #10B981; }
-.nav-titles h2 { margin: 0 0 4px; font-size: 1.25rem; font-weight: 800; color: #0F172A; }
-.nav-titles p { margin: 0; font-size: 0.9rem; color: #64748B; }
-.nav-actions { display: flex; gap: 12px; }
-.back-btn { border: none !important; background: #F1F5F9 !important; color: #475569 !important; font-weight: 600; }
+.results-view {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(219, 234, 254, 0.72), transparent 32%),
+    radial-gradient(circle at 92% 8%, rgba(226, 232, 240, 0.88), transparent 34%),
+    linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
+  overflow-y: auto;
+}
+.result-dashboard-view { color: #0F172A; }
+.glass-nav { background: rgba(255, 255, 255, 0.86); backdrop-filter: blur(18px); }
+.result-hero {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding: 28px 40px 22px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+}
+.result-hero-main { max-width: 1050px; min-width: 0; }
+.result-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.result-success-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  color: #047857;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+.result-soft-meta { color: #64748B; font-size: 0.86rem; font-weight: 700; }
+.result-hero h1 { margin: 0; color: #0F172A; font-size: clamp(1.45rem, 2.5vw, 2.15rem); line-height: 1.18; letter-spacing: -0.035em; }
+.result-hero-desc { margin: 10px 0 0; color: #64748B; line-height: 1.7; max-width: 840px; }
+.result-context-panel {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(260px, 1fr);
+  gap: 12px;
+}
+.result-context-panel div {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid #E2E8F0;
+  border-radius: 18px;
+  padding: 13px 15px;
+  min-width: 0;
+}
+.result-context-panel span { display: block; color: #94A3B8; font-size: 0.76rem; font-weight: 850; margin-bottom: 5px; }
+.result-context-panel strong { display: block; color: #334155; line-height: 1.45; overflow-wrap: anywhere; }
+.result-hero-actions { display: flex; gap: 12px; align-items: center; justify-content: flex-end; }
+.back-btn { border: none !important; background: #F1F5F9 !important; color: #475569 !important; font-weight: 700; }
 .back-btn:hover { background: #E2E8F0 !important; color: #0F172A !important; }
-.path-btn { font-weight: 700; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
-
-.results-body { padding: 40px; max-width: 1500px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
-.review-summary-card { padding: 22px; }
-.review-summary-card p { margin: 0; color: #475569; line-height: 1.65; }
+.path-btn { font-weight: 800; box-shadow: 0 12px 28px rgba(37, 99, 235, 0.2); }
+.results-body { padding: 34px 40px 48px; max-width: 1500px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.resource-overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.overview-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #E2E8F0;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.045);
+}
+.overview-card span { display: block; color: #64748B; font-size: 0.82rem; font-weight: 850; margin-bottom: 8px; }
+.overview-card strong { display: block; color: #0F172A; font-size: 1.78rem; line-height: 1; letter-spacing: -0.04em; }
+.overview-card p { margin: 10px 0 0; color: #64748B; line-height: 1.5; font-size: 0.9rem; }
+.learning-sequence-card, .review-report-card, .result-group-section {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #E2E8F0;
+  border-radius: 26px;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.052);
+}
+.learning-sequence-card { padding: 24px; }
+.section-heading { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.section-heading > span, .review-content > span { color: #64748B; font-size: 0.76rem; letter-spacing: 0.08em; font-weight: 900; }
+.section-heading h2, .review-content h2 { margin: 0; color: #0F172A; font-size: 1.22rem; }
+.section-heading p, .review-content p { margin: 0; color: #64748B; line-height: 1.65; }
+.sequence-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.sequence-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #E2E8F0;
+  border-radius: 18px;
+  background: #F8FAFC;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.sequence-node:hover { transform: translateY(-2px); background: #FFFFFF; border-color: #CBD5E1; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06); }
+.sequence-index { color: #94A3B8; font-size: 0.78rem; font-weight: 900; }
+.sequence-icon, .resource-type-mark, .review-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sequence-node strong { display: block; color: #0F172A; font-size: 0.96rem; margin-bottom: 3px; }
+.sequence-node p { margin: 0; color: #64748B; font-size: 0.84rem; line-height: 1.35; overflow-wrap: anywhere; }
+.review-report-card { padding: 22px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; }
+.review-icon { width: 48px; height: 48px; background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; font-size: 1.45rem; }
 .result-resource-groups { display: flex; flex-direction: column; gap: 24px; }
-.result-group-section { padding: 22px; }
-.result-group-header { margin-bottom: 18px; }
-.result-resource-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; }
-.result-resource-card { padding: 22px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.result-card-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-.result-card-header h3 { margin: 10px 0 0; font-size: 1.12rem; line-height: 1.35; color: #0F172A; overflow-wrap: anywhere; }
-.result-card-header > span { color: #64748B; font-size: 0.82rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.result-group-section { padding: 24px; }
+.result-group-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 20px; }
+.result-group-header h3 { margin: 5px 0 5px; color: #0F172A; font-size: 1.22rem; font-weight: 900; }
+.result-group-header p { margin: 0; color: #64748B; line-height: 1.55; }
+.result-resource-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; align-items: stretch; }
+.result-resource-card {
+  min-width: 0;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 24px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.result-resource-card:hover { transform: translateY(-3px); border-color: #CBD5E1; box-shadow: 0 20px 42px rgba(15, 23, 42, 0.075); }
+.resource-card-top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 13px; align-items: start; }
+.resource-title-block { min-width: 0; }
+.resource-type-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.resource-type-row > span { color: #94A3B8; font-size: 0.76rem; font-weight: 850; text-transform: uppercase; letter-spacing: 0.04em; }
+.resource-title-block h3 { margin: 0; color: #0F172A; font-size: 1.1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.resource-summary { color: #475569; line-height: 1.68; margin: 0; overflow-wrap: anywhere; }
+.resource-usage-card {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.resource-usage-card b, .personalized-reason b { color: #334155; font-size: 0.82rem; }
+.resource-usage-card span, .personalized-reason span { color: #64748B; line-height: 1.55; overflow-wrap: anywhere; }
 .result-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.result-meta-grid span { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 10px; color: #475569; line-height: 1.4; overflow-wrap: anywhere; }
-.result-meta-grid b { display: block; color: #94A3B8; font-size: 0.76rem; margin-bottom: 4px; }
-.personalized-reason { background: #F0F9FF; border: 1px solid #BAE6FD; border-radius: 14px; padding: 12px; color: #075985; line-height: 1.55; overflow-wrap: anywhere; }
+.result-meta-grid span {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 11px;
+  color: #475569;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.result-meta-grid b { display: block; color: #94A3B8; font-size: 0.74rem; margin-bottom: 4px; }
+.resource-knowledge-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.personalized-reason {
+  margin-top: auto;
+  background: #F0F9FF;
+  border: 1px solid #BAE6FD;
+  border-radius: 16px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.resource-card-actions { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding-top: 2px; }
+.tone-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+.tone-purple { background: #F5F3FF; color: #6D28D9; border: 1px solid #DDD6FE; }
+.tone-amber { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
+.tone-rose { background: #FFF1F2; color: #BE123C; border: 1px solid #FFE4E6; }
+.tone-emerald { background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
+.tone-indigo { background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE; }
+.tone-slate { background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; }
+.side-empty.compact { padding: 14px; }
 
 @media (max-width: 1200px) {
   .workbench-grid { grid-template-columns: 240px minmax(0, 1fr); }
@@ -1633,13 +2018,23 @@ const handlePreview = (data: any) => {
   .workbench-grid, .resource-side-panel { grid-template-columns: 1fr; }
   .progress-metrics { grid-template-columns: 1fr; }
   .flow-canvas { height: 720px; }
-  .flow-node { width: 176px; min-height: 126px; font-size: 0.82rem; }
+  .flow-node { width: 176px; min-height: 112px; font-size: 0.82rem; }
   .resource-status-item { grid-template-columns: 1fr; }
   .workflow-timeline-panel, .resource-side-panel { position: static; }
   .event-log-row { grid-template-columns: 1fr; gap: 6px; }
   .result-meta-grid { grid-template-columns: 1fr; }
-  .results-header { align-items: flex-start; flex-direction: column; gap: 16px; padding: 18px; }
+  .result-hero { position: relative; grid-template-columns: 1fr; padding: 20px; }
+  .result-hero-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .result-context-panel { grid-template-columns: 1fr; }
   .results-body { padding: 18px; }
+  .resource-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .result-resource-grid { grid-template-columns: 1fr; }
+  .resource-card-actions { align-items: stretch; flex-direction: column; }
+}
+@media (max-width: 520px) {
+  .resource-overview-grid { grid-template-columns: 1fr; }
+  .sequence-track { display: flex; overflow-x: auto; padding-bottom: 4px; }
+  .sequence-node { min-width: 240px; }
 }
 
 .elegant-dialog :deep(.el-dialog) { border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }

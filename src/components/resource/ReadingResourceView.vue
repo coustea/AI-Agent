@@ -1,10 +1,6 @@
 <template>
   <div class="reading-resource" :class="{ compact }">
     <div v-if="readingData" class="technical-frame reading-container">
-      <div class="frame-corners top-left"></div>
-      <div class="frame-corners top-right"></div>
-      <div class="frame-corners bottom-left"></div>
-      <div class="frame-corners bottom-right"></div>
 
       <div class="frame-header">
         <div class="status-indicator"></div>
@@ -139,21 +135,21 @@ const getDifficultyText = (difficulty?: string) => {
 
 .reading-resource {
   width: 100%;
-  --primary: #6366F1;
-  --bg: #F5F3FF;
-  --fg: #1E1B4B;
-  --border: #E0E7FF;
-  --accent: #059669;
+  --primary: #000000;
+  --bg: #FFFFFF;
+  --fg: #000000;
+  --border: #E5E7EB;
+  --accent: #000000;
 }
 
 /* 技术框架样式 */
 .technical-frame {
   position: relative;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   padding: 44px 32px 32px;
-  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  box-shadow: none;
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -189,7 +185,7 @@ const getDifficultyText = (difficulty?: string) => {
   height: 6px;
   background: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow: none;
   animation: pulse 2s infinite;
 }
 
@@ -218,7 +214,7 @@ const getDifficultyText = (difficulty?: string) => {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
   color: var(--primary);
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   padding: 2px 6px;
   border-radius: 2px;
 }
@@ -236,7 +232,7 @@ const getDifficultyText = (difficulty?: string) => {
   background: white;
   border-radius: 8px;
   border: 1px solid var(--border);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+  box-shadow: none;
 }
 
 .summary-icon {
@@ -268,7 +264,7 @@ const getDifficultyText = (difficulty?: string) => {
 
 .reading-item:hover {
   border-color: var(--primary);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.05);
+  box-shadow: none;
   transform: translateX(4px);
 }
 
@@ -322,14 +318,14 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .difficulty-tag.basic { color: var(--accent); border-color: var(--accent); }
-.difficulty-tag.medium { color: #F59E0B; border-color: #F59E0B; }
-.difficulty-tag.advanced { color: #DC2626; border-color: #DC2626; }
+.difficulty-tag.medium { color: #000000; border-color: #000000; }
+.difficulty-tag.advanced { color: #000000; border-color: #000000; }
 
 .reading-reason {
   font-family: 'Fira Code', monospace;
   font-size: 0.9rem;
   color: var(--fg);
-  background: rgba(99, 102, 241, 0.03);
+  background: rgba(0, 0, 0, 0.03);
   padding: 16px;
   border-radius: 4px;
   margin-bottom: 16px;

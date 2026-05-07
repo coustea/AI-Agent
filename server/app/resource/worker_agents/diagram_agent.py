@@ -42,8 +42,8 @@ from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
 from app.resource.worker_agents.utils import (
+    AgentContextBuilder,
     append_backend_context_for_prompt,
-    extract_markdown_from_llm_output,
     learning_need_from_task,
     title_from_learning_need,
 )
@@ -132,7 +132,6 @@ class DiagramAgent:
         total_steps: int = 0,
         step_label: str = "",
         current_action: str = "",
-        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
@@ -144,7 +143,6 @@ class DiagramAgent:
                 total_steps=total_steps,
                 step_label=step_label,
                 current_action=current_action,
-                output_preview=output_preview,
                 layer=state.layer_index,
                 layer_name="认知建构层",
                 agent_role=self.ROLE_NAME,
@@ -164,7 +162,6 @@ class DiagramAgent:
             total_steps=total,
             step_label=self.STEPS[0],
             current_action="分析图解目标",
-            output_preview="正在识别适合图解表达的结构、流程、关系或状态变化",
         )
         prompt = self._load_prompt()
 
@@ -176,7 +173,6 @@ class DiagramAgent:
             total_steps=total,
             step_label=self.STEPS[1],
             current_action="融合画像与依赖",
-            output_preview="正在结合学习偏好、规划要求和上游重点选择图表表达方式",
         )
         input_text = await self._build_input(state)
 
@@ -196,7 +192,6 @@ class DiagramAgent:
                 total_steps=total,
                 step_label=self.STEPS[2],
                 current_action="生成 Mermaid 图解",
-                output_preview="正在生成可渲染的 Mermaid 图表源码",
             )
             generation = await self._generate_mermaid_single_shot(requested_type, prompt, input_text)
             if generation is None:
@@ -216,7 +211,6 @@ class DiagramAgent:
                 total_steps=total,
                 step_label=self.STEPS[3],
                 current_action="整理图解资源",
-                output_preview=mermaid_source[:240],
             )
 
             content = {
@@ -226,12 +220,20 @@ class DiagramAgent:
                 "description": "知识图解",
             }
 
+            covered_points = self._extract_diagram_labels(mermaid_source)
+            summary_data = {
+                "diagram_type": diagram_type,
+                "covered_points": covered_points,
+                "relation_type": self._infer_relation_type(diagram_type, mermaid_source),
+            }
+
             return WorkerResult(
                 success=True,
                 content=content,
                 file_type="mermaid",
                 title=title_from_learning_need(state.task, "知识图解"),
                 summary="生成 Mermaid 知识图解",
+                summary_data=summary_data,
                 metadata={
                     "engine": "mermaid",
                     "render_at": "frontend",
@@ -340,6 +342,22 @@ class DiagramAgent:
                 return diagram_type
         return "hierarchy"
 
+    def _extract_diagram_labels(self, mermaid_source: str) -> list[str]:
+        """从 Mermaid 节点标签中提取可复用知识点摘要。"""
+        labels = re.findall(r"[\[({]\"?([^\[\]{}()\"<>|]{2,40})\"?[\])}]", mermaid_source or "")
+        cleaned = [re.sub(r"\s+", " ", item).strip() for item in labels]
+        return list(dict.fromkeys(item for item in cleaned if item))[:8]
+
+    def _infer_relation_type(self, diagram_type: str, mermaid_source: str) -> str:
+        """按图类型给最终资源包提供轻量关系描述。"""
+        if diagram_type in {"sequence", "activity", "flow"}:
+            return "流程"
+        if diagram_type == "state" or "stateDiagram" in mermaid_source:
+            return "状态变化"
+        if diagram_type in {"compare", "relation"}:
+            return "对比/关系"
+        return "结构"
+
     def _load_prompt(self) -> str:
         """加载 prompt 模板。"""
         if self.prompt_path.exists():
@@ -395,6 +413,12 @@ class DiagramAgent:
             f"- 细节级别: {agent_config.get('detail_level', 'standard')}",
         ]
 
+        # Use AgentContextBuilder for context-aware prompt building
+        builder = AgentContextBuilder()
+        context_text = builder.build_for_agent("diagram", state)
+        if context_text:
+            parts.append("")
+            parts.append(context_text)
         append_backend_context_for_prompt(parts, state)
 
         parts.append("")

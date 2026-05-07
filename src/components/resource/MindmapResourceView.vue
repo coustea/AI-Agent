@@ -1,10 +1,6 @@
 <template>
   <div class="mindmap-resource" :class="{ compact }">
     <div v-if="markdownContent" class="technical-frame mindmap-container">
-      <div class="frame-corners top-left"></div>
-      <div class="frame-corners top-right"></div>
-      <div class="frame-corners bottom-left"></div>
-      <div class="frame-corners bottom-right"></div>
 
       <div class="frame-header">
         <div class="status-indicator"></div>
@@ -118,16 +114,16 @@ const renderMarkmap = async (content: string) => {
             overflow: visible;
           }
           .${id}-g .markmap-node text {
-            fill: #1E1B4B;
+            fill: #000000;
           }
           .${id}-g .markmap-link {
-            stroke: #6366F1;
+            stroke: #000000;
             stroke-width: 1.5px;
             opacity: 0.6;
           }
           .${id}-g .markmap-node circle {
             fill: #FFFFFF;
-            stroke: #6366F1;
+            stroke: #000000;
             stroke-width: 2px;
           }
         `
@@ -161,21 +157,21 @@ onMounted(() => {
 
 .mindmap-resource {
   width: 100%;
-  --primary: #6366F1;
-  --bg: #F5F3FF;
-  --fg: #1E1B4B;
-  --border: #E0E7FF;
-  --accent: #059669;
+  --primary: #000000;
+  --bg: #FFFFFF;
+  --fg: #000000;
+  --border: #E5E7EB;
+  --accent: #000000;
 }
 
 /* 技术框架样式 */
 .technical-frame {
   position: relative;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   padding: 44px 32px 32px;
-  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  box-shadow: none;
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -210,7 +206,7 @@ onMounted(() => {
   height: 6px;
   background: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow: none;
   animation: pulse 2s infinite;
 }
 
@@ -239,7 +235,7 @@ onMounted(() => {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
   color: var(--primary);
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   padding: 2px 6px;
   border-radius: 2px;
 }
@@ -257,9 +253,7 @@ onMounted(() => {
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
-  background-image: 
-    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-image: none;
   background-size: 32px 32px;
 }
 
@@ -285,10 +279,10 @@ onMounted(() => {
 
 .markmap-error {
   padding: 20px;
-  background: rgba(220, 38, 38, 0.05);
-  border: 1px solid rgba(220, 38, 38, 0.2);
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 4px;
-  color: #DC2626;
+  color: #000000;
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.85rem;
 }
@@ -299,7 +293,6 @@ onMounted(() => {
   background: transparent;
   box-shadow: none;
 }
-.compact .frame-corners,
 .compact .frame-header,
 .compact .frame-footer {
   display: none;

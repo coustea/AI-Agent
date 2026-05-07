@@ -14,6 +14,7 @@ from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
 from app.resource.worker_agents.utils import (
+    AgentContextBuilder,
     append_backend_context_for_prompt,
     extract_markdown_from_llm_output,
     learning_need_from_task,
@@ -45,7 +46,6 @@ class MindmapAgent:
         total_steps: int = 0,
         step_label: str = "",
         current_action: str = "",
-        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
@@ -57,7 +57,6 @@ class MindmapAgent:
                 total_steps=total_steps,
                 step_label=step_label,
                 current_action=current_action,
-                output_preview=output_preview,
                 layer=state.layer_index,
                 layer_name="认知建构层",
                 agent_role=self.ROLE_NAME,
@@ -77,7 +76,6 @@ class MindmapAgent:
             total_steps=total,
             step_label=self.STEPS[0],
             current_action="分析知识结构需求",
-            output_preview="正在识别核心概念、层级关系和知识组织目标",
         )
         prompt = self._load_prompt()
 
@@ -89,7 +87,6 @@ class MindmapAgent:
             total_steps=total,
             step_label=self.STEPS[1],
             current_action="融合画像与依赖",
-            output_preview="正在结合学习短板、前置知识和规划参数梳理导图范围",
         )
         input_text = await self._build_input(state)
 
@@ -102,7 +99,6 @@ class MindmapAgent:
                 total_steps=total,
                 step_label=self.STEPS[2],
                 current_action="生成多级思维导图",
-                output_preview="正在构建主题节点、一级分支和关键概念层级",
             )
 
             response = await self.llm_manager.ainvoke(
@@ -122,8 +118,24 @@ class MindmapAgent:
                 total_steps=total,
                 step_label=self.STEPS[3],
                 current_action="整理导图结构",
-                output_preview=markdown_content[:240],
             )
+
+            branches: list[str] = []
+            weak_points: list[str] = []
+            for line in markdown_content.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("## "):
+                    branches.append(stripped.lstrip("#").strip())
+                elif stripped.startswith("- "):
+                    item = stripped[2:].strip()
+                    if any(token in item for token in ("易错", "误区", "难点", "薄弱")):
+                        weak_points.append(item)
+            summary_data = {
+                "central_topic": learning_need_from_task(state.task)[:50],
+                "branches": list(dict.fromkeys(branches))[:8],
+                "weak_points": list(dict.fromkeys(weak_points))[:8],
+                "map_type": state.agent_config.get("map_type", "knowledge_tree"),
+            }
 
             return WorkerResult(
                 success=True,
@@ -131,6 +143,7 @@ class MindmapAgent:
                 file_type="markdown",
                 title=title_from_learning_need(state.task, "思维导图"),
                 summary="生成 Markmap 思维导图 Markdown",
+                summary_data=summary_data,
                 metadata={
                     "engine": "markmap",
                     "render_at": "frontend",
@@ -176,6 +189,12 @@ class MindmapAgent:
             f"- 包含前置知识: {agent_config.get('include_prerequisites', False)}",
         ]
 
+        # Use AgentContextBuilder for context-aware prompt building
+        builder = AgentContextBuilder()
+        context_text = builder.build_for_agent("mindmap", state)
+        if context_text:
+            parts.append("")
+            parts.append(context_text)
         append_backend_context_for_prompt(parts, state)
 
         parts.append("")

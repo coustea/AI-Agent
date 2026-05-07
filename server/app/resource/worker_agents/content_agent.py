@@ -15,8 +15,9 @@ from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
 from app.resource.worker_agents.utils import (
+    AgentContextBuilder,
     append_backend_context_for_prompt,
-    extract_markdown_from_llm_output,
+    build_content_summary_data,
     learning_need_from_task,
     title_from_learning_need,
 )
@@ -46,7 +47,6 @@ class ContentAgent:
         total_steps: int = 0,
         step_label: str = "",
         current_action: str = "",
-        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
@@ -58,7 +58,6 @@ class ContentAgent:
                 total_steps=total_steps,
                 step_label=step_label,
                 current_action=current_action,
-                output_preview=output_preview,
                 layer=state.layer_index,
                 layer_name="认知建构层",
                 agent_role=self.ROLE_NAME,
@@ -78,7 +77,6 @@ class ContentAgent:
             total_steps=total,
             step_label=self.STEPS[0],
             current_action="分析学习需求",
-            output_preview="正在识别课程主题、知识短板和资源目标",
         )
         prompt = self._load_prompt()
 
@@ -90,7 +88,6 @@ class ContentAgent:
             total_steps=total,
             step_label=self.STEPS[1],
             current_action="融合画像与依赖",
-            output_preview="正在读取个性化约束、学习偏好和 MasterAgent 输入参数",
         )
         input_text = await self._build_input(state)
 
@@ -103,7 +100,6 @@ class ContentAgent:
                 total_steps=total,
                 step_label=self.STEPS[2],
                 current_action="生成课程讲解",
-                output_preview="正在组织概念解释、示例、易错点和复习重点",
             )
 
             response = await self.llm_manager.ainvoke(
@@ -111,9 +107,10 @@ class ContentAgent:
                 [HumanMessage(content=f"{prompt}\n\n{input_text}")],
                 model_kwargs={"temperature": 0.3},
             )
-
             content = response.content if hasattr(response, "content") else str(response)
             content = self._clean_content(content)
+
+            learning_need = learning_need_from_task(state.task)
 
             await self._emit_action(
                 state,
@@ -123,15 +120,18 @@ class ContentAgent:
                 total_steps=total,
                 step_label=self.STEPS[3],
                 current_action="整理讲解文档",
-                output_preview=content[:240],
             )
+
+            # 从讲解文档中提取结构化摘要，供下游 Agent 轻量依赖
+            summary_data = build_content_summary_data(content, learning_need)
 
             return WorkerResult(
                 success=True,
                 content=content,
                 file_type="markdown",
                 title=title_from_learning_need(state.task, "内容讲解"),
-                summary="生成课程讲解文档",
+                summary=f"已生成{summary_data.get('topic') or '学习主题'}讲解文档，包含核心知识点与复习建议",
+                summary_data=summary_data,
                 metadata={"engine": "markdown", "render_at": "frontend"},
             )
 
@@ -171,6 +171,13 @@ class ContentAgent:
             f"- 深度级别: {agent_config.get('depth_level', 'standard')}",
         ]
 
+        # Use AgentContextBuilder for context-aware prompt building
+        builder = AgentContextBuilder()
+        context_text = builder.build_for_agent("content", state)
+        if context_text:
+            parts.append("")
+            parts.append(context_text)
+        # 兼容历史提示词结构：补充统一“学习者画像/依赖摘要”段落
         append_backend_context_for_prompt(parts, state)
 
         parts.append("")

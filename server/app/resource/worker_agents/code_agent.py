@@ -15,11 +15,12 @@ from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
 from app.resource.worker_agents.utils import (
+    AgentContextBuilder,
     append_backend_context_for_prompt,
-    extract_markdown_from_llm_output,
     learning_need_from_task,
     title_from_learning_need,
 )
+from app.shared.json_utils import parse_first_json_object
 
 logger = get_logger(__name__)
 
@@ -46,7 +47,6 @@ class CodeAgent:
         total_steps: int = 0,
         step_label: str = "",
         current_action: str = "",
-        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
@@ -58,7 +58,6 @@ class CodeAgent:
                 total_steps=total_steps,
                 step_label=step_label,
                 current_action=current_action,
-                output_preview=output_preview,
                 layer=state.layer_index,
                 layer_name="实践拓展层",
                 agent_role=self.ROLE_NAME,
@@ -78,7 +77,6 @@ class CodeAgent:
             total_steps=total,
             step_label=self.STEPS[0],
             current_action="分析代码实践需求",
-            output_preview="正在识别编程语言、案例目标、难度和关键知识点",
         )
         prompt = self._load_prompt()
 
@@ -90,7 +88,6 @@ class CodeAgent:
             total_steps=total,
             step_label=self.STEPS[1],
             current_action="融合画像与依赖",
-            output_preview="正在结合 ContentAgent 输出、学习画像和代码配置构建提示词",
         )
         input_text = await self._build_input(state)
 
@@ -103,40 +100,73 @@ class CodeAgent:
                 total_steps=total,
                 step_label=self.STEPS[2],
                 current_action="生成代码与讲解",
-                output_preview="正在编写可运行代码、关键注释、运行步骤和练习任务",
             )
 
             response = await self.llm_manager.ainvoke(
                 "spark_x",
                 [HumanMessage(content=f"{prompt}\n\n{input_text}")],
-                model_kwargs={"temperature": 0.3},
+                model_kwargs={
+                    "temperature": 0.3,
+                    "response_format": {"type": "json_object"},
+                },
             )
 
-            content = response.content if hasattr(response, "content") else str(response)
-            content = self._clean_content(content)
+            raw_content = response.content if hasattr(response, "content") else str(response)
             language = state.agent_config.get("programming_language", "python")
-            code_data = {
-                "language": language,
-                "code": content,
-                "explanation": "代码实操案例",
-                "input_example": "",
-                "output_example": "",
-                "complexity": {"time": "", "space": ""},
-                "run_steps": [],
-                "debug_tips": [],
-                "exercises": [],
-            }
+
+            try:
+                parsed = parse_first_json_object(raw_content)
+                code_data = {
+                    "language": parsed.get("language", language),
+                    "code": parsed.get("code", ""),
+                    "explanation": parsed.get("explanation", "代码实操案例"),
+                    "input_example": parsed.get("input_example", ""),
+                    "output_example": parsed.get("output_example", ""),
+                    "complexity": parsed.get("complexity", {"time": "", "space": ""}),
+                    "run_steps": parsed.get("run_steps", [])[:5],
+                    "debug_tips": parsed.get("debug_tips", []),
+                    "exercises": parsed.get("exercises", [])[:3],
+                }
+            except Exception:
+                # Fallback: 原始内容作为 code
+                code_data = {
+                    "language": language,
+                    "code": self._clean_content(raw_content),
+                    "explanation": "代码实操案例",
+                    "input_example": "",
+                    "output_example": "",
+                    "complexity": {"time": "", "space": ""},
+                    "run_steps": [],
+                    "debug_tips": [],
+                    "exercises": [],
+                }
 
             await self._emit_action(
                 state,
                 "finalize_output",
-                f"实战代码沙箱智能体正在整理输出 ({len(content)} 字符)",
+                f"实战代码沙箱智能体正在整理输出 ({len(code_data.get('code', ''))} 字符)",
                 current_step=5,
                 total_steps=total,
                 step_label=self.STEPS[3],
                 current_action="整理代码资源",
-                output_preview=content[:240],
             )
+
+            explanation = code_data.get("explanation")
+            if isinstance(explanation, list):
+                practice_points = [str(item) for item in explanation if item]
+            elif explanation:
+                practice_points = [str(explanation)]
+            else:
+                practice_points = []
+            practice_points.extend(str(item) for item in code_data.get("run_steps", []) if item)
+            main_functions = re.findall(r"\bdef\s+([A-Za-z_]\w*)\s*\(", str(code_data.get("code") or ""))
+            summary_data = {
+                "language": str(code_data.get("language") or language),
+                "case_type": state.agent_config.get("case_type", "basic_demo"),
+                "practice_points": list(dict.fromkeys(practice_points))[:8],
+                "main_functions": list(dict.fromkeys(main_functions))[:8],
+                "has_exercises": bool(code_data.get("exercises")),
+            }
 
             return WorkerResult.model_construct(
                 success=True,
@@ -145,6 +175,7 @@ class CodeAgent:
                 title=title_from_learning_need(state.task, "代码实操案例"),
                 summary="生成代码实操案例",
                 metadata={"language": language},
+                summary_data=summary_data,
             )
 
         except Exception as exc:
@@ -155,15 +186,21 @@ class CodeAgent:
         """加载提示词。"""
         if self.prompt_path.exists():
             return self.prompt_path.read_text(encoding="utf-8")
-        prompt = """你是一位编程教育专家。请根据给定的主题，生成代码示例。
-                
-                要求：
-                1. 代码可运行，有详细注释
-                2. 包含讲解说明
-                3. 使用 Markdown 代码块格式
-                4. 适合学习者理解
-                """
-        return prompt
+        return """你是一位编程教育专家。请根据给定的主题，生成代码示例。
+
+输出必须是 JSON 格式：
+{
+  "language": "python",
+  "code": "完整可运行代码",
+  "explanation": ["说明1", "说明2"],
+  "run_steps": ["步骤1", "步骤2"],
+  "exercises": ["练习1", "练习2"]
+}
+
+要求：
+1. 代码可运行，有详细注释
+2. 适合学习者理解
+3. 不要输出 Markdown 代码块，直接输出 JSON"""
 
     async def _build_input(self, state: WorkerState) -> str:
         """构建输入内容。"""
@@ -185,6 +222,12 @@ class CodeAgent:
             f"- 代码难度: {agent_config.get('difficulty', 'beginner')}",
         ]
 
+        # Use AgentContextBuilder for context-aware prompt building
+        builder = AgentContextBuilder()
+        context_text = builder.build_for_agent("code", state)
+        if context_text:
+            parts.append("")
+            parts.append(context_text)
         append_backend_context_for_prompt(parts, state)
 
         parts.append("")

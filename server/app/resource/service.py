@@ -14,16 +14,12 @@ from typing import Any, AsyncGenerator
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.logging import get_logger
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
 from app.resource import schemas
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.orchestrator import ResourceWorkflow
 from app.resource.registry import ensure_initialized, get_enabled_agent_ids, get_agent_entry
-
-logger = get_logger(__name__)
-
 
 class ResourceUsecases:
     """资源生成用例。"""
@@ -78,7 +74,8 @@ class ResourceUsecases:
         item: schemas.GeneratedResourceItem,
     ) -> GeneratedResourceItemModel:
         """保存生成资源明细到数据库。"""
-        content_json, content_text = self._split_item_content(item.format, item.content)
+        # 兼容当前表结构：把标题/摘要/结构化摘要一起落到 content_json，避免刷新后丢字段
+        content_json, content_text = self._split_item_content(item)
         resource_item = GeneratedResourceItemModel(
             resource_id=resource_id,
             user_id=user_id,
@@ -138,87 +135,50 @@ class ResourceUsecases:
                 summary[resource_id].append(agent_type)
         return summary
 
-    async def persist_result(
-        self,
-        resource_id: int,
-        agent_name: str,
-        result: dict[str, Any],
-    ) -> None:
-        """持久化单个 Agent 结果。"""
-        resource = await self.session.get(GeneratedResource, resource_id)
-        if not resource:
-            return
-
-        resource_item = self._build_legacy_resource_item(resource, agent_name, result)
-        if resource_item and resource.id is not None:
-            await self.save_resource_item(resource.id, resource.user_id, resource_item)
-
-    async def persist_all_results(
-        self,
-        resource_id: int,
-        results: dict[str, dict[str, Any]],
-    ) -> None:
-        """持久化所有 Agent 结果。"""
-        resource = await self.session.get(GeneratedResource, resource_id)
-        if not resource:
-            return
-
-        for agent_name, result in results.items():
-            resource_item = self._build_legacy_resource_item(resource, agent_name, result)
-            if resource_item and resource.id is not None:
-                await self.save_resource_item(resource.id, resource.user_id, resource_item)
-        logger.info(
-            "[ResourceUsecases] 结果已持久化: resource_id=%s agents=%s",
-            resource_id, list(results.keys())
-        )
-
     def _split_item_content(
         self,
-        item_format: str,
-        content: Any,
+        item: schemas.GeneratedResourceItem,
     ) -> tuple[dict[str, Any] | None, str | None]:
-        fmt = item_format.lower()
+        fmt = item.format.lower()
+        content = item.content
+        envelope = {
+            "title": item.title,
+            "summary": item.summary,
+            "summary_data": item.summary_data,
+            "metadata": item.metadata,
+            "format": item.format,
+            "content": content,
+        }
         if fmt in {"markdown", "mermaid", "text", "code"}:
             if isinstance(content, str):
-                return None, content
-            return None, json.dumps(content, ensure_ascii=False)
+                return envelope, content
+            return envelope, json.dumps(content, ensure_ascii=False)
         if fmt == "json":
             if isinstance(content, dict):
-                return content, None
+                envelope["content"] = content
+                return envelope, None
             if isinstance(content, list):
-                return {"items": content}, None
+                envelope["content"] = {"items": content}
+                return envelope, None
             if isinstance(content, str):
                 try:
                     parsed = json.loads(content)
                 except json.JSONDecodeError:
-                    return None, content
+                    return envelope, content
                 if isinstance(parsed, dict):
-                    return parsed, None
+                    envelope["content"] = parsed
+                    return envelope, None
                 if isinstance(parsed, list):
-                    return {"items": parsed}, None
-                return {"value": parsed}, None
-            return {"value": content}, None
+                    envelope["content"] = {"items": parsed}
+                    return envelope, None
+                envelope["content"] = {"value": parsed}
+                return envelope, None
+            envelope["content"] = {"value": content}
+            return envelope, None
         if isinstance(content, str):
-            return None, content
-        return {"value": content}, None
-
-    def _build_legacy_resource_item(
-        self,
-        resource: GeneratedResource,
-        agent_name: str,
-        result: dict[str, Any],
-    ) -> schemas.GeneratedResourceItem | None:
-        if not result.get("success") or resource.id is None:
-            return None
-        raw_content = result.get("content")
-        return schemas.GeneratedResourceItem(
-            type=schemas.ResourceAgentId(agent_name),
-            title=f"学习资源 - {agent_name}",
-            format=str(result.get("file_type") or "json"),
-            content=raw_content,
-            summary=f"{agent_name} 资源已生成",
-            metadata={"agent": f"{agent_name.capitalize()}Agent"},
-        )
+            return envelope, content
+        envelope["content"] = {"value": content}
+        return envelope, None
 
     async def get_resource(
         self,

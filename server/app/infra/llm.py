@@ -589,7 +589,7 @@ class LlmManager:
             fallback_model_kwargs = {
                 **base_model_kwargs,
                 "streaming": False,
-                "response_format": {"type": "json_object"},
+                "model_kwargs": {"response_format": {"type": "json_object"}},
             }
             fallback_llm = self._get_model(model_type, **fallback_model_kwargs)
             fallback_response = await fallback_llm.ainvoke(input_data, **invoke_kwargs)

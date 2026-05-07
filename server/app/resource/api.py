@@ -165,12 +165,14 @@ async def get_resource(
     resources: list[dict[str, Any]] = [
         {
             "id": item.id,
-            "type": item.resource_type,
-            "title": item.title,
-            "format": item.format,
-            "content": item.content_json if item.content_json is not None else item.content_text,
-            "summary": item.summary or "",
-            "metadata": item.metadata_json or {},
+            "type": item.agent_type,
+            "title": ((item.content_json or {}).get("title") if isinstance(item.content_json, dict) else "") or f"学习资源 - {item.agent_type}",
+            "format": ((item.content_json or {}).get("format") if isinstance(item.content_json, dict) else "") or item.content_format,
+            "content": ((item.content_json or {}).get("content") if isinstance(item.content_json, dict) else None)
+            if item.content_json is not None else item.content_text,
+            "summary": ((item.content_json or {}).get("summary") if isinstance(item.content_json, dict) else "") or "",
+            "summary_data": ((item.content_json or {}).get("summary_data") if isinstance(item.content_json, dict) else {}) or {},
+            "metadata": ((item.content_json or {}).get("metadata") if isinstance(item.content_json, dict) else {}) or {},
             "status": item.status,
             "error_message": item.error_message,
             "created_at": item.created_at,

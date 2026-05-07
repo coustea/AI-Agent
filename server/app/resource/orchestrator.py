@@ -54,15 +54,19 @@ logger = get_logger(__name__)
 
 
 # Agent 间依赖关系图：key 为 agent_id，value 为前置依赖 agent_id 列表
+# 下游 Agent 只接收显式依赖的上游摘要，不接收完整 raw_results
 AGENT_DEPENDENCIES: dict[str, list[str]] = {
     "content": [],         # 课程内容无依赖
     "mindmap": [],         # 思维导图无依赖
-    "diagram": [],         # 知识图解无依赖
+    "diagram": ["content"],         # 知识图解依赖 content 摘要
     "code": ["content"],   # 代码实操依赖课程内容
     "reading": ["content"],  # 拓展阅读依赖课程内容
-    "quiz": ["content", "code"],  # 练习题依赖课程内容和代码
+    "quiz": ["content"],   # 练习题依赖课程内容（不再强依赖 code）
     "video": ["content", "diagram"],  # 视频依赖课程内容和图解
 }
+
+# 单个 workflow 最大并发 Agent 数量
+MAX_AGENT_CONCURRENCY_PER_WORKFLOW = 3
 
 # 学习路径默认顺序（按 Layer 0 → Layer 1 → Layer 2 排列）
 STUDY_PATH_ORDER = ["content", "mindmap", "diagram", "code", "quiz", "reading"]
@@ -140,7 +144,7 @@ class MasterAgent:
         # 获取规划
         response = await self.llm.ainvoke([HumanMessage(content=prompt)])
         content = response.content if hasattr(response, "content") else str(response)
-        logger.info(f"[MasterAgent] 规划：resposne=%s", content)
+        logger.info("[MasterAgent] 规划：response=%s", content)
         return parse_first_json_object(content)
 
     def _sanitize_layer_plan(
@@ -305,17 +309,33 @@ class MasterAgent:
             "learning_scenario": context.question.learning_scenario.value,
             "agent_configs": context.question.agent_configs.model_dump(),
         }
+        example_agent = candidates[0] if candidates else "content"
+        format_example = {
+            "layer": context.layer,
+            "reasoning": "本层规划理由",
+            "agents": [
+                {
+                    "agent_id": example_agent,
+                    "enabled": True,
+                    "task_description": "...",
+                    "depends_on": [],
+                    "priority": 0,
+                    "resource_type": example_agent,
+                    "input_params": {},
+                    "output_requirements": {},
+                    "personalized_constraints": [],
+                    "planning_reason": "...",
+                    "failure_policy": "skip_on_dependency_failed",
+                }
+            ],
+        }
         return (
             "你是 MasterAgent，只负责规划当前 layer 的多智能体资源生成任务。\n"
             "你不能生成学习资源正文，不能规划其他 layer，不能选择 candidate_agents 之外的 Agent，"
             "也不能选择用户未启用的 Agent。\n"
+            f'JSON 格式中的 "layer" 必须返回 {context.layer}，不能照抄其他层示例。\n'
             "输出必须是严格 JSON，不允许 Markdown、解释文本或代码块。\n"
-            "JSON 格式：{\"layer\": 1, \"reasoning\": \"本层规划理由\", \"agents\": ["
-            "{\"agent_id\": \"code\", \"enabled\": true, \"task_description\": \"...\", "
-            "\"depends_on\": [\"content\"], \"priority\": 0, \"resource_type\": \"code\", "
-            "\"input_params\": {}, \"output_requirements\": {}, "
-            "\"personalized_constraints\": [], \"planning_reason\": \"...\", "
-            "\"failure_policy\": \"skip_on_dependency_failed\"}]}\n\n"
+            f"JSON 格式：{json.dumps(format_example, ensure_ascii=False)}\n\n"
             f"当前规划上下文：{json.dumps(payload, ensure_ascii=False)}"
         )
 
@@ -343,7 +363,7 @@ class MasterAgent:
         """根据是否已有上游结果，返回个性化约束提示文本。"""
         if context.upstream_reports:
             return ["结合已生成资源的重点与薄弱点"]
-        return ["结合学习者画像生成个性化资源"]
+        return ["结合学习者画像"]
 
     def _get_layer_name(self, layer: int) -> str:
         """将层编号映射为前端可展示的中文层名称。"""
@@ -376,17 +396,119 @@ class MasterAgent:
         return names.get(agent_id, agent_id)
 
 
+class RulePlanner:
+    """规则规划器：根据用户选择的 Agent 和依赖关系，一次性生成完整 DAG，不调用 LLM。"""
+
+    def plan(self, request: ResourceGenerationRequest) -> list[AgentTask]:
+        """根据用户选择和依赖关系生成 AgentTask 列表。"""
+        enabled_ids = request.enabled_agent_ids()
+        agent_configs = request.agent_configs.model_dump()
+        learning_need = request.learning_need
+
+        tasks: list[AgentTask] = []
+        task_index = 0
+
+        for agent_id in enabled_ids:
+            if agent_id not in AGENT_CLASS_MAP:
+                continue
+
+            # 计算依赖：只保留已启用的上游 Agent
+            deps = [
+                dep for dep in AGENT_DEPENDENCIES.get(agent_id, [])
+                if dep in enabled_ids
+            ]
+
+            # 确定层级
+            layer = self._get_agent_layer(agent_id)
+            layer_name = self._get_layer_name(layer)
+
+            # 获取 Agent 配置
+            config = agent_configs.get(agent_id, {})
+
+            task = AgentTask(
+                agent_id=agent_id,
+                layer=layer,
+                layer_name=layer_name,
+                task_description=f"根据用户需求「{learning_need[:80]}」生成{self._get_agent_name(agent_id)}。",
+                depends_on=deps,
+                is_explicit=True,
+                priority=task_index,
+                config=config,
+                resource_type=agent_id,
+                input_params={"topic": learning_need},
+                output_requirements=self._default_output_requirements(agent_id),
+                personalized_constraints=["结合学习者画像"],
+                planning_reason=self._default_planning_reason(agent_id, layer_name),
+                failure_policy="skip_on_dependency_failed",
+            )
+            tasks.append(task)
+            task_index += 1
+
+        return tasks
+
+    def _get_agent_layer(self, agent_id: str) -> int:
+        """获取 Agent 所属层级。"""
+        for layer, agents in MasterAgent.LAYER_AGENTS.items():
+            if agent_id in agents:
+                return layer
+        return 0
+
+    def _get_layer_name(self, layer: int) -> str:
+        """将层编号映射为前端可展示的中文层名称。"""
+        names = {0: "认知建构层", 1: "实践拓展层", 2: "检测巩固层"}
+        return names.get(layer, f"Layer {layer}")
+
+    def _get_agent_name(self, agent_id: str) -> str:
+        """获取 Agent 中文名称。"""
+        names = {
+            "content": "课程讲解文档",
+            "diagram": "知识图解",
+            "mindmap": "思维导图",
+            "quiz": "练习题",
+            "reading": "拓展阅读推荐",
+            "code": "代码实操案例",
+        }
+        return names.get(agent_id, agent_id)
+
+    def _default_output_requirements(self, agent_id: str) -> dict[str, Any]:
+        """返回每种 Agent 类型的默认输出格式规范。"""
+        requirements = {
+            "content": {"format": "markdown", "must_include": ["title", "key_points", "examples"]},
+            "mindmap": {"format": "markdown", "must_include": ["central_topic", "branches"]},
+            "diagram": {"format": "mermaid", "must_include": ["source", "description"]},
+            "code": {"format": "json", "must_include": ["title", "language", "code", "explanation", "run_steps", "exercises"]},
+            "reading": {"format": "json", "must_include": ["items", "reason"]},
+            "quiz": {"format": "json", "must_include": ["questions", "answers", "analysis"]},
+        }
+        return requirements.get(agent_id, {"format": "json"})
+
+    def _default_planning_reason(self, agent_id: str, layer_name: str) -> str:
+        reasons = {
+            "content": "建立概念理解基础",
+            "diagram": "通过图解强化结构理解",
+            "mindmap": "快速梳理知识结构",
+            "code": "通过实操加深掌握",
+            "quiz": "通过测验检验掌握度",
+            "reading": "补充延展学习材料",
+        }
+        return reasons.get(agent_id, f"{self._get_agent_name(agent_id)}适合支撑{layer_name}的学习目标。")
+
+
 class ReviewerAgent:
     """资源审查 Agent。检查完整性、质量并生成审查报告。"""
 
     def review(
         self,
+        *,
         request: ResourceGenerationRequest,
         resources: list[GeneratedResourceItem],
         failed_agents: list[str],
-        errors: list[str],
+        skipped_agents: list[str] | None = None,
+        errors: list[str] | None = None,
     ) -> ReviewResult:
         """执行资源审查，返回评分和问题列表。"""
+        skipped_agents = skipped_agents or []
+        errors = errors or []
         issues: list[ReviewIssue] = []
         suggestions: list[str] = []
         selected_agents = request.enabled_agent_ids()
@@ -398,14 +520,21 @@ class ReviewerAgent:
                 message="至少应生成一个资源",
                 suggestion="请检查 Agent 执行日志",
             ))
-            return ReviewResult(passed=False, score=0, issues=issues, suggestions=suggestions)
+            return ReviewResult(
+                passed=False,
+                score=0,
+                issues=issues,
+                suggestions=suggestions,
+                failed_agents=failed_agents,
+                skipped_agents=skipped_agents,
+            )
 
         # 构建资源类型到资源的映射，便于按类型快速查找和检查
         resource_map = {res.type.value: res for res in resources}
 
         # 检查启用但未产出的 Agent：用户期望生成但结果缺失的 Agent
         for agent_id in selected_agents:
-            if agent_id not in resource_map and agent_id not in failed_agents:
+            if agent_id not in resource_map and agent_id not in failed_agents and agent_id not in skipped_agents:
                 issues.append(ReviewIssue(
                     resource_type=agent_id,
                     level="warning",
@@ -495,6 +624,14 @@ class ReviewerAgent:
                 suggestion="可单独重试该资源 Agent",
             ))
 
+        for agent_id in skipped_agents:
+            issues.append(ReviewIssue(
+                resource_type=agent_id,
+                level="info",
+                message=f"{agent_id} 因依赖未满足被跳过",
+                suggestion="可检查上游 Agent 执行情况",
+            ))
+
         for error in errors:
             suggestions.append(error)
 
@@ -519,8 +656,10 @@ class ReviewerAgent:
         # 根据检查结果生成面向用户的改进建议
         if warning_count > 0:
             suggestions.append("部分资源可能不完整，建议检查后重新生成")
-        if success_count < total_count:
+        if failed_agents:
             suggestions.append("部分 Agent 执行失败，可以尝试单独重新生成")
+        if skipped_agents:
+            suggestions.append("部分 Agent 被跳过，可检查依赖 Agent 或生成策略")
 
         passed = success_count > 0 and error_count == 0
         return ReviewResult(
@@ -528,6 +667,8 @@ class ReviewerAgent:
             score=int(score),
             issues=issues,
             suggestions=suggestions,
+            failed_agents=failed_agents,
+            skipped_agents=skipped_agents,
         )
 
 
@@ -536,14 +677,18 @@ class AssemblerAgent:
 
     def assemble(
         self,
+        *,
         task_id: str,
         resource_id: str,
         request: ResourceGenerationRequest,
         resources: list[GeneratedResourceItem],
         review_result: ReviewResult,
         failed_agents: list[str],
+        skipped_agents: list[str] | None = None,
+        timing: dict[str, Any] | None = None,
     ) -> ResourceBundle:
         """组装资源包，生成最终输出结构。"""
+        skipped_agents = skipped_agents or []
         # 生成标题：优先使用请求中指定的标题，否则使用默认名称
         title = request.output_options.final_bundle_title
         if not title:
@@ -554,16 +699,26 @@ class AssemblerAgent:
         if request.output_options.include_study_path:
             study_path = self._build_study_path(resources)
 
-        # 计算最终状态：全部成功/部分失败/全部失败三种状态
+        # 计算最终状态：completed/completed_with_warnings/partial_completed/failed
         if not resources:
-            status = "failed"                 # 无任何资源产出
+            status = "failed"
         elif failed_agents:
-            status = "partial_completed"      # 部分 Agent 执行失败
+            status = "partial_completed"
+        elif review_result.issues:
+            status = "completed_with_warnings"
         else:
-            status = "completed"              # 全部成功
+            status = "completed"
 
         # 仅保留用户显式启用且已标记 enabled 的 Agent 选择
         selected_agents = [x for x in request.selected_agents if x.enabled]
+
+        metadata: dict[str, Any] = {
+            "agent_count": len(resources),
+            "failed_agents": failed_agents,
+            "skipped_agents": skipped_agents,
+        }
+        if timing:
+            metadata["timing"] = timing
 
         return ResourceBundle(
             id=str(resource_id),
@@ -575,10 +730,7 @@ class AssemblerAgent:
             study_path=study_path,
             review_result=review_result if request.output_options.include_review_result else None,
             status=status,
-            metadata={
-                "agent_count": len(resources),
-                "failed_agents": failed_agents,
-            },
+            metadata=metadata,
         )
 
     def _build_study_path(self, resources: list[GeneratedResourceItem]) -> list[StudyPathStep]:
@@ -625,16 +777,30 @@ class ResourceWorkflow:
     def __init__(self, emitter: AgentEventEmitter, resource_store: Any):
         self.emitter = emitter              # SSE 事件发射器，向客户端推送实时进度
         self.resource_store = resource_store  # 资源持久化存储
-        self.master_agent = MasterAgent()     # 任务规划器
+        self.master_agent = MasterAgent()     # 任务规划器（LLM 规划）
+        self.rule_planner = RulePlanner()     # 规则规划器（默认）
         self.reviewer_agent = ReviewerAgent() # 质量审查器
         self.assembler_agent = AssemblerAgent() # 结果组装器
 
     async def run(self, user_id: int, request: ResourceGenerationRequest) -> dict[str, Any]:
-        """执行资源生成工作流，每层动态规划。"""
+        """执行资源生成工作流，默认使用规则规划，避免多次 LLM 调用。"""
+        import time
+
         ensure_initialized()
         user_explicit_selection = request.enabled_agent_ids()
         task_id = str(uuid4())
         self.emitter.bind_task(task_id)
+
+        # Timing 统计
+        timing: dict[str, Any] = {
+            "profile_load_ms": 0,
+            "planning_ms": 0,
+            "agents": {},
+            "review_ms": 0,
+            "assemble_ms": 0,
+            "total_ms": 0,
+        }
+        total_start = time.time()
 
         # 第一阶段：发送任务创建事件，通知前端资源生成已启动
         await self.emitter.emit_workflow(
@@ -645,6 +811,7 @@ class ResourceWorkflow:
                 "task_id": task_id,
                 "selected_agents": user_explicit_selection,
                 "learning_need_preview": request.learning_need[:120],
+                "planning_mode": request.planning_mode,
             },
             progress=0,
         )
@@ -658,6 +825,7 @@ class ResourceWorkflow:
             resource_id = resource_record.id
 
             # 第二阶段：加载用户画像信息，用于后续个性化资源生成
+            profile_start = time.time()
             await self.emitter.emit_workflow(
                 stage="profile",
                 status="running",
@@ -666,6 +834,8 @@ class ResourceWorkflow:
             )
             snapshot = await load_profile_snapshot(user_id)
             learner_profile = snapshot.as_agent_profile()
+            timing["profile_load_ms"] = int((time.time() - profile_start) * 1000)
+
             await self.emitter.emit_workflow(
                 stage="profile",
                 status="success",
@@ -689,80 +859,133 @@ class ResourceWorkflow:
             failed_agents: list[str] = []
             skipped_agents: list[str] = []
             errors: list[str] = []
-            total_layers = 3
-            planned_tasks: list[AgentTask] = []
-            planned_agent_ids: set[str] = set()
 
-            # 第三阶段：逐层规划，收集所有 AgentTask；执行阶段交给 DAG 调度器
-            for layer in range(total_layers):
-                layer_name = self._get_layer_name(layer)
-                # 筛选当前层中用户启用且已注册实现的候选 Agent
-                candidate_agents = [
-                    agent for agent in MasterAgent.LAYER_AGENTS.get(layer, [])
-                    if agent in user_explicit_selection and agent in AGENT_CLASS_MAP
-                ]
-                upstream_reports = self._build_upstream_reports(raw_results)
-                # 发送规划中事件，通知前端 MasterAgent 正在分析当前层
+            # 第三阶段：规划 - 默认使用 RulePlanner，避免 3 次 LLM 调用
+            planning_start = time.time()
+            planning_mode = request.planning_mode
+
+            if planning_mode == "rule":
+                # 默认：规则一次性规划
                 await self.emitter.emit_event(
                     event_type="planning",
                     stage="planning",
                     agent="master",
                     status="running",
-                    message=f"MasterAgent 正在规划 {layer_name}",
-                    progress=8 + layer * 3,
+                    message="RulePlanner 正在规划资源生成任务",
+                    progress=10,
                     payload={
-                        "layer": layer,
-                        "layer_name": layer_name,
-                        "candidate_agents": candidate_agents,
-                        "upstream_agents": list(planned_agent_ids),
-                        "has_upstream_results": bool(raw_results),
-                        "planning_mode": "layer_dynamic",
+                        "planning_mode": "rule",
+                        "selected_agents": user_explicit_selection,
                     },
                 )
-                # 构建当前层规划上下文：包含层号、请求、上游结果和交接报告
-                planning_context = PlanningContext(
-                    layer=layer,
-                    question=request,
-                    user_explicit_selection=user_explicit_selection,
-                    implicit_dependencies=[],
-                    upstream_results=raw_results,
-                    upstream_reports=upstream_reports,
-                )
-
-                layer_plan = await self.master_agent.plan_layer(planning_context)
-
-                # 发送规划完成事件，展示 MasterAgent 的推理和 Agent 选择结果
+                planned_tasks = self.rule_planner.plan(request)
                 await self.emitter.emit_event(
                     event_type="planning",
                     stage="planning",
                     agent="master",
                     status="success",
-                    message=f"{layer_name} 规划完成",
+                    message="规则规划完成",
                     payload={
-                        "layer": layer,
-                        "layer_name": layer_name,
-                        "reasoning": layer_plan.reasoning,
-                        "agents": [self._serialize_agent_task(task) for task in layer_plan.agents],
-                        "fallback_used": layer_plan.fallback_used,
+                        "planning_mode": "rule",
+                        "agents": [self._serialize_agent_task(task) for task in planned_tasks],
                     },
-                    progress=10 + int((layer + 1) / total_layers * 5),
+                    progress=15,
                 )
+            else:
+                # LLM 规划（single_llm 或 layer_llm）
+                planned_tasks: list[AgentTask] = []
+                planned_agent_ids: set[str] = set()
+                total_layers = 3
 
-                # 当前层无待执行 Agent 时跳过，不阻塞后续层
-                if not layer_plan.agents:
-                    await self.emitter.emit_workflow(
-                        stage=self._get_layer_stage(layer),
-                        status="skipped",
-                        message=f"{layer_name}无可执行 Agent",
-                        payload={"layer": layer, "layer_name": layer_name, "agents": []},
+                if planning_mode == "single_llm":
+                    # 单次 LLM 规划所有层
+                    await self.emitter.emit_event(
+                        event_type="planning",
+                        stage="planning",
+                        agent="master",
+                        status="running",
+                        message="MasterAgent 正在规划资源生成任务",
+                        progress=10,
+                        payload={"planning_mode": "single_llm"},
                     )
-                    continue
+                    planning_context = PlanningContext(
+                        layer=0,
+                        question=request,
+                        user_explicit_selection=user_explicit_selection,
+                        implicit_dependencies=[],
+                        upstream_results={},
+                        upstream_reports={},
+                    )
+                    layer_plan = await self.master_agent.plan_layer(planning_context)
+                    planned_tasks = layer_plan.agents
+                    await self.emitter.emit_event(
+                        event_type="planning",
+                        stage="planning",
+                        agent="master",
+                        status="success",
+                        message="LLM 规划完成",
+                        payload={
+                            "planning_mode": "single_llm",
+                            "agents": [self._serialize_agent_task(task) for task in planned_tasks],
+                        },
+                        progress=15,
+                    )
+                else:
+                    # layer_llm：分层 LLM 规划（原有逻辑）
+                    for layer in range(total_layers):
+                        layer_name = self._get_layer_name(layer)
+                        candidate_agents = [
+                            agent for agent in MasterAgent.LAYER_AGENTS.get(layer, [])
+                            if agent in user_explicit_selection and agent in AGENT_CLASS_MAP
+                        ]
+                        upstream_summaries = self._build_all_upstream_summaries(raw_results)
+                        upstream_reports = self._build_upstream_reports(upstream_summaries)
+                        await self.emitter.emit_event(
+                            event_type="planning",
+                            stage="planning",
+                            agent="master",
+                            status="running",
+                            message=f"MasterAgent 正在规划 {layer_name}",
+                            progress=8 + layer * 3,
+                            payload={
+                                "layer": layer,
+                                "layer_name": layer_name,
+                                "candidate_agents": candidate_agents,
+                                "planning_mode": "layer_llm",
+                            },
+                        )
+                        planning_context = PlanningContext(
+                            layer=layer,
+                            question=request,
+                            user_explicit_selection=user_explicit_selection,
+                            implicit_dependencies=[],
+                            upstream_results=upstream_summaries,
+                            upstream_reports=upstream_reports,
+                        )
+                        layer_plan = await self.master_agent.plan_layer(planning_context)
+                        await self.emitter.emit_event(
+                            event_type="planning",
+                            stage="planning",
+                            agent="master",
+                            status="success",
+                            message=f"{layer_name} 规划完成",
+                            payload={
+                                "layer": layer,
+                                "layer_name": layer_name,
+                                "reasoning": layer_plan.reasoning,
+                                "agents": [self._serialize_agent_task(task) for task in layer_plan.agents],
+                                "fallback_used": layer_plan.fallback_used,
+                            },
+                            progress=10 + int((layer + 1) / total_layers * 5),
+                        )
+                        if layer_plan.agents:
+                            for agent_task in layer_plan.agents:
+                                planned_tasks.append(agent_task)
+                                planned_agent_ids.add(agent_task.agent_id)
 
-                # 收集所有层的规划任务，统一提交给 DAG 执行引擎
-                for agent_task in layer_plan.agents:
-                    planned_tasks.append(agent_task)
-                    planned_agent_ids.add(agent_task.agent_id)
+            timing["planning_ms"] = int((time.time() - planning_start) * 1000)
 
+            # 执行 DAG 调度
             await self._execute_planned_tasks_dag(
                 planned_tasks=planned_tasks,
                 user_id=user_id,
@@ -777,6 +1000,7 @@ class ResourceWorkflow:
                 user_explicit_selection=user_explicit_selection,
                 base_progress=15,
                 max_progress=90,
+                timing=timing,
             )
 
             # 全部 Agent 失败但无资源时的兜底错误提示
@@ -803,6 +1027,7 @@ class ResourceWorkflow:
                 )
 
             # 第四阶段：ReviewerAgent 审查所有已生成资源的质量
+            review_start = time.time()
             await self.emitter.emit_event(
                 event_type="review",
                 stage="reviewing",
@@ -812,19 +1037,20 @@ class ResourceWorkflow:
                 progress=92,
             )
 
-            # 合并失败和跳过的 Agent 列表（去重保持顺序）
-            failed_or_skipped_agents = list(dict.fromkeys([*failed_agents, *skipped_agents]))
             review_result = self.reviewer_agent.review(
                 request=request,
                 resources=explicit_resources,
-                failed_agents=failed_or_skipped_agents,
+                failed_agents=failed_agents,
+                skipped_agents=skipped_agents,
                 errors=errors,
             )
+            timing["review_ms"] = int((time.time() - review_start) * 1000)
 
             # 发送审查结果事件，前端展示评分和质量问题
             await self.emitter.emit_review(review_result=review_result, progress=95)
 
             # 第五阶段：AssemblerAgent 组装最终资源包
+            assemble_start = time.time()
             await self.emitter.emit_event(
                 event_type="bundle",
                 stage="assembling",
@@ -834,14 +1060,19 @@ class ResourceWorkflow:
                 progress=97,
             )
 
+            timing["total_ms"] = int((time.time() - total_start) * 1000)
+
             bundle = self.assembler_agent.assemble(
                 task_id=task_id,
                 resource_id=str(resource_id),
                 request=request,
                 resources=explicit_resources,
                 review_result=review_result,
-                failed_agents=failed_or_skipped_agents,
+                failed_agents=failed_agents,
+                skipped_agents=skipped_agents,
+                timing=timing,
             )
+            timing["assemble_ms"] = int((time.time() - assemble_start) * 1000)
 
             # 持久化更新资源状态（completed / partial_completed / failed）
             await self.resource_store.update_resource_status(
@@ -852,6 +1083,8 @@ class ResourceWorkflow:
             # 发送资源包和完成事件，通知前端展示最终结果
             await self.emitter.emit_bundle(bundle=bundle, progress=99)
             await self.emitter.emit_done(bundle=bundle)
+
+            logger.info("[ResourceWorkflow] 完成: timing=%s", timing)
 
             return {"success": bundle.status != "failed", "results": raw_results, "bundle": bundle.model_dump(mode="json")}
 
@@ -887,11 +1120,16 @@ class ResourceWorkflow:
 
         # 绑定 Agent 和层阶段，确保事件正确路由到前端 SSE 流
         self.emitter.bind_agent_stage(agent_id, layer_stage)
-        await self.emitter.emit_agent(
+        # 仅发送过程态，不携带资源正文，供流程图和右侧 Agent 面板展示
+        await self.emitter.emit_agent_step(
             agent=agent_id,
-            status="running",
-            message=f"{self._get_agent_role_name(agent_id)}正在生成资源",
+            message=f"{self._get_agent_role_name(agent_id)}正在准备生成",
             stage=layer_stage,
+            status="running",
+            action="prepare_generation",
+            current_step=1,
+            total_steps=3,
+            step_label="准备生成",
             payload={
                 "layer": layer_index,
                 "layer_name": layer_name,
@@ -907,11 +1145,6 @@ class ResourceWorkflow:
                 "output_requirements": agent_task.output_requirements,
                 "personalized_constraints": agent_task.personalized_constraints,
                 "planning_reason": agent_task.planning_reason,
-                "current_action": "接收任务并准备生成",
-                "current_step": 1,
-                "total_steps": 5,
-                "step_label": "接收任务",
-                "output_preview": "已接收 MasterAgent 规划任务，准备结合画像和上游资源生成内容",
             },
         )
 
@@ -926,10 +1159,24 @@ class ResourceWorkflow:
         }
         # 收集依赖 Agent 的执行报告，供当前 Agent 了解上下游进展
         dependency_reports = {
-            dep: upstream_results[dep].get("execution_report") or upstream_results[dep].get("summary", "")
-            for dep in AGENT_DEPENDENCIES.get(agent_id, [])
+            dep: upstream_results[dep].get("summary", "")
+            for dep in agent_task.depends_on
             if dep in upstream_results
         }
+        await self.emitter.emit_agent_step(
+            agent=agent_id,
+            stage=layer_stage,
+            status="running",
+            message=f"{self._get_agent_role_name(agent_id)}正在调用模型生成内容",
+            action="llm_generating",
+            current_step=2,
+            total_steps=3,
+            step_label="模型生成",
+            payload={
+                "agent_id": agent_id,
+                "depends_on": agent_task.depends_on,
+            },
+        )
 
         # 构建 WorkerState：包含所有执行上下文，传递给 Worker Agent 的 run 方法
         state = WorkerState(
@@ -971,6 +1218,7 @@ class ResourceWorkflow:
         user_explicit_selection: list[str],
         base_progress: int = 15,
         max_progress: int = 90,
+        timing: dict[str, Any] | None = None,
     ) -> None:
         """按 DAG 依赖 ready 即触发执行，不再等待整层完成。"""
         # 初始化任务跟踪状态：待执行、执行中、已完成、已失败、已跳过
@@ -1133,10 +1381,17 @@ class ResourceWorkflow:
             """扫描所有 pending Agent，将依赖已满足的 Agent 提交执行。
 
             在同一轮中尽可能多地调度 Agent，最大化并行度。
+            受 MAX_AGENT_CONCURRENCY_PER_WORKFLOW 限制，避免单个 workflow 抢占过多模型并发。
             """
+            import time
+
             while True:
                 scheduled_any = False
                 for task in list(pending_agents.values()):
+                    # 并发限制：检查当前运行中的 Agent 数量
+                    if len(running_agents) >= MAX_AGENT_CONCURRENCY_PER_WORKFLOW:
+                        break
+
                     ready, degraded, missing_deps, failed_deps = dependency_state(task)
                     if not ready:
                         # 依赖不满足且策略为跳过时，标记为已跳过
@@ -1156,11 +1411,15 @@ class ResourceWorkflow:
                     layer_name = task.layer_name or self._get_layer_name(layer)
                     layer_stage = self._get_layer_stage(layer)
                     triggered_by = [dep for dep in task.depends_on if dep in completed_agents]
-                    await self.emitter.emit_agent(
+                    await self.emitter.emit_agent_step(
                         agent=task.agent_id,
+                        message=f"{self._get_agent_role_name(task.agent_id)} 依赖 {', '.join(task.depends_on) or '无'} 已满足，开始生成资源",
                         status="running",
                         stage=layer_stage,
-                        message=f"{self._get_agent_role_name(task.agent_id)} 依赖 {', '.join(task.depends_on) or '无'} 已满足，开始生成资源",
+                        action="dependency_ready",
+                        current_step=1,
+                        total_steps=3,
+                        step_label="依赖就绪",
                         payload={
                             "schedule_mode": "dependency_ready",
                             "depends_on": task.depends_on,
@@ -1183,7 +1442,10 @@ class ResourceWorkflow:
                             resource_id=resource_id,
                             request=request,
                             agent_context=agent_context,
-                            upstream_results=dict(raw_results),
+                            upstream_results=self._build_dependency_upstream_results(
+                                task=task,
+                                raw_results=raw_results,
+                            ),
                             layer_index=layer,
                             layer_name=layer_name,
                             layer_stage=layer_stage,
@@ -1193,6 +1455,8 @@ class ResourceWorkflow:
                         )
                     )
                     running_agents[running] = task
+                    # 记录 Agent 开始时间
+                    task._start_time = time.time()
                     scheduled_any = True
                 if not scheduled_any:
                     break
@@ -1217,6 +1481,13 @@ class ResourceWorkflow:
                 task = running_agents.pop(finished)
                 layer_stage = self._get_layer_stage(task.layer)
                 layer_name = task.layer_name or self._get_layer_name(task.layer)
+
+                # 记录 Agent 执行耗时
+                agent_elapsed_ms = 0
+                if hasattr(task, "_start_time"):
+                    import time
+                    agent_elapsed_ms = int((time.time() - task._start_time) * 1000)
+
                 try:
                     agent_id, result, is_explicit, agent_task = finished.result()
                 except Exception as exc:
@@ -1224,6 +1495,11 @@ class ResourceWorkflow:
                     result = {"success": False, "error": str(exc)}
                     is_explicit = task.is_explicit
                     agent_task = task
+
+                # 记录 timing
+                if timing is not None and agent_id:
+                    timing["agents"][agent_id] = agent_elapsed_ms
+                    logger.info("[ResourceWorkflow] Agent %s 完成: %dms", agent_id, agent_elapsed_ms)
 
                 raw_results[agent_id] = result
                 if result.get("success"):
@@ -1267,110 +1543,10 @@ class ResourceWorkflow:
                         "layer": agent_task.layer,
                         "layer_name": layer_name,
                         "task_description": agent_task.task_description,
+                        "elapsed_ms": agent_elapsed_ms,
                     },
                 )
                 await mark_layer_terminal(agent_task, status="failed")
-
-    async def _finalize_layer_results(
-        self,
-        *,
-        layer_results: list[Any],
-        resource_id: int,
-        user_id: int,
-        request: ResourceGenerationRequest,
-        all_resources: list[GeneratedResourceItem],
-        content_markdown: str | None,
-        code_content: Any,
-        failed_agents: list[str],
-        errors: list[str],
-        layer_index: int = 0,
-        layer_name: str = "认知建构层",
-        layer_stage: str = "layer_0",
-        raw_results: dict[str, dict[str, Any]] | None = None,
-    ) -> tuple[str | None, Any]:
-        """并发保存同一层成功产物，并收集失败信息。"""
-        save_inputs = []
-
-        for item_result in layer_results:
-            if isinstance(item_result, Exception):
-                errors.append(str(item_result))
-                await self.emitter.emit_error(stage=layer_stage, message=str(item_result))
-                continue
-
-            if len(item_result) == 3:
-                agent_id, result, is_explicit = item_result
-                agent_task = AgentTask(
-                    agent_id=agent_id,
-                    task_description=f"执行 {agent_id} 资源生成",
-                    depends_on=AGENT_DEPENDENCIES.get(agent_id, []),
-                    is_explicit=is_explicit,
-                    resource_type=agent_id,
-                    config=request.agent_configs.model_dump().get(agent_id, {}),
-                )
-            else:
-                agent_id, result, is_explicit, agent_task = item_result
-            if raw_results is not None:
-                raw_results[agent_id] = result
-
-            if result.get("success"):
-                save_inputs.append(
-                    (
-                        agent_id,
-                        result,
-                        is_explicit,
-                        agent_task,
-                    )
-                )
-                continue
-
-            failed_agents.append(agent_id)
-            errors.append(f"{agent_id} 生成失败: {result.get('error', 'unknown')}")
-            await self.emitter.emit_agent(
-                agent=agent_id,
-                status="failed",
-                stage=layer_stage,
-                message=f"{self._get_agent_role_name(agent_id)}生成失败",
-                payload={
-                    "error": result.get("error", "unknown"),
-                    "layer": layer_index,
-                    "layer_name": layer_name,
-                    "task_description": agent_task.task_description,
-                },
-            )
-
-        saved_results = []
-        for agent_id, result, is_explicit, agent_task in save_inputs:
-            try:
-                saved_item = await self._save_successful_agent_result(
-                    agent_id=agent_id,
-                    result=result,
-                    is_explicit=is_explicit,
-                    agent_task=agent_task,
-                    resource_id=resource_id,
-                    user_id=user_id,
-                    request=request,
-                    layer_stage=layer_stage,
-                )
-                saved_results.append((agent_id, saved_item, None))
-            except Exception as exc:
-                saved_results.append((agent_id, None, str(exc)))
-
-        for agent_id, resource_item, error in saved_results:
-            if error:
-                errors.append(error)
-                await self.emitter.emit_error(stage=layer_stage, message=error)
-                continue
-            if resource_item is None:
-                failed_agents.append(agent_id)
-                continue
-            all_resources.append(resource_item)
-            # 提取 content（markdown 文本）和 code（结构化数据）供 quiz Agent 使用
-            if agent_id == "content":
-                content_markdown = resource_item.content if isinstance(resource_item.content, str) else None
-            elif agent_id == "code":
-                code_content = resource_item.content
-
-        return content_markdown, code_content
 
     async def _save_successful_agent_result(
         self,
@@ -1410,7 +1586,6 @@ class ResourceWorkflow:
                     "resource_type": resource_item.type.value,
                     "title": resource_item.title,
                     "summary": resource_item.summary,
-                    "output_preview": self._preview_output(resource_item.content),
                     "is_explicit": is_explicit,
                 },
             )
@@ -1463,7 +1638,10 @@ class ResourceWorkflow:
 
         # 构建元数据：合并 Agent 结果中的 metadata 和默认元数据字段
         summary = f"{agent_id} 资源已生成"
+        summary_data = result.get("summary_data") or {}
         metadata = dict(result.get("metadata") or {})
+        # 兼容老存储结构：metadata 中保留一份结构化摘要
+        metadata["summary_data"] = summary_data
         metadata.update({
             "agent": f"{agent_id.capitalize()}Agent",
             "agent_role": self._get_agent_role_name(agent_id),
@@ -1485,9 +1663,50 @@ class ResourceWorkflow:
             format=fmt,
             content=parsed_content,
             summary=result.get("summary") or summary,
+            summary_data=summary_data,
             execution_report=result.get("execution_report"),
             metadata=metadata,
         )
+
+    def _build_dependency_upstream_results(
+        self,
+        *,
+        task: AgentTask,
+        raw_results: dict[str, dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        """只为当前 Agent 构造显式依赖的轻量上游摘要，不传递完整资源正文。"""
+        upstream: dict[str, dict[str, Any]] = {}
+        for dep_agent_id in task.depends_on:
+            result = raw_results.get(dep_agent_id)
+            if not isinstance(result, dict):
+                continue
+            upstream[dep_agent_id] = self._summarize_upstream_result(dep_agent_id, result)
+        return upstream
+
+    def _build_all_upstream_summaries(
+        self,
+        raw_results: dict[str, dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        """给规划器使用的轻量上游摘要，避免携带完整资源正文。"""
+        upstream: dict[str, dict[str, Any]] = {}
+        for agent_id, result in raw_results.items():
+            if isinstance(result, dict):
+                upstream[agent_id] = self._summarize_upstream_result(agent_id, result)
+        return upstream
+
+    def _summarize_upstream_result(self, agent_id: str, result: dict[str, Any]) -> dict[str, Any]:
+        """从 Agent 原始结果中提取可传递给下游的最小摘要，不包含完整 content 正文。"""
+        return {
+            "success": result.get("success", False),
+            "title": result.get("title") or "",
+            "summary": result.get("summary") or "",
+            "summary_data": result.get("summary_data") or {},  # 结构化摘要，供下游 Agent 使用
+            "file_type": result.get("file_type") or "",
+            "metadata": {
+                "agent_id": agent_id,
+                "resource_type": result.get("file_type") or "",
+            },
+        }
 
     def _get_agent_role_name(self, agent_id: str) -> str:
         """获取前端可展示的 Agent 角色名，用于 SSE 事件中的 agent 字段。"""
@@ -1513,13 +1732,11 @@ class ResourceWorkflow:
         return stages.get(layer, "planning")
 
     def _build_upstream_reports(self, raw_results: dict[str, dict[str, Any]]) -> dict[str, str]:
-        """把上游原始结果压缩为给 MasterAgent/WorkerAgent 使用的交接报告。"""
+        """把上游摘要压缩为给 MasterAgent/WorkerAgent 使用的交接报告。"""
         reports: dict[str, str] = {}
         for agent_id, result in raw_results.items():
-            # 优先使用 execution_report，其次 summary，最后 content 的前 300 字符预览
-            report = result.get("execution_report") or result.get("summary")
-            if not report:
-                report = self._preview_output(result.get("content"))
+            # 交接报告只使用摘要字段，不回退到完整资源正文
+            report = result.get("execution_report") or result.get("summary") or result.get("title")
             reports[agent_id] = str(report or "")[:1000]
         return reports
 

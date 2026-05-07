@@ -27,13 +27,13 @@ class ResourceGenerateEvent(BaseModel):
 
     event_id: str = Field(default_factory=lambda: str(uuid4()))
     task_id: str
-    event_type: str
-    stage: str
-    agent: str | None = None
-    status: str
-    message: str
-    progress: int | None = None
-    payload: dict[str, Any] = Field(default_factory=dict)
+    event_type: str  # 事件类型: workflow/planning/agent_step/agent/resource/review/bundle/done/error
+    stage: str  # 阶段: created/planning/layer_0/layer_1/layer_2/reviewing/assembling/completed/failed
+    agent: str | None = None  # Agent 名称
+    status: str  # 状态: pending/running/success/failed/skipped
+    message: str  # 消息文本
+    progress: int | None = None  # 进度 0-100
+    payload: dict[str, Any] = Field(default_factory=dict)  # 事件负载数据
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -142,6 +142,42 @@ class AgentEventEmitter:
             agent=agent,
             payload=payload,
             progress=progress,
+        )
+
+    async def emit_agent_step(
+        self,
+        agent: str,
+        message: str,
+        *,
+        stage: str | None = None,
+        status: str = "running",
+        action: str | None = None,
+        current_step: int | None = None,
+        total_steps: int | None = None,
+        step_label: str | None = None,
+        progress: int | None = None,
+        payload: dict[str, Any] | None = None,
+        task_id: str | None = None,
+    ) -> None:
+        """发送 Agent 过程状态事件，只用于流程图和右侧 Agent 状态面板，不携带资源正文。"""
+        await self.emit_event(
+            task_id=task_id,
+            event_type="agent_step",
+            stage=stage or self._agent_stages.get(agent, "generating"),
+            status=status,
+            message=message,
+            agent=agent,
+            progress=progress,
+            payload={
+                "action": action or message,
+                "current_action": message,
+                "current_step": current_step,
+                "total_steps": total_steps,
+                "step_label": step_label,
+                "render_target": "workflow",  # 前端渲染目标：流程图
+                "is_process_event": True,  # 标记为过程事件，非资源事件
+                **(payload or {}),
+            },
         )
 
     async def emit_resource(
@@ -268,27 +304,23 @@ class AgentEventEmitter:
         step_label: str = "",
         **meta: Any,
     ) -> None:
-        """兼容旧接口：发送 Agent 动作事件。"""
+        """兼容旧接口：发送 Agent 动作事件，内部调用 emit_agent_step，不携带资源正文预览。"""
         task_id = str(meta.pop("task_id", self._resolve_task_id()))
         stage = str(meta.pop("stage", self._agent_stages.get(agent, "planning")))
         current_action = str(meta.pop("current_action", None) or detail or action)
-        output_preview = str(meta.pop("output_preview", "") or "")
-        payload = {
-            "action": action,
-            "current_action": current_action,
-            "current_step": current_step,
-            "total_steps": total_steps,
-            "step_label": step_label,
-            "output_preview": output_preview,
-            **meta,
-        }
-        await self.emit_agent(
+        # 过程事件不允许携带资源正文预览，避免前端误展示半成品
+        meta.pop("output_preview", None)
+        await self.emit_agent_step(
             task_id=task_id,
             agent=agent,
-            status="running",
-            message=detail or action,
-            payload=payload,
             stage=stage,
+            status="running",
+            message=current_action,
+            action=action,
+            current_step=current_step or None,
+            total_steps=total_steps or None,
+            step_label=step_label or None,
+            payload=meta,
         )
 
     async def emit_artifact_ready(self, agent: str, artifact: dict[str, Any]) -> None:

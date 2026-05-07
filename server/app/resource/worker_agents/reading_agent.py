@@ -14,8 +14,8 @@ from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerState, WorkerResult
 from app.resource.worker_agents.utils import (
+    AgentContextBuilder,
     append_backend_context_for_prompt,
-    extract_markdown_from_llm_output,
     learning_need_from_task,
     title_from_learning_need,
 )
@@ -46,7 +46,6 @@ class ReadingAgent:
         total_steps: int = 0,
         step_label: str = "",
         current_action: str = "",
-        output_preview: str = "",
     ) -> None:
         """发送 Agent 动作事件。"""
         if self.emitter:
@@ -58,7 +57,6 @@ class ReadingAgent:
                 total_steps=total_steps,
                 step_label=step_label,
                 current_action=current_action,
-                output_preview=output_preview,
                 layer=state.layer_index,
                 layer_name="实践拓展层",
                 agent_role=self.ROLE_NAME,
@@ -78,7 +76,6 @@ class ReadingAgent:
             total_steps=total,
             step_label=self.STEPS[0],
             current_action="分析拓展阅读需求",
-            output_preview="正在识别主题边界、阅读深度和资源偏好",
         )
         prompt = self._load_prompt()
 
@@ -90,7 +87,6 @@ class ReadingAgent:
             total_steps=total,
             step_label=self.STEPS[1],
             current_action="融合画像与依赖",
-            output_preview="正在结合 ContentAgent 主题重点、学习偏好和阅读配置筛选方向",
         )
         input_text = await self._build_input(state)
 
@@ -103,7 +99,6 @@ class ReadingAgent:
                 total_steps=total,
                 step_label=self.STEPS[2],
                 current_action="生成阅读推荐",
-                output_preview="正在生成阅读材料、推荐理由、阅读顺序和关联说明",
             )
 
             response = await self.llm_manager.ainvoke(
@@ -128,8 +123,25 @@ class ReadingAgent:
                 total_steps=total,
                 step_label=self.STEPS[3],
                 current_action="整理阅读资源",
-                output_preview=str(content)[:240],
             )
+
+            items = content.get("items", []) if isinstance(content, dict) else []
+            recommended_path: list[str] = []
+            if isinstance(items, list):
+                for item in items[:6]:
+                    if not isinstance(item, dict):
+                        continue
+                    title = item.get("title") or item.get("name") or item.get("resource_name")
+                    reason = item.get("reason") or item.get("description")
+                    if title:
+                        recommended_path.append(str(title))
+                    elif reason:
+                        recommended_path.append(str(reason)[:80])
+            summary_data = {
+                "resource_count": len(items) if isinstance(items, list) else 0,
+                "reading_depth": state.agent_config.get("reading_depth", "course_extended"),
+                "recommended_path": recommended_path,
+            }
 
             return WorkerResult.model_construct(
                 success=True,
@@ -137,6 +149,7 @@ class ReadingAgent:
                 file_type="json",
                 title=title_from_learning_need(state.task, "拓展阅读"),
                 summary="生成拓展阅读材料与阅读顺序",
+                summary_data=summary_data,
                 metadata={
                     "reading_depth": state.agent_config.get("reading_depth", "course_extended"),
                 },
@@ -178,6 +191,12 @@ class ReadingAgent:
             f"- 语言偏好: {agent_config.get('language_preference', 'chinese')}",
         ]
 
+        # Use AgentContextBuilder for context-aware prompt building
+        builder = AgentContextBuilder()
+        context_text = builder.build_for_agent("reading", state)
+        if context_text:
+            parts.append("")
+            parts.append(context_text)
         append_backend_context_for_prompt(parts, state)
 
         parts.append("")

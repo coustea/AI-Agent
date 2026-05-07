@@ -2,10 +2,6 @@
   <div class="quiz-resource" :class="{ compact }">
     <div v-if="questions.length" class="quiz-list">
       <article v-for="(question, index) in visibleQuestions" :key="index" class="technical-frame quiz-item">
-        <div class="frame-corners top-left"></div>
-        <div class="frame-corners top-right"></div>
-        <div class="frame-corners bottom-left"></div>
-        <div class="frame-corners bottom-right"></div>
 
         <div class="frame-header">
           <div class="status-indicator"></div>
@@ -235,11 +231,11 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .quiz-resource {
   width: 100%;
-  --primary: #6366F1;
-  --bg: #F5F3FF;
-  --fg: #1E1B4B;
-  --border: #E0E7FF;
-  --accent: #059669;
+  --primary: #000000;
+  --bg: #FFFFFF;
+  --fg: #000000;
+  --border: #E5E7EB;
+  --accent: #000000;
 }
 
 .quiz-list {
@@ -252,10 +248,10 @@ const getQuestionTypeText = (questionType?: string) => {
 .technical-frame {
   position: relative;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   padding: 40px 32px 32px;
-  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  box-shadow: none;
   transition: all 0.3s ease;
 }
 
@@ -287,7 +283,7 @@ const getQuestionTypeText = (questionType?: string) => {
   height: 6px;
   background: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow: none;
   animation: pulse 2s infinite;
 }
 
@@ -352,8 +348,8 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-difficulty.hard, .quiz-difficulty.challenge {
-  border-color: #DC2626;
-  color: #DC2626;
+  border-color: #000000;
+  color: #000000;
 }
 
 .quiz-text {
@@ -386,15 +382,15 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-option-item:not(.is-readonly):hover {
-  background: rgba(99, 102, 241, 0.03);
+  background: rgba(0, 0, 0, 0.03);
   border-color: var(--primary);
   transform: translateX(4px);
 }
 
 .quiz-option-item.is-selected {
-  background: rgba(99, 102, 241, 0.05);
+  background: rgba(0, 0, 0, 0.05);
   border-color: var(--primary);
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.1);
+  box-shadow: none;
 }
 
 .option-check {
@@ -414,7 +410,7 @@ const getQuestionTypeText = (questionType?: string) => {
 .is-selected .check-box {
   background: var(--primary);
   border-color: var(--primary);
-  box-shadow: 0 0 8px var(--primary);
+  box-shadow: none;
 }
 
 .option-label {
@@ -434,15 +430,15 @@ const getQuestionTypeText = (questionType?: string) => {
 /* 状态样式 */
 .quiz-option-item.is-correct {
   border-color: var(--accent);
-  background: rgba(5, 150, 105, 0.05);
+  background: rgba(0, 0, 0, 0.05);
 }
-.is-correct .check-box { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.is-correct .check-box { background: var(--accent); border-color: var(--accent); box-shadow: none; }
 
 .quiz-option-item.is-wrong {
-  border-color: #DC2626;
-  background: rgba(220, 38, 38, 0.05);
+  border-color: #000000;
+  background: rgba(0, 0, 0, 0.05);
 }
-.is-wrong .check-box { background: #DC2626; border-color: #DC2626; box-shadow: 0 0 8px #DC2626; }
+.is-wrong .check-box { background: #000000; border-color: #000000; box-shadow: none; }
 
 .option-status-wrap {
   display: flex;
@@ -450,7 +446,7 @@ const getQuestionTypeText = (questionType?: string) => {
   font-size: 1.2rem;
 }
 .correct { color: var(--accent); }
-.wrong { color: #DC2626; }
+.wrong { color: #000000; }
 
 /* 动作区 */
 .quiz-actions {
@@ -499,11 +495,11 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .hud-btn-primary:hover:not(:disabled) {
   opacity: 0.9;
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+  box-shadow: none;
 }
 
 .hud-btn-primary:disabled {
-  background: #E2E8F0;
+  background: #000000;
   cursor: not-allowed;
   color: #94A3B8;
 }
@@ -512,8 +508,8 @@ const getQuestionTypeText = (questionType?: string) => {
 .quiz-answer {
   margin-top: 28px;
   padding: 20px;
-  background: rgba(5, 150, 105, 0.03);
-  border: 1px solid rgba(5, 150, 105, 0.1);
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
 }
 
@@ -545,8 +541,8 @@ const getQuestionTypeText = (questionType?: string) => {
 .quiz-explanation {
   margin-top: 16px;
   padding: 20px;
-  background: rgba(99, 102, 241, 0.03);
-  border: 1px solid rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
 }
 
@@ -569,7 +565,7 @@ const getQuestionTypeText = (questionType?: string) => {
 .ref-answer pre {
   margin: 0 0 16px 0;
   padding: 16px;
-  background: #0F172A;
+  background: #FFFFFF;
   border: 1px solid #334155;
   border-radius: 6px;
   overflow: auto;
@@ -577,7 +573,7 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .ref-answer code {
   font-family: 'Fira Code', monospace;
-  color: #E2E8F0;
+  color: #000000;
   font-size: 0.85rem;
 }
 
@@ -632,7 +628,6 @@ const getQuestionTypeText = (questionType?: string) => {
   background: transparent;
   box-shadow: none;
 }
-.compact .frame-corners,
 .compact .frame-header {
   display: none;
 }

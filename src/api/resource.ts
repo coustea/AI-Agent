@@ -87,11 +87,11 @@ interface ResourceGenerationRequest {
   }
 }
 
-interface ResourceGenerateEvent {
+export interface ResourceGenerateEvent {
   event_id: string
   task_id: string
-  event_type: 'workflow' | 'agent' | 'resource' | 'review' | 'bundle' | 'error' | 'done'
-  stage: 'created' | 'planning' | 'generating' | 'reviewing' | 'assembling' | 'completed' | 'failed'
+  event_type: 'workflow' | 'planning' | 'agent_step' | 'agent' | 'resource' | 'review' | 'bundle' | 'error' | 'done' | 'layer'
+  stage: string
   agent?: string
   status: 'pending' | 'running' | 'success' | 'failed' | 'skipped'
   message: string

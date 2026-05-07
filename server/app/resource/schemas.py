@@ -14,6 +14,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal, Optional
+
+# 规划模式：rule=规则一次性规划, single_llm=单次LLM规划, layer_llm=分层LLM规划
+PlanningMode = Literal["rule", "single_llm", "layer_llm"]
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -227,6 +230,7 @@ class ResourceGenerationRequest(BaseModel):
         default=LearningScenario.DAILY_REVIEW,
         description="学习场景",
     )
+    planning_mode: PlanningMode = Field(default="rule", description="规划模式: rule/single_llm/layer_llm")
     selected_agents: list[AgentSelection] = Field(default_factory=list, description="选中的 Agent")
     agent_configs: AgentConfigs = Field(default_factory=AgentConfigs, description="Agent 配置")
     output_options: OutputOptions = Field(default_factory=OutputOptions, description="输出选项")
@@ -279,6 +283,7 @@ class GeneratedResourceItem(BaseModel):
     format: str = Field(description="格式: markdown/json/mermaid/code")
     content: Any = Field(description="资源内容")
     summary: str = Field(default="", description="资源摘要")
+    summary_data: dict[str, Any] = Field(default_factory=dict, description="结构化摘要，供下游Agent轻量交接")
     execution_report: str | None = Field(default=None, description="Agent 执行报告")
     metadata: dict[str, Any] = Field(default_factory=dict, description="元数据")
 
@@ -306,6 +311,8 @@ class ReviewResult(BaseModel):
     score: int = Field(default=0, ge=0, le=100, description="评分 0-100")
     issues: list[ReviewIssue] = Field(default_factory=list, description="问题列表")
     suggestions: list[str] = Field(default_factory=list, description="改进建议")
+    failed_agents: list[str] = Field(default_factory=list, description="失败Agent列表")
+    skipped_agents: list[str] = Field(default_factory=list, description="跳过Agent列表")
 
 
 class ResourceBundle(BaseModel):
@@ -318,7 +325,7 @@ class ResourceBundle(BaseModel):
     resources: list[GeneratedResourceItem] = Field(default_factory=list, description="资源列表")
     study_path: list[StudyPathStep] = Field(default_factory=list, description="学习路径")
     review_result: Optional[ReviewResult] = Field(default=None, description="审查结果")
-    status: str = Field(default="completed", description="状态: completed/partial_completed/failed")
+    status: str = Field(default="completed", description="状态: completed/completed_with_warnings/partial_completed/failed")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: dict[str, Any] = Field(default_factory=dict, description="元数据")
@@ -340,7 +347,7 @@ class WorkerState(BaseModel):
     agent_config: dict[str, Any] = Field(default_factory=dict, description="当前 Agent 专属配置")
     workflow_plan: list[dict[str, Any]] = Field(default_factory=list, description="工作流计划")
     layer_index: int = Field(default=0, description="当前层索引")
-    upstream_results: dict[str, Any] = Field(default_factory=dict, description="后端生成的上游 Agent 原始结果")
+    upstream_results: dict[str, Any] = Field(default_factory=dict, description="显式依赖 Agent 的轻量摘要")
     dependency_reports: dict[str, Any] = Field(default_factory=dict, description="依赖 Agent 交接报告")
     learning_scenario: str = Field(default="daily_review", description="学习场景")
     planner_input_params: dict[str, Any] = Field(default_factory=dict, description="MasterAgent 规划的动态输入参数")
@@ -360,6 +367,7 @@ class WorkerResult(BaseModel):
     file_type: str = Field(default="json", description="文件类型")
     title: str | None = Field(default=None, description="资源标题")
     summary: str = Field(default="", description="资源摘要")
+    summary_data: dict[str, Any] = Field(default_factory=dict, description="结构化摘要，供下游Agent轻量交接")
     metadata: dict[str, Any] = Field(default_factory=dict, description="资源元数据")
     error: str | None = Field(default=None, description="错误信息")
 
@@ -439,7 +447,7 @@ class PlanningContext(BaseModel):
     question: "ResourceGenerationRequest" = Field(description="用户原始请求")
     user_explicit_selection: list[str] = Field(default_factory=list, description="用户显式选择的 Agent ID")
     implicit_dependencies: list[str] = Field(default_factory=list, description="系统识别的隐式依赖")
-    upstream_results: dict[str, Any] = Field(default_factory=dict, description="上游执行结果")
+    upstream_results: dict[str, Any] = Field(default_factory=dict, description="上游执行摘要")
     upstream_reports: dict[str, str] = Field(default_factory=dict, description="上游 Agent 执行报告")
 
 # 更新前向引用

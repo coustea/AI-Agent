@@ -1,10 +1,6 @@
 <template>
   <div class="markdown-resource" :class="{ compact }" @click="handleMessageClick">
     <div v-if="content" class="technical-frame">
-      <div class="frame-corners top-left"></div>
-      <div class="frame-corners top-right"></div>
-      <div class="frame-corners bottom-left"></div>
-      <div class="frame-corners bottom-right"></div>
       
       <div class="frame-header">
         <div class="status-indicator"></div>
@@ -28,7 +24,7 @@
 <script setup lang="ts">
 import { computed, onMounted, nextTick, watch } from 'vue'
 import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css'
+import 'highlight.js/styles/github.css'
 import { ElMessage } from 'element-plus'
 import { getMarkdownContent, renderMarkdown, type ResourceArtifactLike } from './resourceViewUtils'
 
@@ -98,21 +94,21 @@ watch(content, performHighlight)
 .markdown-resource {
   min-width: 0;
   width: 100%;
-  --primary: #6366F1;
-  --bg: #F5F3FF;
-  --fg: #1E1B4B;
-  --border: #E0E7FF;
-  --accent: #059669;
+  --primary: #000000;
+  --bg: #FFFFFF;
+  --fg: #000000;
+  --border: #E5E7EB;
+  --accent: #000000;
 }
 
 /* 技术框架样式 */
 .technical-frame {
   position: relative;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   padding: 40px 32px 32px;
-  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  box-shadow: none;
   transition: all 0.3s ease;
 }
 
@@ -146,7 +142,7 @@ watch(content, performHighlight)
   height: 6px;
   background: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow: none;
   animation: pulse 2s infinite;
 }
 
@@ -176,7 +172,7 @@ watch(content, performHighlight)
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
   color: var(--primary);
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   padding: 2px 6px;
   border-radius: 2px;
 }
@@ -222,7 +218,7 @@ watch(content, performHighlight)
 /* 代码块优化 */
 .markdown-shell :deep(pre) {
   border-radius: 8px;
-  background: #0F172A !important; /* 深色终端背景 */
+  background: #FFFFFF !important; /* 深色终端背景 */
   border: 1px solid #334155;
   padding: 20px;
   margin: 1.5em 0;
@@ -246,8 +242,8 @@ watch(content, performHighlight)
   position: absolute;
   top: 10px;
   right: 12px;
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.2);
   color: var(--primary);
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
@@ -283,7 +279,7 @@ watch(content, performHighlight)
 
 .markdown-shell :deep(p > code),
 .markdown-shell :deep(li > code) {
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   padding: 0.2em 0.4em;
   border-radius: 4px;
   color: var(--primary);
@@ -293,7 +289,7 @@ watch(content, performHighlight)
 /* 引用样式 */
 .markdown-shell :deep(blockquote) {
   border-left: 3px solid var(--primary);
-  background: rgba(99, 102, 241, 0.03);
+  background: rgba(0, 0, 0, 0.03);
   padding: 12px 20px;
   margin: 1.5em 0;
   border-radius: 2px;
@@ -320,7 +316,6 @@ watch(content, performHighlight)
   box-shadow: none;
 }
 
-.compact .frame-corners,
 .compact .frame-header,
 .compact .frame-footer {
   display: none;

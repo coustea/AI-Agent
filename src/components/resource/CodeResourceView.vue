@@ -1,10 +1,6 @@
 <template>
   <div class="code-resource" :class="{ compact }" @click="handleMessageClick">
     <div v-if="parsedData || markdownContent" class="technical-frame code-card-content">
-      <div class="frame-corners top-left"></div>
-      <div class="frame-corners top-right"></div>
-      <div class="frame-corners bottom-left"></div>
-      <div class="frame-corners bottom-right"></div>
 
       <div class="frame-header">
         <div class="status-indicator"></div>
@@ -86,7 +82,7 @@
 import { computed, onMounted, nextTick, watch } from 'vue'
 import { Timer, Warning, EditPen } from '@element-plus/icons-vue'
 import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css'
+import 'highlight.js/styles/github.css'
 import { ElMessage } from 'element-plus'
 import { renderMarkdown, parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
@@ -226,21 +222,21 @@ watch(markdownContent, performHighlight)
 .code-resource {
   min-width: 0;
   width: 100%;
-  --primary: #6366F1;
-  --bg: #F5F3FF;
-  --fg: #1E1B4B;
-  --border: #E0E7FF;
-  --accent: #059669;
+  --primary: #000000;
+  --bg: #FFFFFF;
+  --fg: #000000;
+  --border: #E5E7EB;
+  --accent: #000000;
 }
 
 /* 技术框架样式 */
 .technical-frame {
   position: relative;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   padding: 44px 32px 32px;
-  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.05);
+  box-shadow: none;
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -276,7 +272,7 @@ watch(markdownContent, performHighlight)
   height: 6px;
   background: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow: none;
   animation: pulse 2s infinite;
 }
 
@@ -305,7 +301,7 @@ watch(markdownContent, performHighlight)
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
   color: var(--primary);
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   padding: 2px 6px;
   border-radius: 2px;
 }
@@ -339,7 +335,7 @@ watch(markdownContent, performHighlight)
 /* 统一代码块外观 */
 :deep(pre), .pure-code-block pre {
   border-radius: 8px;
-  background: #0F172A !important;
+  background: #FFFFFF !important;
   border: 1px solid #334155;
   padding: 20px;
   margin: 1.2em 0;
@@ -362,8 +358,8 @@ watch(markdownContent, performHighlight)
   position: absolute;
   top: 10px;
   right: 12px;
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.2);
   color: var(--primary);
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
@@ -393,13 +389,13 @@ watch(markdownContent, performHighlight)
 :deep(code), .pure-code-block code {
   font-family: 'Fira Code', monospace;
   font-size: 0.85em;
-  color: #E2E8F0;
+  color: #000000;
 }
 
 /* 页脚扩展信息 */
 .code-footer-extras {
   margin-top: 16px;
-  background: rgba(99, 102, 241, 0.03);
+  background: rgba(0, 0, 0, 0.03);
   padding: 20px;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -456,7 +452,7 @@ watch(markdownContent, performHighlight)
 }
 
 .extra-content code {
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   color: var(--primary);
   padding: 2px 6px;
   border-radius: 4px;
@@ -502,7 +498,7 @@ watch(markdownContent, performHighlight)
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.8rem;
   color: var(--primary);
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   padding: 2px 6px;
   border-radius: 2px;
   flex-shrink: 0;

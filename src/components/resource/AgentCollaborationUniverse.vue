@@ -10,8 +10,8 @@
       <defs>
         <!-- 连线渐变 -->
         <linearGradient id="beam-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stop-color="rgba(99, 102, 241, 0.4)" />
-          <stop offset="100%" stop-color="rgba(99, 102, 241, 0.05)" />
+          <stop offset="0%" stop-color="rgba(0, 0, 0, 0.4)" />
+          <stop offset="100%" stop-color="rgba(0, 0, 0, 0.05)" />
         </linearGradient>
         
         <!-- 活跃状态流光过滤器 -->
@@ -32,7 +32,7 @@
           :class="{ 'is-active': states[agentId] === 'running' || states[agentId] === 'success' }"
         />
         <!-- 流动的光束粒子 -->
-        <circle v-if="states[agentId] === 'running'" r="3" fill="#6366F1" filter="url(#glow)">
+        <circle v-if="states[agentId] === 'running'" r="3" fill="#000000" filter="url(#glow)">
           <animateMotion 
             :path="getLinkPath(agentId)" 
             dur="1.5s" 
@@ -50,10 +50,6 @@
       <div class="orchestrator-section">
         <div class="master-node-wrapper" ref="masterRef">
           <div class="master-core pulse-glow">
-            <div class="frame-corners-small top-left"></div>
-            <div class="frame-corners-small top-right"></div>
-            <div class="frame-corners-small bottom-left"></div>
-            <div class="frame-corners-small bottom-right"></div>
             
             <div class="core-inner">
               <el-icon class="core-icon"><Operation /></el-icon>
@@ -78,10 +74,6 @@
           :class="[states[agentId] || 'pending', { 'has-artifact': results[agentId] }]"
         >
           <div class="worker-node-box">
-            <div class="frame-corners-tiny top-left"></div>
-            <div class="frame-corners-tiny top-right"></div>
-            <div class="frame-corners-tiny bottom-left"></div>
-            <div class="frame-corners-tiny bottom-right"></div>
 
             <!-- 状态指示灯 -->
             <div class="status-indicator"></div>
@@ -208,11 +200,11 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   min-height: 700px;
-  background: #F5F3FF;
+  background: #FFFFFF;
   overflow-y: auto;
   overflow-x: hidden;
-  --primary: #6366F1;
-  --accent: #059669;
+  --primary: #000000;
+  --accent: #000000;
 }
 
 /* 蓝图网格背景 */
@@ -225,10 +217,7 @@ onUnmounted(() => {
 .blueprint-grid {
   position: absolute;
   inset: 0;
-  background-image: 
-    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
+  background-image: none;
   opacity: 1;
 }
 
@@ -244,7 +233,7 @@ onUnmounted(() => {
 
 .connection-path {
   fill: none;
-  stroke: rgba(99, 102, 241, 0.15);
+  stroke: rgba(0, 0, 0, 0.15);
   stroke-width: 1.5;
   stroke-dasharray: 4, 4;
   transition: all 1s ease;
@@ -306,20 +295,18 @@ onUnmounted(() => {
   position: relative;
   width: 90px;
   height: 90px;
-  background: #1E1B4B;
-  border-radius: 4px;
+  background: #000000;
+  border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+  box-shadow: none;
 }
 
 .core-inner {
   width: 54px;
   height: 54px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+  background: transparent;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -330,7 +317,7 @@ onUnmounted(() => {
 .core-waves span {
   position: absolute;
   inset: -15px;
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.3);
   border-radius: 4px;
   animation: waveRipple 4s infinite cubic-bezier(0, 0.2, 0.8, 1);
 }
@@ -346,7 +333,7 @@ onUnmounted(() => {
   font-family: 'Share Tech Mono', monospace;
   font-size: 1.2rem;
   font-weight: normal;
-  color: #1E1B4B;
+  color: #000000;
   letter-spacing: 2px;
   margin: 0;
 }
@@ -371,21 +358,21 @@ onUnmounted(() => {
 .worker-node-box {
   position: relative;
   background: #FFFFFF;
-  border: 1px solid #E0E7FF;
-  border-radius: 4px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.05);
+  box-shadow: none;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
 
 .pending .worker-node-box { opacity: 0.5; transform: scale(0.98); }
-.running .worker-node-box { 
-  border-color: var(--primary); 
-  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.15); 
+.running .worker-node-box {
+  border-color: var(--primary);
+  box-shadow: none;
   transform: translateY(-8px);
 }
-.success .worker-node-box { border-color: var(--accent); background: rgba(5, 150, 105, 0.02); }
+.success .worker-node-box { border-color: var(--border); background: #F9FAFB; }
 
 /* 状态灯 */
 .status-indicator {
@@ -395,8 +382,8 @@ onUnmounted(() => {
   border-radius: 50%;
   background: #CBD5E1;
 }
-.running .status-indicator { background: var(--primary); box-shadow: 0 0 8px var(--primary); animation: blink 1s infinite; }
-.success .status-indicator { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.running .status-indicator { background: var(--primary); box-shadow: none; animation: blink 1s infinite; }
+.success .status-indicator { background: var(--accent); box-shadow: none; }
 
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
@@ -409,21 +396,21 @@ onUnmounted(() => {
 
 .worker-icon-box {
   width: 48px; height: 48px;
-  background: #F1F5F9;
-  border-radius: 4px;
+  background: #F3F4F6;
+  border-radius: 8px;
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #64748B;
+  color: #6B7280;
   font-size: 1.4rem;
   transition: all 0.3s;
 }
-.running .worker-icon-box { background: var(--primary); color: #FFFFFF; box-shadow: 0 0 15px rgba(99, 102, 241, 0.3); }
-.success .worker-icon-box { background: var(--accent); color: #FFFFFF; }
+.running .worker-icon-box { background: var(--primary); color: #FFFFFF; box-shadow: none; }
+.success .worker-icon-box { background: #FFFFFF; border: 1px solid #E5E7EB; color: var(--accent); }
 
 .worker-info { flex: 1; min-width: 0; }
 .wi-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-.wi-name { font-family: 'Share Tech Mono', monospace; font-weight: normal; font-size: 1rem; color: #1E1B4B; letter-spacing: 1px; }
+.wi-name { font-family: 'Share Tech Mono', monospace; font-weight: normal; font-size: 1rem; color: #000000; letter-spacing: 1px; }
 .wi-step { font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; color: var(--primary); }
 .wi-label { font-family: 'Fira Code', monospace; font-size: 0.8rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .running .wi-label { color: var(--primary); }
@@ -469,9 +456,9 @@ onUnmounted(() => {
   height: 100%;
   background: var(--primary);
   transition: width 0.6s ease;
-  box-shadow: 0 0 10px var(--primary);
+  box-shadow: none;
 }
-.success .bar-fill { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.success .bar-fill { background: var(--accent); box-shadow: none; }
 
 .pulse-glow {
   animation: masterPulse 5s infinite ease-in-out;

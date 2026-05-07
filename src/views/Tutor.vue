@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div :class="['tutor-dashboard', `mode-${chatMode}`]">
 
     <main class="dashboard-main">
@@ -529,6 +529,7 @@ import {
   getSessions,
   createSession,
   deleteSession,
+  updateSessionTitle,
   getChatHistory,
   type ChatSession,
 } from '@/api/chat'
@@ -1436,7 +1437,15 @@ const handleSend = async () => {
   if (currentSessionId.value && text) {
     const session = sessions.value.find(s => s.id === currentSessionId.value)
     if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
-      session.title = text.length > 20 ? text.slice(0, 20) + '...' : text
+      // 使用用户消息的前20字符作为临时标题
+      const tempTitle = text.length > 20 ? text.slice(0, 20) + '...' : text
+      session.title = tempTitle
+      // 调用后端API更新标题
+      try {
+        await updateSessionTitle(currentSessionId.value, tempTitle)
+      } catch (err) {
+        console.warn('更新会话标题失败:', err)
+      }
     }
   }
 
