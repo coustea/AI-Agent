@@ -32,7 +32,7 @@
               :width="280"
               trigger="click"
               v-model:visible="searchPopoverVisible"
-              popper-style="padding: 16px 12px 12px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);"
+              popper-style="padding: 16px 12px 12px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);"
               @after-leave="searchKeyword = ''"
           >
             <template #reference>
@@ -79,7 +79,7 @@
               placement="right-start"
               :width="260"
               trigger="click"
-              popper-style="padding: 12px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);"
+              popper-style="padding: 12px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);"
           >
             <template #reference>
               <div class="nav-item history-collapsed-btn" title="历史记录">
@@ -138,14 +138,14 @@
 
         <div v-if="chatMode === 'digital_human'" class="digital-human-stage">
           <DigitalHumanCanvas
-            :is-ready="isAvatarReady"
-            :is-connected="isAvatarConnected"
-            :audio-enabled="avatarAudioEnabled"
-            :idle-countdown="avatarIdleCountdown"
-            ref="canvasRef"
-            @enable-audio="enableAvatarAudio"
-            @disconnect="disconnectAvatar"
-            @reconnect="handleAvatarReconnect"
+              :is-ready="isAvatarReady"
+              :is-connected="isAvatarConnected"
+              :audio-enabled="avatarAudioEnabled"
+              :idle-countdown="avatarIdleCountdown"
+              ref="canvasRef"
+              @enable-audio="enableAvatarAudio"
+              @disconnect="disconnectAvatar"
+              @reconnect="handleAvatarReconnect"
           />
 
           <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking || isVadListening }">
@@ -159,9 +159,7 @@
         <div class="chat-interaction-area">
           <div class="chat-viewport" ref="chatScroll">
             <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
-              <h2>
-                你好，学习者！
-              </h2>
+              <h2>你好，学习者！</h2>
             </div>
 
             <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
@@ -186,10 +184,11 @@
                   <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : 'You' }}</span>
                   <span class="time">{{ msg.time }}</span>
                 </div>
+
                 <div class="bubble">
                   <TutorMessageContent
-                    :content="msg.content"
-                    :is-streaming="isStreamingMessage(msg)"
+                      :content="msg.content"
+                      :is-streaming="isStreamingMessage(msg)"
                   />
                 </div>
 
@@ -223,30 +222,27 @@
                   </div>
                   <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
 
-                  <!-- 浼樺厛灞曠ず PNG 鍥剧墖 -->
                   <img
                       v-if="msg.diagram.image_url"
                       :src="msg.diagram.image_url"
                       :alt="msg.diagram.title || 'AI 图解'"
                       class="diagram-image"
                   />
-
-                  <!-- 闄嶇骇鍒?SVG 娓叉煋 -->
                   <div
                       v-else
                       class="diagram-svg-container"
                       v-html="diagramSvgCache.get(msg.diagram.render.source) || ''"
                   ></div>
                 </div>
-
               </div>
             </div>
 
             <div v-if="showThinkingIndicator" class="message-row ai thinking-row">
               <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
-              <div class="thinking-bubble">
-                <el-icon class="is-loading thinking-spinner"><Loading /></el-icon>
-                <span class="thinking-text">姝ｅ湪鎬濊€?..</span>
+              <div class="bubble thinking-bubble">
+                <div class="typing-dots">
+                  <span></span><span></span><span></span>
+                </div>
               </div>
             </div>
           </div>
@@ -262,33 +258,57 @@
             </div>
 
             <div class="input-wrapper" :class="{ 'is-expanded': isExpandedInput }">
-
               <div class="toolbar-left">
                 <el-popover
-                  placement="top-start"
-                  trigger="click"
-                  :width="150"
-                  popper-class="custom-plus-popover"
-                  :show-arrow="false"
+                    placement="top-start"
+                    trigger="click"
+                    :width="220"
+                    popper-class="custom-plus-popover"
+                    :show-arrow="false"
+                    :offset="12"
                 >
                   <template #reference>
-                    <button class="standard-plus-btn" :disabled="uploadingFile" title="鏇村鍔熻兘">
+                    <button class="standard-plus-btn" :disabled="uploadingFile" title="更多功能">
                       <el-icon><Plus /></el-icon>
                     </button>
                   </template>
-                  
+
                   <div class="action-menu">
                     <div class="action-item" @click="triggerFileUpload">
-                      <el-icon><Document /></el-icon>
-                      <span>上传文件</span>
+                      <div class="item-icon-wrapper bg-blue">
+                        <el-icon><Document /></el-icon>
+                      </div>
+                      <div class="item-content">
+                        <span class="item-text">上传文件</span>
+                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
+                      </div>
+                    </div>
+                    <div class="action-item" @click="triggerFileUpload">
+                      <div class="item-icon-wrapper bg-blue">
+                        <el-icon><Picture /></el-icon>
+                      </div>
+                      <div class="item-content">
+                        <span class="item-text">上传图片</span>
+                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
+                      </div>
                     </div>
                     <div class="action-item" @click="handleImageToggle">
-                      <el-icon :class="{ 'is-active-icon': needDiagram }"><DataLine /></el-icon>
-                      <span>{{ needDiagram ? '取消生成图解' : '生成图解' }}</span>
+                      <div class="item-icon-wrapper" :class="needDiagram ? 'bg-active' : 'bg-purple'">
+                        <el-icon><DataLine /></el-icon>
+                      </div>
+                      <div class="item-content">
+                        <span class="item-text">{{ needDiagram ? '取消生成图解' : '生成图解' }}</span>
+                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
+                      </div>
                     </div>
                     <div class="action-item" @click="handleVideoToggle">
-                      <el-icon :class="{ 'is-active-icon': generateVideo }"><VideoCamera /></el-icon>
-                      <span>{{ generateVideo ? '取消生成视频' : '生成视频' }}</span>
+                      <div class="item-icon-wrapper" :class="generateVideo ? 'bg-active' : 'bg-teal'">
+                        <el-icon><VideoCamera /></el-icon>
+                      </div>
+                      <div class="item-content">
+                        <span class="item-text">{{ generateVideo ? '取消生成视频' : '生成视频' }}</span>
+                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
+                      </div>
                     </div>
                   </div>
                 </el-popover>
@@ -366,7 +386,7 @@
               </div>
 
             </div>
-            <div class="input-footer">AI 可能会产生错误信息，请注意甄别。</div>
+            <div class="input-footer">内容由 AI 生成，仅供参考。</div>
           </div>
         </div>
 
@@ -385,12 +405,12 @@
 
         <div class="profile-cards-container" v-if="profileCards.length > 0">
           <div
-            v-for="card in profileCards"
-            :key="card.key"
-            :class="['insight-card', { 'special-card': card.key === '最近变化' || card.key === '推荐辅导策略' }]"
+              v-for="card in profileCards"
+              :key="card.key"
+              :class="['insight-card', { 'special-card': card.key === '最近变化' || card.key === '推荐辅导策略' }]"
           >
             <div class="card-header">
-              <div class="card-icon-wrap" :style="{ color: card.key === '最近变化' ? '#F59E0B' : '#4F46E5' }">
+              <div class="card-icon-wrap">
                 <el-icon><component :is="getProfileCardIcon(card.key)" /></el-icon>
               </div>
               <span class="card-title">{{ card.title }}</span>
@@ -427,8 +447,8 @@
             <p>由于对话样本较少，您的动态学习画像仍在生成中。多和我交流，我会为您建立更精准的画像。</p>
           </div>
           <div class="empty-hints">
-            <div class="hint-item"><el-icon><ChatLineRound /></el-icon> <span>娣卞害浜ゆ祦</span></div>
-            <div class="hint-item"><el-icon><Aim /></el-icon> <span>瀹氫綅鐥涚偣</span></div>
+            <div class="hint-item"><el-icon><ChatLineRound /></el-icon> <span>深度交流</span></div>
+            <div class="hint-item"><el-icon><Aim /></el-icon> <span>定位痛点</span></div>
             <div class="hint-item"><el-icon><TrendCharts /></el-icon> <span>反馈进度</span></div>
           </div>
         </div>
@@ -504,19 +524,19 @@
 </template>
 
 <script setup lang="ts">
-
 import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
-  Plus, Delete, Close, Top,
+  Plus, Delete, Close, Top, ArrowRight,
   EditPen, Search, Timer, VideoCamera, DataLine,
   CircleCheckFilled,
   InfoFilled, Medal, Aim, Loading, TrendCharts
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import 'github-markdown-css/github-markdown-light.css'
-import 'highlight.js/styles/github.css'
+// 更换为深色主题以匹配深色代码块
+import 'highlight.js/styles/atom-one-dark.css'
 import mermaid from 'mermaid'
 import { getErrorMessage } from '@/utils/http'
 import TutorMessageContent from '@/components/TutorMessageContent.vue'
@@ -537,7 +557,7 @@ import { getMe } from '@/api/auth'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
 
-// 3. 绫诲瀷瀹氫箟
+// 类型定义
 interface PendingFile {
   file?: File;
   url?: string;
@@ -549,7 +569,6 @@ interface Attachment {
   type: string;
   name: string
 }
-// 鐭ヨ瘑图解
 interface DiagramData {
   type: string
   title: string
@@ -560,7 +579,7 @@ interface DiagramData {
     format: string
     source: string
   }
-  image_url?: string  // PNG 鍥剧墖 URL锛堝墠绔覆鏌撳悗涓婁紶锛?
+  image_url?: string
 }
 interface ChatMsg {
   id: number
@@ -581,20 +600,13 @@ interface ProfileCard {
 const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 
-// ==========================================
-// 4. Mermaid 鍒濆鍖?
-// ==========================================
 mermaid.initialize({
   startOnLoad: false,
   theme: 'default',
   securityLevel: 'loose',
 })
 
-// ==========================================
-// 5. 鍝嶅簲寮忕姸鎬?
-// ==========================================
-
-// --- 鑱婂ぉ妯″紡涓庤緭鍏?---
+// 状态
 const chatMode = ref('standard')
 const userInput = ref('')
 const isAIThinking = ref(false)
@@ -602,18 +614,15 @@ const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
-// --- 濯掍綋鐢熸垚/联网搜索寮€鍏?---
-const enableWebSearch = ref(false) 
+const enableWebSearch = ref(false)
 const needDiagram = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
 
-// --- 璇煶鐩稿叧 ---
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
 const lastAsrText = ref('')
 
-// --- 鏁板瓧浜?composable ---
 const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
 const {
   isConnected: isAvatarConnected,
@@ -657,7 +666,6 @@ const {
   },
   onAsrResult: (text) => {
     lastAsrText.value = text.trim()
-    // Show ASR result as a user message in the chat
     if (text.trim()) {
       messages.value.push({
         id: Date.now(),
@@ -683,7 +691,6 @@ const {
     ElMessage.error({ message: msg, plain: true })
   },
   onAvatarReady: () => {
-    // Wire up player container when canvas is mounted
     nextTick(() => {
       const container = canvasRef.value?.getContainer()
       if (container) {
@@ -693,12 +700,10 @@ const {
   },
 })
 
-// --- 鏂囦欢涓婁紶 ---
 const uploadingFile = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
 
-// --- 浼氳瘽绠＄悊 ---
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
@@ -706,25 +711,21 @@ const currentUserId = ref<string | number | null>(null)
 const searchPopoverVisible = ref(false)
 const searchKeyword = ref('')
 
-// --- 娑堟伅鍒楄〃 ---
 const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
 let abortController: AbortController | null = null
 
-// --- 鐢诲儚鐩稿叧 ---
 const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
 const profileCards = ref<ProfileCard[]>([])
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
 
-// --- FAB 鎮诞鎸夐挳 ---
 const fabPos = ref({ x: 16, y: 0 })
 const isDragging = ref(false)
 const showFabMenu = ref(false)
 const isDimmed = ref(false)
 const isStickRight = computed(() => fabPos.value.x > window.innerWidth / 2)
 
-// --- FAB 鎷栨嫿鐘舵€?---
 let dragStartX = 0
 let dragStartY = 0
 let dragInitialX = 0
@@ -732,22 +733,17 @@ let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
 
-// --- 图解娓叉煋 ---
 let diagramRenderSeq = 0
 const diagramSvgCache = ref<Map<string, string>>(new Map())
 
-// --- 婊氬姩鐘舵€?---
 let scrollPending = false
 let streamFlushHandle: number | null = null
 let pendingStreamText = ''
 let pendingStreamTargetId: number | null = null
 let lastAutoScrollAt = 0
-
 const STREAM_SCROLL_INTERVAL_MS = 64
 
-// ==========================================
-// 6. 璁＄畻灞炴€?
-// ==========================================
+// 计算属性
 const filteredSessions = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
   if (!keyword) return []
@@ -772,9 +768,7 @@ const digitalHumanStatusText = computed(() => {
   return '倾听就绪'
 })
 
-// ==========================================
-// 7. 宸ュ叿鍑芥暟
-// ==========================================
+// 工具函数
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 const copyToClipboard = async (text: string) => {
@@ -786,15 +780,12 @@ const copyToClipboard = async (text: string) => {
   }
 }
 
-// 浠ｇ悊浜嬩欢濮旀墭锛氱敤浜庢崟鑾风敱 v-html 娓叉煋鍑烘潵鐨勨€滃鍒朵唬鐮佲€濇寜閽偣鍑讳簨浠?
 const handleMessageClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (target && target.classList.contains('copy-code-btn')) {
     const code = target.dataset.code
     if (code != null) {
       copyToClipboard(code)
-      
-      // 娣诲姞涓存椂鐨勮瑙夊弽棣?
       const originalText = target.innerText
       target.innerText = '已复制'
       target.classList.add('copied')
@@ -873,13 +864,10 @@ const resolveIllustrationUrl = (path: string) => {
   return path
 }
 
-// ==========================================
-// 8. 婊氬姩鏈哄埗浼樺寲 (鍒╃敤 rAF 璁╂祦寮忚緭鍑哄交搴曚笣婊?
-// ==========================================
 const scrollToBottom = () => {
   if (scrollPending) return
   scrollPending = true
-  
+
   nextTick(() => {
     requestAnimationFrame(() => {
       if (chatScroll.value) {
@@ -952,25 +940,18 @@ const autoResize = () => {
   }
 }
 
-// ==========================================
-// 9. 图解娓叉煋鍑芥暟
-// ==========================================
 const renderMermaid = async (source: string): Promise<string> => {
   try {
     diagramRenderSeq += 1
     const { svg } = await mermaid.render(`mermaid-${Date.now()}-${diagramRenderSeq}`, source)
     return svg
   } catch {
-    return `<pre class="mermaid-error">图解娓叉煋澶辫触</pre>`
+    return `<pre class="mermaid-error">图解渲染失败</pre>`
   }
 }
 
-/**
- * 灏?SVG 瀛楃涓茶浆鎹负 PNG Blob
- */
 const svgToPng = (svgString: string): Promise<Blob> => {
   return new Promise((resolve, reject) => {
-    // 鍒涘缓涓存椂瀹瑰櫒鑾峰彇 SVG 灏哄
     const tempDiv = document.createElement('div')
     tempDiv.style.position = 'absolute'
     tempDiv.style.visibility = 'hidden'
@@ -985,11 +966,9 @@ const svgToPng = (svgString: string): Promise<Blob> => {
       return
     }
 
-    // 鑾峰彇 SVG 灏哄
     let width = svgElement.clientWidth || svgElement.getBoundingClientRect().width || 600
     let height = svgElement.clientHeight || svgElement.getBoundingClientRect().height || 400
 
-    // 闄愬埗鏈€澶у昂瀵?
     const maxWidth = 800
     const maxHeight = 600
     if (width > maxWidth) {
@@ -1003,7 +982,6 @@ const svgToPng = (svgString: string): Promise<Blob> => {
 
     document.body.removeChild(tempDiv)
 
-    // 鍒涘缓 Canvas
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
     if (!ctx) {
@@ -1011,16 +989,13 @@ const svgToPng = (svgString: string): Promise<Blob> => {
       return
     }
 
-    // 2x 鍒嗚鲸鐜?
     canvas.width = width * 2
     canvas.height = height * 2
     ctx.scale(2, 2)
 
-    // 鐧借壊鑳屾櫙
     ctx.fillStyle = '#FFFFFF'
     ctx.fillRect(0, 0, width, height)
 
-    // SVG 杞?Data URL
     const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(svgBlob)
 
@@ -1045,9 +1020,6 @@ const svgToPng = (svgString: string): Promise<Blob> => {
   })
 }
 
-/**
- * 涓婁紶图解 PNG 鍒板悗绔?
- */
 const uploadDiagramPng = async (sessionId: string, pngBlob: Blob): Promise<string | null> => {
   try {
     const res = await uploadDiagramImage(pngBlob, sessionId)
@@ -1068,27 +1040,22 @@ const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
   diagramSvgCache.value = new Map(diagramSvgCache.value)
   scrollToBottom()
 
-  // 寮傛涓婁紶 PNG锛堜笉闃诲娓叉煋锛?
   if (currentSessionId.value) {
     svgToPng(svg)
-      .then((pngBlob) => uploadDiagramPng(currentSessionId.value!, pngBlob))
-      .then((imageUrl) => {
-        if (imageUrl && diagram) {
-          // 鏇存柊 diagram 鐨?image_url
-          diagram.image_url = imageUrl
-        }
-      })
-      .catch((err) => {
-        console.warn('[Diagram] PNG conversion/upload failed:', err)
-      })
+        .then((pngBlob) => uploadDiagramPng(currentSessionId.value!, pngBlob))
+        .then((imageUrl) => {
+          if (imageUrl && diagram) {
+            diagram.image_url = imageUrl
+          }
+        })
+        .catch((err) => {
+          console.warn('[Diagram] PNG conversion/upload failed:', err)
+        })
   }
 
   return svg
 }
 
-// ==========================================
-// 10. FAB 鎮诞鎸夐挳鍑芥暟
-// ==========================================
 const getPointerPosition = (e: MouseEvent | TouchEvent) => {
   if (e instanceof MouseEvent) {
     return { x: e.clientX, y: e.clientY }
@@ -1196,9 +1163,6 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
   }
 }
 
-// ==========================================
-// 11. 鐢诲儚鍔犺浇涓庤疆璇?
-// ==========================================
 const fetchProfile = async () => {
   try {
     const res = await getProfile()
@@ -1239,9 +1203,6 @@ const fetchCurrentUser = async () => {
   }
 }
 
-// ==========================================
-// 12. 浼氳瘽绠＄悊鍑芥暟
-// ==========================================
 const loadSessions = async () => {
   try {
     const res = await getSessions()
@@ -1312,9 +1273,6 @@ const archiveSession = async (sessionId: string) => {
   }
 }
 
-// ==========================================
-// 13. 鏂囦欢涓婁紶鍑芥暟
-// ==========================================
 const triggerFileUpload = () => fileInput.value?.click()
 
 const onCombinedFileSelected = async (event: Event) => {
@@ -1336,9 +1294,6 @@ const removeAttachment = (idx: number) => {
   pendingFiles.value.splice(idx, 1)
 }
 
-// ==========================================
-// 14. 濯掍綋鐢熸垚寮€鍏冲嚱鏁?
-// ==========================================
 const handleImageToggle = () => {
   hasToggledMedia.value = true
   if (needDiagram.value) {
@@ -1359,9 +1314,6 @@ const handleVideoToggle = () => {
   }
 }
 
-// ==========================================
-// 15. 璇煶鐩稿叧鍑芥暟
-// ==========================================
 const handleVoiceToggle = async () => {
   if (chatMode.value === 'digital_human') {
     if (isVadListening.value) {
@@ -1373,7 +1325,6 @@ const handleVoiceToggle = async () => {
     }
     return
   }
-  // Standard mode: stub
   isRecording.value = !isRecording.value
   if (isRecording.value) {
     ElMessage.success({ message: '开始录音，请说话...', plain: true })
@@ -1415,9 +1366,6 @@ const handleAvatarReconnect = async () => {
   })
 }
 
-// ==========================================
-// 16. 鍙戦€佹秷鎭嚱鏁?
-// ==========================================
 const handleSend = async () => {
   const text = userInput.value.trim()
   const hasFiles = pendingFiles.value.length > 0
@@ -1532,7 +1480,6 @@ const handleSend = async () => {
   messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
   streamingMsgId.value = aiMsgId
 
-  // --- Digital human mode: send via WebSocket ---
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     const aiMsg = messages.value.find(m => m.id === aiMsgId)
     if (aiMsg) {
@@ -1547,7 +1494,6 @@ const handleSend = async () => {
     return
   }
 
-  // --- Standard mode: send via SSE ---
   abortController = streamChat(
       {
         message: text || '请分析附件',
@@ -1627,9 +1573,6 @@ const handleSend = async () => {
   )
 }
 
-// ==========================================
-// 17. 鐩戝惉鍣?
-// ==========================================
 watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
     sessionSidebarCollapsed.value = true
@@ -1647,20 +1590,17 @@ watch(chatMode, async (newMode) => {
 })
 
 watch(
-  () => messages.value.map(m => m.diagram),
-  (diagrams) => {
-    diagrams.forEach((diagram) => {
-      if (diagram && diagram.render?.source && !diagramSvgCache.value.has(diagram.render.source)) {
-        getDiagramSvg(diagram)
-      }
-    })
-  },
-  { deep: true }
+    () => messages.value.map(m => m.diagram),
+    (diagrams) => {
+      diagrams.forEach((diagram) => {
+        if (diagram && diagram.render?.source && !diagramSvgCache.value.has(diagram.render.source)) {
+          getDiagramSvg(diagram)
+        }
+      })
+    },
+    { deep: true }
 )
 
-// ==========================================
-// 18. 鐢熷懡鍛ㄦ湡閽╁瓙
-// ==========================================
 onMounted(async () => {
   fabPos.value = { x: 16, y: window.innerHeight - 150 }
   resetDimTimer()
@@ -1686,6 +1626,16 @@ onBeforeUnmount(() => {
 })
 </script>
 
+<style>
+/* 覆盖 ElPopover 的默认内边距 */
+.el-popover.custom-plus-popover {
+  padding: 0 !important;
+  border-radius: 16px !important;
+  border: none !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08) !important;
+}
+</style>
+
 <style scoped>
 @import url('https://gs.jurieo.com/gemini/fonts-googleapis/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
@@ -1693,6 +1643,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden; /* 防止最外层溢出 */
   background-color: #FFFFFF;
   font-family: 'Inter', system-ui, sans-serif;
   color: #0F172A;
@@ -1702,6 +1653,7 @@ onBeforeUnmount(() => {
 .dashboard-main {
   display: flex;
   flex: 1;
+  min-height: 0; /* 关键：防止 flex 子项撑破容器 */
   overflow: hidden;
 }
 
@@ -2121,6 +2073,7 @@ onBeforeUnmount(() => {
   position: relative;
   overflow: hidden;
   height: 100%;
+  min-width: 0; /* 关键：防止 flex 子项超出 */
 }
 
 .digital-human-stage {
@@ -2217,17 +2170,18 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-width: 0;
+  min-width: 0; /* 关键：防止 flex 子项超出 */
   position: relative;
 }
 
 .chat-viewport {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  box-sizing: border-box; /* 防止 padding 引发溢出 */
 }
 
 .welcome-banner {
@@ -2254,6 +2208,7 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
+/* ================= 聊天气泡深度优化 ================= */
 .message-row {
   display: flex;
   gap: 1rem;
@@ -2283,6 +2238,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-size: 1rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .ai-av {
@@ -2291,14 +2247,15 @@ onBeforeUnmount(() => {
 }
 
 .user-av {
-  background: #0891B2;
-  color: #FFF;
+  background: #E2E8F0;
+  color: #475569;
 }
 
 .bubble-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0; /* 防止内容撑破气泡 */
 }
 
 .message-row.user .bubble-wrapper {
@@ -2321,27 +2278,53 @@ onBeforeUnmount(() => {
   color: #475569;
 }
 
+/* AI 和 User 气泡基础样式：低饱和、干净 */
 .bubble {
-  padding: 0.75rem 1.25rem;
-  border-radius: 12px;
+  padding: 12px 16px;
   font-size: 0.95rem;
   line-height: 1.6;
+  word-break: break-word;
+  max-width: 100%;
 }
 
+/* AI 气泡：白底带极细边框 */
 .message-row.ai .bubble {
-  background: #FAFAFA;
+  background: #FFFFFF;
   border: 1px solid #E2E8F0;
+  border-radius: 12px;
   border-top-left-radius: 4px;
   color: #0F172A;
 }
 
-/* markdown 娓叉煋鏍峰紡 - 鐗瑰埆閽堝浠ｇ爜鍧椾紭鍖?*/
+/* 用户气泡：极淡灰蓝色 */
+.message-row.user .bubble {
+  background: #F1F5F9;
+  color: #0F172A;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  border-top-right-radius: 4px;
+}
+
+/* 覆盖用户气泡内的 Markdown 颜色 */
+.message-row.user :deep(.markdown-body) {
+  color: #0F172A !important;
+}
+.message-row.user :deep(.markdown-body a) {
+  color: #2563EB !important;
+}
+.message-row.user :deep(.markdown-body code:not(pre code)) {
+  background: #E2E8F0 !important;
+  color: #E11D48 !important;
+}
+
+/* markdown 渲染排版及对齐优化 */
 :deep(.markdown-body) {
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 0.95rem !important;
   background: transparent !important;
   color: inherit;
   overflow-wrap: anywhere;
+  text-align: left; /* 确保严格左对齐 */
 }
 
 :deep(.markdown-body > :first-child) {
@@ -2353,7 +2336,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.markdown-body p) {
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.8rem 0; /* 统一下边距，不用上边距 */
 }
 
 :deep(.markdown-body ul),
@@ -2388,61 +2371,92 @@ onBeforeUnmount(() => {
   font-size: 1.05rem;
 }
 
+/* 内联代码优化 */
 :deep(.markdown-body code:not(pre code)) {
   padding: 0.12rem 0.32rem;
   border-radius: 5px;
-  background: #EEF2F7;
-  color: #B42318;
+  background: #F1F5F9;
+  color: #E11D48;
   font-size: 0.88em;
 }
 
 :deep(.markdown-body blockquote) {
   margin: 0.7rem 0;
   padding: 0.15rem 0 0.15rem 0.85rem;
-  color: #475569;
+  color: #64748B;
   border-left: 3px solid #CBD5E1;
 }
 
+/* 代码块深色高级质感主题 (匹配截图风格) */
 :deep(.code-block-wrapper) {
   position: relative;
-  margin: 1rem 0;
-  border-radius: 8px;
+  margin: 16px 0;
+  border-radius: 12px;
   overflow: hidden;
-  background-color: #F8FAFC;
-  border: 1px solid #CBD5E1;
+  background-color: #1E2432; /* 深度暗蓝灰 */
+  border: 1px solid #2D3748;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 :deep(.code-header) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 12px;
-  background-color: #EEF2F7;
-  border-bottom: 1px solid #CBD5E1;
+  padding: 10px 16px;
+  background-color: #252D3D; /* 略浅一点的暗蓝灰，制造层次 */
+  border-bottom: 1px solid #2D3748;
 }
 
 :deep(.code-lang) {
-  color: #475569;
+  color: #E2E8F0;
   font-size: 0.75rem;
   font-family: 'JetBrains Mono', monospace;
   text-transform: uppercase;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08); /* 胶囊背景 */
+  padding: 4px 14px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.5px;
+}
+
+:deep(.code-lang::before) {
+  content: '⟨/⟩';
+  color: #60A5FA;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: -1px;
 }
 
 :deep(.copy-code-btn) {
-  background: #FFFFFF;
-  border: 1px solid #CBD5E1;
-  color: #334155;
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 0.7rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #CBD5E1;
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:deep(.copy-code-btn::before) {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23CBD5E1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z'/%3E%3C/svg%3E");
+  background-size: cover;
 }
 
 :deep(.copy-code-btn:hover) {
-  background: #E0F2FE;
-  color: #075985;
-  border-color: #7DD3FC;
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 :deep(.copy-code-btn.copied) {
@@ -2450,99 +2464,110 @@ onBeforeUnmount(() => {
   color: white;
   border-color: #10B981;
 }
+:deep(.copy-code-btn.copied::before) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23FFFFFF'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
+}
 
 :deep(.code-block-wrapper pre) {
   margin: 0;
-  padding: 12px;
+  padding: 16px;
   overflow-x: auto;
-  background: #F8FAFC;
+  background: #1E2432 !important;
   border: 0;
   border-radius: 0;
 }
 
 :deep(.code-block-wrapper code) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
   white-space: pre;
+  color: #E2E8F0;
 }
 
-.message-row.user .bubble {
-  background: #F1F5F9;
-  border: 1px solid #E2E8F0;
-  border-top-right-radius: 4px;
-  color: #0F172A;
-}
 
+/* 附件链接优化 */
 .msg-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .attachment-link {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: 6px;
+  padding: 6px 12px;
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.8rem;
-  color: #0891B2;
+  color: #334155;
   text-decoration: none;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
 }
 
 .attachment-link:hover {
-  border-color: #0891B2;
+  border-color: #CBD5E1;
+  background: #F8FAFC;
 }
 
+/* ----------------------------------
+   现代化的思考动画 (Typing Dots)
+----------------------------------- */
 .thinking-bubble {
-  background: #FAFAFA;
-  border: 1px solid #E2E8F0;
-  padding: 0.75rem 1.25rem;
-  border-radius: 12px;
-  border-top-left-radius: 4px;
+  background: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  padding: 12px 16px !important;
+  border-radius: 12px !important;
+  border-top-left-radius: 4px !important;
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #64748B;
-  font-size: 0.9rem;
+  box-shadow: none !important;
 }
 
-.thinking-spinner {
-  font-size: 1.2rem;
-  color: #4F46E5;
+.typing-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
 }
 
-.thinking-text {
-  animation: pulse-text 1.5s infinite;
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  background-color: #94A3B8; /* 柔和灰色 */
+  border-radius: 50%;
+  animation: typingBounce 1.4s infinite ease-in-out both;
 }
 
-@keyframes pulse-text {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; }
+.typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+.typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+.typing-dots span:nth-child(3) { animation-delay: 0s; }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; background-color: #64748B; }
 }
 
-/* ================= 閽堝杈撳叆妗嗙殑浼樺寲 ================= */
+/* ================= 针对输入框的优化 ================= */
 .input-panel {
-  padding: 0 24px 20px 24px; 
+  padding: 0 20px 20px 20px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   background: transparent;
   width: 100%;
-  box-sizing: border-box; 
+  box-sizing: border-box;
 }
 
 .attachments-preview {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
-  width: 100%; 
+  width: 100%;
   max-width: 800px;
   flex-wrap: wrap;
   justify-content: flex-start;
@@ -2573,23 +2598,23 @@ onBeforeUnmount(() => {
 .input-wrapper {
   width: 100%;
   max-width: 800px;
-  background: #F4F4F5;
-  border: 1px solid transparent;
-  border-radius: 36px; 
-  padding: 12px 20px; 
+  background: #F8FAFC; /* 扁平化浅灰底色 */
+  border: 1px solid #E2E8F0;
+  border-radius: 16px; /* 扁平化圆角 */
+  padding: 12px 20px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px 12px;
   transition: all 0.3s ease;
   box-sizing: border-box;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02); 
+  box-shadow: none; /* 移除发光效果 */
 }
 
 .input-wrapper:focus-within {
   background: #FFFFFF;
-  border-color: #D4D4D8;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05); 
+  border-color: #CBD5E1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02); /* 极其克制的焦点阴影 */
 }
 
 .toolbar-left {
@@ -2628,7 +2653,7 @@ onBeforeUnmount(() => {
 }
 
 .input-wrapper.is-expanded {
-  border-radius: 24px; 
+  border-radius: 16px;
   padding: 16px 20px;
   align-items: end;
 }
@@ -2656,10 +2681,10 @@ onBeforeUnmount(() => {
 
 .standard-plus-btn {
   font-size: 1.2rem;
-  color: #666;
+  color: #64748B;
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: 8px; /* 弱化圆角 */
   border: none;
   display: flex;
   align-items: center;
@@ -2667,17 +2692,18 @@ onBeforeUnmount(() => {
   cursor: pointer;
   background: transparent;
   padding: 0;
-  transition: background 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .standard-plus-btn:hover {
-  background: #E5E5E5;
+  background: #E2E8F0;
+  color: #334155;
 }
 
 .media-gen-btn {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 8px;
   border: none;
   display: flex;
   align-items: center;
@@ -2691,17 +2717,17 @@ onBeforeUnmount(() => {
 }
 
 .media-gen-btn.btn-web {
-  color: #374151;
+  color: #64748B;
 }
 
 .media-gen-btn.btn-web:hover {
-  background: #E5E5E5;
-  color: #111827;
+  background: #E2E8F0;
+  color: #334155;
 }
 
 .media-gen-btn.btn-web.active {
-  color: #0EA5E9;
-  background: #F0F9FF;
+  color: #0F172A;
+  background: #E2E8F0;
 }
 
 .active-media-chip {
@@ -2709,34 +2735,29 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px;
   padding: 4px 10px 4px 4px;
-  color: #0EA5E9;
-  border-radius: 20px;
+  color: #334155; /* 取消高饱和颜色 */
+  border-radius: 6px;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: transparent;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
   user-select: none;
   margin-left: 4px;
 }
 
 .active-media-chip:hover {
-  background: #F0F9FF;
+  background: #E2E8F0;
 }
 
 .active-media-chip .chip-icon-circle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  width: 20px;
+  height: 20px;
   background: transparent;
-  transition: background 0.2s ease;
-}
-
-.active-media-chip:hover .chip-icon-circle {
-  background: #DBEAFE;
 }
 
 .active-media-chip .icon-default {
@@ -2747,6 +2768,7 @@ onBeforeUnmount(() => {
 .active-media-chip .icon-hover {
   display: none;
   font-size: 1.05rem;
+  color: #EF4444;
 }
 
 .active-media-chip:hover .icon-default {
@@ -2760,10 +2782,10 @@ onBeforeUnmount(() => {
 .voice-btn {
   background: transparent;
   border: none;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
-  color: #374151;
+  color: #64748B;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2775,34 +2797,30 @@ onBeforeUnmount(() => {
 
 .voice-btn:hover {
   background: #E2E8F0;
-  color: #111827;
+  color: #334155;
 }
 
 .voice-btn.is-recording {
   background: #EF4444;
   color: #FFFFFF;
-  animation: pulse-record 1.5s infinite;
 }
 
 .direct-voice-chat-btn {
-  background: #000000;
+  background: #0F172A;
   border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s;
   flex-shrink: 0;
 }
 
 .direct-voice-chat-btn:hover {
-  transform: scale(1.1);
-  background: #1a1a1a;
-  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+  background: #334155;
 }
 
 .voice-bars-icon {
@@ -2813,57 +2831,34 @@ onBeforeUnmount(() => {
 }
 
 .voice-bars-icon .bar {
-  width: 2.5px;
+  width: 2px;
   background-color: #ffffff;
   border-radius: 1px;
   transition: height 0.2s ease;
 }
 
-.voice-bars-icon .bar:nth-child(1) {
-  height: 8px;
-}
-
-.voice-bars-icon .bar:nth-child(2) {
-  height: 14px;
-}
-
-.voice-bars-icon .bar:nth-child(3) {
-  height: 10px;
-}
-
-.voice-bars-icon .bar:nth-child(4) {
-  height: 6px;
-}
+.voice-bars-icon .bar:nth-child(1) { height: 8px; }
+.voice-bars-icon .bar:nth-child(2) { height: 14px; }
+.voice-bars-icon .bar:nth-child(3) { height: 10px; }
+.voice-bars-icon .bar:nth-child(4) { height: 6px; }
 
 .direct-voice-chat-btn.is-active {
-  background: #4F46E5;
-  animation: pulse-voice-glow 2s infinite;
+  background: #0F172A;
 }
 
 .direct-voice-chat-btn.is-active .bar {
   animation: bar-dance 0.8s infinite ease-in-out alternate;
 }
 
-.direct-voice-chat-btn.is-active .bar:nth-child(1) {
-  animation-delay: 0.0s;
-}
-
-.direct-voice-chat-btn.is-active .bar:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.direct-voice-chat-btn.is-active .bar:nth-child(3) {
-  animation-delay: 0.1s;
-}
-
-.direct-voice-chat-btn.is-active .bar:nth-child(4) {
-  animation-delay: 0.3s;
-}
+.direct-voice-chat-btn.is-active .bar:nth-child(1) { animation-delay: 0.0s; }
+.direct-voice-chat-btn.is-active .bar:nth-child(2) { animation-delay: 0.2s; }
+.direct-voice-chat-btn.is-active .bar:nth-child(3) { animation-delay: 0.1s; }
+.direct-voice-chat-btn.is-active .bar:nth-child(4) { animation-delay: 0.3s; }
 
 .send-btn {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #E2E8F0;
   color: #94A3B8;
   border: none;
@@ -2876,30 +2871,18 @@ onBeforeUnmount(() => {
 }
 
 .send-btn.can-send {
-  background: #000000;
+  background: #0F172A;
   color: #FFFFFF;
   cursor: pointer;
 }
 
 .send-btn.can-send:hover {
-  background: #333333;
+  background: #334155;
 }
 
 @keyframes bar-dance {
   from { transform: scaleY(0.7); }
   to { transform: scaleY(1.5); }
-}
-
-@keyframes pulse-voice-glow {
-  0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.5); }
-  70% { box-shadow: 0 0 0 10px rgba(79, 70, 229, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
-}
-
-@keyframes pulse-record {
-  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
 .input-footer {
@@ -3050,11 +3033,11 @@ onBeforeUnmount(() => {
 /* Special Cards Styling */
 .special-card {
   background: linear-gradient(to bottom right, #FFFFFF, #F8FAFC);
-  border-left: 3px solid #4F46E5;
+  border-left: 3px solid #334155; /* 弱化高亮颜色 */
 }
 
 .special-card.recent-changes-card {
-  border-left-color: #F59E0B;
+  border-left-color: #94A3B8;
 }
 
 /* Empty State */
@@ -3087,7 +3070,7 @@ onBeforeUnmount(() => {
   position: absolute;
   width: 100%;
   height: 100%;
-  border: 1px solid #4F46E5;
+  border: 1px solid #CBD5E1;
   border-radius: 50%;
   opacity: 0;
   animation: pulse-out 3s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
@@ -3110,15 +3093,14 @@ onBeforeUnmount(() => {
 .empty-visual {
   width: 60px;
   height: 60px;
-  background: #EEF2FF;
+  background: #F8FAFC;
   border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2.2rem;
-  color: #4F46E5;
+  color: #64748B;
   z-index: 2;
-  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.1);
   animation: float 4s ease-in-out infinite;
 }
 
@@ -3159,7 +3141,7 @@ onBeforeUnmount(() => {
 
 .hint-item .el-icon {
   font-size: 0.9rem;
-  color: #4F46E5;
+  color: #64748B;
 }
 
 .long-term-memory-section {
@@ -3264,18 +3246,18 @@ onBeforeUnmount(() => {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #5A52FF;
+  background: #0F172A; /* 与整体风格统一 */
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 16px rgba(90, 82, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .fab-button:hover {
   transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(90, 82, 255, 0.4);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.3);
 }
 .fab-button:active {
   transform: scale(0.95);
@@ -3316,7 +3298,7 @@ onBeforeUnmount(() => {
   background: #F8FAFC;
 }
 .fab-menu-item.active {
-  background: #F4F3FF;
+  background: #F1F5F9;
 }
 
 .menu-icon-box {
@@ -3333,8 +3315,8 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .fab-menu-item.active .menu-icon-box {
-  background: #EBE9FF;
-  color: #5A52FF;
+  background: #E2E8F0;
+  color: #0F172A;
 }
 
 .menu-text-content {
@@ -3350,7 +3332,7 @@ onBeforeUnmount(() => {
   transition: color 0.2s;
 }
 .fab-menu-item.active .menu-title {
-  color: #5A52FF;
+  color: #0F172A;
 }
 .menu-desc {
   font-size: 0.75rem;
@@ -3362,7 +3344,7 @@ onBeforeUnmount(() => {
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #5A52FF;
+  color: #0F172A;
   font-size: 1.2rem;
   display: flex;
 }
@@ -3377,46 +3359,69 @@ onBeforeUnmount(() => {
   transform: scale(0.95) translateY(10px);
 }
 
-/* 寮瑰嚭鑿滃崟椤规牱寮?*/
+/* 弹出菜单项样式 */
 .action-menu {
   display: flex;
   flex-direction: column;
   padding: 4px 0;
+  background: #ffffff;
+  border-radius: 16px;
 }
 
 .action-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+  padding: 0 16px;
   cursor: pointer;
-  color: #3f3f46;
-  font-size: 14px;
-  transition: background-color 0.2s;
-  border-radius: 6px;
+  transition: background-color 0.2s ease;
+  border-radius: 8px;
 }
 
 .action-item:hover {
-  background: #f4f4f5;
-  color: #18181b;
+  background-color: #f9fafb;
 }
 
-.action-item .el-icon {
+.item-icon-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 18px;
+  margin-right: 14px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
-.action-item .is-active-icon {
-  color: #4F46E5;
+.bg-blue { background-color: #F1F5F9; color: #475569; }
+.bg-purple { background-color: #F1F5F9; color: #475569; }
+.bg-teal { background-color: #F1F5F9; color: #475569; }
+.bg-active { background-color: #E2E8F0; color: #0F172A; }
+
+.item-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.action-item:last-child .item-content {
+  border-bottom: none;
+}
+
+.item-text {
+  font-size: 14px;
+  color: #1f2937;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.item-arrow {
+  color: #9ca3af;
+  font-size: 14px;
 }
 </style>
-
-<style>
-.custom-plus-popover {
-  padding: 8px !important;
-  border-radius: 12px !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
-}
-</style>
-
-
-
