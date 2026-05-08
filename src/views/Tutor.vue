@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div :class="['tutor-dashboard', `mode-${chatMode}`]">
 
     <main class="dashboard-main">
@@ -622,6 +622,8 @@ const hasToggledMedia = ref(false)
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
 const lastAsrText = ref('')
+const lastAsrCommittedText = ref('')
+let lastAsrCommitAt = 0
 
 const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
 const {
@@ -640,6 +642,10 @@ const {
   setPlayerContainer,
 } = useDigitalHuman({
   onAssistantChunk: (chunk) => {
+    if (isVoiceChatting.value && isVadListening.value) {
+      stopVad()
+      isRecording.value = false
+    }
     if (streamingMsgId.value === null) {
       const aiMsgId = Date.now() + 1
       messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
@@ -663,14 +669,29 @@ const {
     isAIThinking.value = false
     streamingMsgId.value = null
     scheduleProfilePoll()
+    if (isVoiceChatting.value && chatMode.value === 'digital_human' && isAvatarConnected.value) {
+      window.setTimeout(async () => {
+        if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
+        await startVad()
+        isRecording.value = isVadListening.value
+      }, 350)
+    }
   },
   onAsrResult: (text) => {
-    lastAsrText.value = text.trim()
-    if (text.trim()) {
+    const normalized = text.replace(/\s+/g, ' ').trim()
+    lastAsrText.value = normalized
+    if (normalized) {
+      const nowTs = Date.now()
+      const isDup = normalized === lastAsrCommittedText.value
+      const isNearDup = normalized.includes(lastAsrCommittedText.value) || lastAsrCommittedText.value.includes(normalized)
+      const committedRecently = nowTs - lastAsrCommitAt < 1400
+      if (isDup || (isNearDup && committedRecently)) return
+      lastAsrCommittedText.value = normalized
+      lastAsrCommitAt = nowTs
       messages.value.push({
         id: Date.now(),
         role: 'user',
-        content: text,
+        content: normalized,
         time: now(),
       })
       if (streamingMsgId.value === null) {
@@ -683,6 +704,7 @@ const {
     }
   },
   onVadStateChange: (listening) => {
+    isRecording.value = listening
     if (!listening) {
       lastAsrText.value = ''
     }
@@ -763,7 +785,10 @@ const showThinkingIndicator = computed(() => {
 const isStreamingMessage = (msg: ChatMsg) => msg.id === streamingMsgId.value && isAIThinking.value
 const digitalHumanStatusText = computed(() => {
   if (isAIThinking.value || isAvatarSpeaking.value) return '正在多模态解答中...'
-  if (isVadListening.value && lastAsrText.value) return `已识别：${lastAsrText.value.slice(0, 24)}`
+  if (isVadListening.value && lastAsrText.value) {
+    const preview = lastAsrText.value.length > 36 ? `${lastAsrText.value.slice(0, 36)}...` : lastAsrText.value
+    return `识别中：${preview}`
+  }
   if (isVadListening.value) return '正在识别语音...'
   return '倾听就绪'
 })
@@ -1321,7 +1346,7 @@ const handleVoiceToggle = async () => {
       isRecording.value = false
     } else {
       await startVad()
-      isRecording.value = true
+      isRecording.value = isVadListening.value
     }
     return
   }
@@ -1345,7 +1370,7 @@ const handleVoiceChatToggle = async () => {
       }
     })
     await startVad()
-    isRecording.value = true
+    isRecording.value = isVadListening.value
     ElMessage.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
     stopVad()

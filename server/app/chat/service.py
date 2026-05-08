@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from pathlib import Path
 from typing import Any, Callable
@@ -764,6 +765,25 @@ class ChatUseCases:
             kwargs["input_source"] = input_source
 
         # 在上下文中运行
+        try:
+            runner_sig = inspect.signature(runner)
+            accepted = {
+                name
+                for name, param in runner_sig.parameters.items()
+                if param.kind in (
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    inspect.Parameter.KEYWORD_ONLY,
+                )
+            }
+            has_var_kw = any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in runner_sig.parameters.values()
+            )
+            if not has_var_kw:
+                kwargs = {k: v for k, v in kwargs.items() if k in accepted}
+        except Exception:
+            logger.debug("[ChatUseCases] inspect runner signature failed; fallback with full kwargs", exc_info=True)
+
         with chat_runtime_context(user_id, effective_session):
             async for event in runner(**kwargs):
                 # 标准化事件格式

@@ -36,6 +36,8 @@ class RealtimeBridge:
         self._empty_rate = 0.0
         self._round_metrics: list[dict] = []
         self._audio_chunk_counter = 0
+        self._last_asr_text: str = ""
+        self._last_asr_at: float = 0.0
 
     async def _ensure_avatar_controller(self):
         if self._avatar_controller is None:
@@ -384,8 +386,18 @@ class RealtimeBridge:
             )
 
             if result_text:
-                await self._send_to_frontend({"type": "asr_result", "content": result_text})
-                await self._handle_user_text(result_text, source="asr")
+                normalized = str(result_text).strip()
+                if normalized:
+                    import time
+                    now_ts = time.monotonic()
+                    is_dup = normalized == self._last_asr_text
+                    recent_dup = is_dup and (now_ts - self._last_asr_at < 1.6)
+                    if not recent_dup:
+                        self._last_asr_text = normalized
+                        self._last_asr_at = now_ts
+                        await self._send_to_frontend({"type": "asr_result", "content": normalized})
+                        # Keep ASR loop responsive: do not block next round on LLM pipeline.
+                        asyncio.create_task(self._handle_user_text(normalized, source="asr"))
             else:
                 self._consecutive_empty += 1
 
@@ -397,12 +409,22 @@ class RealtimeBridge:
             if data.get('code', -1) != 0:
                 break
             result = data.get('data', {}).get('result', {})
+            status = data.get('data', {}).get('status')
+            current_text = ""
             for ws_item in result.get('ws', []):
                 for cw in ws_item.get('cw', []):
-                    result_text += cw.get('w', '')
-            if data.get('data', {}).get('status') == 2:
+                    current_text += cw.get('w', '')
+            # iFlytek iat round messages are usually full-sentence snapshots, not deltas.
+            # Use overwrite mode to avoid repeated concatenation.
+            if current_text:
+                if status == 2:
+                    if current_text.strip() and len(current_text.strip()) > 1:
+                        result_text = current_text
+                else:
+                    result_text = current_text
+            if status == 2:
                 break
-        return result_text
+        return result_text.strip()
 
     async def _send_audio_to_asr(self, ws, first_chunk: bytes, vad_eos: int) -> dict:
         """Send ASR audio stream with first frame carrying first audio chunk."""
