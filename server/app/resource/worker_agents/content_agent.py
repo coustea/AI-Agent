@@ -18,6 +18,7 @@ from app.resource.worker_agents.utils import (
     AgentContextBuilder,
     append_backend_context_for_prompt,
     build_content_summary_data,
+    generate_summary_with_llm,
     learning_need_from_task,
     title_from_learning_need,
 )
@@ -125,12 +126,16 @@ class ContentAgent:
             # 从讲解文档中提取结构化摘要，供下游 Agent 轻量依赖
             summary_data = build_content_summary_data(content, learning_need)
 
+            # 使用 spark-x2-flash 生成摘要
+            llm_summary = await generate_summary_with_llm(content, learning_need)
+            summary = llm_summary or f"已生成{summary_data.get('topic') or '学习主题'}讲解文档，包含核心知识点与复习建议"
+
             return WorkerResult(
                 success=True,
                 content=content,
                 file_type="markdown",
                 title=title_from_learning_need(state.task, "内容讲解"),
-                summary=f"已生成{summary_data.get('topic') or '学习主题'}讲解文档，包含核心知识点与复习建议",
+                summary=summary,
                 summary_data=summary_data,
                 metadata={"engine": "markdown", "render_at": "frontend"},
             )

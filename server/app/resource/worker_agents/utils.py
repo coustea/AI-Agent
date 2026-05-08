@@ -173,6 +173,39 @@ def append_backend_context_for_prompt(parts: list[str], state: Any) -> None:
         parts.extend(["", "## 上游结果摘要", upstream_preview])
 
 
+async def generate_summary_with_llm(markdown: str, learning_need: str = "") -> str:
+    """使用 spark-x2-flash 生成内容摘要。"""
+    from langchain_core.messages import HumanMessage
+    from app.infra.llm import get_llm_manager
+
+    if not markdown or not markdown.strip():
+        return ""
+
+    prompt = f"""请为以下学习内容生成一段简洁的摘要（100-150字），概括核心知识点：
+
+学习主题：{learning_need[:100] if learning_need else "未指定"}
+
+内容：
+{markdown[:3000]}
+
+要求：
+1. 摘要要简洁，突出核心概念
+2. 不要使用 Markdown 格式，直接输出纯文本
+3. 不要添加额外解释"""
+
+    try:
+        llm_manager = get_llm_manager()
+        response = await llm_manager.ainvoke(
+            "spark_x2_flash",
+            [HumanMessage(content=prompt)],
+            model_kwargs={"temperature": 0.3},
+        )
+        summary = response.content if hasattr(response, "content") else str(response)
+        return summary.strip()
+    except Exception:
+        return ""
+
+
 def build_content_summary_data(markdown: str, learning_need: str = "") -> dict[str, Any]:
     """从 ContentAgent Markdown 输出中提取结构化摘要，供下游 Agent 轻量交接。"""
     text = (markdown or "").strip()
@@ -540,25 +573,26 @@ class AgentContextBuilder:
         return "\n".join(lines)
 
     def _get_upstream_summary(self, state: Any, agent_id: str) -> str:
-        """从 upstream_results 中提取指定 agent 的 summary_data。"""
+        """从 upstream_results 中提取指定 agent 的摘要。优先使用 LLM 生成的 summary。"""
         upstream_results = getattr(state, "upstream_results", {}) or {}
         agent_result = upstream_results.get(agent_id)
         if not agent_result:
             return ""
 
-        # 提取 summary_data
+        # 优先使用 LLM 生成的 summary（由 generate_summary_with_llm 生成）
+        summary = agent_result.get("summary")
+        if summary and isinstance(summary, str) and summary.strip():
+            return summary.strip()[:500]
+
+        # 其次使用 summary_data
         summary_data = agent_result.get("summary_data")
         if not summary_data:
-            # 尝试从 summary 字段提取
-            summary = agent_result.get("summary")
-            if summary:
-                return str(summary)[:500]
             return ""
 
         # 格式化 summary_data
         if isinstance(summary_data, dict):
             # 提取关键信息
-            key_fields = ["title", "key_concepts", "main_points", "topics", "summary"]
+            key_fields = ["topic", "key_points", "principles", "main_points", "topics"]
             extracted: list[str] = []
             for field in key_fields:
                 value = summary_data.get(field)

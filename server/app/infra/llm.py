@@ -205,7 +205,7 @@ class LlmManager:
     DEFAULT_CONCURRENCY_LIMITS: dict[str, int] = {
         "spark_max": 10,  # 主力模型，并发较低
         "spark_x": 20,    # 高并发场景
-        "spark_x2_flash": 30,  # 轻量模型，高并发
+        "spark_x2_flash": 20,  # 轻量模型，高并发
     }
 
     def __init__(
