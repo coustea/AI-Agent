@@ -48,11 +48,6 @@
                 <el-icon><User /></el-icon>个人中心
               </div>
 
-<!--  预想加入的            <el-dropdown-item command="profile"><el-icon><PieChart /></el-icon>学习画像</el-dropdown-item>-->
-<!--              <el-dropdown-item command="history"><el-icon><Clock /></el-icon>学习记录</el-dropdown-item>-->
-<!--              <el-dropdown-item command="favorites"><el-icon><Star /></el-icon>我的收藏资源</el-dropdown-item>-->
-<!--              <el-dropdown-item command="settings"><el-icon><Setting /></el-icon>账号设置</el-dropdown-item>-->
-
               <div class="dropdown-divider"></div>
 
               <el-dropdown-item command="logout" class="logout-item">
@@ -128,7 +123,7 @@ const handleCommand = async (command: string) => {
 </script>
 
 <style>
-/* 覆盖 ElDropdown 默认样式，高度还原设计图 (全局样式) */
+/* 覆盖 ElDropdown 默认样式 (全局样式) */
 .custom-user-dropdown {
   padding: 8px !important;
   border-radius: 12px !important;
@@ -140,29 +135,40 @@ const handleCommand = async (command: string) => {
   padding: 0 !important;
 }
 
+/* 个人中心：默认普通样式 */
 .dropdown-header-block {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
-  margin-bottom: 4px;
-  background: #F4F3FF; /* 浅紫/蓝色块 */
-  color: #5A52FF;
-  border-radius: 8px;
+  padding: 8px 16px;
+  margin: 2px 0 4px 0;
+  background: transparent;
+  color: #475569;
+  border-radius: 6px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: normal;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.dropdown-header-block:hover {
-  background: #EBE9FF;
-}
-
 .dropdown-header-block .el-icon {
   font-size: 16px;
+  color: #64748B;
+  transition: all 0.2s ease;
 }
 
+/* 个人中心：悬停高亮样式 */
+.dropdown-header-block:hover {
+  background: #F4F3FF;
+  color: #5A52FF;
+  font-weight: 600;
+}
+
+.dropdown-header-block:hover .el-icon {
+  color: #5A52FF;
+}
+
+/* 通用菜单项样式 */
 .custom-user-dropdown .el-dropdown-menu__item {
   border-radius: 6px;
   margin: 2px 0;
@@ -189,15 +195,18 @@ const handleCommand = async (command: string) => {
   margin: 8px 0;
 }
 
-.logout-item {
+/* 退出登录专属样式：使用组合选择器提高优先级，防止颜色被通用样式覆盖 */
+.custom-user-dropdown .el-dropdown-menu__item.logout-item {
   color: #64748B !important;
 }
-.logout-item:hover {
-  color: #EF4444 !important; /* 退出登录悬停变红 */
-  background-color: #FEF2F2 !important;
+
+.custom-user-dropdown .el-dropdown-menu__item.logout-item:hover {
+  color: #DF5B5B !important; /* 悬停变为图片所示的红色 */
+  background-color: #F8FAFC !important;
 }
-.logout-item:hover i {
-  color: #EF4444;
+
+.custom-user-dropdown .el-dropdown-menu__item.logout-item:hover i {
+  color: #DF5B5B !important;
 }
 </style>
 
@@ -428,7 +437,17 @@ const handleCommand = async (command: string) => {
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-.fade-slide-enter-active, .fade-slide-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
-.fade-slide-enter-from { opacity: 0; transform: translateY(10px); }
-.fade-slide-leave-to { opacity: 0; transform: translateY(-10px); }
+.fade-slide-enter-active, .fade-slide-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
 </style>
