@@ -1,4 +1,5 @@
 """Local filesystem storage adapter."""
+
 from __future__ import annotations
 
 import random
@@ -12,6 +13,8 @@ from app.shared.paths import CHAT_DIR
 
 
 class LocalFileStore:
+    """Local file storage for user uploads."""
+
     def __init__(self) -> None:
         self.upload_dir = CHAT_DIR
         self.allowed_image_ext = {".png", ".jpg", ".jpeg", ".gif", ".webp"}

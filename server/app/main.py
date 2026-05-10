@@ -8,6 +8,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 if str(SERVER_DIR) not in sys.path:
@@ -17,6 +18,7 @@ import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError, DBAPIError
 
 from app.infra.logging import get_logger, setup_logging
 from app.infra.database import init_db
@@ -24,7 +26,6 @@ from app.shared.storage import local_file_store
 from app.auth.security import decode_token
 from app.avatar.bridge.manager import avatar_bridge_manager
 from app.config import SERVER_HOST, SERVER_PORT
-from sqlalchemy.exc import OperationalError, DBAPIError
 
 logger = get_logger(__name__)
 
@@ -77,7 +78,9 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def rtc_logging_collect_bypass(request: Request, call_next):
+async def rtc_logging_collect_bypass(
+    request: Request, call_next: Any
+) -> JSONResponse:
     if request.url.path == "/api/v1/logging/collect/list":
         return JSONResponse({"code": 0, "message": "ok", "data": []})
     return await call_next(request)
@@ -101,7 +104,9 @@ app.include_router(memory_router, prefix="/api/v1/ai", tags=["memory"])
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
     logger.error(
         "Unhandled exception on %s %s: %s\n%s",
         request.method,
@@ -116,7 +121,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {"message": "AI Learning Platform is running"}
 
 
@@ -126,7 +131,7 @@ async def root():
     "/api/v1/logging/collect/list",
     methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
 )
-async def rtc_logging_collect_list():
+async def rtc_logging_collect_list() -> dict[str, Any]:
     return {"code": 0, "message": "ok", "data": []}
 
 
@@ -134,7 +139,7 @@ async def rtc_logging_collect_list():
 async def avatar_websocket(
     ws: WebSocket,
     token: str = Query(..., description="JWT token"),
-):
+) -> None:
     """Avatar WebSocket 端点（统一挂到主服务入口）。"""
     try:
         user_id = decode_token(token)

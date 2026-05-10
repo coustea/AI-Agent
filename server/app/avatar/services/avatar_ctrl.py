@@ -1,16 +1,17 @@
-"""
-Avatar control module.
+"""Avatar control module.
+
 Manages WebSocket connection to Xfyun avatar service and controls speech synthesis.
 """
 
+import asyncio
 import json
 import uuid
-import asyncio
+
 import websockets
 
-from app.config import AVATAR_URL, AVATAR_APP_ID, AVATAR_API_KEY, AVATAR_API_SECRET, ANCHOR_ID, VCN
-from app.infra.logging import get_logger
 from app.avatar.services import xfyun_auth
+from app.config import ANCHOR_ID, AVATAR_API_KEY, AVATAR_API_SECRET, AVATAR_APP_ID, AVATAR_URL, VCN
+from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

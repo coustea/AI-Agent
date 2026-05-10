@@ -20,26 +20,20 @@ export interface ApiResponse<T = any> {
 export interface LoginData {
   token: string
   user: {
-    id: string
+    id: number
     username: string
     email: string | null
     avatar: string | null
-    major: string | null
-    grade: string | null
-    school: string | null
     created_at: string
   }
 }
 
 export interface UserData {
   user: {
-    id: string
+    id: number
     username: string
     email: string | null
     avatar: string | null
-    major: string | null
-    grade: string | null
-    school: string | null
     created_at: string
   }
 }

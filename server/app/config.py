@@ -64,8 +64,7 @@ PROFILE_GATE_EVERY_N_ASSISTANT_TURNS: int = _env_int("PROFILE_GATE_EVERY_N_ASSIS
 # Debug
 APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
 LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
-LANGCHAIN_DEBUG: bool = _env_bool("LANGCHAIN_DEBUG",
-                                  )
+LANGCHAIN_DEBUG: bool = _env_bool("LANGCHAIN_DEBUG", False)
 LANGCHAIN_VERBOSE: bool = _env_bool("LANGCHAIN_VERBOSE", False)
 LANGGRAPH_DEBUG: bool = _env_bool("LANGGRAPH_DEBUG", False)
 DEEPAGENTS_DEBUG: bool = _env_bool("DEEPAGENTS_DEBUG", False)
@@ -104,6 +103,7 @@ LOGS_DIR: str = _env("LOGS_DIR", "logs")
 KNOWLEDGE_BASE_DIR: str = _env("KNOWLEDGE_BASE_DIR", "data")
 
 TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
+SERPAPI_API_KEY: str = _env("SERPAPI_API_KEY", "")
 
 # Spark X (星火X模型 OpenAI兼容API)
 SPARK_X_API_PASSWORD: str = _env("SPARK_X_API_PASSWORD", "")

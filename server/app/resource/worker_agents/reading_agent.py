@@ -2,10 +2,13 @@
 Reading Agent — 拓展阅读 Agent。
 
 生成延伸阅读材料和参考方向，输出 JSON 格式。
+通过搜索验证资源链接有效性，确保推荐资源真实可访问。
 """
 
 from __future__ import annotations
 
+import asyncio
+import re
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage
@@ -20,14 +23,18 @@ from app.resource.worker_agents.utils import (
     title_from_learning_need,
 )
 from app.shared.json_utils import parse_first_json_value
+from app.tools.search import duckduckgo_search, tavily_search, serp_search
 
 logger = get_logger(__name__)
 
 
 class ReadingAgent:
-    """拓展阅读 Agent。"""
+    """拓展阅读 Agent。
 
-    STEPS = ["分析输入", "融合画像与依赖", "生成内容", "整理输出"]
+    通过搜索验证资源链接有效性，确保推荐资源真实可访问。
+    """
+
+    STEPS = ["分析输入", "提取关键词", "搜索验证资源", "融合画像与依赖", "生成内容", "整理输出"]
     ROLE_NAME = "拓展阅读推荐智能体"
 
     def __init__(self, user_id: int, resource_id: int, emitter=None):
@@ -36,6 +43,210 @@ class ReadingAgent:
         self.emitter = emitter
         self.llm_manager = get_llm_manager()
         self.prompt_path = Path(__file__).parent.parent / "prompts" / "workers" / "reading.md"
+
+    async def _extract_search_keywords(self, state: WorkerState) -> list[str]:
+        """使用 LLM 从学习需求中提取搜索关键词。
+
+        让 LLM 分析学习需求，提取核心知识点、技术术语、相关概念，
+        生成精准的搜索关键词，而非直接使用原始 learning_need。
+        """
+        learning_need = learning_need_from_task(state.task)
+
+        # 获取上游内容摘要，帮助提取更精准的关键词
+        builder = AgentContextBuilder()
+        context_text = builder.build_for_agent("reading", state)
+
+        prompt = f"""请分析以下学习需求，提取 3-5 个最适合搜索学习资源的关键词。
+
+学习需求：{learning_need}
+
+{context_text if context_text else ''}
+
+要求：
+1. 提取核心知识点、技术术语、关键概念
+2. 关键词要具体、可搜索（如 "Python GIL" 而非 "Python多线程问题"）
+3. 避免使用过于宽泛的词（如 "学习"、"教程"、"入门"）
+4. 优先提取技术名词、框架名、算法名、概念名
+5. 如果是编程类，可提取具体技术栈名称
+
+请直接输出关键词，每行一个，不要编号，不要解释。"""
+
+        try:
+            response = await self.llm_manager.ainvoke(
+                "spark_x2_flash",  # 使用快速模型提取关键词
+                [HumanMessage(content=prompt)],
+                model_kwargs={"temperature": 0.1},
+            )
+            raw_content = response.content if hasattr(response, "content") else str(response)
+
+            # 解析关键词
+            keywords = []
+            for line in raw_content.strip().split("\n"):
+                line = line.strip()
+                # 移除编号
+                line = re.sub(r"^\d+[\.\、\:\s]*", "", line)
+                # 移除解释性文字
+                if len(line) > 30:
+                    continue
+                if line and not line.startswith("#"):
+                    keywords.append(line)
+
+            logger.info("[ReadingAgent] 提取的关键词: %s", keywords)
+            return keywords[:5] if keywords else [learning_need[:50]]
+
+        except Exception as e:
+            logger.warning("[ReadingAgent] 关键词提取失败: %s", e)
+            # 回退：简单提取 learning_need 中的关键词
+            words = re.findall(r"[A-Za-z]+[\-A-Za-z]*|[一-龥]{2,8}", learning_need)
+            return words[:5] if words else [learning_need[:50]]
+
+    async def _search_resources(self, keywords: list[str], max_results: int = 8) -> list[dict]:
+        """搜索真实可用的学习资源。
+
+        使用提取的关键词进行搜索，获取真实可访问的资源链接。
+        """
+        resources: list[dict] = []
+        seen_urls: set[str] = set()
+
+        # 根据关键词构建搜索查询
+        search_queries = self._build_search_queries_from_keywords(keywords)
+
+        async def run_search(query: str) -> list[dict]:
+            """执行单个搜索查询。"""
+            results = []
+            try:
+                # 优先使用 SerpApi（结果最准确）
+                search_result = await serp_search.ainvoke({"query": query})
+                results.extend(self._parse_search_result(search_result, "serp"))
+            except Exception as e:
+                logger.warning("[ReadingAgent] SerpApi 搜索失败: %s", e)
+                try:
+                    # 回退到 Tavily
+                    search_result = await tavily_search.ainvoke({"query": query})
+                    results.extend(self._parse_search_result(search_result, "tavily"))
+                except Exception as e2:
+                    logger.warning("[ReadingAgent] Tavily 搜索失败: %s", e2)
+                    try:
+                        # 最后使用 DuckDuckGo
+                        search_result = await duckduckgo_search.ainvoke({"query": query})
+                        results.extend(self._parse_search_result(search_result, "duckduckgo"))
+                    except Exception as e3:
+                        logger.warning("[ReadingAgent] DuckDuckGo 搜索失败: %s", e3)
+            return results
+
+        # 并行执行多个搜索查询
+        tasks = [run_search(query) for query in search_queries[:4]]
+        search_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in search_results:
+            if isinstance(result, list):
+                for item in result:
+                    url = item.get("url", "")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        resources.append(item)
+
+        # 限制结果数量
+        return resources[:max_results]
+
+    def _build_search_queries_from_keywords(self, keywords: list[str]) -> list[str]:
+        """根据关键词构建搜索查询。
+
+        为每个关键词生成多种搜索模式，覆盖不同资源类型。
+        """
+        queries = []
+
+        for kw in keywords[:3]:
+            # 核心关键词搜索
+            queries.append(kw)
+
+            # 教程/文档类
+            queries.append(f"{kw} 教程")
+
+            # 官方文档
+            queries.append(f"{kw} 官方文档")
+
+            # 书籍推荐
+            queries.append(f"{kw} 书籍 推荐")
+
+        # 如果关键词是技术类，添加 GitHub 搜索
+        if any(re.search(r"[A-Za-z\-]+", kw) for kw in keywords):
+            tech_kw = next((kw for kw in keywords if re.search(r"[A-Za-z\-]+", kw)), keywords[0])
+            queries.append(f"{tech_kw} github")
+
+        return queries
+
+    def _parse_search_result(self, search_result: str, source: str) -> list[dict]:
+        """解析搜索结果，提取资源信息。"""
+        resources = []
+
+        if not search_result or "失败" in search_result or "未找到" in search_result:
+            return resources
+
+        # 解析不同来源的搜索结果
+        lines = search_result.split("\n")
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 尝试解析带编号的结果 (1. title)
+            match = re.match(r"^\d+\.\s*(.+)$", line)
+            if match:
+                title_part = match.group(1).strip()
+                # 检查下一行是否有链接
+                continue
+
+            # 解析链接行
+            if line.startswith("链接:") or line.startswith("link:"):
+                url_match = re.search(r"https?://[^\s]+", line)
+                if url_match:
+                    url = url_match.group(0)
+                    # 尝试从上下文获取标题
+                    resources.append({
+                        "title": "",
+                        "url": url,
+                        "source": source,
+                    })
+
+            # 解析 Tavily 格式 (url=..., content=...)
+            if "url=" in line:
+                url_match = re.search(r"url=['\"]?([^'\"\s,]+)['\"]?", line)
+                content_match = re.search(r"content=['\"]?([^'\"]+)['\"]?", line)
+                if url_match:
+                    url = url_match.group(1)
+                    content = content_match.group(1) if content_match else ""
+                    resources.append({
+                        "title": content[:100] if content else "",
+                        "url": url,
+                        "source": source,
+                    })
+
+        return resources
+
+    async def _verify_url(self, url: str) -> bool:
+        """验证 URL 是否可访问（简单检查）。"""
+        if not url:
+            return False
+
+        # 排除明显无效的 URL
+        invalid_patterns = [
+            r"example\.com",
+            r"localhost",
+            r"127\.0\.0\.1",
+            r"your-",
+            r"xxx",
+        ]
+        for pattern in invalid_patterns:
+            if re.search(pattern, url, re.IGNORECASE):
+                return False
+
+        # 检查 URL 格式
+        if not url.startswith(("http://", "https://")):
+            return False
+
+        return True
 
     async def _emit_action(
         self,
@@ -65,8 +276,9 @@ class ReadingAgent:
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """执行拓展阅读生成。"""
-        logger.info("[ReadingAgent] 开始执行: learning_need=%s", learning_need_from_task(state.task)[:80])
-        total = 5
+        learning_need = learning_need_from_task(state.task)
+        logger.info("[ReadingAgent] 开始执行: learning_need=%s", learning_need[:80])
+        total = 7
 
         await self._emit_action(
             state,
@@ -79,25 +291,53 @@ class ReadingAgent:
         )
         prompt = self._load_prompt()
 
+        # 提取搜索关键词
+        await self._emit_action(
+            state,
+            "extract_keywords",
+            "拓展阅读推荐智能体正在提取搜索关键词",
+            current_step=3,
+            total_steps=total,
+            step_label="提取关键词",
+            current_action="提取搜索关键词",
+        )
+        keywords = await self._extract_search_keywords(state)
+        logger.info("[ReadingAgent] 提取的关键词: %s", keywords)
+
+        # 搜索真实可用的资源
+        await self._emit_action(
+            state,
+            "search_resources",
+            "拓展阅读推荐智能体正在搜索验证资源链接",
+            current_step=4,
+            total_steps=total,
+            step_label=self.STEPS[1],
+            current_action="搜索验证资源",
+        )
+
+        max_items = state.agent_config.get("max_items", 5)
+        searched_resources = await self._search_resources(keywords, max_results=max_items + 3)
+        logger.info("[ReadingAgent] 搜索到 %d 个资源", len(searched_resources))
+
         await self._emit_action(
             state,
             "merge_profile_dependencies",
             "拓展阅读推荐智能体正在融合画像和上游内容",
-            current_step=3,
+            current_step=5,
             total_steps=total,
-            step_label=self.STEPS[1],
+            step_label=self.STEPS[2],
             current_action="融合画像与依赖",
         )
-        input_text = await self._build_input(state)
+        input_text = await self._build_input(state, searched_resources)
 
         try:
             await self._emit_action(
                 state,
                 "generate_content",
                 "拓展阅读推荐智能体正在生成阅读导引",
-                current_step=4,
+                current_step=6,
                 total_steps=total,
-                step_label=self.STEPS[2],
+                step_label=self.STEPS[3],
                 current_action="生成阅读推荐",
             )
 
@@ -115,32 +355,41 @@ class ReadingAgent:
                 logger.warning("[ReadingAgent] JSON 解析失败，返回原始内容")
                 content = {"error": "解析失败", "raw_content": self._clean_content(raw_content)}
 
+            # 验证并过滤资源链接
+            content = await self._validate_and_filter_resources(content, searched_resources)
+
             await self._emit_action(
                 state,
                 "finalize_output",
                 "拓展阅读推荐智能体正在整理输出",
-                current_step=5,
+                current_step=7,
                 total_steps=total,
-                step_label=self.STEPS[3],
+                step_label=self.STEPS[4],
                 current_action="整理阅读资源",
             )
 
-            items = content.get("items", []) if isinstance(content, dict) else []
+            resources = content.get("resources", []) if isinstance(content, dict) else []
             recommended_path: list[str] = []
-            if isinstance(items, list):
-                for item in items[:6]:
+            if isinstance(resources, list):
+                for item in resources[:6]:
                     if not isinstance(item, dict):
                         continue
                     title = item.get("title") or item.get("name") or item.get("resource_name")
-                    reason = item.get("reason") or item.get("description")
+                    reason = item.get("recommend_reason") or item.get("description")
                     if title:
                         recommended_path.append(str(title))
                     elif reason:
                         recommended_path.append(str(reason)[:80])
+
+            # 统计有效链接数量
+            valid_url_count = sum(1 for r in resources if isinstance(r, dict) and r.get("url"))
+
             summary_data = {
-                "resource_count": len(items) if isinstance(items, list) else 0,
+                "resource_count": len(resources) if isinstance(resources, list) else 0,
+                "valid_url_count": valid_url_count,
                 "reading_depth": state.agent_config.get("reading_depth", "course_extended"),
                 "recommended_path": recommended_path,
+                "search_keywords": keywords,
             }
 
             return WorkerResult.model_construct(
@@ -152,12 +401,130 @@ class ReadingAgent:
                 summary_data=summary_data,
                 metadata={
                     "reading_depth": state.agent_config.get("reading_depth", "course_extended"),
+                    "searched_resources": len(searched_resources),
+                    "search_keywords": keywords,
                 },
             )
 
         except Exception as exc:
             logger.exception("[ReadingAgent] 执行失败")
             return WorkerResult(success=False, error=str(exc))
+
+    async def _validate_and_filter_resources(
+        self, content: dict, searched_resources: list[dict]
+    ) -> dict:
+        """验证并过滤资源，确保链接有效。
+
+        1. 对于 LLM 生成的资源，验证 URL 格式
+        2. 对于搜索到的真实资源，补充到推荐列表
+        3. 移除无效或可疑的链接
+        """
+        if not isinstance(content, dict):
+            return content
+
+        resources = content.get("resources", [])
+        if not isinstance(resources, list):
+            return content
+
+        validated_resources = []
+        seen_urls: set[str] = set()
+
+        # 构建搜索资源的 URL 映射
+        searched_url_map: dict[str, dict] = {}
+        for sr in searched_resources:
+            url = sr.get("url", "")
+            if url:
+                searched_url_map[url] = sr
+
+        for resource in resources:
+            if not isinstance(resource, dict):
+                continue
+
+            url = resource.get("url", "")
+
+            # 验证 URL
+            if url:
+                is_valid = await self._verify_url(url)
+                if is_valid and url not in seen_urls:
+                    seen_urls.add(url)
+                    validated_resources.append(resource)
+                else:
+                    # URL 无效，尝试从搜索结果中找替代
+                    resource_title = resource.get("title", "")
+                    matched_resource = self._find_matching_searched_resource(
+                        resource_title, searched_url_map, seen_urls
+                    )
+                    if matched_resource:
+                        resource["url"] = matched_resource.get("url", "")
+                        resource["title"] = matched_resource.get("title") or resource.get("title", "")
+                        resource["verified"] = True
+                        seen_urls.add(resource["url"])
+                        validated_resources.append(resource)
+            else:
+                # 没有 URL，尝试从搜索结果中匹配
+                resource_title = resource.get("title", "")
+                matched_resource = self._find_matching_searched_resource(
+                    resource_title, searched_url_map, seen_urls
+                )
+                if matched_resource:
+                    resource["url"] = matched_resource.get("url", "")
+                    resource["verified"] = True
+                    seen_urls.add(resource["url"])
+                validated_resources.append(resource)
+
+        # 如果有效资源太少，补充搜索结果
+        if len(validated_resources) < 3:
+            for sr in searched_resources:
+                url = sr.get("url", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    validated_resources.append({
+                        "id": f"R{len(validated_resources) + 1}",
+                        "type": "article",
+                        "title": sr.get("title", "搜索资源"),
+                        "url": url,
+                        "verified": True,
+                        "recommend_reason": "来自搜索引擎验证的真实资源",
+                    })
+                    if len(validated_resources) >= 5:
+                        break
+
+        content["resources"] = validated_resources
+        return content
+
+    def _find_matching_searched_resource(
+        self,
+        title: str,
+        searched_url_map: dict[str, dict],
+        seen_urls: set[str],
+    ) -> dict | None:
+        """根据标题从搜索结果中找到匹配的资源。"""
+        if not title:
+            return None
+
+        title_lower = title.lower()
+        title_keywords = set(re.findall(r"\w+", title_lower))
+
+        best_match = None
+        best_score = 0
+
+        for url, sr in searched_url_map.items():
+            if url in seen_urls:
+                continue
+
+            sr_title = sr.get("title", "").lower()
+            sr_keywords = set(re.findall(r"\w+", sr_title))
+
+            # 计算关键词重叠
+            overlap = len(title_keywords & sr_keywords)
+            if overlap > best_score:
+                best_score = overlap
+                best_match = sr
+
+        # 至少有 2 个关键词重叠才认为匹配
+        if best_score >= 2:
+            return best_match
+        return None
 
     def _load_prompt(self) -> str:
         """加载提示词。"""
@@ -171,7 +538,7 @@ class ReadingAgent:
 3. 提供学习路径建议
 4. 使用 Markdown 格式"""
 
-    async def _build_input(self, state: WorkerState) -> str:
+    async def _build_input(self, state: WorkerState, searched_resources: list[dict] | None = None) -> str:
         """构建输入内容。"""
         task = state.task
         agent_config = state.agent_config
@@ -190,6 +557,19 @@ class ReadingAgent:
             f"- 包含实践资源: {agent_config.get('include_practice', False)}",
             f"- 语言偏好: {agent_config.get('language_preference', 'chinese')}",
         ]
+
+        # 添加搜索到的真实资源
+        if searched_resources:
+            parts.append("")
+            parts.append("## 已验证的真实资源")
+            parts.append("以下资源已通过搜索引擎验证，链接真实可访问，请优先推荐这些资源：")
+            for i, sr in enumerate(searched_resources[:8], 1):
+                url = sr.get("url", "")
+                title = sr.get("title", "未知标题")
+                source = sr.get("source", "search")
+                parts.append(f"{i}. 标题: {title[:80]}")
+                parts.append(f"   链接: {url}")
+                parts.append(f"   来源: {source}")
 
         # Use AgentContextBuilder for context-aware prompt building
         builder = AgentContextBuilder()

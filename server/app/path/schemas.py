@@ -1,3 +1,8 @@
+"""Path planning schemas.
+
+定义学习路径规划相关的数据模型。
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

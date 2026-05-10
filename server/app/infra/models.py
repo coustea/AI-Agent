@@ -47,9 +47,6 @@ class User(SQLModel, table=True):
     password: str = Field(max_length=255, exclude=True)  # bcrypt 哈希密码，exclude=True 防止序列化泄露
     email: str | None = Field(default=None, max_length=100)
     avatar: str | None = Field(default=None, max_length=500)  # 头像 URL
-    major: str | None = Field(default=None, max_length=100)  # 专业
-    grade: str | None = Field(default=None, max_length=20)  # 年级
-    school: str | None = Field(default=None, max_length=100)  # 学校
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))

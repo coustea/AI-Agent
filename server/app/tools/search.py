@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from langchain_community.tools import DuckDuckGoSearchRun
-from langchain_community.tools import TavilySearchResults
+import serpapi
+from langchain_community.tools import DuckDuckGoSearchRun, TavilySearchResults
 from langchain_core.tools import tool
 
+from app.config import SERPAPI_API_KEY, TAVILY_API_KEY
 from app.infra.logging import get_logger
-from app.config import TAVILY_API_KEY
 
 logger = get_logger(__name__)
 
@@ -44,3 +44,50 @@ def tavily_search(query: str) -> str:
     except Exception as exc:
         logger.warning("[tavily_search] failed: query=%r", query, exc)
         return f"Tavily 搜索失败: {exc}"
+
+@tool("serp_search")
+def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str = "cn") -> str:
+    """使用 SerpApi 搜索网页，返回结构化搜索结果摘要。
+
+    Args:
+        query: 搜索关键词。
+        location: 搜索位置，默认中国。
+        hl: 界面语言，默认中文。
+        gl: 国家/地区，默认中国。
+
+    Returns:
+        搜索结果摘要字符串。
+    """
+    try:
+        client = serpapi.Client(api_key=SERPAPI_API_KEY)
+        results = client.search({
+            "q": query,
+            "location": location,
+            "hl": hl,
+            "gl": gl,
+            "google_domain": "google.com"
+        })
+
+        # 提取有机搜索结果
+        organic_results = results.get("organic_results", [])
+        if not organic_results:
+            return "未找到相关搜索结果"
+
+        # 格式化输出
+        summaries = []
+        for i, item in enumerate(organic_results[:5], 1):
+            title = item.get("title", "无标题")
+            link = item.get("link", "")
+            snippet = item.get("snippet", "无摘要")
+            summaries.append(f"{i}. {title}\n   链接: {link}\n   摘要: {snippet}")
+
+        result_text = "\n\n".join(summaries)
+        logger.info(
+            "[serp_search] query=%r result_count=%d",
+            query,
+            len(organic_results),
+        )
+        return result_text
+    except Exception as exc:
+        logger.warning("[serp_search] failed: query=%r error=%s", query, exc)
+        return f"SerpApi 搜索失败: {exc}"

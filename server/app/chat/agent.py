@@ -41,7 +41,7 @@ from app.config import LANGGRAPH_DEBUG
 from app.memory import MemoryLayer
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.tools.search import duckduckgo_search, tavily_search
+from app.tools.search import duckduckgo_search, serp_search, tavily_search
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -104,7 +104,14 @@ def _graph_stream_kwargs() -> dict[str, Any]:
 
 
 def _stream_chunk_text(chunk: Any) -> str:
-    """Extract plain text from a LangChain stream chunk."""
+    """Extract plain text from a LangChain stream chunk.
+
+    Args:
+        chunk: LangChain stream chunk object.
+
+    Returns:
+        Extracted plain text string.
+    """
     if chunk is None:
         return ""
     content = getattr(chunk, "content", chunk)
@@ -146,7 +153,7 @@ class TutorAgent:
         self.search_model_kwargs = {"temperature": 0.2, "streaming": False, "max_tokens": 1200}
         self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
         # 上下文服务
-        self.memory_layer = MemoryLayer(module_name="mentor")
+        self.memory_layer = MemoryLayer(module="mentor")
 
         # 图与工具
         self.graph = None
@@ -372,7 +379,7 @@ class TutorAgent:
             # 绑定搜索工具
             llm_with_tools = self.llm_manager.bind_tools(
                 "spark_max",
-                [duckduckgo_search, tavily_search],
+                [duckduckgo_search, tavily_search, serp_search],
                 model_kwargs=self.search_model_kwargs,
             )
 
@@ -401,6 +408,8 @@ class TutorAgent:
                             result = await duckduckgo_search.ainvoke(tool_args)
                         elif tool_name == "tavily_search":
                             result = await tavily_search.ainvoke(tool_args)
+                        elif tool_name == "serp_search":
+                            result = await serp_search.ainvoke(tool_args)
                         else:
                             result = ""
                         tool_results.append(f"【{tool_name}】\n{result}")
@@ -702,6 +711,15 @@ class TutorAgent:
 
     @staticmethod
     def _trim_text(value: Any, max_len: int) -> Any:
+        """Trim text to specified length if value is a string.
+
+        Args:
+            value: Value to trim, only strings are modified.
+            max_len: Maximum character length.
+
+        Returns:
+            Trimmed string or original value.
+        """
         if not isinstance(value, str):
             return value
         value = value.strip()
@@ -711,6 +729,15 @@ class TutorAgent:
 
     @classmethod
     def _trim_mapping_fields(cls, mapping: dict[str, Any], limits: dict[str, int]) -> dict[str, Any]:
+        """Trim multiple fields in a mapping to their specified limits.
+
+        Args:
+            mapping: Dictionary with fields to trim.
+            limits: Mapping of field names to character limits.
+
+        Returns:
+            Modified mapping with trimmed fields.
+        """
         for key, limit in limits.items():
             if key in mapping:
                 mapping[key] = cls._trim_text(mapping.get(key), limit)
@@ -718,7 +745,15 @@ class TutorAgent:
 
     @classmethod
     def _normalize_diagram_payload(cls, model_cls: type[Any], payload: dict[str, Any]) -> dict[str, Any]:
-        """将常见的模型漂移输出修正为本地 schema 期望的结构。"""
+        """Normalize common model drift outputs to match local schema expectations.
+
+        Args:
+            model_cls: Pydantic model class for schema reference.
+            payload: Raw payload dictionary from LLM.
+
+        Returns:
+            Normalized payload matching expected schema.
+        """
         payload = dict(payload)
         cls._trim_mapping_fields(payload, {"title": 20, "summary": 50})
 

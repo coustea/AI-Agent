@@ -20,6 +20,38 @@ export interface ProfileData {
   updated_at: string | null
 }
 
+export interface StudentProfileData {
+  education_level: string | null
+  grade: string | null
+  major: string | null
+  courses: string[]
+  learning_goal: string | null
+  school: string | null
+  school_level: string | null
+  preferred_language: string | null
+}
+
+export interface ProfileOnboardingData {
+  student_profile: StudentProfileData
+  profile_initialized: boolean
+}
+
+export interface ProfileOnboardingUpdate {
+  education_level: string
+  grade: string
+  major: string
+  courses: string[]
+  learning_goal: string
+  school?: string | null
+  school_level?: string | null
+  preferred_language?: string | null
+}
+
+export interface ProfileOnboardingUpdateResult {
+  profile: ProfileData
+  onboarding: ProfileOnboardingData
+}
+
 export interface ProfileScoreData {
   user_id: number | null
   module: string | null
@@ -198,6 +230,14 @@ export function getProfile(userId?: number | string) {
 export function getProfileScore(userId?: number | string) {
   const path = userId ? `/ai/profile/${userId}/score` : '/ai/profile/score'
   return http.get<{ code: number; message: string; data: ProfileScoreData }>(path)
+}
+
+export function getProfileOnboarding() {
+  return http.get<ApiResponse<ProfileOnboardingData>>('/ai/profile/onboarding')
+}
+
+export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
+  return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload)
 }
 
 export function getProfileHistory(limit = 20, userId?: number | string) {

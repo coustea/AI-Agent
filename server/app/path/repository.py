@@ -1,3 +1,8 @@
+"""Path planning repository.
+
+提供学习路径规划相关的数据库访问操作。
+"""
+
 from __future__ import annotations
 
 from sqlmodel import select

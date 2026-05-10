@@ -7,11 +7,11 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.auth.schemas import UserLogin, UserRead, UserRegister, UserUpdate
 from app.auth.security import get_current_user
-from app.auth.schemas import UserLogin, UserRegister, UserUpdate, UserRead
+from app.auth.service import auth_usecases
 from app.infra.database import get_session
 from app.infra.models import User
-from app.auth.service import auth_usecases
 from app.shared.response import HttpResponse
 
 router = APIRouter()

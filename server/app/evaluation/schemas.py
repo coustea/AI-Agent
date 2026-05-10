@@ -1,3 +1,5 @@
+"""Learning evaluation schemas."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -17,6 +19,8 @@ LearningEventType = Literal[
 
 
 class LearningEventCreate(BaseModel):
+    """Learning event creation request."""
+
     event_type: LearningEventType
     session_id: str | None = None
     resource_id: int | None = Field(default=None, ge=1)
@@ -29,6 +33,8 @@ class LearningEventCreate(BaseModel):
 
 
 class LearningEventItem(BaseModel):
+    """Learning event item for response."""
+
     id: int
     event_type: str
     course: str | None = None
@@ -40,12 +46,16 @@ class LearningEventItem(BaseModel):
 
 
 class EvaluationMetric(BaseModel):
+    """Evaluation metric item."""
+
     label: str
     value: str
     trend: str = "stable"
 
 
 class EvaluationSummary(BaseModel):
+    """Evaluation summary response."""
+
     event_count: int
     average_score: float | None = None
     completed_resources: int = 0

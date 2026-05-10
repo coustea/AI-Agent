@@ -106,27 +106,128 @@
         </div>
       </div>
     </div>
+
+    <el-dialog
+        v-model="onboardingDialogVisible"
+        title="完善学习画像基础信息"
+        width="640px"
+        :show-close="false"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        class="onboarding-dialog"
+    >
+      <el-form
+          ref="onboardingFormRef"
+          :model="onboardingForm"
+          :rules="onboardingRules"
+          label-position="top"
+          class="onboarding-form"
+      >
+        <div class="onboarding-grid">
+          <el-form-item label="学历层次" prop="education_level">
+            <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" filterable>
+              <el-option label="高职/专科" value="高职/专科" />
+              <el-option label="本科" value="本科" />
+              <el-option label="研究生" value="研究生" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="年级" prop="grade">
+            <el-input v-model="onboardingForm.grade" placeholder="例如：大二、研一" />
+          </el-form-item>
+          <el-form-item label="专业" prop="major">
+            <el-input v-model="onboardingForm.major" placeholder="例如：软件工程" />
+          </el-form-item>
+          <el-form-item label="常用编程语言（选填）" prop="preferred_language">
+            <el-input v-model="onboardingForm.preferred_language" placeholder="例如：Python、C++、Java" />
+          </el-form-item>
+        </div>
+
+        <el-form-item label="正在学习的课程" prop="courses">
+          <el-select
+              v-model="onboardingForm.courses"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="输入课程名称后回车，可添加多门课程"
+              class="w-full"
+          />
+        </el-form-item>
+
+        <el-form-item label="当前学习目标" prop="learning_goal">
+          <el-input
+              v-model="onboardingForm.learning_goal"
+              type="textarea"
+              :rows="3"
+              placeholder="例如：期末复习、查漏补缺、完成课程项目"
+          />
+        </el-form-item>
+
+        <div class="onboarding-grid">
+          <el-form-item label="院校（选填）" prop="school">
+            <el-input v-model="onboardingForm.school" placeholder="用于个人中心展示" />
+          </el-form-item>
+          <el-form-item label="院校层次（选填）" prop="school_level">
+            <el-input v-model="onboardingForm.school_level" placeholder="例如：普通本科、双一流、高职高专" />
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button
+            type="primary"
+            :loading="onboardingSubmitting"
+            @click="submitOnboarding(onboardingFormRef)"
+        >
+          保存并初始化画像
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Lightning, Opportunity, TrendCharts,
   VideoPlay, Monitor, Document, Cpu, EditPen,
   ArrowRight, Warning, Aim
 } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { RadarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
-import { getProfile, getProfileScore } from '@/api/ai'
+import { getProfile, getProfileOnboarding, getProfileScore, updateProfileOnboarding } from '@/api/ai'
+import type { ProfileOnboardingUpdate, StudentProfileData } from '@/api/ai'
 
 use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
 
 const router = useRouter()
+const onboardingDialogVisible = ref(false)
+const onboardingSubmitting = ref(false)
+const onboardingFormRef = ref<FormInstance>()
+
+const onboardingForm = reactive<ProfileOnboardingUpdate>({
+  education_level: '',
+  grade: '',
+  major: '',
+  courses: [],
+  learning_goal: '',
+  school: '',
+  school_level: '',
+  preferred_language: '',
+})
+
+const onboardingRules: FormRules<ProfileOnboardingUpdate> = {
+  education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
+  grade: [{ required: true, message: '请输入年级', trigger: 'blur' }],
+  major: [{ required: true, message: '请输入专业', trigger: 'blur' }],
+  courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
+  learning_goal: [{ required: true, message: '请输入当前学习目标', trigger: 'blur' }],
+}
 
 // --- 1. HUD 核心洞察 ---
 const aiInsight = ref("基于最新评估：感知到您在「反向传播」耗时较长，已自动提升今日实操代码资源权重。")
@@ -231,7 +332,7 @@ const trendOption = computed(() => ({
   }]
 }))
 
-onMounted(async () => {
+const loadProfileSnapshot = async () => {
   try {
     const [profileRes, scoreRes] = await Promise.allSettled([
       getProfile(),
@@ -275,6 +376,58 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load profile', e)
   }
+}
+
+const fillOnboardingForm = (payload: Partial<ProfileOnboardingUpdate> | StudentProfileData) => {
+  onboardingForm.education_level = payload.education_level || ''
+  onboardingForm.grade = payload.grade || ''
+  onboardingForm.major = payload.major || ''
+  onboardingForm.courses = Array.isArray(payload.courses) ? payload.courses : []
+  onboardingForm.learning_goal = payload.learning_goal || ''
+  onboardingForm.school = payload.school || ''
+  onboardingForm.school_level = payload.school_level || ''
+  onboardingForm.preferred_language = payload.preferred_language || ''
+}
+
+const loadOnboardingStatus = async () => {
+  try {
+    const res = await getProfileOnboarding()
+    fillOnboardingForm(res.data.data.student_profile)
+    onboardingDialogVisible.value = !res.data.data.profile_initialized
+  } catch (e) {
+    console.error('Failed to load onboarding status', e)
+  }
+}
+
+const submitOnboarding = async (formEl: FormInstance | undefined) => {
+  if (!formEl) return
+  const valid = await formEl.validate().catch(() => false)
+  if (!valid) return
+  onboardingSubmitting.value = true
+  try {
+    await updateProfileOnboarding({
+      ...onboardingForm,
+      courses: onboardingForm.courses.map((course) => course.trim()).filter(Boolean),
+      school: onboardingForm.school || null,
+      school_level: onboardingForm.school_level || null,
+      preferred_language: onboardingForm.preferred_language || null,
+    })
+    onboardingDialogVisible.value = false
+    ElMessage.success('学习画像初始化完成')
+    await loadProfileSnapshot()
+  } catch (e) {
+    console.error('Failed to submit onboarding', e)
+    ElMessage.error('保存失败，请稍后重试')
+  } finally {
+    onboardingSubmitting.value = false
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([
+    loadProfileSnapshot(),
+    loadOnboardingStatus(),
+  ])
 })
 </script>
 
@@ -385,6 +538,11 @@ onMounted(async () => {
 .mt-2 { margin-top: 0.5rem; }
 .mt-4 { margin-top: 1rem; }
 
+.onboarding-form { padding-top: 0.5rem; }
+.onboarding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+:deep(.onboarding-dialog .el-dialog__body) { padding-top: 0.5rem; }
+:deep(.onboarding-dialog .el-select) { width: 100%; }
+
 @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.5); } }
 @keyframes fade-in { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -392,5 +550,6 @@ onMounted(async () => {
 @media (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr; }
   .hud-left { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .onboarding-grid { grid-template-columns: 1fr; }
 }
 </style>

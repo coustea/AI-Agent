@@ -10,41 +10,45 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Iterator
 
-_current_user_id: ContextVar[int | None] = ContextVar("current_user_id", default=None)
-_current_session_id: ContextVar[str | None] = ContextVar("current_session_id", default=None)
+_CURRENT_USER_ID: ContextVar[int | None] = ContextVar("current_user_id", default=None)
+_CURRENT_SESSION_ID: ContextVar[str | None] = ContextVar("current_session_id", default=None)
 
 
 @contextmanager
 def runtime_context(user_id: int, session_id: str | None = None) -> Iterator[None]:
     """上下文管理器：在 with 块内设置当前 user_id/session_id，退出时自动恢复。"""
-    user_token: Token[int | None] = _current_user_id.set(user_id)
-    session_token: Token[str | None] = _current_session_id.set(session_id)
+    user_token: Token[int | None] = _CURRENT_USER_ID.set(user_id)
+    session_token: Token[str | None] = _CURRENT_SESSION_ID.set(session_id)
     try:
         yield
     finally:
         # In some async-generator cancellation paths, reset can run in a
         # different context; fail-safe cleanup avoids surfacing noisy errors.
         try:
-            _current_user_id.reset(user_token)
+            _CURRENT_USER_ID.reset(user_token)
         except ValueError:
-            _current_user_id.set(None)
+            _CURRENT_USER_ID.set(None)
         try:
-            _current_session_id.reset(session_token)
+            _CURRENT_SESSION_ID.reset(session_token)
         except ValueError:
-            _current_session_id.set(None)
+            _CURRENT_SESSION_ID.set(None)
 
 
 def get_current_user_id() -> int | None:
-    return _current_user_id.get()
+    """Get the current user ID from context."""
+    return _CURRENT_USER_ID.get()
 
 
 def get_current_session_id() -> str | None:
-    return _current_session_id.get()
+    """Get the current session ID from context."""
+    return _CURRENT_SESSION_ID.get()
 
 
 def set_user_id(user_id: int | None) -> None:
-    _current_user_id.set(user_id)
+    """Set the current user ID in context."""
+    _CURRENT_USER_ID.set(user_id)
 
 
 def set_session_id(session_id: str | None) -> None:
-    _current_session_id.set(session_id)
+    """Set the current session ID in context."""
+    _CURRENT_SESSION_ID.set(session_id)

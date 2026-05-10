@@ -11,10 +11,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.database import session_scope
 from app.config import JWT_ALGORITHM, JWT_EXPIRE_DAYS, JWT_SECRET_KEY
-from app.infra.models import ActiveToken
-from app.infra.models import User
+from app.infra.database import session_scope
+from app.infra.models import ActiveToken, User
 
 bearer_scheme = HTTPBearer()
 

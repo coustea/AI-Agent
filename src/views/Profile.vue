@@ -9,16 +9,18 @@
             </div>
             <div class="user-info">
               <div class="name-row">
-                <h3>学习者</h3>
+                <h3>{{ userName }}</h3>
                 <el-icon class="verify-icon"><CircleCheckFilled /></el-icon>
               </div>
-              <p class="major">软件工程 · 学习中</p>
+              <p class="major">{{ profileHeadline }}</p>
               <div class="tags">
-                <span class="tag">大二</span>
-                <span class="tag outline">AI学习路径</span>
+                <span class="tag">{{ studentProfile.grade || '年级待完善' }}</span>
+                <span class="tag outline">{{ studentProfile.learning_goal || '学习目标待完善' }}</span>
               </div>
             </div>
-            <el-button plain class="edit-btn" size="small"><el-icon><Edit /></el-icon> 编辑资料</el-button>
+            <el-button plain class="edit-btn" size="small" @click="openProfileEditor">
+              <el-icon><Edit /></el-icon> 编辑资料
+            </el-button>
           </div>
           <div class="user-stats">
             <div class="stat-item">
@@ -87,6 +89,18 @@
 
     <div class="main-grid">
       <div class="left-column">
+        <div class="dashboard-card profile-info-card">
+          <div class="card-header-flex">
+            <h4 class="card-title">学习画像资料</h4>
+          </div>
+          <div class="profile-info-list">
+            <div class="profile-info-row"><span><el-icon><Reading /></el-icon> 学历层次</span><strong>{{ studentProfile.education_level || '未填写' }}</strong></div>
+            <div class="profile-info-row"><span><el-icon><UserFilled /></el-icon> 专业</span><strong>{{ studentProfile.major || '未填写' }}</strong></div>
+            <div class="profile-info-row"><span><el-icon><VideoPlay /></el-icon> 正在学习</span><strong>{{ courseSummary }}</strong></div>
+            <div class="profile-info-row"><span><el-icon><Cpu /></el-icon> 常用语言</span><strong>{{ studentProfile.preferred_language || '未填写' }}</strong></div>
+          </div>
+        </div>
+
         <div class="dashboard-card">
           <div class="card-header-flex">
             <h4 class="card-title">最近学习记录</h4>
@@ -150,25 +164,193 @@
         </div>
       </div>
     </div>
+
+    <el-dialog
+        v-model="profileEditorVisible"
+        title="编辑学习画像资料"
+        width="640px"
+        :close-on-click-modal="false"
+    >
+      <el-form
+          ref="profileFormRef"
+          :model="profileForm"
+          :rules="profileRules"
+          label-position="top"
+      >
+        <div class="profile-form-grid">
+          <el-form-item label="学历层次" prop="education_level">
+            <el-select v-model="profileForm.education_level" placeholder="请选择学历层次" filterable>
+              <el-option label="高职/专科" value="高职/专科" />
+              <el-option label="本科" value="本科" />
+              <el-option label="研究生" value="研究生" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="年级" prop="grade">
+            <el-input v-model="profileForm.grade" placeholder="例如：大二、研一" />
+          </el-form-item>
+          <el-form-item label="专业" prop="major">
+            <el-input v-model="profileForm.major" placeholder="例如：软件工程" />
+          </el-form-item>
+          <el-form-item label="常用编程语言（选填）" prop="preferred_language">
+            <el-input v-model="profileForm.preferred_language" placeholder="例如：Python、C++、Java" />
+          </el-form-item>
+        </div>
+
+        <el-form-item label="正在学习的课程" prop="courses">
+          <el-select
+              v-model="profileForm.courses"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="输入课程名称后回车，可添加多门课程"
+              class="w-full"
+          />
+        </el-form-item>
+
+        <el-form-item label="当前学习目标" prop="learning_goal">
+          <el-input v-model="profileForm.learning_goal" type="textarea" :rows="3" />
+        </el-form-item>
+
+        <div class="profile-form-grid">
+          <el-form-item label="院校（选填）" prop="school">
+            <el-input v-model="profileForm.school" />
+          </el-form-item>
+          <el-form-item label="院校层次（选填）" prop="school_level">
+            <el-input v-model="profileForm.school_level" />
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="profileEditorVisible = false">取消</el-button>
+        <el-button type="primary" :loading="profileSubmitting" @click="submitProfile(profileFormRef)">
+          保存资料
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import {
   UserFilled, CircleCheckFilled, Edit, Clock, Reading, DocumentCopy, StarFilled,
   InfoFilled, Timer, Checked, VideoPlay, Cpu
 } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { RadarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
+import { getMe } from '@/api/auth'
+import { getProfileOnboarding, updateProfileOnboarding } from '@/api/ai'
+import type { ProfileOnboardingUpdate, StudentProfileData } from '@/api/ai'
 
 use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
 
 const timeRange = ref('7')
 const historyFilter = ref('全部')
+const userName = ref('学习者')
+const profileEditorVisible = ref(false)
+const profileSubmitting = ref(false)
+const profileFormRef = ref<FormInstance>()
+const studentProfile = ref<StudentProfileData>({
+  education_level: null,
+  grade: null,
+  major: null,
+  courses: [],
+  learning_goal: null,
+  school: null,
+  school_level: null,
+  preferred_language: null,
+})
+
+const profileForm = reactive<ProfileOnboardingUpdate>({
+  education_level: '',
+  grade: '',
+  major: '',
+  courses: [],
+  learning_goal: '',
+  school: '',
+  school_level: '',
+  preferred_language: '',
+})
+
+const profileRules: FormRules<ProfileOnboardingUpdate> = {
+  education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
+  grade: [{ required: true, message: '请输入年级', trigger: 'blur' }],
+  major: [{ required: true, message: '请输入专业', trigger: 'blur' }],
+  courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
+  learning_goal: [{ required: true, message: '请输入当前学习目标', trigger: 'blur' }],
+}
+
+const profileHeadline = computed(() => {
+  const parts = [studentProfile.value.major, studentProfile.value.education_level, studentProfile.value.school]
+    .filter((item): item is string => Boolean(item))
+  return parts.length ? parts.join(' · ') : '学习资料待完善'
+})
+
+const courseSummary = computed(() => {
+  return studentProfile.value.courses.length ? studentProfile.value.courses.join('、') : '未填写'
+})
+
+const fillProfileForm = (payload: StudentProfileData) => {
+  profileForm.education_level = payload.education_level || ''
+  profileForm.grade = payload.grade || ''
+  profileForm.major = payload.major || ''
+  profileForm.courses = Array.isArray(payload.courses) ? [...payload.courses] : []
+  profileForm.learning_goal = payload.learning_goal || ''
+  profileForm.school = payload.school || ''
+  profileForm.school_level = payload.school_level || ''
+  profileForm.preferred_language = payload.preferred_language || ''
+}
+
+const loadProfileInfo = async () => {
+  const [userRes, onboardingRes] = await Promise.all([
+    getMe(),
+    getProfileOnboarding(),
+  ])
+  userName.value = userRes.data.data.username
+  studentProfile.value = onboardingRes.data.data.student_profile
+  fillProfileForm(studentProfile.value)
+}
+
+const openProfileEditor = () => {
+  fillProfileForm(studentProfile.value)
+  profileEditorVisible.value = true
+}
+
+const submitProfile = async (formEl: FormInstance | undefined) => {
+  if (!formEl) return
+  const valid = await formEl.validate().catch(() => false)
+  if (!valid) return
+  profileSubmitting.value = true
+  try {
+    const res = await updateProfileOnboarding({
+      ...profileForm,
+      courses: profileForm.courses.map((course) => course.trim()).filter(Boolean),
+      school: profileForm.school || null,
+      school_level: profileForm.school_level || null,
+      preferred_language: profileForm.preferred_language || null,
+    })
+    studentProfile.value = res.data.data.onboarding.student_profile
+    profileEditorVisible.value = false
+    ElMessage.success('学习画像资料已更新')
+  } catch (e) {
+    console.error('Failed to update profile onboarding', e)
+    ElMessage.error('保存失败，请稍后重试')
+  } finally {
+    profileSubmitting.value = false
+  }
+}
+
+onMounted(() => {
+  loadProfileInfo().catch((error) => {
+    console.error('Failed to load profile center data', error)
+  })
+})
 
 // 雷达图配置
 const radarOption = computed(() => ({
@@ -289,6 +471,7 @@ const getStatusType = (status: string) => {
 .tags { display: flex; gap: 8px; }
 .tag { font-size: 0.75rem; padding: 3px 10px; background: #F1F5F9; color: #475569; border-radius: 6px; }
 .edit-btn { position: absolute; right: 0; top: 0; }
+.w-full { width: 100%; }
 
 .user-stats { display: flex; justify-content: space-between; padding-top: 20px; border-top: 1px solid #F1F5F9; }
 .stat-item { text-align: center; }
@@ -354,6 +537,54 @@ const getStatusType = (status: string) => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.profile-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.profile-info-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.profile-info-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.profile-info-row span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748B;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.profile-info-row strong {
+  color: #0F172A;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  text-align: right;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.profile-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+:deep(.profile-form-grid .el-select) {
+  width: 100%;
 }
 
 .recent-record {

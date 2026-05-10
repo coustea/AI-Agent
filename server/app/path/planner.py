@@ -1,3 +1,12 @@
+"""Path planning algorithms.
+
+提供学习路径规划的核心算法，包括：
+- 初始路径构建
+- 节点评分
+- 进度计算
+- 路径调整
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -14,7 +23,7 @@ from app.resource.utils import (
 
 ENHANCEMENT_AGENTS = STRUCTURE_AGENTS + PRACTICE_AGENTS + EXTENSION_AGENTS
 PRESENTATION_AGENTS: list[str] = []
-from app.resource.utils import CORE_AGENTS, STRUCTURE_AGENTS, PRACTICE_AGENTS, EXTENSION_AGENTS
+
 NODE_TITLES: dict[str, str] = {
     "content": "核心知识讲解",
     "mindmap": "知识结构梳理",

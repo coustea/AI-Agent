@@ -84,7 +84,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       if (idleCountdown.value <= 0) {
         clearInterval(idleTimer!)
         idleTimer = null
-        console.log('[DH] idle timeout, auto-disconnecting')
         disconnect()
         callbacks?.onError?.('杩炴帴宸插洜闀挎椂闂存棤浜掑姩鑷姩鏂紑')
       }
@@ -115,8 +114,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     }
 
     const url = buildWsUrl()
-    console.log('[DH] connecting to', url.replace(/token=[^&]+/, 'token=***'))
-
     ws = new WebSocket(url)
 
     ws.onopen = () => {
@@ -124,7 +121,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       error.value = null
       callbacks?.onConnectionChange?.(true)
       resetIdleTimer()
-      console.log('[DH] connected')
     }
 
     ws.onmessage = (event) => {
@@ -144,7 +140,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         error.value = '璁よ瘉澶辫触锛岃閲嶆柊鐧诲綍'
         callbacks?.onError?.(error.value)
       }
-      console.log('[DH] disconnected, code:', event.code)
     }
 
     ws.onerror = () => {
@@ -228,7 +223,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     if (data.reconnected) {
       // Reconnection: destroy and reinit player
-      console.log('[DH] stream reconnected, reinitializing player')
       const wasAudioEnabled = audioEnabled.value
       destroyPlayer()
 
@@ -274,7 +268,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     if (!playerContainer) {
       // Container not ready yet 鈥?save stream data and init later when container arrives
-      console.log('[DH] player container not ready, saving stream data for later')
       pendingStreamData = { url, extend }
       return
     }
@@ -301,7 +294,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
       }
 
       player.play().then(() => {
-        console.log('[DH] player started')
       }).catch((err: unknown) => {
         console.error('[DH] player error:', err)
       })
@@ -335,7 +327,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     playerContainer = el
     // If stream data arrived before container was ready, init player now
     if (el && pendingStreamData) {
-      console.log('[DH] container now ready, initializing pending player')
       const { url, extend } = pendingStreamData
       pendingStreamData = null
       initPlayer(url, extend)

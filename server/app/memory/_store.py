@@ -121,7 +121,7 @@ class MemoryStore:
 
     async def get_user_chat_sessions(self, user_id: int, module: str | None = None, limit: int = 20) -> list[ChatSession]:
         async with AsyncSession(self.engine) as session:
-            stmt = select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_archived == False)  # noqa: E712
+            stmt = select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_archived.is_(False))
             if module:
                 stmt = stmt.where(ChatSession.module == module)
             stmt = stmt.order_by(ChatSession.updated_at.desc()).limit(limit)

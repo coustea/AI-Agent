@@ -1,10 +1,10 @@
-"""
-Audio processing module.
+"""Audio processing module.
+
 Manages audio buffer and coordinates with ASR service.
 """
 
-import base64
 import asyncio
+import base64
 
 from app.avatar.services.asr import IatClient
 from app.infra.logging import get_logger

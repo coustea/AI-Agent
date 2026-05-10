@@ -355,19 +355,26 @@
                 :key="resource.id || resource.type"
                 class="generated-resource-card"
                 :class="getResourceToneClass(resource.type)"
+                role="button"
+                tabindex="0"
                 @click="previewGeneratedResource(resource)"
+                @keydown.enter.prevent="previewGeneratedResource(resource)"
+                @keydown.space.prevent="previewGeneratedResource(resource)"
               >
-                <div class="resource-card-icon">
+                <div class="resource-card-icon" aria-hidden="true">
                   <el-icon><component :is="getAgentMeta(resource.type).icon" /></el-icon>
                 </div>
                 <div class="resource-card-info">
-                  <el-tag size="small" effect="plain" round>{{ getResourceTypeLabel(resource.type) }}</el-tag>
+                  <div class="resource-card-meta-line">
+                    <el-tag size="small" effect="plain" round>{{ getResourceTypeLabel(resource.type) }}</el-tag>
+                    <span>{{ getResourceStageLabel(resource.type) }} · {{ getDefaultResourceFormat(resource.type) }}</span>
+                  </div>
                   <h4>{{ resource.title || getResourceTypeLabel(resource.type) }}</h4>
-                  <p>{{ stringifyCompact(resource.summary || '资源已生成，点击查看详情', 48) }}</p>
+                  <p>{{ stringifyCompact(resource.summary || getResourceUsageHint(resource.type), 84) }}</p>
                 </div>
                 <div class="resource-card-action">
+                  <span>查看详情</span>
                   <el-icon><Position /></el-icon>
-                  <span>查看</span>
                 </div>
               </article>
             </div>
@@ -666,6 +673,8 @@ import CodeResourceView from '@/components/resource/CodeResourceView.vue'
 import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
 
 import { generateResources, type ResourceAgentId, type LearningScenario, type ResourceGenerateEvent } from '@/api/resource'
+
+defineOptions({ name: 'ResourceGenerator' })
 
 const router = useRouter()
 
@@ -2000,6 +2009,145 @@ const handlePreview = (data: any) => {
 .tone-emerald { background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
 .tone-indigo { background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE; }
 .tone-slate { background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; }
+.interactive-resources-panel .panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.interactive-resources-panel .panel-title > span {
+  display: inline-flex;
+  align-items: center;
+  color: #0F172A;
+  font-size: 1rem;
+  font-weight: 900;
+}
+.generated-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+.generated-resource-card {
+  --resource-accent: #2563EB;
+  --resource-soft: #EFF6FF;
+  --resource-border: #BFDBFE;
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid #E2E8F0;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.92) 100%),
+    var(--resource-soft);
+  color: #0F172A;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.generated-resource-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: 18px 0 0 18px;
+  background: var(--resource-accent);
+}
+.generated-resource-card:hover,
+.generated-resource-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--resource-border);
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08);
+  outline: none;
+}
+.generated-resource-card.tone-blue { --resource-accent: #2563EB; --resource-soft: #EFF6FF; --resource-border: #BFDBFE; }
+.generated-resource-card.tone-purple { --resource-accent: #7C3AED; --resource-soft: #F5F3FF; --resource-border: #DDD6FE; }
+.generated-resource-card.tone-amber { --resource-accent: #D97706; --resource-soft: #FFFBEB; --resource-border: #FDE68A; }
+.generated-resource-card.tone-rose { --resource-accent: #E11D48; --resource-soft: #FFF1F2; --resource-border: #FFE4E6; }
+.generated-resource-card.tone-emerald { --resource-accent: #059669; --resource-soft: #ECFDF5; --resource-border: #A7F3D0; }
+.generated-resource-card.tone-indigo { --resource-accent: #4F46E5; --resource-soft: #EEF2FF; --resource-border: #C7D2FE; }
+.generated-resource-card.tone-slate { --resource-accent: #475569; --resource-soft: #F1F5F9; --resource-border: #CBD5E1; }
+.generated-resource-card .resource-card-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--resource-soft);
+  border: 1px solid var(--resource-border);
+  color: var(--resource-accent);
+  font-size: 1.18rem;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+.resource-card-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.resource-card-meta-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.resource-card-meta-line span {
+  color: #94A3B8;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+.resource-card-info h4 {
+  margin: 0;
+  color: #0F172A;
+  font-size: 1.02rem;
+  line-height: 1.38;
+  font-weight: 900;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.resource-card-info p {
+  margin: 0;
+  color: #64748B;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.resource-card-action {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 96px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: #0F172A;
+  color: #FFFFFF;
+  font-size: 0.82rem;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+}
+.generated-resource-card:hover .resource-card-action,
+.generated-resource-card:focus-visible .resource-card-action {
+  background: var(--resource-accent);
+}
 .side-empty.compact { padding: 14px; }
 
 @media (max-width: 1200px) {
@@ -2020,6 +2168,8 @@ const handlePreview = (data: any) => {
   .flow-canvas { height: 720px; }
   .flow-node { width: 176px; min-height: 112px; font-size: 0.82rem; }
   .resource-status-item { grid-template-columns: 1fr; }
+  .generated-resource-card { grid-template-columns: auto minmax(0, 1fr); }
+  .resource-card-action { grid-column: 1 / -1; width: 100%; }
   .workflow-timeline-panel, .resource-side-panel { position: static; }
   .event-log-row { grid-template-columns: 1fr; gap: 6px; }
   .result-meta-grid { grid-template-columns: 1fr; }

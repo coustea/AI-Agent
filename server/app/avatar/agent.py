@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-AvatarAgent — 数字人独立 LangGraph 智能体
+"""AvatarAgent — 数字人独立 LangGraph 智能体
 
 与 TutorAgent 对等但独立的 Agent：
 - 独立的 LangGraph StateGraph 和 system prompt
@@ -17,19 +16,19 @@ import json
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, AnyMessage
-from langgraph.graph import StateGraph, END
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from app.shared.diagram_render import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 from app.chat.utils import load_prompts, truncate
-from app.infra.logging import get_logger
 from app.infra.llm import get_llm_manager
+from app.infra.logging import get_logger
 from app.memory import MemoryLayer
-from app.shared.json_utils import parse_first_json_object
+from app.shared.diagram_render import build_mermaid_render
 from app.shared.image_analyze import build_vision_service
+from app.shared.json_utils import parse_first_json_object
 from app.tools.search import duckduckgo_search, tavily_search
 
 logger = get_logger(__name__)
@@ -91,7 +90,7 @@ class AvatarAgent:
         self.classifier_model_kwargs = {"temperature": 0.0, "max_tokens": 100}
         self.tool_model_kwargs = {"temperature": 0.2, "streaming": False}
         self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-        self.memory_layer = MemoryLayer(module_name="avatar")
+        self.memory_layer = MemoryLayer(module="avatar")
         self.vision_service = build_vision_service(self.llm_manager)
         self._graph = self._build_graph()
 
@@ -175,7 +174,7 @@ class AvatarAgent:
         if profile_ctx is None or memory_ctx is None:
             built_profile_ctx, built_memory_ctx = await asyncio.gather(
                 self.memory_layer.build_profile_context(user_id),
-                self.memory_layer.build_long_term_memory_context(user_id),
+                self.memory_layer.build_memory_context(user_id),
             )
             profile_ctx = profile_ctx if profile_ctx is not None else built_profile_ctx
             memory_ctx = memory_ctx if memory_ctx is not None else built_memory_ctx

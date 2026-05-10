@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -186,7 +187,7 @@ class LongTermMemoryUpdateService:
             return False
 
     def _parse_memory_json(self, response_text: str) -> dict[str, Any] | None:
-        import json
+        """解析 LLM 响应中的 JSON 记忆数据。"""
         text = response_text.strip()
         if text.startswith("```json"):
             text = text[len("```json"):].strip()

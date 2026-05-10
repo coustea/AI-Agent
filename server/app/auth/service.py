@@ -6,9 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.auth.schemas import UserLogin, UserRead, UserRegister, UserUpdate
 from app.auth.security import create_token, hash_password, revoke_token, verify_password
 from app.infra.models import User
-from app.auth.schemas import UserRead
 
 
 def _read_user(user: User) -> UserRead:
@@ -18,7 +18,7 @@ def _read_user(user: User) -> UserRead:
 class UserAccountStore:
     """用户账号持久化。"""
 
-    async def register(self, session: AsyncSession, data) -> dict | None:
+    async def register(self, session: AsyncSession, data: UserRegister) -> dict[str, UserRead] | None:
         existing = (await session.exec(select(User).where(User.username == data.username))).first()
         if existing:
             return None
@@ -36,7 +36,7 @@ class UserAccountStore:
         await session.refresh(user)
         return {"user": _read_user(user)}
 
-    async def authenticate(self, session: AsyncSession, username: str, password: str) -> dict | None:
+    async def authenticate(self, session: AsyncSession, username: str, password: str) -> dict[str, str | UserRead] | None:
         user = (await session.exec(select(User).where(User.username == username))).first()
         if not user:
             return None
@@ -46,7 +46,7 @@ class UserAccountStore:
         token = await create_token(user.id, session)
         return {"token": token, "user": _read_user(user)}
 
-    async def update(self, session: AsyncSession, user_id: int, data) -> User | None:
+    async def update(self, session: AsyncSession, user_id: int, data: UserUpdate) -> User | None:
         user = await session.get(User, user_id)
         if not user:
             return None
@@ -67,13 +67,13 @@ class AuthUseCases:
     def __init__(self, account_store: UserAccountStore) -> None:
         self.account_store = account_store
 
-    async def register(self, session: AsyncSession, data):
+    async def register(self, session: AsyncSession, data: UserRegister) -> dict[str, UserRead] | None:
         return await self.account_store.register(session, data)
 
-    async def login(self, session: AsyncSession, data):
+    async def login(self, session: AsyncSession, data: UserLogin) -> dict[str, str | UserRead] | None:
         return await self.account_store.authenticate(session, data.username, data.password)
 
-    async def update_me(self, session: AsyncSession, user_id: int, data):
+    async def update_me(self, session: AsyncSession, user_id: int, data: UserUpdate) -> User | None:
         return await self.account_store.update(session, user_id, data)
 
     async def logout(self, session: AsyncSession, token: str) -> None:
@@ -83,7 +83,7 @@ class AuthUseCases:
         """登出后触发画像构建（懒加载 memory runtime）。"""
         from app.memory import MemoryLayer
 
-        await MemoryLayer(module_name="mentor").build_profile(user_id=user_id)
+        await MemoryLayer(module="mentor").build_profile(user_id=user_id)
 
 
 # 模块级单例

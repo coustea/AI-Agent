@@ -62,7 +62,9 @@
     <main class="page-content">
       <router-view v-slot="{ Component }">
         <transition name="fade-slide" mode="out-in">
-          <component :is="Component" />
+          <keep-alive include="ResourceGenerator,Tutor">
+            <component :is="Component" />
+          </keep-alive>
         </transition>
       </router-view>
     </main>
@@ -75,7 +77,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Menu, Connection, Cpu, DataLine, ChatDotRound,
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
-  User, PieChart, Star, Setting
+  User
 } from '@element-plus/icons-vue'
 import { logout } from '@/api/auth'
 

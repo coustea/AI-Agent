@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-AvatarAgent schemas — 请求/响应数据模型
-"""
+"""AvatarAgent schemas — 请求/响应数据模型"""
 
 from pydantic import BaseModel
 
@@ -11,4 +9,6 @@ class StopRequest(BaseModel):
 
 
 class SwitchSessionRequest(BaseModel):
+    """Switch session request."""
+
     session_id: str

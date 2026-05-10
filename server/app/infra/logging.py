@@ -34,7 +34,7 @@ class _InterceptHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             level = _loguru_logger.level(record.levelname).name
-        except Exception:
+        except (ValueError, TypeError):
             level = record.levelno
 
         # record.getMessage() 已经完成了 %-style 格式化
@@ -85,7 +85,7 @@ class LoguruLoggerProxy:
         # 兼容 logging 的 %-style 格式化
         try:
             return (message % args, ())
-        except Exception:
+        except (TypeError, ValueError):
             # 兜底：不让日志调用因为格式问题崩掉
             return (f"{message} args={args!r}", ())
 

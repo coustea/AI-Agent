@@ -215,19 +215,23 @@
                   <span>图解正在生成...</span>
                 </div>
 
-                <div v-if="msg.diagram" class="msg-diagram">
+                <div v-if="msg.diagram" class="msg-diagram" @click="previewDiagram(msg.diagram)">
                   <div class="diagram-header">
                     <span class="diagram-title">{{ msg.diagram.title }}</span>
                     <span class="diagram-type-tag">{{ msg.diagram.type }}</span>
                   </div>
                   <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
 
-                  <img
-                      v-if="msg.diagram.image_url"
-                      :src="msg.diagram.image_url"
-                      :alt="msg.diagram.title || 'AI 图解'"
-                      class="diagram-image"
-                  />
+                  <div v-if="msg.diagram.image_url" class="diagram-image-wrapper">
+                    <el-image
+                        :src="msg.diagram.image_url"
+                        :preview-src-list="[msg.diagram.image_url]"
+                        :alt="msg.diagram.title || 'AI 图解'"
+                        class="diagram-image"
+                        fit="contain"
+                        @click.stop
+                    />
+                  </div>
                   <div
                       v-else
                       class="diagram-svg-container"
@@ -347,7 +351,7 @@
                   ref="textareaRef"
                   v-model="userInput"
                   placeholder="向 AI 导师提问（Enter 发送，Shift + Enter 换行）"
-                  @keydown.enter.exact.prevent="handleSend"
+                  @keydown.enter="handleEnter"
                   @input="autoResize"
               ></textarea>
 
@@ -520,6 +524,42 @@
         </div>
       </transition>
     </div>
+
+    <!-- 知识图解预览对话框 -->
+    <el-dialog
+        v-model="diagramPreviewVisible"
+        :title="diagramPreviewData?.title || '知识图解预览'"
+        width="85%"
+        top="5vh"
+        destroy-on-close
+        class="diagram-preview-dialog"
+    >
+      <div class="diagram-preview-body" v-if="diagramPreviewData">
+        <div class="preview-header-meta">
+          <span class="preview-type-tag">{{ diagramPreviewData.type }}</span>
+          <p class="preview-summary">{{ diagramPreviewData.summary }}</p>
+        </div>
+        
+        <div class="preview-content">
+          <img
+              v-if="diagramPreviewData.image_url"
+              :src="diagramPreviewData.image_url"
+              :alt="diagramPreviewData.title"
+              class="preview-image"
+          />
+          <div
+              v-else
+              class="preview-svg-container"
+              v-html="diagramSvgCache.get(diagramPreviewData.render.source) || ''"
+          ></div>
+        </div>
+        
+        <div class="preview-footer">
+          <el-button type="primary" plain @click="copyDiagramSource(diagramPreviewData)">复制 Mermaid 源码</el-button>
+          <el-button @click="diagramPreviewVisible = false">关闭</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -531,7 +571,7 @@ import {
   Plus, Delete, Close, Top, ArrowRight,
   EditPen, Search, Timer, VideoCamera, DataLine,
   CircleCheckFilled,
-  InfoFilled, Medal, Aim, Loading, TrendCharts
+  InfoFilled, Medal, Aim, TrendCharts
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import 'github-markdown-css/github-markdown-light.css'
@@ -556,6 +596,8 @@ import {
 import { getMe } from '@/api/auth'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
+
+defineOptions({ name: 'Tutor' })
 
 // 类型定义
 interface PendingFile {
@@ -595,6 +637,13 @@ interface ProfileCard {
   key: string
   title: string
   content: string
+}
+
+const normalizeDiagramData = (diagram: Record<string, unknown> | null | undefined): DiagramData | null => {
+  if (!diagram || typeof diagram !== 'object') return null
+  const render = diagram.render
+  if (!render || typeof render !== 'object') return null
+  return diagram as unknown as DiagramData
 }
 
 const DEFAULT_SESSION_TITLE = '新对话'
@@ -818,6 +867,28 @@ const digitalHumanStatusText = computed(() => {
   if (isVadListening.value) return '正在识别语音...'
   return '倾听就绪'
 })
+
+const diagramPreviewVisible = ref(false)
+const diagramPreviewData = ref<DiagramData | null>(null)
+
+const previewDiagram = (diagram: DiagramData) => {
+  diagramPreviewData.value = diagram
+  diagramPreviewVisible.value = true
+}
+
+const copyDiagramSource = async (diagram: DiagramData) => {
+  if (diagram?.render?.source) {
+    await copyToClipboard(diagram.render.source)
+  }
+}
+
+const handleEnter = (e: KeyboardEvent) => {
+  if (e.isComposing) return
+  if (e.shiftKey) return
+  
+  e.preventDefault()
+  handleSend()
+}
 
 // 工具函数
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -1302,6 +1373,7 @@ const switchSession = async (sessionId: string) => {
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
       illustrations: [],
+      diagram: normalizeDiagramData(msg.diagram),
     }))
   } catch (err) {
     ElMessage.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
@@ -2009,6 +2081,13 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   padding: 16px;
   max-width: 560px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.msg-diagram:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .diagram-header {
@@ -2040,6 +2119,12 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
+.diagram-image-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 .diagram-svg-container {
   display: flex;
   justify-content: center;
@@ -2057,6 +2142,79 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   display: block;
   margin: 0 auto;
+}
+
+/* 预览对话框样式 */
+.diagram-preview-dialog :deep(.el-dialog__body) {
+  padding: 0;
+}
+
+.diagram-preview-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.preview-header-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-type-tag {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  background: #EEF2FF;
+  color: #4F46E5;
+  border-radius: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.preview-summary {
+  font-size: 1rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.preview-content {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+.preview-svg-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.preview-svg-container :deep(svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.preview-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #F1F5F9;
 }
 
 .mermaid-error {

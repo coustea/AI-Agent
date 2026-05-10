@@ -413,7 +413,7 @@ class ConversationStore:
         Returns:
             会话信息列表，包含 id、title、updated_at 字段。
         """
-        memory_layer = MemoryLayer(module_name=module_name)
+        memory_layer = MemoryLayer(module=module_name)
         sessions = await memory_layer.list_sessions(user_id=user_id, limit=limit)
         return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in sessions]
 
@@ -433,7 +433,7 @@ class ConversationStore:
         Returns:
             新创建的会话信息。
         """
-        memory_layer = MemoryLayer(module_name=module_name)
+        memory_layer = MemoryLayer(module=module_name)
         session = await memory_layer.create_session(user_id=user_id, title=title)
         return {"id": session.id, "title": session.title}
 
@@ -448,10 +448,16 @@ class ConversationStore:
         Returns:
             操作是否成功。
         """
-        memory_layer = MemoryLayer(module_name=module_name)
+        memory_layer = MemoryLayer(module=module_name)
         return await memory_layer.archive_session(user_id=user_id, session_id=session_id)
 
-    async def update_session_title(self, user_id: int, session_id: str, title: str, module_name: str = CHAT_MODULE_NAME) -> bool:
+    async def update_session_title(
+        self,
+        user_id: int,
+        session_id: str,
+        title: str,
+        module_name: str = CHAT_MODULE_NAME,
+    ) -> bool:
         """更新会话标题。
 
         Args:
@@ -463,10 +469,16 @@ class ConversationStore:
         Returns:
             操作是否成功。
         """
-        memory_layer = MemoryLayer(module_name=module_name)
+        memory_layer = MemoryLayer(module=module_name)
         return await memory_layer.update_session_title(user_id=user_id, session_id=session_id, title=title)
 
-    async def generate_session_title(self, user_id: int, session_id: str, first_message: str, module_name: str = CHAT_MODULE_NAME) -> str | None:
+    async def generate_session_title(
+        self,
+        user_id: int,
+        session_id: str,
+        first_message: str,
+        module_name: str = CHAT_MODULE_NAME,
+    ) -> str | None:
         """使用 spark-x2-flash 生成会话标题。
 
         Args:
@@ -508,7 +520,7 @@ class ConversationStore:
             await self.update_session_title(user_id, session_id, title, module_name)
             return title
         except Exception as e:
-            logger.warning(f"生成会话标题失败: {e}")
+            logger.warning("生成会话标题失败: %s", e)
             return None
 
     async def get_history(
@@ -530,7 +542,7 @@ class ConversationStore:
         Returns:
             消息条目列表。
         """
-        memory_layer = MemoryLayer(module_name=module_name)
+        memory_layer = MemoryLayer(module=module_name)
         target_session = session_id
         # 未指定会话时获取最近的会话
         if not target_session:
@@ -539,7 +551,7 @@ class ConversationStore:
                 return []
             target_session = sessions[0].id
 
-        messages = await memory_layer.list_short_term_messages(
+        messages = await memory_layer.list_messages(
             user_id=user_id,
             session_id=target_session,
             limit=limit,
@@ -590,7 +602,7 @@ class ChatUseCases:
         self,
         *,
         conversation_store: ConversationStore,
-        file_store=local_file_store,
+        file_store: Any = local_file_store,
         module_name: str = CHAT_MODULE_NAME,
         default_session_suffix: str | None = None,
         stream_runner: Callable[..., Any] | None = None,

@@ -1,16 +1,17 @@
-"""
-Xfyun speech recognition (ASR) client.
+"""Xfyun speech recognition (ASR) client.
+
 Supports real-time streaming speech recognition.
 """
 
-import websockets
-import json
-import base64
 import asyncio
+import base64
+import json
 
-from app.config import ASR_SPARK_APP_ID, ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET, IAT_URL
-from app.infra.logging import get_logger
+import websockets
+
 from app.avatar.services import xfyun_auth
+from app.config import ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET, ASR_SPARK_APP_ID, IAT_URL
+from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

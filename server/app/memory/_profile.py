@@ -1,21 +1,13 @@
-"""用户画像构建服务 — 从旧画像与近期原始对话生成 JSON 用户画像。
+"""用户画像构建服务。
 
-模块职责：
-- 从 UserProfile 读取旧画像
-- 从 ChatMessage 读取近期用户与助手原始对话
-- 生成结构化文字画像 profile_json，并单独生成评分画像 profile_score_json
-
-设计原则：
-- profile_json 是文字画像权威来源
-- profile_score_json 是评分画像权威来源
-- 支持"随学随新"，基于近期原始对话持续更新
+从旧画像与近期对话生成 8 维度 JSON 画像 + 评分快照。
 """
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
-import json
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -26,6 +18,9 @@ from app.memory._store import MemoryStore
 from app.memory.memory_types import (
     ALL_PROFILE_DIMENSIONS,
     PROFILE_DIMENSION_NAMES,
+    PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION,
+    PROFILE_DIMENSION_LEARNING_GOAL,
+    PROFILE_DIMENSION_LEARNING_HISTORY,
     make_default_profile_json,
     make_default_profile_score_json,
 )
@@ -33,10 +28,16 @@ from app.shared.json_utils import parse_first_json_object
 
 logger = get_logger(__name__)
 
-PROFILE_RECENT_DIALOGUE_LIMIT = 10
-PROFILE_RECENT_DIALOGUE_CHAR_BUDGET = 5000
+# 近期对话配置
+DIALOGUE_LIMIT = 10          # 最多取 10 条消息
+DIALOGUE_CHAR_BUDGET = 5000  # 字符预算
 
-PROFILE_BUILDING_PROMPT = """# 角色与目标
+# 首次登录必填字段
+ONBOARDING_FIELDS = ("education_level", "grade", "major", "courses", "learning_goal")
+ONBOARDING_OPTIONAL_FIELDS = ("school", "school_level", "preferred_language")
+
+# 画像构建提示词
+BUILD_PROMPT = """# 角色与目标
 你是一个学生画像构建器。请根据【旧画像 JSON】和【近期原始对话】，生成一份 JSON 学生画像。
 
 这是一个"对话式学习画像自主构建"流程：从自然语言对话中自动抽取特征，构建动态学生画像，并支持画像的随学随新。
@@ -148,213 +149,355 @@ PROFILE_BUILDING_PROMPT = """# 角色与目标
 """
 
 
-class ProfileDimensionOutput(BaseModel):
-    """单个画像维度的 function calling 输出。"""
+# ---------------------------------------------------------------------------
+# LLM 输出模型（用于 function calling）
+# ---------------------------------------------------------------------------
 
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="该维度判断的置信度，0 到 1。")
-    summary: str | None = Field(default=None, description="该维度画像摘要。没有证据时返回 null。")
-    evidence: list[str] = Field(default_factory=list, description="近期原始对话中的证据。没有证据时返回空数组。")
+class DimensionOutput(BaseModel):
+    """单维度输出。"""
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    summary: str | None = None
+    evidence: list[str] = Field(default_factory=list)
 
 
-class ProfileBuildingOutput(BaseModel):
-    """画像构建 function calling 输出。"""
-
-    dimensions: dict[str, ProfileDimensionOutput] = Field(default_factory=dict)
+class ProfileOutput(BaseModel):
+    """画像构建输出。"""
+    dimensions: dict[str, DimensionOutput] = Field(default_factory=dict)
     recommended_strategy: list[str] = Field(default_factory=list)
     last_update_reason: str = ""
 
 
-def _now_iso() -> str:
+# ---------------------------------------------------------------------------
+# 工具函数
+# ---------------------------------------------------------------------------
+
+def _now() -> str:
+    """当前 ISO 时间戳。"""
     return datetime.now(timezone.utc).isoformat()
 
 
-def _render_recent_dialogue(messages: list[Any]) -> str:
+def _render_dialogue(messages: list[Any]) -> str:
+    """将消息列表渲染为对话文本，受字符预算限制。"""
     lines: list[str] = []
-    used_chars = 0
+    used = 0
     for msg in messages:
         role = getattr(msg, "role", "")
         content = (getattr(msg, "content", "") or "").strip()
         if role not in {"user", "assistant"} or not content:
             continue
         line = f"{role}: {content[:800]}"
-        if used_chars + len(line) > PROFILE_RECENT_DIALOGUE_CHAR_BUDGET:
+        if used + len(line) > DIALOGUE_CHAR_BUDGET:
             break
         lines.append(line)
-        used_chars += len(line)
+        used += len(line)
     return "\n".join(lines) if lines else "暂无近期原始对话。"
 
 
-class ProfileBuildingService:
-    """画像构建服务 — 生成 JSON 用户画像和维度评分。"""
+def _clean_text(value: Any) -> str | None:
+    """清理文本，空转 None。"""
+    text = str(value or "").strip()
+    return text or None
 
-    def __init__(
-        self,
-        *,
-        module_name: str = "mentor",
-        store: MemoryStore | None = None,
-    ) -> None:
-        self.module_name = module_name
+
+def _clean_courses(value: Any) -> list[str]:
+    """清理课程列表，去重。"""
+    raw = [value] if isinstance(value, str) else (value if isinstance(value, list) else [])
+    courses: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        course = str(item or "").strip()
+        if course and course not in seen:
+            seen.add(course)
+            courses.append(course)
+    return courses
+
+
+def _clamp_confidence(value: Any) -> float:
+    """将任意值转为 0-1 置信度。"""
+    try:
+        return round(max(0.0, min(1.0, float(value))), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _avg_confidence(profile_json: dict[str, Any]) -> float:
+    """计算所有有内容维度的平均置信度。"""
+    dims = profile_json.get("dimensions") or {}
+    values = [
+        float((dims.get(k) or {}).get("confidence") or 0)
+        for k in ALL_PROFILE_DIMENSIONS
+        if (dims.get(k) or {}).get("summary") or (dims.get(k) or {}).get("evidence")
+    ]
+    return round(sum(values) / len(values), 2) if values else 0.0
+
+
+# ---------------------------------------------------------------------------
+# 首次登录画像
+# ---------------------------------------------------------------------------
+
+def normalize_onboarding(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """标准化首次登录表单数据。"""
+    src = payload or {}
+    result = {f: _clean_text(src.get(f)) for f in ONBOARDING_FIELDS + ONBOARDING_OPTIONAL_FIELDS if f != "courses"}
+    result["courses"] = _clean_courses(src.get("courses"))
+    return result
+
+
+def is_onboarding_complete(profile: dict[str, Any] | None) -> bool:
+    """检查首次登录必填字段是否完整。"""
+    norm = normalize_onboarding(profile)
+    return all(bool(norm.get(f)) if f != "courses" else bool(norm["courses"]) for f in ONBOARDING_FIELDS)
+
+
+def build_onboarding_profile(
+    onboarding: dict[str, Any],
+    old_json: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """从首次登录表单构建画像 JSON。"""
+    norm = normalize_onboarding(onboarding)
+    profile = deepcopy(old_json) if old_json else make_default_profile_json()
+    if not isinstance(profile, dict):
+        profile = make_default_profile_json()
+
+    dims = profile.get("dimensions")
+    if not isinstance(dims, dict):
+        dims = make_default_profile_json()["dimensions"]
+
+    # 拼接描述文本
+    courses_text = "、".join(norm["courses"])
+    lang_text = f"，常用编程语言为 {norm['preferred_language']}" if norm.get("preferred_language") else ""
+    school_parts = [norm.get(f) for f in ("school", "school_level", "education_level", "grade", "major") if norm.get(f)]
+    school_text = "，".join(school_parts)
+
+    # 填充三个维度
+    dims[PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION] = _make_dim(
+        PROFILE_DIMENSION_NAMES[PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION],
+        f"{norm.get('education_level')} {norm.get('major')} 学生，正在学习 {courses_text}{lang_text}。",
+        ["来自首次登录学习资料"],
+    )
+    dims[PROFILE_DIMENSION_LEARNING_GOAL] = _make_dim(
+        PROFILE_DIMENSION_NAMES[PROFILE_DIMENSION_LEARNING_GOAL],
+        f"围绕 {courses_text} 的当前目标是：{norm.get('learning_goal')}。",
+        ["来自首次登录学习资料"],
+    )
+    dims[PROFILE_DIMENSION_LEARNING_HISTORY] = _make_dim(
+        PROFILE_DIMENSION_NAMES[PROFILE_DIMENSION_LEARNING_HISTORY],
+        school_text or None,
+        ["来自首次登录学习资料"] if school_text else [],
+    )
+
+    profile["profile_version"] = 3
+    profile["format"] = "json"
+    profile["student_profile"] = norm
+    profile["dimensions"] = dims
+    profile["recommended_strategy"] = [
+        f"优先围绕 {courses_text} 生成学习资源",
+        f"资源难度参考 {norm.get('education_level')} / {norm.get('grade')} 阶段",
+        f"学习活动聚焦：{norm.get('learning_goal')}",
+    ]
+    profile["last_update_reason"] = "基于首次登录学习资料初始化画像"
+    profile["overall_confidence"] = _avg_confidence(profile)
+    return profile
+
+
+def _make_dim(name: str, summary: str | None, evidence: list[str], confidence: float = 0.85) -> dict[str, Any]:
+    """构建单个维度字典。"""
+    has_content = bool(summary) or bool(evidence)
+    return {
+        "name": name,
+        "confidence": confidence if has_content else 0.0,
+        "summary": summary,
+        "evidence": evidence[:5],
+        "updated_at": _now() if has_content else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 评分快照
+# ---------------------------------------------------------------------------
+
+def _score_dim(dim: dict[str, Any]) -> int | None:
+    """计算单维度评分（1-100），无内容返回 None。"""
+    summary = str(dim.get("summary") or "").strip()
+    evidence = dim.get("evidence") or []
+    if not summary and not evidence:
+        return None
+    conf = _clamp_confidence(dim.get("confidence"))
+    # 评分公式：置信度 55% + 摘要 20% + 证据 25%
+    evidence_bonus = min(25, len(evidence) * 8)
+    summary_bonus = 20 if summary else 0
+    return max(1, min(100, round(conf * 55 + summary_bonus + evidence_bonus)))
+
+
+def build_score_json(profile_json: dict[str, Any]) -> dict[str, Any]:
+    """构建评分快照。"""
+    dims = profile_json.get("dimensions") or {}
+
+    # 各维度评分
+    dim_scores = {k: _score_dim(dims.get(k) or {}) for k in ALL_PROFILE_DIMENSIONS}
+    valid_scores = [s for s in dim_scores.values() if s is not None]
+
+    # 缺失维度
+    missing = [k for k, s in dim_scores.items() if s is None]
+
+    # 覆盖率
+    coverage = round((len(ALL_PROFILE_DIMENSIONS) - len(missing)) / len(ALL_PROFILE_DIMENSIONS) * 100)
+
+    # 证据质量
+    evidence_count = sum(len((dims.get(k) or {}).get("evidence") or []) for k in ALL_PROFILE_DIMENSIONS)
+    evidence_score = min(100, evidence_count * 20)
+
+    # 总分
+    overall = round(sum(valid_scores) / len(valid_scores)) if valid_scores else None
+    confidence = _avg_confidence(profile_json)
+
+    result = make_default_profile_score_json()
+    result.update({
+        "overall_score": overall,
+        "confidence": confidence,
+        "dimension_scores": dim_scores,
+        "section_coverage": coverage,
+        "evidence_quality": evidence_score,
+        "missing_sections": missing,
+        "scored_at": _now(),
+    })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 画像构建服务
+# ---------------------------------------------------------------------------
+
+class ProfileBuilder:
+    """画像构建服务：从对话生成 8 维度画像。"""
+
+    def __init__(self, module: str = "mentor", store: MemoryStore | None = None) -> None:
+        self.module = module
         self.store = store or MemoryStore()
-        self.llm_manager = get_llm_manager()
-        self.model_kwargs = {"temperature": 0.1, "streaming": False}
+        self.llm = get_llm_manager()
+        self.llm_kwargs = {"temperature": 0.1, "streaming": False}
 
-    async def build_profile(
-        self,
-        user_id: int,
-        session_id: str | None = None,
-    ) -> tuple[bool, bool]:
-        effective_session = session_id
-        if effective_session is None:
-            sessions = await self.store.get_user_chat_sessions(user_id=user_id, module=self.module_name, limit=1)
-            effective_session = sessions[0].id if sessions else f"user-{user_id}-default-{self.module_name}"
+    async def build(self, user_id: int, session_id: str | None = None) -> tuple[bool, bool]:
+        """构建画像。
 
-        old_profile = await self.store.get_user_profile(user_id, self.module_name)
-        recent_messages = await self.store.get_recent_messages(
-            user_id,
-            effective_session,
-            self.module_name,
-            limit=PROFILE_RECENT_DIALOGUE_LIMIT,
-        )
+        Returns:
+            (success, updated): 是否成功、是否有更新
+        """
+        logger.info("[ProfileBuilder] 开始 user=%s session=%s", user_id, session_id)
 
-        old_profile_json = old_profile.profile_json if old_profile and old_profile.profile_json else make_default_profile_json()
-        old_profile_text = json.dumps(old_profile_json, ensure_ascii=False)
-        recent_dialogue_text = _render_recent_dialogue(recent_messages)
+        # 确定会话
+        sid = session_id
+        if sid is None:
+            sessions = await self.store.get_user_chat_sessions(user_id=user_id, module=self.module, limit=1)
+            sid = sessions[0].id if sessions else f"user-{user_id}-default-{self.module}"
 
+        # 查询数据
+        old = await self.store.get_user_profile(user_id, self.module)
+        msgs = await self.store.get_recent_messages(user_id, sid, self.module, limit=DIALOGUE_LIMIT)
+        logger.info("[ProfileBuilder] 数据就绪 old=%s msgs=%s", "yes" if old else "no", len(msgs))
+
+        # 准备上下文
+        old_json = old.profile_json if old and old.profile_json else make_default_profile_json()
+        old_text = json.dumps(old_json, ensure_ascii=False)
+        dialogue_text = _render_dialogue(msgs)
+        logger.info("[ProfileBuilder] 上下文 old_len=%s dialogue_len=%s", len(old_text), len(dialogue_text))
+
+        # 调用 LLM
         try:
-            prompt_text = PROFILE_BUILDING_PROMPT.format(
-                old_profile=old_profile_text[:3000],
-                recent_dialogue=recent_dialogue_text,
-            )
-            response = await self.llm_manager.ainvoke_structured(
+            prompt = BUILD_PROMPT.format(old_profile=old_text[:3000], recent_dialogue=dialogue_text)
+            logger.debug("[ProfileBuilder] 调用 LLM")
+            resp = await self.llm.ainvoke_structured(
                 "spark_max",
-                ProfileBuildingOutput,
-                prompt_text,
+                ProfileOutput,
+                prompt,
                 function_name="update_student_profile",
-                function_description="根据旧画像 JSON 和近期原始对话返回 JSON 学生画像。",
-                model_kwargs=self.model_kwargs,
+                function_description="根据旧画像和近期对话返回学生画像。",
+                model_kwargs=self.llm_kwargs,
             )
-        except Exception as exc:
-            logger.error("[ProfileBuilding] 画像生成失败: %s", str(exc))
+            logger.info("[ProfileBuilder] LLM 成功")
+        except Exception as e:
+            logger.error("[ProfileBuilder] LLM 失败: %s", e)
             return False, False
 
-        profile_json = self._normalize_profile_json(response.model_dump())
-        if not profile_json:
-            logger.warning("[ProfileBuilding] JSON 画像为空，跳过更新")
+        # 解析结果
+        new_json = self._parse_response(resp.model_dump())
+        if not new_json:
+            logger.warning("[ProfileBuilder] 解析结果为空")
             return True, False
-        profile_score_json = self._build_profile_score_json(profile_json)
 
-        if old_profile and old_profile.profile_json:
-            if self._is_same_profile_json(profile_json, old_profile.profile_json):
-                return True, False
+        # 保留首次登录数据
+        if old_json.get("student_profile"):
+            new_json["student_profile"] = normalize_onboarding(old_json["student_profile"])
 
+        score_json = build_score_json(new_json)
+        logger.info("[ProfileBuilder] 解析完成 dims=%s conf=%.2f", len(new_json.get("dimensions", {})), score_json["confidence"])
+
+        # 检查是否有变化
+        if old and old.profile_json and self._is_same(new_json, old.profile_json):
+            logger.info("[ProfileBuilder] 无变化")
+            return True, False
+
+        # 保存
         try:
             await self.store.update_user_profile(
                 user_id=user_id,
-                module=self.module_name,
-                profile_json=profile_json,
-                profile_score_json=profile_score_json,
-                updated_reason="基于旧画像和近期原始对话生成画像",
-                source_session_ids=[effective_session],
-                confidence=profile_score_json["confidence"],
+                module=self.module,
+                profile_json=new_json,
+                profile_score_json=score_json,
+                updated_reason="基于旧画像和近期对话生成画像",
+                source_session_ids=[sid],
+                confidence=score_json["confidence"],
             )
+            logger.info("[ProfileBuilder] 保存成功 user=%s", user_id)
             return True, True
-        except Exception as exc:
-            logger.error("[ProfileBuilding] 保存画像失败: %s", str(exc))
+        except Exception as e:
+            logger.error("[ProfileBuilder] 保存失败: %s", e)
             return False, False
 
-    def _normalize_profile_json(self, response_payload: str | dict[str, Any]) -> dict[str, Any]:
-        parsed = response_payload if isinstance(response_payload, dict) else parse_first_json_object(response_payload)
+    def _parse_response(self, payload: str | dict[str, Any]) -> dict[str, Any]:
+        """解析 LLM 响应为画像 JSON。"""
+        parsed = payload if isinstance(payload, dict) else parse_first_json_object(payload)
         if not parsed:
             return {}
 
-        profile_json = make_default_profile_json()
-        profile_json["profile_version"] = 3
-        profile_json["format"] = "json"
-        profile_json["student_profile"] = None
+        profile = make_default_profile_json()
+        profile["profile_version"] = 3
+        profile["format"] = "json"
+        profile["student_profile"] = None
 
-        parsed_dimensions = parsed.get("dimensions") or {}
-        dimensions: dict[str, dict[str, Any]] = {}
+        # 解析各维度
+        raw_dims = parsed.get("dimensions") or {}
+        dims: dict[str, dict[str, Any]] = {}
         for key in ALL_PROFILE_DIMENSIONS:
-            raw_dim = parsed_dimensions.get(key) or {}
-            summary = raw_dim.get("summary")
-            evidence = raw_dim.get("evidence") or []
-            confidence = raw_dim.get("confidence")
-            has_content = bool(summary) or bool(evidence)
-            dimensions[key] = {
+            raw = raw_dims.get(key) or {}
+            summary = raw.get("summary")
+            evidence = raw.get("evidence") or []
+            conf = raw.get("confidence")
+            has = bool(summary) or bool(evidence)
+            dims[key] = {
                 "name": PROFILE_DIMENSION_NAMES.get(key, key),
-                "confidence": self._coerce_confidence(confidence) if has_content else 0.0,
+                "confidence": _clamp_confidence(conf) if has else 0.0,
                 "summary": str(summary).strip() if summary else None,
-                "evidence": [str(item).strip() for item in evidence if str(item).strip()][:5],
-                "updated_at": _now_iso() if has_content else None,
+                "evidence": [str(i).strip() for i in evidence if str(i).strip()][:5],
+                "updated_at": _now() if has else None,
             }
-        profile_json["dimensions"] = dimensions
+        profile["dimensions"] = dims
 
+        # 策略和原因
         strategies = parsed.get("recommended_strategy") or []
-        profile_json["recommended_strategy"] = [str(item).strip() for item in strategies if str(item).strip()][:5]
-        profile_json["last_update_reason"] = str(parsed.get("last_update_reason") or "").strip()
-        profile_json["overall_confidence"] = self._calculate_overall_confidence(profile_json)
-        return profile_json
+        profile["recommended_strategy"] = [str(s).strip() for s in strategies if str(s).strip()][:5]
+        profile["last_update_reason"] = str(parsed.get("last_update_reason") or "").strip()
+        profile["overall_confidence"] = _avg_confidence(profile)
+        return profile
 
-    def _build_profile_score_json(self, profile_json: dict[str, Any]) -> dict[str, Any]:
-        dimensions = profile_json.get("dimensions") or {}
-        dimension_scores = {key: self._score_dimension(dimensions.get(key) or {}) for key in ALL_PROFILE_DIMENSIONS}
-        available_scores = [score for score in dimension_scores.values() if isinstance(score, (int, float))]
-        confidences = [
-            float((dimensions.get(key) or {}).get("confidence") or 0)
-            for key in ALL_PROFILE_DIMENSIONS
-            if (dimensions.get(key) or {}).get("summary") or (dimensions.get(key) or {}).get("evidence")
-        ]
-        missing_sections = [key for key, score in dimension_scores.items() if score is None]
-        coverage = round((len(ALL_PROFILE_DIMENSIONS) - len(missing_sections)) / len(ALL_PROFILE_DIMENSIONS) * 100)
-        evidence_count = sum(len((dimensions.get(key) or {}).get("evidence") or []) for key in ALL_PROFILE_DIMENSIONS)
-        evidence_score = min(100, evidence_count * 20)
-        overall_score = round(sum(available_scores) / len(available_scores)) if available_scores else None
-        confidence = round(sum(confidences) / len(confidences), 2) if confidences else 0.0
-        score_json = make_default_profile_score_json()
-        score_json.update({
-            "overall_score": overall_score,
-            "confidence": confidence,
-            "dimension_scores": dimension_scores,
-            "section_coverage": coverage,
-            "evidence_quality": evidence_score,
-            "missing_sections": missing_sections,
-            "scored_at": _now_iso(),
-        })
-        return score_json
-
-    def _score_dimension(self, dimension: dict[str, Any]) -> int | None:
-        summary = str(dimension.get("summary") or "").strip()
-        evidence = dimension.get("evidence") or []
-        if not summary and not evidence:
-            return None
-        confidence = self._coerce_confidence(dimension.get("confidence"))
-        evidence_bonus = min(25, len(evidence) * 8)
-        summary_bonus = 20 if summary else 0
-        return max(1, min(100, round(confidence * 55 + summary_bonus + evidence_bonus)))
-
-    def _calculate_overall_confidence(self, profile_json: dict[str, Any]) -> float:
-        dimensions = profile_json.get("dimensions") or {}
-        confidences = [
-            float((dimensions.get(key) or {}).get("confidence") or 0)
-            for key in ALL_PROFILE_DIMENSIONS
-            if (dimensions.get(key) or {}).get("summary") or (dimensions.get(key) or {}).get("evidence")
-        ]
-        return round(sum(confidences) / len(confidences), 2) if confidences else 0.0
-
-    def _coerce_confidence(self, value: Any) -> float:
-        try:
-            return round(max(0.0, min(1.0, float(value))), 2)
-        except (TypeError, ValueError):
-            return 0.0
-
-    def _is_same_profile_json(self, new_json: dict[str, Any], old_json: dict[str, Any]) -> bool:
-        def comparable(payload: dict[str, Any]) -> dict[str, Any]:
-            data = deepcopy(payload)
-            data.pop("overall_confidence", None)
-            for dim in (data.get("dimensions") or {}).values():
+    def _is_same(self, new: dict[str, Any], old: dict[str, Any]) -> bool:
+        """比较两个画像是否相同（忽略时间戳）。"""
+        def strip(data: dict[str, Any]) -> dict[str, Any]:
+            d = deepcopy(data)
+            d.pop("overall_confidence", None)
+            for dim in (d.get("dimensions") or {}).values():
                 if isinstance(dim, dict):
                     dim.pop("updated_at", None)
                     dim.pop("score", None)
-            return data
-
-        return comparable(new_json) == comparable(old_json)
+            return d
+        return strip(new) == strip(old)

@@ -1,8 +1,20 @@
 import axios from 'axios'
 
-export function getErrorMessage(error: any, fallback = '请求失败，请稍后重试') {
-  const data = error?.response?.data
-  if (!data) return error?.message || fallback
+interface ValidationErrorDetail {
+  loc?: string[]
+  msg?: string
+  [key: string]: unknown
+}
+
+interface ErrorResponseData {
+  message?: string
+  detail?: string | ValidationErrorDetail[]
+}
+
+export function getErrorMessage(error: unknown, fallback = '请求失败，请稍后重试'): string {
+  const err = error as { response?: { data?: ErrorResponseData }; message?: string }
+  const data = err?.response?.data
+  if (!data) return err?.message || fallback
 
   if (typeof data.message === 'string' && data.message) {
     return data.message
@@ -14,7 +26,7 @@ export function getErrorMessage(error: any, fallback = '请求失败，请稍后
 
   if (Array.isArray(data.detail) && data.detail.length > 0) {
     return data.detail
-      .map((item: any) => {
+      .map((item: ValidationErrorDetail) => {
         const field = Array.isArray(item?.loc) ? item.loc.slice(1).join('.') : ''
         const message = item?.msg || String(item)
         return field ? `${field}: ${message}` : message

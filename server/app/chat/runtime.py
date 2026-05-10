@@ -27,7 +27,7 @@ class TutorContextService(Protocol):
         """构建用户画像上下文。"""
         ...
 
-    async def build_long_term_memory_context(self, user_id: int) -> str:
+    async def build_memory_context(self, user_id: int) -> str:
         """构建长期记忆上下文。"""
         ...
 
@@ -176,7 +176,7 @@ async def prepare_tutor_turn(
     if enable_long_term_memory:
         profile_str, fact_str = await asyncio.gather(
             ctx_service.build_profile_context(user_id),
-            ctx_service.build_long_term_memory_context(user_id),
+            ctx_service.build_memory_context(user_id),
         )
     else:
         profile_str = await ctx_service.build_profile_context(user_id)

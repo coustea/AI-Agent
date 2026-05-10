@@ -23,7 +23,7 @@ from app.path.schemas import PathInsight, PathPlan, PathPlanData, PathPlanMeta, 
 class PathService:
     def __init__(self, repository: PathRepository, memory_layer: MemoryLayer | None = None) -> None:
         self.repository = repository
-        self.memory_layer = memory_layer or MemoryLayer(module_name="mentor")
+        self.memory_layer = memory_layer or MemoryLayer(module="mentor")
 
     async def build_path_plan(
         self,

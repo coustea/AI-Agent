@@ -20,7 +20,14 @@ MAX_FILE_CONTENT_CHARS = 15000
 
 
 def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
-    """将 URL 路径解析为 (owner_id, absolute_path)，校验路径安全性和文件存在性。"""
+    """将 URL 路径解析为 (owner_id, absolute_path)，校验路径安全性和文件存在性。
+
+    Args:
+        file_url: 上传文件的 URL 路径。
+
+    Returns:
+        元组 (owner_id, absolute_path)，无效路径返回 None。
+    """
     relative: str
     if file_url.startswith("/api/v1/ai/chat/uploads/"):
         relative = file_url.removeprefix("/api/v1/ai/chat/uploads/")
@@ -80,7 +87,14 @@ def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
 
 
 def resolve_uploaded_image_path(image_url: str) -> Path | None:
-    """解析图片 URL 为本地 Path，返回 None 表示无效路径。"""
+    """解析图片 URL 为本地 Path。
+
+    Args:
+        image_url: 图片 URL 路径。
+
+    Returns:
+        本地 Path，无效路径返回 None。
+    """
     resolved = resolve_uploaded_path(image_url)
     if resolved is None:
         return None
@@ -90,7 +104,14 @@ def resolve_uploaded_image_path(image_url: str) -> Path | None:
 
 
 def read_uploaded_file_content(absolute_path: str) -> str:
-    """读取上传文件内容，支持 .pdf / .docx / .txt / .md / .log。"""
+    """读取上传文件内容，支持 .pdf / .docx / .txt / .md / .log。
+
+    Args:
+        absolute_path: 文件绝对路径。
+
+    Returns:
+        文件内容字符串，失败时返回错误提示信息。
+    """
     path = Path(absolute_path)
     if not path.exists():
         return f"文件不存在: {absolute_path}"
@@ -125,7 +146,16 @@ def read_uploaded_file_content(absolute_path: str) -> str:
 
 
 async def analyze_documents(*, current_user_id: int, file_urls: list[str], question: str) -> dict:
-    """批量读取用户上传的文档内容，返回分析摘要。"""
+    """批量读取用户上传的文档内容，返回分析摘要。
+
+    Args:
+        current_user_id: 当前用户 ID。
+        file_urls: 文件 URL 列表。
+        question: 用户问题。
+
+    Returns:
+        分析结果字典，包含 success、documents、analysis_text、error 字段。
+    """
     documents: list[dict[str, str]] = []
     snippets: list[str] = []
 

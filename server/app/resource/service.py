@@ -44,9 +44,9 @@ class ResourceUsecases:
         self.session.add(resource)
         try:
             await self.session.commit()
-        except Exception:
+        except Exception as exc:
             await self.session.rollback()
-            raise
+            raise exc
         await self.session.refresh(resource)
         return resource
 
@@ -62,9 +62,9 @@ class ResourceUsecases:
             resource.updated_at = datetime.now(timezone.utc)
             try:
                 await self.session.commit()
-            except Exception:
+            except Exception as exc:
                 await self.session.rollback()
-                raise
+                raise exc
             await self.session.refresh(resource)
 
     async def save_resource_item(
@@ -90,9 +90,9 @@ class ResourceUsecases:
         self.session.add(resource_item)
         try:
             await self.session.commit()
-        except Exception:
+        except Exception as exc:
             await self.session.rollback()
-            raise
+            raise exc
         await self.session.refresh(resource_item)
         return resource_item
 

@@ -1,3 +1,7 @@
+"""Auth request and response schemas."""
+
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -17,9 +21,6 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=100)
     avatar: str | None = Field(default=None, max_length=500)
-    major: str | None = Field(default=None, max_length=100)
-    grade: str | None = Field(default=None, max_length=20)
-    school: str | None = Field(default=None, max_length=100)
 
 
 class UserRead(BaseModel):
@@ -29,9 +30,6 @@ class UserRead(BaseModel):
     username: str
     email: str | None
     avatar: str | None
-    major: str | None
-    grade: str | None
-    school: str | None
     created_at: datetime
 
 

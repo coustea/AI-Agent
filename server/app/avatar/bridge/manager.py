@@ -1,9 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
-"""
-AvatarBridgeManager ??RealtimeBridge 
+"""AvatarBridgeManager 与 RealtimeBridge 模块。
 
-?Avatar Bridge  (:8765) 
- per-user ?WebSocket SRvatarController ?
+Avatar Bridge 管理 per-user WebSocket 连接、AvatarController 与 AvatarAgent。
 """
 
 import asyncio
@@ -13,13 +11,14 @@ from typing import Optional
 
 from fastapi import WebSocketDisconnect
 from starlette.websockets import WebSocketState
+
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 class RealtimeBridge:
-    """per-user  WS SRvatarAgent"""
+    """per-user WebSocket 连接，管理 AvatarController 与 AvatarAgent。"""
 
     def __init__(self, user_id: int):
         self.user_id = user_id
@@ -28,11 +27,11 @@ class RealtimeBridge:
         self.is_listening = False
         self.current_audio_queue: Optional[asyncio.Queue] = None
 
-        # 
+        # Avatar 控制器
         self._avatar_controller = None
         self._asr_loop_task = None
 
-        # VAD ?
+        # VAD 参数
         self._vad_eos = 1000
         self._consecutive_empty = 0
         self._empty_rate = 0.0
@@ -87,12 +86,12 @@ class RealtimeBridge:
             await self._avatar_controller.connect(
                 on_reconnect_callback=self._on_avatar_reconnect
             )
-            # 
+            # 等待 Avatar 就绪
             asyncio.create_task(
                 self._avatar_controller.receive_messages(self._on_avatar_event)
             )
-            # 
-            for _ in range(40):  #  20 ?
+            # 等待最多 20 秒
+            for _ in range(40):
                 if self._avatar_controller.is_ready:
                     break
                 await asyncio.sleep(0.5)
@@ -107,7 +106,7 @@ class RealtimeBridge:
         })
 
     async def _on_avatar_event(self, event_type: str, data: dict):
-        """Avatar """
+        """Avatar 事件回调。"""
         if not self._frontend_ws_ready():
             return
         if event_type == "stream_info":
@@ -117,18 +116,18 @@ class RealtimeBridge:
             })
 
     async def handle_frontend(self, ws):
-        """ WebSocket """
+        """处理前端 WebSocket 连接。"""
         self.frontend_ws = ws
         # Avoid reusing stale session id across different module pipelines.
         self.session_id = ""
 
-        #  AvatarController 
+        # 确保 AvatarController 已初始化
         try:
             await self._ensure_avatar_controller()
         except Exception as e:
-            logger.warning("[Bridge] AvatarController ? %s", e)
+            logger.warning("[Bridge] AvatarController 初始化失败: %s", e)
 
-        # 
+        # 发送已缓存的流信息
         if self._avatar_controller and self._avatar_controller._last_stream_info:
             await self._send_to_frontend({
                 "type": "stream_info",
@@ -145,10 +144,10 @@ class RealtimeBridge:
                     logger.info("[Bridge] frontend loop cancelled")
                     raise
                 except WebSocketDisconnect:
-                    logger.info("[Bridge] ")
+                    logger.info("[Bridge] 前端断开连接")
                     break
                 except Exception as e:
-                    logger.error("[Bridge] : %s", e)
+                    logger.error("[Bridge] 处理消息异常: %s", e)
                     # Fatal websocket state errors should break the receive loop,
                     # otherwise we'll spin and spam logs.
                     if isinstance(e, RuntimeError) and "accept" in str(e).lower():
@@ -274,7 +273,7 @@ class RealtimeBridge:
                 len(pcm_bytes),
                 self.current_audio_queue.qsize(),
             )
-        # ?1280 40ms @ 16kHz?
+        # 音频块切分（1280 字节 = 40ms @ 16kHz）
         import time
         for i in range(0, len(pcm_bytes), 1280):
             chunk = pcm_bytes[i:i + 1280]
@@ -312,7 +311,7 @@ class RealtimeBridge:
         from app.memory import MemoryLayer
         from app.chat.service import CHAT_MODULE_NAME
 
-        memory_layer = MemoryLayer(module_name=CHAT_MODULE_NAME)
+        memory_layer = MemoryLayer(module=CHAT_MODULE_NAME)
 
         if not self.session_id:
             await self._send_to_frontend(
@@ -428,7 +427,7 @@ class RealtimeBridge:
 
         _, first_chunk = first_item
 
-        #  VAD
+        # VAD 参数
         vad_eos = self._compute_adaptive_vad_eos()
 
         auth_url = assemble_auth_url(IAT_URL, 'GET', ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET)
@@ -601,7 +600,7 @@ class RealtimeBridge:
         file_urls = list(dict.fromkeys(file_urls or []))
         # Keep memory module aligned with text AI pipeline to avoid
         # cross-module session permission errors.
-        memory_layer = MemoryLayer(module_name=CHAT_MODULE_NAME)
+        memory_layer = MemoryLayer(module=CHAT_MODULE_NAME)
         attachments_payload = None
         if image_urls or file_urls:
             attachments_payload = json.dumps(
@@ -610,11 +609,11 @@ class RealtimeBridge:
             )
 
         if not self.session_id:
-            # 
+            # 创建新会话
             session = await memory_layer.create_session(user_id=self.user_id)
             self.session_id = session.id
 
-        # 1. 
+        # 1. 保存用户消息
         await memory_layer.save_message(
             user_id=self.user_id,
             session_id=self.session_id,
@@ -734,7 +733,7 @@ class RealtimeBridge:
             if self.frontend_ws:
                 await self._send_to_frontend({"type": "assistant_complete"})
 
-            # ?
+            # 4. 触发数字人播报
             if full_response.strip() and self._avatar_controller:
                 logger.info(
                     "[Bridge] trigger avatar speak len=%s ws_alive=%s",
@@ -752,7 +751,7 @@ class RealtimeBridge:
                     content=full_response,
                 )
 
-            # 5. ?+ ?
+            # 5. 后处理：记忆更新 + 画像融合
             if self.frontend_ws:
                 asyncio.create_task(self._post_avatar_pipeline(user_text, full_response))
 
@@ -765,14 +764,14 @@ class RealtimeBridge:
             return
 
         try:
-            await MemoryLayer(module_name=CHAT_MODULE_NAME).post_turn_pipeline(
+            await MemoryLayer(module=CHAT_MODULE_NAME).post_turn_pipeline(
                 user_id=self.user_id,
                 session_id=self.session_id,
                 user_message=user_msg,
                 assistant_reply=assistant_msg,
             )
         except Exception as e:
-            logger.error("[Bridge] : %s", e)
+            logger.error("[Bridge] 后处理失败: %s", e)
 
     async def _send_to_frontend(self, data: dict):
         """Send message to frontend websocket."""
@@ -795,7 +794,7 @@ class RealtimeBridge:
 
 
 class AvatarBridgeManager:
-    """ RealtimeBridge """
+    """管理所有用户的 RealtimeBridge 实例。"""
 
     def __init__(self):
         self._bridges: dict[int, RealtimeBridge] = {}
@@ -859,13 +858,13 @@ class AvatarBridgeManager:
         for err in results:
             if isinstance(err, Exception):
                 failed += 1
-                logger.error("[Bridge] cleanup_all : %s", err)
+                logger.error("[Bridge] cleanup_all 失败: %s", err)
         cleaned = len(bridges) - failed
         logger.info("[Bridge] cleanup_all : total=%s cleaned=%s failed=%s", len(bridges), cleaned, failed)
         return cleaned
 
 
-# ?
+# 全局单例
 avatar_bridge_manager = AvatarBridgeManager()
 
 

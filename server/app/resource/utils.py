@@ -110,7 +110,7 @@ def _get_memory_layer():
     global _memory_layer
     if _memory_layer is None:
         from app.memory import MemoryLayer
-        _memory_layer = MemoryLayer(module_name="mentor")
+        _memory_layer = MemoryLayer(module="mentor")
     return _memory_layer
 
 

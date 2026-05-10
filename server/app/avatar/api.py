@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-"""
-Avatar HTTP API — 管理端点（主服务 :9999 挂载）
+"""Avatar HTTP API — 管理端点（主服务 :9999 挂载）
 
 提供数字人状态查询、流信息获取、停止控制等 HTTP 端点。
 实际的 WebSocket 连接统一走主服务入口的 `/ws/avatar`。
 """
 
-from fastapi import APIRouter, Depends
-from fastapi import File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.auth.security import get_current_user
-from app.infra.models import User
 from app.chat.service import get_avatar_chat_usecases
+from app.infra.models import User
 from app.memory import MemoryLayer
 from app.shared.response import HttpResponse
 
@@ -67,7 +65,7 @@ async def clear_avatar_history(
 ):
     """清空数字人会话历史消息（默认清空当前会话）。"""
     from app.avatar.bridge.manager import avatar_bridge_manager
-    memory_layer = MemoryLayer(module_name="avatar")
+    memory_layer = MemoryLayer(module="avatar")
 
     target_session_id = (session_id or "").strip()
     if not target_session_id:
