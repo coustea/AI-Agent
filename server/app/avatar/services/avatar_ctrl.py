@@ -129,6 +129,9 @@ class AvatarController:
                     self._last_stream_info = avatar_data
                     await callback('stream_info', avatar_data)
                     logger.info(f"Avatar video stream ready: {avatar_data.get('stream_url')}")
+                    if (not self.sentence_queue.empty()) and (self._playback_task is None or self._playback_task.done()):
+                        logger.info("Avatar ready: resume queued speech playback")
+                        self._playback_task = asyncio.create_task(self._process_queue())
 
                 elif event_type == 'tts_start':
                     self.is_speaking = True
@@ -279,7 +282,7 @@ class AvatarController:
         if self._playback_task and not self._playback_task.done():
             self._playback_task.cancel()
 
-        if not self.ws:
+        if not self.ws or self._ws_closed:
             return
 
         stop_msg = {
@@ -294,6 +297,10 @@ class AvatarController:
             await self.ws.send(json.dumps(stop_msg))
             self.is_speaking = False
             logger.info("Avatar stopped, queue cleared")
+        except websockets.exceptions.ConnectionClosedOK:
+            # Peer already closed gracefully, treat as idempotent stop.
+            self.is_speaking = False
+            logger.debug("Avatar stop skipped: websocket already closed normally")
         except Exception as e:
             logger.error(f"Failed to stop avatar: {e}")
 

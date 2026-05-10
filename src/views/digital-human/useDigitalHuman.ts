@@ -47,7 +47,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
   const audioEnabled = ref(false)
 
   // --- Idle auto-disconnect ---
-  const IDLE_TIMEOUT_MS = 60_000 // 60 seconds
+  const IDLE_TIMEOUT_MS = 180_000 // 180 seconds
   const idleCountdown = ref(0) // seconds remaining until auto-disconnect
   let idleTimer: ReturnType<typeof setInterval> | null = null
 
@@ -75,6 +75,11 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
 
     idleTimer = setInterval(() => {
+      // Do not auto-disconnect while actively speaking/listening.
+      if (isSpeaking.value || isListening.value) {
+        idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
+        return
+      }
       idleCountdown.value--
       if (idleCountdown.value <= 0) {
         clearInterval(idleTimer!)

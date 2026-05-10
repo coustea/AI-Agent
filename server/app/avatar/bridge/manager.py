@@ -8,9 +8,11 @@ AvatarBridgeManager ??RealtimeBridge
 
 import asyncio
 import json
+import re
 from typing import Optional
 
 from fastapi import WebSocketDisconnect
+from starlette.websockets import WebSocketState
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -39,8 +41,47 @@ class RealtimeBridge:
         self._last_asr_text: str = ""
         self._last_asr_at: float = 0.0
 
+    @staticmethod
+    def _repair_text_encoding(text: str) -> str:
+        """Best-effort repair for mojibake like '鎮ㄥソ' -> '您好'."""
+        if not text:
+            return text
+        # Typical mojibake markers when UTF-8 text is mis-decoded as GBK.
+        if not re.search(r"[鎴浣鍙鐨勪簡璇疯锛銆闂棰]", text):
+            return text
+        candidates = [text]
+        for src in ("gbk", "gb18030", "latin1"):
+            try:
+                fixed = text.encode(src).decode("utf-8")
+                candidates.append(fixed)
+            except Exception:
+                continue
+
+        def score(s: str) -> int:
+            good = len(re.findall(r"[\u4e00-\u9fff]", s))
+            bad = s.count("�")
+            mojibake_hits = len(re.findall(r"[鎴浣鍙鐨勪簡璇疯锛銆闂棰]", s))
+            return good - bad - mojibake_hits
+
+        return max(candidates, key=score)
+
     async def _ensure_avatar_controller(self):
+        need_recreate = False
         if self._avatar_controller is None:
+            need_recreate = True
+        else:
+            try:
+                if self._avatar_controller._ws_closed:
+                    need_recreate = True
+            except Exception:
+                need_recreate = True
+
+        if need_recreate:
+            if self._avatar_controller is not None:
+                try:
+                    await self._avatar_controller.close()
+                except Exception:
+                    logger.debug("[Bridge] close stale avatar controller failed", exc_info=True)
             from app.avatar.services.avatar_ctrl import AvatarController
             self._avatar_controller = AvatarController()
             await self._avatar_controller.connect(
@@ -58,6 +99,8 @@ class RealtimeBridge:
 
     async def _on_avatar_reconnect(self, stream_info: dict):
         """Avatar reconnect callback."""
+        if not self._frontend_ws_ready():
+            return
         await self._send_to_frontend({
             "type": "stream_info",
             "data": stream_info,
@@ -65,6 +108,8 @@ class RealtimeBridge:
 
     async def _on_avatar_event(self, event_type: str, data: dict):
         """Avatar """
+        if not self._frontend_ws_ready():
+            return
         if event_type == "stream_info":
             await self._send_to_frontend({
                 "type": "stream_info",
@@ -74,6 +119,8 @@ class RealtimeBridge:
     async def handle_frontend(self, ws):
         """ WebSocket """
         self.frontend_ws = ws
+        # Avoid reusing stale session id across different module pipelines.
+        self.session_id = ""
 
         #  AvatarController 
         try:
@@ -94,11 +141,19 @@ class RealtimeBridge:
                     message = await ws.receive_text()
                     data = json.loads(message)
                     await self._route_message(data)
+                except asyncio.CancelledError:
+                    logger.info("[Bridge] frontend loop cancelled")
+                    raise
                 except WebSocketDisconnect:
                     logger.info("[Bridge] ")
                     break
                 except Exception as e:
                     logger.error("[Bridge] : %s", e)
+                    # Fatal websocket state errors should break the receive loop,
+                    # otherwise we'll spin and spam logs.
+                    if isinstance(e, RuntimeError) and "accept" in str(e).lower():
+                        logger.warning("[Bridge] websocket state invalid, break receive loop")
+                        break
                     if self.frontend_ws is not None:
                         try:
                             await self._send_to_frontend({"type": "error", "content": str(e)})
@@ -106,6 +161,9 @@ class RealtimeBridge:
                             break
         except WebSocketDisconnect:
             pass
+        except asyncio.CancelledError:
+            logger.info("[Bridge] handle_frontend cancelled")
+            raise
         except Exception as e:
             logger.error("[Bridge] handle_frontend : %s", e, exc_info=True)
         finally:
@@ -115,6 +173,18 @@ class RealtimeBridge:
                 except Exception:
                     logger.debug("[Bridge] avatar stop on disconnect failed", exc_info=True)
             self.frontend_ws = None
+
+    def _frontend_ws_ready(self) -> bool:
+        ws = self.frontend_ws
+        if ws is None:
+            return False
+        try:
+            return (
+                ws.client_state == WebSocketState.CONNECTED
+                and ws.application_state == WebSocketState.CONNECTED
+            )
+        except Exception:
+            return False
 
     async def _route_message(self, data: dict):
         """Route frontend message by type."""
@@ -220,6 +290,7 @@ class RealtimeBridge:
         text = data.get("text", "")
         if not text:
             return
+        logger.info("[Bridge] recv text_input len=%s", len(str(text)))
         image_urls, file_urls = self._extract_attachment_urls(data)
         need_diagram = bool(data.get("need_diagram", False))
         await self._handle_user_text(
@@ -239,8 +310,9 @@ class RealtimeBridge:
         """Clear current session chat history."""
         from app.avatar.bridge.state import MessageType
         from app.memory import MemoryLayer
+        from app.chat.service import CHAT_MODULE_NAME
 
-        memory_layer = MemoryLayer(module_name="avatar")
+        memory_layer = MemoryLayer(module_name=CHAT_MODULE_NAME)
 
         if not self.session_id:
             await self._send_to_frontend(
@@ -522,13 +594,14 @@ class RealtimeBridge:
         need_diagram: bool = False,
     ):
         """Core pipeline: user text -> agent -> frontend + avatar."""
-        from app.avatar.agent import AvatarAgent
-        from app.chat.service import get_avatar_chat_usecases
+        from app.chat.service import get_chat_usecases, CHAT_MODULE_NAME
         from app.memory import MemoryLayer
 
         image_urls = list(dict.fromkeys(image_urls or []))
         file_urls = list(dict.fromkeys(file_urls or []))
-        memory_layer = MemoryLayer(module_name="avatar")
+        # Keep memory module aligned with text AI pipeline to avoid
+        # cross-module session permission errors.
+        memory_layer = MemoryLayer(module_name=CHAT_MODULE_NAME)
         attachments_payload = None
         if image_urls or file_urls:
             attachments_payload = json.dumps(
@@ -550,88 +623,149 @@ class RealtimeBridge:
             attachments=attachments_payload,
         )
 
-        # 2.  ChatUseCases ?
-        chat_uc = get_avatar_chat_usecases()
-        agent = AvatarAgent()
+        # 2. Reuse the same streaming mode as text AI for avatar dialogue.
+        chat_uc = get_chat_usecases()
         full_response = ""
         event_count = 0
-        async for event in chat_uc.stream_chat_events(
-            user_id=self.user_id,
-            user_message=user_text,
-            session_id=self.session_id,
-            image_urls=image_urls,
-            file_urls=file_urls,
-            need_diagram=need_diagram,
-            stream_runner=agent.chat_stream,
-            input_source=source,
-        ):
-            event_count += 1
-            # ?WebSocket 
-            if not self.frontend_ws:
-                logger.warning("[Bridge] WebSocket disconnected, stop processing events")
-                break
+        stream_failed = False
+        fail_reason = ""
+        try:
+            async def _consume_stream_events():
+                nonlocal event_count, full_response
+                async for event in chat_uc.stream_chat_events(
+                    user_id=self.user_id,
+                    user_message=user_text,
+                    session_id=self.session_id,
+                    image_urls=image_urls,
+                    file_urls=file_urls,
+                    need_diagram=need_diagram,
+                    input_source=source,
+                ):
+                    event_count += 1
+                    if not self.frontend_ws:
+                        logger.warning("[Bridge] WebSocket disconnected, stop processing events")
+                        break
 
-            event_type = str(event.get("event", ""))
-            payload = event.get("data")
-            logger.info("[Bridge] event#%d type=%s payload_type=%s preview=%s",
-                        event_count, event_type, type(payload).__name__,
-                        str(payload)[:120] if payload else "None")
+                    event_type = str(event.get("event", ""))
+                    payload = event.get("data")
+                    logger.info("[Bridge] event#%d type=%s payload_type=%s preview=%s",
+                                event_count, event_type, type(payload).__name__,
+                                str(payload)[:120] if payload else "None")
 
-            if event_type == "text_chunk":
-                content = str(payload or "")
-                full_response += content
-                # ?
+                    if event_type == "text_chunk":
+                        content = self._repair_text_encoding(str(payload or ""))
+                        full_response += content
+                        if self.frontend_ws:
+                            await self._send_to_frontend({"type": "assistant_chunk", "content": content})
+                    elif event_type == "token":
+                        content = self._repair_text_encoding(str(payload or ""))
+                        if content:
+                            full_response += content
+                            if self.frontend_ws:
+                                await self._send_to_frontend({"type": "assistant_chunk", "content": content})
+
+                    elif event_type == "tool_result":
+                        if self.frontend_ws:
+                            await self._send_to_frontend({"type": "tool_result", "data": payload})
+
+                    elif event_type == "tool_error":
+                        if self.frontend_ws:
+                            await self._send_to_frontend({"type": "tool_error", "data": payload})
+
+                    elif event_type == "diagram":
+                        if self.frontend_ws:
+                            await self._send_to_frontend({"type": "diagram", "data": payload})
+
+                    elif event_type == "complete":
+                        if not full_response and isinstance(payload, dict):
+                            full_response = self._repair_text_encoding(
+                                str(payload.get("full_response", "") or "")
+                            )
+                            if full_response and self.frontend_ws:
+                                await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
+                    elif event_type == "done":
+                        if isinstance(payload, dict):
+                            maybe_text = self._repair_text_encoding(
+                                str(payload.get("full_response", "") or payload.get("response", "") or "")
+                            )
+                            if maybe_text and not full_response:
+                                full_response = maybe_text
+                                if self.frontend_ws:
+                                    await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
+
+            await asyncio.wait_for(_consume_stream_events(), timeout=20.0)
+        except asyncio.TimeoutError:
+            stream_failed = True
+            fail_reason = "avatar llm timeout"
+            logger.warning(
+                "[Bridge] stream timeout user=%s session=%s text_len=%s",
+                self.user_id,
+                self.session_id,
+                len(user_text or ""),
+            )
+            if not full_response:
+                full_response = "我这边思考超时了，请你再说一遍，或把问题描述得更具体一点。"
                 if self.frontend_ws:
-                    await self._send_to_frontend({"type": "assistant_chunk", "content": content})
-
-            elif event_type == "tool_result":
-                if self.frontend_ws:
-                    await self._send_to_frontend({"type": "tool_result", "data": payload})
-
-            elif event_type == "tool_error":
-                if self.frontend_ws:
-                    await self._send_to_frontend({"type": "tool_error", "data": payload})
-
-            elif event_type == "diagram":
-                if self.frontend_ws:
-                    await self._send_to_frontend({"type": "diagram", "data": payload})
-
-            elif event_type == "complete":
-                if not full_response and isinstance(payload, dict):
-                    full_response = str(payload.get("full_response", "") or "")
-
-        logger.info("[Bridge] stream ended events=%d full_response_len=%d", event_count, len(full_response))
-
-        # 
-        if self.frontend_ws:
-            await self._send_to_frontend({"type": "assistant_complete"})
-
-        # ?
-        if full_response.strip() and self._avatar_controller and self.frontend_ws:
-            asyncio.create_task(self._avatar_controller.speak(full_response.strip()))
-
-        # 4. 
-        if full_response and self.frontend_ws:
-            await memory_layer.save_message(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                role="assistant",
-                content=full_response,
+                    await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
+        except asyncio.CancelledError:
+            stream_failed = True
+            fail_reason = "cancelled"
+            logger.info(
+                "[Bridge] stream cancelled user=%s session=%s",
+                self.user_id,
+                self.session_id,
+            )
+            raise
+        except Exception as exc:
+            stream_failed = True
+            fail_reason = str(exc)
+            logger.exception("[Bridge] stream failed user=%s session=%s", self.user_id, self.session_id)
+            if self.frontend_ws:
+                await self._send_to_frontend({"type": "error", "content": f"数字人回答失败: {fail_reason}"})
+        finally:
+            logger.info(
+                "[Bridge] stream ended events=%d full_response_len=%d failed=%s",
+                event_count,
+                len(full_response),
+                stream_failed,
             )
 
-        # 5. ?+ ?
-        if self.frontend_ws:
-            asyncio.create_task(self._post_avatar_pipeline(user_text, full_response))
+            # Always send completion marker when frontend socket is still alive.
+            if self.frontend_ws:
+                await self._send_to_frontend({"type": "assistant_complete"})
+
+            # ?
+            if full_response.strip() and self._avatar_controller:
+                logger.info(
+                    "[Bridge] trigger avatar speak len=%s ws_alive=%s",
+                    len(full_response.strip()),
+                    bool(self.frontend_ws),
+                )
+                asyncio.create_task(self._avatar_controller.speak(full_response.strip()))
+
+            # 4. 
+            if full_response:
+                await memory_layer.save_message(
+                    user_id=self.user_id,
+                    session_id=self.session_id,
+                    role="assistant",
+                    content=full_response,
+                )
+
+            # 5. ?+ ?
+            if self.frontend_ws:
+                asyncio.create_task(self._post_avatar_pipeline(user_text, full_response))
 
     async def _post_avatar_pipeline(self, user_msg: str, assistant_msg: str):
         """Run async memory/profile post-processing."""
         from app.memory import MemoryLayer
+        from app.chat.service import CHAT_MODULE_NAME
 
         if not self.session_id:
             return
 
         try:
-            await MemoryLayer(module_name="avatar").post_turn_pipeline(
+            await MemoryLayer(module_name=CHAT_MODULE_NAME).post_turn_pipeline(
                 user_id=self.user_id,
                 session_id=self.session_id,
                 user_message=user_msg,
@@ -642,13 +776,14 @@ class RealtimeBridge:
 
     async def _send_to_frontend(self, data: dict):
         """Send message to frontend websocket."""
-        if self.frontend_ws:
-            try:
-                await self.frontend_ws.send_json(data)
-            except Exception as e:
-                logger.error("[Bridge] ? %s", e)
-                # WebSocket ?
-                self.frontend_ws = None
+        if not self._frontend_ws_ready():
+            return
+        try:
+            await self.frontend_ws.send_json(data)
+        except Exception as e:
+            logger.error("[Bridge] send frontend failed: %s", e)
+            # WebSocket may already be closed/invalid
+            self.frontend_ws = None
 
     async def close(self):
         """Close bridge resources."""

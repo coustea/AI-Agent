@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import traceback
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -27,9 +29,15 @@ from sqlalchemy.exc import OperationalError, DBAPIError
 logger = get_logger(__name__)
 
 
+class _SuppressRtcCollectAccessFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/v1/logging/collect/list" not in record.getMessage()
+
+
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     setup_logging()
+    logging.getLogger("uvicorn.access").addFilter(_SuppressRtcCollectAccessFilter())
     logger.info("Application starting up")
 
     try:

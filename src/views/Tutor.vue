@@ -642,6 +642,7 @@ const {
   setPlayerContainer,
 } = useDigitalHuman({
   onAssistantChunk: (chunk) => {
+    startAvatarThinkingTimeout()
     if (isVoiceChatting.value && isVadListening.value) {
       stopVad()
       isRecording.value = false
@@ -665,6 +666,7 @@ const {
     scrollToBottom()
   },
   onAssistantComplete: () => {
+    clearAvatarThinkingTimeout()
     flushPendingStreamText(true)
     isAIThinking.value = false
     streamingMsgId.value = null
@@ -710,6 +712,11 @@ const {
     }
   },
   onError: (msg) => {
+    clearAvatarThinkingTimeout()
+    if (isAIThinking.value) {
+      isAIThinking.value = false
+      streamingMsgId.value = null
+    }
     ElMessage.error({ message: msg, plain: true })
   },
   onAvatarReady: () => {
@@ -736,6 +743,7 @@ const searchKeyword = ref('')
 const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
 let abortController: AbortController | null = null
+let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 
 const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
@@ -757,6 +765,24 @@ let dimTimer: number | null = null
 
 let diagramRenderSeq = 0
 const diagramSvgCache = ref<Map<string, string>>(new Map())
+
+const clearAvatarThinkingTimeout = () => {
+  if (avatarThinkingTimeout) {
+    clearTimeout(avatarThinkingTimeout)
+    avatarThinkingTimeout = null
+  }
+}
+
+const startAvatarThinkingTimeout = () => {
+  clearAvatarThinkingTimeout()
+  avatarThinkingTimeout = setTimeout(() => {
+    if (chatMode.value !== 'digital_human') return
+    if (!isAIThinking.value) return
+    isAIThinking.value = false
+    streamingMsgId.value = null
+    ElMessage.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
+  }, 30000)
+}
 
 let scrollPending = false
 let streamFlushHandle: number | null = null
@@ -1397,6 +1423,11 @@ const handleSend = async () => {
   if ((!text && !hasFiles) || isAIThinking.value) return
   const shouldGenerateDiagram = needDiagram.value
 
+  if (chatMode.value === 'digital_human' && !isAvatarConnected.value) {
+    ElMessage.warning({ message: '数字人连接已断开，请先点击“重新连接”后再发送', plain: true })
+    return
+  }
+
   if (!currentSessionId.value) {
     try {
       const res = await createSession()
@@ -1506,6 +1537,7 @@ const handleSend = async () => {
   streamingMsgId.value = aiMsgId
 
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
+    startAvatarThinkingTimeout()
     const aiMsg = messages.value.find(m => m.id === aiMsgId)
     if (aiMsg) {
       aiMsg.diagramGenerating = shouldGenerateDiagram
@@ -1641,6 +1673,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearAvatarThinkingTimeout()
   disconnectAvatar()
   flushPendingStreamText()
   abortController?.abort()

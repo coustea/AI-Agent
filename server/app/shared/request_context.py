@@ -22,8 +22,16 @@ def runtime_context(user_id: int, session_id: str | None = None) -> Iterator[Non
     try:
         yield
     finally:
-        _current_user_id.reset(user_token)
-        _current_session_id.reset(session_token)
+        # In some async-generator cancellation paths, reset can run in a
+        # different context; fail-safe cleanup avoids surfacing noisy errors.
+        try:
+            _current_user_id.reset(user_token)
+        except ValueError:
+            _current_user_id.set(None)
+        try:
+            _current_session_id.reset(session_token)
+        except ValueError:
+            _current_session_id.set(None)
 
 
 def get_current_user_id() -> int | None:
