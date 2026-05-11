@@ -1,7 +1,7 @@
 <template>
   <div class="elegant-generator-layout">
     <transition name="page-slide" mode="out-in">
-      
+
       <div v-if="currentPhase === 'input'" class="phase-view input-view" key="input">
         <div class="input-container">
           <div class="welcome-header">
@@ -27,10 +27,10 @@
               <div class="action-left">
                 <span class="ai-hint"><el-icon><Cpu /></el-icon> 多智能体协同，全自动构建个性化资源流</span>
               </div>
-              <el-button 
-                type="primary" 
-                class="generate-btn" 
-                round 
+              <el-button
+                type="primary"
+                class="generate-btn"
+                round
                 :disabled="!naturalInput.trim()"
                 @click="goToPersonalize"
               >
@@ -60,7 +60,7 @@
           </div>
 
           <div class="scenario-selector-v2">
-            <div 
+            <div
               v-for="s in [
                 { icon: '备', name: '考试备考', value: 'exam_prep' },
                 { icon: '学', name: '日常学习', value: 'daily_review' },
@@ -89,7 +89,7 @@
                   </div>
                   <span class="cc-title">{{ agent.name }}</span>
                 </div>
-                
+
                 <div class="cc-body-v2">
                   <template v-if="agent.id === 'content'">
                     <div class="ctrl-group">
@@ -660,7 +660,7 @@ import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  MagicStick, ArrowRight, Cpu, 
+  MagicStick, ArrowRight, Cpu,
   CircleCheckFilled, RefreshLeft, Position, VideoPlay,
   Document, Share, Monitor, Edit, Collection
 } from '@element-plus/icons-vue'
@@ -1144,7 +1144,7 @@ const startGeneration = async () => {
       output_options: { output_format: 'json' }
     },
     handleSseEvent,
-    () => { 
+    () => {
       if (!generationError.value && currentPhase.value === 'generating') {
         isGenerating.value = false
         setWorkflowStageStatus('completed', 'success')
@@ -1152,7 +1152,7 @@ const startGeneration = async () => {
         currentPhase.value = 'result'
       }
     },
-    (err: any) => { 
+    (err: any) => {
       generationError.value = err.message || '生成中断，请稍后重试'
       isGenerating.value = false
       markWorkflowFailed()
