@@ -132,9 +132,6 @@ async def load_user_profile(user_id: int) -> dict:
             user_data = {
                 "user_id": user.id,
                 "username": user.username,
-                "major": user.major,
-                "grade": user.grade,
-                "school": user.school,
             }
             logger.info("[Profile] 已读取用户基础信息: user_id=%s", user_id)
 
@@ -146,6 +143,15 @@ async def load_user_profile(user_id: int) -> dict:
         updated_at = profile_data.get("updated_at")
         if updated_at is not None:
             profile_data["updated_at"] = updated_at.isoformat()
+
+        # 从 profile_json.student_profile 提取 major/grade/school
+        profile_json = profile_data.get("profile_json") or {}
+        student_profile = profile_json.get("student_profile") or {}
+        if student_profile:
+            user_data["major"] = student_profile.get("major")
+            user_data["grade"] = student_profile.get("grade")
+            user_data["school"] = student_profile.get("school")
+
         logger.info("[Profile] 已读取用户画像: user_id=%s fields=%s", user_id, list(profile_data.keys()))
 
     return {"user_data": user_data, "profile_data": profile_data}

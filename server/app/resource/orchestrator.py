@@ -71,6 +71,7 @@ AGENT_CLASS_MAP = AGENT_CLASSES
 class WorkflowContext:
     """工作流执行上下文。"""
     task_id: str    # 任务 ID
+    user_id: int    # 用户 ID
     resource_id: int    # 资源ID
     profile: dict[str, Any] # 画像
     selected: list[str]
@@ -408,6 +409,7 @@ class ResourceWorkflow:
 
         return WorkflowContext(
             task_id=task_id,
+            user_id=user_id,
             resource_id=resource_id,
             profile=profile,
             selected=selected,
@@ -647,6 +649,7 @@ class ResourceWorkflow:
         _ = user_id, user_explicit_selection
         ctx = WorkflowContext(
             task_id=str(uuid4()),
+            user_id=user_id,
             resource_id=resource_id,
             profile=agent_context.get("learner_profile", {}),
             selected=request.enabled_agent_ids(),
@@ -673,7 +676,7 @@ class ResourceWorkflow:
             resources = list(result.resources)
         else:
             db_items = await self.store.list_resource_items(
-                user_id=ctx.resource_id,
+                user_id=ctx.user_id,
                 resource_id=ctx.resource_id,
             )
 
@@ -776,7 +779,7 @@ class ResourceWorkflow:
             },
         )
 
-        worker = agent_cls(ctx.resource_id, ctx.resource_id, emitter=self.emitter)
+        worker = agent_cls(ctx.user_id, ctx.resource_id, emitter=self.emitter)
         task_payload = {
             "learning_need": request.learning_need,
             "task_description": task.task_description,
@@ -797,7 +800,7 @@ class ResourceWorkflow:
         )
 
         state = WorkerState(
-            user_id=ctx.resource_id,
+            user_id=ctx.user_id,
             resource_id=ctx.resource_id,
             agent_name=agent_id,
             task=task_payload,
@@ -916,7 +919,7 @@ class ResourceWorkflow:
         """保存成功 Agent 的产物。"""
         item = self._make_resource(agent_id, result, task.depends_on, task)
         try:
-            saved = await self.store.save_resource_item(resource_id=ctx.resource_id, user_id=ctx.resource_id, item=item)
+            saved = await self.store.save_resource_item(resource_id=ctx.resource_id, user_id=ctx.user_id, item=item)
             if saved.id is not None:
                 item.id = str(saved.id)
             await self.emitter.emit_agent(

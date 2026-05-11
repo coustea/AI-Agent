@@ -379,6 +379,132 @@ class LearningEvent(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
+# Path — 学习路径规划
+# ---------------------------------------------------------------------------
+
+class LearningPath(SQLModel, table=True):
+    """学习路径表 — 保存用户的个性化学习路径规划。
+
+    一个用户在一个 module 下只有一条当前学习路径。
+    """
+    __tablename__ = "learning_paths"
+    __table_args__ = (
+        UniqueConstraint("user_id", "module", name="uq_learning_path_user_module"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    module: str = Field(default="mentor", index=True)
+
+    # 路径配置
+    learning_goal: str | None = Field(default=None, sa_column=Column(Text))
+    knowledge_level: str | None = Field(default=None, max_length=100)
+
+    # 进度信息
+    overall_progress: int = Field(default=0, ge=0, le=100)
+    current_stage_id: str | None = Field(default=None, max_length=50)
+    current_node_id: str | None = Field(default=None, max_length=50)
+
+    # 预估信息
+    eta_days: int = Field(default=14, ge=1)
+    confidence: int = Field(default=60, ge=0, le=100)
+
+    # 画像快照（生成路径时的画像状态）
+    profile_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+
+    # 版本与状态
+    version: int = Field(default=1)
+    is_active: bool = Field(default=True)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+
+
+class LearningPathNode(SQLModel, table=True):
+    """学习路径节点表 — 保存路径中每个节点的状态。
+
+    记录节点的进度、优先级、完成时间等信息。
+    """
+    __tablename__ = "learning_path_nodes"
+    __table_args__ = (
+        Index("ix_learning_path_nodes_path_stage", "path_id", "stage_id"),
+        Index("ix_learning_path_nodes_user_status", "user_id", "status"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    path_id: int = Field(index=True, foreign_key="learning_paths.id")
+    user_id: int = Field(index=True)
+
+    # 节点标识
+    node_id: str = Field(max_length=50, index=True)  # content, mindmap, quiz, etc.
+    stage_id: str = Field(max_length=50)  # foundation, enhancement, application
+    title: str = Field(max_length=200)
+
+    # 节点状态
+    status: str = Field(default="wait", max_length=20)  # wait, processing, success
+    progress: int = Field(default=0, ge=0, le=100)
+    priority: int = Field(default=50, ge=0, le=100)
+
+    # 推荐原因（基于画像维度的推荐理由）
+    recommendation_reason: str | None = Field(default=None, sa_column=Column(Text))
+
+    # 完成信息
+    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+
+    # 关联资源
+    resource_id: int | None = Field(default=None, index=True)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+
+
+class LearningPathAdjustment(SQLModel, table=True):
+    """学习路径调整记录表 — 记录路径的每次调整。
+
+    用于追踪路径变化历史和分析调整效果。
+    """
+    __tablename__ = "learning_path_adjustments"
+    __table_args__ = (
+        Index("ix_learning_path_adjustments_path_created", "path_id", "created_at"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    path_id: int = Field(index=True, foreign_key="learning_paths.id")
+    user_id: int = Field(index=True)
+
+    # 调整信息
+    adjustment_type: str = Field(max_length=50)  # feedback, progress, profile_update, manual
+    reason: str = Field(sa_column=Column(Text))
+
+    # 影响的节点
+    impacted_node_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+
+    # 调整前的状态快照
+    before_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+
+    # 调整后的状态快照
+    after_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+
+
+# ---------------------------------------------------------------------------
 # Model registration — init_db() 通过此元组获取所有需要建表的模型类
 # ---------------------------------------------------------------------------
 
@@ -393,6 +519,9 @@ REGISTERED_MODELS = (
     GeneratedResource,
     GeneratedResourceItem,
     LearningEvent,
+    LearningPath,
+    LearningPathNode,
+    LearningPathAdjustment,
     User,
 )
 

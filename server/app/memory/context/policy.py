@@ -1,18 +1,35 @@
-"""记忆上下文注入策略。
+"""上下文构建策略。
 
-该模块只做上下文选择与裁剪，不访问数据库、不调用 LLM。
+模块职责：
+- 定义上下文字符预算常量
+- 提供文本截断函数
+- 提供消息选择策略
+- 提供上下文渲染函数
+
+设计原则：
+- 该模块只做上下文选择与裁剪，不访问数据库、不调用 LLM
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
-RECENT_CHAT_MESSAGE_LIMIT = 10
-RECENT_CHAT_CONTEXT_CHAR_BUDGET = 700
-LONG_TERM_MEMORY_CHAR_BUDGET = 1600
-SUMMARY_CHAR_BUDGET = 900
 
-SUMMARY_RECALL_TRIGGERS = (
+# ---------------------------------------------------------------------------
+# 字符预算常量
+# ---------------------------------------------------------------------------
+
+RECENT_CHAT_MESSAGE_LIMIT: Final[int] = 10
+RECENT_CHAT_CONTEXT_CHAR_BUDGET: Final[int] = 700
+LONG_TERM_MEMORY_CHAR_BUDGET: Final[int] = 1600
+SUMMARY_CHAR_BUDGET: Final[int] = 900
+
+
+# ---------------------------------------------------------------------------
+# 触发器常量
+# ---------------------------------------------------------------------------
+
+SUMMARY_RECALL_TRIGGERS: Final[tuple[str, ...]] = (
     "之前",
     "前面",
     "刚才",
@@ -23,7 +40,7 @@ SUMMARY_RECALL_TRIGGERS = (
     "我们刚",
 )
 
-LONG_TERM_FIELD_TITLES = {
+LONG_TERM_FIELD_TITLES: Final[dict[str, str]] = {
     "corrections": "用户纠正记录",
     "interaction_rules": "交互规则",
     "learning_preferences": "学习偏好",
@@ -35,7 +52,7 @@ LONG_TERM_FIELD_TITLES = {
     "recent_important_changes": "最近重要变化",
 }
 
-LONG_TERM_FIELD_ORDER = (
+LONG_TERM_FIELD_ORDER: Final[tuple[str, ...]] = (
     "corrections",
     "interaction_rules",
     "learning_preferences",
@@ -48,18 +65,28 @@ LONG_TERM_FIELD_ORDER = (
 )
 
 
+# ---------------------------------------------------------------------------
+# 文本处理函数
+# ---------------------------------------------------------------------------
+
 def truncate_text(text: str, char_budget: int) -> str:
+    """截断文本到指定字符预算。"""
     if len(text) <= char_budget:
         return text
     return text[: max(char_budget - 3, 0)].rstrip() + "..."
 
 
 def should_include_session_summary(user_message: str) -> bool:
+    """判断是否应包含会话概要。"""
     normalized = (user_message or "").strip()
     if not normalized:
         return False
     return any(trigger in normalized for trigger in SUMMARY_RECALL_TRIGGERS)
 
+
+# ---------------------------------------------------------------------------
+# 消息选择策略
+# ---------------------------------------------------------------------------
 
 def _message_line(role: str, content: str) -> str:
     label = "用户" if role == "user" else "助手"
@@ -109,7 +136,12 @@ def select_recent_chat_messages(
     return list(reversed(selected))
 
 
-def render_recent_chat_context(messages: list[Any], *, char_budget: int = RECENT_CHAT_CONTEXT_CHAR_BUDGET) -> str:
+def render_recent_chat_context(
+    messages: list[Any],
+    *,
+    char_budget: int = RECENT_CHAT_CONTEXT_CHAR_BUDGET,
+) -> str:
+    """渲染近期对话上下文。"""
     lines = []
     for message in messages:
         role = getattr(message, "role", "")
@@ -118,6 +150,10 @@ def render_recent_chat_context(messages: list[Any], *, char_budget: int = RECENT
     context = "\n".join(lines)
     return truncate_text(context, char_budget) if context else "最近 7 天暂无历史对话。"
 
+
+# ---------------------------------------------------------------------------
+# 长期记忆渲染
+# ---------------------------------------------------------------------------
 
 def _append_with_budget(lines: list[str], addition: str, char_budget: int) -> bool:
     current = "\n".join(lines)
@@ -128,7 +164,12 @@ def _append_with_budget(lines: list[str], addition: str, char_budget: int) -> bo
     return True
 
 
-def render_priority_long_term_memory(memory_json: dict[str, Any], *, char_budget: int = LONG_TERM_MEMORY_CHAR_BUDGET) -> str:
+def render_priority_long_term_memory(
+    memory_json: dict[str, Any],
+    *,
+    char_budget: int = LONG_TERM_MEMORY_CHAR_BUDGET,
+) -> str:
+    """按优先级渲染长期记忆。"""
     if not memory_json:
         return "# 长期记忆\n\n暂无长期记忆信息。"
 

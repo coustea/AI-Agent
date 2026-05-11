@@ -490,38 +490,12 @@ class ConversationStore:
         Returns:
             生成的标题，失败返回 None。
         """
-        from langchain_core.messages import HumanMessage, SystemMessage
-        from app.infra.llm import get_llm_manager
-
-        try:
-            llm_manager = get_llm_manager()
-            prompt = f"""请根据用户的第一条消息生成一个简短的会话标题（10字以内）。
-
-用户消息：{first_message[:200]}
-
-要求：
-1. 标题要简洁，概括主题
-2. 不超过10个字
-3. 只输出标题，不要其他内容"""
-
-            response = await llm_manager.ainvoke(
-                "spark_x2_flash",
-                [
-                    SystemMessage(content="你是一个会话标题生成助手。"),
-                    HumanMessage(content=prompt),
-                ],
-                model_kwargs={"temperature": 0.3, "max_tokens": 20},
-            )
-            title = str(response.content).strip()
-            # 限制标题长度
-            if len(title) > 15:
-                title = title[:15]
-            # 更新数据库
-            await self.update_session_title(user_id, session_id, title, module_name)
-            return title
-        except Exception as e:
-            logger.warning("生成会话标题失败: %s", e)
-            return None
+        memory_layer = MemoryLayer(module=module_name)
+        return await memory_layer.generate_session_title(
+            user_id=user_id,
+            session_id=session_id,
+            first_message=first_message,
+        )
 
     async def get_history(
         self,
