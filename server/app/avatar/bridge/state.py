@@ -40,6 +40,8 @@ class MessageType:
     STOP_VAD = "stop_vad"
     SWITCH_SESSION = "switch_session"
     VAD_STATE = "vad_state"
+    SET_SPEECH_RATE = "set_speech_rate"
+    SET_NEED_DIAGRAM = "set_need_diagram"
 
     # Tool events
     TOOL_CALL_START = "tool_call_start"

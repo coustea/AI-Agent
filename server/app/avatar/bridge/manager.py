@@ -39,6 +39,8 @@ class RealtimeBridge:
         self._audio_chunk_counter = 0
         self._last_asr_text: str = ""
         self._last_asr_at: float = 0.0
+        self._speech_rate: float = 1.0
+        self._need_diagram_default: bool = False
 
     @staticmethod
     def _repair_text_encoding(text: str) -> str:
@@ -46,7 +48,8 @@ class RealtimeBridge:
         if not text:
             return text
         # Typical mojibake markers when UTF-8 text is mis-decoded as GBK.
-        if not re.search(r"[鎴浣鍙鐨勪簡璇疯锛銆闂棰]", text):
+        mojibake_pattern = r"[\u93b4\u6d63\u9359\u9427\u93c9\u3127\u746d\u7487\u8bd8\uE1EC\u8bf7\u951b\u9286\u95c2\u68f0]"
+        if not re.search(mojibake_pattern, text):
             return text
         candidates = [text]
         for src in ("gbk", "gb18030", "latin1"):
@@ -59,7 +62,7 @@ class RealtimeBridge:
         def score(s: str) -> int:
             good = len(re.findall(r"[\u4e00-\u9fff]", s))
             bad = s.count("�")
-            mojibake_hits = len(re.findall(r"[鎴浣鍙鐨勪簡璇疯锛銆闂棰]", s))
+            mojibake_hits = len(re.findall(mojibake_pattern, s))
             return good - bad - mojibake_hits
 
         return max(candidates, key=score)
@@ -120,6 +123,16 @@ class RealtimeBridge:
         self.frontend_ws = ws
         # Avoid reusing stale session id across different module pipelines.
         self.session_id = ""
+        # Handshake debug marker: helps verify frontend is connected to the expected backend build.
+        await self._send_to_frontend({
+            "type": "diagram_debug",
+            "data": {
+                "phase": "connected",
+                "version": "diagram_dbg_v4",
+                "need_diagram": self._need_diagram_default,
+                "diagram_generated": False,
+            },
+        })
 
         # 确保 AvatarController 已初始化
         try:
@@ -202,11 +215,30 @@ class RealtimeBridge:
         elif msg_type == MessageType.CLEAR_HISTORY:
             await self._handle_clear_history()
         elif msg_type == "start_vad":
+            if "need_diagram" in data:
+                self._handle_set_need_diagram(data)
             await self._handle_start_vad()
         elif msg_type == "stop_vad":
             await self._handle_stop_vad()
         elif msg_type == "switch_session":
             self.session_id = data.get("session_id", "")
+        elif msg_type == "set_speech_rate":
+            self._handle_set_speech_rate(data)
+        elif msg_type == "set_need_diagram":
+            self._handle_set_need_diagram(data)
+
+    def _handle_set_speech_rate(self, data: dict):
+        """Handle speech rate update from frontend."""
+        raw = data.get("speech_rate", 1.0)
+        try:
+            rate = float(raw)
+        except (TypeError, ValueError):
+            rate = 1.0
+        self._speech_rate = max(0.5, min(2.0, rate))
+
+    def _handle_set_need_diagram(self, data: dict):
+        """Handle default need_diagram flag for ASR-driven turns."""
+        self._need_diagram_default = bool(data.get("need_diagram", False))
 
     @staticmethod
     def _normalize_url_list(value) -> list[str]:
@@ -290,8 +322,12 @@ class RealtimeBridge:
         if not text:
             return
         logger.info("[Bridge] recv text_input len=%s", len(str(text)))
+        # Allow per-message speech rate override from frontend.
+        if "speech_rate" in data:
+            self._handle_set_speech_rate(data)
         image_urls, file_urls = self._extract_attachment_urls(data)
         need_diagram = bool(data.get("need_diagram", False))
+        self._need_diagram_default = need_diagram
         await self._handle_user_text(
             text,
             source="text",
@@ -468,7 +504,13 @@ class RealtimeBridge:
                         self._last_asr_at = now_ts
                         await self._send_to_frontend({"type": "asr_result", "content": normalized})
                         # Keep ASR loop responsive: do not block next round on LLM pipeline.
-                        asyncio.create_task(self._handle_user_text(normalized, source="asr"))
+                        asyncio.create_task(
+                            self._handle_user_text(
+                                normalized,
+                                source="text",
+                                need_diagram=self._need_diagram_default,
+                            )
+                        )
             else:
                 self._consecutive_empty += 1
 
@@ -628,6 +670,16 @@ class RealtimeBridge:
         event_count = 0
         stream_failed = False
         fail_reason = ""
+        last_diagram_payload = None
+        if self.frontend_ws:
+            await self._send_to_frontend({
+                "type": "diagram_debug",
+                "data": {
+                    "source": source,
+                    "need_diagram": bool(need_diagram),
+                    "phase": "start",
+                },
+            })
         try:
             async def _consume_stream_events():
                 nonlocal event_count, full_response
@@ -638,7 +690,6 @@ class RealtimeBridge:
                     image_urls=image_urls,
                     file_urls=file_urls,
                     need_diagram=need_diagram,
-                    input_source=source,
                 ):
                     event_count += 1
                     if not self.frontend_ws:
@@ -672,6 +723,7 @@ class RealtimeBridge:
                             await self._send_to_frontend({"type": "tool_error", "data": payload})
 
                     elif event_type == "diagram":
+                        last_diagram_payload = payload
                         if self.frontend_ws:
                             await self._send_to_frontend({"type": "diagram", "data": payload})
 
@@ -682,6 +734,11 @@ class RealtimeBridge:
                             )
                             if full_response and self.frontend_ws:
                                 await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
+                        if isinstance(payload, dict):
+                            diagram_payload = payload.get("diagram")
+                            if diagram_payload and self.frontend_ws:
+                                last_diagram_payload = diagram_payload
+                                await self._send_to_frontend({"type": "diagram", "data": diagram_payload})
                     elif event_type == "done":
                         if isinstance(payload, dict):
                             maybe_text = self._repair_text_encoding(
@@ -691,21 +748,19 @@ class RealtimeBridge:
                                 full_response = maybe_text
                                 if self.frontend_ws:
                                     await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
+                            resources = payload.get("resources")
+                            diagram_payload = None
+                            if isinstance(resources, dict):
+                                diagram_payload = resources.get("diagram")
+                            if not diagram_payload:
+                                diagram_payload = payload.get("diagram")
+                            if diagram_payload and self.frontend_ws:
+                                last_diagram_payload = diagram_payload
+                                await self._send_to_frontend({"type": "diagram", "data": diagram_payload})
 
-            await asyncio.wait_for(_consume_stream_events(), timeout=20.0)
-        except asyncio.TimeoutError:
-            stream_failed = True
-            fail_reason = "avatar llm timeout"
-            logger.warning(
-                "[Bridge] stream timeout user=%s session=%s text_len=%s",
-                self.user_id,
-                self.session_id,
-                len(user_text or ""),
-            )
-            if not full_response:
-                full_response = "我这边思考超时了，请你再说一遍，或把问题描述得更具体一点。"
-                if self.frontend_ws:
-                    await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
+            # Do not enforce a fixed timeout here.
+            # Long answers + diagram generation can legitimately exceed 60~120s.
+            await _consume_stream_events()
         except asyncio.CancelledError:
             stream_failed = True
             fail_reason = "cancelled"
@@ -731,6 +786,17 @@ class RealtimeBridge:
 
             # Always send completion marker when frontend socket is still alive.
             if self.frontend_ws:
+                if last_diagram_payload is not None:
+                    await self._send_to_frontend({"type": "diagram", "data": last_diagram_payload})
+                await self._send_to_frontend({
+                    "type": "diagram_debug",
+                    "data": {
+                        "source": source,
+                        "need_diagram": bool(need_diagram),
+                        "diagram_generated": bool(last_diagram_payload),
+                        "phase": "end",
+                    },
+                })
                 await self._send_to_frontend({"type": "assistant_complete"})
 
             # 4. 触发数字人播报
@@ -740,7 +806,12 @@ class RealtimeBridge:
                     len(full_response.strip()),
                     bool(self.frontend_ws),
                 )
-                asyncio.create_task(self._avatar_controller.speak(full_response.strip()))
+                asyncio.create_task(
+                    self._avatar_controller.speak(
+                        full_response.strip(),
+                        speech_rate=self._speech_rate,
+                    )
+                )
 
             # 4. 
             if full_response:

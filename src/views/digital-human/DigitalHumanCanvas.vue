@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="digital-human-canvas">
     <div ref="videoContainer" class="video-container"></div>
 

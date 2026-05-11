@@ -536,7 +536,11 @@ class AvatarAgent:
             # 决策是否需要图解
             decision = await self._decide_diagram(question=question, answer=answer, state=state)
             if not decision.need_diagram or not decision.diagram_type:
-                return {"diagram": None}
+                decision = DiagramDecision(
+                    need_diagram=True,
+                    diagram_type="flow",
+                    reason="forced_by_user_request",
+                )
 
             # 生成图解
             diagram = await self._generate_diagram_by_type(

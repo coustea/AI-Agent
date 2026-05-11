@@ -307,8 +307,9 @@ class TutorAgent:
                 )
                 text = normalize_message_content(getattr(response, "content", response))
             except Exception as exc:
-                logger.warning("[TutorAgent] direct_answer Spark MAX 调用失败 err=%s", exc)
+                logger.warning("[TutorAgent] direct_answer Spark MAX ?????? err=%s", exc)
                 text = ""
+
 
             # 无效回复重试
             if is_unusable_reply_text(text):
@@ -609,30 +610,20 @@ class TutorAgent:
         answer: str,
         state: TutorState,
     ) -> DiagramDecision:
-        """判断是否需要为最终回答补充结构化图解。
-
-        Args:
-            question: 用户问题。
-            answer: 最终回答。
-            state: LangGraph 状态。
-
-        Returns:
-            图解决策结果。
-        """
+        """Decide whether to generate a diagram for final answer."""
         requested = state.get("need_diagram")
-        # 用户未开启图解
         if requested is False:
             return DiagramDecision(
                 need_diagram=False,
                 diagram_type=None,
-                reason="用户未开启图解生成",
+                reason="diagram_disabled_by_user",
             )
 
         prompt = (
-            f"用户问题：\n{question}\n\n"
-            f"最终回答：\n{answer}\n\n"
-            f"用户是否主动要求图解：{bool(requested)}\n\n"
-            "请判断是否需要生成图解，并选择最合适的 diagram_type。"
+            f"User question:\n{question}\n\n"
+            f"Final answer:\n{answer}\n\n"
+            f"User explicitly requests diagram: {bool(requested)}\n\n"
+            "Decide whether to generate a diagram and choose the best diagram_type."
         )
 
         try:
@@ -643,31 +634,45 @@ class TutorAgent:
                     HumanMessage(content=prompt),
                 ],
             )
-            # 图解类型不受支持
+
+            # User explicitly requested diagram: force safe fallback if model says no/empty.
+            if requested is True and not decision.need_diagram:
+                return DiagramDecision(
+                    need_diagram=True,
+                    diagram_type=decision.diagram_type or "flow",
+                    reason=decision.reason or "forced_by_user_request",
+                )
+            if requested is True and not decision.diagram_type:
+                return DiagramDecision(
+                    need_diagram=True,
+                    diagram_type="flow",
+                    reason=decision.reason or "fallback_flow_for_requested_diagram",
+                )
+
             if decision.diagram_type not in DIAGRAM_MODEL_MAP:
                 if not decision.need_diagram:
                     return decision
                 return DiagramDecision(
                     need_diagram=False,
                     diagram_type=None,
-                    reason="图解类型不受支持",
+                    reason="diagram_type_not_supported",
                 )
-            # 用户显式要求图解但决策器判断不需要
-            if requested is True and not decision.need_diagram:
-                return DiagramDecision(
-                    need_diagram=True,
-                    diagram_type=decision.diagram_type,
-                    reason=decision.reason,
-                )
+
             if not decision.need_diagram:
                 return decision
             return decision
         except Exception as exc:
-            logger.warning("[TutorAgent] 图解决策失败: %s", exc)
+            logger.warning("[TutorAgent] diagram decision failed: %s", exc)
+            if requested is True:
+                return DiagramDecision(
+                    need_diagram=True,
+                    diagram_type="flow",
+                    reason="fallback_flow_after_decision_error",
+                )
             return DiagramDecision(
                 need_diagram=False,
                 diagram_type=None,
-                reason="图解决策失败",
+                reason="diagram_decision_failed",
             )
 
     async def _ainvoke_diagram_model(

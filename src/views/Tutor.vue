@@ -148,11 +148,16 @@
               @reconnect="handleAvatarReconnect"
           />
 
-          <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking || isVadListening }">
+          <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking || isVadListening || isAsrProcessing }">
             <div class="speech-wave" v-if="isAIThinking || isAvatarSpeaking">
               <span></span><span></span><span></span><span></span><span></span>
             </div>
+            <div class="asr-processing-dot" v-else-if="isAsrProcessing"></div>
+            <div class="listening-dot" v-else-if="isVadListening"></div>
             <div class="status-badge">{{ digitalHumanStatusText }}</div>
+            <div class="status-badge" style="margin-top:6px; font-size:11px; opacity:.78;">图解开关: {{ debugNeedDiagramEnabled ? 'ON' : 'OFF' }} | 图解回传: {{ debugDiagramReceivedAt ? 'YES' : 'NO' }}</div>
+            <div class="status-badge" style="margin-top:4px; font-size:11px; opacity:.78;">后端need_diagram: {{ debugBackendNeedDiagram === null ? '-' : (debugBackendNeedDiagram ? 'TRUE' : 'FALSE') }} | 后端diagram_generated: {{ debugBackendDiagramGenerated === null ? '-' : (debugBackendDiagramGenerated ? 'TRUE' : 'FALSE') }}</div>
+            <div class="status-badge" style="margin-top:4px; font-size:11px; opacity:.6;">WS: {{ avatarWsUrl || '-' }}</div>
           </div>
         </div>
 
@@ -215,7 +220,7 @@
                   <span>图解正在生成...</span>
                 </div>
 
-                <div v-if="msg.diagram" class="msg-diagram">
+                <div v-if="msg.diagram && !isLegacyFallbackDiagram(msg.diagram)" class="msg-diagram" @click="previewDiagram(msg.diagram)">
                   <div class="diagram-header">
                     <span class="diagram-title">{{ msg.diagram.title }}</span>
                     <span class="diagram-type-tag">{{ msg.diagram.type }}</span>
@@ -378,18 +383,22 @@
                   </button>
                 </el-tooltip>
 
-                <el-tooltip :content="isAIThinking ? '停止生成' : '发送问题'" placement="top" :show-after="500">
-                  <button
-                      class="send-btn"
-                      :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 || isAIThinking, 'is-stopping': isAIThinking }"
-                      @click="isAIThinking ? stopGeneration() : handleSend()"
-                  >
-                    <el-icon v-if="isAIThinking">
-                      <svg viewBox="0 0 24 24" width="1.2em" height="1.2em" fill="currentColor">
-                        <rect x="7" y="7" width="10" height="10" rx="2" />
-                      </svg>
-                    </el-icon>
-                    <el-icon v-else><Top /></el-icon>
+                <div v-if="chatMode === 'digital_human'" class="speech-rate-control">
+                  <span class="speech-rate-label">语速</span>
+                  <el-slider
+                    v-model="avatarSpeechRate"
+                    :min="0.5"
+                    :max="2"
+                    :step="0.1"
+                    :show-tooltip="false"
+                    @change="handleAvatarSpeechRateChange"
+                  />
+                  <span class="speech-rate-value">{{ avatarSpeechRate.toFixed(1) }}x</span>
+                </div>
+
+                <el-tooltip content="发送问题" placement="top" :show-after="500">
+                  <button class="send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend">
+                    <el-icon><Top /></el-icon>
                   </button>
                 </el-tooltip>
               </div>
@@ -589,6 +598,13 @@ interface DiagramData {
   }
   image_url?: string
 }
+
+const isLegacyFallbackDiagram = (diagram: DiagramData | null | undefined): boolean => {
+  if (!diagram) return false
+  const title = String(diagram.title || '')
+  return title.includes('语音图解（即时）') || title.includes('自动图解（兜底）')
+}
+
 interface ChatMsg {
   id: number
   role: 'user' | 'ai'
@@ -630,6 +646,11 @@ const hasToggledMedia = ref(false)
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
 const lastAsrText = ref('')
+const hasSpeechDetected = ref(false)
+const debugNeedDiagramEnabled = ref(false)
+const debugDiagramReceivedAt = ref(0)
+const debugBackendNeedDiagram = ref<boolean | null>(null)
+const debugBackendDiagramGenerated = ref<boolean | null>(null)
 const lastAsrCommittedText = ref('')
 let lastAsrCommitAt = 0
 
@@ -639,11 +660,15 @@ const {
   isAvatarReady,
   isSpeaking: isAvatarSpeaking,
   isListening: isVadListening,
+  wsUrl: avatarWsUrl,
   audioEnabled: avatarAudioEnabled,
+  speechRate: avatarSpeechRate,
   idleCountdown: avatarIdleCountdown,
   connect: connectAvatar,
   disconnect: disconnectAvatar,
   sendText: sendAvatarText,
+  setSpeechRate: setAvatarSpeechRate,
+  setNeedDiagram: setAvatarNeedDiagram,
   startVad,
   stopVad,
   stopSpeaking: stopAvatarSpeaking,
@@ -651,6 +676,7 @@ const {
   setPlayerContainer,
 } = useDigitalHuman({
   onAssistantChunk: (chunk) => {
+    clearAsrProcessing()
     startAvatarThinkingTimeout()
     if (isVoiceChatting.value && isVadListening.value) {
       stopVad()
@@ -667,31 +693,57 @@ const {
     }
   },
   onDiagram: (diagram) => {
-    if (!diagram || streamingMsgId.value === null) return
-    const aiMsg = messages.value.find(m => m.id === streamingMsgId.value)
+    if (!diagram) return
+    debugDiagramReceivedAt.value = Date.now()
+    debugBackendDiagramGenerated.value = true
+    const aiMsg = (
+      (streamingMsgId.value !== null
+        ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
+        : null)
+      || [...messages.value].reverse().find(m => m.role === 'ai')
+    )
     if (!aiMsg) return
     aiMsg.diagram = diagram as DiagramData
     aiMsg.diagramGenerating = false
     scrollToBottom()
   },
+  onDiagramDebug: (data) => {
+    if (!data) return
+    if (typeof data.need_diagram === 'boolean') {
+      debugBackendNeedDiagram.value = data.need_diagram
+    }
+    if (data.phase === 'end' && typeof data.diagram_generated === 'boolean') {
+      debugBackendDiagramGenerated.value = data.diagram_generated
+    }
+  },
   onAssistantComplete: () => {
     clearAvatarThinkingTimeout()
+    clearAsrProcessing()
     flushPendingStreamText(true)
+    const lastAiMsg = [...messages.value].reverse().find(m => m.role === 'ai')
+    if (lastAiMsg && lastAiMsg.diagramGenerating && !lastAiMsg.diagram) {
+      lastAiMsg.diagramGenerating = false
+    }
     isAIThinking.value = false
     streamingMsgId.value = null
     scheduleProfilePoll()
     if (isVoiceChatting.value && chatMode.value === 'digital_human' && isAvatarConnected.value) {
       window.setTimeout(async () => {
         if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
-        await startVad()
+        await startVad(needDiagram.value)
         isRecording.value = isVadListening.value
       }, 350)
     }
   },
   onAsrResult: (text) => {
+    if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
+      setAvatarNeedDiagram(needDiagram.value)
+      debugNeedDiagramEnabled.value = needDiagram.value
+    }
     const normalized = text.replace(/\s+/g, ' ').trim()
     lastAsrText.value = normalized
     if (normalized) {
+      startAsrProcessing(6000)
       const nowTs = Date.now()
       const isDup = normalized === lastAsrCommittedText.value
       const isNearDup = normalized.includes(lastAsrCommittedText.value) || lastAsrCommittedText.value.includes(normalized)
@@ -710,6 +762,12 @@ const {
         messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
         streamingMsgId.value = aiMsgId
       }
+      if (needDiagram.value) {
+        const aiMsg = streamingMsgId.value !== null
+          ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
+          : null
+        if (aiMsg) aiMsg.diagramGenerating = true
+      }
       isAIThinking.value = true
       scrollToBottom()
     }
@@ -717,11 +775,22 @@ const {
   onVadStateChange: (listening) => {
     isRecording.value = listening
     if (!listening) {
-      lastAsrText.value = ''
+      hasSpeechDetected.value = false
+      if (chatMode.value === 'digital_human' && isVoiceChatting.value) {
+        startAsrProcessing(8000)
+      } else {
+        lastAsrText.value = ''
+        clearAsrProcessing()
+      }
     }
+  },
+  onSpeechDetectedChange: (detected) => {
+    hasSpeechDetected.value = detected
   },
   onError: (msg) => {
     clearAvatarThinkingTimeout()
+    clearAsrProcessing()
+    stopDiagramGeneratingForCurrentAi()
     if (isAIThinking.value) {
       isAIThinking.value = false
       streamingMsgId.value = null
@@ -753,6 +822,8 @@ const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
 let abortController: AbortController | null = null
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
+const isAsrProcessing = ref(false)
+let asrProcessingTimer: ReturnType<typeof setTimeout> | null = null
 
 const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
@@ -782,12 +853,42 @@ const clearAvatarThinkingTimeout = () => {
   }
 }
 
+const stopDiagramGeneratingForCurrentAi = () => {
+  const target = (
+    (streamingMsgId.value !== null
+      ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
+      : null)
+    || [...messages.value].reverse().find(m => m.role === 'ai')
+  )
+  if (target) {
+    target.diagramGenerating = false
+  }
+}
+
+const clearAsrProcessing = () => {
+  isAsrProcessing.value = false
+  if (asrProcessingTimer) {
+    clearTimeout(asrProcessingTimer)
+    asrProcessingTimer = null
+  }
+}
+
+const startAsrProcessing = (timeoutMs = 6000) => {
+  isAsrProcessing.value = true
+  if (asrProcessingTimer) clearTimeout(asrProcessingTimer)
+  asrProcessingTimer = setTimeout(() => {
+    isAsrProcessing.value = false
+    asrProcessingTimer = null
+  }, timeoutMs)
+}
+
 const startAvatarThinkingTimeout = () => {
   clearAvatarThinkingTimeout()
   avatarThinkingTimeout = setTimeout(() => {
     if (chatMode.value !== 'digital_human') return
     if (!isAIThinking.value) return
     isAIThinking.value = false
+    stopDiagramGeneratingForCurrentAi()
     streamingMsgId.value = null
     ElMessage.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
   }, 30000)
@@ -818,13 +919,21 @@ const showThinkingIndicator = computed(() => {
 })
 
 const isStreamingMessage = (msg: ChatMsg) => msg.id === streamingMsgId.value && isAIThinking.value
+type VoiceAsrStage = 'idle' | 'no_voice' | 'heard_voice' | 'transcribing'
+const voiceAsrStage = computed<VoiceAsrStage>(() => {
+  if (isAIThinking.value || isAvatarSpeaking.value) return 'idle'
+  if (isAsrProcessing.value) return 'transcribing'
+  if (isVadListening.value) {
+    return hasSpeechDetected.value ? 'heard_voice' : 'no_voice'
+  }
+  return 'idle'
+})
+
 const digitalHumanStatusText = computed(() => {
   if (isAIThinking.value || isAvatarSpeaking.value) return '正在多模态解答中...'
-  if (isVadListening.value && lastAsrText.value) {
-    const preview = lastAsrText.value.length > 36 ? `${lastAsrText.value.slice(0, 36)}...` : lastAsrText.value
-    return `识别中：${preview}`
-  }
-  if (isVadListening.value) return '正在识别语音...'
+  if (voiceAsrStage.value === 'no_voice') return '未识别到声音'
+  if (voiceAsrStage.value === 'heard_voice') return '已识别到声音'
+  if (voiceAsrStage.value === 'transcribing') return '正在转文字'
   return '倾听就绪'
 })
 
@@ -1095,7 +1204,17 @@ const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
   if (diagramSvgCache.value.has(cacheKey)) {
     return diagramSvgCache.value.get(cacheKey)!
   }
-  const svg = await renderMermaid(diagram.render.source)
+  let svg = ''
+  try {
+    svg = await renderMermaid(diagram.render.source)
+  } catch (err) {
+    console.warn('[Diagram] Mermaid render failed, fallback to source preview:', err)
+    const escaped = diagram.render.source
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+    svg = `<pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;padding:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">${escaped}</pre>`
+  }
   diagramSvgCache.value.set(cacheKey, svg)
   diagramSvgCache.value = new Map(diagramSvgCache.value)
   scrollToBottom()
@@ -1304,7 +1423,7 @@ const switchSession = async (sessionId: string) => {
   try {
     const res = await getChatHistory(sessionId)
     const history = res.data.data || []
-    messages.value = history.map((msg, i) => ({
+    const mapped = history.map((msg, i) => ({
       id: Date.now() + i,
       role: msg.role === 'assistant' ? 'ai' as const : msg.role as 'user' | 'ai',
       content: msg.content,
@@ -1312,6 +1431,12 @@ const switchSession = async (sessionId: string) => {
       attachments: msg.attachments || null,
       illustrations: [],
     }))
+    // 防止刷新后历史中相邻重复消息导致双排显示
+    messages.value = mapped.filter((item, idx) => {
+      if (idx === 0) return true
+      const prev = mapped[idx - 1]
+      return !(prev && prev.role === item.role && prev.content === item.content)
+    })
   } catch (err) {
     ElMessage.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
   }
@@ -1379,9 +1504,12 @@ const handleVoiceToggle = async () => {
     if (isVadListening.value) {
       stopVad()
       isRecording.value = false
+      hasSpeechDetected.value = true
+      startAsrProcessing(8000)
     } else {
-      await startVad()
+      await startVad(needDiagram.value)
       isRecording.value = isVadListening.value
+      clearAsrProcessing()
     }
     return
   }
@@ -1404,7 +1532,7 @@ const handleVoiceChatToggle = async () => {
         setPlayerContainer(container)
       }
     })
-    await startVad()
+    await startVad(needDiagram.value)
     isRecording.value = isVadListening.value
     ElMessage.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
@@ -1418,12 +1546,17 @@ const handleVoiceChatToggle = async () => {
 const handleAvatarReconnect = async () => {
   disconnectAvatar()
   await connectAvatar()
+  setAvatarSpeechRate(avatarSpeechRate.value)
   nextTick(() => {
     const container = canvasRef.value?.getContainer()
     if (container) {
       setPlayerContainer(container)
     }
   })
+}
+
+const handleAvatarSpeechRateChange = (val: number) => {
+  setAvatarSpeechRate(val)
 }
 
 const stopGeneration = () => {
@@ -1576,6 +1709,7 @@ const handleSend = async () => {
       need_diagram: shouldGenerateDiagram,
       image_urls: imageUrls.length > 0 ? imageUrls : undefined,
       file_urls: fileUrls.length > 0 ? fileUrls : undefined,
+      speech_rate: avatarSpeechRate.value,
     })
     return
   }
@@ -1617,6 +1751,7 @@ const handleSend = async () => {
             aiMsg.content = `Generate failed: ${err.message}`
           }
         }
+        stopDiagramGeneratingForCurrentAi()
         isAIThinking.value = false
         streamingMsgId.value = null
         abortController = null
@@ -1663,6 +1798,7 @@ watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
     sessionSidebarCollapsed.value = true
     await connectAvatar()
+    setAvatarNeedDiagram(needDiagram.value)
     nextTick(() => {
       const container = canvasRef.value?.getContainer()
       if (container) {
@@ -1672,6 +1808,13 @@ watch(chatMode, async (newMode) => {
   } else if (newMode === 'standard') {
     sessionSidebarCollapsed.value = false
     disconnectAvatar()
+  }
+})
+
+watch(needDiagram, (enabled) => {
+  debugNeedDiagramEnabled.value = enabled
+  if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
+    setAvatarNeedDiagram(enabled)
   }
 })
 
@@ -2237,6 +2380,37 @@ onBeforeUnmount(() => {
   animation-delay: 0.2s;
 }
 
+.listening-dot,
+.asr-processing-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.listening-dot {
+  background: #0EA5E9;
+  box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.45);
+  animation: listening-pulse 1.4s infinite;
+}
+
+.asr-processing-dot {
+  background: #F59E0B;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.42);
+  animation: processing-pulse 1s infinite;
+}
+
+@keyframes listening-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.45); }
+  70% { box-shadow: 0 0 0 10px rgba(14, 165, 233, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+}
+
+@keyframes processing-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.42); transform: scale(1); }
+  60% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); transform: scale(1.08); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); transform: scale(1); }
+}
+
 @keyframes wave-anim {
   0%, 100% {
     height: 8px;
@@ -2737,6 +2911,32 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.speech-rate-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 150px;
+  padding: 0 4px;
+}
+
+.speech-rate-label {
+  font-size: 12px;
+  color: #64748B;
+  white-space: nowrap;
+}
+
+.speech-rate-value {
+  font-size: 12px;
+  color: #334155;
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.speech-rate-control :deep(.el-slider) {
+  width: 78px;
 }
 
 .input-wrapper.is-expanded {
@@ -3525,3 +3725,4 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 </style>
+
