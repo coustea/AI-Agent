@@ -150,7 +150,7 @@ class AvatarController:
             logger.error(f"Failed to receive avatar messages: {e}", exc_info=True)
             raise RuntimeError(f"Failed to receive avatar messages: {e}")
 
-    async def speak(self, text: str):
+    async def speak(self, text: str, speech_rate: float = 1.0):
         """
         Queue text for avatar to speak (non-blocking).
 
@@ -162,7 +162,8 @@ class AvatarController:
             return
 
         # Add to queue (even if not ready, wait for reconnection)
-        await self.sentence_queue.put(text)
+        safe_rate = max(0.5, min(2.0, float(speech_rate)))
+        await self.sentence_queue.put((text, safe_rate))
         logger.debug(f"Sentence queued: {text[:30]}... (queue size: {self.sentence_queue.qsize()})")
 
         # If not ready, wait for reconnection
@@ -179,8 +180,8 @@ class AvatarController:
         logger.info("Starting to process sentence queue")
 
         while not self.sentence_queue.empty():
-            sentence = await self.sentence_queue.get()
-            success = await self._speak_with_retry(sentence)
+            sentence, speech_rate = await self.sentence_queue.get()
+            success = await self._speak_with_retry(sentence, speech_rate)
 
             if not success:
                 logger.error(f"Sentence failed after {self.MAX_RETRIES} retries: {sentence[:30]}...")
@@ -208,7 +209,7 @@ class AvatarController:
 
         logger.info("Sentence queue processing completed")
 
-    async def _speak_with_retry(self, text: str) -> bool:
+    async def _speak_with_retry(self, text: str, speech_rate: float = 1.0) -> bool:
         """
         Speak with retry mechanism (internal method).
 
@@ -220,7 +221,7 @@ class AvatarController:
         """
         for attempt in range(self.MAX_RETRIES):
             try:
-                await self._speak_immediate(text)
+                await self._speak_immediate(text, speech_rate)
                 return True
             except Exception as e:
                 logger.warning(f"Speech failed (attempt {attempt + 1}/{self.MAX_RETRIES}): {e}")
@@ -229,7 +230,7 @@ class AvatarController:
 
         return False
 
-    async def _speak_immediate(self, text: str):
+    async def _speak_immediate(self, text: str, speech_rate: float = 1.0):
         """
         Send speech command immediately (internal method with connection check).
 
@@ -252,7 +253,7 @@ class AvatarController:
                 "ctrl": "text_driver"
             },
             "parameter": {
-                "tts": {"vcn": VCN},
+                "tts": {"vcn": VCN, "speed": int(max(0.5, min(2.0, speech_rate)) * 50)},
                 "avatar_dispatch": {"interactive_mode": 1}  # Enable interactive mode (gesture linkage)
             },
             "payload": {
