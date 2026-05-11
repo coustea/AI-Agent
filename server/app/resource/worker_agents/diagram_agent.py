@@ -202,7 +202,7 @@ class DiagramAgent:
 
             if not mermaid_source:
                 return WorkerResult(success=False, error="图解生成失败")
-
+            logger.info("[DiagramAgent] 知识图解生成完毕!!!")
             await self._emit_action(
                 state,
                 "finalize_output",

@@ -108,6 +108,7 @@ class ContentAgent:
                 [HumanMessage(content=f"{prompt}\n\n{input_text}")],
                 model_kwargs={"temperature": 0.3},
             )
+            logger.info("[ContentAgent] 讲解内容生成完毕!!!")
             content = response.content if hasattr(response, "content") else str(response)
             content = self._clean_content(content)
 
@@ -150,11 +151,11 @@ class ContentAgent:
             return self.prompt_path.read_text(encoding="utf-8")
         return """你是一位专业的教育内容创作者。请根据给定的主题和知识点，生成一份清晰、专业的讲解文档。
 
-要求：
-1. 内容结构清晰，使用 Markdown 格式
-2. 包含概念解释、示例、注意事项
-3. 字数控制在 1500-3000 字
-4. 使用中文撰写"""
+        要求：
+        1. 内容结构清晰，使用 Markdown 格式
+        2. 包含概念解释、示例、注意事项
+        3. 字数控制在 1500-3000 字
+        4. 使用中文撰写"""
 
     async def _build_input(self, state: WorkerState) -> str:
         """构建输入文本。"""
