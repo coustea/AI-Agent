@@ -1,20 +1,23 @@
-# 数字人互动模式
+﻿# 数字人互动模式
 
-此目录为数字人互动功能的占位实现，用于未来集成。
+此目录用于数字人互动功能集成，包含前端播放器画布组件与控制逻辑。
 
-## 预期集成
+## 目录说明
 
-- **DigitalHumanCanvas.vue** - 数字人 3D 渲染画布组件
-- **useDigitalHuman.ts** - 数字人控制 Composable
+- **DigitalHumanCanvas.vue** - 数字人视频渲染容器与连接状态 UI
+- **useDigitalHuman.ts** - 数字人连接、消息协议、语音输入与播放器控制 Composable
 
-## 未来技术选型
+## 已实现能力
 
-- TTS: 文本转语音服务（如阿里云、讯飞、Edge TTS）
-- 唇形同步: 基于 Viseme 映射驱动面部动画
-- 3D 渲染: Three.js / Unreal MetaHuman / 开源数字人方案
-- 语音识别: Web Speech API 或第三方 ASR 服务
+- WebSocket 连接数字人桥接服务（`/ws/avatar`）
+- 接收 `stream_info` 并初始化 RTCPlayer 播放
+- 文本输入驱动数字人对话
+- 麦克风采集 + VAD 音频分片上传
+- 会话历史清空、停止播报、断线重连
 
-## 当前状态
+## 后续可扩展方向
 
-Tutor.vue 中已包含数字人模式的 UI 框架（头像展示、语音波形动画、状态标识）。
-此目录的组件将在实际数字人服务接入后替换占位内容。
+- TTS 声线和情感参数可配置
+- Viseme/表情驱动联动
+- 3D 数字人渲染引擎替换（如 Three.js / MetaHuman）
+- 多角色数字人切换

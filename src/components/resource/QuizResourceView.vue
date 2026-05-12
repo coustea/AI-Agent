@@ -5,7 +5,7 @@
 
         <div class="frame-header">
           <div class="status-indicator"></div>
-          <span class="technical-label">TECHNICAL_QUIZ // MODULE_{{ (index + 1).toString().padStart(2, '0') }}</span>
+          <span class="technical-label">技术练习 // 模块_{{ (index + 1).toString().padStart(2, '0') }}</span>
         </div>
 
         <div class="quiz-stem">
@@ -60,7 +60,7 @@
               @click="showAnswers[index] = true" 
               :disabled="isChoiceType(question) && !hasSelected(index)"
             >
-              {{ isChoiceType(question) ? 'EXECUTE: SUBMIT' : 'EXECUTE: REVEAL_ANALYSIS' }}
+              {{ isChoiceType(question) ? '提交答案' : '查看解析' }}
             </button>
           </div>
         </div>

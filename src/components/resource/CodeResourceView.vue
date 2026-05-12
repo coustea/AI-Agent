@@ -4,7 +4,7 @@
 
       <div class="frame-header">
         <div class="status-indicator"></div>
-        <span class="technical-label">CODE_ARTIFACT // {{ (parsedData?.language || 'TEXT').toUpperCase() }} // REV_4.0</span>
+        <span class="technical-label">代码资源 // {{ (parsedData?.language || 'TEXT').toUpperCase() }} // 版本_4.0</span>
       </div>
 
       <!-- 顶部信息栏：简述 -->
@@ -28,23 +28,23 @@
       <!-- 底部辅助信息：复杂度、运行步骤、练习等 -->
       <div v-if="!compact && hasExtraInfo" class="code-footer-extras">
         <div class="footer-divider">
-          <span class="divider-label">IMPLEMENTATION_METRICS</span>
+          <span class="divider-label">实现指标</span>
           <div class="divider-line"></div>
         </div>
         
         <div class="extras-grid">
           <!-- 复杂度 -->
           <div v-if="hasComplexity" class="extra-item complexity-info">
-            <div class="extra-label"><el-icon><Timer /></el-icon> COMPLEXITY_ANALYSIS</div>
+            <div class="extra-label"><el-icon><Timer /></el-icon> 复杂度分析</div>
             <div class="extra-content">
-              <span v-if="parsedData.complexity.time">TIME: <code>{{ parsedData.complexity.time }}</code></span>
-              <span v-if="parsedData.complexity.space" class="ml-4">SPACE: <code>{{ parsedData.complexity.space }}</code></span>
+              <span v-if="parsedData.complexity.time">时间: <code>{{ parsedData.complexity.time }}</code></span>
+              <span v-if="parsedData.complexity.space" class="ml-4">空间: <code>{{ parsedData.complexity.space }}</code></span>
             </div>
           </div>
 
           <!-- 避坑指南 -->
           <div v-if="parsedData.debug_tips?.length" class="extra-item tips-info">
-            <div class="extra-label"><el-icon><Warning /></el-icon> DEBUG_PROTOCOLS</div>
+            <div class="extra-label"><el-icon><Warning /></el-icon> 调试建议</div>
             <ul class="tips-list">
               <li v-for="(tip, idx) in parsedData.debug_tips" :key="idx">{{ tip }}</li>
             </ul>
@@ -53,7 +53,7 @@
 
         <!-- 扩展练习 -->
         <div v-if="parsedData.exercises?.length" class="extra-item exercises-info">
-          <div class="extra-label"><el-icon><EditPen /></el-icon> DRILL_SEQUENCE</div>
+          <div class="extra-label"><el-icon><EditPen /></el-icon> 练习序列</div>
           <div class="exercises-container">
             <div v-for="(ex, idx) in parsedData.exercises" :key="idx" class="exercise-item">
               <span class="ex-num">{{ (Number(idx) + 1).toString().padStart(2, '0') }}</span>
@@ -64,7 +64,7 @@
       </div>
 
       <div class="frame-footer">
-        <span class="mono-tag">READY_TO_EXECUTE</span>
+        <span class="mono-tag">可执行</span>
         <div class="footer-line"></div>
       </div>
     </div>
@@ -72,7 +72,7 @@
     <div v-else class="code-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
-        <p>NO_CODE_SOURCE_DETECTED</p>
+        <p>未检测到代码内容</p>
       </div>
     </div>
   </div>

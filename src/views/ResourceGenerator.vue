@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="elegant-generator-layout">
     <transition name="page-slide" mode="out-in">
 
@@ -367,10 +367,11 @@
             </div>
             <div v-if="generatedResources.length" class="generated-resource-grid">
               <article
-                v-for="resource in sortedGeneratedResources"
+                v-for="(resource, index) in sortedGeneratedResources"
                 :key="resource.id || resource.type"
                 class="generated-resource-card"
                 :class="getResourceToneClass(resource.type)"
+                :style="getGeneratedCardGridStyle(index, sortedGeneratedResources.length)"
                 role="button"
                 tabindex="0"
                 @click="previewGeneratedResource(resource)"
@@ -429,16 +430,6 @@
               <span>GEN_COMPLETE</span>
             </div>
             <h1 class="hero-title">{{ finalBundle?.title || '个性化学习资源已就绪' }}</h1>
-            <div class="hero-context-pills">
-              <div class="context-pill">
-                <span class="pill-label">TOPIC</span>
-                <span class="pill-value">{{ resultTopicSummary }}</span>
-              </div>
-              <div class="context-pill">
-                <span class="pill-label">NEED</span>
-                <span class="pill-value">{{ resultNeedSummary }}</span>
-              </div>
-            </div>
           </div>
           <div class="hero-actions">
             <el-button plain round @click="resetGenerator" class="action-btn">
@@ -506,10 +497,11 @@
 
               <div class="bento-resource-grid">
                 <article
-                  v-for="res in group.resources"
+                  v-for="(res, index) in group.resources"
                   :key="res.id || res.title"
                   class="bento-res-card"
                   :class="getResourceToneClass(res.type)"
+                  :style="getBentoCardGridStyle(index, group.resources.length)"
                 >
                   <div class="card-header">
                     <div class="type-icon-box">
@@ -637,7 +629,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -837,6 +829,7 @@ const agentDetailVisible = ref(false)
 const flowEventBubbles = ref<FlowEventBubble[]>([])
 const agentDisplayCounter = ref(0)
 const resourceDisplayCounter = ref(0)
+const USE_FIXED_RESULT_PAGE = false
 
 const createWorkflowStages = (): WorkflowStage[] => [
   { key: 'planning', label: 'MasterAgent 规划', status: 'pending' },
@@ -1167,6 +1160,34 @@ const sortedGeneratedResources = computed(() => {
   })
 })
 
+const getGeneratedCardGridStyle = (index: number, total: number) => {
+  const baseCols = 4
+  const totalRows = Math.ceil(total / baseCols)
+  const rowIndex = Math.floor(index / baseCols)
+  const isLastRow = rowIndex === totalRows - 1
+  if (!isLastRow) return {}
+
+  const remainder = total % baseCols
+  if (remainder === 0) return {}
+
+  const spanMap: Record<number, number> = { 1: 12, 2: 6, 3: 4 }
+  return { gridColumn: `span ${spanMap[remainder] || 3}` }
+}
+
+const getBentoCardGridStyle = (index: number, total: number) => {
+  const baseCols = 4
+  const totalRows = Math.ceil(total / baseCols)
+  const rowIndex = Math.floor(index / baseCols)
+  const isLastRow = rowIndex === totalRows - 1
+  if (!isLastRow) return {}
+
+  const remainder = total % baseCols
+  if (remainder === 0) return {}
+
+  const spanMap: Record<number, number> = { 1: 12, 2: 6, 3: 4 }
+  return { gridColumn: `span ${spanMap[remainder] || 3}` }
+}
+
 // 预览运行中已生成的单个资源
 const previewGeneratedResource = (resource: any) => {
   handlePreview({
@@ -1190,6 +1211,10 @@ const groupedResultResources = computed(() => {
 })
 
 const startGeneration = async () => {
+  if (USE_FIXED_RESULT_PAGE) {
+    applyFixedResultPage()
+    return
+  }
   currentPhase.value = 'generating'
   resetGenerationState()
   isGenerating.value = true
@@ -1228,6 +1253,112 @@ const startGeneration = async () => {
       ElMessage.error(generationError.value || '生成中断，请稍后重试')
     }
   )
+}
+
+const applyFixedResultPage = () => {
+  const now = new Date().toISOString()
+  resetGenerationState()
+  totalProgress.value = 100
+  currentPhase.value = 'result'
+  currentMessage.value = '固定结果页模式已加载（仅用于页面调试）'
+  setWorkflowStageStatus('completed', 'success')
+
+  naturalInput.value = '复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题'
+
+  const mockResources: GeneratedResourceItem[] = [
+    {
+      id: 'mock-content-tcp-handshake',
+      type: 'content',
+      title: 'TCP三次握手高频考点速讲',
+      summary: '从为什么不是两次或四次出发，覆盖SYN/ACK语义、半连接队列、旧连接报文干扰与RST处理。',
+      format: 'Markdown',
+      metadata: { difficulty: 'intermediate', estimated_time: '12-18 分钟' },
+      content: { title: 'TCP三次握手高频考点速讲', markdown: '# TCP 三次握手...' },
+    },
+    {
+      id: 'mock-mindmap-tcp-handshake',
+      type: 'mindmap',
+      title: 'TCP三次握手思维导图（复习版）',
+      summary: '按目的、流程、状态、常见陷阱、面试追问组织，适合考前快速回忆。',
+      format: 'Markdown / Tree',
+      metadata: { difficulty: 'intermediate', estimated_time: '6-10 分钟' },
+      content: { title: 'TCP三次握手思维导图', markdown: '# TCP 三次握手思维导图...' },
+    },
+    {
+      id: 'mock-diagram-tcp-sequence',
+      type: 'diagram',
+      title: 'TCP三次握手时序图（含异常分支）',
+      summary: '主干流程 + 丢包重传 + SYN Flood 防护标注，适合按时序线复盘每个状态迁移。',
+      format: 'Diagram Source',
+      metadata: { difficulty: 'advanced', estimated_time: '10-15 分钟' },
+      content: {
+        title: 'TCP三次握手时序图',
+        diagram_type: 'sequence',
+        mermaid: `sequenceDiagram
+participant C as Client
+participant S as Server
+C->>S: SYN(seq=x)
+S->>C: SYN+ACK(seq=y, ack=x+1)
+C->>S: ACK(ack=y+1)
+Note over C,S: Connection Established`,
+      },
+    },
+    {
+      id: 'mock-code-tcp',
+      type: 'code',
+      title: 'TCP握手抓包分析代码模板',
+      summary: '提供抓包字段解析模板，帮助定位重传、乱序和异常握手。',
+      format: 'Code',
+      metadata: { difficulty: 'intermediate', estimated_time: '15-20 分钟' },
+      content: { title: 'TCP抓包分析模板', code: 'print("tcp handshake analyzer")', language: 'python' },
+    },
+    {
+      id: 'mock-quiz-tcp-hard',
+      type: 'quiz',
+      title: 'TCP三次握手难题自测（8题）',
+      summary: '偏难题，覆盖半连接队列、SYN Cookie、抓包字段分析与故障定位。',
+      format: 'Quiz JSON',
+      metadata: { difficulty: 'hard', estimated_time: '18-25 分钟' },
+      content: {
+        title: 'TCP三次握手难题自测',
+        questions: [
+          { question_type: 'single_choice', stem: '为何第三次握手必要？', options: ['确认双向收发', '减少带宽', '避免拥塞', '提高吞吐'], answer: '确认双向收发' },
+        ],
+      },
+    },
+    {
+      id: 'mock-reading-tcp-extend',
+      type: 'reading',
+      title: 'TCP握手扩展阅读清单',
+      summary: '延伸到拥塞控制初始化、Fast Open、SYN Cookie 实现细节，便于深挖。',
+      format: 'Reading List',
+      metadata: { difficulty: 'advanced', estimated_time: '25-35 分钟' },
+      content: {
+        summary: '建议先完成时序图与难题，再扩展阅读。',
+        resources: [
+          { title: 'RFC 793 / RFC 9293 handshake sections', type: 'documentation' },
+          { title: 'SYN Flood defense and SYN Cookie notes', type: 'article' },
+        ],
+      },
+    },
+  ]
+
+  generatedResources.value = mockResources.map((item, index) => ({
+    ...item,
+    generatedAt: now,
+    displayOrder: index + 1,
+  }))
+
+  finalBundle.value = {
+    topic: naturalInput.value,
+    gap: naturalInput.value,
+    resources: generatedResources.value,
+    metadata: {
+      topic: naturalInput.value,
+      gap: naturalInput.value,
+      course: '计算机网络',
+    },
+  }
 }
 
 const resetGenerationState = () => {
@@ -1653,6 +1784,12 @@ const formatEventTime = (timestamp: string) => {
   }).format(new Date(timestamp))
 }
 
+onMounted(() => {
+  if (USE_FIXED_RESULT_PAGE) {
+    applyFixedResultPage()
+  }
+})
+
 onBeforeUnmount(() => {
   closeSseConnection()
 })
@@ -1921,7 +2058,7 @@ const handlePreview = (data: any) => {
 
 /* ================= Phase 4: Results View (Bento Grid) ================= */
 .results-view { background: #FCFDFE; overflow-y: auto; padding-bottom: 60px; }
-.result-hero-minimal { position: sticky; top: 0; z-index: 50; padding: 32px 48px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.result-hero-minimal { padding: 32px 48px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
 .hero-content { display: flex; flex-direction: column; gap: 12px; }
 .hero-status-tag { display: inline-flex; align-items: center; gap: 6px; background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; width: max-content; }
 .hero-title { margin: 0; font-size: 2rem; font-weight: 850; color: #0F172A; letter-spacing: -0.02em; }
@@ -1933,17 +2070,17 @@ const handlePreview = (data: any) => {
 .action-btn { font-weight: 700; }
 .action-btn-primary { font-weight: 800; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2); }
 .results-body-bento { max-width: 1440px; margin: 0 auto; padding: 32px 48px; display: flex; flex-direction: column; gap: 32px; }
-.bento-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.bento-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
 .stat-pill { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); }
 .stat-v { font-size: 2.5rem; font-weight: 850; color: #0F172A; line-height: 1.2; }
 .stat-l { font-size: 0.9rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
 .stat-icon-success { font-size: 2.5rem; color: #10B981; margin-bottom: 8px; }
-.learning-path-timeline { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 32px; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); }
+.learning-path-timeline { margin: 16px 0 28px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 32px; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); }
 .timeline-header { margin-bottom: 24px; }
 .timeline-kicker { font-size: 0.8rem; font-weight: 850; color: #3B82F6; letter-spacing: 0.05em; margin-bottom: 8px; }
 .timeline-header h2 { margin: 0; font-size: 1.5rem; font-weight: 800; color: #0F172A; }
-.path-track-container { overflow-x: auto; padding-bottom: 8px; }
-.path-track { display: flex; gap: 16px; min-width: max-content; }
+.path-track-container { overflow-x: auto; overflow-y: visible; padding: 6px 0 10px; }
+.path-track { display: flex; gap: 16px; min-width: max-content; padding-top: 4px; }
 .path-step { display: flex; align-items: center; gap: 16px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 16px; padding: 16px 20px; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; min-width: 260px; }
 .path-step:hover { transform: translateY(-2px); border-color: #3B82F6; box-shadow: 0 8px 24px rgba(59, 130, 246, 0.1); }
 .step-icon-wrap { width: 48px; height: 48px; border-radius: 14px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -1956,8 +2093,8 @@ const handlePreview = (data: any) => {
 .group-header { display: flex; align-items: center; gap: 12px; }
 .group-badge { background: #0F172A; color: #FFFFFF; font-size: 0.75rem; font-weight: 850; padding: 4px 10px; border-radius: 8px; }
 .group-header h3 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #0F172A; }
-.bento-resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
-.bento-res-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 16px; position: relative; overflow: hidden; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); cursor: pointer; outline: none; }
+.bento-resource-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
+.bento-res-card { grid-column: span 3; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 16px; position: relative; overflow: hidden; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); cursor: pointer; outline: none; }
 .bento-res-card:hover, .bento-res-card:focus-visible { transform: translateY(-4px); box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08); }
 .card-header { display: flex; align-items: center; gap: 12px; }
 .type-icon-box { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
@@ -2011,8 +2148,10 @@ const handlePreview = (data: any) => {
 }
 .generated-resource-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 14px;
+  row-gap: 20px;
+  align-items: stretch;
 }
 .generated-resource-card {
   --resource-accent: #2563EB;
@@ -2020,10 +2159,13 @@ const handlePreview = (data: any) => {
   --resource-border: #BFDBFE;
   position: relative;
   min-width: 0;
+  grid-column: span 3;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
+  height: 100%;
+  min-height: 196px;
   padding: 16px;
   border: 1px solid #E2E8F0;
   border-radius: 18px;
@@ -2075,6 +2217,7 @@ const handlePreview = (data: any) => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 8px;
 }
 .resource-card-meta-line {
@@ -2096,8 +2239,8 @@ const handlePreview = (data: any) => {
   line-height: 1.38;
   font-weight: 900;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
@@ -2108,31 +2251,37 @@ const handlePreview = (data: any) => {
   font-size: 0.88rem;
   line-height: 1.55;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
 }
 .resource-card-action {
-  align-self: center;
+  grid-column: 1 / -1;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 7px;
-  min-width: 96px;
-  padding: 9px 12px;
-  border-radius: 999px;
-  background: #0F172A;
-  color: #FFFFFF;
-  font-size: 0.82rem;
+  margin-top: 8px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.02);
+  color: #334155;
+  border: 1px dashed #CBD5E1;
+  font-size: 0.8rem;
   font-weight: 900;
   white-space: nowrap;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 .generated-resource-card:hover .resource-card-action,
 .generated-resource-card:focus-visible .resource-card-action {
-  background: var(--resource-accent);
+  background: var(--resource-soft);
+  color: var(--resource-accent);
+  border-color: var(--resource-border);
 }
 .side-empty.compact { padding: 14px; }
 
@@ -2143,8 +2292,11 @@ const handlePreview = (data: any) => {
   .agent-configs-grid { grid-template-columns: repeat(2, 1fr); }
   .workbench-hero { grid-template-columns: 1fr; }
   .bento-stats-row { grid-template-columns: repeat(2, 1fr); }
-  .bento-resource-grid { grid-template-columns: repeat(2, 1fr); }
+  .bento-resource-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .bento-res-card { grid-column: span 2 !important; }
   .resource-metric-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .results-body-bento { padding: 24px 28px; }
+  .generated-resource-card { grid-column: span 4; }
 }
 @media (max-width: 768px) {
   .elegant-generator-layout { height: auto; min-height: calc(100vh - 64px); }
@@ -2157,21 +2309,26 @@ const handlePreview = (data: any) => {
   .flow-canvas { height: 720px; }
   .flow-node { width: 176px; min-height: 112px; font-size: 0.82rem; }
   .resource-status-item { grid-template-columns: 1fr; }
-  .generated-resource-card { grid-template-columns: auto minmax(0, 1fr); }
+  .generated-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .generated-resource-card { grid-column: span 1; grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
   .resource-card-action { grid-column: 1 / -1; width: 100%; }
   .workflow-timeline-panel, .resource-side-panel { position: static; }
   .event-log-row { grid-template-columns: 1fr; gap: 6px; }
-  .results-body-bento { padding: 16px 20px; }
+  .results-body-bento { padding: 16px; }
   .result-hero-minimal { padding: 20px; }
   .bento-stats-row { grid-template-columns: 1fr; }
-  .bento-resource-grid { grid-template-columns: 1fr; }
-  .learning-path-timeline { padding: 20px; }
+  .bento-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bento-res-card { grid-column: span 1 !important; }
+  .learning-path-timeline { margin: 12px 0 22px; padding: 20px; }
 }
 @media (max-width: 520px) {
   .sequence-track { display: flex; overflow-x: auto; padding-bottom: 4px; }
   .sequence-node { min-width: 240px; }
   .resource-card-actions { flex-direction: column; }
   .resource-metric-stack { grid-template-columns: 1fr; }
+  .generated-resource-grid { grid-template-columns: 1fr; }
+  .bento-resource-grid { grid-template-columns: 1fr; }
+  .bento-res-card { grid-column: span 1 !important; }
 }
 
 .elegant-dialog :deep(.el-dialog) { border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }

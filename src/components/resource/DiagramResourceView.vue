@@ -14,7 +14,12 @@
         </div>
       </div>
 
-      <div class="diagram-workspace">
+      <div class="diagram-workspace" :class="{ 'single-pane': compact || !hasInsightPanel }">
+        <div v-if="compact" class="frame-header compact-frame-header">
+          <div class="status-indicator"></div>
+          <span class="technical-label">知识拓扑 // 时序图</span>
+        </div>
+
         <aside v-if="!compact && hasInsightPanel" class="diagram-insights">
           <div class="insight-grid">
             <div v-for="item in statItems" :key="item.label" class="insight-stat">
@@ -77,6 +82,11 @@
           <div v-if="exportError" class="export-error">
             {{ exportError }}
           </div>
+        </div>
+
+        <div v-if="compact" class="frame-footer compact-frame-footer">
+          <span class="mono-tag">图谱同步中</span>
+          <div class="footer-line"></div>
         </div>
       </div>
     </div>
@@ -641,6 +651,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
 .diagram-resource {
   width: 100%;
   --diagram-ink: #172033;
@@ -651,6 +663,27 @@ onBeforeUnmount(() => {
   --diagram-blue: #2563eb;
   --diagram-green: #059669;
   --diagram-amber: #d97706;
+}
+
+.status-indicator {
+  width: 6px;
+  height: 6px;
+  background: #000000;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.technical-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: #000000;
+  letter-spacing: 1px;
 }
 
 .diagram-panel {
@@ -732,6 +765,10 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
+}
+
+.diagram-workspace.single-pane {
+  grid-template-columns: 1fr;
 }
 
 .diagram-insights {
@@ -864,13 +901,35 @@ onBeforeUnmount(() => {
 .diagram-svg-wrapper {
   width: 100%;
   min-height: 320px;
-  background:
-    linear-gradient(#eef4fb 1px, transparent 1px),
-    linear-gradient(90deg, #eef4fb 1px, transparent 1px),
-    #ffffff;
-  background-size: 28px 28px;
+  background: #ffffff;
   padding: 22px;
   overflow: auto;
+}
+
+.diagram-workspace.single-pane .diagram-canvas {
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.diagram-workspace.single-pane .diagram-svg-wrapper {
+  min-height: 600px;
+  max-height: 72vh;
+  padding: 16px;
+  overflow: auto;
+  border-top: 1px solid #eef2f7;
+}
+
+.diagram-workspace.single-pane .diagram-svg-shell {
+  min-height: 100%;
+  align-items: center;
+}
+
+.diagram-workspace.single-pane .diagram-svg-shell :deep(svg) {
+  width: 100% !important;
+  max-width: 100%;
+  height: auto !important;
+  filter: none;
 }
 
 .diagram-svg-shell {
@@ -1017,20 +1076,80 @@ onBeforeUnmount(() => {
 }
 
 .compact .diagram-workspace {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .compact .diagram-canvas {
+  order: 2;
   border: none;
   background: transparent;
 }
 
 .compact .diagram-svg-wrapper {
-  min-height: 220px;
-  max-height: 280px;
-  padding: 12px;
+  min-height: 240px;
+  max-height: 240px;
+  padding: 8px;
+  background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-image: none;
+}
+
+.compact .diagram-svg-shell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.compact .diagram-svg-shell :deep(svg) {
+  width: 100% !important;
+  max-width: 100%;
+  max-height: 220px;
+  height: auto !important;
+  filter: none;
+}
+
+.compact-frame-header {
+  position: static;
+  order: 1;
+  left: auto;
+  right: auto;
+  top: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.compact-frame-footer {
+  order: 3;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mono-tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: #000000;
+  background: rgba(0, 0, 0, 0.1);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.footer-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, #e2e8f0, transparent);
 }
 
 @media (max-width: 960px) {

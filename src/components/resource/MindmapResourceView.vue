@@ -4,13 +4,13 @@
 
       <div class="frame-header">
         <div class="status-indicator"></div>
-        <span class="technical-label">LOGIC_TOPOLOGY // KNOWLEDGE_MAPPING // SEQ_{{ Math.floor(Math.random() * 9999) }}</span>
+        <span class="technical-label">知识拓扑 // 知识映射 // 序号_{{ Math.floor(Math.random() * 9999) }}</span>
       </div>
 
       <div ref="markmapRef" class="markmap-shell"></div>
 
       <div class="frame-footer">
-        <span class="mono-tag">MAP_SYNC_LIVE</span>
+        <span class="mono-tag">导图同步中</span>
         <div class="footer-line"></div>
       </div>
     </div>

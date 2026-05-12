@@ -4,7 +4,7 @@
 
       <div class="frame-header">
         <div class="status-indicator"></div>
-        <span class="technical-label">READING_ARTIFACT // EXTENDED_LEARNING // MODULE_ALPHA</span>
+        <span class="technical-label">阅读资源 // 拓展学习 // 模块A</span>
       </div>
 
       <div v-if="!compact && readingData.summary" class="reading-summary">
@@ -27,7 +27,7 @@
             </span>
           </div>
           <div class="reading-reason" v-if="resource.recommend_reason && !compact">
-            <div class="reason-label">RECOMMEND_REASON //</div>
+            <div class="reason-label">推荐理由 //</div>
             {{ resource.recommend_reason }}
           </div>
           <div class="reading-desc" v-if="resource.description && !compact">
@@ -38,12 +38,12 @@
 
       <div v-if="compact && resources.length > visibleResources.length" class="reading-more">
         <el-button type="primary" link class="more-btn-hud">
-          ACCESS_ALL_MODULES ({{ resources.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          查看全部资源 ({{ resources.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
         </el-button>
       </div>
 
       <div class="frame-footer">
-        <span class="mono-tag">KNOWLEDGE_SYNC_COMPLETE</span>
+        <span class="mono-tag">知识同步完成</span>
         <div class="footer-line"></div>
       </div>
     </div>
@@ -51,7 +51,7 @@
     <div v-else class="reading-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
-        <p>NO_READING_CONTENT_DETECTED</p>
+        <p>未检测到阅读内容</p>
       </div>
     </div>
   </div>
