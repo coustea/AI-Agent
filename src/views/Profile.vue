@@ -1,7 +1,6 @@
 <template>
   <div class="profile-dashboard">
     <div class="bento-container">
-      <!-- 1. User Profile & Stats (Span 2x1) -->
       <div class="bento-card bento-span-2 user-card">
         <div class="user-header">
           <el-upload
@@ -37,7 +36,9 @@
         <div class="user-stats">
           <div class="stat-item">
             <el-icon class="text-blue"><Clock /></el-icon>
-            <div class="stat-val">128<small>h</small></div>
+            <div class="stat-val">
+              {{ formatDurationValue(studentProfile.learning_duration_total) }}<small>{{ formatDurationUnit(studentProfile.learning_duration_total) }}</small>
+            </div>
             <div class="stat-label">累计学习时长</div>
           </div>
           <div class="stat-item">
@@ -58,7 +59,6 @@
         </div>
       </div>
 
-      <!-- 2. Recent Performance (Span 1x1) -->
       <div class="bento-card performance-card">
         <div class="card-header-flex">
           <h4>近期表现</h4>
@@ -72,7 +72,9 @@
             <div class="perf-icon bg-blue-light"><el-icon class="text-blue"><Timer /></el-icon></div>
             <div class="perf-data">
               <span class="label">学习时长</span>
-              <span class="value">12.8<small>h</small></span>
+              <span class="value">
+                {{ formatDurationValue(studentProfile.learning_duration_total) }}<small>{{ formatDurationUnit(studentProfile.learning_duration_total) }}</small>
+              </span>
             </div>
           </div>
           <div class="perf-box">
@@ -85,7 +87,6 @@
         </div>
       </div>
 
-      <!-- 3. Recent Record (Span 1x1) -->
       <div class="bento-card recent-card">
         <div class="card-header-flex">
           <h4 class="card-title">最近学习记录</h4>
@@ -106,20 +107,35 @@
         </div>
       </div>
 
-      <!-- 4. Profile Details (Span 1x1) -->
       <div class="bento-card profile-info-card">
         <div class="card-header-flex">
           <h4 class="card-title">学习画像资料</h4>
         </div>
         <div class="profile-info-list">
-          <div class="profile-info-row"><span><el-icon><Reading /></el-icon> 学历层次</span><strong>{{ studentProfile.education_level || '未填写' }}</strong></div>
-          <div class="profile-info-row"><span><el-icon><UserFilled /></el-icon> 专业</span><strong>{{ studentProfile.major || '未填写' }}</strong></div>
-          <div class="profile-info-row"><span><el-icon><VideoPlay /></el-icon> 正在学习</span><strong>{{ courseSummary }}</strong></div>
-          <div class="profile-info-row"><span><el-icon><Cpu /></el-icon> 常用语言</span><strong>{{ studentProfile.preferred_language || '未填写' }}</strong></div>
+          <div class="profile-info-row">
+            <span><el-icon><Reading /></el-icon> 学历层次</span>
+            <strong>{{ studentProfile.education_level || '未填写' }}</strong>
+          </div>
+          <div class="profile-info-row">
+            <span><el-icon><UserFilled /></el-icon> 专业</span>
+            <strong>{{ studentProfile.major || '未填写' }}</strong>
+          </div>
+
+          <div class="profile-info-row course-display-row">
+            <span><el-icon><VideoPlay /></el-icon> 正在学习</span>
+            <div v-if="studentProfile.courses && studentProfile.courses.length > 0" class="course-tags-display">
+              <span v-for="c in studentProfile.courses" :key="c" class="c-tag">{{ c }}</span>
+            </div>
+            <strong v-else>未填写</strong>
+          </div>
+
+          <div class="profile-info-row">
+            <span><el-icon><Cpu /></el-icon> 常用语言</span>
+            <strong>{{ studentProfile.preferred_language || '未填写' }}</strong>
+          </div>
         </div>
       </div>
 
-      <!-- 5. Growth Trend (Span 2x1) -->
       <div class="bento-card bento-span-2 trend-section">
         <div class="card-header-flex">
           <h4 class="card-title">学习成长趋势</h4>
@@ -129,7 +145,6 @@
         </div>
       </div>
 
-      <!-- 6. Radar Chart (Span 1x1) -->
       <div class="bento-card radar-card">
         <div class="card-header-flex">
           <h4>学习画像 <el-icon class="info-icon"><InfoFilled /></el-icon></h4>
@@ -139,7 +154,6 @@
         </div>
       </div>
 
-      <!-- 7. History Table (Span 4x1) -->
       <div class="bento-card bento-span-4 history-card">
         <div class="card-header-flex">
           <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
@@ -174,155 +188,155 @@
 
     <el-dialog
         v-model="profileEditorVisible"
-        title="编辑学习画像资料"
-        width="720px"
+        width="660px"
         :close-on-click-modal="false"
-        class="profile-editor-dialog"
+        class="profile-editor-dialog compact-dialog"
+        :show-close="true"
+        align-center
     >
+      <template #header>
+        <div class="dialog-custom-header">
+          <h2 class="dialog-title">编辑学习画像资料</h2>
+          <p class="dialog-subtitle">完善你的基础信息，帮助系统生成更贴合你的学习资源与学习路径。</p>
+        </div>
+      </template>
+
       <el-form
           ref="profileFormRef"
           :model="profileForm"
           :rules="profileRules"
           label-position="top"
+          class="custom-profile-form"
+          hide-required-asterisk
       >
         <div class="profile-form-section">
           <div class="profile-form-section-head">
-            <span>必填 01</span>
-            <h5>专业与课程</h5>
-            <p>先确定专业背景和正在学习的课程。</p>
+            <div class="section-badge required-badge">必填 01</div>
+            <h5 class="section-title">专业与课程</h5>
+            <span class="section-desc-inline">先确定专业背景和正在学习的课程。</span>
           </div>
-          <el-form-item label="专业" prop="major">
-            <el-select
-                v-model="profileForm.major"
-                filterable
-                allow-create
-                default-first-option
-                clearable
-                placeholder="请选择专业，列表没有可直接输入"
-            >
-              <el-option v-for="major in PRESET_MAJORS" :key="major" :label="major" :value="major" />
-            </el-select>
-          </el-form-item>
 
-          <el-form-item label="正在学习的课程" prop="courses">
-            <el-select
-                v-model="profileForm.courses"
-                multiple
-                filterable
-                allow-create
-                default-first-option
-                placeholder="输入课程名称后回车，可添加多门课程"
-                class="w-full"
-                aria-label="正在学习的课程"
-            >
-              <el-option v-for="course in PRESET_COURSES" :key="course" :label="course" :value="course" />
-            </el-select>
-          </el-form-item>
+          <div class="profile-form-grid">
+            <el-form-item prop="major">
+              <template #label><span class="custom-label"><span class="req-star">*</span> 专业</span></template>
+              <el-autocomplete
+                  v-model="profileForm.major"
+                  :fetch-suggestions="querySearchMajor"
+                  placeholder="可以直接输入或选择"
+                  clearable
+                  class="w-full"
+              >
+                <template #default="{ item }">
+                  <span>{{ item.value }}</span>
+                </template>
+              </el-autocomplete>
+            </el-form-item>
+
+            <el-form-item prop="courses">
+              <template #label><span class="custom-label"><span class="req-star">*</span> 正在学习的课程</span></template>
+              <el-select
+                  v-model="profileForm.courses"
+                  multiple
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="输入课程名后【按回车】即可添加"
+                  class="w-full"
+              >
+                <el-option v-for="course in PRESET_COURSES" :key="course" :label="course" :value="course" />
+              </el-select>
+            </el-form-item>
+          </div>
         </div>
 
         <div class="profile-form-section">
           <div class="profile-form-section-head">
-            <span>必填 02</span>
-            <h5>学习目标</h5>
-            <p>目标决定资源和路径生成方向。</p>
+            <div class="section-badge required-badge">必填 02</div>
+            <h5 class="section-title">学习目标</h5>
+            <span class="section-desc-inline">目标决定资源和路径生成方向。</span>
           </div>
-          <el-form-item label="当前学习目标" prop="learning_goal">
-            <el-select
-                v-model="profileForm.learning_goal"
-                filterable
-                allow-create
-                default-first-option
-                clearable
-                placeholder="请选择目标，列表没有可直接输入"
-            >
+
+          <el-form-item prop="learning_goal">
+            <template #label><span class="custom-label"><span class="req-star">*</span> 当前学习目标</span></template>
+            <el-select v-model="profileForm.learning_goal" filterable allow-create default-first-option clearable placeholder="请选择目标，列表没有可直接输入后【按回车】">
               <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
             </el-select>
           </el-form-item>
         </div>
 
-        <div class="profile-form-section optional">
+        <div class="profile-form-section">
           <div class="profile-form-section-head">
-            <span>背景 03</span>
-            <h5>学校与阶段</h5>
-            <p>学校信息可选；学历层次和年级用于判断内容难度。</p>
+            <div class="section-badge bg-badge">背景 03</div>
+            <h5 class="section-title">学校与阶段</h5>
+            <span class="section-desc-inline">学校可选；学历和年级用于判断内容难度。</span>
           </div>
+
           <div class="profile-form-grid">
-            <el-form-item label="院校（选填）" prop="school">
-              <el-select
+            <el-form-item prop="school">
+              <template #label><span class="custom-label">院校（选填）</span></template>
+              <el-autocomplete
                   v-model="profileForm.school"
-                  filterable
-                  remote
-                  allow-create
-                  default-first-option
+                  :fetch-suggestions="querySearchSchool"
+                  placeholder="可以直接输入或搜索"
                   clearable
-                  placeholder="搜索并选择院校，列表没有可直接输入"
-                  :remote-method="searchProfileSchoolsDebounced"
-                  :loading="profileSchoolSearchLoading"
-                  @focus="handleProfileSchoolFocus"
-                  @change="handleProfileSchoolChange"
+                  class="w-full"
+                  @select="handleSchoolSelect"
               >
-                <el-option
-                    v-for="school in profileSchoolOptions"
-                    :key="school.id"
-                    :label="school.name"
-                    :value="school.name"
-                >
-                  <span>{{ school.name }}</span>
-                  <span v-if="school.level" class="school-level-tag">{{ school.level }}</span>
-                </el-option>
-              </el-select>
-              <div v-if="profileSchoolLevelLabel" class="school-level-note">
-                已识别院校层次：<span>{{ profileSchoolLevelLabel }}</span>
-              </div>
+                <template #prefix><el-icon><Search /></el-icon></template>
+                <template #default="{ item }">
+                  <span>{{ item.value }}</span>
+                  <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
+                </template>
+              </el-autocomplete>
+              <div v-if="profileSchoolLevelLabel" class="school-level-note">已识别层次：<span>{{ profileSchoolLevelLabel }}</span></div>
             </el-form-item>
-            <el-form-item label="学历层次" prop="education_level">
-              <el-select v-model="profileForm.education_level" placeholder="请选择学历层次" filterable aria-label="学历层次">
+
+            <el-form-item prop="education_level">
+              <template #label><span class="custom-label"><span class="req-star">*</span> 学历层次</span></template>
+              <el-select v-model="profileForm.education_level" placeholder="请选择学历层次" filterable>
                 <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
               </el-select>
             </el-form-item>
-            <el-form-item label="年级" prop="grade">
-              <el-select
-                  v-model="profileForm.grade"
-                  filterable
-                  allow-create
-                  default-first-option
-                  clearable
-                  placeholder="请选择年级，列表没有可直接输入"
-              >
+
+            <el-form-item prop="grade">
+              <template #label><span class="custom-label"><span class="req-star">*</span> 年级</span></template>
+              <el-select v-model="profileForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级">
                 <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
               </el-select>
             </el-form-item>
-            <el-form-item label="常用编程语言（选填）" prop="preferred_language">
-              <el-select
-                  v-model="profileForm.preferred_language"
-                  filterable
-                  allow-create
-                  default-first-option
-                  clearable
-                  placeholder="请选择常用语言，列表没有可直接输入"
-              >
+
+            <el-form-item prop="preferred_language">
+              <template #label><span class="custom-label">常用编程语言（选填）</span></template>
+              <el-select v-model="profileForm.preferred_language" filterable allow-create default-first-option clearable placeholder="请选择常用语言">
                 <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
               </el-select>
             </el-form-item>
           </div>
         </div>
       </el-form>
+
       <template #footer>
-        <el-button @click="profileEditorVisible = false">取消</el-button>
-        <el-button type="primary" :loading="profileSubmitting" @click="submitProfile(profileFormRef)">
-          保存资料
-        </el-button>
+        <div class="dialog-custom-footer">
+          <div class="footer-hint">
+            <el-icon><InfoFilled /></el-icon>
+            <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得精准推荐。</span>
+          </div>
+          <div class="footer-actions">
+            <el-button class="cancel-btn" @click="profileEditorVisible = false">取消</el-button>
+            <el-button type="primary" class="save-btn" :loading="profileSubmitting" @click="submitProfile(profileFormRef)">保存资料</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   UserFilled, CircleCheckFilled, Edit, Clock, Reading, DocumentCopy, StarFilled,
-  InfoFilled, Timer, Checked, VideoPlay, Cpu
+  InfoFilled, Timer, Checked, VideoPlay, Cpu, Search
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -377,7 +391,7 @@ const PRESET_LANGUAGES = [
   'SQL', 'Shell', 'Kotlin', 'Swift', 'PHP', 'HTML/CSS'
 ]
 
-const studentProfile = ref<StudentProfileData>({
+const studentProfile = ref<StudentProfileData & { learning_duration_total?: number }>({
   education_level: null,
   grade: null,
   major: null,
@@ -386,6 +400,7 @@ const studentProfile = ref<StudentProfileData>({
   school: null,
   school_level: null,
   preferred_language: null,
+  learning_duration_total: 0
 })
 
 const profileForm = reactive<ProfileOnboardingUpdate>({
@@ -402,22 +417,66 @@ const profileForm = reactive<ProfileOnboardingUpdate>({
 const profileRules: FormRules<ProfileOnboardingUpdate> = {
   education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
   grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
-  major: [{ required: true, message: '请选择或输入专业', trigger: 'change' }],
+  major: [{ required: true, message: '请填写或选择专业', trigger: 'change' }],
   courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
   learning_goal: [{ required: true, message: '请选择或输入当前学习目标', trigger: 'change' }],
 }
 
 const profileHeadline = computed(() => {
   const parts = [studentProfile.value.major, studentProfile.value.education_level, studentProfile.value.school]
-    .filter((item): item is string => Boolean(item))
+      .filter((item): item is string => Boolean(item))
   return parts.length ? parts.join(' · ') : '学习资料待完善'
 })
 
-const courseSummary = computed(() => {
-  return studentProfile.value.courses.length ? studentProfile.value.courses.join('、') : '未填写'
-})
+const formatDurationValue = (seconds?: number | null) => {
+  if (!seconds) return '0';
+  if (seconds < 3600) return Math.floor(seconds / 60).toString();
+  return (seconds / 3600).toFixed(1);
+}
 
-const profileSchoolLevelLabel = computed(() => profileForm.school_level || '')
+const formatDurationUnit = (seconds?: number | null) => {
+  if (!seconds) return 'm';
+  if (seconds < 3600) return 'm';
+  return 'h';
+}
+
+const querySearchMajor = (queryString: string, cb: any) => {
+  const results = queryString
+      ? PRESET_MAJORS.filter(m => m.toLowerCase().includes(queryString.toLowerCase()))
+      : PRESET_MAJORS;
+  cb(results.map(m => ({ value: m })));
+}
+
+const querySearchSchool = async (queryString: string, cb: any) => {
+  if (!queryString) {
+    cb([]);
+    return;
+  }
+  try {
+    const res = await searchSchools(queryString, 20);
+    profileSchoolOptions.value = res.data.data;
+    const options = res.data.data.map((school: any) => ({
+      value: school.name,
+      level: school.level
+    }));
+    cb(options);
+  } catch (e) {
+    cb([]);
+  }
+}
+
+const handleSchoolSelect = (item: any) => {
+  profileForm.school_level = item.level || '';
+}
+
+watch(() => profileForm.school, (newVal) => {
+  if (!newVal) {
+    profileForm.school_level = '';
+    return;
+  }
+  const matched = profileSchoolOptions.value.find((s: any) => s.name === newVal);
+  profileForm.school_level = matched ? (matched.level || '') : '';
+})
 
 const fillProfileForm = (payload: StudentProfileData) => {
   profileForm.education_level = payload.education_level || ''
@@ -430,59 +489,11 @@ const fillProfileForm = (payload: StudentProfileData) => {
   profileForm.preferred_language = payload.preferred_language || ''
 }
 
-const applyProfileSchoolLevelFromSelection = (schoolName: string | null | undefined, clearWhenMissing = true) => {
-  if (!schoolName) {
-    profileForm.school_level = ''
-    return
-  }
-  const selectedSchool = profileSchoolOptions.value.find((school) => school.name === schoolName)
-  if (selectedSchool) {
-    profileForm.school_level = selectedSchool.level || ''
-  } else if (clearWhenMissing) {
-    profileForm.school_level = ''
-  }
-}
-
-let profileSchoolSearchTimeout: ReturnType<typeof setTimeout> | null = null
-const handleProfileSchoolSearch = async (keyword: string) => {
-  profileSchoolSearchLoading.value = true
-  try {
-    const res = await searchSchools(keyword, 20)
-    profileSchoolOptions.value = res.data.data
-    applyProfileSchoolLevelFromSelection(profileForm.school, false)
-  } catch (e) {
-    console.error('Failed to search schools', e)
-  } finally {
-    profileSchoolSearchLoading.value = false
-  }
-}
-
-const searchProfileSchoolsDebounced = (keyword: string) => {
-  if (profileSchoolSearchTimeout) {
-    clearTimeout(profileSchoolSearchTimeout)
-  }
-  profileSchoolSearchTimeout = setTimeout(() => {
-    handleProfileSchoolSearch(keyword)
-  }, 300)
-}
-
-const handleProfileSchoolFocus = () => {
-  if (profileSchoolOptions.value.length === 0) {
-    handleProfileSchoolSearch('')
-  }
-}
-
-const handleProfileSchoolChange = (schoolName: string) => {
-  applyProfileSchoolLevelFromSelection(schoolName)
-}
-
 const loadProfileInfo = async () => {
   const [userRes, onboardingRes] = await Promise.all([
     getMe(),
     getProfileOnboarding(),
   ])
-  console.log('[Profile] getMe response:', userRes.data)
-  console.log('[Profile] avatar value:', userRes.data.data.avatar)
   userName.value = userRes.data.data.username
   userAvatar.value = userRes.data.data.avatar
   userEmail.value = userRes.data.data.email
@@ -535,7 +546,7 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
       school: profileForm.school || null,
       school_level: profileForm.school_level || null,
       preferred_language: profileForm.preferred_language || null,
-    })
+    } as any)
     studentProfile.value = res.data.data.onboarding.student_profile
     profileEditorVisible.value = false
     ElMessage.success('学习画像资料已更新')
@@ -548,15 +559,10 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
 }
 
 onMounted(() => {
-  loadProfileInfo().catch((error) => {
-    console.error('Failed to load profile center data', error)
-  })
-  loadResourceHistory().catch((error) => {
-    console.error('Failed to load resource history', error)
-  })
+  loadProfileInfo().catch(console.error)
+  loadResourceHistory().catch(console.error)
 })
 
-// 雷达图配置
 const radarOption = computed(() => ({
   radar: {
     indicator: [
@@ -585,7 +591,6 @@ const radarOption = computed(() => ({
   }]
 }))
 
-// 折线图配置
 const lineOption = computed(() => ({
   grid: { top: 20, right: 10, bottom: 20, left: 30 },
   tooltip: { trigger: 'axis' },
@@ -615,7 +620,6 @@ const lineOption = computed(() => ({
   }]
 }))
 
-// 资源历史数据
 const resourceHistory = ref<GeneratedResourceItem[]>([])
 const resourceHistoryLoading = ref(false)
 
@@ -645,18 +649,13 @@ const formatTime = (time: string | null) => {
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-
   const timeFormatter = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' })
   const monthDayFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' })
   const rtf = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' })
 
-  if (days === 0) {
-    return `今天 ${timeFormatter.format(date)}`
-  } else if (days === 1) {
-    return `昨天 ${timeFormatter.format(date)}`
-  } else if (days < 7) {
-    return rtf.format(-days, 'day')
-  }
+  if (days === 0) return `今天 ${timeFormatter.format(date)}`
+  else if (days === 1) return `昨天 ${timeFormatter.format(date)}`
+  else if (days < 7) return rtf.format(-days, 'day')
   return monthDayFormatter.format(date)
 }
 
@@ -686,92 +685,34 @@ const getStatusType = (status: string) => {
 
 <style scoped>
 .profile-dashboard {
-  padding: 30px;
-  background-color: #F8FAFC;
-  min-height: 100%;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  padding: 30px; background-color: #F8FAFC; min-height: 100%; font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 }
-
-.bento-container {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-}
-
-.bento-card {
-  background: #FFFFFF;
-  border-radius: 24px;
-  padding: 24px;
-  border: 1px solid #E2E8F0;
-  display: flex;
-  flex-direction: column;
-}
-
-.bento-span-2 {
-  grid-column: span 2;
-}
-
-.bento-span-4 {
-  grid-column: span 4;
-}
+.bento-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.bento-card { background: #FFFFFF; border-radius: 24px; padding: 24px; border: 1px solid #E2E8F0; display: flex; flex-direction: column; }
+.bento-span-2 { grid-column: span 2; }
+.bento-span-4 { grid-column: span 4; }
 
 @media (max-width: 1200px) {
-  .bento-container {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .bento-span-4 {
-    grid-column: span 2;
-  }
+  .bento-container { grid-template-columns: repeat(2, 1fr); }
+  .bento-span-4 { grid-column: span 2; }
 }
-
 @media (max-width: 768px) {
-  .bento-container {
-    grid-template-columns: 1fr;
-  }
-  .bento-span-2, .bento-span-4 {
-    grid-column: span 1;
-  }
+  .bento-container { grid-template-columns: 1fr; }
+  .bento-span-2, .bento-span-4 { grid-column: span 1; }
 }
 
-.card-header-flex {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.card-title, .card-header-flex h4 {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #1E293B;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.link-text {
-  font-size: 0.8rem;
-  color: #3B82F6;
-  cursor: pointer;
-}
+.card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.card-title, .card-header-flex h4 { margin: 0; font-size: 1.05rem; font-weight: 700; color: #1E293B; display: flex; align-items: center; gap: 8px; }
+.link-text { font-size: 0.8rem; color: #3B82F6; cursor: pointer; }
 
 /* User Card */
 .user-header { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; position: relative; }
 .avatar-uploader { cursor: pointer; }
-.avatar-box {
-  width: 72px; height: 72px; background: #EEF2FF; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; font-size: 2.2rem; color: #4F46E5;
-  position: relative; overflow: hidden; transition: background-color 0.3s;
-}
+.avatar-box { width: 72px; height: 72px; background: #EEF2FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; color: #4F46E5; position: relative; overflow: hidden; transition: background-color 0.3s; }
 .avatar-box:hover { background: #E0E7FF; }
 .avatar-box.has-avatar { background: transparent; }
 .avatar-image { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-.avatar-upload-overlay {
-  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5);
-  display: flex; align-items: center; justify-content: center; opacity: 0;
-  transition: opacity 0.3s; border-radius: 50%;
-}
+.avatar-upload-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; border-radius: 50%; }
 .avatar-box:hover .avatar-upload-overlay { opacity: 1; }
 .avatar-upload-overlay .el-icon { color: white; font-size: 1.5rem; }
 .user-info h3 { margin: 0; font-size: 1.3rem; font-weight: 800; }
@@ -788,255 +729,145 @@ const getStatusType = (status: string) => {
 .stat-label { font-size: 0.75rem; color: #94A3B8; margin-top: 2px; }
 
 /* Radar & Trend */
-.radar-container {
-  height: 220px;
-  width: 100%;
-  flex: 1;
-}
-
-.trend-chart-container {
-  height: 220px;
-  width: 100%;
-  flex: 1;
-}
+.radar-container { height: 220px; width: 100%; flex: 1; }
+.trend-chart-container { height: 220px; width: 100%; flex: 1; }
 
 /* Performance */
-.perf-grid {
+.perf-grid { display: flex; flex-direction: column; gap: 16px; flex: 1; justify-content: center; }
+.perf-box { display: flex; align-items: center; gap: 15px; background: #F8FAFC; padding: 16px; border-radius: 16px; }
+.perf-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+.bg-blue-light { background: #EFF6FF; }
+.bg-green-light { background: #ECFDF5; }
+.text-blue { color: #3B82F6; }
+.text-green { color: #10B981; }
+.perf-data .label { font-size: 0.8rem; color: #64748B; display: block; margin-bottom: 2px; }
+.perf-data .value { font-size: 1.1rem; font-weight: 700; color: #1E293B; }
+
+/* ================= 优化后的 Profile Info ================= */
+.profile-info-list { display: flex; flex-direction: column; gap: 18px; flex: 1; justify-content: center; }
+.profile-info-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid #F1F5F9; }
+.profile-info-row:last-child { border-bottom: none; padding-bottom: 0; }
+.profile-info-row span { display: flex; align-items: center; gap: 8px; color: #64748B; font-size: 0.85rem; flex-shrink: 0; }
+.profile-info-row strong { color: #0F172A; font-size: 0.88rem; line-height: 1.5; text-align: right; font-weight: 700; overflow-wrap: anywhere; }
+
+/* 课程 Tag 显示样式 */
+.course-display-row { align-items: flex-start !important; }
+.course-tags-display {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  flex: 1;
-  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: 65%;
 }
-
-.perf-box {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  background: #F8FAFC;
-  padding: 16px;
-  border-radius: 16px;
-}
-
-.perf-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-}
-
-.bg-blue-light {
-  background: #EFF6FF;
-}
-
-.bg-green-light {
-  background: #ECFDF5;
-}
-
-.text-blue {
-  color: #3B82F6;
-}
-
-.text-green {
-  color: #10B981;
-}
-
-/* Profile Info */
-.profile-info-list {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  flex: 1;
-  justify-content: center;
-}
-
-.profile-info-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-.profile-info-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.profile-info-row span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #64748B;
-  font-size: 0.85rem;
-  flex-shrink: 0;
-}
-
-.profile-info-row strong {
-  color: #0F172A;
-  font-size: 0.88rem;
-  line-height: 1.5;
-  text-align: right;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.profile-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 16px;
-}
-
-:deep(.profile-form-grid .el-select) {
-  width: 100%;
-}
-
-.school-level-tag {
-  margin-left: 8px;
-  font-size: 0.75rem;
-  color: #64748B;
-  background: #F1F5F9;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.school-level-note {
-  margin-top: 8px;
-  font-size: 0.82rem;
-  color: #64748B;
-}
-
-.school-level-note span {
-  color: #2563EB;
-  font-weight: 700;
-}
-
-.profile-editor-dialog :deep(.el-dialog) {
-  border-radius: 20px;
-  overflow: hidden;
-}
-
-.profile-editor-dialog :deep(.el-dialog__body) {
-  background: #F8FAFC;
-  padding: 22px 24px;
-}
-
-.profile-form-section {
-  padding: 18px;
-  margin-bottom: 16px;
-  border-radius: 18px;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-}
-
-.profile-form-section:last-child {
-  margin-bottom: 0;
-}
-
-.profile-form-section.optional {
-  background: #FCFCFD;
-}
-
-.profile-form-section-head {
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-.profile-form-section-head span {
+.c-tag {
+  background-color: #EEF2FF;
   color: #4F46E5;
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.profile-form-section-head h5 {
-  margin: 6px 0 4px;
-  color: #0F172A;
-  font-size: 1rem;
-  line-height: 1.35;
-}
-
-.profile-form-section-head p {
-  margin: 0;
-  color: #64748B;
-  font-size: 0.82rem;
-  line-height: 1.55;
-}
-
-.profile-editor-dialog :deep(.el-input__wrapper),
-.profile-editor-dialog :deep(.el-select__wrapper),
-.profile-editor-dialog :deep(.el-textarea__inner) {
-  min-height: 42px;
-  border-radius: 12px;
-}
-
-@media (max-width: 720px) {
-  .profile-form-grid {
-    grid-template-columns: 1fr;
-  }
+  font-size: 0.75rem !important;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* Recent Record */
-.recent-card {
-  justify-content: center;
-}
-.recent-record {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-  margin-top: 10px;
-}
+.recent-card { justify-content: center; }
+.recent-record { display: flex; gap: 15px; align-items: center; margin-top: 10px; }
+.record-icon { width: 48px; height: 48px; border-radius: 16px; background: #FEF2F2; color: #EF4444; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.record-info h5 { margin: 0 0 5px 0; font-size: 1rem; font-weight: 600; }
+.meta-tag { font-size: 0.75rem; color: #64748B; background: #F1F5F9; padding: 4px 10px; border-radius: 6px; }
+.record-progress { margin-top: 24px; }
+.prog-text { display: flex; justify-content: space-between; font-size: 0.8rem; color: #94A3B8; margin-top: 8px; font-weight: 500; }
+.task-title-cell { font-weight: 600; color: #1E293B; }
+.custom-tag { border-radius: 6px; }
 
-.record-icon {
-  width: 48px;
-  height: 48px;
+/* ================= 极致紧凑防滚动弹窗样式 ================= */
+.profile-editor-dialog :deep(.el-dialog) {
   border-radius: 16px;
-  background: #FEF2F2;
-  color: #EF4444;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
+  overflow: hidden;
+  box-shadow: 0 20px 60px -10px rgba(0, 0, 0, 0.15);
+  margin-top: 5vh !important;
 }
 
-.record-info h5 {
-  margin: 0 0 5px 0;
-  font-size: 1rem;
-  font-weight: 600;
+.profile-editor-dialog :deep(.el-dialog__header) {
+  padding: 0; margin: 0; border-bottom: none;
 }
 
-.meta-tag {
-  font-size: 0.75rem;
-  color: #64748B;
-  background: #F1F5F9;
-  padding: 4px 10px;
-  border-radius: 6px;
+.profile-editor-dialog :deep(.el-dialog__headerbtn) {
+  top: 18px; right: 20px; font-size: 1.2rem; color: #64748B;
 }
 
-.record-progress {
-  margin-top: 24px;
+.dialog-custom-header {
+  padding: 20px 24px 12px;
+}
+.dialog-title {
+  margin: 0 0 4px; font-size: 1.25rem; font-weight: 800; color: #0F172A;
+}
+.dialog-subtitle {
+  margin: 0; font-size: 0.85rem; color: #64748B; line-height: 1.4;
 }
 
-.prog-text {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: #94A3B8;
-  margin-top: 8px;
-  font-weight: 500;
+.profile-editor-dialog :deep(.el-dialog__body) {
+  background: #FFFFFF; padding: 0 24px 8px;
 }
 
-.task-title-cell {
-  font-weight: 600;
-  color: #1E293B;
+.custom-profile-form { display: flex; flex-direction: column; gap: 12px; }
+.profile-form-section {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #FFFFFF; border: 1px solid #E2E8F0;
+}
+.profile-form-section-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+}
+.section-desc-inline {
+  color: #64748B; font-size: 0.8rem; margin-left: auto;
 }
 
-.custom-tag {
-  border-radius: 6px;
+.section-badge {
+  font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+}
+.required-badge { color: #4F46E5; background: #EEF2FF; }
+.bg-badge { color: #4F46E5; background: #EEF2FF; }
+.section-title { margin: 0; color: #0F172A; font-size: 0.95rem; font-weight: 800; }
+
+.profile-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+
+.custom-label { font-size: 0.8rem; font-weight: 600; color: #334155; display: flex; align-items: center; }
+.req-star { color: #EF4444; margin-right: 4px; }
+.profile-editor-dialog :deep(.el-form-item) { margin-bottom: 12px; }
+
+.profile-editor-dialog :deep(.el-input__wrapper),
+.profile-editor-dialog :deep(.el-select__wrapper) {
+  min-height: 34px !important;
+  border-radius: 6px; box-shadow: none !important; border: 1px solid #E2E8F0; background: #FFFFFF;
+}
+.profile-editor-dialog :deep(.el-input__inner) { font-size: 0.85rem; }
+
+.school-level-tag { margin-left: 8px; font-size: 0.7rem; color: #64748B; background: #F1F5F9; padding: 2px 6px; border-radius: 4px; }
+.school-level-note { margin-top: 4px; font-size: 0.75rem; color: #64748B; }
+.school-level-note span { color: #2563EB; font-weight: 700; }
+
+.profile-editor-dialog :deep(.el-dialog__footer) {
+  padding: 10px 24px 20px; border-top: none;
+}
+.dialog-custom-footer {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.footer-hint { display: flex; align-items: center; gap: 6px; color: #64748B; font-size: 0.8rem; }
+.footer-hint .el-icon { color: #4F46E5; font-size: 0.9rem; }
+.footer-actions { display: flex; gap: 10px; }
+
+.cancel-btn, .save-btn {
+  border-radius: 6px; height: 36px; padding: 0 20px; font-weight: 600; font-size: 0.85rem;
+}
+.cancel-btn { color: #475569; border-color: #CBD5E1; }
+.cancel-btn:hover { background: #F8FAFC; color: #0F172A; }
+.save-btn { background: #4F46E5; border: none; color: white;}
+.save-btn:hover { background: #4338CA; transform: translateY(-1px); }
+
+@media (max-width: 720px) {
+  .profile-form-grid { grid-template-columns: 1fr; gap: 0; }
+  .dialog-custom-footer { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .section-desc-inline { display: none; }
 }
 </style>
