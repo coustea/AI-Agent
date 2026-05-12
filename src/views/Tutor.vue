@@ -227,12 +227,16 @@
                   </div>
                   <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
 
-                  <img
-                      v-if="msg.diagram.image_url"
-                      :src="msg.diagram.image_url"
-                      :alt="msg.diagram.title || 'AI 图解'"
-                      class="diagram-image"
-                  />
+                  <div v-if="msg.diagram.image_url" class="diagram-image-wrapper">
+                    <el-image
+                        :src="msg.diagram.image_url"
+                        :preview-src-list="[msg.diagram.image_url]"
+                        :alt="msg.diagram.title || 'AI 图解'"
+                        class="diagram-image"
+                        fit="contain"
+                        @click.stop
+                    />
+                  </div>
                   <div
                       v-else
                       class="diagram-svg-container"
@@ -352,7 +356,7 @@
                   ref="textareaRef"
                   v-model="userInput"
                   placeholder="向 AI 导师提问（Enter 发送，Shift + Enter 换行）"
-                  @keydown.enter.exact.prevent="handleSend"
+                  @keydown.enter="handleEnter"
                   @input="autoResize"
               ></textarea>
 
@@ -538,6 +542,42 @@
         </div>
       </transition>
     </div>
+
+    <!-- 知识图解预览对话框 -->
+    <el-dialog
+        v-model="diagramPreviewVisible"
+        :title="diagramPreviewData?.title || '知识图解预览'"
+        width="85%"
+        top="5vh"
+        destroy-on-close
+        class="diagram-preview-dialog"
+    >
+      <div class="diagram-preview-body" v-if="diagramPreviewData">
+        <div class="preview-header-meta">
+          <span class="preview-type-tag">{{ diagramPreviewData.type }}</span>
+          <p class="preview-summary">{{ diagramPreviewData.summary }}</p>
+        </div>
+        
+        <div class="preview-content">
+          <img
+              v-if="diagramPreviewData.image_url"
+              :src="diagramPreviewData.image_url"
+              :alt="diagramPreviewData.title"
+              class="preview-image"
+          />
+          <div
+              v-else
+              class="preview-svg-container"
+              v-html="diagramSvgCache.get(diagramPreviewData.render.source) || ''"
+          ></div>
+        </div>
+        
+        <div class="preview-footer">
+          <el-button type="primary" plain @click="copyDiagramSource(diagramPreviewData)">复制 Mermaid 源码</el-button>
+          <el-button @click="diagramPreviewVisible = false">关闭</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -549,10 +589,11 @@ import {
   Plus, Delete, Close, Top, ArrowRight,
   EditPen, Search, Timer, VideoCamera, DataLine,
   CircleCheckFilled,
-  InfoFilled, Medal, Aim, Loading, TrendCharts
+  InfoFilled, Medal, Aim, TrendCharts
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import 'github-markdown-css/github-markdown-light.css'
+// 更换为深色主题以匹配深色代码块
 import 'highlight.js/styles/atom-one-dark.css'
 import mermaid from 'mermaid'
 import { getErrorMessage } from '@/utils/http'
@@ -573,6 +614,8 @@ import {
 import { getMe } from '@/api/auth'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
+
+defineOptions({ name: 'Tutor' })
 
 // 类型定义
 interface PendingFile {
@@ -619,6 +662,13 @@ interface ProfileCard {
   key: string
   title: string
   content: string
+}
+
+const normalizeDiagramData = (diagram: Record<string, unknown> | null | undefined): DiagramData | null => {
+  if (!diagram || typeof diagram !== 'object') return null
+  const render = diagram.render
+  if (!render || typeof render !== 'object') return null
+  return diagram as unknown as DiagramData
 }
 
 const DEFAULT_SESSION_TITLE = '新对话'
@@ -671,7 +721,6 @@ const {
   setNeedDiagram: setAvatarNeedDiagram,
   startVad,
   stopVad,
-  stopSpeaking: stopAvatarSpeaking,
   enableAudio: enableAvatarAudio,
   setPlayerContainer,
 } = useDigitalHuman({
@@ -936,6 +985,28 @@ const digitalHumanStatusText = computed(() => {
   if (voiceAsrStage.value === 'transcribing') return '正在转文字'
   return '倾听就绪'
 })
+
+const diagramPreviewVisible = ref(false)
+const diagramPreviewData = ref<DiagramData | null>(null)
+
+const previewDiagram = (diagram: DiagramData) => {
+  diagramPreviewData.value = diagram
+  diagramPreviewVisible.value = true
+}
+
+const copyDiagramSource = async (diagram: DiagramData) => {
+  if (diagram?.render?.source) {
+    await copyToClipboard(diagram.render.source)
+  }
+}
+
+const handleEnter = (e: KeyboardEvent) => {
+  if (e.isComposing) return
+  if (e.shiftKey) return
+  
+  e.preventDefault()
+  handleSend()
+}
 
 // 工具函数
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -1430,6 +1501,7 @@ const switchSession = async (sessionId: string) => {
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
       illustrations: [],
+      diagram: normalizeDiagramData(msg.diagram),
     }))
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = mapped.filter((item, idx) => {
@@ -1559,28 +1631,6 @@ const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
 }
 
-const stopGeneration = () => {
-  clearAvatarThinkingTimeout()
-
-  if (chatMode.value === 'digital_human') {
-    stopAvatarSpeaking()
-  } else if (abortController) {
-    abortController.abort()
-    abortController = null
-  }
-
-  flushPendingStreamText(true)
-  isAIThinking.value = false
-
-  if (streamingMsgId.value !== null) {
-    const aiMsg = messages.value.find(m => m.id === streamingMsgId.value)
-    if (aiMsg) {
-      aiMsg.diagramGenerating = false
-    }
-    streamingMsgId.value = null
-  }
-}
-
 const handleSend = async () => {
   const text = userInput.value.trim()
   const hasFiles = pendingFiles.value.length > 0
@@ -1605,8 +1655,10 @@ const handleSend = async () => {
   if (currentSessionId.value && text) {
     const session = sessions.value.find(s => s.id === currentSessionId.value)
     if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
+      // 使用用户消息的前20字符作为临时标题
       const tempTitle = text.length > 20 ? text.slice(0, 20) + '...' : text
       session.title = tempTitle
+      // 调用后端API更新标题
       try {
         await updateSessionTitle(currentSessionId.value, tempTitle)
       } catch (err) {
@@ -1918,7 +1970,7 @@ onBeforeUnmount(() => {
 }
 
 .brand-icon {
-  color: #8E7CF3;
+  color: #4F46E5;
   font-size: 1.25rem;
 }
 
@@ -2012,7 +2064,7 @@ onBeforeUnmount(() => {
 }
 .history-section-header .el-icon {
   font-size: 1.25rem;
-  color: #8E7CF3;
+  color: #4F46E5;
 }
 
 .popover-search-container {
@@ -2030,7 +2082,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #8E7CF3 inset !important;
+  box-shadow: 0 0 0 1px #0891B2 inset !important;
 }
 
 .popover-session-scroll {
@@ -2085,7 +2137,7 @@ onBeforeUnmount(() => {
   color: #334155;
 }
 .session-item.active {
-  color: #8E7CF3;
+  color: #4F46E5;
   font-weight: 600;
 }
 
@@ -2096,7 +2148,7 @@ onBeforeUnmount(() => {
 }
 
 .session-item.active .session-icon {
-  color: #8E7CF3;
+  color: #4F46E5;
 }
 
 .session-info {
@@ -2162,7 +2214,7 @@ onBeforeUnmount(() => {
   width: 14px;
   height: 14px;
   border: 2px solid #CBD5E1;
-  border-top-color: #8E7CF3;
+  border-top-color: #4F46E5;
   border-radius: 50%;
   animation: diagramSpin 0.8s linear infinite;
   flex-shrink: 0;
@@ -2181,6 +2233,13 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   padding: 16px;
   max-width: 560px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.msg-diagram:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .diagram-header {
@@ -2199,8 +2258,8 @@ onBeforeUnmount(() => {
 .diagram-type-tag {
   font-size: 0.7rem;
   padding: 2px 8px;
-  background: #F4F2FF;
-  color: #8E7CF3;
+  background: #E0E7FF;
+  color: #4F46E5;
   border-radius: 4px;
   font-weight: 500;
 }
@@ -2210,6 +2269,12 @@ onBeforeUnmount(() => {
   color: #64748B;
   margin-bottom: 12px;
   line-height: 1.5;
+}
+
+.diagram-image-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .diagram-svg-container {
@@ -2229,6 +2294,79 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   display: block;
   margin: 0 auto;
+}
+
+/* 预览对话框样式 */
+.diagram-preview-dialog :deep(.el-dialog__body) {
+  padding: 0;
+}
+
+.diagram-preview-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.preview-header-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-type-tag {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  background: #EEF2FF;
+  color: #4F46E5;
+  border-radius: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.preview-summary {
+  font-size: 1rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.preview-content {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+.preview-svg-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.preview-svg-container :deep(svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.preview-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #F1F5F9;
 }
 
 .mermaid-error {
@@ -2353,8 +2491,8 @@ onBeforeUnmount(() => {
 }
 
 .digital-human-status-overlay.active {
-  border-color: #8E7CF3;
-  box-shadow: 0 4px 20px rgba(142, 124, 243, 0.15);
+  border-color: #0EA5E9;
+  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.15);
 }
 
 .speech-wave {
@@ -2367,7 +2505,7 @@ onBeforeUnmount(() => {
 .speech-wave span {
   width: 3px;
   height: 8px;
-  background: #8E7CF3;
+  background: #0891B2;
   border-radius: 2px;
   animation: wave-anim 1s infinite ease-in-out;
 }
@@ -2571,7 +2709,7 @@ onBeforeUnmount(() => {
   color: #0F172A !important;
 }
 .message-row.user :deep(.markdown-body a) {
-  color: #8E7CF3 !important;
+  color: #2563EB !important;
 }
 .message-row.user :deep(.markdown-body code:not(pre code)) {
   background: #E2E8F0 !important;
@@ -2685,7 +2823,7 @@ onBeforeUnmount(() => {
 
 :deep(.code-lang::before) {
   content: '⟨/⟩';
-  color: #B3A8F9;
+  color: #60A5FA;
   font-size: 0.85rem;
   font-weight: 800;
   letter-spacing: -1px;
@@ -3167,11 +3305,6 @@ onBeforeUnmount(() => {
   background: #334155;
 }
 
-.send-btn.is-stopping:hover {
-  background: #EF4444;
-  color: #FFFFFF;
-}
-
 @keyframes bar-dance {
   from { transform: scaleY(0.7); }
   to { transform: scaleY(1.5); }
@@ -3518,7 +3651,6 @@ onBeforeUnmount(() => {
   margin-top: -10vh;
 }
 
-/* ================== Apple 风格悬浮按钮 (紫色主题) ================== */
 .fab-container {
   position: fixed;
   z-index: 1000;
@@ -3529,7 +3661,7 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 .fab-container.is-dimmed {
-  opacity: 0.4; /* 更低的透明度，使其在不使用时完全隐匿 */
+  opacity: 0.6;
 }
 .fab-container.is-dimmed:hover {
   opacity: 1;
@@ -3539,27 +3671,21 @@ onBeforeUnmount(() => {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #FFFFFF; /* 极简纯白底色 */
-  color: #8E7CF3; /* 薰衣草紫 */
-  border: 1px solid #E2E8F0; /* 细腻的极细边框 */
+  background: #0F172A; /* 与整体风格统一 */
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.02); /* 弥散感柔和阴影 */
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .fab-button:hover {
   transform: scale(1.05);
-  background: #F4F2FF; /* 悬停时变为浅紫色背景 */
-  color: #7A68E6; /* 悬停时图标颜色微微加深，提升质感 */
-  border-color: #D6CEF8; /* 边框变为淡紫 */
-  box-shadow: 0 8px 24px rgba(142, 124, 243, 0.15), 0 4px 8px rgba(142, 124, 243, 0.08); /* 增加紫色弥散阴影 */
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.3);
 }
 .fab-button:active {
   transform: scale(0.95);
-  background: #EBE5FF; /* 按下时背景更深一点 */
-  box-shadow: 0 2px 8px rgba(142, 124, 243, 0.1);
 }
 
 .fab-menu {
@@ -3575,7 +3701,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   transform-origin: bottom left;
-  border: 1px solid #F1F5F9;
 }
 .fab-container.stick-right .fab-menu {
   left: auto;

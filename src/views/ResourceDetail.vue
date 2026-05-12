@@ -42,10 +42,16 @@
           暂无生成资源
         </div>
         <div v-else class="resource-items">
-          <div
+          <article
             v-for="item in resource.resources"
             :key="item.id"
             class="resource-item-card"
+            :class="{ 'is-clickable': hasPreviewContent(item) }"
+            :role="hasPreviewContent(item) ? 'button' : undefined"
+            :tabindex="hasPreviewContent(item) ? 0 : undefined"
+            @click="openResourcePreview(item)"
+            @keydown.enter.prevent="openResourcePreview(item)"
+            @keydown.space.prevent="openResourcePreview(item)"
           >
             <div class="item-header">
               <div class="item-type">
@@ -62,31 +68,46 @@
               <el-icon><WarningFilled /></el-icon>
               {{ item.error_message }}
             </div>
-            <el-collapse v-if="item.content" class="item-content-collapse">
-              <el-collapse-item title="查看内容">
-                <div class="item-content">
-                  <ReadingResourceView v-if="item.type === 'reading'" :result-data="item" />
-                  <div v-else-if="item.format === 'markdown'" v-html="renderMarkdown(item.content)"></div>
-                  <pre v-else-if="item.format === 'json' || typeof item.content === 'object'">{{ JSON.stringify(item.content, null, 2) }}</pre>
-                  <div v-else>{{ item.content }}</div>
-                </div>
-              </el-collapse-item>
-            </el-collapse>
-          </div>
+            <div class="item-preview-hint" :class="{ disabled: !hasPreviewContent(item) }">
+              {{ hasPreviewContent(item) ? '点击卡片查看完整内容' : '暂无可预览内容' }}
+            </div>
+          </article>
         </div>
       </div>
     </template>
+
+    <el-dialog
+      v-model="previewVisible"
+      :title="previewTitle"
+      width="78%"
+      top="6vh"
+      destroy-on-close
+      class="resource-preview-dialog"
+    >
+      <div v-if="previewItem" class="preview-dialog-body">
+        <MindmapResourceView v-if="previewItem.type === 'mindmap'" :result-data="previewItem" />
+        <QuizResourceView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem" />
+        <DiagramResourceView v-else-if="previewItem.type === 'diagram'" :result-data="previewItem" />
+        <CodeResourceView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
+        <ReadingResourceView v-else-if="previewItem.type === 'reading'" :result-data="previewItem" />
+        <MarkdownResourceView v-else :result-data="previewItem" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Clock, Document, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { marked } from 'marked'
 import { getGeneratedResourceDetail } from '@/api/ai'
-import type { GeneratedResourceBundle } from '@/api/ai'
+import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
+import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
+import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
+import QuizResourceView from '@/components/resource/QuizResourceView.vue'
+import DiagramResourceView from '@/components/resource/DiagramResourceView.vue'
+import CodeResourceView from '@/components/resource/CodeResourceView.vue'
 import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
 
 const route = useRoute()
@@ -95,6 +116,13 @@ const router = useRouter()
 const loading = ref(true)
 const error = ref(false)
 const resource = ref<GeneratedResourceBundle | null>(null)
+const previewVisible = ref(false)
+const previewItem = ref<ResourceItemDetail | null>(null)
+
+const previewTitle = computed(() => {
+  if (!previewItem.value) return '资源预览'
+  return previewItem.value.title || `${getAgentTypeName(previewItem.value.type)}资源`
+})
 
 const loadResource = async () => {
   const resourceId = Number(route.params.id)
@@ -153,6 +181,19 @@ const getAgentTypeName = (type: string) => {
   return map[type] || type
 }
 
+const hasPreviewContent = (item: ResourceItemDetail) => {
+  if (item.content != null && String(item.content).trim()) return true
+  if (item.summary_data && Object.keys(item.summary_data).length) return true
+  if (item.metadata && Object.keys(item.metadata).length) return true
+  return false
+}
+
+const openResourcePreview = (item: ResourceItemDetail) => {
+  if (!hasPreviewContent(item)) return
+  previewItem.value = item
+  previewVisible.value = true
+}
+
 const formatTime = (time: string | null) => {
   if (!time) return ''
   const date = new Date(time)
@@ -173,11 +214,6 @@ const formatTime = (time: string | null) => {
     return `${days}天前`
   }
   return `${date.getMonth() + 1}月${date.getDate()}日`
-}
-
-const renderMarkdown = (content: string) => {
-  if (typeof content !== 'string') return ''
-  return marked(content)
 }
 
 onMounted(() => {
@@ -267,6 +303,20 @@ onMounted(() => {
   border: 1px solid #E2E8F0;
   border-radius: 12px;
   padding: 16px;
+  background: #FFFFFF;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.resource-item-card.is-clickable {
+  cursor: pointer;
+}
+
+.resource-item-card.is-clickable:hover,
+.resource-item-card.is-clickable:focus-visible {
+  border-color: #93C5FD;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+  outline: none;
 }
 
 .item-header {
@@ -309,23 +359,35 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-.item-content-collapse {
+.item-preview-hint {
   margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #F1F5F9;
+  color: #2563EB;
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
-.item-content {
-  font-size: 0.875rem;
-  line-height: 1.6;
-  color: #475569;
-  max-height: 400px;
+.item-preview-hint.disabled {
+  color: #94A3B8;
+}
+
+.resource-preview-dialog :deep(.el-dialog) {
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.resource-preview-dialog :deep(.el-dialog__body) {
+  background: #F8FAFC;
+  padding: 20px 24px 24px;
+}
+
+.preview-dialog-body {
+  max-height: 72vh;
   overflow-y: auto;
-}
-
-.item-content pre {
-  background: #F1F5F9;
-  padding: 12px;
-  border-radius: 8px;
-  overflow-x: auto;
-  font-size: 0.8rem;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 18px;
 }
 </style>

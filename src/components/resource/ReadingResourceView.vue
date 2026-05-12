@@ -60,7 +60,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { User, ArrowRight, Reading } from '@element-plus/icons-vue'
-import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
+import { normalizeReadingArtifact, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -68,37 +68,7 @@ const props = defineProps<{
 }>()
 
 const readingData = computed<Record<string, any> | null>(() => {
-  if (!props.resultData) return null
-  
-  let data = props.resultData as Record<string, any>
-  if (data.resource && typeof data.resource === 'object') {
-    data = data.resource
-  }
-
-  // 1. 直层级有 resources
-  if (Array.isArray(data.resources)) {
-    return data
-  }
-  
-  // 2. content 为对象且内部有 resources
-  if (typeof data.content === 'object' && data.content !== null) {
-    if (Array.isArray(data.content.resources)) return data.content
-    if (Array.isArray(data.content.recommendations)) return { ...data.content, resources: data.content.recommendations }
-  }
-
-  // 3. content 为字符串 but 包含 resources or recommendations
-  const parsedContent = parseJsonObject(data.content)
-  if (parsedContent) {
-    if (Array.isArray(parsedContent.resources)) return parsedContent
-    if (Array.isArray(parsedContent.recommendations)) return { ...parsedContent, resources: parsedContent.recommendations }
-  }
-
-  // 4. recommendations (兼容旧版拼写)
-  if (Array.isArray(data.recommendations)) {
-    return { ...data, resources: data.recommendations }
-  }
-
-  return null
+  return normalizeReadingArtifact(props.resultData)
 })
 
 const resources = computed<any[]>(() => {

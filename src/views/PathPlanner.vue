@@ -98,13 +98,34 @@
 
                           <div class="node-copy">
                             <div class="node-title">{{ node.title }}</div>
-                            <div v-if="node.desc" class="node-desc">{{ node.desc }}</div>
+                            <div v-if="node.recommendation_reason || node.desc" class="node-desc">
+                              {{ node.recommendation_reason || node.desc }}
+                            </div>
+                            <div class="resource-strip" :class="node.resource_status || 'none'">
+                              <div class="resource-copy">
+                                <span class="resource-label">{{ resourceStatusLabel(node.resource_status) }}</span>
+                                <strong>{{ node.resource_title || resourceFallbackTitle(node.id) }}</strong>
+                                <p>{{ node.resource_summary || resourceFallbackSummary(node.resource_status) }}</p>
+                              </div>
+                              <el-button
+                                v-if="node.resource_status === 'available' && node.resource_id"
+                                link
+                                type="primary"
+                                :icon="View"
+                                @click="openResource(node.resource_id)"
+                              >
+                                查看
+                              </el-button>
+                            </div>
                           </div>
                         </div>
 
                         <div class="node-side">
                           <el-tag size="small" :type="statusTagType(node.status)">
                             {{ statusLabel(node.status) }}
+                          </el-tag>
+                          <el-tag size="small" :type="resourceTagType(node.resource_status)" effect="plain">
+                            {{ resourceStatusLabel(node.resource_status) }}
                           </el-tag>
                           <span class="node-meta">优先级 {{ node.priority }}</span>
                           <span class="node-meta">进度 {{ node.progress }}%</span>
@@ -227,13 +248,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Aim,
   CircleCheckFilled,
   Flag,
   RefreshRight,
+  View,
 } from '@element-plus/icons-vue'
 import {
   getPathPlan,
@@ -244,6 +266,7 @@ import {
 import { getErrorMessage } from '@/utils/http'
 
 const route = useRoute()
+const router = useRouter()
 const plan = ref<PathPlan | null>(null)
 const loading = ref(true)
 const rebuildLoading = ref(false)
@@ -316,10 +339,61 @@ function sourceLabel(source: string) {
   const labels: Record<string, string> = {
     profile: '用户画像',
     resource: '学习资源',
-    plan_result: '已有计划',
+    resource_items: '资源明细',
     cold_start: '冷启动',
   }
   return labels[source] || source
+}
+
+function resourceStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case 'available':
+      return '资源就绪'
+    case 'pending':
+      return '生成中'
+    case 'failed':
+      return '生成失败'
+    case 'missing':
+      return '待生成'
+    default:
+      return '无资源'
+  }
+}
+
+function resourceTagType(status: string | null | undefined) {
+  switch (status) {
+    case 'available':
+      return 'success'
+    case 'pending':
+      return 'warning'
+    case 'failed':
+      return 'danger'
+    default:
+      return 'info'
+  }
+}
+
+function resourceFallbackTitle(nodeId: string) {
+  const labels: Record<string, string> = {
+    content: '核心讲解资源',
+    mindmap: '思维导图资源',
+    diagram: '图解资源',
+    quiz: '练习测验资源',
+    code: '代码实操资源',
+    reading: '拓展阅读资源',
+  }
+  return labels[nodeId] || '学习资源'
+}
+
+function resourceFallbackSummary(status: string | null | undefined) {
+  if (status === 'missing') return '当前资源包尚未包含该类型资源，可在资源生成页补充生成。'
+  if (status === 'pending') return '资源仍在生成，稍后刷新路径即可查看。'
+  if (status === 'failed') return '该资源生成失败，可重新生成资源包后再查看路径。'
+  return '根据画像和资源包为当前节点匹配的学习材料。'
+}
+
+function openResource(resourceId: number) {
+  void router.push({ name: 'ResourceDetail', params: { id: resourceId } })
 }
 
 function formatDate(value: string) {
@@ -546,6 +620,59 @@ watch(resourceId, () => {
   line-height: 1.5;
 }
 
+.resource-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.resource-strip.available {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: rgba(240, 253, 244, 0.8);
+}
+
+.resource-strip.pending {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: rgba(255, 251, 235, 0.82);
+}
+
+.resource-strip.failed {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(254, 242, 242, 0.82);
+}
+
+.resource-copy {
+  min-width: 0;
+}
+
+.resource-label {
+  display: block;
+  margin-bottom: 0.18rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.resource-copy strong {
+  display: block;
+  color: var(--text-main);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.resource-copy p {
+  margin: 0.22rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .node-side {
   display: flex;
   flex-direction: column;
@@ -664,6 +791,11 @@ watch(resourceId, () => {
 
   .node-side {
     align-items: flex-start;
+  }
+
+  .resource-strip {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .split {

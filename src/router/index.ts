@@ -8,6 +8,7 @@ import PathPlanner from '../views/PathPlanner.vue'
 import Tutor from '../views/Tutor.vue'
 import Evaluation from '../views/Evaluation.vue'
 import Profile from "@/views/Profile.vue";
+import ResourceDetail from "@/views/ResourceDetail.vue";
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -22,7 +23,8 @@ const routes = [
         {path: 'path-planner', name: 'PathPlanner', component: PathPlanner},
         {path: 'tutor', name: 'Tutor', component: Tutor},
         {path: 'evaluation', name: 'Evaluation', component: Evaluation},
-        {path: 'profile', name: 'Profile', component: Profile,}
+        {path: 'profile', name: 'Profile', component: Profile,},
+        {path: 'resource-detail/:id', name: 'ResourceDetail', component: ResourceDetail,}
     ]
   }
 ]

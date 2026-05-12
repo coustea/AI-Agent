@@ -123,45 +123,24 @@
 
             <div v-else-if="currentStep === 2" key="step2" class="step-pane">
               
-              <div class="form-row-grid">
-                <el-form-item prop="education_level">
-                  <template #label>
-                    <div class="custom-label">
-                      <span>学历阶段</span><span class="required-star">*</span>
-                    </div>
-                  </template>
-                  <div class="tag-group">
-                    <div 
-                      v-for="level in PRESET_EDUCATION_LEVELS" 
-                      :key="level"
-                      class="selectable-tag"
-                      :class="{ active: onboardingForm.education_level === level }"
-                      @click="setSingleValue('education_level', level)"
-                    >
-                      {{ level }}
-                    </div>
+              <el-form-item prop="education_level">
+                <template #label>
+                  <div class="custom-label">
+                    <span>学历阶段</span><span class="required-star">*</span>
                   </div>
-                </el-form-item>
-
-                <el-form-item prop="school_level">
-                  <template #label>
-                    <div class="custom-label">
-                      <span>院校类别 (选填)</span>
-                    </div>
-                  </template>
-                  <div class="tag-group">
-                    <div 
-                      v-for="level in PRESET_SCHOOL_LEVELS" 
-                      :key="level"
-                      class="selectable-tag"
-                      :class="{ active: onboardingForm.school_level === level }"
-                      @click="setSingleValue('school_level', level)"
-                    >
-                      {{ level }}
-                    </div>
+                </template>
+                <div class="tag-group">
+                  <div
+                    v-for="level in PRESET_EDUCATION_LEVELS"
+                    :key="level"
+                    class="selectable-tag"
+                    :class="{ active: onboardingForm.education_level === level }"
+                    @click="setSingleValue('education_level', level)"
+                  >
+                    {{ level }}
                   </div>
-                </el-form-item>
-              </div>
+                </div>
+              </el-form-item>
 
               <el-form-item prop="grade">
                 <template #label>
@@ -183,11 +162,31 @@
               </el-form-item>
 
               <el-form-item label="就读院校名称 (选填)" prop="school">
-                <el-input 
-                  v-model="onboardingForm.school" 
-                  placeholder="例如：北京大学、清华大学" 
-                  class="custom-inline-input"
-                />
+                <el-select
+                  v-model="onboardingForm.school"
+                  filterable
+                  remote
+                  clearable
+                  placeholder="搜索并选择院校"
+                  :remote-method="searchSchoolsDebounced"
+                  :loading="schoolSearchLoading"
+                  class="custom-inline-input w-full"
+                  @focus="handleSchoolFocus"
+                  @change="handleSchoolChange"
+                >
+                  <el-option
+                    v-for="school in schoolOptions"
+                    :key="school.id"
+                    :label="school.name"
+                    :value="school.name"
+                  >
+                    <span>{{ school.name }}</span>
+                    <span v-if="school.level" class="school-level-tag">{{ school.level }}</span>
+                  </el-option>
+                </el-select>
+                <div v-if="selectedSchoolLevel" class="school-level-note">
+                  已识别院校层次：<span>{{ selectedSchoolLevel }}</span>
+                </div>
               </el-form-item>
 
               <el-form-item label="常用编程语言 (选填)" prop="preferred_language">
@@ -248,8 +247,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { getProfileOnboarding, updateProfileOnboarding } from '@/api/ai'
-import type { ProfileOnboardingUpdate, StudentProfileData } from '@/api/ai'
+import { getProfileOnboarding, updateProfileOnboarding, searchSchools } from '@/api/ai'
+import type { ProfileOnboardingUpdate, StudentProfileData, SchoolItem } from '@/api/ai'
 import { Close, MagicStick } from '@element-plus/icons-vue'
 
 const props = defineProps<{
@@ -269,6 +268,10 @@ const visible = computed({
 const submitting = ref(false)
 const currentStep = ref(0)
 const onboardingFormRef = ref<FormInstance>()
+
+// 学校搜索相关
+const schoolSearchLoading = ref(false)
+const schoolOptions = ref<SchoolItem[]>([])
 
 const STEP_META = [
   {
@@ -293,7 +296,6 @@ const PRESET_COURSES = ['数据结构', '操作系统', '计算机网络', '数�
 const PRESET_GOALS = ['期末考试冲刺', '完成课设/毕设', '大厂求职/面试', '考研初复试准备', '零基础快速入门', '日常系统学习进阶']
 const PRESET_EDUCATION_LEVELS = ['专科', '本科', '硕士', '博士']
 const PRESET_GRADES = ['大一', '大二', '大三', '大四', '研一', '研二']
-const PRESET_SCHOOL_LEVELS = ['985', '211', '双一流', '普通本科', '高职高专']
 const PRESET_LANGUAGES = ['Python', 'Java', 'C++', 'Go', 'JavaScript']
 
 const onboardingForm = reactive<ProfileOnboardingUpdate>({
@@ -314,6 +316,7 @@ const customInputs = reactive({
   course: ''
 })
 const customAddedCourses = ref<string[]>([])
+const selectedSchoolLevel = computed(() => onboardingForm.school_level || '')
 
 const onboardingRules: FormRules<ProfileOnboardingUpdate> = {
   education_level: [{ required: true, message: '请选择学历阶段', trigger: 'change' }],
@@ -361,6 +364,53 @@ const addCustomCourse = () => {
   }
   customInputs.course = ''
   onboardingFormRef.value?.validateField('courses').catch(() => {})
+}
+
+const applySchoolLevelFromSelection = (schoolName: string | null | undefined, clearWhenMissing = true) => {
+  if (!schoolName) {
+    onboardingForm.school_level = ''
+    return
+  }
+  const selectedSchool = schoolOptions.value.find((school) => school.name === schoolName)
+  if (selectedSchool) {
+    onboardingForm.school_level = selectedSchool.level || ''
+  } else if (clearWhenMissing) {
+    onboardingForm.school_level = ''
+  }
+}
+
+// 学校搜索
+let schoolSearchTimeout: ReturnType<typeof setTimeout> | null = null
+const handleSchoolSearch = async (keyword: string) => {
+  schoolSearchLoading.value = true
+  try {
+    const res = await searchSchools(keyword, 20)
+    schoolOptions.value = res.data.data
+    applySchoolLevelFromSelection(onboardingForm.school, false)
+  } catch (e) {
+    console.error('Failed to search schools', e)
+  } finally {
+    schoolSearchLoading.value = false
+  }
+}
+
+const handleSchoolFocus = () => {
+  if (schoolOptions.value.length === 0) {
+    handleSchoolSearch('')
+  }
+}
+
+const searchSchoolsDebounced = (keyword: string) => {
+  if (schoolSearchTimeout) {
+    clearTimeout(schoolSearchTimeout)
+  }
+  schoolSearchTimeout = setTimeout(() => {
+    handleSchoolSearch(keyword)
+  }, 300)
+}
+
+const handleSchoolChange = (schoolName: string) => {
+  applySchoolLevelFromSelection(schoolName)
 }
 
 const skipOnboarding = () => {
@@ -701,6 +751,31 @@ onMounted(() => {
 
 .skip-btn:hover {
   color: #64748B;
+}
+
+/* 学校层次标签 */
+.school-level-tag {
+  margin-left: 8px;
+  font-size: 0.75rem;
+  color: #64748B;
+  background: #F1F5F9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.school-level-note {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: #64748B;
+}
+
+.school-level-note span {
+  color: #2563EB;
+  font-weight: 700;
+}
+
+.w-full {
+  width: 100%;
 }
 
 /* 过渡动画 */

@@ -105,6 +105,7 @@ import {
   getFileName,
   getFileUrl,
   getMarkdownContent,
+  normalizeReadingArtifact,
 } from '@/components/resource/resourceViewUtils'
 
 const props = defineProps<{
@@ -155,7 +156,7 @@ const quizCount = computed(() => {
 })
 
 const readingCount = computed(() => {
-  return Array.isArray(props.resultData?.recommendations) ? props.resultData.recommendations.length : 0
+  return normalizeReadingArtifact(props.resultData)?.resources?.length || 0
 })
 
 const resourceTypeLabel = computed(() => {

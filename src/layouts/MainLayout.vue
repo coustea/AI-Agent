@@ -68,6 +68,10 @@
         </transition>
       </router-view>
     </main>
+
+    <OnboardingDialog
+      v-model="onboardingDialogVisible"
+    />
   </div>
 </template>
 
@@ -80,9 +84,12 @@ import {
   User
 } from '@element-plus/icons-vue'
 import { logout } from '@/api/auth'
+import { getProfileOnboarding } from '@/api/ai'
+import OnboardingDialog from '@/components/OnboardingDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
+const onboardingDialogVisible = ref(false)
 
 const navItems = [
   { path: '/dashboard', label: '全景中枢', icon: Menu },
@@ -97,12 +104,22 @@ const activePath = computed(() => route.path)
 const currentTime = ref('')
 let timer: number
 
+const loadOnboardingStatus = async () => {
+  try {
+    const res = await getProfileOnboarding()
+    onboardingDialogVisible.value = !res.data.data.profile_initialized
+  } catch (e) {
+    console.error('Failed to load onboarding status', e)
+  }
+}
+
 onMounted(() => {
   const updateTime = () => {
     currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
   updateTime()
   timer = window.setInterval(updateTime, 1000)
+  loadOnboardingStatus()
 })
 
 onUnmounted(() => {

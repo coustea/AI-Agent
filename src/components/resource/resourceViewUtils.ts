@@ -36,8 +36,9 @@ export function asText(value: unknown): string {
 export function getMarkdownContent(resultData: ResourceArtifactLike): string {
   if (!resultData) return ''
   if (typeof resultData === 'string') return resultData
-  if (resultData.type === 'reading' && Array.isArray(resultData.recommendations)) {
-    return renderReadingRecommendations(resultData.recommendations)
+  const readingData = normalizeReadingArtifact(resultData)
+  if (readingData?.resources?.length) {
+    return renderReadingRecommendations(readingData.resources)
   }
   return asText(
     resultData.content ||
@@ -65,6 +66,43 @@ export function parseJsonObject(value: unknown): Record<string, any> | null {
   } catch {
     return null
   }
+}
+
+function normalizeReadingCollection(data: Record<string, any>): Record<string, any> | null {
+  const collectionKeys = ['resources', 'recommendations', 'items']
+  for (const key of collectionKeys) {
+    if (Array.isArray(data[key])) {
+      return key === 'resources' ? data : { ...data, resources: data[key] }
+    }
+  }
+  return null
+}
+
+export function normalizeReadingArtifact(resultData: ResourceArtifactLike): Record<string, any> | null {
+  if (!resultData) return null
+  if (Array.isArray(resultData)) return { resources: resultData }
+  if (typeof resultData !== 'object') return null
+
+  let data = resultData as Record<string, any>
+  if (data.resource && typeof data.resource === 'object' && !Array.isArray(data.resource)) {
+    data = data.resource as Record<string, any>
+  }
+
+  const direct = normalizeReadingCollection(data)
+  if (direct) return direct
+
+  if (typeof data.content === 'object' && data.content !== null && !Array.isArray(data.content)) {
+    const fromContent = normalizeReadingCollection(data.content as Record<string, any>)
+    if (fromContent) return fromContent
+  }
+
+  const parsedContent = parseJsonObject(data.content)
+  if (parsedContent) {
+    const fromParsed = normalizeReadingCollection(parsedContent)
+    if (fromParsed) return fromParsed
+  }
+
+  return null
 }
 
 /**
@@ -124,12 +162,13 @@ export function renderReadingRecommendations(recommendations: unknown[]): string
   const lines = ['# 拓展阅读', '']
   recommendations.forEach((item, index) => {
     const record = item && typeof item === 'object' ? item as Record<string, any> : {}
+    const authors = Array.isArray(record.authors) ? record.authors.join(', ') : record.author_or_source || record.source || ''
     lines.push(
       `### ${index + 1}. ${asText(record.title || '未命名资源')}`,
-      `- 来源：${asText(record.author_or_source || record.source || '未知')}`,
+      `- 来源：${asText(authors || '未知')}`,
       `- 类型：${asText(record.type || 'resource')}`,
-      `- 推荐理由：${asText(record.relevance || '与当前主题相关')}`,
-      `- 摘要：${asText(record.abstract || record.summary || '')}`,
+      `- 推荐理由：${asText(record.recommend_reason || record.relevance || '与当前主题相关')}`,
+      `- 摘要：${asText(record.description || record.abstract || record.summary || '')}`,
       '',
     )
   })

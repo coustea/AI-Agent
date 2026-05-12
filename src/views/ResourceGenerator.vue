@@ -127,10 +127,26 @@
                         <el-option-group label="通用基础图解">
                           <el-option label="层级结构图 (Hierarchy)" value="hierarchy" />
                           <el-option label="顺序流程图 (Flow)" value="flow" />
+                          <el-option label="对比结构图 (Compare)" value="compare" />
+                          <el-option label="关系网络图 (Relation)" value="relation" />
+                        </el-option-group>
+                        <el-option-group label="计算机学科图表">
+                          <el-option label="类结构图 (Class)" value="class" />
+                          <el-option label="实体关系图 (ER)" value="er" />
+                          <el-option label="模块方块图 (Block)" value="block" />
+                          <el-option label="协议包结构图 (Packet)" value="packet" />
+                          <el-option label="Git 演进图 (Git)" value="git" />
                         </el-option-group>
                         <el-option-group label="软件工程图表">
                           <el-option label="交互时序图 (Sequence)" value="sequence" />
                           <el-option label="状态转移图 (State)" value="state" />
+                          <el-option label="活动流程图 (Activity)" value="activity" />
+                          <el-option label="用例关系图 (Usecase)" value="usecase" />
+                          <el-option label="组件依赖图 (Component)" value="component" />
+                          <el-option label="包依赖图 (Package)" value="package" />
+                          <el-option label="部署拓扑图 (Deployment)" value="deployment" />
+                          <el-option label="对象实例图 (Object)" value="object" />
+                          <el-option label="通信协作图 (Communication)" value="communication" />
                         </el-option-group>
                       </el-select>
                     </div>
@@ -406,166 +422,131 @@
       </div>
 
       <div v-else-if="currentPhase === 'result'" class="phase-view results-view result-dashboard-view" key="result">
-        <header class="result-hero glass-nav">
-          <div class="result-hero-main">
-            <div class="result-status-line">
-              <span class="result-success-badge"><el-icon><CircleCheckFilled /></el-icon> 生成完成</span>
-              <span class="result-soft-meta">{{ getBundleStatusLabel(finalBundle?.status) }} · {{ resultResources.length }} 项资源 · {{ involvedAgentCount }} 个智能体参与</span>
+        <header class="result-hero-minimal">
+          <div class="hero-content">
+            <div class="hero-status-tag">
+              <el-icon><CircleCheckFilled /></el-icon>
+              <span>GEN_COMPLETE</span>
             </div>
-            <h1>{{ finalBundle?.title || '个性化学习资源包已就绪' }}</h1>
-            <p class="result-hero-desc">系统已将本次学习需求拆解为讲解、结构化、图解、实践、检测与拓展资源，建议按照下方学习顺序完成复习。</p>
-            <div class="result-context-panel">
-              <div>
-                <span>学习主题</span>
-                <strong>{{ resultTopicSummary }}</strong>
+            <h1 class="hero-title">{{ finalBundle?.title || '个性化学习资源已就绪' }}</h1>
+            <div class="hero-context-pills">
+              <div class="context-pill">
+                <span class="pill-label">TOPIC</span>
+                <span class="pill-value">{{ resultTopicSummary }}</span>
               </div>
-              <div>
-                <span>学习需求 / 薄弱点</span>
-                <strong>{{ resultNeedSummary }}</strong>
+              <div class="context-pill">
+                <span class="pill-label">NEED</span>
+                <span class="pill-value">{{ resultNeedSummary }}</span>
               </div>
             </div>
           </div>
-          <div class="result-hero-actions">
-            <el-button plain round @click="resetGenerator" class="back-btn">
+          <div class="hero-actions">
+            <el-button plain round @click="resetGenerator" class="action-btn">
               <el-icon><RefreshLeft /></el-icon> 新建任务
             </el-button>
-            <el-button type="primary" round @click="pushToLearningPath" class="path-btn">
-              规划学习路径 <el-icon class="el-icon--right"><Position /></el-icon>
+            <el-button type="primary" round @click="pushToLearningPath" class="action-btn-primary">
+              规划路径 <el-icon class="el-icon--right"><Position /></el-icon>
             </el-button>
           </div>
         </header>
 
-        <main class="results-body result-dashboard-body">
-          <section class="resource-overview-grid">
-            <article class="overview-card">
-              <span>资源总数</span>
-              <strong>{{ resultResources.length }}</strong>
-              <p>覆盖理解、图解、练习与拓展资料</p>
-            </article>
-            <article class="overview-card">
-              <span>参与智能体</span>
-              <strong>{{ involvedAgentCount }}</strong>
-              <p>多个 Agent 按依赖关系协作完成</p>
-            </article>
-            <article class="overview-card">
-              <span>学习阶段</span>
-              <strong>{{ learningSequenceResources.length }}</strong>
-              <p>已整理为推荐使用顺序</p>
-            </article>
-            <article class="overview-card">
-              <span>质量审查</span>
-              <strong>{{ reviewResult ? '已完成' : '待同步' }}</strong>
-              <p>ReviewerAgent 汇总资源质量与匹配度</p>
-            </article>
-          </section>
-
-          <section class="learning-sequence-card">
-            <div class="section-heading">
-              <span>RECOMMENDED FLOW</span>
-              <h2>推荐学习顺序</h2>
-              <p>先建立概念理解，再通过图解和导图整理结构，最后用代码案例与自测题巩固。</p>
+        <main class="results-body-bento">
+          <section class="bento-stats-row">
+            <div class="stat-pill">
+              <span class="stat-v">{{ resultResources.length }}</span>
+              <span class="stat-l">资源总数</span>
             </div>
-            <div v-if="learningSequenceResources.length" class="sequence-track">
-              <article
-                v-for="(res, index) in learningSequenceResources"
-                :key="res.id || `${res.type}-${index}`"
-                class="sequence-node"
-                @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
-              >
-                <span class="sequence-index">{{ String(index + 1).padStart(2, '0') }}</span>
-                <div class="sequence-icon" :class="getResourceToneClass(res.type)">
-                  <el-icon><component :is="getAgentMeta(res.type).icon" /></el-icon>
-                </div>
-                <div>
-                  <strong>{{ getResourceTypeLabel(res.type) }}</strong>
-                  <p>{{ stringifyCompact(res.title || getResourceUsageHint(res.type), 42) }}</p>
-                </div>
-              </article>
+            <div class="stat-pill">
+              <span class="stat-v">{{ involvedAgentCount }}</span>
+              <span class="stat-l">智能体参与</span>
             </div>
-            <div v-else class="side-empty compact">暂无可排序资源</div>
-          </section>
-
-          <section class="review-report-card" v-if="reviewResult">
-            <div class="review-icon"><el-icon><CircleCheckFilled /></el-icon></div>
-            <div class="review-content">
-              <span>ReviewerAgent Quality Report</span>
-              <h2>资源质量审查已完成</h2>
-              <p>{{ reviewResult.summary || reviewResult.message || '资源质量审查已完成，可进入学习与复习阶段。' }}</p>
+            <div class="stat-pill">
+              <span class="stat-v">{{ learningSequenceResources.length }}</span>
+              <span class="stat-l">推荐步骤</span>
+            </div>
+            <div class="stat-pill" v-if="reviewResult">
+              <el-icon class="stat-icon-success"><CircleCheckFilled /></el-icon>
+              <span class="stat-l">质量审查已通过</span>
             </div>
           </section>
 
-          <div class="result-resource-groups">
-            <section v-for="group in groupedResultResources" :key="group.key" class="result-group-section">
-              <header class="result-group-header">
-                <div>
-                  <span class="layer-index">{{ group.badge }}</span>
-                  <h3>{{ group.label }}</h3>
-                  <p>{{ group.description }}</p>
+          <section class="learning-path-timeline">
+            <div class="timeline-header">
+              <div class="timeline-kicker">LEARNING_PATH</div>
+              <h2>智能循序学习路径</h2>
+            </div>
+            <div class="path-track-container">
+              <div v-if="learningSequenceResources.length" class="path-track">
+                <div
+                  v-for="(res, index) in learningSequenceResources"
+                  :key="res.id || `${res.type}-${index}`"
+                  class="path-step"
+                  :class="getResourceToneClass(res.type)"
+                  @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
+                >
+                  <div class="step-icon-wrap">
+                    <el-icon><component :is="getAgentMeta(res.type).icon" /></el-icon>
+                    <span class="step-number">{{ index + 1 }}</span>
+                  </div>
+                  <div class="step-info">
+                    <span class="step-type">{{ getResourceTypeLabel(res.type) }}</span>
+                    <span class="step-name">{{ stringifyCompact(res.title || getResourceUsageHint(res.type), 18) }}</span>
+                  </div>
                 </div>
-                <el-tag effect="plain" round>{{ group.resources.length }} 项资源</el-tag>
-              </header>
+              </div>
+            </div>
+          </section>
 
-              <div v-if="group.resources.length" class="result-resource-grid">
+          <div class="bento-grid-container">
+            <section v-for="group in groupedResultResources" :key="group.key" class="bento-group">
+              <div class="group-header">
+                <span class="group-badge">{{ group.badge }}</span>
+                <h3>{{ group.label }}</h3>
+              </div>
+
+              <div class="bento-resource-grid">
                 <article
                   v-for="res in group.resources"
                   :key="res.id || res.title"
-                  class="result-resource-card enhanced-resource-card"
+                  class="bento-res-card"
+                  :class="getResourceToneClass(res.type)"
                 >
-                  <div class="resource-card-top">
-                    <div class="resource-type-mark" :class="getResourceToneClass(res.type)">
+                  <div class="card-header">
+                    <div class="type-icon-box">
                       <el-icon><component :is="getAgentMeta(res.type).icon" /></el-icon>
                     </div>
-                    <div class="resource-title-block">
-                      <div class="resource-type-row">
-                        <el-tag size="small" effect="plain" round>{{ getResourceTypeLabel(res.type) }}</el-tag>
-                        <span>{{ res.format || getDefaultResourceFormat(res.type) }}</span>
-                      </div>
-                      <h3>{{ res.title || getResourceTypeLabel(res.type) }}</h3>
+                    <div class="type-info">
+                      <span class="type-label">{{ getResourceTypeLabel(res.type) }}</span>
+                      <span class="format-tag">{{ res.format || getDefaultResourceFormat(res.type) }}</span>
                     </div>
                   </div>
 
-                  <p class="resource-summary">{{ res.summary || getResourceUsageHint(res.type) }}</p>
-
-                  <div class="resource-usage-card">
-                    <b>使用建议</b>
-                    <span>{{ getResourceUsageHint(res.type) }}</span>
+                  <div class="card-body">
+                    <h4 class="card-title">{{ res.title || getResourceTypeLabel(res.type) }}</h4>
+                    <p class="card-summary">{{ stringifyCompact(res.summary || getResourceUsageHint(res.type), 100) }}</p>
+                    
+                    <div class="card-metrics">
+                      <div class="metric-item">
+                        <span class="m-l">难度</span>
+                        <span class="m-v">{{ getDifficultyLabel(res.metadata?.difficulty) }}</span>
+                      </div>
+                      <div class="metric-item">
+                        <span class="m-l">预计</span>
+                        <span class="m-v">{{ res.metadata?.estimated_time || getEstimatedTime(res.type) }}</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div class="result-meta-grid resource-meta-grid">
-                    <span><b>生成 Agent</b>{{ res.metadata?.agent_role || getAgentMeta(res.type).name }}</span>
-                    <span><b>学习难度</b>{{ getDifficultyLabel(res.metadata?.difficulty) }}</span>
-                    <span><b>适合阶段</b>{{ res.metadata?.suitable_stage || getResourceStageLabel(res.type) }}</span>
-                    <span><b>预计时长</b>{{ res.metadata?.estimated_time || getEstimatedTime(res.type) }}</span>
-                  </div>
-
-                  <div class="resource-knowledge-tags" v-if="normalizeList(res.metadata?.knowledge_points).length">
-                    <el-tag
-                      v-for="point in normalizeList(res.metadata?.knowledge_points).slice(0, 6)"
-                      :key="point"
-                      size="small"
-                      effect="plain"
-                      round
-                    >
-                      {{ point }}
-                    </el-tag>
-                  </div>
-
-                  <div class="personalized-reason">
-                    <b>个性化匹配</b>
-                    <span>{{ res.metadata?.personalized_reason || getPersonalizedFallback(res.type) }}</span>
-                  </div>
-
-                  <div class="resource-card-actions">
-                    <el-button type="primary" plain round @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })">
-                      查看资源详情
+                  <div class="card-footer">
+                    <el-button type="primary" link @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })">
+                      查看详情 <el-icon class="el-icon--right"><Position /></el-icon>
                     </el-button>
-                    <el-button text round @click="pushToLearningPath">
-                      加入学习路径
-                    </el-button>
+                    <div class="card-actions-hover">
+                      <el-button circle size="small" @click="pushToLearningPath"><el-icon><Position /></el-icon></el-button>
+                    </div>
                   </div>
                 </article>
               </div>
-              <div v-else class="side-empty compact">本组暂无资源</div>
             </section>
           </div>
         </main>
@@ -725,9 +706,16 @@ type AgentRuntimeState = {
   updated_at?: string
   startedAt?: string
   finishedAt?: string
+  displayOrder?: number
+  resourceGeneratedAt?: string
   elapsedMs: number
   recentLogs: AgentLogItem[]
   resourceGenerated?: boolean
+}
+
+type GeneratedResourceItem = Record<string, any> & {
+  generatedAt?: string
+  displayOrder?: number
 }
 
 type FlowEventBubble = {
@@ -836,7 +824,7 @@ const goToPersonalize = () => {
 const totalProgress = ref(0)
 const currentMessage = ref('')
 const activeAgents = reactive<Record<string, AgentRuntimeState>>({})
-const generatedResources = ref<any[]>([])
+const generatedResources = ref<GeneratedResourceItem[]>([])
 const reviewResult = ref<any | null>(null)
 const finalBundle = ref<any | null>(null)
 const profileSummary = ref<Record<string, any> | null>(null)
@@ -847,6 +835,8 @@ const streamController = ref<AbortController | null>(null)
 const focusedAgentId = ref<string | null>(null)
 const agentDetailVisible = ref(false)
 const flowEventBubbles = ref<FlowEventBubble[]>([])
+const agentDisplayCounter = ref(0)
+const resourceDisplayCounter = ref(0)
 
 const createWorkflowStages = (): WorkflowStage[] => [
   { key: 'planning', label: 'MasterAgent 规划', status: 'pending' },
@@ -903,27 +893,37 @@ const currentAgentLabel = computed(() => {
 const completedResourceCount = computed(() => generatedResources.value.length)
 const expectedResourceCount = computed(() => Math.max(Object.keys(activeAgents).length, enabledAgentIds.value.length))
 
-const flowNodeDefinitions = [
+const DEFAULT_RESOURCE_SEQUENCE = ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading', 'video']
+
+const flowAgentPhases = [
+  { x: 28, agents: ['content', 'mindmap'] },
+  { x: 52, agents: ['diagram', 'code', 'quiz'] },
+  { x: 72, agents: ['reading'] },
+]
+
+const flowAgentMeta: Record<string, { label: string; icon: any }> = {
+  content: { label: '课程讲解', icon: Document },
+  mindmap: { label: '思维导图', icon: Share },
+  diagram: { label: '知识图解', icon: Monitor },
+  code: { label: '代码案例', icon: Cpu },
+  quiz: { label: '练习题', icon: Edit },
+  reading: { label: '拓展阅读', icon: Collection },
+}
+
+const fixedFlowNodes = [
   { id: 'master', label: 'MasterAgent', x: 8, y: 50, icon: Cpu },
-  { id: 'content', label: '课程讲解', x: 28, y: 24, icon: Document },
-  { id: 'mindmap', label: '思维导图', x: 28, y: 50, icon: Share },
-  { id: 'diagram', label: '知识图解', x: 28, y: 76, icon: Monitor },
-  { id: 'code', label: '代码案例', x: 50, y: 30, icon: Cpu },
-  { id: 'reading', label: '拓展阅读', x: 50, y: 62, icon: Collection },
-  { id: 'quiz', label: '练习题', x: 68, y: 46, icon: Edit },
-  { id: 'reviewer', label: '资源审查', x: 84, y: 38, icon: CircleCheckFilled },
-  { id: 'assembler', label: '资源组装', x: 92, y: 66, icon: Position },
 ]
 
 const rawFlowEdges = [
   ['master', 'content'],
   ['master', 'mindmap'],
-  ['master', 'diagram'],
+  ['content', 'diagram'],
+  ['mindmap', 'diagram'],
   ['content', 'code'],
-  ['diagram', 'code'],
-  ['content', 'reading'],
   ['content', 'quiz'],
-  ['code', 'quiz'],
+  ['diagram', 'reading'],
+  ['code', 'reading'],
+  ['quiz', 'reading'],
   ['content', 'reviewer'],
   ['mindmap', 'reviewer'],
   ['diagram', 'reviewer'],
@@ -933,7 +933,66 @@ const rawFlowEdges = [
   ['reviewer', 'assembler'],
 ]
 
-const flowNodes = computed(() => flowNodeDefinitions.map(node => ({
+const getDistributedY = (index: number, total: number) => {
+  if (total <= 1) return 50
+  const start = total === 2 ? 34 : 24
+  const end = total === 2 ? 66 : 76
+  return start + ((end - start) * index) / (total - 1)
+}
+
+const getDefaultResourceIndex = (agentId: string) => {
+  const index = DEFAULT_RESOURCE_SEQUENCE.indexOf(agentId)
+  return index >= 0 ? index : DEFAULT_RESOURCE_SEQUENCE.length
+}
+
+const hasRuntimeActivity = (agentId: string) => {
+  const runtime = activeAgents[agentId]
+  return Boolean(
+    runtime?.displayOrder
+    || runtime?.startedAt
+    || runtime?.resourceGeneratedAt
+    || (runtime && runtime.status !== 'waiting')
+  )
+}
+
+const sortAgentIdsByRuntime = (agentIds: string[]) => [...agentIds].sort((a, b) => {
+  const aActive = hasRuntimeActivity(a) ? 0 : 1
+  const bActive = hasRuntimeActivity(b) ? 0 : 1
+  if (aActive !== bActive) return aActive - bActive
+
+  const aRuntime = activeAgents[a]
+  const bRuntime = activeAgents[b]
+  const aOrder = aRuntime?.displayOrder ?? Number.POSITIVE_INFINITY
+  const bOrder = bRuntime?.displayOrder ?? Number.POSITIVE_INFINITY
+  if (aOrder !== bOrder) return aOrder - bOrder
+
+  return getDefaultResourceIndex(a) - getDefaultResourceIndex(b)
+})
+
+const flowNodeDefinitions = computed(() => {
+  const nodes = [...fixedFlowNodes]
+  flowAgentPhases.forEach((phase) => {
+    const sortedAgents = sortAgentIdsByRuntime(phase.agents)
+    sortedAgents.forEach((agentId, index) => {
+      const meta = flowAgentMeta[agentId]
+      if (!meta) return
+      nodes.push({
+        id: agentId,
+        label: meta.label,
+        x: phase.x,
+        y: getDistributedY(index, sortedAgents.length),
+        icon: meta.icon,
+      })
+    })
+  })
+  nodes.push(
+    { id: 'reviewer', label: '资源审查', x: 86, y: 38, icon: CircleCheckFilled },
+    { id: 'assembler', label: '资源组装', x: 94, y: 66, icon: Position },
+  )
+  return nodes
+})
+
+const flowNodes = computed(() => flowNodeDefinitions.value.map(node => ({
   ...node,
   status: getFlowNodeStatus(node.id),
 })))
@@ -985,15 +1044,27 @@ const resultNeedSummary = computed(() => (
 
 const involvedAgentCount = computed(() => new Set(resultResources.value.map(resource => resource.type).filter(Boolean)).size)
 
-const sequenceOrder = ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading', 'video']
-
 const learningSequenceResources = computed(() => {
   const resourceMap = new Map<string, any>()
   resultResources.value.forEach((resource) => {
     if (resource?.type && !resourceMap.has(resource.type)) resourceMap.set(resource.type, resource)
   })
-  return sequenceOrder.map(type => resourceMap.get(type)).filter(Boolean)
+  return [...resourceMap.values()].sort((a, b) => getLearningResourceOrder(a) - getLearningResourceOrder(b))
 })
+
+const findGeneratedResourcePeer = (resource: any) => generatedResources.value.find(item => (
+  item.id === resource?.id || (item.type === resource?.type && item.title === resource?.title)
+))
+
+const getLearningResourceOrder = (resource: any) => {
+  const runtimeOrder = activeAgents[resource?.type]?.displayOrder
+  if (typeof runtimeOrder === 'number') return runtimeOrder
+
+  const generatedPeer = findGeneratedResourcePeer(resource)
+  if (typeof generatedPeer?.displayOrder === 'number') return generatedPeer.displayOrder
+
+  return 1000 + getDefaultResourceIndex(resource?.type)
+}
 
 const getResourceTypeLabel = (type: string) => {
   const labelMap: Record<string, string> = {
@@ -1086,15 +1157,13 @@ const getResourceToneClass = (type: string) => {
   return toneMap[type] || 'tone-blue'
 }
 
-const getPersonalizedFallback = (_type: string) => `该资源围绕”${resultTopicSummary.value}”生成，适合结合你的学习需求进行针对性复习。`
-
-// 资源排序顺序：按学习路径顺序排列
-const RESOURCE_ORDER = ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading']
-
-// 运行中已生成资源列表（按学习路径顺序排序）
+// 运行中已生成资源列表：模拟栈，后生成的资源优先展示在顶部
 const sortedGeneratedResources = computed(() => {
   return [...generatedResources.value].sort((a, b) => {
-    return RESOURCE_ORDER.indexOf(a.type) - RESOURCE_ORDER.indexOf(b.type)
+    const aOrder = typeof a.displayOrder === 'number' ? a.displayOrder : -1
+    const bOrder = typeof b.displayOrder === 'number' ? b.displayOrder : -1
+    if (aOrder !== bOrder) return bOrder - aOrder
+    return getDefaultResourceIndex(a.type) - getDefaultResourceIndex(b.type)
   })
 })
 
@@ -1174,6 +1243,8 @@ const resetGenerationState = () => {
   focusedAgentId.value = null
   agentDetailVisible.value = false
   flowEventBubbles.value = []
+  agentDisplayCounter.value = 0
+  resourceDisplayCounter.value = 0
   isGenerating.value = false
   workflowStages.splice(0, workflowStages.length, ...createWorkflowStages())
 }
@@ -1198,6 +1269,14 @@ const ensureAgentRuntime = (agentId: string) => {
   }
   activeAgents[agentId] = runtime
   return runtime
+}
+
+const markAgentRuntimeVisible = (runtime: AgentRuntimeState, time: string) => {
+  if (typeof runtime.displayOrder !== 'number') {
+    agentDisplayCounter.value += 1
+    runtime.displayOrder = agentDisplayCounter.value
+  }
+  if (!runtime.startedAt) runtime.startedAt = time
 }
 
 const calculateElapsedMs = (start?: string, end?: string) => {
@@ -1235,7 +1314,7 @@ const appendEventToAgentRuntime = (event: ResourceGenerateEvent) => {
   runtime.current_step = event.payload?.current_step ?? runtime.current_step
   runtime.total_steps = event.payload?.total_steps ?? runtime.total_steps
   runtime.updated_at = time
-  if (status === 'running' && !runtime.startedAt) runtime.startedAt = time
+  if (status !== 'waiting') markAgentRuntimeVisible(runtime, time)
   if (status === 'success' || status === 'failed' || status === 'skipped') runtime.finishedAt = time
   runtime.elapsedMs = calculateElapsedMs(runtime.startedAt, runtime.finishedAt || runtime.updated_at)
   runtime.recentLogs.unshift(logItem)
@@ -1296,13 +1375,19 @@ const handleSseEvent = (event: ResourceGenerateEvent) => {
   if (event.event_type === 'resource') {
     const resource = event.payload?.resource
     if (resource) {
-      upsertResource(resource)
+      const eventTime = event.timestamp || new Date().toISOString()
+      upsertResource(resource, eventTime)
       const agentId = (resource.type as string) || resolveEventAgentId(event)
       if (agentId) {
         const runtime = ensureAgentRuntime(agentId)
+        markAgentRuntimeVisible(runtime, eventTime)
         runtime.resourceGenerated = true
-        runtime.updated_at = event.timestamp || new Date().toISOString()
+        runtime.resourceGeneratedAt = eventTime
+        runtime.updated_at = eventTime
         runtime.message = `${runtime.agent_role || getAgentMeta(agentId).name}资源已生成`
+        if (runtime.status === 'waiting') runtime.status = 'success'
+        if (!runtime.finishedAt) runtime.finishedAt = eventTime
+        runtime.elapsedMs = calculateElapsedMs(runtime.startedAt, runtime.finishedAt)
       }
     }
   }
@@ -1340,13 +1425,29 @@ const handleSseEvent = (event: ResourceGenerateEvent) => {
   pushFlowEventBubble(event)
 }
 
-const upsertResource = (resource: any) => {
+const upsertResource = (resource: any, timestamp?: string) => {
+  const generatedAt = timestamp || new Date().toISOString()
   const index = generatedResources.value.findIndex(item => item.id === resource.id || (item.type === resource.type && item.title === resource.title))
   if (index >= 0) {
-    generatedResources.value[index] = { ...generatedResources.value[index], ...resource }
+    const previous = generatedResources.value[index]!
+    const displayOrder = typeof previous.displayOrder === 'number'
+      ? previous.displayOrder
+      : resourceDisplayCounter.value + 1
+    if (typeof previous.displayOrder !== 'number') resourceDisplayCounter.value = displayOrder
+    generatedResources.value[index] = {
+      ...previous,
+      ...resource,
+      generatedAt: previous.generatedAt || generatedAt,
+      displayOrder,
+    }
     return
   }
-  generatedResources.value.push(resource)
+  resourceDisplayCounter.value += 1
+  generatedResources.value.push({
+    ...resource,
+    generatedAt,
+    displayOrder: resourceDisplayCounter.value,
+  })
 }
 
 const closeSseConnection = () => {
@@ -1467,12 +1568,6 @@ const stringifyCompact = (value: any, maxLength = 80): string => {
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text
 }
 
-const normalizeList = (value: any): string[] => {
-  if (!value) return []
-  if (Array.isArray(value)) return value.map(item => String(item)).filter(Boolean)
-  return [String(value)]
-}
-
 const getStatusLabel = (status: WorkflowStatus) => {
   const labels: Record<WorkflowStatus, string> = {
     pending: '等待',
@@ -1493,16 +1588,6 @@ const getRuntimeStatusLabel = (status: AgentRuntimeStatus) => {
     skipped: '跳过',
   }
   return labels[status]
-}
-
-const getBundleStatusLabel = (status?: string) => {
-  const labels: Record<string, string> = {
-    completed: '生成完成',
-    completed_with_warnings: '完成但有提醒',
-    partial_completed: '部分完成',
-    failed: '生成失败',
-  }
-  return labels[status || ''] || '生成完成'
 }
 
 const getAgentProgress = (status: WorkflowStatus | AgentRuntimeStatus) => {
@@ -1834,181 +1919,82 @@ const handlePreview = (data: any) => {
 .resource-status-item p { margin: 0; color: #64748B; line-height: 1.5; overflow-wrap: anywhere; }
 .side-empty.compact { padding: 14px; }
 
-/* ================= Phase 4: Results View ================= */
-.results-view {
-  background:
-    radial-gradient(circle at 8% 0%, rgba(219, 234, 254, 0.72), transparent 32%),
-    radial-gradient(circle at 92% 8%, rgba(226, 232, 240, 0.88), transparent 34%),
-    linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
-  overflow-y: auto;
-}
-.result-dashboard-view { color: #0F172A; }
-.glass-nav { background: rgba(255, 255, 255, 0.86); backdrop-filter: blur(18px); }
-.result-hero {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  padding: 28px 40px 22px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
-  align-items: start;
-}
-.result-hero-main { max-width: 1050px; min-width: 0; }
-.result-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
-.result-success-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border-radius: 999px;
-  background: #ECFDF5;
-  border: 1px solid #A7F3D0;
-  color: #047857;
-  font-size: 0.84rem;
-  font-weight: 850;
-}
-.result-soft-meta { color: #64748B; font-size: 0.86rem; font-weight: 700; }
-.result-hero h1 { margin: 0; color: #0F172A; font-size: clamp(1.45rem, 2.5vw, 2.15rem); line-height: 1.18; letter-spacing: -0.035em; }
-.result-hero-desc { margin: 10px 0 0; color: #64748B; line-height: 1.7; max-width: 840px; }
-.result-context-panel {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(260px, 1fr);
-  gap: 12px;
-}
-.result-context-panel div {
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid #E2E8F0;
-  border-radius: 18px;
-  padding: 13px 15px;
-  min-width: 0;
-}
-.result-context-panel span { display: block; color: #94A3B8; font-size: 0.76rem; font-weight: 850; margin-bottom: 5px; }
-.result-context-panel strong { display: block; color: #334155; line-height: 1.45; overflow-wrap: anywhere; }
-.result-hero-actions { display: flex; gap: 12px; align-items: center; justify-content: flex-end; }
-.back-btn { border: none !important; background: #F1F5F9 !important; color: #475569 !important; font-weight: 700; }
-.back-btn:hover { background: #E2E8F0 !important; color: #0F172A !important; }
-.path-btn { font-weight: 800; box-shadow: 0 12px 28px rgba(37, 99, 235, 0.2); }
-.results-body { padding: 34px 40px 48px; max-width: 1500px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
-.resource-overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.overview-card {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #E2E8F0;
-  border-radius: 22px;
-  padding: 18px;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.045);
-}
-.overview-card span { display: block; color: #64748B; font-size: 0.82rem; font-weight: 850; margin-bottom: 8px; }
-.overview-card strong { display: block; color: #0F172A; font-size: 1.78rem; line-height: 1; letter-spacing: -0.04em; }
-.overview-card p { margin: 10px 0 0; color: #64748B; line-height: 1.5; font-size: 0.9rem; }
-.learning-sequence-card, .review-report-card, .result-group-section {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #E2E8F0;
-  border-radius: 26px;
-  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.052);
-}
-.learning-sequence-card { padding: 24px; }
-.section-heading { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
-.section-heading > span, .review-content > span { color: #64748B; font-size: 0.76rem; letter-spacing: 0.08em; font-weight: 900; }
-.section-heading h2, .review-content h2 { margin: 0; color: #0F172A; font-size: 1.22rem; }
-.section-heading p, .review-content p { margin: 0; color: #64748B; line-height: 1.65; }
-.sequence-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
-.sequence-node {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #E2E8F0;
-  border-radius: 18px;
-  background: #F8FAFC;
-  cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-.sequence-node:hover { transform: translateY(-2px); background: #FFFFFF; border-color: #CBD5E1; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06); }
-.sequence-index { color: #94A3B8; font-size: 0.78rem; font-weight: 900; }
-.sequence-icon, .resource-type-mark, .review-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.sequence-node strong { display: block; color: #0F172A; font-size: 0.96rem; margin-bottom: 3px; }
-.sequence-node p { margin: 0; color: #64748B; font-size: 0.84rem; line-height: 1.35; overflow-wrap: anywhere; }
-.review-report-card { padding: 22px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; }
-.review-icon { width: 48px; height: 48px; background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; font-size: 1.45rem; }
-.result-resource-groups { display: flex; flex-direction: column; gap: 24px; }
-.result-group-section { padding: 24px; }
-.result-group-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 20px; }
-.result-group-header h3 { margin: 5px 0 5px; color: #0F172A; font-size: 1.22rem; font-weight: 900; }
-.result-group-header p { margin: 0; color: #64748B; line-height: 1.55; }
-.result-resource-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; align-items: stretch; }
-.result-resource-card {
-  min-width: 0;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 24px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.result-resource-card:hover { transform: translateY(-3px); border-color: #CBD5E1; box-shadow: 0 20px 42px rgba(15, 23, 42, 0.075); }
-.resource-card-top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 13px; align-items: start; }
-.resource-title-block { min-width: 0; }
-.resource-type-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.resource-type-row > span { color: #94A3B8; font-size: 0.76rem; font-weight: 850; text-transform: uppercase; letter-spacing: 0.04em; }
-.resource-title-block h3 { margin: 0; color: #0F172A; font-size: 1.1rem; line-height: 1.35; overflow-wrap: anywhere; }
-.resource-summary { color: #475569; line-height: 1.68; margin: 0; overflow-wrap: anywhere; }
-.resource-usage-card {
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 16px;
-  padding: 12px 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.resource-usage-card b, .personalized-reason b { color: #334155; font-size: 0.82rem; }
-.resource-usage-card span, .personalized-reason span { color: #64748B; line-height: 1.55; overflow-wrap: anywhere; }
-.result-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.result-meta-grid span {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 14px;
-  padding: 11px;
-  color: #475569;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-.result-meta-grid b { display: block; color: #94A3B8; font-size: 0.74rem; margin-bottom: 4px; }
-.resource-knowledge-tags { display: flex; flex-wrap: wrap; gap: 8px; }
-.personalized-reason {
-  margin-top: auto;
-  background: #F0F9FF;
-  border: 1px solid #BAE6FD;
-  border-radius: 16px;
-  padding: 12px 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.resource-card-actions { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding-top: 2px; }
-.tone-blue { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
-.tone-purple { background: #F5F3FF; color: #6D28D9; border: 1px solid #DDD6FE; }
-.tone-amber { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
-.tone-rose { background: #FFF1F2; color: #BE123C; border: 1px solid #FFE4E6; }
-.tone-emerald { background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
-.tone-indigo { background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE; }
-.tone-slate { background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; }
+/* ================= Phase 4: Results View (Bento Grid) ================= */
+.results-view { background: #FCFDFE; overflow-y: auto; padding-bottom: 60px; }
+.result-hero-minimal { position: sticky; top: 0; z-index: 50; padding: 32px 48px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.hero-content { display: flex; flex-direction: column; gap: 12px; }
+.hero-status-tag { display: inline-flex; align-items: center; gap: 6px; background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; width: max-content; }
+.hero-title { margin: 0; font-size: 2rem; font-weight: 850; color: #0F172A; letter-spacing: -0.02em; }
+.hero-context-pills { display: flex; gap: 12px; flex-wrap: wrap; }
+.context-pill { display: flex; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 6px 12px; font-size: 0.85rem; }
+.pill-label { color: #64748B; font-weight: 800; margin-right: 8px; }
+.pill-value { color: #0F172A; font-weight: 600; }
+.hero-actions { display: flex; gap: 16px; align-items: center; }
+.action-btn { font-weight: 700; }
+.action-btn-primary { font-weight: 800; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2); }
+.results-body-bento { max-width: 1440px; margin: 0 auto; padding: 32px 48px; display: flex; flex-direction: column; gap: 32px; }
+.bento-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.stat-pill { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); }
+.stat-v { font-size: 2.5rem; font-weight: 850; color: #0F172A; line-height: 1.2; }
+.stat-l { font-size: 0.9rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+.stat-icon-success { font-size: 2.5rem; color: #10B981; margin-bottom: 8px; }
+.learning-path-timeline { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 32px; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); }
+.timeline-header { margin-bottom: 24px; }
+.timeline-kicker { font-size: 0.8rem; font-weight: 850; color: #3B82F6; letter-spacing: 0.05em; margin-bottom: 8px; }
+.timeline-header h2 { margin: 0; font-size: 1.5rem; font-weight: 800; color: #0F172A; }
+.path-track-container { overflow-x: auto; padding-bottom: 8px; }
+.path-track { display: flex; gap: 16px; min-width: max-content; }
+.path-step { display: flex; align-items: center; gap: 16px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 16px; padding: 16px 20px; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; min-width: 260px; }
+.path-step:hover { transform: translateY(-2px); border-color: #3B82F6; box-shadow: 0 8px 24px rgba(59, 130, 246, 0.1); }
+.step-icon-wrap { width: 48px; height: 48px; border-radius: 14px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.step-number { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #0F172A; color: #FFFFFF; font-size: 0.7rem; font-weight: 800; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #FFFFFF; }
+.step-info { display: flex; flex-direction: column; }
+.step-type { font-size: 0.8rem; font-weight: 700; color: #64748B; }
+.step-name { font-size: 1rem; font-weight: 800; color: #0F172A; }
+.bento-grid-container { display: flex; flex-direction: column; gap: 32px; }
+.bento-group { display: flex; flex-direction: column; gap: 16px; }
+.group-header { display: flex; align-items: center; gap: 12px; }
+.group-badge { background: #0F172A; color: #FFFFFF; font-size: 0.75rem; font-weight: 850; padding: 4px 10px; border-radius: 8px; }
+.group-header h3 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #0F172A; }
+.bento-resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
+.bento-res-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 16px; position: relative; overflow: hidden; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02); cursor: pointer; outline: none; }
+.bento-res-card:hover, .bento-res-card:focus-visible { transform: translateY(-4px); box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08); }
+.card-header { display: flex; align-items: center; gap: 12px; }
+.type-icon-box { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.type-info { display: flex; flex-direction: column; }
+.type-label { font-size: 0.9rem; font-weight: 800; color: #0F172A; }
+.format-tag { font-size: 0.75rem; font-weight: 600; color: #64748B; }
+.card-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.card-title { margin: 0; font-size: 1.1rem; font-weight: 850; color: #0F172A; line-height: 1.4; }
+.card-summary { margin: 0; font-size: 0.9rem; color: #64748B; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-metrics { display: flex; gap: 16px; margin-top: 8px; }
+.metric-item { background: #F8FAFC; border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; }
+.m-l { font-size: 0.7rem; color: #94A3B8; font-weight: 700; }
+.m-v { font-size: 0.85rem; color: #0F172A; font-weight: 800; }
+.card-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F1F5F9; padding-top: 16px; }
+.card-actions-hover { opacity: 0; transition: opacity 0.2s ease; }
+.bento-res-card:hover .card-actions-hover, .bento-res-card:focus-visible .card-actions-hover { opacity: 1; }
+.bento-res-card.tone-blue .type-icon-box { background: #EFF6FF; color: #3B82F6; }
+.bento-res-card.tone-purple .type-icon-box { background: #F5F3FF; color: #8B5CF6; }
+.bento-res-card.tone-amber .type-icon-box { background: #FFF7ED; color: #F59E0B; }
+.bento-res-card.tone-rose .type-icon-box { background: #FFF1F2; color: #E11D48; }
+.bento-res-card.tone-emerald .type-icon-box { background: #ECFDF5; color: #10B981; }
+.bento-res-card.tone-indigo .type-icon-box { background: #EEF2FF; color: #6366F1; }
+.bento-res-card.tone-slate .type-icon-box { background: #F1F5F9; color: #64748B; }
+.bento-res-card.tone-blue:hover { border-color: #3B82F6; }
+.bento-res-card.tone-purple:hover { border-color: #8B5CF6; }
+.bento-res-card.tone-amber:hover { border-color: #F59E0B; }
+.bento-res-card.tone-rose:hover { border-color: #E11D48; }
+.bento-res-card.tone-emerald:hover { border-color: #10B981; }
+.bento-res-card.tone-indigo:hover { border-color: #6366F1; }
+.bento-res-card.tone-slate:hover { border-color: #64748B; }
+.path-step.tone-blue .step-icon-wrap { color: #3B82F6; }
+.path-step.tone-purple .step-icon-wrap { color: #8B5CF6; }
+.path-step.tone-amber .step-icon-wrap { color: #F59E0B; }
+.path-step.tone-rose .step-icon-wrap { color: #E11D48; }
+.path-step.tone-emerald .step-icon-wrap { color: #10B981; }
+.path-step.tone-indigo .step-icon-wrap { color: #6366F1; }
+.path-step.tone-slate .step-icon-wrap { color: #64748B; }
 .interactive-resources-panel .panel-title {
   display: flex;
   align-items: center;
@@ -2156,6 +2142,9 @@ const handlePreview = (data: any) => {
   .generation-focus-grid { grid-template-columns: 1fr; }
   .agent-configs-grid { grid-template-columns: repeat(2, 1fr); }
   .workbench-hero { grid-template-columns: 1fr; }
+  .bento-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .bento-resource-grid { grid-template-columns: repeat(2, 1fr); }
+  .resource-metric-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 768px) {
   .elegant-generator-layout { height: auto; min-height: calc(100vh - 64px); }
@@ -2172,19 +2161,17 @@ const handlePreview = (data: any) => {
   .resource-card-action { grid-column: 1 / -1; width: 100%; }
   .workflow-timeline-panel, .resource-side-panel { position: static; }
   .event-log-row { grid-template-columns: 1fr; gap: 6px; }
-  .result-meta-grid { grid-template-columns: 1fr; }
-  .result-hero { position: relative; grid-template-columns: 1fr; padding: 20px; }
-  .result-hero-actions { justify-content: flex-start; flex-wrap: wrap; }
-  .result-context-panel { grid-template-columns: 1fr; }
-  .results-body { padding: 18px; }
-  .resource-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .result-resource-grid { grid-template-columns: 1fr; }
-  .resource-card-actions { align-items: stretch; flex-direction: column; }
+  .results-body-bento { padding: 16px 20px; }
+  .result-hero-minimal { padding: 20px; }
+  .bento-stats-row { grid-template-columns: 1fr; }
+  .bento-resource-grid { grid-template-columns: 1fr; }
+  .learning-path-timeline { padding: 20px; }
 }
 @media (max-width: 520px) {
-  .resource-overview-grid { grid-template-columns: 1fr; }
   .sequence-track { display: flex; overflow-x: auto; padding-bottom: 4px; }
   .sequence-node { min-width: 240px; }
+  .resource-card-actions { flex-direction: column; }
+  .resource-metric-stack { grid-template-columns: 1fr; }
 }
 
 .elegant-dialog :deep(.el-dialog) { border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }

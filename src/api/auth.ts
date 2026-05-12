@@ -53,3 +53,17 @@ export function logout() {
 export function getMe() {
   return http.get<ApiResponse<LoginData['user']>>('/users/me')
 }
+
+export interface AvatarUploadData {
+  avatar: string
+}
+
+export function uploadAvatar(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return http.post<ApiResponse<AvatarUploadData>>('/users/me/avatar', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}

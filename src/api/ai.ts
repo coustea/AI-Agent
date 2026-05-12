@@ -95,6 +95,14 @@ export interface PathNode {
   progress: number
   priority: number
   desc: string | null
+  recommendation_reason?: string | null
+  resource_id?: number | null
+  resource_item_id?: number | null
+  resource_type?: string | null
+  resource_title?: string | null
+  resource_summary?: string | null
+  resource_format?: string | null
+  resource_status?: 'available' | 'missing' | 'pending' | 'failed' | null
 }
 
 export interface PathStage {
@@ -108,14 +116,24 @@ export interface PathStage {
 export interface PathPlanSummary {
   overall_progress: number
   current_stage: string | null
+  current_node?: string | null
   knowledge_level: string | null
   eta_days: number
   confidence: number
 }
 
+export interface PathRecommendedNode {
+  node_id: string
+  title: string
+  priority: number
+  stage_id: string
+  reason: string
+}
+
 export interface PathPlanInsights {
   adjustment_reason: string
   next_action: string
+  recommended_nodes?: PathRecommendedNode[]
 }
 
 export interface PathPlanMeta {
@@ -244,5 +262,74 @@ export function getProfileHistory(limit = 20, userId?: number | string) {
   const path = userId ? `/ai/profile/${userId}/history` : '/ai/profile/history'
   return http.get<{ code: number; message: string; data: ProfileHistoryItem[] }>(path, {
     params: { limit }
+  })
+}
+
+// ==========================================
+// 资源生成历史 API
+// ==========================================
+
+export interface GeneratedResourceItem {
+  id: number
+  learning_need: string | null
+  status: string
+  resource_types: string[]
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface ResourceItemDetail {
+  id: number
+  type: string
+  title: string
+  format: string
+  content: string | null
+  summary: string
+  summary_data: Record<string, unknown>
+  metadata: Record<string, unknown>
+  status: string
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface GeneratedResourceBundle {
+  id: string
+  task_id: string
+  title: string
+  learning_need: string
+  selected_agents: string[]
+  resources: ResourceItemDetail[]
+  study_path: unknown[]
+  review_result: unknown
+  status: string
+  created_at: string | null
+  updated_at: string | null
+  metadata: Record<string, unknown>
+}
+
+export function getGeneratedResources(limit = 20) {
+  return http.get<ApiResponse<GeneratedResourceItem[]>>('/ai/resources', {
+    params: { limit }
+  })
+}
+
+export function getGeneratedResourceDetail(resourceId: number) {
+  return http.get<ApiResponse<GeneratedResourceBundle>>(`/ai/resources/${resourceId}`)
+}
+
+// ==========================================
+// 学校搜索 API
+// ==========================================
+
+export interface SchoolItem {
+  id: number
+  name: string
+  level: string | null
+}
+
+export function searchSchools(keyword: string = '', limit = 20) {
+  return http.get<ApiResponse<SchoolItem[]>>('/ai/schools/search', {
+    params: { keyword, limit }
   })
 }
