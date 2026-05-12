@@ -40,6 +40,10 @@ dependencies = [
     "deepagents>=0.5.3",
     "httpx>=0.28.1",
     "playwright>=1.59.0",
+    "serpapi>=1.0.2",
+    "pandas>=3.0.3",
+    "xlrd>=2.0.2",
+    "beautifulsoup4>=4.14.3",
 ]
 
 [dependency-groups]

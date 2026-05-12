@@ -254,7 +254,7 @@ def _infer_dimension_level(dim_key: str, summary: str, evidence: list) -> str:
     elif dim_key == "weakness_points":
         if any(kw in summary_lower for kw in ["概念", "concept", "理论", "原理"]):
             return "concept"
-        elif any(kw in summary_lower for kw in ["实践", "practice", "应用", "代码"]):
+        elif any(kw in summary_lower for kw in ["实践", "practice", "应用", "代码", "刷题", "练习", "准确率", "题目"]):
             return "practice"
         elif any(kw in summary_lower for kw in ["综合", "application", "整合"]):
             return "application"
@@ -340,6 +340,238 @@ def build_initial_plan(
         adjustments=[],
         profile_dimensions=profile_dimensions,
     )
+
+
+def build_resource_study_plan(
+    resource_node_ids: Iterable[str],
+    *,
+    profile_json: dict | None = None,
+    learning_scenario: str | None = None,
+    learning_need: str | None = None,
+    completed_node_ids: set[str] | None = None,
+    now: datetime | None = None,
+) -> PathPlan:
+    """基于资源项、学习场景和画像构建资源学习路径。
+
+    这是资源包内部学习顺序的规划入口。resource 模块只负责把生成资源
+    转成节点 ID，具体排序、画像分析和推荐理由都收敛在 path 模块。
+    """
+    selected_ids = _normalize_resource_node_ids(resource_node_ids)
+    profile_dimensions = analyze_profile_dimensions(profile_json)
+    weak_points = infer_resource_weak_points(
+        profile_json=profile_json,
+        profile_dimensions=profile_dimensions,
+        learning_scenario=learning_scenario,
+        learning_need=learning_need,
+    )
+
+    plan = build_initial_plan(
+        knowledge_level=_dimension_summary(profile_json, "knowledge_foundation"),
+        learning_goal=_dimension_summary(profile_json, "learning_goal"),
+        weak_points=weak_points,
+        planned_node_ids=set(selected_ids),
+        now=now,
+        profile_dimensions=profile_dimensions,
+    )
+    if profile_dimensions:
+        plan = score_nodes_with_profile(
+            plan,
+            profile_dimensions=profile_dimensions,
+            weak_points=weak_points,
+        )
+    else:
+        plan = score_nodes(plan, weak_points=weak_points)
+
+    plan = _order_resource_study_plan(
+        plan,
+        selected_ids=selected_ids,
+        learning_scenario=learning_scenario,
+        profile_dimensions=profile_dimensions,
+    )
+    plan = compute_progress(plan, completed_node_ids=completed_node_ids or set())
+    return _attach_resource_recommendation_reasons(plan)
+
+
+def infer_resource_weak_points(
+    *,
+    profile_json: dict | None,
+    profile_dimensions: dict[str, dict] | None = None,
+    learning_scenario: str | None = None,
+    learning_need: str | None = None,
+) -> list[str]:
+    """从画像、场景和学习需求中推断资源路径应优先照顾的节点。"""
+    dimensions = profile_dimensions or analyze_profile_dimensions(profile_json)
+    texts: list[str] = []
+    for key in ("weakness_points", "learning_goal", "cognitive_style", "practice_ability"):
+        summary = dimensions.get(key, {}).get("summary") if dimensions else None
+        if summary:
+            texts.append(str(summary))
+    if learning_scenario:
+        texts.append(learning_scenario)
+    if learning_need:
+        texts.append(learning_need)
+
+    merged = " ".join(texts).lower()
+    keyword_mapping = {
+        "code": "code",
+        "编程": "code",
+        "实践": "code",
+        "实操": "code",
+        "项目": "code",
+        "quiz": "quiz",
+        "刷题": "quiz",
+        "错题": "quiz",
+        "题目": "quiz",
+        "考试": "quiz",
+        "考研": "quiz",
+        "准确率": "quiz",
+        "概念": "content",
+        "原理": "content",
+        "知识点": "content",
+        "结构": "mindmap",
+        "框架": "mindmap",
+        "导图": "mindmap",
+        "阅读": "reading",
+        "拓展": "reading",
+        "图解": "diagram",
+        "图表": "diagram",
+        "视觉": "diagram",
+    }
+    inferred = [node_id for keyword, node_id in keyword_mapping.items() if keyword in merged]
+
+    scenario = (learning_scenario or "").lower()
+    if scenario == "exam_prep":
+        inferred.append("quiz")
+    elif scenario == "project_practice":
+        inferred.append("code")
+
+    return [node_id for node_id in ALL_NODE_IDS if node_id in set(inferred)]
+
+
+def _normalize_resource_node_ids(resource_node_ids: Iterable[str]) -> list[str]:
+    selected: list[str] = []
+    for raw in resource_node_ids:
+        node_id = str(raw).strip().lower()
+        if node_id in ALL_NODE_IDS and node_id not in selected:
+            selected.append(node_id)
+    return selected or list(ALL_NODE_IDS)
+
+
+def _dimension_summary(profile_json: dict | None, dimension_key: str) -> str | None:
+    if not profile_json:
+        return None
+    dimensions = profile_json.get("dimensions", {})
+    if not isinstance(dimensions, dict):
+        return None
+    value = dimensions.get(dimension_key, {})
+    return value.get("summary") if isinstance(value, dict) else None
+
+
+def _order_resource_study_plan(
+    plan: PathPlan,
+    *,
+    selected_ids: list[str],
+    learning_scenario: str | None,
+    profile_dimensions: dict[str, dict],
+) -> PathPlan:
+    node_map = {node.id: node for stage in plan.stages for node in stage.nodes}
+    foundation = [node_id for node_id in ("content", "mindmap") if node_id in node_map]
+    middle = [node_id for node_id in ("diagram", "code", "quiz") if node_id in node_map]
+    extension = [node_id for node_id in ("reading",) if node_id in node_map]
+
+    middle = _order_middle_resource_nodes(
+        middle,
+        learning_scenario=learning_scenario,
+        profile_dimensions=profile_dimensions,
+        node_map=node_map,
+    )
+    known = set(foundation) | set(middle) | set(extension)
+    fallback = [node_id for node_id in selected_ids if node_id in node_map and node_id not in known]
+    ordered_ids = [*foundation, *middle, *extension, *fallback]
+
+    stage_specs = [
+        ("foundation", "基础建构", foundation),
+        ("practice", "理解巩固", [node_id for node_id in middle if node_id in ordered_ids]),
+        ("extension", "拓展迁移", extension),
+    ]
+    stages = [
+        PathStage(
+            id=stage_id,
+            title=stage_title,
+            nodes=[node_map[node_id] for node_id in stage_node_ids if node_id in node_map],
+        )
+        for stage_id, stage_title, stage_node_ids in stage_specs
+        if any(node_id in node_map for node_id in stage_node_ids)
+    ]
+    if fallback:
+        stages.append(PathStage(
+            id="other",
+            title="补充学习",
+            nodes=[node_map[node_id] for node_id in fallback],
+        ))
+
+    progress = plan.progress.model_copy(
+        update={"current_stage_id": stages[0].id if stages else None}
+    )
+    return plan.model_copy(update={"stages": stages, "progress": progress})
+
+
+def _order_middle_resource_nodes(
+    middle: list[str],
+    *,
+    learning_scenario: str | None,
+    profile_dimensions: dict[str, dict],
+    node_map: dict[str, PathNode],
+) -> list[str]:
+    if not middle:
+        return middle
+
+    scenario = (learning_scenario or "").lower()
+    cognitive_style = profile_dimensions.get("cognitive_style", {}).get("level", "")
+    learning_goal = profile_dimensions.get("learning_goal", {}).get("level", "")
+    weakness = profile_dimensions.get("weakness_points", {}).get("level", "")
+
+    preferred: list[str] = []
+    if cognitive_style == "visual":
+        preferred.append("diagram")
+    if scenario == "exam_prep" or learning_goal == "exam":
+        preferred.append("quiz")
+    if scenario == "project_practice" or learning_goal == "project" or weakness in {"practice", "application"}:
+        preferred.append("code")
+
+    priority_index = {node_id: index for index, node_id in enumerate(preferred)}
+    default_index = {node_id: index for index, node_id in enumerate(("diagram", "code", "quiz"))}
+    return sorted(
+        middle,
+        key=lambda node_id: (
+            priority_index.get(node_id, 99),
+            -node_map[node_id].priority,
+            default_index.get(node_id, 99),
+        ),
+    )
+
+
+def _attach_resource_recommendation_reasons(plan: PathPlan) -> PathPlan:
+    recommendations = recommend_next_nodes(
+        plan,
+        top_n=len(ALL_NODE_IDS),
+        profile_dimensions=plan.profile_dimensions,
+    )
+    reason_map = {item["node_id"]: item["reason"] for item in recommendations}
+    stages = []
+    weak_set = set(plan.weak_points)
+    for stage in plan.stages:
+        nodes = []
+        for node in stage.nodes:
+            reason = reason_map.get(
+                node.id,
+                node.recommendation_reason or f"根据学习路径规划，建议完成「{node.title}」",
+            )
+            if node.id in weak_set and "薄弱点" not in reason:
+                reason = f"{reason}，用于优先巩固当前薄弱点"
+            nodes.append(node.model_copy(update={"recommendation_reason": reason}))
+        stages.append(stage.model_copy(update={"nodes": nodes}))
+    return plan.model_copy(update={"stages": stages})
 
 
 def score_nodes_with_profile(

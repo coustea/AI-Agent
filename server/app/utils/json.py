@@ -1,11 +1,11 @@
 """JSON 解析辅助工具（不使用正则）。
 
-本模块用于处理“模型输出 JSON 结构化结果”的解析与兼容：
+本模块用于处理"模型输出 JSON 结构化结果"的解析与兼容：
 - 优先直接 json.loads
 - 兼容常见的 Markdown code fence（```json ...```），用行级过滤去掉围栏
 - 兼容模型在 JSON 前后夹杂少量说明文字：使用 JSONDecoder.raw_decode 扫描解析首个 JSON 值
 
-注意：本模块刻意不使用正则，避免通过 regex “抠 JSON”。
+注意：本模块刻意不使用正则，避免通过 regex "抠 JSON"。
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def parse_first_json_value(text: str) -> Any:
     if not cleaned:
         raise json.JSONDecodeError("empty input", "", 0)
 
-    # 先尝试“整体就是 JSON”
+    # 先尝试"整体就是 JSON"
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
@@ -84,4 +84,3 @@ def preview_for_log(value: Any, max_len: int = 500) -> str:
         dumped = str(value)
     dumped = dumped.replace("\n", " ")
     return dumped[:max_len] + ("..." if len(dumped) > max_len else "")
-

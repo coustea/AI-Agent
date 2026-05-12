@@ -1,7 +1,7 @@
-"""
-MasterAgent - LLM 规划代理。
+# -*- coding: utf-8 -*-
+"""LLM 规划器 (MasterAgent)。
 
-只负责当前层资源生成任务规划，不生成资源正文。
+使用 LLM 进行分层任务规划，支持单次规划和分层规划两种模式。
 """
 
 from __future__ import annotations
@@ -26,13 +26,16 @@ from app.resource.schemas import (
     LayerPlan,
     PlanningContext,
 )
-from app.shared.json_utils import parse_first_json_object
+from app.utils.json import parse_first_json_object
 
 logger = get_logger(__name__)
 
 
-class MasterAgent:
-    """MasterAgent：只负责当前层资源生成任务规划，不生成资源正文。"""
+class LLMPlanner:
+    """LLM 规划器：使用 LLM 进行分层任务规划。
+
+    只负责当前层资源生成任务规划，不生成资源正文。
+    """
 
     def __init__(self, llm: Any | None = None) -> None:
         self.llm = llm or get_llm_manager().get_model("spark_max")
@@ -44,7 +47,12 @@ class MasterAgent:
         explicit_set = set(context.user_explicit_selection)
 
         if not candidates:
-            return LayerPlan(layer=context.layer, agents=[], reasoning="本层无待执行 Agent", fallback_used=False)
+            return LayerPlan(
+                layer=context.layer,
+                agents=[],
+                reasoning="本层无待执行 Agent",
+                fallback_used=False,
+            )
 
         raw_plan = await self._get_plan(context=context, candidates=candidates)
         return self._sanitize(raw_plan, candidates, explicit_set, context)
@@ -56,7 +64,12 @@ class MasterAgent:
         explicit_set = set(context.user_explicit_selection)
 
         if not candidates:
-            return LayerPlan(layer=context.layer, agents=[], reasoning="本层无待执行 Agent", fallback_used=True)
+            return LayerPlan(
+                layer=context.layer,
+                agents=[],
+                reasoning="本层无待执行 Agent",
+                fallback_used=True,
+            )
 
         tasks = self._default_tasks(candidates, explicit_set, context)
         return LayerPlan(
@@ -66,12 +79,17 @@ class MasterAgent:
             fallback_used=True,
         )
 
-    async def _get_plan(self, *, context: PlanningContext, candidates: list[str]) -> dict[str, Any]:
+    async def _get_plan(
+        self,
+        *,
+        context: PlanningContext,
+        candidates: list[str],
+    ) -> dict[str, Any]:
         """调用 LLM 获取层规划。"""
         prompt = self._build_prompt(context=context, candidates=candidates)
         response = await self.llm.ainvoke([HumanMessage(content=prompt)])
         content = response.content if hasattr(response, "content") else str(response)
-        logger.info("[MasterAgent] 规划：response=%s", content)
+        logger.info("[LLMPlanner] 规划响应: %s", content)
         return parse_first_json_object(content)
 
     def _sanitize(
@@ -83,8 +101,11 @@ class MasterAgent:
     ) -> LayerPlan:
         """清洗 LLM 规划结果。"""
         if int(plan.get("layer", context.layer)) != context.layer:
-            logger.warning("[MasterAgent] LLM 返回跨层规划: %s", plan.get("layer"))
-            raise ValueError(f"LLM 返回了非当前层规划: 期望 layer={context.layer}, 实际 layer={plan.get('layer')}")
+            logger.warning("[LLMPlanner] LLM 返回跨层规划: %s", plan.get("layer"))
+            raise ValueError(
+                f"LLM 返回了非当前层规划: 期望 layer={context.layer}, "
+                f"实际 layer={plan.get('layer')}"
+            )
 
         agents = plan.get("agents", [])
         if not isinstance(agents, list) or not agents:
@@ -97,6 +118,7 @@ class MasterAgent:
         for index, raw_task in enumerate(agents):
             if not isinstance(raw_task, dict):
                 continue
+
             agent_id = str(raw_task.get("agent_id") or "").strip()
             if agent_id in seen or agent_id not in candidates or agent_id not in explicit_set:
                 continue
@@ -123,10 +145,14 @@ class MasterAgent:
                 priority = index
             priority = max(0, priority)
 
-            task_desc = str(raw_task.get("task_description") or self._default_desc(agent_id, context.question.learning_need))
+            task_desc = str(
+                raw_task.get("task_description")
+                or self._default_desc(agent_id, context.question.learning_need)
+            )
             constraints = raw_task.get("personalized_constraints", [])
             if not isinstance(constraints, list):
                 constraints = []
+            constraints = [*constraints, *self._profile_constraints(context)]
 
             output_req = raw_task.get("output_requirements")
             if not isinstance(output_req, dict):
@@ -145,7 +171,7 @@ class MasterAgent:
                 config=config,
                 input_params=input_params,
                 output_requirements=output_req,
-                personalized_constraints=[str(item) for item in constraints if item],
+                personalized_constraints=self._dedupe_constraints(str(item) for item in constraints if item),
                 planning_reason=str(raw_task.get("planning_reason") or ""),
                 failure_policy=str(raw_task.get("failure_policy") or "skip_on_dependency_failed"),
             ))
@@ -162,7 +188,10 @@ class MasterAgent:
         return LayerPlan(
             layer=context.layer,
             agents=sanitized,
-            reasoning=str(plan.get("reasoning") or f"{layer_name(context.layer)} 规划完成"),
+            reasoning=str(
+                plan.get("reasoning")
+                or f"{layer_name(context.layer)} 规划完成"
+            ),
             fallback_used=False,
         )
 
@@ -185,21 +214,32 @@ class MasterAgent:
                 layer=context.layer,
                 layer_name=layer_name(context.layer),
                 task_description=task_desc,
-                depends_on=[dep for dep in DEPENDS.get(agent_id, []) if dep in self._allowed_deps(context)],
+                depends_on=[
+                    dep for dep in DEPENDS.get(agent_id, [])
+                    if dep in self._allowed_deps(context)
+                ],
                 is_explicit=agent_id in explicit_set,
                 priority=i,
                 config=agent_config,
                 resource_type=agent_id,
                 input_params={"topic": learning_need},
                 output_requirements=agent_output(agent_id),
-                personalized_constraints=["结合学习者画像"],
+                personalized_constraints=self._dedupe_constraints([
+                    "结合学习者画像",
+                    *self._profile_constraints(context),
+                ]),
                 planning_reason=f"{agent_name(agent_id)}适合支撑{layer_name(context.layer)}的学习目标。",
                 failure_policy="skip_on_dependency_failed",
             ))
 
         return tasks
 
-    def _build_prompt(self, *, context: PlanningContext, candidates: list[str]) -> str:
+    def _build_prompt(
+        self,
+        *,
+        context: PlanningContext,
+        candidates: list[str],
+    ) -> str:
         """构造 LLM 提示词。"""
         current_agent_catalog = get_agent_planning_catalog(candidates)
         payload = {
@@ -213,7 +253,9 @@ class MasterAgent:
             "learning_need": context.question.learning_need,
             "learning_scenario": context.question.learning_scenario.value,
             "agent_configs": context.question.agent_configs.model_dump(),
+            "learner_profile_constraints": self._profile_constraints(context),
         }
+
         example_agent = candidates[0] if candidates else "content"
         format_example = {
             "layer": context.layer,
@@ -234,6 +276,7 @@ class MasterAgent:
                 }
             ],
         }
+
         return (
             "你是 MasterAgent，只负责规划当前 layer 的多智能体资源生成任务。\n"
             "你不能生成学习资源正文，不能规划其他 layer，不能选择 candidate_agents 之外的 Agent，"
@@ -261,3 +304,34 @@ class MasterAgent:
         if learning_need:
             base = f"根据用户需求「{learning_need[:100]}」生成{agent_name(agent_id)}。"
         return base
+
+    def _profile_constraints(self, context: PlanningContext) -> list[str]:
+        """从画像维度生成规划约束。"""
+        profile = context.learner_profile or {}
+        profile_json = profile.get("profile_json") if isinstance(profile, dict) else None
+        source = profile_json if isinstance(profile_json, dict) else profile
+        if not isinstance(source, dict):
+            return []
+
+        constraints: list[str] = []
+        dimensions = source.get("dimensions")
+        if isinstance(dimensions, dict):
+            for key, label in (
+                ("weakness_points", "优先覆盖薄弱点"),
+                ("knowledge_foundation", "匹配知识基础"),
+                ("interaction_preference", "贴合交互偏好"),
+                ("cognitive_style", "贴合认知风格"),
+                ("learning_goal", "服务学习目标"),
+            ):
+                value = dimensions.get(key)
+                if isinstance(value, dict) and value.get("summary"):
+                    constraints.append(f"{label}: {str(value['summary'])[:120]}")
+        return constraints[:6]
+
+    def _dedupe_constraints(self, constraints: Any) -> list[str]:
+        result: list[str] = []
+        for item in constraints:
+            text = str(item).strip()
+            if text and text not in result:
+                result.append(text)
+        return result

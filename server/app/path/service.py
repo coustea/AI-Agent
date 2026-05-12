@@ -1,14 +1,29 @@
+"""Path planning service.
+
+学习路径规划业务服务层，整合数据访问和业务逻辑。
+"""
+
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.models import GeneratedResource, LearningPath, LearningPathNode, LearningPathAdjustment
+from app.infra.models import (
+    GeneratedResource,
+    GeneratedResourceItem,
+    LearningEvent,
+    LearningPath,
+    LearningPathAdjustment,
+    LearningPathNode,
+)
 from app.memory import MemoryLayer
 from app.path.planner import (
     ALL_NODE_IDS,
+    NODE_TITLES,
     adjust_plan,
     analyze_profile_dimensions,
     build_initial_plan,
@@ -17,20 +32,23 @@ from app.path.planner import (
     recommend_next_nodes,
 )
 from app.path.profile_recommender import (
-    compute_node_scores,
     compute_learning_pace,
+    compute_node_scores,
     estimate_completion_time,
     recommend_nodes,
-    suggest_path_adjustment,
 )
-from app.path.repository import PathRepository
 from app.path.schemas import PathInsight, PathPlan, PathPlanData, PathPlanMeta, PathSummary
 
 
 class PathService:
-    def __init__(self, repository: PathRepository, memory_layer: MemoryLayer | None = None) -> None:
-        self.repository = repository
+    """学习路径规划服务。"""
+
+    def __init__(self, memory_layer: MemoryLayer | None = None) -> None:
         self.memory_layer = memory_layer or MemoryLayer(module="mentor")
+
+    # =========================================================================
+    # 路径规划核心方法
+    # =========================================================================
 
     async def build_path_plan(
         self,
@@ -42,22 +60,22 @@ class PathService:
         weak_points: list[str] | None = None,
         force_rebuild: bool = False,
     ) -> PathPlanData:
+        """构建学习路径计划。"""
         profile = await self.memory_layer.get_profile(user_id=user_id)
-        resource = await self._resolve_resource(session, user_id, resource_id)
+        resource = await self._get_resource(session, user_id, resource_id)
 
         if resource_id is not None and resource is None:
             raise LookupError("resource_not_found")
 
-        resource_items = await self._load_resource_items(session, user_id, resource)
+        resource_items = await self._list_resource_items(session, resource)
         planned_node_ids = self._extract_planned_node_ids(resource, resource_items)
         inferred_weak_points = self._extract_weak_points(profile, resource, weak_points)
-        completed_node_ids = await self._extract_completed_node_ids(session, user_id, resource)
+        completed_node_ids = await self._get_completed_node_ids(session, user_id, resource)
 
-        profile_info = self._parse_profile(profile)
         profile_json = profile.profile_json if profile and profile.profile_json else None
         profile_dimensions = analyze_profile_dimensions(profile_json)
 
-        # 使用基于画像的节点评分
+        # 基于画像计算节点评分
         node_scores = compute_node_scores(
             profile_json,
             weak_points=inferred_weak_points,
@@ -65,21 +83,20 @@ class PathService:
         )
 
         plan = build_initial_plan(
-            knowledge_level=profile_info.get("技术能力判断"),
-            learning_goal=profile_info.get("当前学习/项目背景"),
+            knowledge_level=self._get_profile_field(profile, "knowledge_foundation"),
+            learning_goal=self._get_profile_field(profile, "learning_goal"),
             weak_points=inferred_weak_points,
             planned_node_ids=planned_node_ids,
             profile_dimensions=profile_dimensions,
         )
 
-        # 应用基于画像的节点评分
         plan = self._apply_profile_scores(plan, node_scores)
-
         plan = compute_progress(
             plan,
             completed_node_ids=completed_node_ids,
             pace=compute_learning_pace(profile_json),
         )
+
         if feedback or weak_points:
             plan = adjust_plan(
                 plan,
@@ -96,14 +113,7 @@ class PathService:
             update={"progress": plan.progress.model_copy(update={"confidence": confidence})}
         )
 
-        # 保存学习路径到数据库
-        await self._persist_learning_path(
-            session,
-            user_id,
-            plan,
-            profile_json,
-            resource_id=resource.id if resource else None,
-        )
+        await self._save_learning_path(session, user_id, plan, profile_json, resource)
 
         return self._build_response(
             plan=plan,
@@ -112,92 +122,6 @@ class PathService:
             resource_items=resource_items,
             force_rebuild=force_rebuild,
         )
-
-    def _apply_profile_scores(self, plan: PathPlan, node_scores: dict[str, float]) -> PathPlan:
-        """将基于画像的节点评分应用到路径规划中。"""
-        updated_stages: list[Any] = []
-        for stage in plan.stages:
-            updated_nodes: list[Any] = []
-            for node in stage.nodes:
-                score = node_scores.get(node.id, node.priority)
-                updated_nodes.append(node.model_copy(update={"priority": int(score)}))
-            updated_stages.append(stage.model_copy(update={"nodes": updated_nodes}))
-        return plan.model_copy(update={"stages": updated_stages})
-
-    async def _resolve_resource(
-        self,
-        session: AsyncSession,
-        user_id: int,
-        resource_id: int | None,
-    ) -> GeneratedResource | None:
-        if resource_id is not None:
-            return await self.repository.get_resource_by_id(session, user_id, resource_id)
-        return await self.repository.get_latest_resource(session, user_id)
-
-    async def _persist_learning_path(
-        self,
-        session: AsyncSession,
-        user_id: int,
-        plan: PathPlan,
-        profile_json: dict[str, Any] | None,
-        *,
-        resource_id: int | None = None,
-    ) -> LearningPath | None:
-        """持久化学习路径到数据库。"""
-        now = datetime.now(timezone.utc)
-
-        # 查找或创建学习路径
-        existing = await self.repository.get_learning_path(session, user_id)
-        if existing:
-            path = existing
-            path.version += 1
-            path.updated_at = now
-        else:
-            path = LearningPath(
-                user_id=user_id,
-                module=self.memory_layer.module,
-                created_at=now,
-                updated_at=now,
-            )
-
-        # 更新路径信息
-        path.learning_goal = plan.learning_goal
-        path.knowledge_level = plan.knowledge_level
-        path.overall_progress = plan.progress.overall
-        path.current_stage_id = plan.progress.current_stage_id
-        path.eta_days = plan.progress.eta_days
-        path.confidence = plan.progress.confidence
-        path.profile_snapshot = profile_json
-
-        session.add(path)
-        await session.commit()
-        await session.refresh(path)
-
-        # 删除旧的节点记录
-        await self.repository.delete_path_nodes(session, path.id)
-
-        # 创建新的节点记录
-        for stage in plan.stages:
-            for node in stage.nodes:
-                path_node = LearningPathNode(
-                    path_id=path.id,
-                    user_id=user_id,
-                    node_id=node.id,
-                    stage_id=stage.id,
-                    title=node.title,
-                    status=node.status,
-                    progress=node.progress,
-                    priority=node.priority,
-                    recommendation_reason=node.recommendation_reason or node.desc,
-                    resource_id=node.resource_id or resource_id,
-                    completed_at=now if node.status == "success" else None,
-                    created_at=now,
-                    updated_at=now,
-                )
-                session.add(path_node)
-
-        await session.commit()
-        return path
 
     async def update_node_progress(
         self,
@@ -210,16 +134,16 @@ class PathService:
         resource_id: int | None = None,
     ) -> LearningPathNode | None:
         """更新学习节点的进度。"""
-        path = await self.repository.get_learning_path(session, user_id)
+        path = await self._get_learning_path(session, user_id)
         if not path:
             return None
 
-        node = await self.repository.get_path_node(session, path.id, node_id)
+        node = await self._get_path_node(session, path.id, node_id)
         if not node:
             return None
 
         now = datetime.now(timezone.utc)
-        updates: dict[str, Any] = {"updated_at": now}
+        updates = {"updated_at": now}
 
         if status is not None:
             updates["status"] = status
@@ -242,71 +166,8 @@ class PathService:
         await session.commit()
         await session.refresh(node)
 
-        # 更新路径整体进度
         await self._recalculate_path_progress(session, path)
-
         return node
-
-    async def _recalculate_path_progress(
-        self,
-        session: AsyncSession,
-        path: LearningPath,
-    ) -> None:
-        """重新计算路径整体进度。"""
-        nodes = await self.repository.get_path_nodes(session, path.id)
-        if not nodes:
-            return
-
-        total = len(nodes)
-        completed = sum(1 for n in nodes if n.status == "success")
-        overall = int((completed / total) * 100) if total else 0
-
-        # 找当前阶段
-        current_stage_id = None
-        for node in nodes:
-            if node.status != "success":
-                current_stage_id = node.stage_id
-                break
-
-        path.overall_progress = overall
-        path.current_stage_id = current_stage_id
-        path.updated_at = datetime.now(timezone.utc)
-
-        session.add(path)
-        await session.commit()
-
-    async def record_adjustment(
-        self,
-        session: AsyncSession,
-        user_id: int,
-        *,
-        adjustment_type: str,
-        reason: str,
-        impacted_node_ids: list[str] | None = None,
-        before_snapshot: dict[str, Any] | None = None,
-        after_snapshot: dict[str, Any] | None = None,
-    ) -> LearningPathAdjustment | None:
-        """记录路径调整。"""
-        path = await self.repository.get_learning_path(session, user_id)
-        if not path:
-            return None
-
-        adjustment = LearningPathAdjustment(
-            path_id=path.id,
-            user_id=user_id,
-            adjustment_type=adjustment_type,
-            reason=reason,
-            impacted_node_ids=impacted_node_ids,
-            before_snapshot=before_snapshot,
-            after_snapshot=after_snapshot,
-            created_at=datetime.now(timezone.utc),
-        )
-
-        session.add(adjustment)
-        await session.commit()
-        await session.refresh(adjustment)
-
-        return adjustment
 
     async def get_node_recommendations(
         self,
@@ -319,11 +180,7 @@ class PathService:
         profile = await self.memory_layer.get_profile(user_id=user_id)
         profile_json = profile.profile_json if profile and profile.profile_json else None
 
-        path = await self.repository.get_learning_path(session, user_id)
-        completed_node_ids: set[str] = set()
-        if path:
-            nodes = await self.repository.get_path_nodes(session, path.id)
-            completed_node_ids = {n.node_id for n in nodes if n.status == "success"}
+        completed_node_ids = await self._get_completed_node_ids_from_path(session, user_id)
 
         recommendations = recommend_nodes(
             profile_json,
@@ -343,42 +200,293 @@ class PathService:
             for r in recommendations
         ]
 
-    async def _load_resource_items(
+    async def record_adjustment(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        *,
+        adjustment_type: str,
+        reason: str,
+        impacted_node_ids: list[str] | None = None,
+        before_snapshot: dict[str, Any] | None = None,
+        after_snapshot: dict[str, Any] | None = None,
+    ) -> LearningPathAdjustment | None:
+        """记录路径调整。"""
+        path = await self._get_learning_path(session, user_id)
+        if not path:
+            return None
+
+        adjustment = LearningPathAdjustment(
+            path_id=path.id,
+            user_id=user_id,
+            adjustment_type=adjustment_type,
+            reason=reason,
+            impacted_node_ids=impacted_node_ids,
+            before_snapshot=before_snapshot,
+            after_snapshot=after_snapshot,
+            created_at=datetime.now(timezone.utc),
+        )
+
+        session.add(adjustment)
+        await session.commit()
+        await session.refresh(adjustment)
+        return adjustment
+
+    # =========================================================================
+    # 数据访问方法
+    # =========================================================================
+
+    async def _get_resource(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        resource_id: int | None,
+    ) -> GeneratedResource | None:
+        """获取生成资源。"""
+        if resource_id is not None:
+            resource = await session.get(GeneratedResource, resource_id)
+            return resource if resource and resource.user_id == user_id else None
+
+        stmt = (
+            select(GeneratedResource)
+            .where(GeneratedResource.user_id == user_id)
+            .order_by(GeneratedResource.created_at.desc())
+            .limit(1)
+        )
+        result = await session.exec(stmt)
+        return result.first()
+
+    async def _list_resource_items(
+        self,
+        session: AsyncSession,
+        resource: GeneratedResource | None,
+    ) -> list[GeneratedResourceItem]:
+        """列出资源项。"""
+        if resource is None or resource.id is None:
+            return []
+
+        stmt = (
+            select(GeneratedResourceItem)
+            .where(GeneratedResourceItem.user_id == resource.user_id)
+            .where(GeneratedResourceItem.resource_id == resource.id)
+            .order_by(GeneratedResourceItem.created_at.asc())
+        )
+        result = await session.exec(stmt)
+        return list(result.all())
+
+    async def _get_learning_path(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        module: str = "mentor",
+    ) -> LearningPath | None:
+        """获取用户的学习路径。"""
+        stmt = (
+            select(LearningPath)
+            .where(LearningPath.user_id == user_id)
+            .where(LearningPath.module == module)
+            .where(LearningPath.is_active == True)
+        )
+        result = await session.exec(stmt)
+        return result.first()
+
+    async def _get_path_node(
+        self,
+        session: AsyncSession,
+        path_id: int,
+        node_id: str,
+    ) -> LearningPathNode | None:
+        """获取路径节点。"""
+        stmt = (
+            select(LearningPathNode)
+            .where(LearningPathNode.path_id == path_id)
+            .where(LearningPathNode.node_id == node_id)
+        )
+        result = await session.exec(stmt)
+        return result.first()
+
+    async def _get_completed_node_ids(
         self,
         session: AsyncSession,
         user_id: int,
         resource: GeneratedResource | None,
-    ) -> list[Any]:
-        if resource is None or resource.id is None:
-            return []
-        return await self.repository.list_resource_items(session, user_id, resource.id)
+    ) -> set[str]:
+        """从学习事件中获取已完成的节点 ID。"""
+        resource_id = resource.id if resource else None
+
+        stmt = select(LearningEvent).where(LearningEvent.user_id == user_id)
+        if resource_id is not None:
+            stmt = stmt.where(LearningEvent.resource_id == resource_id)
+        stmt = stmt.order_by(LearningEvent.created_at.desc()).limit(200)
+
+        result = await session.exec(stmt)
+        completed: set[str] = set()
+
+        for event in result.all():
+            if event.event_type not in {"resource_completed", "node_completed", "quiz_submitted"}:
+                continue
+
+            metadata = event.metadata_json or {}
+            candidates = [
+                metadata.get("node_id"),
+                metadata.get("agent_type"),
+                metadata.get("resource_type"),
+            ]
+
+            if event.event_type == "quiz_submitted" and event.score is not None and event.score >= 60:
+                candidates.append("quiz")
+
+            for raw in candidates:
+                node_id = str(raw) if raw else ""
+                if node_id in ALL_NODE_IDS:
+                    completed.add(node_id)
+
+        return completed
+
+    async def _get_completed_node_ids_from_path(
+        self,
+        session: AsyncSession,
+        user_id: int,
+    ) -> set[str]:
+        """从路径节点中获取已完成的节点 ID。"""
+        path = await self._get_learning_path(session, user_id)
+        if not path:
+            return set()
+
+        stmt = (
+            select(LearningPathNode)
+            .where(LearningPathNode.path_id == path.id)
+            .where(LearningPathNode.status == "success")
+        )
+        result = await session.exec(stmt)
+        return {n.node_id for n in result.all()}
+
+    async def _save_learning_path(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        plan: PathPlan,
+        profile_json: dict[str, Any] | None,
+        resource: GeneratedResource | None,
+    ) -> LearningPath | None:
+        """保存学习路径到数据库。"""
+        now = datetime.now(timezone.utc)
+
+        path = await self._get_learning_path(session, user_id)
+        if path:
+            path.version += 1
+            path.updated_at = now
+        else:
+            path = LearningPath(
+                user_id=user_id,
+                module=self.memory_layer.module,
+                created_at=now,
+                updated_at=now,
+            )
+
+        path.learning_goal = plan.learning_goal
+        path.knowledge_level = plan.knowledge_level
+        path.overall_progress = plan.progress.overall
+        path.current_stage_id = plan.progress.current_stage_id
+        path.eta_days = plan.progress.eta_days
+        path.confidence = plan.progress.confidence
+        path.profile_snapshot = profile_json
+
+        session.add(path)
+        await session.commit()
+        await session.refresh(path)
+
+        # 删除旧节点
+        stmt = delete(LearningPathNode).where(LearningPathNode.path_id == path.id)
+        await session.exec(stmt)
+
+        # 创建新节点
+        resource_id = resource.id if resource else None
+        for stage in plan.stages:
+            for node in stage.nodes:
+                path_node = LearningPathNode(
+                    path_id=path.id,
+                    user_id=user_id,
+                    node_id=node.id,
+                    stage_id=stage.id,
+                    title=node.title,
+                    status=node.status,
+                    progress=node.progress,
+                    priority=node.priority,
+                    recommendation_reason=node.recommendation_reason or node.desc,
+                    resource_id=node.resource_id or resource_id,
+                    completed_at=now if node.status == "success" else None,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(path_node)
+
+        await session.commit()
+        return path
+
+    async def _recalculate_path_progress(
+        self,
+        session: AsyncSession,
+        path: LearningPath,
+    ) -> None:
+        """重新计算路径整体进度。"""
+        stmt = select(LearningPathNode).where(LearningPathNode.path_id == path.id)
+        result = await session.exec(stmt)
+        nodes = list(result.all())
+
+        if not nodes:
+            return
+
+        total = len(nodes)
+        completed = sum(1 for n in nodes if n.status == "success")
+        overall = int((completed / total) * 100) if total else 0
+
+        current_stage_id = None
+        for node in nodes:
+            if node.status != "success":
+                current_stage_id = node.stage_id
+                break
+
+        path.overall_progress = overall
+        path.current_stage_id = current_stage_id
+        path.updated_at = datetime.now(timezone.utc)
+
+        session.add(path)
+        await session.commit()
+
+    # =========================================================================
+    # 辅助方法
+    # =========================================================================
+
+    def _apply_profile_scores(self, plan: PathPlan, node_scores: dict[str, float]) -> PathPlan:
+        """将基于画像的节点评分应用到路径规划中。"""
+        updated_stages = []
+        for stage in plan.stages:
+            updated_nodes = [
+                node.model_copy(update={"priority": int(node_scores.get(node.id, node.priority))})
+                for node in stage.nodes
+            ]
+            updated_stages.append(stage.model_copy(update={"nodes": updated_nodes}))
+        return plan.model_copy(update={"stages": updated_stages})
 
     def _extract_planned_node_ids(
         self,
         resource: GeneratedResource | None,
         resource_items: list[Any],
     ) -> set[str] | None:
-        candidates: list[str] = []
+        """提取已规划的节点 ID。"""
+        candidates = []
+
         selected = getattr(resource, "selected_agents", None) if resource else None
         if isinstance(selected, list):
             candidates.extend(str(item) for item in selected)
+
         candidates.extend(str(getattr(item, "agent_type", "")) for item in resource_items)
+
         node_ids = {self._normalize_node_id(item) for item in candidates}
         node_ids = {item for item in node_ids if item in ALL_NODE_IDS}
-        if not node_ids:
-            return None
-        return node_ids
 
-    async def _extract_completed_node_ids(
-        self,
-        session: AsyncSession,
-        user_id: int,
-        resource: GeneratedResource | None,
-    ) -> set[str]:
-        resource_id = resource.id if resource else None
-        if resource_id is None:
-            return set()
-        return await self.repository.list_completed_node_ids_from_events(session, user_id, resource_id)
+        return node_ids if node_ids else None
 
     def _extract_weak_points(
         self,
@@ -386,68 +494,53 @@ class PathService:
         resource: GeneratedResource | None,
         extra_weak_points: list[str] | None,
     ) -> list[str]:
-        texts: list[str] = []
+        """提取薄弱点。"""
+        texts = []
+
         if profile and profile.profile_json:
-            profile_info = self._parse_profile(profile)
-            if profile_info.get("当前薄弱点"):
-                texts.append(profile_info["当前薄弱点"])
+            dims = profile.profile_json.get("dimensions", {})
+            if dims.get("weakness_points", {}).get("summary"):
+                texts.append(dims["weakness_points"]["summary"])
+
         if resource and resource.learning_need:
             texts.append(resource.learning_need)
+
         merged_text = " ".join(texts).lower()
 
-        keyword_mapping: dict[str, str] = {
-            "code": "code",
-            "编程": "code",
-            "错题": "quiz",
-            "quiz": "quiz",
-            "题目": "quiz",
-            "概念": "content",
-            "知识点": "content",
-            "结构": "mindmap",
-            "框架": "mindmap",
+        keyword_mapping = {
+            "code": "code", "编程": "code",
+            "错题": "quiz", "quiz": "quiz", "题目": "quiz",
+            "概念": "content", "知识点": "content",
+            "结构": "mindmap", "框架": "mindmap",
             "阅读": "reading",
-            "图解": "diagram",
-            "图表": "diagram",
-            "表达": "content",
-            "讲解": "content",
+            "图解": "diagram", "图表": "diagram",
+            "表达": "content", "讲解": "content",
         }
 
-        inferred: list[str] = []
-        for keyword, node_id in keyword_mapping.items():
-            if keyword in merged_text:
-                inferred.append(node_id)
+        inferred = [node_id for kw, node_id in keyword_mapping.items() if kw in merged_text]
 
         for node_id in (extra_weak_points or []):
             if node_id in ALL_NODE_IDS:
                 inferred.append(node_id)
 
-        if not inferred and profile:
-            profile_info = self._parse_profile(profile)
-            goal = (profile_info.get("当前学习/项目背景") or "").lower()
-            if "exam" in goal or "考试" in goal:
-                inferred.append("quiz")
-            if "project" in goal or "项目" in goal:
-                inferred.append("code")
+        # 根据学习目标推断
+        if not inferred and profile and profile.profile_json:
+            goal = profile.profile_json.get("dimensions", {}).get("learning_goal", {}).get("summary", "")
+            if goal:
+                goal_lower = goal.lower()
+                if "exam" in goal_lower or "考试" in goal_lower:
+                    inferred.append("quiz")
+                if "project" in goal_lower or "项目" in goal_lower:
+                    inferred.append("code")
 
-        ordered = [node_id for node_id in ALL_NODE_IDS if node_id in set(inferred)]
-        return ordered
+        return [node_id for node_id in ALL_NODE_IDS if node_id in set(inferred)]
 
-    def _parse_profile(self, profile) -> dict[str, str]:
-        """从 JSON 画像中提取学习路径规划需要的关键信息。"""
-        result: dict[str, str] = {}
+    def _get_profile_field(self, profile: Any | None, field: str) -> str | None:
+        """获取画像字段值。"""
         if not profile or not profile.profile_json:
-            return result
-
-        dimensions = profile.profile_json.get("dimensions", {})
-        student_profile = profile.profile_json.get("student_profile") or {}
-        result["技术能力判断"] = dimensions.get("knowledge_foundation", {}).get("summary") or ""
-        result["当前学习/项目背景"] = dimensions.get("learning_goal", {}).get("summary") or ""
-        result["学习偏好"] = dimensions.get("interaction_preference", {}).get("summary") or ""
-        result["当前薄弱点"] = dimensions.get("weakness_points", {}).get("summary") or ""
-        result["兴趣方向"] = student_profile.get("current_focus", [])
-        if isinstance(result["兴趣方向"], list):
-            result["兴趣方向"] = ", ".join(result["兴趣方向"])
-        return result
+            return None
+        dims = profile.profile_json.get("dimensions", {})
+        return dims.get(field, {}).get("summary")
 
     def _compute_confidence(
         self,
@@ -456,6 +549,7 @@ class PathService:
         has_resource_items: bool,
         completed_node_ids: set[str],
     ) -> int:
+        """计算路径置信度。"""
         score = 35
         now = datetime.now()
 
@@ -463,6 +557,7 @@ class PathService:
             score += 25
             if profile.updated_at and (now - profile.updated_at).days <= 30:
                 score += 5
+
         if resource:
             score += 20
             if resource.created_at:
@@ -471,12 +566,118 @@ class PathService:
                     score += 12
                 elif age_days <= 30:
                     score += 8
+
         if has_resource_items:
             score += 10
+
         if completed_node_ids:
             score += 4
 
         return max(30, min(score, 95))
+
+    def _attach_resource_items(
+        self,
+        plan: PathPlan,
+        resource: GeneratedResource | None,
+        resource_items: list[Any],
+    ) -> PathPlan:
+        """关联资源项到路径节点。"""
+        resource_id = resource.id if resource else None
+        item_map: dict[str, Any] = {}
+
+        for item in resource_items:
+            node_id = self._normalize_node_id(getattr(item, "agent_type", ""))
+            if node_id in ALL_NODE_IDS and node_id not in item_map:
+                item_map[node_id] = item
+
+        stages = []
+        for stage in plan.stages:
+            nodes = []
+            for node in stage.nodes:
+                item = item_map.get(node.id)
+                if item is None:
+                    nodes.append(node.model_copy(update={
+                        "resource_id": resource_id,
+                        "resource_type": node.id,
+                        "resource_status": "missing" if resource_id is not None else None,
+                    }))
+                    continue
+
+                content_json = getattr(item, "content_json", None) or {}
+                resource_status = self._get_resource_status(item)
+
+                nodes.append(node.model_copy(update={
+                    "resource_id": resource_id,
+                    "resource_item_id": getattr(item, "id", None),
+                    "resource_type": node.id,
+                    "resource_title": content_json.get("title") or node.title,
+                    "resource_summary": content_json.get("summary") or getattr(item, "content_text", None),
+                    "resource_format": content_json.get("format") or getattr(item, "content_format", None),
+                    "resource_status": resource_status,
+                }))
+            stages.append(stage.model_copy(update={"nodes": nodes}))
+
+        return plan.model_copy(update={"stages": stages})
+
+    def _get_resource_status(self, item: Any) -> str:
+        """获取资源项状态。"""
+        status = str(getattr(item, "status", "") or "").lower()
+
+        if status == "failed":
+            return "failed"
+        if status in {"pending", "running"}:
+            return "pending"
+
+        if status == "completed":
+            content_json = getattr(item, "content_json", None)
+            content_text = getattr(item, "content_text", None)
+
+            if isinstance(content_json, dict) and content_json:
+                content = content_json.get("content")
+                if content not in (None, "", {}, []):
+                    return "available"
+
+            if isinstance(content_text, str) and content_text.strip():
+                return "available"
+
+        return "missing"
+
+    def _attach_recommendation_reasons(
+        self,
+        plan: PathPlan,
+        profile_dimensions: dict[str, dict],
+    ) -> PathPlan:
+        """附加推荐理由到节点。"""
+        recommendations = recommend_next_nodes(
+            plan,
+            top_n=len(ALL_NODE_IDS),
+            profile_dimensions=profile_dimensions,
+        )
+        reason_map = {item["node_id"]: item["reason"] for item in recommendations}
+
+        stages = []
+        for stage in plan.stages:
+            nodes = [
+                node.model_copy(update={
+                    "recommendation_reason": reason_map.get(
+                        node.id,
+                        node.recommendation_reason or f"根据学习路径规划，建议完成「{node.title}」",
+                    )
+                })
+                for node in stage.nodes
+            ]
+            stages.append(stage.model_copy(update={"nodes": nodes}))
+
+        return plan.model_copy(update={"stages": stages})
+
+    def _normalize_node_id(self, raw: str) -> str:
+        """标准化节点 ID。"""
+        node_id = (raw or "").strip().lower()
+        aliases = {
+            "image": "diagram", "chart": "diagram", "flowchart": "diagram",
+            "ppt": "content", "video": "content",
+        }
+        return aliases.get(node_id, node_id)
 
     def _build_response(
         self,
@@ -487,6 +688,7 @@ class PathService:
         resource_items: list[Any],
         force_rebuild: bool,
     ) -> PathPlanData:
+        """构建响应数据。"""
         current_stage = next(
             (stage.title for stage in plan.stages if stage.id == plan.progress.current_stage_id),
             None,
@@ -509,6 +711,7 @@ class PathService:
             eta_days=plan.progress.eta_days,
             confidence=plan.progress.confidence,
         )
+
         insights = PathInsight(
             adjustment_reason=adjustment_reason,
             next_action=derive_next_action(plan),
@@ -518,6 +721,7 @@ class PathService:
                 profile_dimensions=plan.profile_dimensions,
             ),
         )
+
         data_sources = []
         if profile:
             data_sources.append("profile")
@@ -534,6 +738,7 @@ class PathService:
             resource_id=resource.id if resource else None,
             plan_version=plan.version,
         )
+
         return PathPlanData(
             summary=summary,
             stages=plan.stages,
@@ -541,116 +746,10 @@ class PathService:
             meta=meta,
         )
 
-    def _attach_resource_items(
-        self,
-        plan: PathPlan,
-        resource: GeneratedResource | None,
-        resource_items: list[Any],
-    ) -> PathPlan:
-        resource_id = resource.id if resource else None
-        item_map: dict[str, Any] = {}
-        for item in resource_items:
-            node_id = self._normalize_node_id(getattr(item, "agent_type", ""))
-            if node_id in ALL_NODE_IDS and node_id not in item_map:
-                item_map[node_id] = item
-
-        stages = []
-        for stage in plan.stages:
-            nodes = []
-            for node in stage.nodes:
-                item = item_map.get(node.id)
-                if item is None:
-                    nodes.append(
-                        node.model_copy(
-                            update={
-                                "resource_id": resource_id,
-                                "resource_type": node.id,
-                                "resource_status": "missing" if resource_id is not None else None,
-                            }
-                        )
-                    )
-                    continue
-
-                content_json = getattr(item, "content_json", None)
-                if not isinstance(content_json, dict):
-                    content_json = {}
-                resource_status = self._resource_item_status(item)
-                nodes.append(
-                    node.model_copy(
-                        update={
-                            "resource_id": resource_id,
-                            "resource_item_id": getattr(item, "id", None),
-                            "resource_type": node.id,
-                            "resource_title": content_json.get("title") or node.title,
-                            "resource_summary": content_json.get("summary") or getattr(item, "content_text", None),
-                            "resource_format": content_json.get("format") or getattr(item, "content_format", None),
-                            "resource_status": resource_status,
-                        }
-                    )
-                )
-            stages.append(stage.model_copy(update={"nodes": nodes}))
-        return plan.model_copy(update={"stages": stages})
-
-    def _attach_recommendation_reasons(
-        self,
-        plan: PathPlan,
-        profile_dimensions: dict[str, dict],
-    ) -> PathPlan:
-        recommendations = recommend_next_nodes(
-            plan,
-            top_n=len(ALL_NODE_IDS),
-            profile_dimensions=profile_dimensions,
-        )
-        reason_map = {item["node_id"]: item["reason"] for item in recommendations}
-        stages = []
-        for stage in plan.stages:
-            nodes = [
-                node.model_copy(
-                    update={
-                        "recommendation_reason": reason_map.get(
-                            node.id,
-                            node.recommendation_reason or f"根据学习路径规划，建议完成「{node.title}」",
-                        )
-                    }
-                )
-                for node in stage.nodes
-            ]
-            stages.append(stage.model_copy(update={"nodes": nodes}))
-        return plan.model_copy(update={"stages": stages})
-
-    def _resource_item_status(self, item: Any) -> str:
-        status = str(getattr(item, "status", "") or "").lower()
-        if status == "failed":
-            return "failed"
-        if status in {"pending", "running"}:
-            return "pending"
-        if status == "completed" and self._resource_item_has_content(item):
-            return "available"
-        return "missing"
-
-    def _resource_item_has_content(self, item: Any) -> bool:
-        content_json = getattr(item, "content_json", None)
-        content_text = getattr(item, "content_text", None)
-        if isinstance(content_json, dict) and content_json:
-            content = content_json.get("content")
-            return content not in (None, "", {}, [])
-        if isinstance(content_text, str):
-            return bool(content_text.strip())
-        return False
-
-    def _normalize_node_id(self, raw: str) -> str:
-        node_id = (raw or "").strip().lower()
-        aliases = {
-            "image": "diagram",
-            "chart": "diagram",
-            "flowchart": "diagram",
-            "ppt": "content",
-            "video": "content",
-        }
-        return aliases.get(node_id, node_id)
-
 
 class PathUseCases:
+    """学习路径用例层。"""
+
     def __init__(self, path_service: PathService) -> None:
         self.path_service = path_service
 
@@ -661,6 +760,7 @@ class PathUseCases:
         *,
         resource_id: int | None = None,
     ) -> PathPlanData:
+        """获取路径规划。"""
         return await self.path_service.build_path_plan(
             session,
             user_id,
@@ -674,6 +774,7 @@ class PathUseCases:
         *,
         resource_id: int | None = None,
     ) -> PathPlanData:
+        """重建路径规划。"""
         return await self.path_service.build_path_plan(
             session,
             user_id,
@@ -690,6 +791,7 @@ class PathUseCases:
         weak_points: list[str] | None = None,
         resource_id: int | None = None,
     ) -> PathPlanData:
+        """应用反馈调整路径。"""
         return await self.path_service.build_path_plan(
             session,
             user_id,
@@ -699,6 +801,6 @@ class PathUseCases:
         )
 
 
-path_repository = PathRepository()
-path_service = PathService(path_repository)
+# 全局实例
+path_service = PathService()
 path_usecases = PathUseCases(path_service)

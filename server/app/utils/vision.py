@@ -21,7 +21,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.config import SPARK_VISION_API_KEY, SPARK_VISION_API_SECRET, SPARK_VISION_APPID
 from app.infra.llm import LlmManager, get_llm_manager
 from app.infra.logging import get_logger
-from app.shared.file_service import resolve_uploaded_image_path
+from app.utils.files import resolve_uploaded_image_path
 
 logger = get_logger(__name__)
 

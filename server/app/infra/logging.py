@@ -21,7 +21,7 @@ from app.config import (
     LANGGRAPH_DEBUG,
     LOG_LEVEL,
 )
-from app.shared.paths import LOGS_DIR as LOG_DIR
+from app.utils.paths import LOGS_DIR as LOG_DIR
 
 
 # 输出格式尽量与旧 logging 版保持一致，便于 grep/排障。

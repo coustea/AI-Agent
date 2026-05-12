@@ -27,9 +27,6 @@ from app.memory.layer import MemoryLayer
 # 流水线
 from app.memory.pipeline.service import PipelineService
 
-# 向后兼容别名
-PostChatPipeline = PipelineService
-
 # Store 类（高级用法）
 from app.memory.session.store import SessionStore
 from app.memory.message.store import MessageStore
@@ -59,27 +56,11 @@ from app.memory.profile.service import (
     calculate_score,
 )
 
-# 向后兼容：从旧模块导出
-from app.memory.memory.types import (
-    make_default_memory_json,
-    render_memory_markdown,
-    has_stable_signal,
-)
-from app.memory.summary.types import (
-    make_default_summary_json,
-    render_summary_markdown,
-    SUMMARY_TOKEN_THRESHOLD,
-)
-
-# 向后兼容别名
-build_onboarding_profile = normalize_onboarding  # 别名
-
 __all__ = [
     # 主入口
     "MemoryLayer",
     # 流水线
     "PipelineService",
-    "PostChatPipeline",  # 向后兼容
     # Store 类
     "SessionStore",
     "MessageStore",
@@ -102,13 +83,4 @@ __all__ = [
     "normalize_onboarding",
     "is_onboarding_complete",
     "calculate_score",
-    "build_onboarding_profile",  # 向后兼容
-    # 记忆相关
-    "make_default_memory_json",
-    "render_memory_markdown",
-    "has_stable_signal",
-    # 概要相关
-    "make_default_summary_json",
-    "render_summary_markdown",
-    "SUMMARY_TOKEN_THRESHOLD",
 ]

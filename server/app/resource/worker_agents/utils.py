@@ -4,7 +4,7 @@ Worker Agent 工具函数集合。
 包含：
 - Markdown 提取工具
 - 格式化工具（上游结果、画像、依赖报告）
-- append_backend_context_for_prompt（兼容旧接口）
+- append_backend_context_for_prompt
 - AgentContextBuilder：按 Agent 类型裁剪上下文，避免 prompt token 过长
 
 AgentContextBuilder 使用示例：
@@ -256,6 +256,68 @@ def build_content_summary_data(markdown: str, learning_need: str = "") -> dict[s
     }
 
 
+async def build_content_summary_data_with_llm(markdown: str, learning_need: str = "") -> dict[str, Any]:
+    """用轻量 LLM 提取 ContentAgent 的结构化交接摘要，失败时回退到本地解析。"""
+    fallback = build_content_summary_data(markdown, learning_need)
+    if not markdown or not markdown.strip():
+        return fallback
+
+    from langchain_core.messages import HumanMessage
+    from app.infra.llm import get_llm_manager
+    from app.utils.json import parse_first_json_object
+
+    prompt = f"""请从课程讲解中提取供下游多智能体协作使用的结构化摘要。
+只输出严格 JSON，不要 Markdown 或解释文本。
+
+JSON 字段：
+{{
+  "topic": "主题",
+  "course": "课程名或空字符串",
+  "key_points": ["核心知识点"],
+  "principles": ["核心原理"],
+  "weak_points": ["薄弱点或难点"],
+  "common_mistakes": ["常见误区"],
+  "examples": ["示例或案例"],
+  "learning_suggestions": ["学习建议"]
+}}
+
+学习需求：{learning_need[:160]}
+
+课程讲解：
+{markdown[:4500]}"""
+
+    try:
+        llm_manager = get_llm_manager()
+        response = await llm_manager.ainvoke(
+            "spark_x2_flash",
+            [HumanMessage(content=prompt)],
+            model_kwargs={"temperature": 0.1},
+        )
+        content = response.content if hasattr(response, "content") else str(response)
+        parsed = parse_first_json_object(content)
+    except Exception:
+        return fallback
+
+    result = dict(fallback)
+    for key in (
+        "topic",
+        "course",
+        "key_points",
+        "principles",
+        "weak_points",
+        "common_mistakes",
+        "examples",
+        "learning_suggestions",
+    ):
+        value = parsed.get(key)
+        if isinstance(value, list):
+            cleaned = [str(item).strip() for item in value if str(item).strip()]
+            result[key] = cleaned[:8]
+        elif isinstance(value, str) and value.strip():
+            result[key] = value.strip()[:160] if key in {"topic", "course"} else [value.strip()[:160]]
+    return result
+
+
 def learning_need_from_task(task: dict[str, Any]) -> str:
     """Return the frontend natural-language learning need from a worker task."""
     return str(task.get("learning_need") or "未说明").strip() or "未说明"
@@ -291,6 +353,14 @@ class AgentContextBuilder:
 
     # 薄弱点简要字段（用于 QuizAgent）
     _WEAK_POINT_FIELDS = ["weak_points", "knowledge_gaps", "struggling_topics"]
+    _PROFILE_DIMENSION_FIELDS = [
+        "knowledge_foundation",
+        "learning_goal",
+        "weakness_points",
+        "interaction_preference",
+        "cognitive_style",
+        "motivation",
+    ]
 
     def build_for_agent(self, agent_id: str, state: Any) -> str:
         """构建指定 Agent 的上下文字符串。
@@ -360,6 +430,10 @@ class AgentContextBuilder:
         if scenario:
             parts.append(f"## 学习场景\n{scenario}")
 
+        profile_brief = self._get_profile_brief(state)
+        if profile_brief:
+            parts.append(f"## 学习者画像摘要\n{profile_brief}")
+
         agent_config = self._get_agent_config(state)
         if agent_config:
             config_text = self._format_mindmap_config(agent_config)
@@ -383,6 +457,10 @@ class AgentContextBuilder:
         scenario = self._get_learning_scenario(state)
         if scenario:
             parts.append(f"## 学习场景\n{scenario}")
+
+        profile_brief = self._get_profile_brief(state)
+        if profile_brief:
+            parts.append(f"## 学习者画像摘要\n{profile_brief}")
 
         agent_config = self._get_agent_config(state)
         if agent_config:
@@ -408,6 +486,10 @@ class AgentContextBuilder:
         if scenario:
             parts.append(f"## 学习场景\n{scenario}")
 
+        profile_brief = self._get_profile_brief(state)
+        if profile_brief:
+            parts.append(f"## 学习者画像摘要\n{profile_brief}")
+
         agent_config = self._get_agent_config(state)
         if agent_config:
             config_text = self._format_code_config(agent_config)
@@ -431,6 +513,10 @@ class AgentContextBuilder:
         scenario = self._get_learning_scenario(state)
         if scenario:
             parts.append(f"## 学习场景\n{scenario}")
+
+        profile_brief = self._get_profile_brief(state)
+        if profile_brief:
+            parts.append(f"## 学习者画像摘要\n{profile_brief}")
 
         agent_config = self._get_agent_config(state)
         if agent_config:
@@ -465,6 +551,10 @@ class AgentContextBuilder:
         scenario = self._get_learning_scenario(state)
         if scenario:
             parts.append(f"## 学习场景\n{scenario}")
+
+        profile_brief = self._get_profile_brief(state)
+        if profile_brief:
+            parts.append(f"## 学习者画像摘要\n{profile_brief}")
 
         agent_config = self._get_agent_config(state)
         if agent_config:
@@ -541,12 +631,24 @@ class AgentContextBuilder:
                 value = profile_json.get(key)
                 if value:
                     lines.append(f"- {label}: {value}")
+            dimensions = profile_json.get("dimensions")
+            if isinstance(dimensions, dict):
+                for key in self._PROFILE_DIMENSION_FIELDS:
+                    value = dimensions.get(key)
+                    if isinstance(value, dict) and value.get("summary"):
+                        lines.append(f"- {key}: {value['summary']}")
         else:
             # 直接从顶层字段提取
             for key, label in self._PROFILE_BRIEF_FIELDS:
                 value = learner_profile.get(key)
                 if value:
                     lines.append(f"- {label}: {value}")
+            dimensions = learner_profile.get("dimensions")
+            if isinstance(dimensions, dict):
+                for key in self._PROFILE_DIMENSION_FIELDS:
+                    value = dimensions.get(key)
+                    if isinstance(value, dict) and value.get("summary"):
+                        lines.append(f"- {key}: {value['summary']}")
 
         return "\n".join(lines)
 
@@ -558,6 +660,17 @@ class AgentContextBuilder:
         # 优先从 profile_json 中提取
         profile_json = learner_profile.get("profile_json")
         source = profile_json if isinstance(profile_json, dict) else learner_profile
+
+        dimensions = source.get("dimensions") if isinstance(source, dict) else None
+        if isinstance(dimensions, dict):
+            weakness = dimensions.get("weakness_points")
+            if isinstance(weakness, dict):
+                summary = weakness.get("summary")
+                if summary:
+                    lines.append(f"- weakness_points: {str(summary)[:200]}")
+                details = weakness.get("details")
+                if isinstance(details, list) and details:
+                    lines.append(f"- weakness_details: {', '.join(str(item) for item in details[:5])}")
 
         for field in self._WEAK_POINT_FIELDS:
             value = source.get(field)
@@ -579,29 +692,20 @@ class AgentContextBuilder:
         if not agent_result:
             return ""
 
-        # 优先使用 LLM 生成的 summary（由 generate_summary_with_llm 生成）
+        # 优先使用 summary_data：这是上游 Agent 给下游协同的结构化交接数据。
+        summary_data = agent_result.get("summary_data")
+        if isinstance(summary_data, dict) and summary_data:
+            formatted = _format_dependency_summary(
+                {"summary_data": summary_data},
+                max_chars=1400,
+            )
+            if formatted:
+                return formatted
+
+        # 其次使用 LLM 生成的 summary（由 generate_summary_with_llm 生成）
         summary = agent_result.get("summary")
         if summary and isinstance(summary, str) and summary.strip():
             return summary.strip()[:500]
-
-        # 其次使用 summary_data
-        summary_data = agent_result.get("summary_data")
-        if not summary_data:
-            return ""
-
-        # 格式化 summary_data
-        if isinstance(summary_data, dict):
-            # 提取关键信息
-            key_fields = ["topic", "key_points", "principles", "main_points", "topics"]
-            extracted: list[str] = []
-            for field in key_fields:
-                value = summary_data.get(field)
-                if value:
-                    if isinstance(value, list):
-                        extracted.append(f"{field}: {', '.join(str(v) for v in value[:5])}")
-                    elif isinstance(value, str):
-                        extracted.append(f"{field}: {value[:100]}")
-            return "\n".join(extracted) if extracted else str(summary_data)[:500]
 
         return str(summary_data)[:500]
 

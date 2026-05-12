@@ -47,7 +47,7 @@ from app.resource.worker_agents.utils import (
     learning_need_from_task,
     title_from_learning_need,
 )
-from app.shared.diagram_render import build_mermaid_render
+from app.utils.mermaid import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP
 
 logger = get_logger(__name__)
@@ -57,13 +57,20 @@ SUPPORTED_DIAGRAM_TYPES = [
     "flow",
     "compare",
     "relation",
+    "sequence",
     "state",
     "class",
+    "er",
     "block",
     "packet",
-    "sequence",
+    "git",
     "activity",
+    "usecase",
     "component",
+    "package",
+    "deployment",
+    "object",
+    "communication",
 ]
 
 DIAGRAM_TYPE_DESCRIPTIONS = {
@@ -88,15 +95,15 @@ DIAGRAM_TYPE_DESCRIPTIONS = {
 }
 
 MERMAID_DIAGRAM_KEYWORDS = {
-    "hierarchy": "graph TD",
+    "hierarchy": "flowchart TD",
     "flow": "flowchart TD",
     "compare": "flowchart LR",
-    "relation": "graph TD",
+    "relation": "flowchart LR",
     "sequence": "sequenceDiagram",
     "state": "stateDiagram-v2",
     "class": "classDiagram",
     "er": "erDiagram",
-    "block": "block-beta",
+    "block": "flowchart TB",
     "packet": "packet-beta",
     "git": "gitGraph",
     "activity": "flowchart TD",
@@ -106,6 +113,42 @@ MERMAID_DIAGRAM_KEYWORDS = {
     "deployment": "flowchart TB",
     "object": "flowchart TB",
     "communication": "flowchart LR",
+}
+
+FLOWCHART_COMPATIBLE_TYPES = {
+    "hierarchy",
+    "flow",
+    "compare",
+    "relation",
+    "block",
+    "activity",
+    "usecase",
+    "component",
+    "package",
+    "deployment",
+    "object",
+    "communication",
+}
+
+DIAGRAM_TYPE_GUIDANCE = {
+    "hierarchy": "使用 flowchart TD 或 LR。必须有核心主题、上位分类、下位知识点、易错考点，至少 3 个 subgraph。",
+    "flow": "使用 flowchart TD。按起点、关键步骤、判断分支、输出结果组织，必须体现顺序、分支和回路。",
+    "compare": "使用 flowchart LR。按对比对象、对比维度、相同点、差异点、适用场景组织，至少 3 个维度模块。",
+    "relation": "使用 flowchart LR。突出依赖、因果、前置、影响、约束关系，避免只画树状目录。",
+    "sequence": "使用 sequenceDiagram。至少 3 个参与者、6 条消息，包含 note over 解释关键阶段，不使用 classDef。",
+    "state": "使用 stateDiagram-v2。至少 6 个状态、6 条转移，包含初始、终止、异常或回退路径。",
+    "class": "使用 classDiagram。至少 4 个类或接口，包含属性、方法、继承、组合或依赖关系。",
+    "er": "使用 erDiagram。至少 4 个实体、3 条关系，每个核心实体至少列出 2 个字段。",
+    "block": "优先使用 flowchart TB 模拟模块方块图。至少 3 层模块：入口、核心处理、存储或输出。",
+    "packet": "使用 packet-beta 展示字段布局。至少 8 个字段段，覆盖固定字段、标志位、长度或校验字段。",
+    "git": "使用 gitGraph。至少 6 个 commit、2 条 branch、2 次 merge 或 checkout，体现开发线与复习线演进。",
+    "activity": "使用 flowchart TD 模拟活动图。必须包含开始、动作、判断、并行或回退、结束。",
+    "usecase": "使用 flowchart LR 模拟用例图。至少 2 类角色、6 个用例、包含 include 或 extend 语义的连线文本。",
+    "component": "使用 flowchart TB 模拟组件图。至少 4 个组件、3 个接口或依赖，分层展示前端、服务、数据或外部系统。",
+    "package": "使用 flowchart TB 模拟包图。至少 4 个包、依赖方向清晰，体现公共包、领域包、基础设施包。",
+    "deployment": "使用 flowchart TB 模拟部署图。至少 4 个运行节点，包含客户端、服务、数据库、缓存或外部服务。",
+    "object": "使用 flowchart TB 模拟对象图。至少 5 个对象实例，体现运行时引用、集合归属或状态值。",
+    "communication": "使用 flowchart LR 模拟通信图。至少 4 个对象、6 条编号消息，体现协作顺序和返回关系。",
 }
 
 
@@ -121,7 +164,11 @@ class DiagramAgent:
         self.emitter = emitter
         self.llm_manager = get_llm_manager()
         self.prompt_path = Path(__file__).parent.parent / "prompts" / "workers" / "diagram.md"
-        self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 4000}
+        self.diagram_model_kwargs = {
+            "temperature": 0.2,
+            "streaming": False,
+            "max_tokens": 6000,
+        }
 
     async def _emit_action(
         self,
@@ -213,11 +260,18 @@ class DiagramAgent:
                 current_action="整理图解资源",
             )
 
+            quality = self._analyze_mermaid_quality(mermaid_source, diagram_type)
+            description = (
+                f"教学知识图解：{quality['node_count']} 个知识节点、"
+                f"{quality['module_count']} 个模块、{quality['edge_count']} 条关系"
+            )
+
             content = {
                 "diagram_type": diagram_type,
                 "render_format": state.agent_config.get("render_format", "mermaid"),
                 "source": mermaid_source,
-                "description": "知识图解",
+                "description": description,
+                "quality": quality,
             }
 
             covered_points = self._extract_diagram_labels(mermaid_source)
@@ -225,6 +279,12 @@ class DiagramAgent:
                 "diagram_type": diagram_type,
                 "covered_points": covered_points,
                 "relation_type": self._infer_relation_type(diagram_type, mermaid_source),
+                "node_count": quality["node_count"],
+                "edge_count": quality["edge_count"],
+                "module_count": quality["module_count"],
+                "module_titles": quality["module_titles"],
+                "quality_level": quality["quality_level"],
+                "has_visual_styles": quality["has_visual_styles"],
             }
 
             return WorkerResult(
@@ -232,12 +292,13 @@ class DiagramAgent:
                 content=content,
                 file_type="mermaid",
                 title=title_from_learning_need(state.task, "知识图解"),
-                summary="生成 Mermaid 知识图解",
+                summary=description,
                 summary_data=summary_data,
                 metadata={
                     "engine": "mermaid",
                     "render_at": "frontend",
                     "diagram_type": diagram_type,
+                    "quality": quality,
                 },
             )
 
@@ -259,18 +320,20 @@ class DiagramAgent:
         if requested_type:
             type_instruction = (
                 f"用户指定图解类型: {requested_type} — {DIAGRAM_TYPE_DESCRIPTIONS.get(requested_type, '')}\n"
-                f"Mermaid 第一行必须是: {MERMAID_DIAGRAM_KEYWORDS.get(requested_type, 'graph TD')}"
+                f"Mermaid 第一行必须是: {MERMAID_DIAGRAM_KEYWORDS.get(requested_type, 'graph TD')}\n"
+                f"类型专属要求: {DIAGRAM_TYPE_GUIDANCE.get(requested_type, '')}"
             )
         else:
             type_instruction = (
                 "图解类型为 auto。请先在支持的图解类型中选择最适合教学表达的一种，"
                 "再直接生成对应 Mermaid 源码。"
             )
+        type_quality_instruction = self._build_type_quality_instruction(requested_type)
 
         generation_prompt = f"""{prompt}
 
 ## Single-Shot 输出要求
-本次请求必须一次完成“选择图解类型”和“生成 Mermaid 源码”，不要要求二次确认。
+本次请求必须一次完成"选择图解类型"和"生成 Mermaid 源码"，不要要求二次确认。
 
 {type_instruction}
 
@@ -282,11 +345,53 @@ class DiagramAgent:
 第二行输出: REASON: <一句话选择理由>
 随后输出完整 Mermaid 源码。可以使用 ```mermaid 代码围栏，但不要输出 JSON。
 
-生成完整知识图解，不是 demo、占位示意或两三个节点的简化样例。
-覆盖输入中的主要概念、关系、步骤、边界条件或易混点。
-节点和连线文本只能使用简短自然语言，不要输出 Markdown、HTML、竖线 `|`、尖括号 `< >`。
-节点文本极其简短，不超过 16 个字。
-节点数量优先控制在 8 到 18 个原子知识节点，确保图表结构丰富、连线清晰。"""
+## 图解质量要求
+你生成的知识图解不能是简单目录树，必须是教学型知识图解。
+
+### 类型专属要求
+{type_quality_instruction}
+
+### 内容要求
+每个知识模块至少覆盖以下两类信息：
+- 概念定义
+- 核心性质
+- 操作方法
+- 易错点
+- 高频考点
+- 应用场景
+- 复杂度或边界条件
+
+### 排版要求
+1. flowchart 兼容类型优先使用 LR 或 TB，并通过 subgraph 分组。
+2. sequence、state、class、er、packet、git 必须使用对应 Mermaid 原生语法。
+3. 同类知识点必须放入同一个 subgraph。
+4. 节点文本不超过 14 个字。
+5. 连线文本尽量简短，只说明关键关系。
+6. 避免所有节点纵向堆叠。
+7. 避免长链条，优先使用模块化分区布局。
+
+### 视觉样式要求
+flowchart / graph 兼容类型必须添加 Mermaid classDef 样式，并使用 class 绑定节点样式。
+sequence、state、class、er、packet、git 等原生类型如果 Mermaid 语法不支持 classDef，可以不添加样式，但必须通过结构完整性弥补。
+至少包含以下样式：
+- core：核心主题节点
+- module：模块节点或模块关键节点
+- key：关键知识点
+- warning：易错点、边界条件、高频考点
+
+推荐样式如下：
+classDef core fill:#EEF2FF,stroke:#4F46E5,stroke-width:2px,color:#111827;
+classDef module fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1px,color:#1E293B;
+classDef key fill:#ECFDF5,stroke:#10B981,stroke-width:1px,color:#065F46;
+classDef warning fill:#FFF7ED,stroke:#FB923C,stroke-width:1px,color:#9A3412;
+
+### Mermaid 语法限制
+1. 只能输出 Mermaid 支持的语法。
+2. 节点和连线文本只能使用简短自然语言。
+3. 不要输出 Markdown、HTML、竖线 `|`、尖括号 `< >`。
+4. 不要使用过长节点文本。
+5. 不要输出 demo、占位图或简化示例。
+"""
 
         try:
             messages = [HumanMessage(content=generation_prompt)]
@@ -300,6 +405,36 @@ class DiagramAgent:
             if not mermaid_source:
                 return None
             diagram_type = self._extract_diagram_type(content, mermaid_source, requested_type)
+
+            # 质量校验与自动重试。重试失败时保留已生成的可渲染版本，避免质量增强拖垮结果。
+            if self._is_poor_mermaid(mermaid_source, diagram_type):
+                logger.warning("[DiagramAgent] Mermaid 图解质量不足，准备重试: type=%s", diagram_type)
+                retry_prompt = generation_prompt + f"""
+
+## 质量重试要求
+上一次生成的图解过于简单或排版不符合要求，请重新生成更完整的教学图解。
+必须做到：
+{type_quality_instruction}
+输出仍然保持 DIAGRAM_TYPE、REASON 和 Mermaid 源码格式。
+"""
+                try:
+                    retry_response = await self.llm_manager.ainvoke(
+                        "spark_x",
+                        [HumanMessage(content=retry_prompt)],
+                        model_kwargs=self.diagram_model_kwargs,
+                    )
+                    retry_content = retry_response.content if hasattr(retry_response, "content") else str(retry_response)
+                    retry_source = self._extract_mermaid_source(retry_content)
+                    if retry_source:
+                        retry_type = self._extract_diagram_type(retry_content, retry_source, requested_type)
+                        if not self._is_poor_mermaid(retry_source, retry_type):
+                            return retry_type, retry_source
+                        logger.warning("[DiagramAgent] Mermaid 重试后仍质量不足，返回较长版本")
+                        if len(retry_source) > len(mermaid_source):
+                            return retry_type, retry_source
+                except Exception as retry_exc:
+                    logger.warning("[DiagramAgent] Mermaid 质量重试失败，保留首版图解: %s", retry_exc)
+
             return diagram_type, mermaid_source
         except Exception as exc:
             logger.warning("[DiagramAgent] Mermaid 图解生成失败: %s", exc)
@@ -344,9 +479,31 @@ class DiagramAgent:
 
     def _extract_diagram_labels(self, mermaid_source: str) -> list[str]:
         """从 Mermaid 节点标签中提取可复用知识点摘要。"""
-        labels = re.findall(r"[\[({]\"?([^\[\]{}()\"<>|]{2,40})\"?[\])}]", mermaid_source or "")
+        text = mermaid_source or ""
+        first_line = text.strip().splitlines()[0].strip().lower() if text.strip() else ""
+        labels: list[str] = []
+        if first_line.startswith("sequencediagram"):
+            labels.extend(re.findall(r"(?im)^\s*(?:participant|actor)\s+\w+(?:\s+as\s+(.+?))?\s*$", text))
+            labels.extend(re.findall(r":\s*([^:\n]{2,40})", text))
+        elif first_line.startswith("statediagram"):
+            for left, right in re.findall(r"(?m)^\s*([^\s\[\]:]+)\s*-->\s*([^:\n]+)", text):
+                labels.extend([left, right.strip().split()[0]])
+        elif first_line.startswith("classdiagram"):
+            labels.extend(re.findall(r"(?im)^\s*class\s+([A-Za-z][\w-]*)", text))
+            labels.extend(re.findall(r"(?m)^\s*[+-]\s*([A-Za-z_][\w_]*)", text))
+        elif first_line.startswith("erdiagram"):
+            labels.extend(re.findall(r"(?im)^\s*([A-Z][A-Z0-9_]*)\s+\{", text))
+            labels.extend(re.findall(r"(?im)^\s+\w+\s+([A-Za-z_][\w_]*)", text))
+        elif first_line.startswith("packet-beta"):
+            labels.extend(re.findall(r'(?m)^\s*\d+(?:-\d+)?\s*:\s*"?([^"\n]{2,40})"?', text))
+        elif first_line.startswith("gitgraph"):
+            labels.extend(re.findall(r'id:\s*"([^"]{2,40})"', text))
+        else:
+            labels.extend(re.findall(r"[\[({]\"?([^\[\]{}()\"<>|]{2,40})\"?[\])}]", text))
+
         cleaned = [re.sub(r"\s+", " ", item).strip() for item in labels]
-        return list(dict.fromkeys(item for item in cleaned if item))[:8]
+        ignored = {"[*]", "as"}
+        return list(dict.fromkeys(item for item in cleaned if item and item not in ignored))[:16]
 
     def _infer_relation_type(self, diagram_type: str, mermaid_source: str) -> str:
         """按图类型给最终资源包提供轻量关系描述。"""
@@ -354,9 +511,194 @@ class DiagramAgent:
             return "流程"
         if diagram_type == "state" or "stateDiagram" in mermaid_source:
             return "状态变化"
+        if diagram_type in {"class", "er", "component", "package", "deployment", "object"}:
+            return "结构依赖"
+        if diagram_type in {"packet", "git"}:
+            return "结构演进"
         if diagram_type in {"compare", "relation"}:
             return "对比/关系"
         return "结构"
+
+    def _build_type_quality_instruction(self, requested_type: str | None) -> str:
+        """生成按图类型区分的质量要求，避免所有图都套用 flowchart 标准。"""
+        common = (
+            "1. 不允许输出 demo、占位图或两三个节点的简化示例。\n"
+            "2. 必须覆盖定义、关键性质、操作过程、易错边界和高频考点中的至少三类信息。\n"
+            "3. 节点或字段文本必须短，避免长句和 Markdown。"
+        )
+        if requested_type:
+            return f"{common}\n4. {DIAGRAM_TYPE_GUIDANCE.get(requested_type, '')}"
+
+        all_types = "\n".join(
+            f"- {diagram_type}: {DIAGRAM_TYPE_GUIDANCE[diagram_type]}"
+            for diagram_type in SUPPORTED_DIAGRAM_TYPES
+        )
+        return f"{common}\n4. auto 选择类型后必须严格遵守对应规则：\n{all_types}"
+
+    def _extract_subgraph_titles(self, mermaid_source: str) -> list[str]:
+        """提取 Mermaid subgraph 标题，用于前端展示模块摘要。"""
+        titles: list[str] = []
+        for line in (mermaid_source or "").splitlines():
+            match = re.match(r"^\s*subgraph\s+(?:[A-Za-z][\w-]*\s*)?(?:\[(.*?)\]|\"(.*?)\"|(.+?))\s*$", line)
+            if not match:
+                continue
+            title = next((part for part in match.groups() if part), "")
+            title = re.sub(r"\s+", " ", title).strip()
+            if title and title.lower() != "end":
+                titles.append(title)
+        return list(dict.fromkeys(titles))[:8]
+
+    def _analyze_mermaid_quality(self, source: str, diagram_type: str) -> dict[str, Any]:
+        """计算图解质量指标，供后端质量门槛和前端摘要复用。"""
+        text = source or ""
+        first_line = text.strip().splitlines()[0].strip().lower() if text.strip() else ""
+        is_sequence = diagram_type == "sequence" or first_line.startswith("sequencediagram")
+        is_state = diagram_type == "state" or first_line.startswith("statediagram")
+        is_class = diagram_type == "class" or first_line.startswith("classdiagram")
+        is_er = diagram_type == "er" or first_line.startswith("erdiagram")
+        is_packet = diagram_type == "packet" or first_line.startswith("packet-beta")
+        is_git = diagram_type == "git" or first_line.startswith("gitgraph")
+
+        flow_nodes = set(re.findall(r"\b([A-Za-z][A-Za-z0-9_]*)\s*[\[\(\{]", text))
+        subgraph_titles = self._extract_subgraph_titles(text)
+        class_defs = set(re.findall(r"(?im)^\s*class\s+([A-Za-z][A-Za-z0-9_,\s]*)\s+\w+\s*;?\s*$", text))
+
+        if is_sequence:
+            participants = set(re.findall(r"(?im)^\s*(?:participant|actor)\s+([A-Za-z][\w-]*)\b", text))
+            messages = re.findall(r"(?:->>|-->>|-\)|--\)|->|-->)", text)
+            node_count = len(participants) + len(messages)
+            edge_count = len(messages)
+            module_count = max(1, len(participants))
+        elif is_state:
+            states = set()
+            for left, right in re.findall(r"(?m)^\s*([^\s\[\]:]+)\s*-->\s*([^:\n]+)", text):
+                if left != "[*]":
+                    states.add(left.strip())
+                target = right.strip().split()[0]
+                if target and target != "[*]":
+                    states.add(target)
+            states.update(
+                state.strip()
+                for state in re.findall(r"(?im)^\s*state\s+\"?.+?\"?\s+as\s+([A-Za-z][\w-]*)", text)
+            )
+            node_count = len(states)
+            edge_count = len(re.findall(r"-->", text))
+            module_count = max(1, len(re.findall(r"(?im)^\s*state\s+", text)) or len(subgraph_titles))
+        elif is_class:
+            classes = set(re.findall(r"(?im)^\s*class\s+([A-Za-z][\w-]*)", text))
+            classes.update(re.findall(r"\b([A-Za-z][\w-]*)\s*(?:<\|--|\*--|o--|-->)", text))
+            classes.update(re.findall(r"(?:<\|--|\*--|o--|-->)\s*([A-Za-z][\w-]*)", text))
+            node_count = len(classes)
+            edge_count = len(re.findall(r"<\|--|\*--|o--|-->", text))
+            module_count = max(1, len(classes))
+        elif is_er:
+            entities = set()
+            entities.update(re.findall(r"(?im)^\s*([A-Z][A-Z0-9_]*)\s+\{", text))
+            for left, right in re.findall(r"(?im)^\s*([A-Z][A-Z0-9_]*)\s+[|o}{\w-]+--[|o}{\w-]+\s+([A-Z][A-Z0-9_]*)\s*:", text):
+                entities.add(left)
+                entities.add(right)
+            relationships = re.findall(r"[|o}{\w-]+--[|o}{\w-]+", text)
+            fields = re.findall(r"(?im)^\s+\w+\s+\w+", text)
+            node_count = len(entities) + len(fields)
+            edge_count = len(relationships)
+            module_count = max(1, len(entities))
+        elif is_packet:
+            segments = re.findall(r"(?im)^\s*\d+(?:-\d+)?\s*:", text)
+            node_count = len(segments)
+            edge_count = max(0, len(segments) - 1)
+            module_count = max(1, len({segment.split("-")[0].split(":")[0].strip() for segment in segments}) // 3)
+        elif is_git:
+            commits = re.findall(r"(?im)^\s*commit\b", text)
+            branches = re.findall(r"(?im)^\s*branch\s+([A-Za-z][\w-]*)", text)
+            transitions = re.findall(r"(?im)^\s*(?:checkout|merge)\b", text)
+            merges = re.findall(r"(?im)^\s*merge\b", text)
+            node_count = len(commits) + len(merges)
+            edge_count = max(0, len(commits) - 1) + len(transitions)
+            module_count = max(1, 1 + len(set(branches)))
+        else:
+            node_count = len(flow_nodes)
+            edge_count = len(re.findall(r"-->|---|-.->|==>|--\s+[^-\n]+?\s+-->", text))
+            module_count = len(subgraph_titles)
+
+        has_visual_styles = "classDef" in text and bool(class_defs or re.search(r"(?im)^\s*class\s+", text))
+        score = 0
+        if (
+            node_count >= 12
+            or (is_sequence and node_count >= 8)
+            or (is_state and node_count >= 6)
+            or (is_class and node_count >= 4)
+            or (is_er and node_count >= 10)
+            or (is_packet and node_count >= 8)
+            or (is_git and node_count >= 5)
+        ):
+            score += 1
+        if (
+            edge_count >= 10
+            or (is_sequence and edge_count >= 5)
+            or (is_state and edge_count >= 5)
+            or (is_class and edge_count >= 3)
+            or (is_er and edge_count >= 3)
+            or (is_packet and edge_count >= 7)
+            or (is_git and edge_count >= 6)
+        ):
+            score += 1
+        if (
+            module_count >= 3
+            or is_sequence
+            or is_state
+            or is_class
+            or is_er
+            or is_packet
+            or is_git
+        ):
+            score += 1
+        if has_visual_styles or is_sequence or is_state or is_class or is_er or is_packet or is_git:
+            score += 1
+
+        if score >= 4:
+            quality_level = "complete"
+        elif score == 3:
+            quality_level = "rich"
+        elif score == 2:
+            quality_level = "basic"
+        else:
+            quality_level = "thin"
+
+        return {
+            "node_count": node_count,
+            "edge_count": edge_count,
+            "module_count": module_count,
+            "module_titles": subgraph_titles,
+            "has_visual_styles": has_visual_styles,
+            "quality_level": quality_level,
+        }
+
+    def _is_poor_mermaid(self, source: str, diagram_type: str) -> bool:
+        """判断 Mermaid 图解是否过于简单。"""
+        metrics = self._analyze_mermaid_quality(source, diagram_type)
+        # 只对 flowchart / graph 类型强制检查 subgraph 和样式。
+        if diagram_type == "sequence":
+            return metrics["module_count"] < 2 or metrics["edge_count"] < 3
+        if diagram_type == "state":
+            return metrics["node_count"] < 5 or metrics["edge_count"] < 5
+        if diagram_type == "class":
+            return metrics["node_count"] < 4 or metrics["edge_count"] < 2
+        if diagram_type == "er":
+            return metrics["node_count"] < 8 or metrics["edge_count"] < 3
+        if diagram_type == "packet":
+            return metrics["node_count"] < 8
+        if diagram_type == "git":
+            return metrics["node_count"] < 5 or metrics["edge_count"] < 5
+
+        if metrics["node_count"] < 12:
+            return True
+        if metrics["edge_count"] < 10:
+            return True
+        if diagram_type in FLOWCHART_COMPATIBLE_TYPES and metrics["module_count"] < 3:
+            return True
+        if diagram_type in FLOWCHART_COMPATIBLE_TYPES and not metrics["has_visual_styles"]:
+            return True
+        return False
 
     def _load_prompt(self) -> str:
         """加载 prompt 模板。"""
@@ -373,9 +715,10 @@ class DiagramAgent:
 3. 图解必须服务于教学理解，必须进行原子化知识拆分。
 4. 生成的是完整知识图解，不是 demo、示意占位或两三个节点的简化样例。
 5. 必须覆盖用户要求中的主要概念、关系、步骤、边界条件、易混点或关键字段；不要只画标题级摘要。
-6. 优先生成 8 到 18 个原子知识节点；如果图类型天然节点较少，也要通过消息、字段、属性、子节点或边补足关键细节。
+6. 优先生成 16 到 28 个原子知识节点。对于 flowchart 或 graph 类型，必须使用 subgraph 进行模块分组，并添加 classDef 样式。
 7. 节点和连线文本使用简短自然语言，不要写 Markdown、HTML 标签、代码块、竖线、尖括号。
 8. 图解内容必须与输入内容一致，不要编造输入中不存在的关键事实。
+9. 图解必须体现教学价值，不允许只生成简单目录树。应该包含核心主题、知识模块、具体知识点、易错点和高频考点。
 
 ## 支持的图解类型
 

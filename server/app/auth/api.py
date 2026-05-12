@@ -12,8 +12,8 @@ from app.auth.security import get_current_user
 from app.auth.service import auth_usecases
 from app.infra.database import get_session
 from app.infra.models import User
-from app.shared.paths import AVATAR_DIR
-from app.shared.response import HttpResponse
+from app.utils.paths import AVATAR_DIR
+from app.utils.response import HttpResponse
 
 router = APIRouter()
 bearer_scheme = HTTPBearer()

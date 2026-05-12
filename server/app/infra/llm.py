@@ -50,7 +50,7 @@ from app.config import (
     SPARK_X2_FLASH_API_BASE,
 )
 from app.infra.logging import get_logger
-from app.shared.json_utils import parse_first_json_object, preview_for_log
+from app.utils.json import parse_first_json_object, preview_for_log
 
 logger = get_logger(__name__)
 

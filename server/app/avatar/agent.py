@@ -26,10 +26,10 @@ from app.chat.utils import load_prompts, truncate
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.memory import MemoryLayer
-from app.shared.diagram_render import build_mermaid_render
-from app.shared.image_analyze import build_vision_service
-from app.shared.json_utils import parse_first_json_object
-from app.tools.search import duckduckgo_search, tavily_search
+from app.utils.mermaid import build_mermaid_render
+from app.utils.vision import build_vision_service
+from app.utils.json import parse_first_json_object
+from app.utils.search import duckduckgo_search, tavily_search
 
 logger = get_logger(__name__)
 

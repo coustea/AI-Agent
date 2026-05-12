@@ -11,7 +11,7 @@ from app.auth.security import get_current_user
 from app.chat.service import get_avatar_chat_usecases
 from app.infra.models import User
 from app.memory import MemoryLayer
-from app.shared.response import HttpResponse
+from app.utils.response import HttpResponse
 
 router = APIRouter()
 

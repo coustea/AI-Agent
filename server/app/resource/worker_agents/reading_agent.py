@@ -22,8 +22,8 @@ from app.resource.worker_agents.utils import (
     learning_need_from_task,
     title_from_learning_need,
 )
-from app.shared.json_utils import parse_first_json_value
-from app.tools.search import duckduckgo_search, tavily_search, serp_search
+from app.utils.json import parse_first_json_value
+from app.utils.search import duckduckgo_search, tavily_search, serp_search
 
 logger = get_logger(__name__)
 

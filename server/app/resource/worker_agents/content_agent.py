@@ -17,7 +17,7 @@ from app.resource.schemas import WorkerState, WorkerResult
 from app.resource.worker_agents.utils import (
     AgentContextBuilder,
     append_backend_context_for_prompt,
-    build_content_summary_data,
+    build_content_summary_data_with_llm,
     generate_summary_with_llm,
     learning_need_from_task,
     title_from_learning_need,
@@ -124,8 +124,8 @@ class ContentAgent:
                 current_action="整理讲解文档",
             )
 
-            # 从讲解文档中提取结构化摘要，供下游 Agent 轻量依赖
-            summary_data = build_content_summary_data(content, learning_need)
+            # 从讲解文档中提取结构化摘要，供下游 Agent 精准协同；LLM 失败时自动回退本地解析
+            summary_data = await build_content_summary_data_with_llm(content, learning_need)
 
             # 使用 spark-x2-flash 生成摘要
             llm_summary = await generate_summary_with_llm(content, learning_need)

@@ -22,7 +22,7 @@ from app.infra.logging import get_logger
 from app.infra.models import User
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceUsecases, ResourceStreamService, get_stream_service
-from app.shared.response import HttpResponse
+from app.utils.response import HttpResponse
 
 router = APIRouter()
 logger = get_logger(__name__)

@@ -9,10 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
-# Log files
-logs/
-*.log
-
 # Test / temp files
 test_async_db.py
 workplace/

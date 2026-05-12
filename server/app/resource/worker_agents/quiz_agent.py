@@ -20,7 +20,7 @@ from app.resource.worker_agents.utils import (
     learning_need_from_task,
     title_from_learning_need,
 )
-from app.shared.json_utils import parse_first_json_object
+from app.utils.json import parse_first_json_object
 
 logger = get_logger(__name__)
 

@@ -23,8 +23,8 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-# ---- 通用服务（从 shared 导入） ----
-from app.shared.request_context import (
+# ---- 通用服务（从 utils 导入） ----
+from app.utils.context import (
     runtime_context as chat_runtime_context,
     get_current_user_id,
     get_current_session_id,
@@ -32,8 +32,8 @@ from app.shared.request_context import (
     set_session_id,
 )
 from app.memory import MemoryLayer
-from app.shared.image_analyze import build_vision_service
-from app.shared.file_service import (
+from app.utils.vision import build_vision_service
+from app.utils.files import (
     resolve_uploaded_path,
     resolve_uploaded_image_path,
     read_uploaded_file_content,
@@ -42,7 +42,7 @@ from app.shared.file_service import (
 from app.chat.utils import truncate
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.shared.storage import local_file_store
+from app.utils.storage import local_file_store
 
 from app.chat.schemas import AttachmentInfo, ChatMessageItem, ToolCallRecord
 

@@ -110,14 +110,21 @@ class DiagramAgentConfig(BaseModel):
         "relation",
         "state",
         "class",
+        "er",
         "block",
         "packet",
+        "git",
         "sequence",
         "activity",
+        "usecase",
         "component",
+        "package",
+        "deployment",
+        "object",
+        "communication",
     ] = Field(
         default="auto",
-        description="图解类型: auto/hierarchy/flow/compare/relation/state/class/block/packet/sequence/activity/component",
+        description="图解类型: auto/hierarchy/flow/compare/relation/state/class/er/block/packet/git/sequence/activity/usecase/component/package/deployment/object/communication",
     )
     visual_style: Literal["minimal", "exam"] = Field(default="minimal", description="视觉风格: minimal/exam")
     highlight_mode: Literal["weak_points", "key_points", "all"] = Field(
@@ -449,6 +456,7 @@ class PlanningContext(BaseModel):
     implicit_dependencies: list[str] = Field(default_factory=list, description="系统识别的隐式依赖")
     upstream_results: dict[str, Any] = Field(default_factory=dict, description="上游执行摘要")
     upstream_reports: dict[str, str] = Field(default_factory=dict, description="上游 Agent 执行报告")
+    learner_profile: dict[str, Any] = Field(default_factory=dict, description="学习者画像摘要")
 
 # 更新前向引用
 ResourceGenerationRequest.model_rebuild()

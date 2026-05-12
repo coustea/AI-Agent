@@ -20,11 +20,11 @@ import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
-from app.shared.diagram_render import build_mermaid_render
+from app.utils.mermaid import build_mermaid_render
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision, TutorState
-from app.shared.json_utils import parse_first_json_object
-from app.shared.request_context import runtime_context as chat_runtime_context
-from app.shared.paths import CHAT_DIR
+from app.utils.json import parse_first_json_object
+from app.utils.context import runtime_context as chat_runtime_context
+from app.utils.paths import CHAT_DIR
 from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
 from app.chat.utils import (
     classify_route,
@@ -41,7 +41,7 @@ from app.config import LANGGRAPH_DEBUG
 from app.memory import MemoryLayer
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
-from app.tools.search import duckduckgo_search, serp_search, tavily_search
+from app.utils.search import duckduckgo_search, serp_search, tavily_search
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -149,8 +149,8 @@ class TutorAgent:
         """
         # LLM 实例
         self.llm_manager = get_llm_manager()
-        self.spark_model_kwargs = {"temperature": 0.7, "streaming": True}
-        self.search_model_kwargs = {"temperature": 0.2, "streaming": False, "max_tokens": 1200}
+        self.spark_model_kwargs = {"temperature": 1.0, "streaming": True}
+        self.search_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1200}
         self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
         # 上下文服务
         self.memory_layer = MemoryLayer(module="mentor")

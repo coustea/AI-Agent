@@ -1,40 +1,22 @@
 """Profile-based path recommendation engine.
 
-基于用户画像 8 维度的动态路径推荐引擎，提供：
-- 维度到节点类型的映射
-- 个性化节点评分
-- 动态路径调整建议
-- 学习进度追踪
-
-设计原则：
-- 利用 UserProfile 的 8 个维度信息进行个性化推荐
-- 支持冷启动（无画像）和热启动（有画像）场景
-- 提供可解释的推荐理由
+基于用户画像 8 维度的动态路径推荐引擎。
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
-from app.memory.memory_types import (
-    ALL_PROFILE_DIMENSIONS,
-    PROFILE_DIMENSION_COGNITIVE_STYLE,
-    PROFILE_DIMENSION_INTERACTION_PREFERENCE,
-    PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION,
-    PROFILE_DIMENSION_LEARNING_GOAL,
-    PROFILE_DIMENSION_LEARNING_HISTORY,
-    PROFILE_DIMENSION_MISTAKE_PREFERENCE,
-    PROFILE_DIMENSION_PRACTICE_ABILITY,
-    PROFILE_DIMENSION_WEAKNESS_POINTS,
-)
+from app.memory import ALL_DIMENSIONS, ProfileDimension
 from app.path.planner import ALL_NODE_IDS, NODE_TITLES
 
 
 @dataclass
 class NodeRecommendation:
     """节点推荐结果。"""
+
     node_id: str
     node_title: str
     priority_score: float
@@ -46,6 +28,7 @@ class NodeRecommendation:
 @dataclass
 class PathAdjustmentSuggestion:
     """路径调整建议。"""
+
     suggested_nodes_to_add: list[str]
     suggested_nodes_to_skip: list[str]
     suggested_node_order: list[str]
@@ -53,72 +36,34 @@ class PathAdjustmentSuggestion:
     confidence: float
 
 
+# =============================================================================
 # 维度到节点类型的映射权重
-# 每个维度对不同类型的学习资源有不同的推荐权重
+# =============================================================================
+
 DIMENSION_NODE_WEIGHTS: dict[str, dict[str, float]] = {
-    PROFILE_DIMENSION_KNOWLEDGE_FOUNDATION: {
-        "content": 1.5,
-        "mindmap": 1.3,
-        "reading": 1.0,
-        "diagram": 1.2,
-        "quiz": 0.8,
-        "code": 0.7,
+    ProfileDimension.KNOWLEDGE_FOUNDATION: {
+        "content": 1.5, "mindmap": 1.3, "reading": 1.0, "diagram": 1.2, "quiz": 0.8, "code": 0.7,
     },
-    PROFILE_DIMENSION_LEARNING_GOAL: {
-        "content": 1.0,
-        "mindmap": 0.8,
-        "reading": 1.2,
-        "diagram": 0.7,
-        "quiz": 1.3,
-        "code": 1.4,
+    ProfileDimension.LEARNING_GOAL: {
+        "content": 1.0, "mindmap": 0.8, "reading": 1.2, "diagram": 0.7, "quiz": 1.3, "code": 1.4,
     },
-    PROFILE_DIMENSION_COGNITIVE_STYLE: {
-        "content": 1.0,
-        "mindmap": 1.4,
-        "reading": 0.8,
-        "diagram": 1.5,
-        "quiz": 1.0,
-        "code": 1.2,
+    ProfileDimension.COGNITIVE_STYLE: {
+        "content": 1.0, "mindmap": 1.4, "reading": 0.8, "diagram": 1.5, "quiz": 1.0, "code": 1.2,
     },
-    PROFILE_DIMENSION_WEAKNESS_POINTS: {
-        "content": 1.3,
-        "mindmap": 1.0,
-        "reading": 0.9,
-        "diagram": 1.1,
-        "quiz": 1.5,
-        "code": 1.2,
+    ProfileDimension.WEAKNESS_POINTS: {
+        "content": 1.3, "mindmap": 1.0, "reading": 0.9, "diagram": 1.1, "quiz": 1.5, "code": 1.2,
     },
-    PROFILE_DIMENSION_MISTAKE_PREFERENCE: {
-        "content": 1.0,
-        "mindmap": 0.8,
-        "reading": 0.7,
-        "diagram": 0.9,
-        "quiz": 1.6,
-        "code": 1.3,
+    ProfileDimension.MISTAKE_PREFERENCE: {
+        "content": 1.0, "mindmap": 0.8, "reading": 0.7, "diagram": 0.9, "quiz": 1.6, "code": 1.3,
     },
-    PROFILE_DIMENSION_PRACTICE_ABILITY: {
-        "content": 0.7,
-        "mindmap": 0.8,
-        "reading": 0.6,
-        "diagram": 0.7,
-        "quiz": 1.2,
-        "code": 1.6,
+    ProfileDimension.PRACTICE_ABILITY: {
+        "content": 0.7, "mindmap": 0.8, "reading": 0.6, "diagram": 0.7, "quiz": 1.2, "code": 1.6,
     },
-    PROFILE_DIMENSION_INTERACTION_PREFERENCE: {
-        "content": 0.9,
-        "mindmap": 1.1,
-        "reading": 0.8,
-        "diagram": 1.0,
-        "quiz": 1.3,
-        "code": 1.1,
+    ProfileDimension.INTERACTION_PREFERENCE: {
+        "content": 0.9, "mindmap": 1.1, "reading": 0.8, "diagram": 1.0, "quiz": 1.3, "code": 1.1,
     },
-    PROFILE_DIMENSION_LEARNING_HISTORY: {
-        "content": 1.1,
-        "mindmap": 1.0,
-        "reading": 1.3,
-        "diagram": 0.9,
-        "quiz": 1.0,
-        "code": 1.1,
+    ProfileDimension.LEARNING_HISTORY: {
+        "content": 1.1, "mindmap": 1.0, "reading": 1.3, "diagram": 0.9, "quiz": 1.0, "code": 1.1,
     },
 }
 
@@ -155,6 +100,11 @@ GOAL_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+# =============================================================================
+# 辅助函数
+# =============================================================================
+
+
 def _get_dimension_confidence(profile_json: dict[str, Any], dimension: str) -> float:
     """获取单个维度的置信度。"""
     dims = profile_json.get("dimensions", {})
@@ -173,13 +123,18 @@ def _extract_keywords(text: str) -> list[str]:
     """从文本中提取关键词。"""
     text_lower = text.lower()
     keywords = []
-    for key, node_types in COGNITIVE_STYLE_KEYWORDS.items():
+    for key in COGNITIVE_STYLE_KEYWORDS:
         if key in text_lower:
             keywords.append(key)
-    for key, node_types in GOAL_KEYWORDS.items():
+    for key in GOAL_KEYWORDS:
         if key in text_lower:
             keywords.append(key)
     return keywords
+
+
+# =============================================================================
+# 核心推荐算法
+# =============================================================================
 
 
 def compute_node_scores(
@@ -201,8 +156,8 @@ def compute_node_scores(
     scores: dict[str, float] = {node_id: 50.0 for node_id in ALL_NODE_IDS}
     completed = completed_node_ids or set()
 
+    # 冷启动：使用默认权重
     if not profile_json:
-        # 冷启动：使用默认权重
         scores["content"] = 70.0
         scores["quiz"] = 65.0
         scores["mindmap"] = 60.0
@@ -211,7 +166,7 @@ def compute_node_scores(
     dims = profile_json.get("dimensions", {})
 
     # 遍历每个维度，累加权重
-    for dim_key in ALL_PROFILE_DIMENSIONS:
+    for dim_key in ALL_DIMENSIONS:
         dim_data = dims.get(dim_key, {})
         dim_confidence = float(dim_data.get("confidence", 0.0))
         dim_summary = str(dim_data.get("summary", "") or "")
@@ -222,12 +177,11 @@ def compute_node_scores(
         weights = DIMENSION_NODE_WEIGHTS.get(dim_key, {})
         for node_id, weight in weights.items():
             if node_id in scores:
-                # 置信度越高，权重影响越大
                 adjusted_weight = weight * (0.5 + dim_confidence * 0.5)
                 scores[node_id] += (adjusted_weight - 1.0) * 20
 
     # 基于认知风格关键词调整
-    cognitive_style = _get_dimension_summary(profile_json, PROFILE_DIMENSION_COGNITIVE_STYLE)
+    cognitive_style = _get_dimension_summary(profile_json, ProfileDimension.COGNITIVE_STYLE)
     for keyword, node_types in COGNITIVE_STYLE_KEYWORDS.items():
         if keyword in cognitive_style.lower():
             for node_id in node_types:
@@ -235,7 +189,7 @@ def compute_node_scores(
                     scores[node_id] += 10
 
     # 基于学习目标关键词调整
-    learning_goal = _get_dimension_summary(profile_json, PROFILE_DIMENSION_LEARNING_GOAL)
+    learning_goal = _get_dimension_summary(profile_json, ProfileDimension.LEARNING_GOAL)
     for keyword, node_types in GOAL_KEYWORDS.items():
         if keyword in learning_goal.lower():
             for node_id in node_types:
@@ -243,7 +197,7 @@ def compute_node_scores(
                     scores[node_id] += 15
 
     # 薄弱点调整
-    weakness_summary = _get_dimension_summary(profile_json, PROFILE_DIMENSION_WEAKNESS_POINTS)
+    weakness_summary = _get_dimension_summary(profile_json, ProfileDimension.WEAKNESS_POINTS)
     weak_points_list = weak_points or []
     combined_weak = set(weak_points_list)
     if weakness_summary:
@@ -301,29 +255,9 @@ def recommend_nodes(
         if node_id in completed:
             continue
 
-        reasons = []
-        dims_used = []
-
-        if profile_json:
-            dims = profile_json.get("dimensions", {})
-
-            # 检查各维度对推荐的影响
-            for dim_key in ALL_PROFILE_DIMENSIONS:
-                dim_data = dims.get(dim_key, {})
-                dim_confidence = float(dim_data.get("confidence", 0.0))
-                weights = DIMENSION_NODE_WEIGHTS.get(dim_key, {})
-                node_weight = weights.get(node_id, 1.0)
-
-                if dim_confidence > 0.3 and node_weight > 1.1:
-                    reasons.append(f"符合{dim_data.get('name', dim_key)}特征")
-                    dims_used.append(dim_key)
-
-        if node_id in (weak_points or []):
-            reasons.append("针对薄弱点强化")
-            dims_used.append(PROFILE_DIMENSION_WEAKNESS_POINTS)
-
-        if not reasons:
-            reasons.append("适合当前学习阶段")
+        reasons, dims_used = _build_recommendation_reasons(
+            profile_json, node_id, weak_points
+        )
 
         recommendations.append(NodeRecommendation(
             node_id=node_id,
@@ -338,6 +272,38 @@ def recommend_nodes(
             break
 
     return recommendations
+
+
+def _build_recommendation_reasons(
+    profile_json: dict[str, Any] | None,
+    node_id: str,
+    weak_points: list[str] | None,
+) -> tuple[list[str], list[str]]:
+    """构建推荐理由。"""
+    reasons = []
+    dims_used = []
+
+    if profile_json:
+        dims = profile_json.get("dimensions", {})
+
+        for dim_key in ALL_DIMENSIONS:
+            dim_data = dims.get(dim_key, {})
+            dim_confidence = float(dim_data.get("confidence", 0.0))
+            weights = DIMENSION_NODE_WEIGHTS.get(dim_key, {})
+            node_weight = weights.get(node_id, 1.0)
+
+            if dim_confidence > 0.3 and node_weight > 1.1:
+                reasons.append(f"符合{dim_data.get('name', dim_key)}特征")
+                dims_used.append(dim_key)
+
+    if node_id in (weak_points or []):
+        reasons.append("针对薄弱点强化")
+        dims_used.append(ProfileDimension.WEAKNESS_POINTS)
+
+    if not reasons:
+        reasons.append("适合当前学习阶段")
+
+    return reasons, dims_used
 
 
 def suggest_path_adjustment(
@@ -370,16 +336,16 @@ def suggest_path_adjustment(
     current_set = set(current_plan_nodes)
 
     # 找出高分但未在当前路径中的节点
-    nodes_to_add = []
-    for node_id, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
-        if node_id not in current_set and node_id not in completed and score > 60:
-            nodes_to_add.append(node_id)
+    nodes_to_add = [
+        node_id for node_id, score in sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        if node_id not in current_set and node_id not in completed and score > 60
+    ]
 
     # 找出低分但在当前路径中的节点
-    nodes_to_skip = []
-    for node_id in current_plan_nodes:
-        if node_id not in completed and scores.get(node_id, 50) < 40:
-            nodes_to_skip.append(node_id)
+    nodes_to_skip = [
+        node_id for node_id in current_plan_nodes
+        if node_id not in completed and scores.get(node_id, 50) < 40
+    ]
 
     # 重新排序：按分数降序
     remaining = [n for n in current_plan_nodes if n not in completed]
@@ -411,6 +377,11 @@ def suggest_path_adjustment(
     )
 
 
+# =============================================================================
+# 学习节奏估算
+# =============================================================================
+
+
 def compute_learning_pace(profile_json: dict[str, Any] | None) -> str:
     """基于用户画像计算学习节奏建议。
 
@@ -423,22 +394,14 @@ def compute_learning_pace(profile_json: dict[str, Any] | None) -> str:
     if not profile_json:
         return "normal"
 
-    dims = profile_json.get("dimensions", {})
+    cognitive_style = _get_dimension_summary(profile_json, ProfileDimension.COGNITIVE_STYLE)
+    practice_ability = _get_dimension_summary(profile_json, ProfileDimension.PRACTICE_ABILITY)
+    interaction_pref = _get_dimension_summary(profile_json, ProfileDimension.INTERACTION_PREFERENCE)
 
-    # 基于认知风格和实践能力判断
-    cognitive_style = _get_dimension_summary(profile_json, PROFILE_DIMENSION_COGNITIVE_STYLE)
-    practice_ability = _get_dimension_summary(profile_json, PROFILE_DIMENSION_PRACTICE_ABILITY)
-    interaction_pref = _get_dimension_summary(profile_json, PROFILE_DIMENSION_INTERACTION_PREFERENCE)
-
-    # 关键词判断
     fast_keywords = ["快", "fast", "高效", "熟练", "强"]
     slow_keywords = ["慢", "slow", "基础", "薄弱", "弱"]
 
-    cognitive_lower = cognitive_style.lower()
-    practice_lower = practice_ability.lower()
-    interaction_lower = interaction_pref.lower()
-    combined = f"{cognitive_lower} {practice_lower} {interaction_lower}"
-
+    combined = f"{cognitive_style} {practice_ability} {interaction_pref}".lower()
     fast_count = sum(1 for kw in fast_keywords if kw in combined)
     slow_count = sum(1 for kw in slow_keywords if kw in combined)
 
@@ -464,20 +427,15 @@ def estimate_completion_time(
     """
     pace = compute_learning_pace(profile_json)
 
-    if pace == "fast":
-        capacity = 2.5
-    elif pace == "slow":
-        capacity = 0.6
-    else:
-        capacity = 1.2
+    pace_capacity = {"fast": 2.5, "slow": 0.6, "normal": 1.2}
+    capacity = pace_capacity.get(pace, 1.2)
 
     # 基于实践能力调整
     if profile_json:
-        practice_conf = _get_dimension_confidence(profile_json, PROFILE_DIMENSION_PRACTICE_ABILITY)
+        practice_conf = _get_dimension_confidence(profile_json, ProfileDimension.PRACTICE_ABILITY)
         if practice_conf > 0.7:
             capacity *= 1.2
         elif practice_conf < 0.3:
             capacity *= 0.8
 
-    import math
     return max(1, math.ceil(remaining_nodes / capacity))

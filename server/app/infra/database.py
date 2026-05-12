@@ -106,26 +106,6 @@ async def init_db() -> None:
 
     import_all_models()
 
-    async def _ensure_legacy_columns() -> None:
-        """Best-effort schema patch for legacy DBs missing recently added columns."""
-        async with engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS user_profiles
-                    ADD COLUMN IF NOT EXISTS profile_score_json JSONB
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    ALTER TABLE IF EXISTS user_profile_history
-                    ADD COLUMN IF NOT EXISTS profile_score_json JSONB
-                    """
-                )
-            )
-
     async def _run_once() -> None:
         if APP_DEBUG:
             logger.warning("[Database] APP_DEBUG=true，将删除并重建所有表！")
@@ -153,7 +133,12 @@ async def init_db() -> None:
                 max_retries,
             )
             await _run_once()
-            await _ensure_legacy_columns()
+
+            # 导入学校数据
+            from app.infra.school_import import import_schools
+            async with AsyncSession(engine, expire_on_commit=False) as session:
+                await import_schools(session)
+
             logger.info(
                 "[Database] 数据库表初始化完成: url=%s debug=%s attempt=%s/%s",
                 engine.url.render_as_string(hide_password=True),

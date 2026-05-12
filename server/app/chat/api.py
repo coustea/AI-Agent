@@ -1,6 +1,6 @@
 """Chat HTTP routing.
 
-聊天模块的 HTTP 路由定义，包含对话流、文件上传、会话管理等端点。
+聊天模块的 HTTP 路由定义，包含对话流、文件上传、会话管理、画像等端点。
 """
 
 from __future__ import annotations
@@ -11,7 +11,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 from app.auth.security import get_current_user
 from app.infra.models import User
 from app.chat.service import get_chat_usecases
-from app.shared.response import HttpResponse
+from app.memory.layer import MemoryLayer
+from app.memory.profile.schemas import OnboardingResponse, OnboardingUpdate
+from app.utils.response import HttpResponse
 
 # 路由器实例
 router = APIRouter()
@@ -220,7 +222,7 @@ async def get_chat_file(
     Raises:
         HTTPException: 权限不足、文件不存在等错误。
     """
-    from app.shared.paths import CHAT_DIR
+    from app.utils.paths import CHAT_DIR
 
     # 权限校验：只允许所有者访问
     if current_user.id != owner_id:
@@ -381,3 +383,185 @@ async def upload_diagram_image(
         return HttpResponse.error(code=400, message=str(exc))
 
     return HttpResponse.success(data=saved)
+
+
+# ---------------------------------------------------------------------------
+# 画像 API
+# ---------------------------------------------------------------------------
+
+
+@router.get("/profile")
+async def get_profile(current_user: User = Depends(get_current_user)):
+    """获取当前用户画像。"""
+    memory = MemoryLayer()
+    profile = await memory.get_or_create_profile(user_id=current_user.id)
+    return HttpResponse.success(data={
+        "user_id": profile.user_id,
+        "module": profile.module,
+        "profile_json": profile.profile_json,
+        "profile_score_json": profile.profile_score_json,
+        "version": profile.version,
+        "confidence": profile.confidence,
+        "updated_reason": profile.updated_reason,
+        "updated_at": profile.updated_at,
+    })
+
+
+@router.get("/profile/score")
+async def get_profile_score(current_user: User = Depends(get_current_user)):
+    """获取当前用户画像评分。"""
+    memory = MemoryLayer()
+    profile = await memory.get_or_create_profile(user_id=current_user.id)
+    score_json = profile.profile_score_json or {}
+    return HttpResponse.success(data={
+        "user_id": profile.user_id,
+        "module": profile.module,
+        "version": profile.version,
+        "score": score_json.get("overall_score"),
+        "confidence": score_json.get("confidence", profile.confidence),
+        "metrics": {
+            "dimension_scores": score_json.get("dimension_scores") or {},
+            "section_coverage": score_json.get("section_coverage", 0),
+            "evidence_quality": score_json.get("evidence_quality", 0),
+            "uncertainty_handling": None,
+            "content_richness": None,
+        },
+        "missing_sections": score_json.get("missing_sections") or [],
+        "scored_at": score_json.get("scored_at"),
+        "updated_at": profile.updated_at,
+    })
+
+
+@router.get("/profile/onboarding")
+async def get_profile_onboarding(
+    current_user: User = Depends(get_current_user),
+):
+    """获取首次登录状态。"""
+    memory = MemoryLayer()
+    data = await memory.get_onboarding(user_id=current_user.id)
+    return HttpResponse.success(data=OnboardingResponse(**data).model_dump())
+
+
+@router.patch("/profile/onboarding")
+async def update_profile_onboarding(
+    payload: OnboardingUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    """更新首次登录数据。"""
+    memory = MemoryLayer()
+    student_profile = payload.model_dump()
+    student_profile["school_level"] = await _resolve_school_level(student_profile.get("school"))
+    try:
+        profile = await memory.update_onboarding(
+            user_id=current_user.id,
+            student_profile=student_profile,
+        )
+    except ValueError as e:
+        return HttpResponse.error(code=400, message=str(e))
+
+    onboarding_data = await memory.get_onboarding(user_id=current_user.id)
+    return HttpResponse.success(data={
+        "profile": {
+            "user_id": profile.user_id,
+            "module": profile.module,
+            "profile_json": profile.profile_json,
+            "profile_score_json": profile.profile_score_json,
+            "version": profile.version,
+            "confidence": profile.confidence,
+            "updated_reason": profile.updated_reason,
+            "updated_at": profile.updated_at,
+        },
+        "onboarding": onboarding_data,
+    })
+
+
+@router.get("/profile/history")
+async def get_profile_history(
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+):
+    """获取画像历史。"""
+    memory = MemoryLayer()
+    history = await memory.list_profile_history(user_id=current_user.id, limit=limit)
+    return HttpResponse.success(data=[
+        {
+            "id": item.id,
+            "user_id": item.user_id,
+            "module": item.module,
+            "version": item.version,
+            "profile_json": item.profile_json,
+            "profile_score_json": item.profile_score_json,
+            "change_reason": item.change_reason,
+            "source_session_ids": item.source_session_ids,
+            "created_at": item.created_at,
+        }
+        for item in history
+    ])
+
+
+# ---------------------------------------------------------------------------
+# 学校搜索 API
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_school_level(school_name: str | None) -> str | None:
+    """根据学校名称解析院校层次。"""
+    school_name = (school_name or "").strip()
+    if not school_name:
+        return None
+
+    from sqlalchemy import select
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from app.infra.database import engine
+    from app.infra.models import School
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        stmt = select(School).where(School.name == school_name).limit(1)
+        school = (await session.exec(stmt)).scalars().first()
+
+    return school.level if school and school.level else None
+
+
+@router.get("/schools/search")
+async def search_schools(
+    keyword: str = Query(default="", min_length=0, max_length=50),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """搜索学校。
+
+    Args:
+        keyword: 搜索关键词，为空则返回热门学校
+        limit: 返回数量限制
+
+    Returns:
+        学校列表，包含 id、name、level
+    """
+    from sqlalchemy import select
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from app.infra.database import engine
+    from app.infra.models import School
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        if keyword:
+            stmt = (
+                select(School)
+                .where(School.name.contains(keyword))
+                .order_by(School.name)
+                .limit(limit)
+            )
+        else:
+            # 无关键词时返回部分学校（按 ID 倒序，获取最新导入的）
+            stmt = select(School).order_by(School.id.desc()).limit(limit)
+
+        schools = (await session.exec(stmt)).scalars().all()
+
+    return HttpResponse.success(data=[
+        {
+            "id": school.id,
+            "name": school.name,
+            "level": school.level,
+        }
+        for school in schools
+    ])

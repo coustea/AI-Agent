@@ -11,13 +11,14 @@ from app.infra.database import get_session
 from app.infra.models import User
 from app.path.schemas import PathFeedbackRequest, PathRebuildRequest
 from app.path.service import path_usecases
-from app.shared.response import HttpResponse
+from app.utils.response import HttpResponse
 
 router = APIRouter()
 
 
 class NodeProgressRequest(BaseModel):
     """节点进度更新请求。"""
+
     node_id: str = Field(..., min_length=1, max_length=50)
     status: str | None = Field(default=None, pattern="^(wait|processing|success)$")
     progress: int | None = Field(default=None, ge=0, le=100)
@@ -30,6 +31,7 @@ async def get_path_plan(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取学习路径规划。"""
     try:
         data = await path_usecases.get_path_plan(
             session,
@@ -47,6 +49,7 @@ async def rebuild_path_plan(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """重建学习路径规划。"""
     try:
         data = await path_usecases.rebuild_path_plan(
             session,
@@ -64,6 +67,7 @@ async def feedback_path_plan(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """根据反馈调整学习路径。"""
     try:
         data = await path_usecases.apply_feedback(
             session,

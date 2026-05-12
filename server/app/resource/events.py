@@ -285,15 +285,6 @@ class AgentEventEmitter:
         )
         await self.close()
 
-    # =========================================================================
-    # 兼容旧接口
-    # =========================================================================
-
-    async def emit_agent_status(self, agent: str, status: str, message: str, **meta: Any) -> None:
-        """兼容旧接口：发送 Agent 状态事件。"""
-        task_id = str(meta.pop("task_id", self._resolve_task_id()))
-        await self.emit_agent(task_id=task_id, agent=agent, status=status, message=message, payload=meta)
-
     async def emit_agent_action(
         self,
         agent: str,
@@ -304,7 +295,7 @@ class AgentEventEmitter:
         step_label: str = "",
         **meta: Any,
     ) -> None:
-        """兼容旧接口：发送 Agent 动作事件，内部调用 emit_agent_step，不携带资源正文预览。"""
+        """发送 Agent 动作事件，内部调用 emit_agent_step，不携带资源正文预览。"""
         task_id = str(meta.pop("task_id", self._resolve_task_id()))
         stage = str(meta.pop("stage", self._agent_stages.get(agent, "planning")))
         current_action = str(meta.pop("current_action", None) or detail or action)
@@ -321,18 +312,6 @@ class AgentEventEmitter:
             total_steps=total_steps or None,
             step_label=step_label or None,
             payload=meta,
-        )
-
-    async def emit_artifact_ready(self, agent: str, artifact: dict[str, Any]) -> None:
-        """兼容旧接口：发送产物就绪事件。"""
-        await self.emit_event(
-            task_id=self._resolve_task_id(),
-            event_type="resource",
-            stage=self._agent_stages.get(agent, "planning"),
-            status="success",
-            message=f"{agent} 产物就绪",
-            agent=agent,
-            payload={"artifact": artifact},
         )
 
     # =========================================================================

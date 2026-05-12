@@ -74,6 +74,15 @@ class ActiveToken(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True))
     )
 
+class School(SQLModel, table=True):
+    """学校存储"""
+    __tablename__ = "schools"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True, max_length=100)
+    level: str | None = Field(default=None, max_length=50)  # 办学层次：本科/专科
+    tier: str | None = Field(default=None, max_length=20)  # 院校层次：985/211/双一流/普通本科/专科
+    created_at: datetime = Field(default_factory=datetime.now)
 
 # ---------------------------------------------------------------------------
 # Chat — 会话与消息
@@ -523,6 +532,7 @@ REGISTERED_MODELS = (
     LearningPathNode,
     LearningPathAdjustment,
     User,
+    School,
 )
 
 

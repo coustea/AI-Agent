@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app.infra.logging import get_logger
-from app.shared.paths import RESOURCE_DIR
+from app.utils.paths import RESOURCE_DIR
 
 logger = get_logger(__name__)
 

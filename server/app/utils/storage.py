@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.chat.schemas import UploadResponse
-from app.shared.paths import CHAT_DIR
+from app.utils.paths import CHAT_DIR
 
 
 class LocalFileStore:
