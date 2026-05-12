@@ -1920,7 +1920,7 @@ const handlePreview = (data: any) => {
 .workbench-kicker { margin-bottom: 12px; color: #0369A1 !important; border-color: #BAE6FD !important; background: #F0F9FF !important; font-weight: 800; letter-spacing: 0.05em; }
 .workbench-hero h2 { margin: 0 0 10px; font-size: 2rem; line-height: 1.2; font-weight: 850; color: #0F172A; text-wrap: balance; }
 .workbench-hero p { margin: 0; max-width: 760px; color: #64748B; line-height: 1.65; }
-.progress-panel { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.progress-panel { grid-column: 1 / -1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .progress-number { font-size: 2.1rem; font-weight: 850; color: #0369A1; font-variant-numeric: tabular-nums; }
 .current-message { color: #475569; line-height: 1.5; word-break: break-word; }
 .generation-error { border-radius: 16px; }
