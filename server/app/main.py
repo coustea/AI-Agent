@@ -19,6 +19,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, DBAPIError
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.logging import get_logger, setup_logging
 from app.infra.database import init_db, engine
