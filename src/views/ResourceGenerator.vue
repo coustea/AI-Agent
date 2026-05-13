@@ -2049,7 +2049,10 @@ const handlePreview = (data: any) => {
 .stage-chip.is-success span { background: #10B981; }
 .stage-chip.is-failed { color: #B91C1C; border-color: #FCA5A5; background: #FEF2F2; }
 .stage-chip.is-failed span { background: #EF4444; }
-.resource-summary-card { padding: 20px; }
+.resource-summary-card { padding: 24px; }
+.interactive-resources-panel {
+  min-height: 380px;
+}
 .resource-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .resource-status-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; border: 1px solid #E2E8F0; background: #FFFFFF; border-radius: 16px; padding: 14px; }
 .resource-status-item h4 { margin: 0 0 4px; color: #0F172A; font-size: 0.96rem; line-height: 1.35; overflow-wrap: anywhere; }
@@ -2152,6 +2155,8 @@ const handlePreview = (data: any) => {
   column-gap: 14px;
   row-gap: 20px;
   align-items: stretch;
+  margin-top: 4px;
+  padding-bottom: 6px;
 }
 .generated-resource-card {
   --resource-accent: #2563EB;
@@ -2297,6 +2302,7 @@ const handlePreview = (data: any) => {
   .resource-metric-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .results-body-bento { padding: 24px 28px; }
   .generated-resource-card { grid-column: span 4; }
+  .interactive-resources-panel { min-height: 320px; }
 }
 @media (max-width: 768px) {
   .elegant-generator-layout { height: auto; min-height: calc(100vh - 64px); }
@@ -2311,6 +2317,7 @@ const handlePreview = (data: any) => {
   .resource-status-item { grid-template-columns: 1fr; }
   .generated-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .generated-resource-card { grid-column: span 1; grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
+  .interactive-resources-panel { min-height: 0; }
   .resource-card-action { grid-column: 1 / -1; width: 100%; }
   .workflow-timeline-panel, .resource-side-panel { position: static; }
   .event-log-row { grid-template-columns: 1fr; gap: 6px; }

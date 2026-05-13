@@ -155,9 +155,6 @@
             <div class="asr-processing-dot" v-else-if="isAsrProcessing"></div>
             <div class="listening-dot" v-else-if="isVadListening"></div>
             <div class="status-badge">{{ digitalHumanStatusText }}</div>
-            <div class="status-badge" style="margin-top:6px; font-size:11px; opacity:.78;">图解开关: {{ debugNeedDiagramEnabled ? 'ON' : 'OFF' }} | 图解回传: {{ debugDiagramReceivedAt ? 'YES' : 'NO' }}</div>
-            <div class="status-badge" style="margin-top:4px; font-size:11px; opacity:.78;">后端need_diagram: {{ debugBackendNeedDiagram === null ? '-' : (debugBackendNeedDiagram ? 'TRUE' : 'FALSE') }} | 后端diagram_generated: {{ debugBackendDiagramGenerated === null ? '-' : (debugBackendDiagramGenerated ? 'TRUE' : 'FALSE') }}</div>
-            <div class="status-badge" style="margin-top:4px; font-size:11px; opacity:.6;">WS: {{ avatarWsUrl || '-' }}</div>
           </div>
         </div>
 
