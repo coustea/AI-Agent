@@ -104,6 +104,15 @@ class LlmFactory:
         if not (value or "").strip():
             raise ValueError(f"Missing required config: {name}")
 
+    @staticmethod
+    def _openai_base_url(value: str) -> str:
+        """归一化 OpenAI 兼容客户端 base_url，避免重复拼接 completions 路径。"""
+        base_url = (value or "").strip().rstrip("/")
+        suffix = "/chat/completions"
+        if base_url.endswith(suffix):
+            return base_url[: -len(suffix)]
+        return base_url
+
     @classmethod
     def create(cls, model_type: str, **kwargs: Any) -> Any:
         """创建 ChatOpenAI 实例。
@@ -131,7 +140,7 @@ class LlmFactory:
             return ChatOpenAI(
                 model="generalv3.5",
                 api_key=SPARK_MAX_API_PASSWORD,
-                base_url=SPARK_MAX_API_BASE,
+                base_url=cls._openai_base_url(SPARK_MAX_API_BASE),
                 temperature=temperature,
                 streaming=streaming,
                 max_tokens=max_tokens,
@@ -147,7 +156,7 @@ class LlmFactory:
             return ChatOpenAI(
                 model="spark-x",
                 api_key=SPARK_X_API_PASSWORD,
-                base_url=SPARK_X_API_BASE,
+                base_url=cls._openai_base_url(SPARK_X_API_BASE),
                 temperature=temperature,
                 streaming=streaming,
                 max_tokens=max_tokens,
@@ -163,7 +172,7 @@ class LlmFactory:
             return ChatOpenAI(
                 model="spark-x2-flash",
                 api_key=SPARK_X2_FLASH_API_PASSWORD,
-                base_url=SPARK_X2_FLASH_API_BASE,
+                base_url=cls._openai_base_url(SPARK_X2_FLASH_API_BASE),
                 temperature=temperature,
                 streaming=streaming,
                 max_tokens=max_tokens,

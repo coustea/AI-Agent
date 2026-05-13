@@ -551,17 +551,19 @@ class PathService:
     ) -> int:
         """计算路径置信度。"""
         score = 35
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         if profile:
             score += 25
-            if profile.updated_at and (now - profile.updated_at).days <= 30:
+            profile_updated_at = self._as_utc_datetime(getattr(profile, "updated_at", None))
+            if profile_updated_at and (now - profile_updated_at).days <= 30:
                 score += 5
 
         if resource:
             score += 20
-            if resource.created_at:
-                age_days = (now - resource.created_at).days
+            resource_created_at = self._as_utc_datetime(getattr(resource, "created_at", None))
+            if resource_created_at:
+                age_days = (now - resource_created_at).days
                 if age_days <= 7:
                     score += 12
                 elif age_days <= 30:
@@ -574,6 +576,15 @@ class PathService:
             score += 4
 
         return max(30, min(score, 95))
+
+    @staticmethod
+    def _as_utc_datetime(value: Any) -> datetime | None:
+        """把数据库/旧测试数据里的时间统一成 UTC aware datetime。"""
+        if not isinstance(value, datetime):
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def _attach_resource_items(
         self,

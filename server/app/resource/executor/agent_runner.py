@@ -388,6 +388,10 @@ class AgentRunner:
     def _normalize_reading(self, raw: Any) -> dict[str, Any]:
         """标准化 reading 内容。"""
         if isinstance(raw, dict):
+            if "resources" in raw or "recommendations" in raw:
+                if "resources" not in raw and isinstance(raw.get("recommendations"), list):
+                    return {**raw, "resources": raw["recommendations"]}
+                return raw
             if "items" in raw:
                 return raw
             return {"items": [raw]}

@@ -8,6 +8,7 @@ Reading Agent — 拓展阅读 Agent。
 from __future__ import annotations
 
 import asyncio
+import ast
 import re
 from pathlib import Path
 
@@ -23,7 +24,7 @@ from app.resource.worker_agents.utils import (
     title_from_learning_need,
 )
 from app.utils.json import parse_first_json_value
-from app.utils.search import duckduckgo_search, tavily_search, serp_search
+from app.utils.search import duckduckgo_search, tavily_search
 
 logger = get_logger(__name__)
 
@@ -113,26 +114,23 @@ class ReadingAgent:
 
         async def run_search(query: str) -> list[dict]:
             """执行单个搜索查询。"""
-            results = []
-            try:
-                # 优先使用 SerpApi（结果最准确）
-                search_result = await serp_search.ainvoke({"query": query})
-                results.extend(self._parse_search_result(search_result, "serp"))
-            except Exception as e:
-                logger.warning("[ReadingAgent] SerpApi 搜索失败: %s", e)
+            providers = [
+                ("tavily", tavily_search),
+                ("duckduckgo", duckduckgo_search),
+            ]
+
+            for source, search_tool in providers:
                 try:
-                    # 回退到 Tavily
-                    search_result = await tavily_search.ainvoke({"query": query})
-                    results.extend(self._parse_search_result(search_result, "tavily"))
-                except Exception as e2:
-                    logger.warning("[ReadingAgent] Tavily 搜索失败: %s", e2)
-                    try:
-                        # 最后使用 DuckDuckGo
-                        search_result = await duckduckgo_search.ainvoke({"query": query})
-                        results.extend(self._parse_search_result(search_result, "duckduckgo"))
-                    except Exception as e3:
-                        logger.warning("[ReadingAgent] DuckDuckGo 搜索失败: %s", e3)
-            return results
+                    search_result = await search_tool.ainvoke({"query": query})
+                except Exception as exc:
+                    logger.warning("[ReadingAgent] %s 搜索失败: %s", source, exc)
+                    continue
+
+                results = self._parse_search_result(search_result, source)
+                if results:
+                    return results
+
+            return []
 
         # 并行执行多个搜索查询
         tasks = [run_search(query) for query in search_queries[:4]]
@@ -176,15 +174,25 @@ class ReadingAgent:
 
         return queries
 
-    def _parse_search_result(self, search_result: str, source: str) -> list[dict]:
+    def _parse_search_result(self, search_result: object, source: str) -> list[dict]:
         """解析搜索结果，提取资源信息。"""
-        resources = []
+        resources: list[dict] = []
 
-        if not search_result or "失败" in search_result or "未找到" in search_result:
+        if not search_result:
+            return resources
+
+        search_text = str(search_result)
+        structured = self._parse_structured_search_items(search_result, source)
+        if structured:
+            return structured
+
+        if "失败" in search_text or "未找到" in search_text or "不可用" in search_text:
             return resources
 
         # 解析不同来源的搜索结果
-        lines = search_result.split("\n")
+        lines = search_text.split("\n")
+        pending_title = ""
+        pending_description = ""
 
         for line in lines:
             line = line.strip()
@@ -194,8 +202,8 @@ class ReadingAgent:
             # 尝试解析带编号的结果 (1. title)
             match = re.match(r"^\d+\.\s*(.+)$", line)
             if match:
-                title_part = match.group(1).strip()
-                # 检查下一行是否有链接
+                pending_title = match.group(1).strip()
+                pending_description = ""
                 continue
 
             # 解析链接行
@@ -203,12 +211,19 @@ class ReadingAgent:
                 url_match = re.search(r"https?://[^\s]+", line)
                 if url_match:
                     url = url_match.group(0)
-                    # 尝试从上下文获取标题
                     resources.append({
-                        "title": "",
+                        "title": pending_title,
                         "url": url,
+                        "description": pending_description,
                         "source": source,
                     })
+                    pending_title = ""
+                    pending_description = ""
+                continue
+
+            if line.startswith("摘要:") or line.startswith("snippet:"):
+                pending_description = re.sub(r"^(摘要|snippet):\s*", "", line, flags=re.IGNORECASE)
+                continue
 
             # 解析 Tavily 格式 (url=..., content=...)
             if "url=" in line:
@@ -220,9 +235,49 @@ class ReadingAgent:
                     resources.append({
                         "title": content[:100] if content else "",
                         "url": url,
+                        "description": content,
                         "source": source,
                     })
 
+        return resources
+
+    def _parse_structured_search_items(self, search_result: object, source: str) -> list[dict]:
+        """解析 Tavily 等搜索工具返回的 list/dict 或其字符串表示。"""
+        parsed: object = search_result
+        if isinstance(search_result, str):
+            stripped = search_result.strip()
+            if not stripped.startswith(("[", "{")):
+                return []
+            try:
+                parsed = ast.literal_eval(stripped)
+            except (ValueError, SyntaxError):
+                try:
+                    parsed = parse_first_json_value(stripped)
+                except (TypeError, ValueError):
+                    return []
+
+        if isinstance(parsed, dict):
+            candidates = parsed.get("results") or parsed.get("organic_results") or [parsed]
+        elif isinstance(parsed, list):
+            candidates = parsed
+        else:
+            return []
+
+        resources: list[dict] = []
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            url = item.get("url") or item.get("link")
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                continue
+            title = item.get("title") or item.get("name") or item.get("source") or ""
+            description = item.get("content") or item.get("snippet") or item.get("description") or ""
+            resources.append({
+                "title": str(title),
+                "url": url,
+                "description": str(description),
+                "source": source,
+            })
         return resources
 
     async def _verify_url(self, url: str) -> bool:
