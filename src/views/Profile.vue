@@ -362,7 +362,8 @@ const avatarUploading = ref(false)
 const profileEditorVisible = ref(false)
 const profileSubmitting = ref(false)
 const profileFormRef = ref<FormInstance>()
-const profileSchoolSearchLoading = ref(false)
+// const profileSchoolSearchLoading = ref(false)
+const profileSchoolLevelLabel = computed(() => profileForm.school_level)
 const profileSchoolOptions = ref<SchoolItem[]>([])
 
 const PRESET_MAJORS = [

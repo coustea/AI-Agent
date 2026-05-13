@@ -70,7 +70,7 @@
     </main>
 
     <OnboardingDialog
-      v-model="onboardingDialogVisible"
+        v-model="onboardingDialogVisible"
     />
   </div>
 </template>
@@ -105,12 +105,21 @@ const currentTime = ref('')
 let timer: number
 
 const loadOnboardingStatus = async () => {
-  try {
-    const res = await getProfileOnboarding()
-    onboardingDialogVisible.value = !res.data.data.profile_initialized
-  } catch (e) {
-    console.error('Failed to load onboarding status', e)
-  }
+  // 1. 强制设为 true，让它每次都弹出来测试
+  onboardingDialogVisible.value = true
+
+
+  // 新增逻辑：检查本地存储，如果用户选择了不再弹出，则会直接返回
+  // if (localStorage.getItem('hide_onboarding_dialog') === 'true') {
+  //   return
+  // }
+  //
+  // try {
+  //   const res = await getProfileOnboarding()
+  //   onboardingDialogVisible.value = !res.data.data.profile_initialized
+  // } catch (e) {
+  //   console.error('Failed to load onboarding status', e)
+  // }
 }
 
 onMounted(() => {
