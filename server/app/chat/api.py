@@ -561,7 +561,8 @@ async def search_schools(
         {
             "id": school.id,
             "name": school.name,
-            "level": school.level,
+            "level": school.tier or school.level,
+            "tier": school.tier,
         }
         for school in schools
     ])

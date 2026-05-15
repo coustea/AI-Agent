@@ -105,7 +105,7 @@
           <div class="custom-input-wrap form-grid-2x2 mt-2">
 
             <div class="grid-item">
-              <label class="sub-label">院校 <span class="optional-text">（选填）</span></label>
+              <label class="sub-label">院校 <span class="required-star">*</span></label>
               <el-autocomplete
                   v-model="onboardingForm.school"
                   :fetch-suggestions="querySearchSchool"
@@ -123,6 +123,13 @@
             </div>
 
             <div class="grid-item">
+              <label class="sub-label">院校层次 <span class="required-star">*</span></label>
+              <el-select v-model="onboardingForm.school_level" filterable allow-create default-first-option clearable placeholder="请选择或从院校自动带出" class="custom-inline-input w-full">
+                <el-option v-for="level in PRESET_SCHOOL_LEVELS" :key="level" :label="level" :value="level" />
+              </el-select>
+            </div>
+
+            <div class="grid-item">
               <label class="sub-label">学历层次 <span class="required-star">*</span></label>
               <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" class="custom-inline-input w-full" filterable>
                 <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
@@ -133,6 +140,13 @@
               <label class="sub-label">年级 <span class="required-star">*</span></label>
               <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级" class="custom-inline-input w-full">
                 <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
+              </el-select>
+            </div>
+
+            <div class="grid-item">
+              <label class="sub-label">当前学习目标 <span class="required-star">*</span></label>
+              <el-select v-model="onboardingForm.learning_goal" filterable allow-create default-first-option clearable placeholder="请选择或输入" class="custom-inline-input w-full">
+                <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
               </el-select>
             </div>
 
@@ -198,7 +212,12 @@ const isCustomMajor = ref(false)
 
 const PRESET_MAJORS = ['计算机科学', '软件工程', '人工智能', '数据科学', '网络安全', '电子信息', '其他专业']
 const PRESET_COURSES = ['数据结构', '操作系统', '计算机网络', '数据库原理', '算法分析', '机器学习']
+const PRESET_GOALS = [
+  '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
+  '系统学习进阶', '零基础快速入门', '竞赛夺奖(ACM/蓝桥)', '个人兴趣拓展', '行业证书考取'
+]
 const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
+const PRESET_SCHOOL_LEVELS = ['985', '211', '双一流', '普通本科', '高职高专', '海外高校', '其他']
 const PRESET_GRADES = [
   '大一', '大二', '大三', '大四', '大五',
   '研一', '研二', '研三',
@@ -211,11 +230,11 @@ const PRESET_LANGUAGES = [
 ]
 
 const onboardingForm = reactive<ProfileOnboardingUpdate>({
-  education_level: '本科',
-  grade: '大二',
+  education_level: '',
+  grade: '',
   major: '',
   courses: [],
-  learning_goal: '日常系统学习进阶',
+  learning_goal: '',
   school: '',
   school_level: '',
   preferred_language: '',
@@ -356,8 +375,20 @@ const submitForm = async () => {
     ElMessage.warning('请选择学历层次')
     return
   }
+  if (!onboardingForm.school) {
+    ElMessage.warning('请选择或填写就读院校')
+    return
+  }
+  if (!onboardingForm.school_level) {
+    ElMessage.warning('请选择院校层次')
+    return
+  }
   if (!onboardingForm.grade) {
     ElMessage.warning('请选择就读年级')
+    return
+  }
+  if (!onboardingForm.learning_goal) {
+    ElMessage.warning('请选择或输入当前学习目标')
     return
   }
 

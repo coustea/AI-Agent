@@ -273,7 +273,7 @@
 
           <div class="profile-form-grid">
             <el-form-item prop="school">
-              <template #label><span class="custom-label">院校（选填）</span></template>
+              <template #label><span class="custom-label"><span class="req-star">*</span> 院校</span></template>
               <el-autocomplete
                   v-model="profileForm.school"
                   :fetch-suggestions="querySearchSchool"
@@ -288,7 +288,14 @@
                   <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
                 </template>
               </el-autocomplete>
-              <div v-if="profileSchoolLevelLabel" class="school-level-note">已识别层次：<span>{{ profileSchoolLevelLabel }}</span></div>
+              </el-autocomplete>
+            </el-form-item>
+
+            <el-form-item prop="school_level">
+              <template #label><span class="custom-label"><span class="req-star">*</span> 院校层次</span></template>
+              <el-select v-model="profileForm.school_level" placeholder="请选择或从院校自动带出" filterable allow-create default-first-option>
+                <el-option v-for="level in PRESET_SCHOOL_LEVELS" :key="level" :label="level" :value="level" />
+              </el-select>
             </el-form-item>
 
             <el-form-item prop="education_level">
@@ -363,7 +370,6 @@ const profileEditorVisible = ref(false)
 const profileSubmitting = ref(false)
 const profileFormRef = ref<FormInstance>()
 // const profileSchoolSearchLoading = ref(false)
-const profileSchoolLevelLabel = computed(() => profileForm.school_level)
 const profileSchoolOptions = ref<SchoolItem[]>([])
 
 const PRESET_MAJORS = [
@@ -381,6 +387,7 @@ const PRESET_GOALS = [
   '系统学习进阶', '零基础快速入门', '竞赛夺奖(ACM/蓝桥)', '个人兴趣拓展', '行业证书考取'
 ]
 const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
+const PRESET_SCHOOL_LEVELS = ['985', '211', '双一流', '普通本科', '高职高专', '海外高校', '其他']
 const PRESET_GRADES = [
   '大一', '大二', '大三', '大四', '大五',
   '研一', '研二', '研三',
@@ -416,6 +423,8 @@ const profileForm = reactive<ProfileOnboardingUpdate>({
 })
 
 const profileRules: FormRules<ProfileOnboardingUpdate> = {
+  school: [{ required: true, message: '请选择或填写院校', trigger: 'change' }],
+  school_level: [{ required: true, message: '请选择院校层次', trigger: 'change' }],
   education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
   grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
   major: [{ required: true, message: '请填写或选择专业', trigger: 'change' }],
