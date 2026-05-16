@@ -92,9 +92,9 @@ const onboardingDialogVisible = ref(false)
 
 const navItems = [
   { path: '/dashboard', label: '全景中枢', icon: Menu },
-  { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
   { path: '/resource-generator', label: '资源引擎', icon: Cpu },
   { path: '/path-planner', label: '路径规划', icon: Connection },
+  { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
   { path: '/evaluation', label: '多维评估', icon: DataLine },
 ]
 
