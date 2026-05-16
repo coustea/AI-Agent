@@ -173,8 +173,15 @@
             <div
                 v-for="msg in messages"
                 :key="msg.id"
+                v-memo="[
+                  msg.id === streamingMsgId ? streamDisplayText : msg.content,
+                  msg.diagramGenerating,
+                  msg.diagram,
+                  msg.illustrations,
+                  msg.attachments
+                ]"
                 :class="['message-row', msg.role]"
-                v-show="!(msg.role === 'ai' && msg.id === streamingMsgId && !msg.content)"
+                v-show="!(msg.role === 'ai' && msg.id === streamingMsgId && !getDisplayContent(msg))"
             >
               <div class="msg-avatar">
                 <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
@@ -188,10 +195,15 @@
                 </div>
 
                 <div class="bubble markdown-body">
-                  <TutorMessageContent
-                      :content="msg.content"
-                      :is-streaming="isStreamingMessage(msg)"
-                  />
+                  <template v-if="msg.role === 'user'">
+                    <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
+                  </template>
+                  <template v-else>
+                    <TutorMessageContent
+                        :content="getDisplayContent(msg)"
+                        :is-streaming="isStreamingMessage(msg)"
+                    />
+                  </template>
                 </div>
 
                 <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
@@ -248,15 +260,6 @@
               </div>
             </div>
 
-            <div v-if="showThinkingIndicator" class="message-row ai thinking-row">
-              <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
-              <div class="bubble thinking-bubble">
-                <span class="thinking-ring" aria-hidden="true"></span>
-                <div class="typing-dots">
-                  <span></span><span></span><span></span>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div class="input-panel">
@@ -765,13 +768,18 @@ const {
   onAssistantComplete: () => {
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
+    isStreamDone = false
     flushPendingStreamText(true)
+    if (streamingMsgId.value !== null) {
+      commitStreamTextToMessage(streamingMsgId.value)
+    }
     const lastAiMsg = [...messages.value].reverse().find(m => m.role === 'ai')
     if (lastAiMsg && lastAiMsg.diagramGenerating && !lastAiMsg.diagram) {
       lastAiMsg.diagramGenerating = false
     }
     isAIThinking.value = false
     streamingMsgId.value = null
+    streamingMsgRef.value = null
     scheduleProfilePoll()
     if (isVoiceChatting.value && chatMode.value === 'digital_human' && isAvatarConnected.value) {
       window.setTimeout(async () => {
@@ -837,9 +845,14 @@ const {
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
     stopDiagramGeneratingForCurrentAi()
+    if (streamingMsgId.value !== null) {
+      flushPendingStreamText(true)
+      commitStreamTextToMessage(streamingMsgId.value)
+    }
     if (isAIThinking.value) {
       isAIThinking.value = false
       streamingMsgId.value = null
+      streamingMsgRef.value = null
     }
     ElMessage.error({ message: msg, plain: true })
   },
@@ -866,6 +879,7 @@ const searchKeyword = ref('')
 
 const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
+const streamingMsgRef = ref<ChatMsg | null>(null)
 let abortController: AbortController | null = null
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 const isAsrProcessing = ref(false)
@@ -938,11 +952,24 @@ const startAvatarThinkingTimeout = () => {
 }
 
 let scrollPending = false
-let streamFlushHandle: number | null = null
-let pendingStreamText = ''
-let pendingStreamTargetId: number | null = null
+let streamFlushHandle: ReturnType<typeof setInterval> | null = null
+const streamDisplayText = ref('')
+const pendingRenderQueue: string[] = []
+let pendingRenderQueueStart = 0
+let pendingRenderOffset = 0
+let pendingRenderChars = 0
+let isStreamDone = false
+const streamRenderedChunks: string[] = []
 let lastAutoScrollAt = 0
-const STREAM_SCROLL_INTERVAL_MS = 64
+const STREAM_FLUSH_INTERVAL_MS = 16
+const STREAM_MIN_CHARS_PER_TICK = 2
+const STREAM_BASE_CHARS_PER_TICK = 2
+const STREAM_MAX_CHARS_PER_TICK = 4
+const STREAM_TARGET_BUFFER_CHARS = 42
+const STREAM_TAIL_CHARS_PER_TICK = 1
+let streamAdaptiveLevel = 0
+const STREAM_SCROLL_INTERVAL_MS = 220
+const STREAM_AUTO_SCROLL_BOTTOM_GAP_PX = 96
 
 // 计算属性
 const filteredSessions = computed(() => {
@@ -954,14 +981,13 @@ const filteredSessions = computed(() => {
   })
 })
 
-const showThinkingIndicator = computed(() => {
-  if (!isAIThinking.value) return false
-  if (chatMode.value === 'digital_human') return false
-  const streamingMsg = messages.value.find(m => m.id === streamingMsgId.value)
-  return !streamingMsg || !streamingMsg.content
-})
-
 const isStreamingMessage = (msg: ChatMsg) => msg.id === streamingMsgId.value && isAIThinking.value
+const getDisplayContent = (msg: ChatMsg) => {
+  if (msg.id === streamingMsgId.value && streamDisplayText.value) {
+    return streamDisplayText.value
+  }
+  return msg.content
+}
 type VoiceAsrStage = 'idle' | 'no_voice' | 'heard_voice' | 'transcribing'
 const voiceAsrStage = computed<VoiceAsrStage>(() => {
   if (isAIThinking.value || isAvatarSpeaking.value) return 'idle'
@@ -1113,6 +1139,9 @@ const scrollToBottom = () => {
 }
 
 const scrollToBottomThrottled = (force = false) => {
+  if (!force && !isNearBottom()) {
+    return
+  }
   const nowTs = Date.now()
   if (!force && nowTs - lastAutoScrollAt < STREAM_SCROLL_INTERVAL_MS) {
     return
@@ -1121,42 +1150,126 @@ const scrollToBottomThrottled = (force = false) => {
   scrollToBottom()
 }
 
-const flushPendingStreamText = (forceScroll = false) => {
-  if (streamFlushHandle != null) {
-    cancelAnimationFrame(streamFlushHandle)
-    streamFlushHandle = null
-  }
-  if (!pendingStreamText || pendingStreamTargetId == null) {
-    pendingStreamText = ''
-    pendingStreamTargetId = null
-    return
-  }
+const isNearBottom = () => {
+  const el = chatScroll.value
+  if (!el) return true
+  const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+  return gap <= STREAM_AUTO_SCROLL_BOTTOM_GAP_PX
+}
 
-  const aiMsg = messages.value.find(m => m.id === pendingStreamTargetId)
+const flushPendingStreamText = (forceScroll = false) => {
+  if (pendingRenderQueueStart >= pendingRenderQueue.length) return
+  const aiMsg = streamingMsgRef.value
   if (aiMsg) {
-    aiMsg.content += pendingStreamText
+    // Controlled adaptive pacing: speed up gently when backlog builds,
+    // but keep a hard ceiling so late-stage output won't "suddenly sprint".
+    const error = (pendingRenderChars - STREAM_TARGET_BUFFER_CHARS) / STREAM_TARGET_BUFFER_CHARS
+    if (error > 0) {
+      streamAdaptiveLevel = Math.min(1, streamAdaptiveLevel + 0.14 * error)
+    } else {
+      streamAdaptiveLevel = Math.max(0, streamAdaptiveLevel - 0.06)
+    }
+    let remaining = STREAM_BASE_CHARS_PER_TICK + Math.floor(streamAdaptiveLevel * (STREAM_MAX_CHARS_PER_TICK - STREAM_BASE_CHARS_PER_TICK))
+    if (remaining < STREAM_MIN_CHARS_PER_TICK) remaining = STREAM_MIN_CHARS_PER_TICK
+    if (remaining > STREAM_MAX_CHARS_PER_TICK) remaining = STREAM_MAX_CHARS_PER_TICK
+    if (isStreamDone) remaining = STREAM_TAIL_CHARS_PER_TICK
+    let out = ''
+    while (remaining > 0 && pendingRenderQueueStart < pendingRenderQueue.length) {
+      const part = pendingRenderQueue[pendingRenderQueueStart] || ''
+      const available = part.length - pendingRenderOffset
+      if (available <= 0) {
+        pendingRenderQueueStart += 1
+        pendingRenderOffset = 0
+        continue
+      }
+      const take = Math.min(remaining, available)
+      out += part.slice(pendingRenderOffset, pendingRenderOffset + take)
+      pendingRenderOffset += take
+      pendingRenderChars -= take
+      remaining -= take
+      if (pendingRenderOffset >= part.length) {
+        pendingRenderQueueStart += 1
+        pendingRenderOffset = 0
+      }
+    }
+    if (!out) return
+    streamRenderedChunks.push(out)
+    streamDisplayText.value += out
+
+    if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+      pendingRenderQueue.length = 0
+      pendingRenderQueueStart = 0
+      pendingRenderOffset = 0
+      pendingRenderChars = 0
+    }
     scrollToBottomThrottled(forceScroll)
   }
-
-  pendingStreamText = ''
-  pendingStreamTargetId = null
 }
 
 const enqueueStreamChunk = (messageId: number, chunk: string) => {
   if (!chunk) return
-
-  if (pendingStreamTargetId !== null && pendingStreamTargetId !== messageId) {
-    flushPendingStreamText()
-  }
-
-  pendingStreamTargetId = messageId
-  pendingStreamText += chunk
-
+  if (streamingMsgRef.value?.id !== messageId) return
+  pendingRenderQueue.push(chunk)
+  pendingRenderChars += chunk.length
   if (streamFlushHandle != null) return
-  streamFlushHandle = requestAnimationFrame(() => {
-    streamFlushHandle = null
+  streamFlushHandle = setInterval(() => {
     flushPendingStreamText()
-  })
+    if (pendingRenderQueueStart >= pendingRenderQueue.length && isStreamDone && streamingMsgId.value != null) {
+      const doneId = streamingMsgId.value
+      stopStreamFlushLoop()
+      finishStream(doneId)
+      return
+    }
+    if (pendingRenderQueueStart >= pendingRenderQueue.length && streamFlushHandle != null) {
+      clearInterval(streamFlushHandle)
+      streamFlushHandle = null
+    }
+  }, STREAM_FLUSH_INTERVAL_MS)
+}
+
+const finishStream = (messageId: number) => {
+  commitStreamTextToMessage(messageId)
+  isAIThinking.value = false
+  streamingMsgId.value = null
+  streamingMsgRef.value = null
+  scheduleProfilePoll()
+  abortController = null
+}
+
+const commitStreamTextToMessage = (messageId: number) => {
+  const aiMsg = streamingMsgRef.value && streamingMsgRef.value.id === messageId
+    ? streamingMsgRef.value
+    : messages.value.find(m => m.id === messageId)
+  if (!aiMsg) {
+    pendingRenderQueue.length = 0
+    pendingRenderQueueStart = 0
+    pendingRenderOffset = 0
+    pendingRenderChars = 0
+    streamRenderedChunks.length = 0
+    streamDisplayText.value = ''
+    return
+  }
+  if (streamRenderedChunks.length > 0) {
+    aiMsg.content += streamRenderedChunks.join('')
+  } else if (streamDisplayText.value) {
+    aiMsg.content += streamDisplayText.value
+  }
+  pendingRenderQueue.length = 0
+  pendingRenderQueueStart = 0
+  pendingRenderOffset = 0
+  pendingRenderChars = 0
+  isStreamDone = false
+  streamAdaptiveLevel = 0
+  streamRenderedChunks.length = 0
+  streamDisplayText.value = ''
+  streamingMsgRef.value = null
+}
+
+const stopStreamFlushLoop = () => {
+  if (streamFlushHandle != null) {
+    clearInterval(streamFlushHandle)
+    streamFlushHandle = null
+  }
 }
 
 const autoResize = () => {
@@ -1623,6 +1736,11 @@ const handleSend = async () => {
   const aiMsgId = Date.now() + 1
   messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
   streamingMsgId.value = aiMsgId
+  streamingMsgRef.value = messages.value[messages.value.length - 1] || null
+  isStreamDone = false
+  streamAdaptiveLevel = 0
+  streamRenderedChunks.length = 0
+  streamDisplayText.value = ''
 
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     startAvatarThinkingTimeout()
@@ -1654,25 +1772,25 @@ const handleSend = async () => {
         enqueueStreamChunk(aiMsgId, chunk)
       },
       () => {
-        flushPendingStreamText(true)
+        isStreamDone = true
         const finishedSessionId = currentSessionId.value
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
           aiMsg.diagramGenerating = false
-          if (!aiMsg.content.trim() && !aiMsg.diagram) {
-            aiMsg.content = 'AI 响应暂时中断，请稍后重试。'
-          }
         }
-        isAIThinking.value = false
-        streamingMsgId.value = null
-        scheduleProfilePoll()
-        abortController = null
+        if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+          stopStreamFlushLoop()
+          finishStream(aiMsgId)
+        }
         if (finishedSessionId) {
           void refreshSessionTitleWithRetry(finishedSessionId)
         }
       },
       (err) => {
+        isStreamDone = false
         flushPendingStreamText(true)
+        stopStreamFlushLoop()
+        commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
           aiMsg.diagramGenerating = false
@@ -1683,6 +1801,7 @@ const handleSend = async () => {
         stopDiagramGeneratingForCurrentAi()
         isAIThinking.value = false
         streamingMsgId.value = null
+        streamingMsgRef.value = null
         abortController = null
       },
       (evt) => {
@@ -1765,6 +1884,12 @@ onBeforeUnmount(() => {
   clearAvatarThinkingTimeout()
   disconnectAvatar()
   flushPendingStreamText()
+  stopStreamFlushLoop()
+  if (streamingMsgId.value !== null) {
+    commitStreamTextToMessage(streamingMsgId.value)
+  }
+  isStreamDone = false
+  streamingMsgRef.value = null
   abortController?.abort()
   profilePollTimers.forEach(t => clearTimeout(t))
   if (dimTimer) clearTimeout(dimTimer)
@@ -2492,7 +2617,7 @@ onBeforeUnmount(() => {
 .message-row {
   display: flex;
   gap: 1rem;
-  max-width: 85%;
+  max-width: 60%;
   animation: msg-appear 0.3s ease-out;
 }
 
@@ -2560,10 +2685,12 @@ onBeforeUnmount(() => {
 
 /* AI 和 User 气泡基础样式：低饱和、干净 */
 .bubble {
-  padding: 12px 16px;
+  padding: 10px 14px;
   font-size: 0.95rem;
   line-height: 1.6;
   word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
   max-width: 100%;
 }
 
@@ -2598,6 +2725,15 @@ onBeforeUnmount(() => {
   color: #E11D48 !important;
 }
 
+.user-plain-text {
+  margin: 0;
+  padding: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 /* markdown 渲染排版及对齐优化 */
 :deep(.markdown-body) {
   font-family: 'Inter', system-ui, sans-serif;
@@ -2617,7 +2753,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.markdown-body p) {
-  margin: 0 0 0.8rem 0; /* 统一下边距，不用上边距 */
+  margin: 0 0 0.45rem 0; /* 收紧段落底部间距，减少气泡底部留白 */
 }
 
 :deep(.markdown-body ul),
@@ -2792,62 +2928,6 @@ onBeforeUnmount(() => {
 .attachment-link:hover {
   border-color: #CBD5E1;
   background: #F8FAFC;
-}
-
-/* ----------------------------------
-   现代化的思考动画 (Typing Dots)
------------------------------------ */
-.thinking-bubble {
-  background: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  padding: 10px 14px !important;
-  border-radius: 12px !important;
-  border-top-left-radius: 4px !important;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 104px;
-  box-shadow: none !important;
-}
-
-.thinking-ring {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #E2E8F0;
-  border-top-color: #64748B;
-  border-radius: 50%;
-  animation: thinkingSpin 0.9s linear infinite;
-  flex-shrink: 0;
-}
-
-.typing-dots {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 18px;
-}
-
-.typing-dots span {
-  width: 6px;
-  height: 6px;
-  background-color: #94A3B8; /* 柔和灰色 */
-  border-radius: 50%;
-  animation: typingBounce 1.4s infinite ease-in-out both;
-}
-
-.typing-dots span:nth-child(1) { animation-delay: -0.32s; }
-.typing-dots span:nth-child(2) { animation-delay: -0.16s; }
-.typing-dots span:nth-child(3) { animation-delay: 0s; }
-
-@keyframes typingBounce {
-  0%, 80%, 100% { transform: translateY(2px); opacity: 0.45; }
-  40% { transform: translateY(-2px); opacity: 1; background-color: #64748B; }
-}
-
-@keyframes thinkingSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* ================= 针对输入框的优化 ================= */

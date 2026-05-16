@@ -65,6 +65,11 @@ const normalizedContent = computed(() => normalizeStreamingMarkdown(props.conten
   margin-bottom: 0;
 }
 
+.app-markdown-preview :deep(.md-editor-preview p) {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
 /* 强制覆盖代码块的背景色为纯白色 */
 .app-markdown-preview :deep(.md-editor-preview pre),
 .app-markdown-preview :deep(.md-editor-preview pre code),
