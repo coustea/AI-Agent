@@ -198,6 +198,21 @@
         <div class="dialog-custom-header">
           <h2 class="dialog-title">编辑学习画像资料</h2>
           <p class="dialog-subtitle">完善你的基础信息，帮助系统生成更贴合你的学习资源与学习路径。</p>
+
+          <div class="editor-step-indicator">
+            <div class="step-item" :class="{ 'is-active': currentEditorStep >= 1 }">
+              <div class="step-icon">
+                <el-icon v-if="currentEditorStep === 2"><Check /></el-icon>
+                <span v-else>1</span>
+              </div>
+              <div class="step-text">专业与目标</div>
+            </div>
+            <div class="step-line" :class="{ 'is-active': currentEditorStep === 2 }"></div>
+            <div class="step-item" :class="{ 'is-active': currentEditorStep === 2 }">
+              <div class="step-icon">2</div>
+              <div class="step-text">学校与阶段</div>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -209,114 +224,118 @@
           class="custom-profile-form"
           hide-required-asterisk
       >
-        <div class="profile-form-section">
-          <div class="profile-form-section-head">
-            <div class="section-badge required-badge">必填 01</div>
-            <h5 class="section-title">专业与课程</h5>
-            <span class="section-desc-inline">先确定专业背景和正在学习的课程。</span>
+        <div v-show="currentEditorStep === 1" class="editor-step-content">
+          <div class="profile-form-section">
+            <div class="profile-form-section-head">
+              <div class="section-badge required-badge">必填 01</div>
+              <h5 class="section-title">专业与课程</h5>
+              <span class="section-desc-inline">先确定专业背景和正在学习的课程。</span>
+            </div>
+
+            <div class="profile-form-grid">
+              <el-form-item prop="major">
+                <template #label><span class="custom-label"><span class="req-star">*</span> 专业</span></template>
+                <el-autocomplete
+                    v-model="profileForm.major"
+                    :fetch-suggestions="querySearchMajor"
+                    placeholder="可以直接输入或选择"
+                    clearable
+                    class="w-full"
+                >
+                  <template #default="{ item }">
+                    <span>{{ item.value }}</span>
+                  </template>
+                </el-autocomplete>
+              </el-form-item>
+
+              <el-form-item prop="courses">
+                <template #label><span class="custom-label"><span class="req-star">*</span> 正在学习的课程</span></template>
+                <el-select
+                    v-model="profileForm.courses"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="输入课程名后【按回车】即可添加"
+                    class="w-full"
+                >
+                  <el-option v-for="course in PRESET_COURSES" :key="course" :label="course" :value="course" />
+                </el-select>
+              </el-form-item>
+            </div>
           </div>
 
-          <div class="profile-form-grid">
-            <el-form-item prop="major">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 专业</span></template>
-              <el-autocomplete
-                  v-model="profileForm.major"
-                  :fetch-suggestions="querySearchMajor"
-                  placeholder="可以直接输入或选择"
-                  clearable
-                  class="w-full"
-              >
-                <template #default="{ item }">
-                  <span>{{ item.value }}</span>
-                </template>
-              </el-autocomplete>
-            </el-form-item>
+          <div class="profile-form-section mt-3">
+            <div class="profile-form-section-head">
+              <div class="section-badge required-badge">必填 02</div>
+              <h5 class="section-title">学习目标</h5>
+              <span class="section-desc-inline">目标决定资源和路径生成方向。</span>
+            </div>
 
-            <el-form-item prop="courses">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 正在学习的课程</span></template>
-              <el-select
-                  v-model="profileForm.courses"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  placeholder="输入课程名后【按回车】即可添加"
-                  class="w-full"
-              >
-                <el-option v-for="course in PRESET_COURSES" :key="course" :label="course" :value="course" />
+            <el-form-item prop="learning_goal">
+              <template #label><span class="custom-label"><span class="req-star">*</span> 当前学习目标</span></template>
+              <el-select v-model="profileForm.learning_goal" filterable allow-create default-first-option clearable placeholder="请选择目标，列表没有可直接输入后【按回车】">
+                <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
               </el-select>
             </el-form-item>
           </div>
         </div>
 
-        <div class="profile-form-section">
-          <div class="profile-form-section-head">
-            <div class="section-badge required-badge">必填 02</div>
-            <h5 class="section-title">学习目标</h5>
-            <span class="section-desc-inline">目标决定资源和路径生成方向。</span>
-          </div>
+        <div v-show="currentEditorStep === 2" class="editor-step-content">
+          <div class="profile-form-section">
+            <div class="profile-form-section-head">
+              <div class="section-badge bg-badge">背景 03</div>
+              <h5 class="section-title">学校与阶段</h5>
+              <span class="section-desc-inline">学校可选；学历和年级用于判断内容难度。</span>
+            </div>
 
-          <el-form-item prop="learning_goal">
-            <template #label><span class="custom-label"><span class="req-star">*</span> 当前学习目标</span></template>
-            <el-select v-model="profileForm.learning_goal" filterable allow-create default-first-option clearable placeholder="请选择目标，列表没有可直接输入后【按回车】">
-              <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
-            </el-select>
-          </el-form-item>
-        </div>
+            <div class="profile-form-grid">
+              <el-form-item prop="school">
+                <template #label><span class="custom-label"><span class="req-star">*</span> 院校</span></template>
+                <el-autocomplete
+                    v-model="profileForm.school"
+                    :fetch-suggestions="querySearchSchool"
+                    placeholder="可以直接输入或搜索"
+                    clearable
+                    class="w-full"
+                    @select="handleSchoolSelect"
+                >
+                  <template #prefix><el-icon><Search /></el-icon></template>
+                  <template #default="{ item }">
+                    <span>{{ item.value }}</span>
+                    <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
+                  </template>
+                </el-autocomplete>
+              </el-form-item>
 
-        <div class="profile-form-section">
-          <div class="profile-form-section-head">
-            <div class="section-badge bg-badge">背景 03</div>
-            <h5 class="section-title">学校与阶段</h5>
-            <span class="section-desc-inline">学校可选；学历和年级用于判断内容难度。</span>
-          </div>
+              <el-form-item prop="school_level">
+                <template #label><span class="custom-label"><span class="req-star">*</span> 院校层次</span></template>
+                <el-select v-model="profileForm.school_level" placeholder="请选择或从院校自动带出" filterable allow-create default-first-option>
+                  <el-option v-for="level in PRESET_SCHOOL_LEVELS" :key="level" :label="level" :value="level" />
+                </el-select>
+              </el-form-item>
 
-          <div class="profile-form-grid">
-            <el-form-item prop="school">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 院校</span></template>
-              <el-autocomplete
-                  v-model="profileForm.school"
-                  :fetch-suggestions="querySearchSchool"
-                  placeholder="可以直接输入或搜索"
-                  clearable
-                  class="w-full"
-                  @select="handleSchoolSelect"
-              >
-                <template #prefix><el-icon><Search /></el-icon></template>
-              <template #default="{ item }">
-                <span>{{ item.value }}</span>
-                <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
-              </template>
-            </el-autocomplete>
-          </el-form-item>
+              <el-form-item prop="education_level">
+                <template #label><span class="custom-label"><span class="req-star">*</span> 学历层次</span></template>
+                <el-select v-model="profileForm.education_level" placeholder="请选择学历层次" filterable>
+                  <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
+                </el-select>
+              </el-form-item>
 
-            <el-form-item prop="school_level">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 院校层次</span></template>
-              <el-select v-model="profileForm.school_level" placeholder="请选择或从院校自动带出" filterable allow-create default-first-option>
-                <el-option v-for="level in PRESET_SCHOOL_LEVELS" :key="level" :label="level" :value="level" />
-              </el-select>
-            </el-form-item>
+              <el-form-item prop="grade">
+                <template #label><span class="custom-label"><span class="req-star">*</span> 年级</span></template>
+                <el-select v-model="profileForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级">
+                  <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
+                </el-select>
+              </el-form-item>
 
-            <el-form-item prop="education_level">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 学历层次</span></template>
-              <el-select v-model="profileForm.education_level" placeholder="请选择学历层次" filterable>
-                <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item prop="grade">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 年级</span></template>
-              <el-select v-model="profileForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级">
-                <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item prop="preferred_language">
-              <template #label><span class="custom-label">常用编程语言（选填）</span></template>
-              <el-select v-model="profileForm.preferred_language" filterable allow-create default-first-option clearable placeholder="请选择常用语言">
-                <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
-              </el-select>
-            </el-form-item>
+              <el-form-item prop="preferred_language">
+                <template #label><span class="custom-label">常用编程语言（选填）</span></template>
+                <el-select v-model="profileForm.preferred_language" filterable allow-create default-first-option clearable placeholder="请选择常用语言">
+                  <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
+                </el-select>
+              </el-form-item>
+            </div>
           </div>
         </div>
       </el-form>
@@ -328,8 +347,20 @@
             <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得精准推荐。</span>
           </div>
           <div class="footer-actions">
-            <el-button class="cancel-btn" @click="profileEditorVisible = false">取消</el-button>
-            <el-button type="primary" class="save-btn" :loading="profileSubmitting" @click="submitProfile(profileFormRef)">保存资料</el-button>
+            <template v-if="currentEditorStep === 1">
+              <el-button class="step-btn" @click="nextEditorStep(profileFormRef)">
+                下一步 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+              </el-button>
+              <el-button type="primary" class="save-btn" @click="profileEditorVisible = false">取消</el-button>
+            </template>
+            <template v-else>
+              <el-button class="step-btn" @click="currentEditorStep = 1">
+                <el-icon class="el-icon--left"><ArrowLeft /></el-icon> 上一步
+              </el-button>
+              <el-button type="primary" class="save-btn" :loading="profileSubmitting" @click="submitProfile(profileFormRef)">
+                保存资料
+              </el-button>
+            </template>
           </div>
         </div>
       </template>
@@ -342,7 +373,7 @@ import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   UserFilled, CircleCheckFilled, Edit, Clock, Reading, DocumentCopy, StarFilled,
-  InfoFilled, Timer, Checked, VideoPlay, Cpu, Search
+  InfoFilled, Timer, Checked, VideoPlay, Cpu, Search, Check, ArrowRight, ArrowLeft
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -366,9 +397,9 @@ const userEmail = ref<string | null>(null)
 const userAvatar = ref<string | null>(null)
 const avatarUploading = ref(false)
 const profileEditorVisible = ref(false)
+const currentEditorStep = ref(1) // 弹窗阶段控制
 const profileSubmitting = ref(false)
 const profileFormRef = ref<FormInstance>()
-// const profileSchoolSearchLoading = ref(false)
 const profileSchoolOptions = ref<SchoolItem[]>([])
 
 const PRESET_MAJORS = [
@@ -388,7 +419,7 @@ const PRESET_GOALS = [
 const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
 const PRESET_SCHOOL_LEVELS = ['985', '211', '双一流', '普通本科', '高职高专', '海外高校', '其他']
 const PRESET_GRADES = [
-  '大一', '大二', '大三', '大四', '大五',
+  '大一', '大二', '大三', '大四',
   '研一', '研二', '研三',
   '博一', '博二', '博三',
   '高职一年级', '高职二年级', '高职三年级'
@@ -540,7 +571,19 @@ const handleAvatarUpload = async (options: { file: File }) => {
 
 const openProfileEditor = () => {
   fillProfileForm(studentProfile.value)
+  currentEditorStep.value = 1
   profileEditorVisible.value = true
+}
+
+const nextEditorStep = (formEl: FormInstance | undefined) => {
+  if (!formEl) return
+  formEl.validateField(['major', 'courses', 'learning_goal'], (valid) => {
+    if (valid) {
+      currentEditorStep.value = 2
+    } else {
+      ElMessage.warning('请先完善当前页面的必填项')
+    }
+  })
 }
 
 const submitProfile = async (formEl: FormInstance | undefined) => {
@@ -802,11 +845,12 @@ const getStatusType = (status: string) => {
 }
 
 .profile-editor-dialog :deep(.el-dialog__headerbtn) {
-  top: 18px; right: 20px; font-size: 1.2rem; color: #64748B;
+  top: 18px; right: 20px; font-size: 1.2rem; color: #64748B; z-index: 10;
 }
 
 .dialog-custom-header {
-  padding: 20px 24px 12px;
+  padding: 24px 32px 12px;
+  text-align: center;
 }
 .dialog-title {
   margin: 0 0 4px; font-size: 1.25rem; font-weight: 800; color: #0F172A;
@@ -815,8 +859,63 @@ const getStatusType = (status: string) => {
   margin: 0; font-size: 0.85rem; color: #64748B; line-height: 1.4;
 }
 
+/* 步骤指示器 */
+.editor-step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+.editor-step-indicator .step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9CA3AF;
+}
+.editor-step-indicator .step-item.is-active {
+  color: #4F46E5;
+}
+.editor-step-indicator .step-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #9CA3AF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  background-color: #FFFFFF;
+}
+.editor-step-indicator .step-item.is-active .step-icon {
+  border-color: #4F46E5;
+  color: #4F46E5;
+}
+.editor-step-indicator .step-text {
+  font-size: 13px;
+  font-weight: 600;
+}
+.editor-step-indicator .step-line {
+  width: 80px;
+  height: 1px;
+  background-color: #E5E7EB;
+}
+.editor-step-indicator .step-line.is-active {
+  background-color: #4F46E5;
+}
+
+.editor-step-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .profile-editor-dialog :deep(.el-dialog__body) {
-  background: #FFFFFF; padding: 0 24px 8px;
+  background: #FFFFFF; padding: 0 32px 8px;
 }
 
 .custom-profile-form { display: flex; flex-direction: column; gap: 12px; }
@@ -847,17 +946,15 @@ const getStatusType = (status: string) => {
 
 .profile-editor-dialog :deep(.el-input__wrapper),
 .profile-editor-dialog :deep(.el-select__wrapper) {
-  min-height: 34px !important;
-  border-radius: 6px; box-shadow: none !important; border: 1px solid #E2E8F0; background: #FFFFFF;
+  min-height: 36px !important;
+  border-radius: 8px; box-shadow: none !important; border: 1px solid #E2E8F0; background: #FFFFFF;
 }
 .profile-editor-dialog :deep(.el-input__inner) { font-size: 0.85rem; }
 
 .school-level-tag { margin-left: 8px; font-size: 0.7rem; color: #64748B; background: #F1F5F9; padding: 2px 6px; border-radius: 4px; }
-.school-level-note { margin-top: 4px; font-size: 0.75rem; color: #64748B; }
-.school-level-note span { color: #2563EB; font-weight: 700; }
 
 .profile-editor-dialog :deep(.el-dialog__footer) {
-  padding: 10px 24px 20px; border-top: none;
+  padding: 10px 32px 24px; border-top: none;
 }
 .dialog-custom-footer {
   display: flex; justify-content: space-between; align-items: center;
@@ -866,17 +963,20 @@ const getStatusType = (status: string) => {
 .footer-hint .el-icon { color: #4F46E5; font-size: 0.9rem; }
 .footer-actions { display: flex; gap: 10px; }
 
-.cancel-btn, .save-btn {
-  border-radius: 6px; height: 36px; padding: 0 20px; font-weight: 600; font-size: 0.85rem;
+.step-btn, .save-btn {
+  border-radius: 8px; height: 38px; padding: 0 20px; font-weight: 600; font-size: 0.85rem;
 }
-.cancel-btn { color: #475569; border-color: #CBD5E1; }
-.cancel-btn:hover { background: #F8FAFC; color: #0F172A; }
+.step-btn { background: #FFFFFF; color: #475569; border: 1px solid #CBD5E1; }
+.step-btn:hover { background: #F8FAFC; color: #0F172A; border-color: #94A3B8; }
 .save-btn { background: #4F46E5; border: none; color: white;}
 .save-btn:hover { background: #4338CA; transform: translateY(-1px); }
+
+.mt-3 { margin-top: 12px; }
 
 @media (max-width: 720px) {
   .profile-form-grid { grid-template-columns: 1fr; gap: 0; }
   .dialog-custom-footer { flex-direction: column; gap: 12px; align-items: flex-start; }
   .section-desc-inline { display: none; }
+  .editor-step-indicator .step-line { width: 40px; }
 }
 </style>
