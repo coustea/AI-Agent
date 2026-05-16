@@ -48,11 +48,11 @@
           </div>
         </aside>
 
-        <!-- Mermaid SVG 直接内联展示，避免先转 Canvas 导致跨域污染 -->
+        <!-- Mermaid 源码交给 md-editor-v3 渲染，导出时再读取生成后的 SVG。 -->
         <div class="diagram-canvas">
           <div class="canvas-toolbar">
             <span>{{ relationType }}</span>
-            <div v-if="renderedMermaid" class="diagram-actions">
+            <div v-if="diagramReady" class="diagram-actions">
               <button class="diagram-action" @click="downloadSvg">导出 SVG</button>
               <button class="diagram-action primary" :disabled="pngExporting" @click="downloadPng">
                 {{ pngExporting ? '导出中...' : '导出 PNG' }}
@@ -61,21 +61,12 @@
           </div>
 
           <div ref="diagramBodyRef" class="diagram-svg-wrapper">
-            <div
-              v-if="renderedMermaid"
-              ref="mermaidSvgShell"
-              class="mermaid-shell diagram-svg-shell"
-              v-html="renderedMermaid"
-            ></div>
-
-            <div v-else-if="renderingError" class="error-box">
-              <div class="error-icon">!</div>
-              <div class="error-text">图解渲染失败：{{ renderingError }}</div>
-            </div>
-
-            <div v-else class="loading-box">
-              <el-icon class="is-loading"><Loading /></el-icon>
-              <span>正在渲染知识图解...</span>
+            <div ref="mermaidPreviewShell" class="mermaid-shell diagram-svg-shell">
+              <MarkdownPreview
+                :id="diagramPreviewId"
+                class="diagram-markdown-preview"
+                :content="mermaidMarkdown"
+              />
             </div>
           </div>
 
@@ -102,9 +93,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import mermaid from 'mermaid'
-import { Loading } from '@element-plus/icons-vue'
-import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import {
+  parseJsonObject,
+  sanitizeMermaidSource,
+  type ResourceArtifactLike,
+} from './resourceViewUtils'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -113,14 +107,15 @@ const props = defineProps<{
 }>()
 
 const diagramBodyRef = ref<HTMLElement | null>(null)
-const mermaidSvgShell = ref<HTMLElement | null>(null)
-const renderedMermaid = ref('')
-const renderingError = ref('')
+const mermaidPreviewShell = ref<HTMLElement | null>(null)
+const diagramReady = ref(false)
 const exportError = ref('')
 const pngExporting = ref(false)
 
-let renderToken = 0
 let resizeObserver: ResizeObserver | null = null
+let mutationObserver: MutationObserver | null = null
+let renderCheckFrame: number | null = null
+const diagramPreviewId = `diagram-md-preview-${Math.random().toString(36).slice(2)}`
 
 const unwrappedData = computed<Record<string, any>>(() => {
   if (!props.resultData) return {}
@@ -164,6 +159,12 @@ const mermaidSource = computed<string>(() => {
   if (typeof data.code === 'string') return data.code
 
   return ''
+})
+
+const mermaidMarkdown = computed(() => {
+  const source = sanitizeMermaidSource(mermaidSource.value).trim()
+  if (!source) return ''
+  return `\`\`\`mermaid\n${source}\n\`\`\``
 })
 
 const summaryData = computed<Record<string, any>>(() => {
@@ -391,30 +392,13 @@ const visibleCoveredPoints = computed(() => coveredPoints.value.slice(0, 8))
 
 const hasInsightPanel = computed(() => statItems.value.length > 0 || moduleTitles.value.length > 0 || coveredPoints.value.length > 0)
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
-  fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  flowchart: {
-    htmlLabels: true,
-    useMaxWidth: false,
-  },
-  sequence: {
-    useMaxWidth: false,
-  },
-  gantt: {
-    useMaxWidth: false,
-  },
-})
-
 const safeFileName = computed(() => {
   const raw = props.topic || 'diagram'
   return raw.replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') || 'diagram'
 })
 
 const getSvgElement = (): SVGSVGElement | null => {
-  return mermaidSvgShell.value?.querySelector('svg') ?? null
+  return mermaidPreviewShell.value?.querySelector('svg') ?? null
 }
 
 const getFallbackSize = () => {
@@ -588,50 +572,49 @@ const downloadPng = async () => {
   }
 }
 
-const renderDiagram = async () => {
-  const source = mermaidSource.value.trim()
-  const currentToken = ++renderToken
-
-  if (!source) {
-    renderedMermaid.value = ''
-    renderingError.value = ''
-    exportError.value = ''
-    return
+const updateRenderedDiagramState = async () => {
+  await nextTick()
+  if (renderCheckFrame !== null) {
+    cancelAnimationFrame(renderCheckFrame)
   }
-
-  renderingError.value = ''
-  exportError.value = ''
-  renderedMermaid.value = ''
-
-  try {
-    const id = `mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    const { svg } = await mermaid.render(id, source)
-
-    if (currentToken !== renderToken) return
-
-    renderedMermaid.value = svg
-    await nextTick()
-
-    requestAnimationFrame(() => {
-      if (currentToken !== renderToken) return
-      const svgElement = getSvgElement()
-      if (svgElement) {
-        normalizeSvgSize(svgElement)
-      }
-    })
-  } catch (err: any) {
-    console.error('[DiagramResourceView] Render error:', err)
-    if (currentToken === renderToken) {
-      renderingError.value = err?.message || String(err)
+  renderCheckFrame = requestAnimationFrame(() => {
+    renderCheckFrame = null
+    const svgElement = getSvgElement()
+    diagramReady.value = Boolean(svgElement)
+    if (svgElement) {
+      normalizeSvgSize(svgElement)
     }
-  }
+  })
+}
+
+const observeRenderedDiagram = () => {
+  mutationObserver?.disconnect()
+  mutationObserver = null
+
+  if (!mermaidPreviewShell.value || typeof MutationObserver === 'undefined') return
+
+  mutationObserver = new MutationObserver(() => {
+    updateRenderedDiagramState()
+  })
+  mutationObserver.observe(mermaidPreviewShell.value, {
+    childList: true,
+    subtree: true,
+  })
 }
 
 watch(mermaidSource, () => {
-  renderDiagram()
+  exportError.value = ''
+  diagramReady.value = false
+  nextTick(() => {
+    observeRenderedDiagram()
+    updateRenderedDiagramState()
+  })
 }, { immediate: true })
 
 onMounted(() => {
+  observeRenderedDiagram()
+  updateRenderedDiagramState()
+
   if (diagramBodyRef.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
       const svgElement = getSvgElement()
@@ -644,8 +627,12 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  renderToken++
+  if (renderCheckFrame !== null) {
+    cancelAnimationFrame(renderCheckFrame)
+  }
+  mutationObserver?.disconnect()
   resizeObserver?.disconnect()
+  mutationObserver = null
   resizeObserver = null
 })
 </script>
@@ -940,6 +927,17 @@ onBeforeUnmount(() => {
   align-items: flex-start;
 }
 
+.diagram-markdown-preview,
+.diagram-svg-shell :deep(.md-editor-preview),
+.diagram-svg-shell :deep(.md-editor-mermaid) {
+  width: 100%;
+}
+
+.diagram-svg-shell :deep(.md-editor-mermaid) {
+  display: flex;
+  justify-content: center;
+}
+
 .diagram-svg-shell :deep(svg) {
   display: block;
   max-width: 100%;
@@ -996,28 +994,6 @@ onBeforeUnmount(() => {
   opacity: 0.55;
 }
 
-.error-box,
-.loading-box {
-  min-height: 260px;
-  padding: 40px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
-  text-align: center;
-  font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #64748b;
-}
-
-.error-box {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: #dc2626;
-}
-
 .export-error {
   margin: 12px 14px 14px;
   padding: 9px 11px;
@@ -1027,11 +1003,6 @@ onBeforeUnmount(() => {
   color: #dc2626;
   font-size: 13px;
   line-height: 1.5;
-}
-
-.error-icon {
-  font-size: 1.5rem;
-  opacity: 0.8;
 }
 
 .empty-state {

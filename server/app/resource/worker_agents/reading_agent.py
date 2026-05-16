@@ -74,7 +74,7 @@ class ReadingAgent:
 
         try:
             response = await self.llm_manager.ainvoke(
-                "spark_x2_flash",  # 使用快速模型提取关键词
+                "spark_x",
                 [HumanMessage(content=prompt)],
                 model_kwargs={"temperature": 0.1},
             )

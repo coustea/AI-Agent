@@ -1,5 +1,5 @@
 <template>
-  <div class="markdown-resource" :class="{ compact }" @click="handleMessageClick">
+  <div class="markdown-resource" :class="{ compact }">
     <div v-if="content" class="technical-frame">
       
       <div class="frame-header">
@@ -7,7 +7,7 @@
         <span class="technical-label">RESOURCE_CONTENT // VERSION 2.0</span>
       </div>
 
-      <div class="markdown-body markdown-shell" v-html="renderMarkdown(content)"></div>
+      <MarkdownPreview class="markdown-shell" :content="content" />
       
       <div class="frame-footer">
         <span class="mono-tag">EOF_READY</span>
@@ -22,11 +22,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, nextTick, watch } from 'vue'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'
-import { ElMessage } from 'element-plus'
-import { getMarkdownContent, renderMarkdown, type ResourceArtifactLike } from './resourceViewUtils'
+import { computed } from 'vue'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import { getMarkdownContent, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -34,58 +32,6 @@ const props = defineProps<{
 }>()
 
 const content = computed(() => getMarkdownContent(props.resultData))
-
-const performHighlight = async () => {
-  await nextTick()
-  if (typeof document !== 'undefined') {
-    const preBlocks = document.querySelectorAll('.markdown-shell pre')
-    preBlocks.forEach((pre) => {
-      const code = pre.querySelector('code')
-      if (code) {
-        hljs.highlightElement(code as HTMLElement)
-        
-        // 如果还没有复制按钮，则添加一个
-        if (!pre.querySelector('.copy-code-btn')) {
-          const btn = document.createElement('button')
-          btn.className = 'copy-code-btn'
-          btn.type = 'button'
-          btn.innerText = '复制'
-          btn.setAttribute('data-code', code.innerText)
-          pre.appendChild(btn)
-        }
-      }
-    })
-  }
-}
-
-const copyToClipboard = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
-    ElMessage.success({ message: '代码已复制', plain: true })
-  } catch (err) {
-    ElMessage.error({ message: '复制失败，请重试', plain: true })
-  }
-}
-
-const handleMessageClick = (e: MouseEvent) => {
-  const target = e.target as HTMLElement
-  if (target && target.classList.contains('copy-code-btn')) {
-    const code = target.getAttribute('data-code')
-    if (code) {
-      copyToClipboard(code)
-      const originalText = target.innerText
-      target.innerText = '已复制'
-      target.classList.add('copied')
-      setTimeout(() => {
-        target.innerText = originalText
-        target.classList.remove('copied')
-      }, 2000)
-    }
-  }
-}
-
-onMounted(performHighlight)
-watch(content, performHighlight)
 </script>
 
 <style scoped>
@@ -94,11 +40,11 @@ watch(content, performHighlight)
 .markdown-resource {
   min-width: 0;
   width: 100%;
-  --primary: #000000;
+  --primary: #475569; /* Slate 600 */
   --bg: #FFFFFF;
-  --fg: #000000;
-  --border: #E5E7EB;
-  --accent: #000000;
+  --fg: #334155; /* Slate 700 */
+  --border: #E2E8F0;
+  --accent: #6366F1; /* Indigo 500 */
 }
 
 /* 技术框架样式 */
@@ -273,7 +219,7 @@ watch(content, performHighlight)
 .markdown-shell :deep(code) {
   font-family: 'Fira Code', monospace;
   font-size: 0.85em;
-  background: transparent;
+  background: transparent !important;
   padding: 0;
 }
 
@@ -360,5 +306,4 @@ watch(content, performHighlight)
   letter-spacing: 1px;
 }
 </style>
-
 

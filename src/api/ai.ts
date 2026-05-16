@@ -29,6 +29,10 @@ export interface StudentProfileData {
   school: string | null
   school_level: string | null
   preferred_language: string | null
+  cognitive_style?: string | null
+  interaction_preference?: string | null
+  practice_ability?: string | null
+  weakness_points?: string[] | null
 }
 
 export interface ProfileOnboardingData {
@@ -45,6 +49,10 @@ export interface ProfileOnboardingUpdate {
   school?: string | null
   school_level?: string | null
   preferred_language?: string | null
+  cognitive_style?: string | null
+  interaction_preference?: string | null
+  practice_ability?: string | null
+  weakness_points?: string[] | null
 }
 
 export interface ProfileOnboardingUpdateResult {

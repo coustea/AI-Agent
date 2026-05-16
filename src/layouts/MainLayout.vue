@@ -84,7 +84,6 @@ import {
   User
 } from '@element-plus/icons-vue'
 import { logout } from '@/api/auth'
-import { getProfileOnboarding } from '@/api/ai'
 import OnboardingDialog from '@/components/OnboardingDialog.vue'
 
 const route = useRoute()

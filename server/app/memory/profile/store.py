@@ -25,16 +25,16 @@ class ProfileStore(BaseStore):
         user_id: int,
         module: str = "mentor",
     ) -> UserProfile:
-        """获取或创建画像。"""
-        async with await self._get_session() as session:
-            stmt = select(UserProfile).where(
-                UserProfile.user_id == user_id,
-                UserProfile.module == module,
-            )
-            existing = (await session.exec(stmt)).first()
-            if existing:
-                return existing
+        """获取或创建画像。
 
+        使用数据库唯一约束处理并发创建冲突：
+        - 先尝试创建，如果违反唯一约束则回滚并查询现有记录
+        - 避免"先查后插"的竞态条件
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        async with await self._get_session() as session:
+            # 先尝试直接创建（乐观策略）
             profile = UserProfile(
                 user_id=user_id,
                 module=module,
@@ -42,9 +42,22 @@ class ProfileStore(BaseStore):
                 profile_score_json=make_default_score_json(),
             )
             session.add(profile)
-            await session.commit()
-            await session.refresh(profile)
-            return profile
+            try:
+                await session.commit()
+                await session.refresh(profile)
+                return profile
+            except IntegrityError:
+                # 唯一约束冲突，说明已存在，回滚并查询
+                await session.rollback()
+                stmt = select(UserProfile).where(
+                    UserProfile.user_id == user_id,
+                    UserProfile.module == module,
+                )
+                existing = (await session.exec(stmt)).first()
+                if existing:
+                    return existing
+                # 如果查询不到，重新抛出异常（不应发生）
+                raise
 
     async def get(self, user_id: int, module: str = "mentor") -> UserProfile | None:
         """获取画像。"""

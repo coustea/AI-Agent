@@ -1,5 +1,3 @@
-import { marked } from 'marked'
-
 export type ResourceArtifactLike = Record<string, any> | string | null | undefined
 
 export function getFileUrl(resultData: ResourceArtifactLike): string {
@@ -50,10 +48,6 @@ export function getMarkdownContent(resultData: ResourceArtifactLike): string {
   )
 }
 
-export function renderMarkdown(text: string): string {
-  return text ? String(marked.parse(text)) : ''
-}
-
 export function parseJsonObject(value: unknown): Record<string, any> | null {
   if (!value) return null
   if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>
@@ -68,14 +62,123 @@ export function parseJsonObject(value: unknown): Record<string, any> | null {
   }
 }
 
+function unwrapMermaidFence(source: string): string {
+  const trimmed = source.trim()
+  const match = trimmed.match(/^```(?:mermaid)?\s*\n([\s\S]*?)\n?```$/i)
+  return match?.[1]?.trim() || trimmed
+}
+
+export function stripUnsupportedSequenceDiagramDirectives(source: string): string {
+  const normalized = source.replace(/\r\n?/g, '\n')
+  const lines = normalized.split('\n')
+  const firstContentLine = lines.find((line) => {
+    const trimmed = line.trim()
+    return trimmed && !trimmed.startsWith('%%')
+  })
+
+  if (!firstContentLine || !/^sequenceDiagram\b/i.test(firstContentLine.trim())) {
+    return source
+  }
+
+  return lines
+    .filter((line) => {
+      const trimmed = line.trim()
+      return !/^(classDef|class|style|linkStyle)\b/i.test(trimmed)
+    })
+    .join('\n')
+    .trim()
+}
+
+export function sanitizeMermaidSource(source: string): string {
+  const body = unwrapMermaidFence(source)
+  return stripUnsupportedSequenceDiagramDirectives(body)
+}
+
+function unwrapResourceArtifact(resultData: ResourceArtifactLike): unknown {
+  if (!resultData || typeof resultData !== 'object' || Array.isArray(resultData)) return resultData
+  return resultData.resource && typeof resultData.resource === 'object'
+    ? resultData.resource
+    : resultData
+}
+
+function ensureOptions(questions: any[]): Record<string, any>[] {
+  if (!Array.isArray(questions)) return []
+  return questions.map(q => {
+    const type = (q.type || q.question_type)?.toLowerCase() || ''
+    if (['true_false', 'truefalse', 'tf'].includes(type) && (!Array.isArray(q.options) || q.options.length === 0)) {
+      return {
+        ...q,
+        options: [
+          { label: 'A', content: '正确' },
+          { label: 'B', content: '错误' }
+        ]
+      }
+    }
+    return q
+  })
+}
+
+function quizQuestionsFromRecord(record: Record<string, any>): Record<string, any>[] {
+  if (Array.isArray(record.questions)) return ensureOptions(record.questions)
+
+  const content = record.content
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    if (Array.isArray(content.questions)) return ensureOptions(content.questions)
+  }
+
+  const parsedContent = parseJsonObject(content)
+  if (parsedContent && Array.isArray(parsedContent.questions)) return ensureOptions(parsedContent.questions)
+
+  const parsedRawJson = parseJsonObject(record.raw_json)
+  if (parsedRawJson && Array.isArray(parsedRawJson.questions)) return ensureOptions(parsedRawJson.questions)
+
+  return []
+}
+
+export function normalizeQuizQuestions(resultData: ResourceArtifactLike): Record<string, any>[] {
+  const unwrapped = unwrapResourceArtifact(resultData)
+  const parsedRoot = parseJsonObject(unwrapped)
+
+  if (parsedRoot) return quizQuestionsFromRecord(parsedRoot)
+  if (unwrapped && typeof unwrapped === 'object' && !Array.isArray(unwrapped)) {
+    return quizQuestionsFromRecord(unwrapped as Record<string, any>)
+  }
+
+  return []
+}
+
 function normalizeReadingCollection(data: Record<string, any>): Record<string, any> | null {
   const collectionKeys = ['resources', 'recommendations', 'items']
   for (const key of collectionKeys) {
     if (Array.isArray(data[key])) {
-      return key === 'resources' ? data : { ...data, resources: data[key] }
+      const resources = flattenReadingResources(data[key])
+      return key === 'resources' ? { ...data, resources } : { ...data, resources }
     }
   }
   return null
+}
+
+function flattenReadingResources(items: unknown[]): unknown[] {
+  const flattened: unknown[] = []
+  for (const item of items) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const record = item as Record<string, any>
+      if (Array.isArray(record.resources)) {
+        flattened.push(...flattenReadingResources(record.resources))
+        continue
+      }
+      if (Array.isArray(record.recommendations)) {
+        flattened.push(...flattenReadingResources(record.recommendations))
+        continue
+      }
+      if (Array.isArray(record.items)) {
+        flattened.push(...flattenReadingResources(record.items))
+        continue
+      }
+    }
+    flattened.push(item)
+  }
+  return flattened
 }
 
 export function normalizeReadingArtifact(resultData: ResourceArtifactLike): Record<string, any> | null {

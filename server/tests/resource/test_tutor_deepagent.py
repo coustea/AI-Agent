@@ -130,7 +130,7 @@ def test_diagram_generate_node_generates_sequence_when_requested():
 
     result = asyncio.run(tutor._diagram_generate_node(state))
 
-    assert tutor.llm_manager.calls[0]["model_type"] == "spark"
+    assert tutor.llm_manager.calls[0]["model_type"] == "spark_max"
     assert tutor.llm_manager.calls[0]["structured_kwargs"]["strict"] is True
     assert "structured_kwargs" not in tutor.llm_manager.calls[1]
     assert result["diagram"]["type"] == "sequence"

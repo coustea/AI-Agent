@@ -129,7 +129,7 @@ class QualityReviewAgent:
         else:
             manager = get_llm_manager()
             response = await manager.ainvoke(
-                "spark_x2_flash",
+                "spark_max",
                 messages,
                 model_kwargs={"temperature": 0.1},
             )

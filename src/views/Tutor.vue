@@ -237,8 +237,13 @@
                   <div
                       v-else
                       class="diagram-svg-container"
-                      v-html="diagramSvgCache.get(msg.diagram.render.source) || ''"
-                  ></div>
+                  >
+                    <MarkdownPreview
+                      class="diagram-markdown-preview"
+                      :id="`chat-diagram-${msg.id}`"
+                      :content="toMermaidMarkdown(msg.diagram.render.source)"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -246,6 +251,7 @@
             <div v-if="showThinkingIndicator" class="message-row ai thinking-row">
               <div class="msg-avatar"><div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div></div>
               <div class="bubble thinking-bubble">
+                <span class="thinking-ring" aria-hidden="true"></span>
                 <div class="typing-dots">
                   <span></span><span></span><span></span>
                 </div>
@@ -565,8 +571,13 @@
           <div
               v-else
               class="preview-svg-container"
-              v-html="diagramSvgCache.get(diagramPreviewData.render.source) || ''"
-          ></div>
+          >
+            <MarkdownPreview
+              class="diagram-markdown-preview"
+              id="diagram-preview-dialog"
+              :content="toMermaidMarkdown(diagramPreviewData.render.source)"
+            />
+          </div>
         </div>
         
         <div class="preview-footer">
@@ -589,10 +600,6 @@ import {
   InfoFilled, Medal, Aim, TrendCharts
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import 'github-markdown-css/github-markdown-light.css'
-// 更换为深色主题以匹配深色代码块
-import 'highlight.js/styles/atom-one-dark.css'
-import mermaid from 'mermaid'
 import { getErrorMessage } from '@/utils/http'
 import TutorMessageContent from '@/components/TutorMessageContent.vue'
 
@@ -600,7 +607,6 @@ import { getProfile } from '@/api/ai'
 import {
   streamChat,
   uploadFile,
-  uploadDiagramImage,
   getSessions,
   createSession,
   deleteSession,
@@ -611,6 +617,7 @@ import {
 import { getMe } from '@/api/auth'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 
 defineOptions({ name: 'Tutor' })
 
@@ -671,12 +678,6 @@ const normalizeDiagramData = (diagram: Record<string, unknown> | null | undefine
 const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
-})
-
 // 状态
 const chatMode = ref('standard')
 const userInput = ref('')
@@ -707,7 +708,6 @@ const {
   isAvatarReady,
   isSpeaking: isAvatarSpeaking,
   isListening: isVadListening,
-  wsUrl: avatarWsUrl,
   audioEnabled: avatarAudioEnabled,
   speechRate: avatarSpeechRate,
   idleCountdown: avatarIdleCountdown,
@@ -888,9 +888,6 @@ let dragInitialX = 0
 let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
-
-let diagramRenderSeq = 0
-const diagramSvgCache = ref<Map<string, string>>(new Map())
 
 const clearAvatarThinkingTimeout = () => {
   if (avatarThinkingTimeout) {
@@ -1177,130 +1174,10 @@ const autoResize = () => {
   }
 }
 
-const renderMermaid = async (source: string): Promise<string> => {
-  try {
-    diagramRenderSeq += 1
-    const { svg } = await mermaid.render(`mermaid-${Date.now()}-${diagramRenderSeq}`, source)
-    return svg
-  } catch {
-    return `<pre class="mermaid-error">图解渲染失败</pre>`
-  }
-}
-
-const svgToPng = (svgString: string): Promise<Blob> => {
-  return new Promise((resolve, reject) => {
-    const tempDiv = document.createElement('div')
-    tempDiv.style.position = 'absolute'
-    tempDiv.style.visibility = 'hidden'
-    tempDiv.style.width = '800px'
-    document.body.appendChild(tempDiv)
-    tempDiv.innerHTML = svgString
-
-    const svgElement = tempDiv.querySelector('svg')
-    if (!svgElement) {
-      document.body.removeChild(tempDiv)
-      reject(new Error('SVG element not found'))
-      return
-    }
-
-    let width = svgElement.clientWidth || svgElement.getBoundingClientRect().width || 600
-    let height = svgElement.clientHeight || svgElement.getBoundingClientRect().height || 400
-
-    const maxWidth = 800
-    const maxHeight = 600
-    if (width > maxWidth) {
-      height = (height * maxWidth) / width
-      width = maxWidth
-    }
-    if (height > maxHeight) {
-      width = (width * maxHeight) / height
-      height = maxHeight
-    }
-
-    document.body.removeChild(tempDiv)
-
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    if (!ctx) {
-      reject(new Error('Canvas context not available'))
-      return
-    }
-
-    canvas.width = width * 2
-    canvas.height = height * 2
-    ctx.scale(2, 2)
-
-    ctx.fillStyle = '#FFFFFF'
-    ctx.fillRect(0, 0, width, height)
-
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
-    const url = URL.createObjectURL(svgBlob)
-
-    const img = new Image()
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, width, height)
-      URL.revokeObjectURL(url)
-
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob)
-        } else {
-          reject(new Error('Canvas toBlob failed'))
-        }
-      }, 'image/png')
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('Image load failed'))
-    }
-    img.src = url
-  })
-}
-
-const uploadDiagramPng = async (sessionId: string, pngBlob: Blob): Promise<string | null> => {
-  try {
-    const res = await uploadDiagramImage(pngBlob, sessionId)
-    return res.data.data?.url || null
-  } catch (err) {
-    console.error('[Diagram] PNG upload failed:', err)
-    return null
-  }
-}
-
-const getDiagramSvg = async (diagram: DiagramData): Promise<string> => {
-  const cacheKey = diagram.render.source
-  if (diagramSvgCache.value.has(cacheKey)) {
-    return diagramSvgCache.value.get(cacheKey)!
-  }
-  let svg = ''
-  try {
-    svg = await renderMermaid(diagram.render.source)
-  } catch (err) {
-    console.warn('[Diagram] Mermaid render failed, fallback to source preview:', err)
-    const escaped = diagram.render.source
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-    svg = `<pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;padding:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">${escaped}</pre>`
-  }
-  diagramSvgCache.value.set(cacheKey, svg)
-  diagramSvgCache.value = new Map(diagramSvgCache.value)
-  scrollToBottom()
-
-  if (currentSessionId.value) {
-    svgToPng(svg)
-        .then((pngBlob) => uploadDiagramPng(currentSessionId.value!, pngBlob))
-        .then((imageUrl) => {
-          if (imageUrl && diagram) {
-            diagram.image_url = imageUrl
-          }
-        })
-        .catch((err) => {
-          console.warn('[Diagram] PNG conversion/upload failed:', err)
-        })
-  }
-
-  return svg
+const toMermaidMarkdown = (source: string | undefined): string => {
+  const trimmed = String(source || '').trim()
+  if (!trimmed) return ''
+  return /^```/.test(trimmed) ? trimmed : `\`\`\`mermaid\n${trimmed}\n\`\`\``
 }
 
 const getPointerPosition = (e: MouseEvent | TouchEvent) => {
@@ -1782,6 +1659,9 @@ const handleSend = async () => {
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
           aiMsg.diagramGenerating = false
+          if (!aiMsg.content.trim() && !aiMsg.diagram) {
+            aiMsg.content = 'AI 响应暂时中断，请稍后重试。'
+          }
         }
         isAIThinking.value = false
         streamingMsgId.value = null
@@ -1866,18 +1746,6 @@ watch(needDiagram, (enabled) => {
     setAvatarNeedDiagram(enabled)
   }
 })
-
-watch(
-    () => messages.value.map(m => m.diagram),
-    (diagrams) => {
-      diagrams.forEach((diagram) => {
-        if (diagram && diagram.render?.source && !diagramSvgCache.value.has(diagram.render.source)) {
-          getDiagramSvg(diagram)
-        }
-      })
-    },
-    { deep: true }
-)
 
 onMounted(async () => {
   fabPos.value = { x: 16, y: window.innerHeight - 150 }
@@ -2280,6 +2148,17 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
+.diagram-svg-container .diagram-markdown-preview,
+.diagram-svg-container :deep(.md-editor-preview),
+.diagram-svg-container :deep(.md-editor-mermaid) {
+  width: 100%;
+}
+
+.diagram-svg-container :deep(.md-editor-mermaid) {
+  display: flex;
+  justify-content: center;
+}
+
 .diagram-svg-container :deep(svg) {
   max-width: 100%;
   height: auto;
@@ -2353,6 +2232,17 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
+.preview-svg-container .diagram-markdown-preview,
+.preview-svg-container :deep(.md-editor-preview),
+.preview-svg-container :deep(.md-editor-mermaid) {
+  width: 100%;
+}
+
+.preview-svg-container :deep(.md-editor-mermaid) {
+  display: flex;
+  justify-content: center;
+}
+
 .preview-svg-container :deep(svg) {
   max-width: 100%;
   height: auto;
@@ -2364,12 +2254,6 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding-top: 12px;
   border-top: 1px solid #F1F5F9;
-}
-
-.mermaid-error {
-  color: #EF4444;
-  font-size: 0.85rem;
-  padding: 8px;
 }
 
 .session-empty {
@@ -2694,11 +2578,12 @@ onBeforeUnmount(() => {
 
 /* 用户气泡：极淡灰蓝色 */
 .message-row.user .bubble {
-  background: #F1F5F9;
+  background: #F8FAFC !important;
   color: #0F172A;
-  border: 1px solid transparent;
+  border: 1px solid #CBD5E1 !important;
   border-radius: 12px;
   border-top-right-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 /* 覆盖用户气泡内的 Markdown 颜色 */
@@ -2915,19 +2800,31 @@ onBeforeUnmount(() => {
 .thinking-bubble {
   background: #FFFFFF !important;
   border: 1px solid #E2E8F0 !important;
-  padding: 12px 16px !important;
+  padding: 10px 14px !important;
   border-radius: 12px !important;
   border-top-left-radius: 4px !important;
   display: flex;
   align-items: center;
+  gap: 10px;
+  min-width: 104px;
   box-shadow: none !important;
+}
+
+.thinking-ring {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #E2E8F0;
+  border-top-color: #64748B;
+  border-radius: 50%;
+  animation: thinkingSpin 0.9s linear infinite;
+  flex-shrink: 0;
 }
 
 .typing-dots {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 20px;
+  gap: 5px;
+  height: 18px;
 }
 
 .typing-dots span {
@@ -2943,8 +2840,14 @@ onBeforeUnmount(() => {
 .typing-dots span:nth-child(3) { animation-delay: 0s; }
 
 @keyframes typingBounce {
-  0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
-  40% { transform: scale(1); opacity: 1; background-color: #64748B; }
+  0%, 80%, 100% { transform: translateY(2px); opacity: 0.45; }
+  40% { transform: translateY(-2px); opacity: 1; background-color: #64748B; }
+}
+
+@keyframes thinkingSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ================= 针对输入框的优化 ================= */
@@ -3847,4 +3750,3 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 </style>
-

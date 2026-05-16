@@ -1,30 +1,20 @@
 <template>
   <div class="tutor-message-content">
-    <template v-for="(block, index) in blocks" :key="`${index}-${block.type}`">
-      <div
-        v-if="block.type === 'markdown'"
-        class="markdown-body tutor-markdown-block"
-        v-html="block.html || ''"
-      ></div>
-      <div
-        v-else
-        class="tutor-code-block"
-        v-html="block.html || ''"
-      ></div>
-    </template>
+    <MarkdownPreview
+      class="tutor-markdown-block"
+      :content="content"
+      :is-streaming="isStreaming"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { parseTutorContentBlocks } from '@/utils/markdown'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 
-const props = defineProps<{
+defineProps<{
   content: string
   isStreaming?: boolean
 }>()
-
-const blocks = computed(() => parseTutorContentBlocks(props.content, { isStreaming: Boolean(props.isStreaming) }))
 </script>
 
 <style scoped>
@@ -34,8 +24,7 @@ const blocks = computed(() => parseTutorContentBlocks(props.content, { isStreami
   gap: 0.85rem;
 }
 
-.tutor-markdown-block,
-.tutor-code-block {
+.tutor-markdown-block {
   min-width: 0;
 }
 </style>

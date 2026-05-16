@@ -24,12 +24,12 @@
 
     <div class="res-body">
       <div class="resource-preview-shell">
-        <MindmapResourceView v-if="agentId === 'mindmap'" :result-data="resultData" compact />
-        <DiagramResourceView v-else-if="agentId === 'diagram'" :result-data="resultData" compact />
-        <QuizResourceView v-else-if="agentId === 'quiz'" :result-data="resultData" compact />
-        <CodeResourceView v-else-if="agentId === 'code'" :result-data="resultData" compact />
-        <ReadingResourceView v-else-if="agentId === 'reading'" :result-data="resultData" compact />
-        <MarkdownResourceView v-else-if="isMarkdownAgent" :result-data="resultData" compact />
+        <MindmapView v-if="agentId === 'mindmap'" :result-data="resultData" compact />
+        <DiagramView v-else-if="agentId === 'diagram'" :result-data="resultData" compact />
+        <QuizView v-else-if="agentId === 'quiz'" :result-data="resultData" compact />
+        <CodeView v-else-if="agentId === 'code'" :result-data="resultData" compact />
+        <ReadingView v-else-if="agentId === 'reading'" :result-data="resultData" compact />
+        <MarkdownView v-else-if="isMarkdownAgent" :result-data="resultData" compact />
         <div v-else-if="agentId === 'ppt'" class="ppt-card-body">
           <div class="ppt-info-row">
             <el-icon class="ppt-file-icon"><DataBoard /></el-icon>
@@ -94,12 +94,12 @@
 import { computed } from 'vue'
 import { DataBoard, Picture, VideoCamera, VideoPlay, Loading } from '@element-plus/icons-vue'
 import { recordLearningEvent } from '@/api/ai'
-import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
-import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
-import QuizResourceView from '@/components/resource/QuizResourceView.vue'
-import DiagramResourceView from '@/components/resource/DiagramResourceView.vue'
-import CodeResourceView from '@/components/resource/CodeResourceView.vue'
-import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
+import MindmapView from '@/components/resource/MindmapView.vue'
+import MarkdownView from '@/components/resource/MarkdownView.vue'
+import QuizView from '@/components/resource/QuizView.vue'
+import DiagramView from '@/components/resource/DiagramView.vue'
+import CodeView from '@/components/resource/CodeView.vue'
+import ReadingView from '@/components/resource/ReadingView.vue'
 import {
   getFileCategory,
   getFileName,

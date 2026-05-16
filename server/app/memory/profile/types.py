@@ -111,4 +111,12 @@ def make_default_score_json() -> dict[str, Any]:
 
 # 首次登录必填字段
 ONBOARDING_REQUIRED_FIELDS = ("education_level", "grade", "major", "courses", "learning_goal")
-ONBOARDING_OPTIONAL_FIELDS = ("school", "school_level", "preferred_language")
+ONBOARDING_OPTIONAL_FIELDS = (
+    "school", 
+    "school_level", 
+    "preferred_language",
+    "cognitive_style",
+    "interaction_preference",
+    "practice_ability",
+    "weakness_points"
+)

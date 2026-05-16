@@ -1,6 +1,6 @@
 <template>
   <div class="reading-resource" :class="{ compact }">
-    <div v-if="readingData" class="technical-frame reading-container">
+    <div v-if="readingData && resources.length" class="technical-frame reading-container">
 
       <div class="frame-header">
         <div class="status-indicator"></div>
@@ -22,17 +22,29 @@
             <span v-if="resource.authors && resource.authors.length">
               <el-icon><User /></el-icon> {{ resource.authors.join(', ') }}
             </span>
+            <span v-if="resource.source">
+              来源 {{ resource.source }}
+            </span>
             <span v-if="resource.difficulty" class="difficulty-tag" :class="resource.difficulty">
               {{ getDifficultyText(resource.difficulty) }}
             </span>
           </div>
-          <div class="reading-reason" v-if="resource.recommend_reason && !compact">
+          <div class="reading-reason" v-if="getRecommendReason(resource) && !compact">
             <div class="reason-label">推荐理由 //</div>
-            {{ resource.recommend_reason }}
+            {{ getRecommendReason(resource) }}
           </div>
-          <div class="reading-desc" v-if="resource.description && !compact">
-            {{ resource.description }}
+          <div class="reading-desc" v-if="getDescription(resource) && !compact">
+            {{ getDescription(resource) }}
           </div>
+          <a
+            v-if="resource.url"
+            class="reading-link"
+            :href="resource.url"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            打开资源
+          </a>
         </article>
       </div>
 
@@ -79,6 +91,14 @@ const visibleResources = computed(() => {
   return props.compact ? resources.value.slice(0, 3) : resources.value
 })
 
+const getRecommendReason = (resource: Record<string, any>) => {
+  return resource.recommend_reason || resource.reason || resource.relevance || ''
+}
+
+const getDescription = (resource: Record<string, any>) => {
+  return resource.description || resource.content || resource.abstract || resource.summary || ''
+}
+
 const getResourceTypeText = (type?: string) => {
   const map: Record<string, string> = {
     book: '书籍',
@@ -105,11 +125,11 @@ const getDifficultyText = (difficulty?: string) => {
 
 .reading-resource {
   width: 100%;
-  --primary: #000000;
+  --primary: #475569; /* Slate 600 */
   --bg: #FFFFFF;
-  --fg: #000000;
-  --border: #E5E7EB;
-  --accent: #000000;
+  --fg: #334155; /* Slate 700 */
+  --border: #E2E8F0;
+  --accent: #6366F1; /* Indigo 500 */
 }
 
 /* 技术框架样式 */
@@ -288,8 +308,8 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .difficulty-tag.basic { color: var(--accent); border-color: var(--accent); }
-.difficulty-tag.medium { color: #000000; border-color: #000000; }
-.difficulty-tag.advanced { color: #000000; border-color: #000000; }
+.difficulty-tag.medium { color: #F59E0B; border-color: #F59E0B; } /* Amber 500 */
+.difficulty-tag.advanced { color: #EF4444; border-color: #EF4444; } /* Red 500 */
 
 .reading-reason {
   font-family: 'Fira Code', monospace;
@@ -316,6 +336,27 @@ const getDifficultyText = (difficulty?: string) => {
   font-size: 0.9rem;
   color: #475569;
   line-height: 1.6;
+}
+
+.reading-link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 14px;
+  padding: 7px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  color: var(--primary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.6px;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.reading-link:hover {
+  background: var(--primary);
+  color: #fff;
 }
 
 .reading-more {

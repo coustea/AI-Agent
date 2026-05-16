@@ -165,12 +165,13 @@ class LlmFactory:
                 **kwargs,
             )
 
-        # spark_x2_flash: 讯飞星火 spark-x2-flash（轻量快速模型，用于标题生成等）
+        # spark_x2_flash: 讯飞星火 generalv3.5（轻量快速模型，用于标题生成等）
+        # 使用标准 /v1 端点，model 名称为 generalv3.5
         if model_type == "spark_x2_flash":
             cls._require_non_empty("SPARK_X2_FLASH_API_PASSWORD", SPARK_X2_FLASH_API_PASSWORD)
             cls._require_non_empty("SPARK_X2_FLASH_API_BASE", SPARK_X2_FLASH_API_BASE)
             return ChatOpenAI(
-                model="spark-x2-flash",
+                model="generalv3.5",
                 api_key=SPARK_X2_FLASH_API_PASSWORD,
                 base_url=cls._openai_base_url(SPARK_X2_FLASH_API_BASE),
                 temperature=temperature,

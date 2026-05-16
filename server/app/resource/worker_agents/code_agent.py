@@ -103,7 +103,7 @@ class CodeAgent:
             )
 
             response = await self.llm_manager.ainvoke(
-                "spark_x",
+                "spark_max",
                 [HumanMessage(content=f"{prompt}\n\n{input_text}")],
                 model_kwargs={
                     "temperature": 0.3,

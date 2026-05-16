@@ -69,6 +69,12 @@ class OnboardingUpdate(BaseModel):
     school: str | None = Field(default=None, max_length=100)
     school_level: str | None = Field(default=None, max_length=100)
     preferred_language: str | None = Field(default=None, max_length=50)
+    
+    # 补充学习偏好维度
+    cognitive_style: str | None = Field(default=None, max_length=100)
+    interaction_preference: str | None = Field(default=None, max_length=100)
+    practice_ability: str | None = Field(default=None, max_length=100)
+    weakness_points: list[str] | None = Field(default=None)
 
     @field_validator("education_level", "grade", "major", "learning_goal")
     @classmethod

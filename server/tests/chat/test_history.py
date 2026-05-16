@@ -30,13 +30,13 @@ class FakeMessage:
 class FakeMemoryLayer:
     calls: list[dict] = []
 
-    def __init__(self, module_name: str) -> None:
-        self.module_name = module_name
+    def __init__(self, *, module: str) -> None:
+        self.module = module
 
     async def list_sessions(self, *, user_id: int, limit: int):
         return [FakeSession(id="s-1")]
 
-    async def list_short_term_messages(self, **kwargs):
+    async def list_messages(self, **kwargs):
         self.calls.append(kwargs)
         return [
             FakeMessage(

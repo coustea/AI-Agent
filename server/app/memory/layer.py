@@ -110,12 +110,21 @@ class MemoryLayer:
         user_id: int,
         session_id: str,
         limit: int = 50,
+        only_unexpired: bool = True,
     ):
-        """获取消息列表。"""
+        """获取消息列表。
+
+        Args:
+            user_id: 用户 ID。
+            session_id: 会话 ID。
+            limit: 返回数量限制。
+            only_unexpired: 是否只返回未过期消息（默认 7 天内）。
+        """
         return await self.message_service.list(
             user_id=user_id,
             session_id=session_id,
             limit=limit,
+            only_unexpired=only_unexpired,
         )
 
     # ------------------------------------------------------------------
@@ -219,6 +228,40 @@ class MemoryLayer:
     # ------------------------------------------------------------------
     # 上下文构建
     # ------------------------------------------------------------------
+
+    async def build_profile_context(self, user_id: int) -> str:
+        """构建用户画像上下文。"""
+        return await self.context_service.build_profile_context(user_id)
+
+    async def build_memory_context(self, user_id: int) -> str:
+        """构建长期记忆上下文。"""
+        return await self.context_service.build_memory_context(user_id)
+
+    def build_file_context(
+        self,
+        image_urls: list[str],
+        file_urls: list[str],
+    ) -> str:
+        """构建附件上下文。"""
+        return self.context_service.build_file_context(image_urls, file_urls)
+
+    async def build_recent_chat_context(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        image_urls: list[str] | None = None,
+        file_urls: list[str] | None = None,
+    ) -> tuple[list[Any], str]:
+        """构建近期对话上下文。"""
+        return await self.context_service.build_recent_chat_context(
+            user_id=user_id,
+            session_id=session_id,
+            user_message=user_message,
+            image_urls=image_urls,
+            file_urls=file_urls,
+        )
 
     async def build_context_preview(
         self,

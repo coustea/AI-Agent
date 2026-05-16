@@ -127,7 +127,7 @@ class ContentAgent:
             # 从讲解文档中提取结构化摘要，供下游 Agent 精准协同；LLM 失败时自动回退本地解析
             summary_data = await build_content_summary_data_with_llm(content, learning_need)
 
-            # 使用 spark-x2-flash 生成摘要
+            # 使用主力模型生成摘要
             llm_summary = await generate_summary_with_llm(content, learning_need)
             summary = llm_summary or f"已生成{summary_data.get('topic') or '学习主题'}讲解文档，包含核心知识点与复习建议"
 

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="elegant-generator-layout">
     <transition name="page-slide" mode="out-in">
 
@@ -82,15 +82,24 @@
 
           <div class="config-section-v2">
             <div class="agent-configs-grid">
-              <div class="config-card-v2" :class="{ disabled: agent.disabled }" v-for="agent in personalizeAgents" :key="agent.id">
+              <div class="config-card-v2" :class="{ disabled: agent.disabled, 'agent-off': !isAgentEnabled(agent.id) && !agent.disabled }" v-for="agent in personalizeAgents" :key="agent.id">
                 <div class="cc-header-v2">
                   <div class="cc-icon-wrap" :class="agent.colorClass">
                     <el-icon><component :is="agent.icon" /></el-icon>
                   </div>
                   <span class="cc-title">{{ agent.name }}</span>
+                  <div class="cc-header-switch">
+                    <el-switch
+                      v-if="!agent.disabled"
+                      :model-value="isAgentEnabled(agent.id)"
+                      @change="toggleAgent(agent.id)"
+                      active-color="#0369A1"
+                    />
+                    <el-tag v-else size="small" type="info">敬请期待</el-tag>
+                  </div>
                 </div>
 
-                <div class="cc-body-v2">
+                <div class="cc-body-v2" :class="{ 'body-disabled': !isAgentEnabled(agent.id) && !agent.disabled }">
                   <template v-if="agent.id === 'content'">
                     <div class="ctrl-group">
                       <label>讲解结构</label>
@@ -188,6 +197,14 @@
                       </el-select>
                     </div>
                     <div class="ctrl-group">
+                      <label>案例难度级别</label>
+                      <el-radio-group v-model="agentConfigs.code.difficulty" size="small" class="custom-radio-group">
+                        <el-radio-button label="beginner">入门</el-radio-button>
+                        <el-radio-button label="intermediate">进阶</el-radio-button>
+                        <el-radio-button label="advanced">挑战</el-radio-button>
+                      </el-radio-group>
+                    </div>
+                    <div class="ctrl-group">
                       <label>案例交付形态</label>
                       <el-radio-group v-model="agentConfigs.code.case_type" size="small" class="custom-radio-group">
                         <el-radio-button label="basic_demo">基础教学</el-radio-button>
@@ -206,6 +223,15 @@
                       </el-radio-group>
                     </div>
                     <div class="ctrl-group">
+                      <label>题型偏好（可多选）</label>
+                      <el-checkbox-group v-model="agentConfigs.quiz.question_types" class="question-type-group">
+                        <el-checkbox label="single">单选题</el-checkbox>
+                        <el-checkbox label="multiple">多选题</el-checkbox>
+                        <el-checkbox label="judge">判断题</el-checkbox>
+                        <el-checkbox label="fill">填空题</el-checkbox>
+                      </el-checkbox-group>
+                    </div>
+                    <div class="ctrl-group">
                       <div class="slider-label-row">
                         <label>生成题目数量</label>
                         <span class="slider-value"><b>{{ agentConfigs.quiz.question_count }}</b> 道</span>
@@ -222,6 +248,14 @@
                         <el-option label="工程化实践 (Engineering)" value="engineering" />
                         <el-option label="前沿学术论文 (Frontier)" value="frontier" />
                       </el-select>
+                    </div>
+                    <div class="ctrl-group">
+                      <label>资料语言偏好</label>
+                      <el-radio-group v-model="agentConfigs.reading.language_preference" size="small" class="custom-radio-group">
+                        <el-radio-button label="chinese">中文优先</el-radio-button>
+                        <el-radio-button label="bilingual">中英双语</el-radio-button>
+                        <el-radio-button label="english">英文原版</el-radio-button>
+                      </el-radio-group>
                     </div>
                     <div class="ctrl-group">
                       <div class="slider-label-row">
@@ -247,29 +281,54 @@
           </div>
 
           <div class="personalize-footer-v2">
-            <el-button plain round size="large" @click="currentPhase = 'input'" class="footer-back-btn">返回修改需求</el-button>
-            <el-button type="primary" round size="large" class="launch-btn-v2" @click="startGeneration">
-              确认配置，启动多智能体加工 <el-icon class="el-icon--right"><VideoPlay /></el-icon>
-            </el-button>
+            <div class="selected-agents-bar">
+              <span class="sab-label">本次将调度 {{ enabledAgentIds.length }} 个智能体：</span>
+              <div class="sab-pills">
+                <el-tag
+                  v-for="id in enabledAgentIds"
+                  :key="id"
+                  size="small"
+                  effect="plain"
+                  round
+                  class="sab-pill"
+                >
+                  <el-icon><component :is="getAgentMeta(id).icon" /></el-icon>
+                  {{ getAgentMeta(id).name }}
+                </el-tag>
+              </div>
+              <span class="sab-hint" v-if="enabledAgentIds.length === MIN_AGENTS">⚠️ 已达最低要求</span>
+            </div>
+            <div class="footer-btns">
+              <el-button plain round size="large" @click="currentPhase = 'input'" class="footer-back-btn">返回修改需求</el-button>
+              <el-button type="primary" round size="large" class="launch-btn-v2" @click="startGeneration">
+                确认配置，启动多智能体加工 <el-icon class="el-icon--right"><VideoPlay /></el-icon>
+              </el-button>
+            </div>
           </div>
         </div>
       </div>
 
       <div v-else-if="currentPhase === 'generating'" class="phase-view generating-view" key="generating">
         <div class="generation-workbench">
-          <section class="workbench-hero" aria-live="polite">
-            <div>
-              <el-tag class="workbench-kicker" effect="plain" round>STREAMING WORKFLOW</el-tag>
-              <h2>多智能体资源生成中</h2>
-              <p>{{ currentMessage || '系统正在建立 SSE 流，准备展示每个子 Agent 的实时动作。' }}</p>
+          <section class="compact-hero-bar" aria-live="polite">
+            <div class="hero-bar-left">
+              <el-tag class="hero-kicker" effect="plain" round>
+                <span class="ping-dot"></span>
+                STREAMING
+              </el-tag>
+              <div class="hero-bar-text">
+                <h2 class="hero-bar-title">多智能体协同生成中</h2>
+                <p class="hero-bar-message">{{ currentMessage || '系统正在建立 SSE 流，准备展示实时动作。' }}</p>
+              </div>
             </div>
-            <div class="progress-panel">
-              <div class="progress-number">{{ totalProgress }}%</div>
-              <el-progress :percentage="totalProgress" :stroke-width="10" :show-text="false" />
-              <div class="progress-metrics">
-                <span><b>当前阶段</b>{{ currentStageLabel }}</span>
-                <span><b>当前 Agent</b>{{ currentAgentLabel }}</span>
-                <span><b>资源完成</b>{{ completedResourceCount }} / {{ expectedResourceCount }}</span>
+            <div class="hero-bar-right">
+              <div class="progress-info-v2">
+                <div class="pi-item"><span>阶段</span><b>{{ currentStageLabel }}</b></div>
+                <div class="pi-item"><span>资源</span><b>{{ completedResourceCount }}/{{ expectedResourceCount }}</b></div>
+              </div>
+              <div class="mini-progress">
+                <el-progress type="dashboard" :percentage="totalProgress" :width="54" :stroke-width="5" color="#0369A1" :show-text="false" />
+                <span class="mini-progress-text">{{ totalProgress }}%</span>
               </div>
             </div>
           </section>
@@ -288,7 +347,7 @@
               <header class="flow-card-header">
                 <div>
                   <span class="layer-index">MULTI-AGENT FLOW</span>
-                  <h3>分层资源生成流水线</h3>
+                  <h3>多智能体实时协同流水线</h3>
                 </div>
                 <el-tag effect="plain">{{ Object.keys(activeAgents).length }} 个 Agent 已被调度</el-tag>
               </header>
@@ -357,189 +416,143 @@
                 </button>
               </div>
             </main>
-
           </div>
 
-          <section class="resource-summary-card interactive-resources-panel">
-            <div class="panel-title">
-              <span>已生成资源</span>
-              <el-tag size="small" effect="plain" round v-if="generatedResources.length">{{ generatedResources.length }} 项可查看</el-tag>
-            </div>
-            <div v-if="generatedResources.length" class="generated-resource-grid">
-              <article
-                v-for="(resource, index) in sortedGeneratedResources"
-                :key="resource.id || resource.type"
-                class="generated-resource-card"
-                :class="getResourceToneClass(resource.type)"
-                :style="getGeneratedCardGridStyle(index, sortedGeneratedResources.length)"
-                role="button"
-                tabindex="0"
-                @click="previewGeneratedResource(resource)"
-                @keydown.enter.prevent="previewGeneratedResource(resource)"
-                @keydown.space.prevent="previewGeneratedResource(resource)"
-              >
-                <div class="resource-card-icon" aria-hidden="true">
-                  <el-icon><component :is="getAgentMeta(resource.type).icon" /></el-icon>
+          <div class="bottom-panels">
+            <section class="compact-resource-panel">
+              <div class="panel-header-minimal">
+                <div class="phm-left">
+                  <el-icon><Collection /></el-icon>
+                  <span>已生成资源</span>
+                  <el-tag size="small" effect="plain" round v-if="generatedResources.length">{{ generatedResources.length }} 项</el-tag>
                 </div>
-                <div class="resource-card-info">
-                  <div class="resource-card-meta-line">
-                    <el-tag size="small" effect="plain" round>{{ getResourceTypeLabel(resource.type) }}</el-tag>
-                    <span>{{ getResourceStageLabel(resource.type) }} · {{ getDefaultResourceFormat(resource.type) }}</span>
+              </div>
+              <div v-if="generatedResources.length" class="generated-resource-row">
+                <article
+                  v-for="resource in sortedGeneratedResources"
+                  :key="resource.id || resource.type"
+                  class="mini-resource-card"
+                  :class="getResourceToneClass(resource.type)"
+                  @click="previewGeneratedResource(resource)"
+                >
+                  <div class="mrc-icon">
+                    <el-icon><component :is="getAgentMeta(resource.type).icon" /></el-icon>
                   </div>
-                  <h4>{{ resource.title || getResourceTypeLabel(resource.type) }}</h4>
-                  <p>{{ stringifyCompact(resource.summary || getResourceUsageHint(resource.type), 84) }}</p>
-                </div>
-                <div class="resource-card-action">
-                  <span>查看详情</span>
-                  <el-icon><Position /></el-icon>
-                </div>
-              </article>
-            </div>
-            <div v-else class="side-empty compact">
-              <el-icon class="empty-icon"><Collection /></el-icon>
-              <span>资源会随着 Agent 完成而逐个出现，完成后可点击查看</span>
-            </div>
-          </section>
-
-          <el-collapse class="workbench-collapse">
-            <el-collapse-item title="MasterAgent 规划历史" name="planning">
-              <div v-if="planningHistory.length" class="planning-history-list">
-                <article v-for="plan in planningHistory" :key="`${plan.layer}-${plan.layer_name}`" class="planning-card">
-                  <h4>{{ plan.layer_name || `Layer ${plan.layer}` }}</h4>
-                  <p>{{ plan.reasoning || 'MasterAgent 已完成本层规划。' }}</p>
-                  <div class="planning-agent-list">
-                    <div v-for="agent in plan.agents || []" :key="agent.agent_id" class="planning-agent-item">
-                      <strong>{{ agent.agent_role || getAgentMeta(agent.agent_id).name }}</strong>
-                      <span>{{ agent.task_description }}</span>
-                      <em>{{ agent.planning_reason }}</em>
-                    </div>
+                  <div class="mrc-info">
+                    <h4>{{ resource.title || getResourceTypeLabel(resource.type) }}</h4>
+                    <span>{{ getResourceStageLabel(resource.type) }}</span>
                   </div>
                 </article>
               </div>
-              <div v-else class="side-empty">等待 MasterAgent 返回规划结果</div>
-            </el-collapse-item>
-          </el-collapse>
+              <div v-else class="side-empty minimal">
+                <span class="loading-dots">等待资源生成中...</span>
+              </div>
+            </section>
+
+            <section class="live-event-timeline">
+              <div class="let-header">
+                <div class="let-title-group">
+                  <span class="let-ping"></span>
+                  <span class="let-title">实时事件流</span>
+                </div>
+                <span class="let-count" v-if="flowEventBubbles.length">{{ flowEventBubbles.length }} 条事件</span>
+              </div>
+              <div class="let-body" v-if="flowEventBubbles.length">
+                <transition-group name="event-slide" tag="div" class="let-list">
+                  <div
+                    v-for="evt in [...flowEventBubbles].reverse().slice(0, 12)"
+                    :key="evt.id"
+                    class="let-row"
+                    :class="`evt-${evt.status}`"
+                  >
+                    <div class="let-dot-col">
+                      <span class="let-dot"></span>
+                      <span class="let-line" v-if="true"></span>
+                    </div>
+                    <div class="let-content">
+                      <div class="let-top">
+                        <span class="let-agent">{{ getAgentMeta(evt.nodeId).name }}</span>
+                        <el-tag size="small" :type="evt.status === 'success' ? 'success' : evt.status === 'failed' ? 'danger' : evt.status === 'running' ? '' : 'info'" effect="plain" class="let-type-tag">
+                          {{ getFlowLogTypeLabel(evt.event_type) }}
+                        </el-tag>
+                        <time class="let-time">{{ formatEventTime(evt.timestamp) }}</time>
+                      </div>
+                      <p class="let-msg">{{ stringifyCompact(evt.message, 100) }}</p>
+                    </div>
+                  </div>
+                </transition-group>
+              </div>
+              <div v-else class="let-empty">
+                <span class="loading-dots">等待智能体事件...</span>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
 
       <div v-else-if="currentPhase === 'result'" class="phase-view results-view result-dashboard-view" key="result">
-        <header class="result-hero-minimal">
-          <div class="hero-content">
-            <div class="hero-status-tag">
+        <header class="result-hero-compact">
+          <div class="hero-content-left">
+            <div class="hero-status-tag-mini success-glow">
               <el-icon><CircleCheckFilled /></el-icon>
-              <span>GEN_COMPLETE</span>
+              <span>已完成</span>
             </div>
-            <h1 class="hero-title">{{ finalBundle?.title || '个性化学习资源已就绪' }}</h1>
+            <h1 class="hero-title-compact">{{ finalBundle?.title || '个性化学习资源已就绪' }}</h1>
+            <p class="hero-subtitle-compact">多智能体协同加工完成，已为您生成专属多模态知识图谱</p>
           </div>
-          <div class="hero-actions">
-            <el-button plain round @click="resetGenerator" class="action-btn">
+          <div class="hero-actions-right">
+            <el-button round size="small" @click="resetGenerator">
               <el-icon><RefreshLeft /></el-icon> 新建任务
             </el-button>
-            <el-button type="primary" round @click="pushToLearningPath" class="action-btn-primary">
-              规划路径 <el-icon class="el-icon--right"><Position /></el-icon>
+            <el-button type="primary" round class="action-btn-premium-mini glow-effect" @click="pushToLearningPath">
+              启动学习路径 <el-icon class="el-icon--right"><Position /></el-icon>
             </el-button>
           </div>
         </header>
 
         <main class="results-body-bento">
-          <section class="bento-stats-row">
-            <div class="stat-pill">
-              <span class="stat-v">{{ resultResources.length }}</span>
-              <span class="stat-l">资源总数</span>
-            </div>
-            <div class="stat-pill">
-              <span class="stat-v">{{ involvedAgentCount }}</span>
-              <span class="stat-l">智能体参与</span>
-            </div>
-            <div class="stat-pill">
-              <span class="stat-v">{{ learningSequenceResources.length }}</span>
-              <span class="stat-l">推荐步骤</span>
-            </div>
-            <div class="stat-pill" v-if="reviewResult">
-              <el-icon class="stat-icon-success"><CircleCheckFilled /></el-icon>
-              <span class="stat-l">质量审查已通过</span>
-            </div>
-          </section>
-
-          <section class="learning-path-timeline">
-            <div class="timeline-header">
-              <div class="timeline-kicker">LEARNING_PATH</div>
-              <h2>智能循序学习路径</h2>
-            </div>
-            <div class="path-track-container">
-              <div v-if="learningSequenceResources.length" class="path-track">
-                <div
-                  v-for="(res, index) in learningSequenceResources"
-                  :key="res.id || `${res.type}-${index}`"
-                  class="path-step"
-                  :class="getResourceToneClass(res.type)"
-                  @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
-                >
-                  <div class="step-icon-wrap">
+          <div class="bento-grid-container">
+            <div class="premium-resource-grid">
+              <article
+                v-for="(res, index) in resultResources"
+                :key="res.id || res.title"
+                class="premium-res-card"
+                :class="getResourceToneClass(res.type)"
+                :style="{...getBentoCardGridStyle(index, resultResources.length), animationDelay: `${index * 0.08}s`}"
+                @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
+              >
+                <div class="card-bg-glow"></div>
+                <div class="card-header">
+                  <div class="type-icon-box">
                     <el-icon><component :is="getAgentMeta(res.type).icon" /></el-icon>
-                    <span class="step-number">{{ index + 1 }}</span>
                   </div>
-                  <div class="step-info">
-                    <span class="step-type">{{ getResourceTypeLabel(res.type) }}</span>
-                    <span class="step-name">{{ stringifyCompact(res.title || getResourceUsageHint(res.type), 18) }}</span>
+                  <div class="type-info">
+                    <span class="type-label">{{ getResourceTypeLabel(res.type) }}</span>
+                    <span class="format-tag">{{ res.format || getDefaultResourceFormat(res.type) }}</span>
                   </div>
                 </div>
-              </div>
+
+                <div class="card-body">
+                  <h4 class="card-title">{{ formatBentoTitle(res.title, res.type) }}</h4>
+                  <p class="card-summary">{{ stringifyCompact(res.summary || getResourceUsageHint(res.type), 100) }}</p>
+                  
+                  <div class="card-metrics-modern">
+                    <div class="metric-badge">
+                      <el-icon><Odometer /></el-icon> {{ getDifficultyLabel(res.metadata?.difficulty) }}
+                    </div>
+                    <div class="metric-badge">
+                      <el-icon><Clock /></el-icon> {{ res.metadata?.estimated_time || getEstimatedTime(res.type) }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card-footer">
+                  <button class="modern-text-btn">
+                    查看详情 <span>&rarr;</span>
+                  </button>
+                </div>
+              </article>
             </div>
-          </section>
-
-          <div class="bento-grid-container">
-            <section v-for="group in groupedResultResources" :key="group.key" class="bento-group">
-              <div class="group-header">
-                <span class="group-badge">{{ group.badge }}</span>
-                <h3>{{ group.label }}</h3>
-              </div>
-
-              <div class="bento-resource-grid">
-                <article
-                  v-for="(res, index) in group.resources"
-                  :key="res.id || res.title"
-                  class="bento-res-card"
-                  :class="getResourceToneClass(res.type)"
-                  :style="getBentoCardGridStyle(index, group.resources.length)"
-                >
-                  <div class="card-header">
-                    <div class="type-icon-box">
-                      <el-icon><component :is="getAgentMeta(res.type).icon" /></el-icon>
-                    </div>
-                    <div class="type-info">
-                      <span class="type-label">{{ getResourceTypeLabel(res.type) }}</span>
-                      <span class="format-tag">{{ res.format || getDefaultResourceFormat(res.type) }}</span>
-                    </div>
-                  </div>
-
-                  <div class="card-body">
-                    <h4 class="card-title">{{ formatBentoTitle(res.title, res.type) }}</h4>
-                    <p class="card-summary">{{ stringifyCompact(res.summary || getResourceUsageHint(res.type), 100) }}</p>
-                    
-                    <div class="card-metrics">
-                      <div class="metric-item">
-                        <span class="m-l">难度</span>
-                        <span class="m-v">{{ getDifficultyLabel(res.metadata?.difficulty) }}</span>
-                      </div>
-                      <div class="metric-item">
-                        <span class="m-l">预计</span>
-                        <span class="m-v">{{ res.metadata?.estimated_time || getEstimatedTime(res.type) }}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="card-footer">
-                    <el-button type="primary" link @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })">
-                      查看详情 <el-icon class="el-icon--right"><Position /></el-icon>
-                    </el-button>
-                    <div class="card-actions-hover">
-                      <el-button circle size="small" @click="pushToLearningPath"><el-icon><Position /></el-icon></el-button>
-                    </div>
-                  </div>
-                </article>
-              </div>
-            </section>
           </div>
         </main>
       </div>
@@ -617,12 +630,12 @@
 
     <el-dialog v-model="previewVisible" :title="previewData?.title || '资源预览'" width="78%" top="6vh" destroy-on-close class="elegant-dialog">
       <div v-if="previewData" class="preview-dialog-body">
-        <MindmapResourceView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
-        <QuizResourceView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
-        <DiagramResourceView v-else-if="previewData.agentId === 'diagram'" :result-data="previewData.resultData" />
-        <CodeResourceView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
-        <ReadingResourceView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
-        <MarkdownResourceView v-else :result-data="previewData.resultData" />
+        <MindmapView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
+        <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
+        <DiagramView v-else-if="previewData.agentId === 'diagram'" :result-data="previewData.resultData" />
+        <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
+        <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
+        <MarkdownView v-else :result-data="previewData.resultData" />
       </div>
     </el-dialog>
   </div>
@@ -635,15 +648,16 @@ import { ElMessage } from 'element-plus'
 import {
   MagicStick, ArrowRight, Cpu,
   CircleCheckFilled, RefreshLeft, Position, VideoPlay,
-  Document, Share, Monitor, Edit, Collection
+  Document, Share, Monitor, Edit, Collection,
+  Clock, Odometer
 } from '@element-plus/icons-vue'
 
-import MindmapResourceView from '@/components/resource/MindmapResourceView.vue'
-import MarkdownResourceView from '@/components/resource/MarkdownResourceView.vue'
-import QuizResourceView from '@/components/resource/QuizResourceView.vue'
-import DiagramResourceView from '@/components/resource/DiagramResourceView.vue'
-import CodeResourceView from '@/components/resource/CodeResourceView.vue'
-import ReadingResourceView from '@/components/resource/ReadingResourceView.vue'
+import MindmapView from '@/components/resource/MindmapView.vue'
+import MarkdownView from '@/components/resource/MarkdownView.vue'
+import QuizView from '@/components/resource/QuizView.vue'
+import DiagramView from '@/components/resource/DiagramView.vue'
+import CodeView from '@/components/resource/CodeView.vue'
+import ReadingView from '@/components/resource/ReadingView.vue'
 
 import { generateResources, type ResourceAgentId, type LearningScenario, type ResourceGenerateEvent } from '@/api/resource'
 
@@ -759,7 +773,7 @@ const quickPrompts = [
 ]
 
 const agentMetaList = [
-  { id: 'master', name: 'MasterAgent', icon: Cpu, colorClass: 'text-blue' },
+  { id: 'master', name: '多智能体调度', icon: Cpu, colorClass: 'text-blue' },
   { id: 'reviewer', name: '资源审查', icon: CircleCheckFilled, colorClass: 'text-emerald' },
   { id: 'assembler', name: '资源组装', icon: Position, colorClass: 'text-indigo' },
   { id: 'content', name: '核心知识讲解', icon: Document, colorClass: 'text-blue' },
@@ -772,9 +786,26 @@ const agentMetaList = [
 ]
 
 const getAgentMeta = (id: string) => agentMetaList.find(a => a.id === id) || { name: id, icon: Document, colorClass: 'text-blue' }
-const enabledAgentIds = computed<ResourceAgentId[]>(() => ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading'])
+const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading'])
 
-const personalizeAgents = computed(() => agentMetaList.filter(agent => enabledAgentIds.value.includes(agent.id as ResourceAgentId) || agent.id === 'video'))
+const isAgentEnabled = (id: string) => enabledAgentIds.value.includes(id as ResourceAgentId)
+
+const MIN_AGENTS = 3
+
+const toggleAgent = (id: string) => {
+  const idx = enabledAgentIds.value.indexOf(id as ResourceAgentId)
+  if (idx >= 0) {
+    if (enabledAgentIds.value.length <= MIN_AGENTS) {
+      ElMessage.warning({ message: `至少需要保留 ${MIN_AGENTS} 个智能体才能生成有效的个性化学习资源`, plain: true })
+      return
+    }
+    enabledAgentIds.value.splice(idx, 1)
+  } else {
+    enabledAgentIds.value.push(id as ResourceAgentId)
+  }
+}
+
+const personalizeAgents = computed(() => agentMetaList.filter(agent => !['master', 'reviewer', 'assembler'].includes(agent.id)))
 
 const getScenarioDesc = (scenario: string) => {
   const descMap: Record<string, string> = {
@@ -791,7 +822,7 @@ const agentConfigs = reactive({
   content: { structure: 'progressive' as const, include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage' as const, depth_level: 'standard' as const },
   mindmap: { map_type: 'knowledge_tree' as const, max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
   diagram: { diagram_type: 'auto' as const, visual_style: 'minimal' as const, highlight_mode: 'key_points' as const, detail_level: 'standard' as const },
-  quiz: { question_count: 5, difficulty_mode: 'adaptive' as const, weak_point_weight: 50, exam_style: 'school' as const, include_analysis: true },
+  quiz: { question_count: 5, difficulty_mode: 'adaptive' as const, weak_point_weight: 50, exam_style: 'school' as const, include_analysis: true, question_types: ['single', 'multiple', 'judge'] as string[] },
   code: { programming_language: 'python' as const, case_type: 'basic_demo' as const, comment_level: 'standard' as const, include_test: false, difficulty: 'beginner' as const },
   reading: { reading_depth: 'course_extended' as const, max_items: 3, resource_quality: 'balanced' as const, include_practice: false, language_preference: 'chinese' as const },
   video: { script_style: 'concept_animation', estimated_duration: 3 },
@@ -832,7 +863,7 @@ const resourceDisplayCounter = ref(0)
 const USE_FIXED_RESULT_PAGE = false
 
 const createWorkflowStages = (): WorkflowStage[] => [
-  { key: 'planning', label: 'MasterAgent 规划', status: 'pending' },
+  { key: 'planning', label: '多智能体调度', status: 'pending' },
   { key: 'layer_0', label: '认知建构层', status: 'pending' },
   { key: 'layer_1', label: '实践拓展层', status: 'pending' },
   { key: 'layer_2', label: '检测巩固层', status: 'pending' },
@@ -877,18 +908,14 @@ const currentStageLabel = computed(() => {
   return running?.label || latestSuccess?.label || '等待任务创建'
 })
 
-const currentAgentLabel = computed(() => {
-  const agent = focusedAgent.value
-  if (!agent) return '等待调度'
-  return agent.agent_role || getAgentMeta(agent.id).name
-})
 
 const completedResourceCount = computed(() => generatedResources.value.length)
 const expectedResourceCount = computed(() => Math.max(Object.keys(activeAgents).length, enabledAgentIds.value.length))
 
 const DEFAULT_RESOURCE_SEQUENCE = ['content', 'mindmap', 'diagram', 'code', 'quiz', 'reading', 'video']
 
-const flowAgentPhases = [
+// 每个 agent 属于哪个「阶段层」及在流图中的 x 坐标（固定）
+const PHASE_LAYOUT: { x: number; agents: string[] }[] = [
   { x: 28, agents: ['content', 'mindmap'] },
   { x: 52, agents: ['diagram', 'code', 'quiz'] },
   { x: 72, agents: ['reading'] },
@@ -903,11 +930,20 @@ const flowAgentMeta: Record<string, { label: string; icon: any }> = {
   reading: { label: '拓展阅读', icon: Collection },
 }
 
+// 动态只保留已启用 agent 所在的 phase
+const flowAgentPhases = computed(() =>
+  PHASE_LAYOUT.map(p => ({
+    x: p.x,
+    agents: p.agents.filter(id => enabledAgentIds.value.includes(id as ResourceAgentId)),
+  })).filter(p => p.agents.length > 0)
+)
+
 const fixedFlowNodes = [
-  { id: 'master', label: 'MasterAgent', x: 8, y: 50, icon: Cpu },
+  { id: 'master', label: '多智能体调度', x: 8, y: 50, icon: Cpu },
 ]
 
-const rawFlowEdges = [
+// 所有可能的有向边（含 reviewer / assembler）
+const ALL_FLOW_EDGES: [string, string][] = [
   ['master', 'content'],
   ['master', 'mindmap'],
   ['content', 'diagram'],
@@ -925,6 +961,13 @@ const rawFlowEdges = [
   ['quiz', 'reviewer'],
   ['reviewer', 'assembler'],
 ]
+
+// 动态过滤：只保留两端节点均在本次启用列表（或 master/reviewer/assembler）中的边
+const systemNodes = new Set(['master', 'reviewer', 'assembler'])
+const activeFlowEdges = computed(() => {
+  const enabled = new Set([...enabledAgentIds.value, ...systemNodes])
+  return ALL_FLOW_EDGES.filter(([from, to]) => enabled.has(from) && enabled.has(to))
+})
 
 const getDistributedY = (index: number, total: number) => {
   if (total <= 1) return 50
@@ -964,7 +1007,7 @@ const sortAgentIdsByRuntime = (agentIds: string[]) => [...agentIds].sort((a, b) 
 
 const flowNodeDefinitions = computed(() => {
   const nodes = [...fixedFlowNodes]
-  flowAgentPhases.forEach((phase) => {
+  flowAgentPhases.value.forEach((phase) => {
     const sortedAgents = sortAgentIdsByRuntime(phase.agents)
     sortedAgents.forEach((agentId, index) => {
       const meta = flowAgentMeta[agentId]
@@ -990,7 +1033,7 @@ const flowNodes = computed(() => flowNodeDefinitions.value.map(node => ({
   status: getFlowNodeStatus(node.id),
 })))
 
-const flowConnections = computed(() => rawFlowEdges.map(([from, to]) => {
+const flowConnections = computed(() => activeFlowEdges.value.map(([from, to]) => {
   const source = flowNodes.value.find(node => node.id === from)
   const target = flowNodes.value.find(node => node.id === to)
   const sourceStatus = source?.status || 'pending'
@@ -1022,6 +1065,7 @@ const resultTopicSummary = computed(() => (
   finalBundle.value?.topic
   || finalBundle.value?.metadata?.topic
   || finalBundle.value?.metadata?.course
+  || finalBundle.value?.learning_need
   || stringifyCompact(naturalInput.value, 42)
   || '本次个性化学习任务'
 ))
@@ -1031,33 +1075,12 @@ const resultNeedSummary = computed(() => (
   || finalBundle.value?.metadata?.gap
   || finalBundle.value?.metadata?.learning_need
   || finalBundle.value?.metadata?.weak_points
+  || finalBundle.value?.learning_need
   || stringifyCompact(naturalInput.value, 86)
   || '系统已根据你的输入生成学习资源。'
 ))
 
-const involvedAgentCount = computed(() => new Set(resultResources.value.map(resource => resource.type).filter(Boolean)).size)
 
-const learningSequenceResources = computed(() => {
-  const resourceMap = new Map<string, any>()
-  resultResources.value.forEach((resource) => {
-    if (resource?.type && !resourceMap.has(resource.type)) resourceMap.set(resource.type, resource)
-  })
-  return [...resourceMap.values()].sort((a, b) => getLearningResourceOrder(a) - getLearningResourceOrder(b))
-})
-
-const findGeneratedResourcePeer = (resource: any) => generatedResources.value.find(item => (
-  item.id === resource?.id || (item.type === resource?.type && item.title === resource?.title)
-))
-
-const getLearningResourceOrder = (resource: any) => {
-  const runtimeOrder = activeAgents[resource?.type]?.displayOrder
-  if (typeof runtimeOrder === 'number') return runtimeOrder
-
-  const generatedPeer = findGeneratedResourcePeer(resource)
-  if (typeof generatedPeer?.displayOrder === 'number') return generatedPeer.displayOrder
-
-  return 1000 + getDefaultResourceIndex(resource?.type)
-}
 
 const getResourceTypeLabel = (type: string) => {
   const labelMap: Record<string, string> = {
@@ -1160,20 +1183,6 @@ const sortedGeneratedResources = computed(() => {
   })
 })
 
-const getGeneratedCardGridStyle = (index: number, total: number) => {
-  const baseCols = 4
-  const totalRows = Math.ceil(total / baseCols)
-  const rowIndex = Math.floor(index / baseCols)
-  const isLastRow = rowIndex === totalRows - 1
-  if (!isLastRow) return {}
-
-  const remainder = total % baseCols
-  if (remainder === 0) return {}
-
-  const spanMap: Record<number, number> = { 1: 12, 2: 6, 3: 4 }
-  return { gridColumn: `span ${spanMap[remainder] || 3}` }
-}
-
 const getBentoCardGridStyle = (index: number, total: number) => {
   const baseCols = 4
   const totalRows = Math.ceil(total / baseCols)
@@ -1197,19 +1206,6 @@ const previewGeneratedResource = (resource: any) => {
   })
 }
 
-const groupedResultResources = computed(() => {
-  const groups = [
-    { key: 'basic', badge: 'FOUNDATION', label: '基础理解类', description: '用于快速建立概念理解、知识结构和核心关系。', types: ['content', 'mindmap', 'diagram'], resources: [] as any[] },
-    { key: 'practice', badge: 'PRACTICE', label: '实践拓展类', description: '用于通过代码、案例和延伸阅读加深掌握。', types: ['code', 'reading', 'video'], resources: [] as any[] },
-    { key: 'assessment', badge: 'ASSESSMENT', label: '检测巩固类', description: '用于检验掌握程度，发现仍然薄弱的知识点。', types: ['quiz'], resources: [] as any[] },
-  ]
-  resultResources.value.forEach((resource) => {
-    const group = groups.find(item => item.types.includes(resource.type)) ?? groups[0]!
-    group.resources.push(resource)
-  })
-  return groups
-})
-
 const startGeneration = async () => {
   if (USE_FIXED_RESULT_PAGE) {
     applyFixedResultPage()
@@ -1220,11 +1216,13 @@ const startGeneration = async () => {
   isGenerating.value = true
   currentMessage.value = '正在将配置参数发送至后端资源生成工作流…'
 
+  // 仅发送后端 schema 中允许的字段（question_types 是纯前端 UI 状态，不传后端）
+  const { question_types: _qt, ...quizConfig } = agentConfigs.quiz
   const requestAgentConfigs = {
     content: agentConfigs.content,
     mindmap: agentConfigs.mindmap,
     diagram: agentConfigs.diagram,
-    quiz: agentConfigs.quiz,
+    quiz: quizConfig,
     code: agentConfigs.code,
     reading: agentConfigs.reading,
   }
@@ -1233,7 +1231,7 @@ const startGeneration = async () => {
     {
       learning_need: naturalInput.value,
       learning_scenario: learningScenario.value,
-      selected_agents: enabledAgentIds.value.map((id, index) => ({ agent_id: id, enabled: true, priority: index })),
+      selected_agents: enabledAgentIds.value.map((id, index) => ({ agent_id: id, enabled: true, priority: index })).filter(a => a.enabled),
       agent_configs: requestAgentConfigs,
       output_options: { output_format: 'json' }
     },
@@ -1369,7 +1367,6 @@ const resetGenerationState = () => {
   reviewResult.value = null
   finalBundle.value = null
   profileSummary.value = null
-  planningHistory.value = []
   generationError.value = null
   focusedAgentId.value = null
   agentDetailVisible.value = false
@@ -1706,7 +1703,7 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
   const suffixPattern = /\s*[-－—]\s*(内容讲解|思维导图|知识图解|代码实操案例|拓展阅读|自测题)\s*$/
   const matched = raw.match(suffixPattern)
   if (!matched) return raw
-  const suffix = matched[1]
+  const suffix = matched[1] || ''
   const prefix = raw.replace(suffixPattern, '').trim()
   return prefix ? `${prefix}\n- ${suffix}` : suffix
 }
@@ -1836,7 +1833,7 @@ const handlePreview = (data: any) => {
 
 <style scoped>
 /* ================= 全局布局与转场 ================= */
-.elegant-generator-layout { width: 100%; height: calc(100vh - 64px); background: #FAFAFA; font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif; overflow-x: hidden; position: relative; }
+.elegant-generator-layout { width: 100%; height: calc(100vh - 64px); background: #FAFAFA; font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif; overflow-x: hidden; position: relative; padding-top: 20px; }
 .phase-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; background: transparent; }
 .page-slide-enter-active, .page-slide-leave-active { transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
@@ -1957,6 +1954,15 @@ const handlePreview = (data: any) => {
 .cc-icon-wrap.text-indigo { background: #EEF2FF; color: #6366F1; }
 .cc-icon-wrap.text-slate { background: #F1F5F9; color: #475569; }
 .config-card-v2.disabled { opacity: 0.74; background: #F8FAFC; }
+.config-card-v2.agent-off { border-color: #E2E8F0; opacity: 0.85; }
+.cc-header-v2 { padding: 24px 24px 16px; display: flex; align-items: center; gap: 12px; }
+.cc-header-switch { margin-left: auto; flex-shrink: 0; }
+.cc-body-v2.body-disabled { opacity: 0.38; pointer-events: none; filter: grayscale(60%); }
+.question-type-group { display: flex; gap: 10px; flex-wrap: wrap; }
+.question-type-group :deep(.el-checkbox) { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 6px 12px; margin: 0; transition: all 0.2s ease; }
+.question-type-group :deep(.el-checkbox.is-checked) { background: #EFF6FF; border-color: #93C5FD; }
+.question-type-group :deep(.el-checkbox__label) { font-size: 0.88rem; font-weight: 600; color: #334155; }
+.question-type-group :deep(.el-checkbox.is-checked .el-checkbox__label) { color: #1D4ED8; }
 .coming-soon-panel { min-height: 128px; border: 1px dashed #CBD5E1; border-radius: 16px; background: #FFFFFF; display: flex; align-items: center; gap: 14px; padding: 20px; color: #475569; }
 .coming-soon-panel .el-icon { width: 42px; height: 42px; border-radius: 14px; background: #F1F5F9; color: #334155; font-size: 1.3rem; flex: 0 0 auto; }
 .coming-soon-panel div { display: flex; flex-direction: column; gap: 6px; }
@@ -1981,7 +1987,13 @@ const handlePreview = (data: any) => {
 .slider-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: -4px; }
 .slider-value { font-size: 0.9rem; color: #3B82F6; font-weight: 700; }
 .custom-slider-v2 { padding: 0 8px; }
-.personalize-footer-v2 { display: flex; justify-content: center; gap: 24px; margin-top: 16px; padding-bottom: 40px; }
+.personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: 20px; margin-top: 16px; padding-bottom: 40px; }
+.footer-btns { display: flex; justify-content: center; gap: 24px; }
+.selected-agents-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; background: rgba(255,255,255,0.75); backdrop-filter: blur(12px); border: 1px solid #E2E8F0; border-radius: 16px; padding: 12px 20px; max-width: 860px; }
+.sab-label { font-size: 0.85rem; color: #64748B; font-weight: 700; white-space: nowrap; }
+.sab-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.sab-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 0.82rem; font-weight: 600; cursor: default; }
+.sab-hint { font-size: 0.78rem; color: #D97706; font-weight: 700; }
 .footer-back-btn { font-weight: 700; color: #64748B; border: 1px solid #E2E8F0; }
 .launch-btn-v2 { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; padding: 0 40px; background: #0369A1 !important; border: none; box-shadow: 0 10px 25px -5px rgba(3, 105, 161, 0.4); transition: transform 0.3s ease, box-shadow 0.3s ease; }
 .launch-btn-v2:hover { transform: translateY(-3px); box-shadow: 0 15px 30px -5px rgba(3, 105, 161, 0.5); }
@@ -2135,86 +2147,339 @@ const handlePreview = (data: any) => {
 .resource-status-item p { margin: 0; color: #64748B; line-height: 1.5; overflow-wrap: anywhere; }
 .side-empty.compact { padding: 14px; }
 
-/* ================= Phase 4: Results View (Bento Grid) ================= */
-.results-view { background: #FCFDFE; overflow-y: auto; padding-bottom: 60px; }
-.result-hero-minimal { padding: 32px 48px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
-.hero-content { display: flex; flex-direction: column; gap: 12px; }
-.hero-status-tag { display: inline-flex; align-items: center; gap: 6px; background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; width: max-content; }
-.hero-title { margin: 0; font-size: 2rem; font-weight: 850; color: #0F172A; letter-spacing: -0.02em; }
-.hero-context-pills { display: flex; gap: 12px; flex-wrap: wrap; }
-.context-pill { display: flex; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 6px 12px; font-size: 0.85rem; }
-.pill-label { color: #64748B; font-weight: 800; margin-right: 8px; }
-.pill-value { color: #0F172A; font-weight: 600; }
-.hero-actions { display: flex; gap: 16px; align-items: center; }
-.action-btn { font-weight: 700; }
-.action-btn-primary { font-weight: 800; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2); }
-.results-body-bento { max-width: 1440px; margin: 0 auto; padding: 32px 48px; display: flex; flex-direction: column; gap: 32px; }
-.bento-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.stat-pill { background: #FFFFFF; border: 1px solid rgba(15, 23, 42, 0.04); border-radius: 20px; padding: 28px 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.02), 0 2px 8px -2px rgba(15, 23, 42, 0.02); transition: transform 0.3s ease, box-shadow 0.3s ease; }
-.stat-pill:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.06); }
-.stat-v { font-size: 2.8rem; font-weight: 800; color: #0F172A; line-height: 1.1; letter-spacing: -0.04em; font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
-.stat-l { font-size: 0.85rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 8px; }
-.stat-icon-success { font-size: 2.5rem; color: #10B981; margin-bottom: 8px; }
-.learning-path-timeline { margin: 16px 0 24px; background: transparent; border: none; border-radius: 24px; padding: 16px 0 0 0; box-shadow: none; }
-.timeline-header { margin-bottom: 24px; }
-.timeline-kicker { font-size: 0.78rem; font-weight: 800; color: #3B82F6; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
-.timeline-header h2 { margin: 0; font-size: 1.6rem; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; }
-.path-track-container { overflow-x: auto; overflow-y: visible; padding: 6px 0 10px; }
-.path-track { display: flex; gap: 16px; min-width: max-content; padding-top: 4px; }
-.path-step { display: flex; align-items: center; gap: 16px; background: #FFFFFF; border: 1px solid rgba(15, 23, 42, 0.05); border-radius: 18px; padding: 18px 22px; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; min-width: 280px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.02); }
-.path-step:hover { transform: translateY(-2px); border-color: rgba(59, 130, 246, 0.3); box-shadow: 0 12px 28px -6px rgba(59, 130, 246, 0.12); }
-.step-icon-wrap { width: 48px; height: 48px; border-radius: 14px; background: #F8FAFC; border: 1px solid rgba(15, 23, 42, 0.04); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; position: relative; box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04); }
-.step-number { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #1E293B; color: #FFFFFF; font-size: 0.7rem; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #FFFFFF; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15); }
-.step-info { display: flex; flex-direction: column; }
-.step-type { font-size: 0.8rem; font-weight: 600; color: #64748B; letter-spacing: 0.02em; }
-.step-name { font-size: 0.98rem; font-weight: 700; color: #0F172A; line-height: 1.4; }
-.bento-grid-container { display: flex; flex-direction: column; gap: 32px; }
-.bento-group { display: flex; flex-direction: column; gap: 16px; }
-.group-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-.group-badge { background: rgba(15, 23, 42, 0.05); color: #334155; border: 1px solid rgba(15, 23, 42, 0.06); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; padding: 4px 10px; border-radius: 6px; }
-.group-header h3 { margin: 0; font-size: 1.25rem; font-weight: 700; color: #0F172A; letter-spacing: -0.01em; }
-.bento-resource-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
-.bento-resource-grid { align-items: start; }
-.bento-res-card { grid-column: span 3; background: #FFFFFF; border: 1px solid rgba(15, 23, 42, 0.05); border-radius: 24px; padding: 26px; display: flex; flex-direction: column; gap: 16px; position: relative; overflow: hidden; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 2px 10px rgba(15, 23, 42, 0.015); cursor: pointer; outline: none; }
-.bento-res-card:hover, .bento-res-card:focus-visible { transform: translateY(-4px) scale(1.005); border-color: rgba(15, 23, 42, 0.1); box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.06), 0 4px 12px -4px rgba(15, 23, 42, 0.03); }
-.card-header { display: flex; align-items: center; gap: 12px; }
-.type-icon-box { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; background: rgba(15, 23, 42, 0.03); border: 1px solid rgba(15, 23, 42, 0.04); }
-.type-info { display: flex; flex-direction: column; }
-.type-label { font-size: 0.9rem; font-weight: 800; color: #0F172A; }
-.format-tag { font-size: 0.75rem; font-weight: 600; color: #64748B; }
-.card-body { display: flex; flex-direction: column; gap: 8px; }
-.card-title { margin: 0; font-size: 1.1rem; font-weight: 700; color: #0F172A; line-height: 1.4; letter-spacing: -0.01em; }
-.card-title { white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.card-summary { margin: 0; font-size: 0.9rem; color: #64748B; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.card-metrics { display: flex; gap: 16px; margin-top: 8px; }
-.metric-item { background: #F8FAFC; border: 1px solid rgba(15, 23, 42, 0.03); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; }
-.m-l { font-size: 0.7rem; color: #94A3B8; font-weight: 600; }
-.m-v { font-size: 0.85rem; color: #1E293B; font-weight: 700; }
-.card-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(15, 23, 42, 0.04); padding-top: 16px; }
-.card-actions-hover { opacity: 0; transition: opacity 0.2s ease; }
-.bento-res-card:hover .card-actions-hover, .bento-res-card:focus-visible .card-actions-hover { opacity: 1; }
-.bento-res-card.tone-blue .type-icon-box { color: #2563EB; }
-.bento-res-card.tone-purple .type-icon-box { color: #7C3AED; }
-.bento-res-card.tone-amber .type-icon-box { color: #D97706; }
-.bento-res-card.tone-rose .type-icon-box { color: #E11D48; }
-.bento-res-card.tone-emerald .type-icon-box { color: #059669; }
-.bento-res-card.tone-indigo .type-icon-box { color: #6366F1; }
-.bento-res-card.tone-slate .type-icon-box { color: #475569; }
-.bento-res-card .type-icon-box { background: rgba(15, 23, 42, 0.03) !important; border: 1px solid rgba(15, 23, 42, 0.04); }
-.bento-res-card.tone-blue:hover { border-color: #3B82F6; }
-.bento-res-card.tone-purple:hover { border-color: #8B5CF6; }
-.bento-res-card.tone-amber:hover { border-color: #F59E0B; }
-.bento-res-card.tone-rose:hover { border-color: #E11D48; }
-.bento-res-card.tone-emerald:hover { border-color: #10B981; }
-.bento-res-card.tone-indigo:hover { border-color: #6366F1; }
-.bento-res-card.tone-slate:hover { border-color: #64748B; }
-.path-step.tone-blue .step-icon-wrap { color: #3B82F6; }
-.path-step.tone-purple .step-icon-wrap { color: #8B5CF6; }
-.path-step.tone-amber .step-icon-wrap { color: #F59E0B; }
-.path-step.tone-rose .step-icon-wrap { color: #E11D48; }
-.path-step.tone-emerald .step-icon-wrap { color: #10B981; }
-.path-step.tone-indigo .step-icon-wrap { color: #6366F1; }
-.path-step.tone-slate .step-icon-wrap { color: #64748B; }
+/* ================= Phase 4: Premium Results View ================= */
+.results-view {
+  background: #F4F7FB;
+  overflow-y: auto;
+  padding-bottom: 80px;
+  position: relative;
+}
+.results-view::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 500px;
+  background: linear-gradient(180deg, rgba(224, 231, 255, 0.6) 0%, rgba(244, 247, 251, 0) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.result-hero-premium {
+  position: relative;
+  padding: 48px 60px;
+  background: #FFFFFF;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  z-index: 1;
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.hero-bg-pattern {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background-image: radial-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+}
+.hero-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 1;
+}
+.hero-status-tag.success-glow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  width: max-content;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+  animation: pulse-glow 2s infinite alternate;
+}
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.1); }
+  100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.3); }
+}
+.hero-title.gradient-text {
+  margin: 0;
+  font-size: 2.6rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #0F172A 0%, #334155 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.2;
+}
+.hero-subtitle {
+  font-size: 1.1rem;
+  color: #64748B;
+  margin: 0 0 8px 0;
+}
+.hero-context-pills {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.glass-pill {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+}
+.hero-actions {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  z-index: 1;
+}
+.action-btn-ghost {
+  border: 1px solid #CBD5E1;
+  color: #475569;
+  font-weight: 700;
+  padding: 12px 24px;
+  height: auto;
+  transition: all 0.3s ease;
+}
+.action-btn-ghost:hover {
+  background: #F1F5F9;
+  color: #0F172A;
+  border-color: #94A3B8;
+}
+.action-btn-premium {
+  background: linear-gradient(135deg, #2563EB 0%, #4F46E5 100%) !important;
+  border: none !important;
+  font-weight: 800;
+  font-size: 1.05rem;
+  padding: 14px 32px;
+  height: auto;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  color: #FFF !important;
+}
+.action-btn-premium.glow-effect {
+  box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+}
+.action-btn-premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 30px -5px rgba(79, 70, 229, 0.5);
+}
+.action-btn-premium::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: btn-shine 3s infinite;
+}
+@keyframes btn-shine {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
+}
+
+.results-body-bento {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  position: relative;
+  z-index: 1;
+}
+
+.premium-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+.premium-stat-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 24px;
+  padding: 24px 32px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.premium-stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.08);
+}
+.stat-icon-wrapper {
+  width: 64px; height: 64px;
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem;
+  background: #F8FAFC;
+}
+.stat-icon-wrapper.text-blue { background: #EFF6FF; color: #3B82F6; }
+.stat-icon-wrapper.text-purple { background: #F5F3FF; color: #8B5CF6; }
+.stat-icon-wrapper.text-emerald { background: #ECFDF5; color: #10B981; }
+
+.stat-info { display: flex; flex-direction: column; gap: 4px; }
+.premium-stat-card .stat-v { font-size: 2.2rem; font-weight: 900; color: #0F172A; line-height: 1; font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
+.premium-stat-card .stat-l { font-size: 0.9rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.premium-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 28px;
+  align-items: stretch;
+}
+.premium-res-card {
+  grid-column: span 3;
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 24px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.03);
+  cursor: pointer;
+  animation: fadeSlideUp 0.6s ease-out backwards;
+}
+@keyframes fadeSlideUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.premium-res-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.1);
+  border-color: transparent;
+}
+.card-bg-glow {
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 100%;
+  background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 100%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+.premium-res-card.tone-blue:hover { border-color: rgba(59, 130, 246, 0.3); }
+.premium-res-card.tone-blue:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 70%); opacity: 1; }
+.premium-res-card.tone-purple:hover { border-color: rgba(139, 92, 246, 0.3); }
+.premium-res-card.tone-purple:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.08) 0%, transparent 70%); opacity: 1; }
+.premium-res-card.tone-amber:hover { border-color: rgba(245, 158, 11, 0.3); }
+.premium-res-card.tone-amber:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 70%); opacity: 1; }
+.premium-res-card.tone-rose:hover { border-color: rgba(225, 29, 72, 0.3); }
+.premium-res-card.tone-rose:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(225, 29, 72, 0.08) 0%, transparent 70%); opacity: 1; }
+.premium-res-card.tone-emerald:hover { border-color: rgba(16, 185, 129, 0.3); }
+.premium-res-card.tone-emerald:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 70%); opacity: 1; }
+.premium-res-card.tone-indigo:hover { border-color: rgba(99, 102, 241, 0.3); }
+.premium-res-card.tone-indigo:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 70%); opacity: 1; }
+.premium-res-card.tone-slate:hover { border-color: rgba(100, 116, 139, 0.3); }
+.premium-res-card.tone-slate:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(100, 116, 139, 0.08) 0%, transparent 70%); opacity: 1; }
+
+.premium-res-card .card-header,
+.premium-res-card .card-body,
+.premium-res-card .card-footer {
+  position: relative;
+  z-index: 1;
+}
+.premium-res-card .type-icon-box {
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+  background: rgba(15, 23, 42, 0.03); border: 1px solid rgba(15, 23, 42, 0.04);
+}
+.premium-res-card.tone-blue .type-icon-box { color: #2563EB; }
+.premium-res-card.tone-purple .type-icon-box { color: #7C3AED; }
+.premium-res-card.tone-amber .type-icon-box { color: #D97706; }
+.premium-res-card.tone-rose .type-icon-box { color: #E11D48; }
+.premium-res-card.tone-emerald .type-icon-box { color: #059669; }
+.premium-res-card.tone-indigo .type-icon-box { color: #6366F1; }
+.premium-res-card.tone-slate .type-icon-box { color: #475569; }
+
+.premium-res-card .card-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.45;
+  white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+.premium-res-card .card-summary {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #475569;
+  line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.card-metrics-modern {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.metric-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #F8FAFC;
+  color: #475569;
+  padding: 6px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.04);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.premium-res-card .card-footer {
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  padding-top: 20px;
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modern-text-btn {
+  background: transparent;
+  border: none;
+  color: #0F172A;
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.2s ease;
+}
+.modern-text-btn span {
+  transition: transform 0.3s ease;
+}
+.premium-res-card:hover .modern-text-btn {
+  color: #2563EB;
+}
+.premium-res-card:hover .modern-text-btn span {
+  transform: translateX(4px);
+}
 .interactive-resources-panel .panel-title {
   display: flex;
   align-items: center;
@@ -2411,7 +2676,6 @@ const handlePreview = (data: any) => {
   .bento-stats-row { grid-template-columns: 1fr; }
   .bento-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bento-res-card { grid-column: span 1 !important; }
-  .learning-path-timeline { margin: 12px 0 22px; padding: 20px; }
 }
 @media (max-width: 520px) {
   .sequence-track { display: flex; overflow-x: auto; padding-bottom: 4px; }
@@ -2442,16 +2706,6 @@ p, .card-summary, .s-desc, .greeting-subtitle {
 }
 
 /* ================= 极致明亮模式：细节打磨与对齐 ================= */
-.path-track-container {
-  overflow-x: auto;
-  padding-bottom: 12px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.path-track-container::-webkit-scrollbar {
-  display: none;
-}
-
 .bento-res-card {
   display: flex;
   flex-direction: column;
@@ -2668,5 +2922,72 @@ p, .card-summary, .s-desc, .greeting-subtitle {
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.01);
 }
 
-</style>
+/* ================= 极简明亮模式：生成中顶部面板 ================= */
+.compact-hero-bar { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 16px; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.03); transition: all 0.3s ease; }
+.hero-bar-left { display: flex; align-items: center; gap: 20px; }
+.hero-kicker { display: flex; align-items: center; gap: 6px; color: #0369A1 !important; border-color: #BAE6FD !important; background: #F0F9FF !important; font-weight: 800; padding: 0 12px; }
+.ping-dot { width: 8px; height: 8px; border-radius: 50%; background-color: #10B981; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
+.hero-bar-title { margin: 0 0 4px; font-size: 1.25rem; font-weight: 800; color: #0F172A; }
+.hero-bar-message { margin: 0; color: #64748B; font-size: 0.9rem; }
+.hero-bar-right { display: flex; align-items: center; gap: 24px; }
+.progress-info-v2 { display: flex; gap: 20px; text-align: right; }
+.pi-item { display: flex; flex-direction: column; }
+.pi-item span { font-size: 0.8rem; color: #94A3B8; margin-bottom: 2px; }
+.pi-item b { font-size: 1rem; color: #0F172A; }
+.mini-progress { position: relative; display: flex; justify-content: center; align-items: center; }
+.mini-progress-text { position: absolute; font-size: 0.75rem; font-weight: 800; color: #0369A1; }
 
+/* ================= 极简明亮模式：生成中底部面板重塑 ================= */
+.bottom-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.compact-resource-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 16px; padding: 20px; box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.03); }
+.panel-header-minimal { display: flex; justify-content: space-between; margin-bottom: 16px; }
+.phm-left { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.05rem; color: #0F172A; }
+.phm-left .el-tag { margin-left: 6px; }
+.generated-resource-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.mini-resource-card { display: flex; align-items: center; gap: 12px; padding: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; cursor: pointer; transition: all 0.2s ease; }
+.mini-resource-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); background: #FFFFFF; border-color: #CBD5E1; }
+.mrc-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; background: rgba(15, 23, 42, 0.03); }
+.mrc-info { display: flex; flex-direction: column; min-width: 0; }
+.mrc-info h4 { margin: 0; font-size: 0.9rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrc-info span { font-size: 0.75rem; color: #64748B; }
+
+.live-event-timeline { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 16px; padding: 20px; box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.03); display: flex; flex-direction: column; height: 320px; }
+.let-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.let-title-group { display: flex; align-items: center; gap: 10px; }
+.let-title { font-weight: 800; font-size: 1.05rem; color: #0F172A; }
+.let-ping { width: 8px; height: 8px; background: #10B981; border-radius: 50%; position: relative; }
+.let-ping::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid #10B981; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
+.let-count { font-size: 0.75rem; color: #64748B; background: #F1F5F9; padding: 2px 8px; border-radius: 999px; }
+.let-body { flex: 1; overflow-y: auto; padding-right: 4px; }
+.let-body::-webkit-scrollbar { width: 4px; }
+.let-body::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+.let-list { display: flex; flex-direction: column; }
+.let-row { display: flex; gap: 12px; padding-bottom: 16px; position: relative; }
+.let-dot-col { display: flex; flex-direction: column; align-items: center; padding-top: 6px; }
+.let-dot { width: 8px; height: 8px; border-radius: 50%; background: #CBD5E1; border: 2px solid #FFF; box-shadow: 0 0 0 1px #CBD5E1; z-index: 1; }
+.let-line { flex: 1; width: 1px; background: #E2E8F0; margin: 4px 0 -16px; }
+.let-row:last-child .let-line { display: none; }
+.let-row.evt-running .let-dot { background: #3B82F6; box-shadow: 0 0 0 1px #3B82F6; }
+.let-row.evt-success .let-dot { background: #10B981; box-shadow: 0 0 0 1px #10B981; }
+.let-row.evt-failed .let-dot { background: #EF4444; box-shadow: 0 0 0 1px #EF4444; }
+.let-content { flex: 1; min-width: 0; }
+.let-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.let-agent { font-size: 0.85rem; font-weight: 700; color: #1E293B; }
+.let-type-tag { font-weight: 700; font-size: 0.7rem; height: 18px; padding: 0 6px; line-height: 16px; }
+.let-time { font-size: 0.75rem; color: #94A3B8; font-variant-numeric: tabular-nums; margin-left: auto; }
+.let-msg { margin: 0; font-size: 0.8rem; color: #475569; line-height: 1.5; word-break: break-all; }
+.let-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #94A3B8; font-size: 0.9rem; }
+
+.event-slide-enter-active, .event-slide-leave-active { transition: all 0.3s ease; }
+.event-slide-enter-from { opacity: 0; transform: translateX(-10px); }
+.event-slide-leave-to { opacity: 0; transform: scale(0.95); }
+
+.side-empty.minimal { display: flex; align-items: center; justify-content: center; height: 100px; color: #94A3B8; font-size: 0.9rem; font-weight: 600; }
+
+@media (max-width: 1024px) {
+  .bottom-panels { grid-template-columns: 1fr; }
+  .compact-hero-bar { flex-direction: column; align-items: flex-start; gap: 16px; }
+}
+</style>

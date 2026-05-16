@@ -16,13 +16,16 @@
       <div class="code-main-body">
         <div 
           v-if="displayMarkdown" 
-          class="markdown-body markdown-shell" 
-          v-html="renderMarkdown(displayMarkdown)"
-        ></div>
+          class="markdown-shell"
+        >
+          <MarkdownPreview :content="displayMarkdown" />
+        </div>
         <div v-else-if="pureCode" class="pure-code-block">
           <pre><code :class="'language-' + (parsedData.language || 'text')">{{ pureCode }}</code></pre>
         </div>
-        <div v-else-if="markdownContent" class="markdown-body markdown-shell" v-html="renderMarkdown(markdownContent)"></div>
+        <div v-else-if="markdownContent" class="markdown-shell">
+          <MarkdownPreview :content="markdownContent" />
+        </div>
       </div>
 
       <!-- 底部辅助信息：复杂度、运行步骤、练习等 -->
@@ -84,7 +87,8 @@ import { Timer, Warning, EditPen } from '@element-plus/icons-vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import { ElMessage } from 'element-plus'
-import { renderMarkdown, parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -165,7 +169,7 @@ const hasComplexity = computed(() => {
 const performHighlight = async () => {
   await nextTick()
   if (typeof document !== 'undefined') {
-    const preBlocks = document.querySelectorAll('.code-resource pre')
+    const preBlocks = document.querySelectorAll('.code-resource .pure-code-block pre')
     preBlocks.forEach((pre) => {
       const code = pre.querySelector('code')
       if (code) {
@@ -213,7 +217,7 @@ const handleMessageClick = (e: MouseEvent) => {
 
 onMounted(performHighlight)
 watch(parsedData, performHighlight)
-watch(markdownContent, performHighlight)
+watch(pureCode, performHighlight)
 </script>
 
 <style scoped>
@@ -222,11 +226,11 @@ watch(markdownContent, performHighlight)
 .code-resource {
   min-width: 0;
   width: 100%;
-  --primary: #000000;
+  --primary: #475569; /* Slate 600 */
   --bg: #FFFFFF;
-  --fg: #000000;
-  --border: #E5E7EB;
-  --accent: #000000;
+  --fg: #334155; /* Slate 700 */
+  --border: #E2E8F0;
+  --accent: #6366F1; /* Indigo 500 */
 }
 
 /* 技术框架样式 */
@@ -389,7 +393,8 @@ watch(markdownContent, performHighlight)
 :deep(code), .pure-code-block code {
   font-family: 'Fira Code', monospace;
   font-size: 0.85em;
-  color: #000000;
+  color: var(--fg);
+  background: transparent !important;
 }
 
 /* 页脚扩展信息 */

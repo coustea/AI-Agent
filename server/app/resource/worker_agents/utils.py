@@ -174,7 +174,7 @@ def append_backend_context_for_prompt(parts: list[str], state: Any) -> None:
 
 
 async def generate_summary_with_llm(markdown: str, learning_need: str = "") -> str:
-    """使用 spark-x2-flash 生成内容摘要。"""
+    """使用主力模型生成内容摘要。"""
     from langchain_core.messages import HumanMessage
     from app.infra.llm import get_llm_manager
 
@@ -196,7 +196,7 @@ async def generate_summary_with_llm(markdown: str, learning_need: str = "") -> s
     try:
         llm_manager = get_llm_manager()
         response = await llm_manager.ainvoke(
-            "spark_x2_flash",
+            "spark_x",
             [HumanMessage(content=prompt)],
             model_kwargs={"temperature": 0.3},
         )
@@ -289,7 +289,7 @@ JSON 字段：
     try:
         llm_manager = get_llm_manager()
         response = await llm_manager.ainvoke(
-            "spark_x2_flash",
+            "spark_max",
             [HumanMessage(content=prompt)],
             model_kwargs={"temperature": 0.1},
         )

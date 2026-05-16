@@ -6,7 +6,9 @@ Quiz Agent — 习题 Agent。
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,7 +22,7 @@ from app.resource.worker_agents.utils import (
     learning_need_from_task,
     title_from_learning_need,
 )
-from app.utils.json import parse_first_json_object
+from app.utils.json import parse_first_json_object, strip_markdown_code_fences
 
 logger = get_logger(__name__)
 
@@ -139,8 +141,6 @@ class QuizAgent:
             )
             quiz_payload = await self._invoke_quiz_payload(prompt, input_text)
 
-            quiz_json = quiz_payload.model_dump(mode="json", exclude_none=True)
-
             await self._emit_action(
                 state,
                 "finalize_output",
@@ -150,6 +150,7 @@ class QuizAgent:
                 step_label=self.STEPS[3],
                 current_action="整理测评资源",
             )
+            quiz_json = quiz_payload.model_dump(mode="json", exclude_none=True)
             questions = quiz_json.get("questions", [])
             question_count = len(questions) if isinstance(questions, list) else 0
             difficulty = state.agent_config.get("difficulty_mode", "adaptive")
@@ -190,12 +191,11 @@ class QuizAgent:
             return WorkerResult(success=False, error=str(exc))
 
     async def _invoke_quiz_payload(self, prompt: str, input_text: str) -> QuizPayload:
-        """优先 JSON 输出，失败时修复，不默认 function calling。"""
+        """使用主力模型生成结构化题目。"""
         messages = [HumanMessage(content=f"{prompt}\n\n{input_text}")]
 
-        # 1. 使用 spark_x (更快) + JSON 模式
         response = await self.llm_manager.ainvoke(
-            "spark_x",
+            "spark_max",
             messages,
             model_kwargs={
                 "temperature": 0.2,
@@ -203,17 +203,103 @@ class QuizAgent:
             },
         )
         raw_content = response.content if hasattr(response, "content") else str(response)
-
-        # 2. 解析 JSON
         try:
-            payload = parse_first_json_object(raw_content)
-            return QuizPayload.model_validate(payload)
+            return self._parse_quiz_payload(raw_content)
         except Exception as e:
-            logger.warning("[QuizAgent] JSON 解析失败，尝试修复: %s", e)
+            logger.warning("[QuizAgent] JSON 解析失败，尝试本地回收: %s", e)
 
-        # 3. 失败时尝试一次修复（可选：调用 LLM 修复 JSON）
-        # 这里简单返回解析错误
+        repaired = self._salvage_quiz_payload(raw_content)
+        if repaired is not None:
+            return repaired
+
         raise ValueError(f"Quiz JSON 解析失败: {raw_content[:200]}")
+
+    def _parse_quiz_payload(self, raw_content: str) -> QuizPayload:
+        payload = parse_first_json_object(raw_content)
+        return QuizPayload.model_validate(payload)
+
+    def _salvage_quiz_payload(self, raw_content: str) -> QuizPayload | None:
+        """从轻微损坏的 quiz JSON 中回收可用题目，避免整组题目丢失。"""
+        text = strip_markdown_code_fences(raw_content)
+        title = self._extract_json_string_field(text, "title") or "个性化练习题"
+        summary = self._extract_json_string_field(text, "summary") or ""
+        questions_start = self._find_field_array_start(text, "questions")
+        if questions_start < 0:
+            return None
+
+        questions: list[QuizQuestion] = []
+        for candidate in self._iter_json_objects(text[questions_start:]):
+            try:
+                questions.append(QuizQuestion.model_validate(candidate))
+            except Exception:
+                continue
+
+        if not questions:
+            return None
+        return QuizPayload(title=title, summary=summary, questions=questions)
+
+    def _extract_json_string_field(self, text: str, field: str) -> str:
+        field_pos = text.find(f'"{field}"')
+        if field_pos < 0:
+            return ""
+        colon_pos = text.find(":", field_pos)
+        if colon_pos < 0:
+            return ""
+        value_text = text[colon_pos + 1 :].lstrip()
+        try:
+            value, _ = json.JSONDecoder().raw_decode(value_text)
+        except json.JSONDecodeError:
+            return ""
+        return value.strip() if isinstance(value, str) else ""
+
+    def _find_field_array_start(self, text: str, field: str) -> int:
+        field_pos = text.find(f'"{field}"')
+        if field_pos < 0:
+            return -1
+        colon_pos = text.find(":", field_pos)
+        if colon_pos < 0:
+            return -1
+        return text.find("[", colon_pos)
+
+    def _iter_json_objects(self, text: str) -> list[dict[str, Any]]:
+        objects: list[dict[str, Any]] = []
+        start: int | None = None
+        depth = 0
+        in_string = False
+        escaped = False
+
+        for index, char in enumerate(text):
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+                continue
+            if char == "{":
+                if depth == 0:
+                    start = index
+                depth += 1
+                continue
+            if char == "}" and depth:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    snippet = text[start : index + 1]
+                    try:
+                        parsed = json.loads(snippet)
+                    except json.JSONDecodeError:
+                        start = None
+                        continue
+                    if isinstance(parsed, dict):
+                        objects.append(parsed)
+                    start = None
+
+        return objects
 
     def _load_prompt(self) -> str:
         """加载提示词。"""

@@ -396,7 +396,7 @@ classDef warning fill:#FFF7ED,stroke:#FB923C,stroke-width:1px,color:#9A3412;
         try:
             messages = [HumanMessage(content=generation_prompt)]
             response = await self.llm_manager.ainvoke(
-                "spark_x",
+                "spark_max",
                 messages,
                 model_kwargs=self.diagram_model_kwargs,
             )
@@ -419,7 +419,7 @@ classDef warning fill:#FFF7ED,stroke:#FB923C,stroke-width:1px,color:#9A3412;
 """
                 try:
                     retry_response = await self.llm_manager.ainvoke(
-                        "spark_x",
+                        "spark_max",
                         [HumanMessage(content=retry_prompt)],
                         model_kwargs=self.diagram_model_kwargs,
                     )

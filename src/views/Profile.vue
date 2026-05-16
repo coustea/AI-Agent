@@ -283,13 +283,12 @@
                   @select="handleSchoolSelect"
               >
                 <template #prefix><el-icon><Search /></el-icon></template>
-                <template #default="{ item }">
-                  <span>{{ item.value }}</span>
-                  <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
-                </template>
-              </el-autocomplete>
-              </el-autocomplete>
-            </el-form-item>
+              <template #default="{ item }">
+                <span>{{ item.value }}</span>
+                <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
+              </template>
+            </el-autocomplete>
+          </el-form-item>
 
             <el-form-item prop="school_level">
               <template #label><span class="custom-label"><span class="req-star">*</span> 院校层次</span></template>
