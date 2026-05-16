@@ -851,7 +851,6 @@ const generatedResources = ref<GeneratedResourceItem[]>([])
 const reviewResult = ref<any | null>(null)
 const finalBundle = ref<any | null>(null)
 const profileSummary = ref<Record<string, any> | null>(null)
-const planningHistory = ref<any[]>([])
 const isGenerating = ref(false)
 const generationError = ref<string | null>(null)
 const streamController = ref<AbortController | null>(null)
@@ -1061,24 +1060,8 @@ const resultResources = computed(() => {
   return Array.isArray(resources) && resources.length ? resources : generatedResources.value
 })
 
-const resultTopicSummary = computed(() => (
-  finalBundle.value?.topic
-  || finalBundle.value?.metadata?.topic
-  || finalBundle.value?.metadata?.course
-  || finalBundle.value?.learning_need
-  || stringifyCompact(naturalInput.value, 42)
-  || '本次个性化学习任务'
-))
+// Computed properties for result display logic removed as they are no longer used in the condensed header.
 
-const resultNeedSummary = computed(() => (
-  finalBundle.value?.gap
-  || finalBundle.value?.metadata?.gap
-  || finalBundle.value?.metadata?.learning_need
-  || finalBundle.value?.metadata?.weak_points
-  || finalBundle.value?.learning_need
-  || stringifyCompact(naturalInput.value, 86)
-  || '系统已根据你的输入生成学习资源。'
-))
 
 
 
@@ -1473,7 +1456,7 @@ const handleSseEvent = (event: ResourceGenerateEvent) => {
   if (event.event_type === 'planning') {
     setWorkflowStageStatus('planning', event.status)
     if (event.status === 'success') {
-      planningHistory.value.push(event.payload)
+      // planningHistory reference removed
       ;(event.payload?.agents || []).forEach((agent: any) => {
         if (!agent.agent_id) return
         const runtime = ensureAgentRuntime(agent.agent_id)
@@ -2163,125 +2146,48 @@ const handlePreview = (data: any) => {
   z-index: 0;
 }
 
-.result-hero-premium {
-  position: relative;
-  padding: 48px 60px;
-  background: #FFFFFF;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+.result-hero-compact {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 32px;
-  z-index: 1;
-  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.05);
-  overflow: hidden;
-  flex-shrink: 0;
+  padding: 16px 32px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid #E2E8F0;
+  margin-bottom: 24px;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
-.hero-bg-pattern {
-  position: absolute;
-  top: 0; right: 0; bottom: 0; left: 0;
-  background-image: radial-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px);
-  background-size: 24px 24px;
-  pointer-events: none;
-}
-.hero-content {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  z-index: 1;
-}
-.hero-status-tag.success-glow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(16, 185, 129, 0.1);
-  color: #059669;
-  border: 1px solid rgba(16, 185, 129, 0.2);
-  padding: 8px 16px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 800;
-  width: max-content;
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
-  animation: pulse-glow 2s infinite alternate;
-}
-@keyframes pulse-glow {
-  0% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.1); }
-  100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.3); }
-}
-.hero-title.gradient-text {
-  margin: 0;
-  font-size: 2.6rem;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #0F172A 0%, #334155 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  line-height: 1.2;
-}
-.hero-subtitle {
-  font-size: 1.1rem;
-  color: #64748B;
-  margin: 0 0 8px 0;
-}
-.hero-context-pills {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.glass-pill {
-  display: flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 12px;
-  padding: 8px 16px;
-  font-size: 0.9rem;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
-}
-.hero-actions {
-  position: relative;
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  z-index: 1;
-}
-.action-btn-ghost {
-  border: 1px solid #CBD5E1;
-  color: #475569;
-  font-weight: 700;
-  padding: 12px 24px;
-  height: auto;
-  transition: all 0.3s ease;
-}
-.action-btn-ghost:hover {
-  background: #F1F5F9;
-  color: #0F172A;
-  border-color: #94A3B8;
-}
-.action-btn-premium {
-  background: linear-gradient(135deg, #2563EB 0%, #4F46E5 100%) !important;
-  border: none !important;
+.hero-content-left { display: flex; flex-direction: column; gap: 4px; }
+.hero-status-tag-mini { display: inline-flex; align-items: center; gap: 4px; color: #10B981; font-size: 0.75rem; font-weight: 800; }
+.hero-title-compact { margin: 0; font-size: 1.25rem; font-weight: 800; color: #1E293B; }
+.hero-subtitle-compact { margin: 0; font-size: 0.85rem; color: #64748B; }
+.hero-actions-right { display: flex; gap: 12px; align-items: center; }
+.action-btn-premium-mini {
+  background: #0369A1 !important;
+  color: white !important;
   font-weight: 800;
   font-size: 1.05rem;
-  padding: 14px 32px;
+  padding: 12px 28px;
   height: auto;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  border: none !important;
   position: relative;
   overflow: hidden;
-  transition: all 0.3s ease;
-  color: #FFF !important;
 }
-.action-btn-premium.glow-effect {
-  box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+
+.action-btn-premium-mini.glow-effect {
+  box-shadow: 0 10px 25px -5px rgba(3, 105, 161, 0.4);
 }
-.action-btn-premium:hover {
+.action-btn-premium-mini:hover {
   transform: translateY(-2px);
-  box-shadow: 0 15px 30px -5px rgba(79, 70, 229, 0.5);
+  box-shadow: 0 15px 30px -5px rgba(3, 105, 161, 0.5);
 }
-.action-btn-premium::after {
+.action-btn-premium-mini::after {
   content: '';
   position: absolute;
   top: 0; left: -100%; width: 50%; height: 100%;
