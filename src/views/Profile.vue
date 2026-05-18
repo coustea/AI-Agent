@@ -197,7 +197,7 @@
       <template #header>
         <div class="dialog-custom-header">
           <h2 class="dialog-title">编辑学习画像资料</h2>
-          <p class="dialog-subtitle">完善你的基础信息，帮助系统生成更贴合你的学习资源与学习路径。</p>
+          <p class="dialog-subtitle">完善你的基础信息，帮助系统生成更贴合你的学习资源与学习路径</p>
 
           <div class="editor-step-indicator">
             <div class="step-item" :class="{ 'is-active': currentEditorStep >= 1 }">
@@ -229,7 +229,7 @@
             <div class="profile-form-section-head">
               <div class="section-badge required-badge">必填 01</div>
               <h5 class="section-title">专业与课程</h5>
-              <span class="section-desc-inline">先确定专业背景和正在学习的课程。</span>
+<!--              <span class="section-desc-inline">先确定专业背景和正在学习的课程。</span>-->
             </div>
 
             <div class="profile-form-grid">
@@ -269,7 +269,7 @@
             <div class="profile-form-section-head">
               <div class="section-badge required-badge">必填 02</div>
               <h5 class="section-title">学习目标</h5>
-              <span class="section-desc-inline">目标决定资源和路径生成方向。</span>
+<!--              <span class="section-desc-inline">目标决定资源和路径生成方向。</span>-->
             </div>
 
             <el-form-item prop="learning_goal">
@@ -286,7 +286,7 @@
             <div class="profile-form-section-head">
               <div class="section-badge bg-badge">背景 03</div>
               <h5 class="section-title">学校与阶段</h5>
-              <span class="section-desc-inline">学校可选；学历和年级用于判断内容难度。</span>
+<!--              <span class="section-desc-inline">学校可选；学历和年级用于判断内容难度。</span>-->
             </div>
 
             <div class="profile-form-grid">
@@ -344,7 +344,7 @@
         <div class="dialog-custom-footer">
           <div class="footer-hint">
             <el-icon><InfoFilled /></el-icon>
-            <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得精准推荐。</span>
+            <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得精准推荐</span>
           </div>
           <div class="footer-actions">
             <template v-if="currentEditorStep === 1">

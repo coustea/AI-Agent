@@ -1,923 +1,820 @@
 <template>
-  <div class="command-center-modern">
-    <header class="page-header fade-in-up">
-      <div class="header-content">
-        <h1 class="page-title">全景中枢</h1>
-        <p class="page-subtitle">
-          聚合学习任务、资源状态与下一步行动，帮助你高效推进学习闭环。
-        </p>
-      </div>
-      <div class="header-actions">
-        <el-button type="primary" round size="large" class="shadow-btn" @click="router.push('/tutor')">
-          继续学习 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-        </el-button>
-        <el-button plain round size="large" @click="router.push('/path-planner')">
-          查看完整路径
-        </el-button>
+  <div class="home-dashboard">
+    <!-- User Profile & Welcome Banner -->
+    <header class="welcome-banner fade-in-up">
+      <div class="banner-content">
+        <div class="user-profile">
+          <el-avatar :size="80" :src="userInfo.avatar" class="user-avatar" />
+          <div class="user-greeting">
+            <h1 class="greeting-text">早安，{{ userInfo.name }} <span class="wave">👋</span></h1>
+            <p class="greeting-sub">
+              <span class="level-tag">{{ userInfo.level }}</span>
+              今日有 <strong>{{ userInfo.todayTasks }}</strong> 个学习任务待完成，继续保持！
+            </p>
+          </div>
+        </div>
+        <div class="user-stats">
+          <div class="stat-item">
+            <div class="stat-val">{{ userInfo.studyDays }} <span>天</span></div>
+            <div class="stat-label">连续学习</div>
+          </div>
+          <div class="divider"></div>
+          <div class="stat-item">
+            <div class="stat-val">{{ userInfo.masteryScore }} <span>分</span></div>
+            <div class="stat-label">掌握度评估</div>
+          </div>
+          <div class="divider"></div>
+          <div class="stat-item">
+            <div class="stat-val">{{ userInfo.resourcesCount }} <span>份</span></div>
+            <div class="stat-label">已生成资源</div>
+          </div>
+        </div>
       </div>
     </header>
 
-    <section class="metrics-grid fade-in-up" style="animation-delay: 0.1s">
-      <div class="metric-card">
-        <div class="metric-top">
-          <div class="metric-value">{{ metrics.activePaths }}</div>
-          <div class="metric-icon bg-blue-light"><el-icon class="text-blue"><Position /></el-icon></div>
-        </div>
-        <div class="metric-info">
-          <h4 class="metric-name">进行中路径</h4>
-          <p class="metric-desc">正在推进的学习计划</p>
-        </div>
-        <div class="metric-action">
-          <el-button link type="primary" @click="router.push('/path-planner')">查看路径</el-button>
-        </div>
-      </div>
-
-      <div class="metric-card">
-        <div class="metric-top">
-          <div class="metric-value">{{ metrics.availableResources }}</div>
-          <div class="metric-icon bg-indigo-light"><el-icon class="text-indigo"><Cpu /></el-icon></div>
-        </div>
-        <div class="metric-info">
-          <h4 class="metric-name">已生成资源</h4>
-          <p class="metric-desc">可用于学习、练习和复习的个性化资源</p>
-        </div>
-        <div class="metric-action">
-          <el-button link type="primary" @click="router.push('/profile-assistant')">查看资源</el-button>
-        </div>
-      </div>
-
-      <div class="metric-card">
-        <div class="metric-top">
-          <div class="metric-value">{{ metrics.pendingTasks }}</div>
-          <div class="metric-icon bg-amber-light"><el-icon class="text-amber"><List /></el-icon></div>
-        </div>
-        <div class="metric-info">
-          <h4 class="metric-name">待完成任务</h4>
-          <p class="metric-desc">来自学习路径和评估结果的待办事项</p>
-        </div>
-        <div class="metric-action">
-          <el-button link type="primary" @click="router.push('/path-planner')">处理任务</el-button>
-        </div>
-      </div>
-
-      <div class="metric-card">
-        <div class="metric-top">
-          <div class="metric-value">{{ metrics.recentScore }}</div>
-          <div class="metric-icon bg-emerald-light"><el-icon class="text-emerald"><DataAnalysis /></el-icon></div>
-        </div>
-        <div class="metric-info">
-          <h4 class="metric-name">最近评估得分</h4>
-          <p class="metric-desc">反映当前阶段的知识掌握情况</p>
-        </div>
-        <div class="metric-action">
-          <el-button link type="primary" @click="router.push('/evaluation')">查看评估</el-button>
-        </div>
-      </div>
-    </section>
-
-    <section class="loop-banner fade-in-up" style="animation-delay: 0.2s">
-      <div class="loop-header">
-        <h3>学习闭环</h3>
-        <p>从薄弱点识别到资源生成、路径规划、智能辅导和学习评估，形成完整的个性化学习流程。</p>
-      </div>
-      <div class="loop-nodes">
-        <div class="loop-node">
-          <h4 class="node-title">薄弱点识别</h4>
-          <p class="node-desc">发现当前掌握不牢的知识点</p>
-          <el-button link type="primary" @click="router.push('/evaluation')">查看薄弱点 <el-icon><ArrowRight /></el-icon></el-button>
-        </div>
-        <div class="loop-divider"><el-icon><Right /></el-icon></div>
-
-        <div class="loop-node">
-          <h4 class="node-title">资源生成</h4>
-          <p class="node-desc">生成讲解、练习、代码等资源</p>
-          <el-button link type="primary" @click="router.push('/resource-generator')">生成资源 <el-icon><ArrowRight /></el-icon></el-button>
-        </div>
-        <div class="loop-divider"><el-icon><Right /></el-icon></div>
-
-        <div class="loop-node">
-          <h4 class="node-title">路径规划</h4>
-          <p class="node-desc">把资源组织成可执行学习步骤</p>
-          <el-button link type="primary" @click="router.push('/path-planner')">规划路径 <el-icon><ArrowRight /></el-icon></el-button>
-        </div>
-        <div class="loop-divider"><el-icon><Right /></el-icon></div>
-
-        <div class="loop-node">
-          <h4 class="node-title">智能辅导</h4>
-          <p class="node-desc">针对学习问题进行即时答疑</p>
-          <el-button link type="primary" @click="router.push('/tutor')">开始提问 <el-icon><ArrowRight /></el-icon></el-button>
-        </div>
-        <div class="loop-divider"><el-icon><Right /></el-icon></div>
-
-        <div class="loop-node">
-          <h4 class="node-title">学习评估</h4>
-          <p class="node-desc">检测学习效果，反向优化安排</p>
-          <el-button link type="primary" @click="router.push('/evaluation')">开始评估 <el-icon><ArrowRight /></el-icon></el-button>
-        </div>
-      </div>
-    </section>
-
-    <div class="bento-grid">
-      <div class="bento-card highlight-card col-span-2 fade-in-up" style="animation-delay: 0.3s">
+    <div class="dashboard-bento">
+      <!-- Row 1: Current Path & Tutor -->
+      <section class="bento-card path-card fade-in-up" style="animation-delay: 0.1s">
         <div class="card-header">
-          <h3 class="card-title"><el-icon><Aim /></el-icon> 下一步建议</h3>
-          <p class="card-subtitle">系统根据最近的学习任务、资源使用情况和评估结果推荐的最优操作。</p>
+          <div class="header-title">
+            <div class="icon-box bg-indigo-soft"><el-icon><Position /></el-icon></div>
+            <h3>当前学习路径</h3>
+          </div>
+          <el-button link type="primary" @click="router.push('/path-planner')">查看完整路径 <el-icon><ArrowRight /></el-icon></el-button>
         </div>
-        <div class="suggestion-body">
-          <div class="suggestion-main">
-            <h4 class="suggestion-topic">建议继续学习「{{ nextStepData.topic }}」</h4>
-            <div class="suggestion-reason">
-              <span class="reason-label">推荐原因：</span>
-              <p>{{ nextStepData.reason }}</p>
-            </div>
-            <div class="suggestion-steps">
-              <span class="steps-label">建议步骤：</span>
-              <ul class="steps-list">
-                <li v-for="(step, index) in nextStepData.steps" :key="index">
-                  <span class="step-num">{{ index + 1 }}</span>
-                  {{ step }}
-                </li>
-              </ul>
+        <div class="path-content">
+          <div class="path-info">
+            <h4 class="path-title">{{ activePath.title }}</h4>
+            <p class="path-next"><strong>下一步：</strong>{{ activePath.nextTask }}</p>
+            <div class="path-meta">
+              <span><el-icon><Clock /></el-icon> 预计 {{ activePath.remaining }}</span>
             </div>
           </div>
+          <div class="path-action">
+            <div class="progress-wrap">
+              <span class="progress-text">进度 {{ activePath.progress }}%</span>
+              <el-progress :percentage="activePath.progress" :show-text="false" color="#4F46E5" :stroke-width="10" />
+            </div>
+            <el-button type="primary" round class="continue-btn" @click="router.push('/tutor')">继续学习</el-button>
+          </div>
         </div>
-        <div class="card-actions mt-auto">
-          <el-button type="primary" round size="large" @click="router.push('/tutor')">继续学习</el-button>
-          <el-button plain round size="large" @click="router.push('/resource-generator')">生成补充资源</el-button>
-          <el-button plain round size="large" @click="router.push('/path-planner')">查看学习路径</el-button>
-        </div>
-      </div>
+      </section>
 
-      <div class="bento-card tutor-card col-span-1 fade-in-up" style="animation-delay: 0.4s">
+      <section class="bento-card tutor-card fade-in-up" style="animation-delay: 0.2s">
         <div class="card-header">
-          <h3 class="card-title"><el-icon><Service /></el-icon> 遇到问题？直接问智能导师</h3>
-          <p class="card-subtitle">遇到不理解的知识点，可以直接向智能导师提问，获得分步骤讲解。</p>
-        </div>
-        <div class="tutor-quick-access">
-          <div class="tutor-input-box">
-            <el-input
-                v-model="quickTutorQuery"
-                type="textarea"
-                :rows="4"
-                placeholder="输入你想问的问题，例如：为什么二叉树递归遍历需要回溯？"
-                resize="none"
-                @keydown.enter.prevent="jumpToTutor"
-            />
-            <el-button type="primary" class="tutor-submit-btn w-full" size="large" @click="jumpToTutor">
-              开始辅导 <el-icon class="el-icon--right"><Position /></el-icon>
-            </el-button>
+          <div class="header-title">
+            <div class="icon-box bg-cyan-soft"><el-icon><ChatDotRound /></el-icon></div>
+            <h3>向导师提问</h3>
           </div>
         </div>
-        <div class="recent-tutor-topics mt-auto">
-          <span class="topic-label">最近辅导主题：</span>
-          <div class="topic-tags">
-            <span v-for="(topic, idx) in recentTutorTopics" :key="idx" class="topic-tag" @click="setTutorQuery(topic)">
-              {{ topic }}
-            </span>
-          </div>
+        <div class="tutor-content">
+          <p class="tutor-desc">遇到难题？随时向你的专属智能导师求助。</p>
+          <el-input
+            v-model="quickQuestion"
+            type="textarea"
+            :rows="3"
+            placeholder="例如：为什么快排的最坏时间复杂度是O(n²)？"
+            resize="none"
+            class="custom-textarea"
+            @keydown.enter.prevent="askTutor"
+          />
+          <el-button type="primary" class="w-full mt-3 submit-btn" size="large" @click="askTutor">
+            发送提问 <el-icon class="el-icon--right"><Position /></el-icon>
+          </el-button>
         </div>
-      </div>
+      </section>
 
-      <div class="bento-card path-card col-span-1 fade-in-up" style="animation-delay: 0.5s">
+      <!-- Row 2: Learning Activity & Weak Points -->
+      <section class="bento-card activity-card fade-in-up" style="animation-delay: 0.3s">
         <div class="card-header">
-          <h3 class="card-title"><el-icon><Compass /></el-icon> 进行中路径</h3>
-          <p class="card-subtitle">{{ currentPath.title }}</p>
-        </div>
-        <div class="path-details">
-          <div class="path-progress-row">
-            <div class="progress-info">
-              <span class="progress-label">进度</span>
-              <span class="progress-val">{{ currentPath.progress }}%</span>
-            </div>
-            <el-progress :percentage="currentPath.progress" :show-text="false" :stroke-width="8" color="#4F46E5" class="flex-1" />
+          <div class="header-title">
+            <div class="icon-box bg-blue-soft"><el-icon><DataLine /></el-icon></div>
+            <h3>学习活跃度</h3>
           </div>
-          <div class="path-nodes-info">
-            <div class="node-box">
-              <span class="n-label">当前节点</span>
-              <span class="n-val">{{ currentPath.currentNode }}</span>
-            </div>
-            <div class="node-box">
-              <span class="n-label">下一任务</span>
-              <span class="n-val">{{ currentPath.nextTask }}</span>
-            </div>
-            <div class="node-box">
-              <span class="n-label">预计剩余</span>
-              <span class="n-val">{{ currentPath.timeLeft }}</span>
-            </div>
+          <div class="chart-legend">
+            <span class="legend-item"><i class="dot study"></i> 学习时长</span>
+            <span class="legend-item"><i class="dot resource"></i> 资源生成</span>
           </div>
         </div>
-        <div class="card-actions mt-auto">
-          <el-button type="primary" round plain @click="router.push('/path-planner')">继续路径</el-button>
-          <el-button plain round>重新规划</el-button>
+        <div class="chart-container">
+          <v-chart class="chart" :option="chartOption" autoresize />
         </div>
-      </div>
+      </section>
 
-      <div class="bento-card resource-card col-span-1 fade-in-up" style="animation-delay: 0.6s">
+      <section class="bento-card weak-card fade-in-up" style="animation-delay: 0.4s">
         <div class="card-header">
-          <h3 class="card-title"><el-icon><Collection /></el-icon> 最近生成资源</h3>
-          <p class="card-subtitle">这里展示最近生成的学习资源，可用于继续学习、加入路径或发起提问。</p>
-        </div>
-        <div class="resource-list">
-          <div v-for="res in recentResources" :key="res.id" class="res-item-row">
-            <div class="res-info-basic">
-              <span class="res-type">【{{ res.type }}】</span>
-              <span class="res-title" :title="res.title">{{ res.title }}</span>
-            </div>
-            <div class="res-inline-actions">
-              <span class="res-action-link" @click="router.push('/profile-assistant')">查看</span>
-              <el-divider direction="vertical" />
-              <span class="res-action-link" @click="router.push('/tutor')">提问</span>
-              <el-divider direction="vertical" />
-              <span class="res-action-link" @click="router.push('/path-planner')">加入路径</span>
-            </div>
+          <div class="header-title">
+            <div class="icon-box bg-rose-soft"><el-icon><Warning /></el-icon></div>
+            <h3>薄弱知识点</h3>
           </div>
         </div>
-      </div>
+        <div class="weak-list" v-if="weakPoints.length > 0">
+          <div v-for="(wp, idx) in weakPoints" :key="idx" class="weak-item">
+            <div class="weak-info">
+              <span class="weak-name">{{ wp.name }}</span>
+              <span class="weak-level">{{ wp.level }}</span>
+            </div>
+            <el-button link type="primary" @click="router.push('/resource-generator')">生成强化资源</el-button>
+          </div>
+        </div>
+        <div v-else class="empty-state">
+          <el-empty description="太棒了，暂无明显薄弱点" :image-size="60" />
+        </div>
+      </section>
 
-      <div class="bento-card weak-card col-span-1 fade-in-up" style="animation-delay: 0.7s">
+      <!-- Row 3: Multi-Agent Resources & Achievements -->
+      <section class="bento-card resources-card fade-in-up" style="animation-delay: 0.5s">
         <div class="card-header">
-          <h3 class="card-title text-rose"><el-icon><Warning /></el-icon> 薄弱知识点</h3>
-          <p class="card-subtitle">根据练习与评估结果识别需要优先巩固的知识点。</p>
+          <div class="header-title">
+            <div class="icon-box bg-emerald-soft"><el-icon><Share /></el-icon></div>
+            <h3>最近生成资源</h3>
+          </div>
+          <el-button link type="primary" @click="router.push('/resource-generator')">查看全部 <el-icon><ArrowRight /></el-icon></el-button>
         </div>
-        <div class="weak-points-list">
-          <div v-for="(wp, idx) in weakPoints" :key="idx" class="weak-point-row">
-            <div class="wp-info-basic">
-              <span class="wp-name">{{ wp.name }}</span>
-              <span class="wp-level" :class="wp.levelClass">{{ wp.level }}</span>
+        
+        <div v-if="multiAgentResources.length > 0" class="resources-grid">
+          <div v-for="res in multiAgentResources" :key="res.id" class="resource-item">
+            <div class="res-icon-wrap" :class="res.colorClass">
+              <el-icon><component :is="res.icon" /></el-icon>
             </div>
-            <div class="wp-inline-actions">
-              <span class="wp-action-link" @click="router.push('/resource-generator')">生成资源</span>
-              <el-divider direction="vertical" />
-              <span class="wp-action-link" @click="router.push('/tutor')">问导师</span>
-              <el-divider direction="vertical" />
-              <span class="wp-action-link" @click="router.push('/path-planner')">加入路径</span>
+            <div class="res-details">
+              <h4 class="res-title" :title="res.title">{{ res.title }}</h4>
+              <div class="res-meta">
+                <span class="agent-badge">{{ res.agent }}</span>
+                <span class="res-time">{{ res.time }}</span>
+              </div>
+            </div>
+            <div class="res-actions">
+              <el-button circle size="small" :icon="View" @click="router.push('/resource-generator')" />
             </div>
           </div>
         </div>
-      </div>
+        <div v-else class="empty-state">
+          <el-empty description="暂无生成的资源" :image-size="80" />
+        </div>
+      </section>
 
+      <section class="bento-card achievement-card fade-in-up" style="animation-delay: 0.6s">
+        <div class="card-header">
+          <div class="header-title">
+            <div class="icon-box bg-amber-soft"><el-icon><Lightning /></el-icon></div>
+            <h3>近期成就</h3>
+          </div>
+        </div>
+        <div class="achievement-list">
+          <div v-for="ach in achievements" :key="ach.id" class="achievement-item">
+            <div class="ach-icon">{{ ach.emoji }}</div>
+            <div class="ach-info">
+              <span class="ach-name">{{ ach.name }}</span>
+              <span class="ach-date">{{ ach.date }}</span>
+            </div>
+            <div class="ach-status">
+              <el-tag size="small" type="success" effect="plain" round>已达成</el-tag>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  ArrowRight, Warning, Aim, Position, Collection, Service,
-  List, Compass, Right, Cpu, DataAnalysis
+  Clock, DataLine, Lightning, Position, ArrowRight,
+  Share, Document, Edit, VideoPlay, ChatDotRound, Warning, View
 } from '@element-plus/icons-vue'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { BarChart, LineChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent
+} from 'echarts/components'
+import VChart from 'vue-echarts'
+
+// 注册 ECharts 组件
+use([
+  CanvasRenderer,
+  BarChart,
+  LineChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent
+])
 
 const router = useRouter()
 
-// --- 1. 状态概览数据 ---
-const metrics = ref({
-  activePaths: 2,
-  availableResources: 12,
-  pendingTasks: 5,
-  recentScore: 82
+// 用户信息
+const userInfo = ref({
+  name: '学习者',
+  avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+  level: 'Lv.4 知识达人',
+  studyDays: 24,
+  todayTasks: 3,
+  masteryScore: 88,
+  resourcesCount: 15
 })
 
-// --- 2. 下一步建议数据 ---
-const nextStepData = ref({
-  topic: '二叉树遍历',
-  reason: '最近练习中，递归调用栈相关题目正确率较低，建议优先巩固递归遍历过程。',
-  steps: [
-    '阅读讲解文档',
-    '查看思维导图',
-    '完成专项练习',
-    '进入智能辅导提问'
-  ]
+// 当前学习路径
+const activePath = ref({
+  title: '数据结构与算法强化',
+  progress: 65,
+  nextTask: '完成图的广度优先遍历',
+  remaining: '1.5 小时'
 })
 
-// --- 3. 学习路径数据 ---
-const currentPath = ref({
-  title: '数据结构基础强化路径',
-  progress: 45,
-  currentNode: '栈与队列',
-  nextTask: '完成队列应用练习',
-  timeLeft: '2 小时 30 分钟'
-})
-
-// --- 4. 最近生成资源数据 ---
-const recentResources = ref([
-  { id: 1, type: '讲解文档', title: '二叉树遍历核心概念' },
-  { id: 2, type: '思维导图', title: '数据结构知识体系' },
-  { id: 3, type: '练习题', title: '栈与队列专项训练' },
-  { id: 4, type: '代码案例', title: '链表反转 Python 实现' }
+// 多智能体最近生成的资源
+const multiAgentResources = ref([
+  { id: 1, title: '二叉树遍历原理详解', agent: '内容规划', type: 'document', time: '10分钟前', icon: Document, colorClass: 'icon-indigo' },
+  { id: 2, title: '数据结构全景思维导图', agent: '导图智能体', type: 'mindmap', time: '2小时前', icon: Share, colorClass: 'icon-cyan' },
+  { id: 3, title: '排序算法专项练习题', agent: '测试智能体', type: 'quiz', time: '昨天', icon: Edit, colorClass: 'icon-amber' },
+  { id: 4, title: '红黑树原理解析视频', agent: '视频智能体', type: 'video', time: '昨天', icon: VideoPlay, colorClass: 'icon-emerald' }
 ])
 
-// --- 5. 薄弱知识点数据 ---
+// 薄弱知识点
 const weakPoints = ref([
-  { name: '递归调用栈', level: '掌握较弱', levelClass: 'text-rose' },
-  { name: 'SQL 子查询', level: '需要加强', levelClass: 'text-amber' },
-  { name: '最短路径算法', level: '理解一般', levelClass: 'text-indigo' }
+  { name: '动态规划：背包问题', level: '待突破' },
+  { name: '红黑树：左旋右旋', level: '需巩固' }
 ])
 
-// --- 6. 智能辅导数据 ---
-const quickTutorQuery = ref('')
-const recentTutorTopics = ref([
-  '二叉树递归过程',
-  'SQL 多表查询',
-  'RAG 知识库构建'
+// 近期成就
+const achievements = ref([
+  { id: 1, name: '七日连续打卡', date: '2026-05-15', emoji: '🔥' },
+  { id: 2, name: '算法之星：快速排序', date: '2026-05-12', emoji: '⭐' },
+  { id: 3, name: '资源收集家', date: '2026-05-10', emoji: '📚' }
 ])
 
-const setTutorQuery = (topic: string) => {
-  quickTutorQuery.value = `关于“${topic}”，我有个问题想请教：`
+// 导师提问
+const quickQuestion = ref('')
+
+const askTutor = () => {
+  router.push('/tutor')
 }
 
-const jumpToTutor = () => {
-  if (quickTutorQuery.value.trim()) {
-    router.push('/tutor')
-  } else {
-    router.push('/tutor')
-  }
-}
+// ECharts 配置
+const chartOption = computed(() => ({
+  backgroundColor: 'transparent',
+  tooltip: {
+    trigger: 'axis',
+    axisPointer: { type: 'shadow' }
+  },
+  grid: {
+    top: '10%',
+    left: '3%',
+    right: '4%',
+    bottom: '3%',
+    containLabel: true
+  },
+  xAxis: {
+    type: 'category',
+    data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { color: '#64748B' }
+  },
+  yAxis: {
+    type: 'value',
+    splitLine: { lineStyle: { type: 'dashed', color: '#E2E8F0' } },
+    axisLabel: { color: '#64748B' }
+  },
+  series: [
+    {
+      name: '学习时长 (min)',
+      type: 'bar',
+      barWidth: '25%',
+      itemStyle: {
+        borderRadius: [4, 4, 0, 0],
+        color: '#4F46E5'
+      },
+      data: [45, 60, 85, 40, 95, 120, 80]
+    },
+    {
+      name: '资源生成 (份)',
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 8,
+      itemStyle: { color: '#06B6D4' },
+      lineStyle: { width: 3 },
+      data: [2, 3, 5, 1, 4, 6, 3]
+    }
+  ]
+}))
 </script>
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 
-.command-center-modern {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  padding: 32px 40px;
-  max-width: 1600px;
-  margin: 0 auto;
+.home-dashboard {
+  padding: 32px;
+  width: 100%;
+  margin: 0;
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   background-color: #F8FAFC;
   min-height: 100vh;
   box-sizing: border-box;
 }
 
-/* ================= 1. 顶部：全景中枢 Header ================= */
-.page-header {
+/* ================= Welcome Banner ================= */
+.welcome-banner {
+  background: linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #06B6D4 100%);
+  border-radius: 32px;
+  padding: 48px;
+  color: #FFFFFF;
+  box-shadow: 0 20px 50px -15px rgba(79, 70, 229, 0.4);
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+}
+.welcome-banner::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.banner-content {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 8px;
+  align-items: center;
+  max-width: 1800px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
-.header-content {
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.user-avatar {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+}
+.greeting-text {
+  margin: 0 0 12px 0;
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.wave {
+  display: inline-block;
+  animation: wave-animation 2.5s infinite;
+  transform-origin: 70% 70%;
+}
+@keyframes wave-animation {
+  0% { transform: rotate( 0.0deg) }
+  10% { transform: rotate(14.0deg) }
+  20% { transform: rotate(-8.0deg) }
+  30% { transform: rotate(14.0deg) }
+  40% { transform: rotate(-4.0deg) }
+  50% { transform: rotate(10.0deg) }
+  60% { transform: rotate( 0.0deg) }
+  100% { transform: rotate( 0.0deg) }
+}
+.greeting-sub {
+  margin: 0;
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.level-tag {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 20px;
+  padding: 6px 18px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.user-stats {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+  background: rgba(15, 23, 42, 0.3);
+  padding: 28px 48px;
+  border-radius: 28px;
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+.stat-item {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 6px;
 }
-
-.page-title {
-  margin: 0;
+.stat-val {
   font-size: 2.2rem;
   font-weight: 800;
-  color: #0F172A;
-  letter-spacing: -0.02em;
-}
-
-.page-subtitle {
-  margin: 0;
-  font-size: 1.05rem;
-  color: #64748B;
-  max-width: 600px;
-  line-height: 1.6;
-}
-
-.header-actions {
-  display: flex;
-  gap: 16px;
-}
-
-.shadow-btn {
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
-  font-weight: 700;
-}
-.shadow-btn:hover {
-  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
-  transform: translateY(-1px);
-}
-
-/* ================= 2. 数据概览卡片 ================= */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-}
-
-.metric-card {
-  background: #FFFFFF;
-  border-radius: 20px;
-  border: 1px solid #E2E8F0;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.03);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.metric-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.06);
-}
-
-.metric-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.metric-value {
-  font-size: 2.5rem;
-  font-weight: 800;
-  color: #0F172A;
   line-height: 1;
 }
-
-.metric-icon {
-  width: 48px; height: 48px;
-  border-radius: 14px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem;
-}
-.bg-blue-light { background: #EFF6FF; }
-.bg-indigo-light { background: #EEF2FF; }
-.bg-amber-light { background: #FFFBEB; }
-.bg-emerald-light { background: #ECFDF5; }
-.text-blue { color: #3B82F6; }
-.text-indigo { color: #4F46E5; }
-.text-amber { color: #F59E0B; }
-.text-emerald { color: #10B981; }
-
-.metric-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 20px;
-  flex: 1;
-}
-
-.metric-name {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #1E293B;
-}
-
-.metric-desc {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #64748B;
-  line-height: 1.5;
-}
-
-.metric-action {
-  border-top: 1px solid #F1F5F9;
-  padding-top: 16px;
-}
-.metric-action .el-button {
-  padding: 0;
-  font-weight: 700;
-}
-
-/* ================= 3. 学习闭环节点横幅 ================= */
-.loop-banner {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 20px;
-  padding: 24px 32px;
-  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.03);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.loop-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.loop-header h3 {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #0F172A;
-}
-
-.loop-header p {
-  margin: 0;
-  color: #64748B;
-  font-size: 0.9rem;
-}
-
-.loop-nodes {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.loop-node {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  background: #F8FAFC;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid #F1F5F9;
-}
-
-.node-title {
-  margin: 0 0 4px;
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: #1E293B;
-}
-
-.node-desc {
-  margin: 0 0 12px;
-  font-size: 0.75rem;
-  color: #64748B;
-  line-height: 1.4;
-}
-
-.loop-node .el-button {
-  padding: 0;
-  font-weight: 700;
-  font-size: 0.8rem;
-  margin-top: auto;
-}
-
-.loop-divider {
-  color: #CBD5E1;
+.stat-val span {
   font-size: 1.2rem;
-  margin: 0 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+}
+.stat-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.divider {
+  width: 1px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.15);
 }
 
-/* ================= 4. Bento Grid 布局 ================= */
-.bento-grid {
+/* ================= Bento Grid ================= */
+.dashboard-bento {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  align-items: stretch;
+  grid-auto-rows: auto;
+  gap: 28px;
+  max-width: 1800px;
+  margin: 0 auto;
 }
 
-.col-span-1 { grid-column: span 1; }
-.col-span-2 { grid-column: span 2; }
-.col-span-3 { grid-column: span 3; }
+/* Card Spanning */
+.path-card { grid-column: span 2; }
+.tutor-card { grid-column: span 1; }
+.activity-card { grid-column: span 2; }
+.weak-card { grid-column: span 1; }
+.resources-card { grid-column: span 2; }
+.achievement-card { grid-column: span 1; }
 
+/* ================= Cards General ================= */
 .bento-card {
   background: #FFFFFF;
-  border-radius: 20px;
+  border-radius: 28px;
+  padding: 36px;
+  box-shadow: 0 4px 24px -6px rgba(15, 23, 42, 0.04);
   border: 1px solid #E2E8F0;
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.03);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+}
+.bento-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.1);
 }
 
 .card-header {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 24px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
 }
-
-.card-title {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #1E293B;
+.header-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-.card-title .el-icon {
-  color: #4F46E5;
-  font-size: 1.25rem;
-}
-
-.card-subtitle {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #64748B;
-  line-height: 1.5;
-}
-
-.mt-auto { margin-top: auto; }
-.w-full { width: 100%; }
-
-.card-actions {
-  display: flex;
-  gap: 12px;
-  border-top: 1px solid #F1F5F9;
-  padding-top: 20px;
-  margin-top: 24px;
-}
-
-/* ================= 卡片细节设计 ================= */
-
-/* 下一步建议 (重点区域) */
-.highlight-card {
-  background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
-  border: 1px solid #E0E7FF;
-}
-.card-header {
-  position: relative;
-}
-.urgency-tag {
-  position: absolute;
-  right: 0; top: 0;
-  background: #4F46E5 !important;
-  border: none;
-  font-weight: 700;
-}
-.suggestion-body {
-  display: flex;
-  flex-direction: column;
   gap: 16px;
 }
-.suggestion-topic {
-  margin: 0 0 16px;
+.header-title h3 {
+  margin: 0;
   font-size: 1.3rem;
-  color: #0F172A;
   font-weight: 800;
+  color: #0F172A;
 }
-.suggestion-reason {
-  background: #EFF6FF;
-  padding: 16px;
-  border-radius: 12px;
-  border-left: 4px solid #3B82F6;
-  margin-bottom: 16px;
-}
-.reason-label {
-  font-weight: 700;
-  color: #1D4ED8;
-  font-size: 0.9rem;
-  margin-bottom: 4px;
-  display: block;
-}
-.suggestion-reason p {
-  margin: 0;
-  color: #1E3A8A;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-.suggestion-steps {
-  display: flex;
-  flex-direction: column;
-}
-.steps-label {
-  font-weight: 700;
-  color: #475569;
-  font-size: 0.95rem;
-  margin-bottom: 12px;
-}
-.steps-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.steps-list li {
+.icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.95rem;
-  color: #334155;
-  font-weight: 600;
-}
-.step-num {
-  width: 24px; height: 24px;
-  background: #E2E8F0;
-  color: #475569;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.8rem; font-weight: 800;
+  justify-content: center;
+  font-size: 1.4rem;
 }
 
-/* 智能辅导入口 */
-.tutor-card {
-  background: #F5F3FF;
-  border-color: #EDE9FE;
-}
-.tutor-card .card-title .el-icon { color: #7C3AED; }
-.tutor-input-box {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-.tutor-input-box :deep(.el-textarea__inner) {
-  border-radius: 12px;
-  border: 1px solid #DDD6FE;
-  padding: 12px;
-  font-size: 0.95rem;
-  box-shadow: none !important;
-}
-.tutor-input-box :deep(.el-textarea__inner:focus) {
-  border-color: #8B5CF6;
-  background: #FFFFFF;
-}
-.tutor-submit-btn {
-  background: #7C3AED !important;
-  border: none;
-  font-weight: 700;
-  border-radius: 12px;
-}
-.tutor-submit-btn:hover { background: #6D28D9 !important; }
-.recent-tutor-topics {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 24px;
-}
-.topic-label {
-  font-size: 0.85rem;
-  color: #6D28D9;
-  font-weight: 700;
-}
-.topic-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.topic-tag {
-  background: #EDE9FE;
-  color: #5B21B6;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.topic-tag:hover {
-  background: #DDD6FE;
-}
+/* Updated Icon Colors */
+.bg-indigo-soft { background: #EEF2FF; color: #4F46E5; }
+.bg-cyan-soft { background: #ECFEFF; color: #0891B2; }
+.bg-blue-soft { background: #EFF6FF; color: #3B82F6; }
+.bg-rose-soft { background: #FFF1F2; color: #E11D48; }
+.bg-emerald-soft { background: #ECFDF5; color: #059669; }
+.bg-amber-soft { background: #FFFBEB; color: #D97706; }
 
-/* 进行中路径 */
-.path-details {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.path-progress-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.flex-1 { flex: 1; }
-.progress-info {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.progress-val { font-size: 1.1rem; font-weight: 800; color: #0F172A; }
-.progress-label { font-size: 0.8rem; color: #64748B; font-weight: 600; }
-
-.path-nodes-info {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.node-box {
+/* ================= Path Card ================= */
+.path-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: #F8FAFC;
-  padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: 24px;
+  padding: 32px;
   border: 1px solid #F1F5F9;
 }
-.n-label { font-size: 0.85rem; color: #64748B; font-weight: 600; }
-.n-val { font-size: 0.95rem; color: #1E293B; font-weight: 700; }
-
-/* 最近生成资源 */
-.resource-list {
+.path-info {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-.res-item-row {
+.path-title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #0F172A;
+}
+.path-next {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #475569;
+}
+.path-meta {
+  margin-top: 6px;
+  font-size: 0.95rem;
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.path-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 20px;
+  width: 280px;
+}
+.progress-wrap {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px 16px;
-  background: #F8FAFC;
-  border-radius: 12px;
-  border: 1px solid #F1F5F9;
 }
-.res-info-basic {
+.progress-text {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #4F46E5;
+  text-align: right;
+}
+.continue-btn {
+  width: 100%;
+  height: 52px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  background: #4F46E5 !important;
+  border-color: #4F46E5 !important;
+  box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
+}
+
+/* ================= Activity Card ================= */
+.chart-container {
+  height: 300px;
+  width: 100%;
+}
+.chart {
+  height: 100%;
+}
+.chart-legend {
+  display: flex;
+  gap: 24px;
+}
+.legend-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-.res-type {
-  font-size: 0.85rem;
+  gap: 10px;
+  font-size: 0.9rem;
   color: #64748B;
-  font-weight: 700;
+  font-weight: 600;
+}
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.dot.study { background: #4F46E5; }
+.dot.resource { background: #06B6D4; }
+
+/* ================= Multi-Agent Resources ================= */
+.resources-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+  border-radius: 24px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  transition: all 0.3s ease;
+}
+.resource-item:hover {
+  box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.08);
+  border-color: #CBD5E1;
+}
+.res-icon-wrap {
+  width: 60px; height: 60px;
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem;
   flex-shrink: 0;
 }
+.icon-indigo { background: #EEF2FF; color: #4F46E5; }
+.icon-cyan { background: #ECFEFF; color: #0891B2; }
+.icon-amber { background: #FFFBEB; color: #D97706; }
+.icon-emerald { background: #ECFDF5; color: #059669; }
+
+.res-details {
+  flex: 1;
+  min-width: 0;
+}
 .res-title {
-  font-size: 0.95rem;
+  margin: 0 0 10px 0;
+  font-size: 1.15rem;
   font-weight: 700;
-  color: #1E293B;
+  color: #0F172A;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.res-inline-actions {
+.res-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
-.res-action-link {
+.agent-badge {
+  background: #F1F5F9;
+  color: #475569;
   font-size: 0.85rem;
-  color: #3B82F6;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.2s;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 10px;
 }
-.res-action-link:hover { color: #1D4ED8; text-decoration: underline; }
+.res-time {
+  font-size: 0.9rem;
+  color: #94A3B8;
+  font-weight: 500;
+}
 
-/* 薄弱知识点 */
-.weak-card .card-title .el-icon { color: #E11D48; }
-.text-rose { color: #E11D48 !important; }
-.text-amber { color: #F59E0B !important; }
-.text-indigo { color: #4F46E5 !important; }
-
-.weak-points-list {
+/* ================= Tutor Card ================= */
+.tutor-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
 }
-.weak-point-row {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
+.tutor-desc {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #475569;
+  line-height: 1.6;
+}
+.custom-textarea :deep(.el-textarea__inner) {
+  border-radius: 20px;
   background: #F8FAFC;
-  border-radius: 12px;
-  border: 1px solid #F1F5F9;
+  border: 2px solid #E2E8F0;
+  box-shadow: none !important;
+  font-size: 1.05rem;
+  padding: 20px;
+  font-family: inherit;
+  transition: all 0.3s ease;
 }
-.wp-info-basic {
+.custom-textarea :deep(.el-textarea__inner:focus) {
+  border-color: #4F46E5;
+  background: #FFFFFF;
+}
+.submit-btn {
+  background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%) !important;
+  border: none;
+  font-weight: 700;
+  height: 56px;
+  border-radius: 18px;
+  font-size: 1.1rem;
+  box-shadow: 0 8px 20px -5px rgba(79, 70, 229, 0.4);
+}
+
+/* ================= Weak Points ================= */
+.weak-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.weak-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 20px 24px;
+  background: #F8FAFC;
+  border-radius: 20px;
+  border: 1px solid #F1F5F9;
+  transition: all 0.2s ease;
 }
-.wp-name { font-size: 0.95rem; font-weight: 700; color: #1E293B; }
-.wp-level { font-size: 0.8rem; font-weight: 600; }
-.wp-inline-actions {
+.weak-item:hover {
+  background: #FFF1F2;
+  border-color: #FECDD3;
+}
+.weak-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.weak-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+.weak-level {
+  font-size: 0.9rem;
+  color: #E11D48;
+  font-weight: 700;
+  background: rgba(225, 29, 72, 0.1);
+  padding: 2px 10px;
+  border-radius: 6px;
+}
+
+/* ================= Achievements ================= */
+.achievement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.achievement-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 20px;
+  padding: 16px 0;
 }
-.wp-action-link {
-  font-size: 0.85rem;
-  color: #3B82F6;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.2s;
+.achievement-item:not(:last-child) {
+  border-bottom: 1px solid #F1F5F9;
 }
-.wp-action-link:hover { color: #1D4ED8; text-decoration: underline; }
+.ach-icon {
+  width: 52px;
+  height: 52px;
+  background: #F8FAFC;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+.ach-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ach-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+.ach-date {
+  font-size: 0.9rem;
+  color: #94A3B8;
+}
 
-
-/* ================= 动画 ================= */
+/* ================= Animations ================= */
 .fade-in-up {
-  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(40px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ================= 响应式 ================= */
-@media (max-width: 1200px) {
-  .bento-grid { grid-template-columns: repeat(2, 1fr); }
-  .col-span-3 { grid-column: span 2; }
+/* ================= Responsive ================= */
+@media (max-width: 1440px) {
+  .dashboard-bento { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .path-card, .activity-card, .resources-card { grid-column: span 2; }
+  .tutor-card, .weak-card, .achievement-card { grid-column: span 1; }
 }
 
-@media (max-width: 960px) {
-  .loop-nodes { flex-wrap: wrap; gap: 16px; }
-  .loop-divider { display: none; }
-  .loop-node { min-width: calc(33.333% - 16px); }
-  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-  .page-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+@media (max-width: 1024px) {
+  .dashboard-bento { grid-template-columns: 1fr; }
+  .path-card, .tutor-card, .activity-card, .weak-card, .resources-card, .achievement-card {
+    grid-column: span 1;
+  }
+  .banner-content { flex-direction: column; gap: 40px; align-items: flex-start; }
+  .user-stats { width: 100%; justify-content: space-between; padding: 24px 32px; }
 }
 
 @media (max-width: 768px) {
-  .bento-grid { grid-template-columns: 1fr; }
-  .col-span-1, .col-span-2, .col-span-3 { grid-column: span 1; }
-  .loop-node { min-width: 100%; }
-}
-
-@media (max-width: 600px) {
-  .command-center-modern { padding: 16px; }
-  .metrics-grid { grid-template-columns: 1fr; }
-  .card-actions { flex-direction: column; }
-  .card-actions .el-button { width: 100%; margin-left: 0 !important; margin-bottom: 8px; }
+  .home-dashboard { padding: 20px; }
+  .welcome-banner { padding: 32px; border-radius: 24px; }
+  .user-stats { flex-direction: column; gap: 24px; align-items: flex-start; padding: 24px; }
+  .divider { width: 100%; height: 1px; }
+  .resources-grid { grid-template-columns: 1fr; }
+  .path-content { flex-direction: column; align-items: flex-start; gap: 28px; }
+  .path-action { width: 100%; align-items: flex-start; }
+  .greeting-text { font-size: 2rem; }
 }
 </style>

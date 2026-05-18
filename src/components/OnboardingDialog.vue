@@ -11,12 +11,6 @@
     <div class="onboarding-wrapper">
       <header class="onboarding-header">
         <h2 class="header-title">欢迎来到学枢</h2>
-        <p class="header-subtitle" v-if="currentStep === 1">
-          请告诉我们你的专业方向和学习偏好，<br>以便为你定制个性化学习路径和多模态资源推荐。
-        </p>
-        <p class="header-subtitle" v-else>
-          完善学校与阶段信息，用于生成更准确的学习路径。
-        </p>
 
         <div class="custom-step-indicator">
           <div class="step-item" :class="{ 'is-active': currentStep >= 1 }">
