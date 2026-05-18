@@ -135,6 +135,41 @@ class ContextService:
         recent_ctx = "\n".join(recent_lines) or "暂无最近对话。"
         return f"# 用户画像\n{profile_ctx}\n\n# 用户长期记忆\n{memory_ctx}\n\n# 最近对话\n{recent_ctx}"
 
+    async def build_cross_session_context(
+        self,
+        user_id: int,
+        current_session_id: str,
+        char_budget: int = 800,
+    ) -> str:
+        """构建跨会话概要上下文，检索其他会话的相关记忆。"""
+        list_cross_session = getattr(self.summary_store, "list_cross_session", None)
+        if not callable(list_cross_session):
+            return ""
+        summaries = await list_cross_session(
+            user_id=user_id,
+            module=self.module,
+            exclude_session_id=current_session_id,
+            limit=5,
+        )
+        if not summaries:
+            return ""
+        chunks = []
+        for s in summaries:
+            if s.summary_json:
+                task = s.summary_json.get("current_learning_task", "")
+                confusions = s.summary_json.get("current_confusions", [])
+                if task:
+                    chunks.append(f"- {task}")
+                for c in (confusions or [])[:2]:
+                    chunks.append(f"  - 困惑: {c}")
+            elif s.summary_markdown:
+                first_line = s.summary_markdown.split("\n")[0]
+                chunks.append(f"- {first_line}")
+        if not chunks:
+            return ""
+        text = "# 其他会话概要\n" + "\n".join(chunks)
+        return truncate_text(text, char_budget)
+
     async def build_recent_chat_context(
         self,
         user_id: int,
@@ -174,6 +209,10 @@ class ContextService:
                     f"# 会话概要\n{truncate_text(summary_ctx, SUMMARY_CHAR_BUDGET)}\n\n"
                     f"# 最近对话\n{recent_ctx}"
                 )
+            # 跨会话检索：用户引用过去话题时，补充其他会话的相关概要
+            cross_ctx = await self.build_cross_session_context(user_id, session_id)
+            if cross_ctx:
+                recent_ctx = f"{cross_ctx}\n\n{recent_ctx}"
         return messages, recent_ctx
 
     async def build_context_preview(

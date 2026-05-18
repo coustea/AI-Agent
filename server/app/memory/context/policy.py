@@ -12,17 +12,24 @@
 
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Any
+
+from app.config import (
+    LONG_TERM_MEMORY_CHAR_BUDGET as _CFG_LTM_BUDGET,
+    RECENT_CHAT_CONTEXT_CHAR_BUDGET as _CFG_CHAT_BUDGET,
+    RECENT_CHAT_MESSAGE_LIMIT as _CFG_MSG_LIMIT,
+    SUMMARY_CHAR_BUDGET as _CFG_SUMMARY_BUDGET,
+)
 
 
 # ---------------------------------------------------------------------------
-# 字符预算常量
+# 字符预算（从 config 读取，保留模块级常量供默认参数使用）
 # ---------------------------------------------------------------------------
 
-RECENT_CHAT_MESSAGE_LIMIT: Final[int] = 10
-RECENT_CHAT_CONTEXT_CHAR_BUDGET: Final[int] = 700
-LONG_TERM_MEMORY_CHAR_BUDGET: Final[int] = 1600
-SUMMARY_CHAR_BUDGET: Final[int] = 900
+RECENT_CHAT_MESSAGE_LIMIT: int = _CFG_MSG_LIMIT
+RECENT_CHAT_CONTEXT_CHAR_BUDGET: int = _CFG_CHAT_BUDGET
+LONG_TERM_MEMORY_CHAR_BUDGET: int = _CFG_LTM_BUDGET
+SUMMARY_CHAR_BUDGET: int = _CFG_SUMMARY_BUDGET
 
 
 # ---------------------------------------------------------------------------

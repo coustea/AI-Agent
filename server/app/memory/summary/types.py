@@ -3,15 +3,31 @@
 模块职责：
 - 定义概要相关常量
 - 定义概要默认结构
+- 定义概要 LLM 输出模型
 """
 
 from __future__ import annotations
 
 from typing import Any, Final
 
+from pydantic import BaseModel, Field
+
 
 # Token 阈值（触发概要生成）
 SUMMARY_TOKEN_THRESHOLD: Final[int] = 150
+
+
+class SummaryLLMOutput(BaseModel):
+    """概要 LLM 输出模型。"""
+    current_learning_task: str = Field(default="", description="当前学习任务")
+    original_user_questions: list[str] = Field(default_factory=list, description="用户原始问题")
+    explained_content: list[str] = Field(default_factory=list, description="已解释内容")
+    current_understanding: list[str] = Field(default_factory=list, description="当前理解状态")
+    current_confusions: list[str] = Field(default_factory=list, description="当前困惑点")
+    teaching_methods_used: list[str] = Field(default_factory=list, description="已使用教学方法")
+    conversation_position: str = Field(default="", description="对话进度")
+    next_action: str = Field(default="", description="下一步行动")
+    references: list[str] = Field(default_factory=list, description="参考资料")
 
 
 def make_default_summary_json() -> dict[str, Any]:

@@ -1,7 +1,7 @@
 """
 资源生成服务层。
 
-整合新架构：ResourceWorkflow + Workspace + TraceLog
+整合轻量 ResourceWorkflow、数据库资源记录和 SSE 输出。
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from app.resource.events import AgentEventEmitter
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.orchestrator import ResourceWorkflow
 from app.resource.registry import ensure_initialized, get_enabled_agent_ids, get_agent_entry
+
 
 class ResourceUsecases:
     """资源生成用例。"""
@@ -227,16 +228,10 @@ class ResourceStreamService:
         )
 
         async def _run_workflow() -> dict[str, Any]:
-            try:
-                result = await workflow.run(
-                    user_id=user_id,
-                    request=request,
-                )
-                if not result.get("success"):
-                    await emitter.emit_error(task_id="unknown", message=result.get("error", "生成失败"))
-                return result
-            finally:
-                await emitter.close()
+            return await workflow.run(
+                user_id=user_id,
+                request=request,
+            )
 
         workflow_task = asyncio.create_task(_run_workflow())
         try:

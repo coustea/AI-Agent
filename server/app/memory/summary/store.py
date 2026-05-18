@@ -103,3 +103,22 @@ class SummaryStore(BaseStore):
         """获取最新概要。"""
         summaries = await self.list(user_id, session_id, module, limit=1)
         return summaries[0] if summaries else None
+
+    async def list_cross_session(
+        self,
+        user_id: int,
+        module: str = "mentor",
+        exclude_session_id: str | None = None,
+        limit: int = 5,
+    ) -> list[ChatSessionSummary]:
+        """跨会话查询概要，用于检索其他会话的相关记忆。"""
+        async with await self._get_session() as session:
+            stmt = select(ChatSessionSummary).where(
+                ChatSessionSummary.user_id == user_id,
+                ChatSessionSummary.module == module,
+            )
+            if exclude_session_id:
+                stmt = stmt.where(ChatSessionSummary.session_id != exclude_session_id)
+            stmt = stmt.order_by(ChatSessionSummary.created_at.desc()).limit(limit)
+            result = await session.exec(stmt)
+            return list(result.all())

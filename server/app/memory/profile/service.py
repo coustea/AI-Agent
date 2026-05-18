@@ -18,6 +18,7 @@ from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
 from app.memory.message.types import DIALOGUE_ROLES
 from app.memory.message.store import MessageStore
+from app.memory.memory.store import LongTermMemoryStore
 from app.memory.prompts import render_prompt
 from app.memory.profile.store import ProfileStore
 from app.memory.profile.types import (
@@ -167,6 +168,7 @@ class ProfileService:
         self.module = module
         self.store = ProfileStore()
         self.message_store = MessageStore()
+        self.memory_store = LongTermMemoryStore()
         self.llm = get_llm_manager()
 
     async def get(self, user_id: int):
@@ -228,10 +230,19 @@ class ProfileService:
 
         old_json = old.profile_json if old and old.profile_json else make_default_profile_json()
 
+        # 获取长期记忆作为补充上下文
+        long_term_text = "暂无长期记忆。"
+        try:
+            ltm = await self.memory_store.get(user_id, self.module)
+            if ltm and ltm.memory_markdown:
+                long_term_text = ltm.memory_markdown[:3000]
+        except Exception as e:
+            logger.warning("[ProfileService] 获取长期记忆失败: %s", e)
+
         # 调用 LLM 构建画像
         try:
             recent_dialogue = await self._build_recent_dialogue(user_id, session_id)
-            prompt = self._build_prompt(old_json, recent_dialogue)
+            prompt = self._build_prompt(old_json, recent_dialogue, long_term_text)
             resp = await self.llm.ainvoke_structured(
                 "spark_max",
                 ProfileOutput,
@@ -337,7 +348,7 @@ class ProfileService:
             lines.append(f"{role}: {content[:1200]}")
         return "\n".join(lines)[-6000:] or "暂无近期原始对话。"
 
-    def _build_prompt(self, old_json: dict[str, Any], recent_dialogue: str) -> str:
+    def _build_prompt(self, old_json: dict[str, Any], recent_dialogue: str, long_term_memory: str = "暂无长期记忆。") -> str:
         """构建 LLM prompt。"""
         return render_prompt(
             "profile_builder.md",
@@ -348,6 +359,7 @@ class ProfileService:
             ),
             old_profile=json.dumps(old_json, ensure_ascii=False, indent=2),
             recent_dialogue=recent_dialogue,
+            long_term_memory=long_term_memory,
         )
 
     def _parse_response(self, payload: dict[str, Any]) -> dict[str, Any]:
