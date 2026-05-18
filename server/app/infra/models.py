@@ -337,9 +337,23 @@ class GeneratedResourceItem(SQLModel, table=True):
     # 内容格式（markdown/json/mermaid）
     content_format: str = Field(default="json", max_length=50)
 
+    # 展示与契约信息
+    title: str | None = Field(default=None, max_length=200)
+    summary: str | None = Field(default=None, sa_column=Column(Text))
+    output_contract: str | None = Field(default=None, max_length=80)
+    generated_by: str | None = Field(default=None, max_length=50, index=True)
+
     # 内容主体（根据 content_format 选择存储位置）
     content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     content_text: str | None = Field(default=None, sa_column=Column(Text))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+
+    # Agent 协作与路径规划检索字段
+    depends_on_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    source_resource_item_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))
+    covered_knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    weak_points_covered: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    recommended_next_resource_types: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     # Agent 执行报告
     execution_report: str | None = Field(default=None, sa_column=Column(Text))
@@ -374,6 +388,10 @@ class LearningEvent(SQLModel, table=True):
     user_id: int = Field(index=True)
     session_id: str | None = Field(default=None, max_length=100, index=True)
     resource_id: int | None = Field(default=None, index=True)
+    resource_item_id: int | None = Field(default=None, index=True)
+    path_id: int | None = Field(default=None, index=True)
+    path_node_id: int | None = Field(default=None, index=True)
+    node_id: str | None = Field(default=None, max_length=50, index=True)
     event_type: str = Field(max_length=50, index=True)
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
@@ -394,11 +412,12 @@ class LearningEvent(SQLModel, table=True):
 class LearningPath(SQLModel, table=True):
     """学习路径表 — 保存用户的个性化学习路径规划。
 
-    一个用户在一个 module 下只有一条当前学习路径。
+    一个用户在一个 module 下可以拥有多条学习路径。
     """
     __tablename__ = "learning_paths"
     __table_args__ = (
-        UniqueConstraint("user_id", "module", name="uq_learning_path_user_module"),
+        Index("ix_learning_paths_user_module_active", "user_id", "module", "is_active"),
+        Index("ix_learning_paths_user_source_resource", "user_id", "source_resource_id"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -406,6 +425,11 @@ class LearningPath(SQLModel, table=True):
     module: str = Field(default="mentor", index=True)
 
     # 路径配置
+    path_key: str | None = Field(default=None, max_length=100, index=True)
+    title: str | None = Field(default=None, max_length=200)
+    course: str | None = Field(default=None, max_length=200)
+    topic: str | None = Field(default=None, max_length=200, index=True)
+    source_resource_id: int | None = Field(default=None, index=True)
     learning_goal: str | None = Field(default=None, sa_column=Column(Text))
     knowledge_level: str | None = Field(default=None, max_length=100)
 
@@ -423,6 +447,7 @@ class LearningPath(SQLModel, table=True):
 
     # 版本与状态
     version: int = Field(default=1)
+    status: str = Field(default="active", max_length=30, index=True)
     is_active: bool = Field(default=True)
 
     created_at: datetime = Field(
@@ -469,6 +494,9 @@ class LearningPathNode(SQLModel, table=True):
 
     # 关联资源
     resource_id: int | None = Field(default=None, index=True)
+    resource_item_id: int | None = Field(default=None, index=True)
+    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    weak_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

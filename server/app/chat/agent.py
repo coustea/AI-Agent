@@ -104,13 +104,13 @@ def _graph_stream_kwargs() -> dict[str, Any]:
 
 
 def _stream_chunk_text(chunk: Any) -> str:
-    """Extract plain text from a LangChain stream chunk.
+    """从 LangChain 流式块中提取纯文本。
 
     Args:
-        chunk: LangChain stream chunk object.
+        chunk: LangChain 流式块对象。
 
     Returns:
-        Extracted plain text string.
+        提取的纯文本字符串。
     """
     if chunk is None:
         return ""
@@ -172,6 +172,60 @@ class TutorAgent:
         if cls._shared_instance is None:
             cls._shared_instance = cls()
         return cls._shared_instance
+
+    # ------------------------------------------------------------------
+    # 内部辅助方法
+    # ------------------------------------------------------------------
+
+    async def _invoke_with_retry(
+        self,
+        messages: list[Any],
+        *,
+        node_name: str,
+        fallback_text: str = "抱歉，我暂时无法回答这个问题，请稍后重试。",
+        retry_prompt: str = "请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。",
+    ) -> str:
+        """调用 LLM 并在无效回复时重试。
+
+        Args:
+            messages: 初始消息列表。
+            node_name: 节点名称，用于日志。
+            fallback_text: 最终失败时的回退文本。
+            retry_prompt: 重试时的提示词。
+
+        Returns:
+            LLM 返回的文本内容。
+        """
+        try:
+            response = await self.llm_manager.ainvoke(
+                "spark_max",
+                messages,
+                model_kwargs=self.spark_model_kwargs,
+            )
+            text = normalize_message_content(getattr(response, "content", response))
+        except Exception as exc:
+            logger.warning("[TutorAgent] %s Spark MAX 调用失败 err=%s", node_name, exc)
+            text = ""
+
+        # 无效回复重试
+        if is_unusable_reply_text(text):
+            logger.warning("[TutorAgent] %s 重试 原因=无效回复", node_name)
+            retry_messages = messages + [HumanMessage(content=retry_prompt)]
+            try:
+                retry_response = await self.llm_manager.ainvoke(
+                    "spark_max",
+                    retry_messages,
+                    model_kwargs=self.spark_model_kwargs,
+                )
+                text = normalize_message_content(getattr(retry_response, "content", retry_response))
+            except Exception as exc:
+                logger.warning("[TutorAgent] %s 重试调用失败 err=%s", node_name, exc)
+                text = ""
+
+        if is_unusable_reply_text(text):
+            text = fallback_text
+
+        return text
 
     # ------------------------------------------------------------------
     # 图构建
@@ -291,45 +345,13 @@ class TutorAgent:
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         system_prompt = state.get("system_prompt", "")
-        attachment_context = str(state.get("attachment_analysis_context", "")).strip()
         question = extract_question(messages)
 
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
 
             full_messages = build_messages(system_prompt, list(messages))
-
-            try:
-                response = await self.llm_manager.ainvoke(
-                    "spark_max",
-                    full_messages,
-                    model_kwargs=self.spark_model_kwargs,
-                )
-                text = normalize_message_content(getattr(response, "content", response))
-            except Exception as exc:
-                logger.warning("[TutorAgent] direct_answer Spark MAX ?????? err=%s", exc)
-                text = ""
-
-
-            # 无效回复重试
-            if is_unusable_reply_text(text):
-                logger.warning("[TutorAgent] direct_answer 重试 原因=无效回复")
-                retry_messages = full_messages + [
-                    HumanMessage(content="请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。")
-                ]
-                try:
-                    retry_response = await self.llm_manager.ainvoke(
-                        "spark_max",
-                        retry_messages,
-                        model_kwargs=self.spark_model_kwargs,
-                    )
-                    text = normalize_message_content(getattr(retry_response, "content", retry_response))
-                except Exception as exc:
-                    logger.warning("[TutorAgent] direct_answer 重试调用失败 err=%s", exc)
-                    text = ""
-
-            if is_unusable_reply_text(text):
-                text = "抱歉，我暂时无法回答这个问题，请稍后重试。"
+            text = await self._invoke_with_retry(full_messages, node_name="direct_answer")
 
             response_msg = AIMessage(content=text)
             logger.debug("[TutorAgent] direct_answer 完成 preview=%s", truncate(text, 220))
@@ -461,36 +483,12 @@ class TutorAgent:
                 HumanMessage(content=prompt),
             ]
 
-            try:
-                response = await self.llm_manager.ainvoke(
-                    "spark_max",
-                    full_messages,
-                    model_kwargs=self.spark_model_kwargs,
-                )
-                text = normalize_message_content(getattr(response, "content", response))
-            except Exception as exc:
-                logger.warning("[TutorAgent] spark_summary Spark MAX 调用失败 err=%s", exc)
-                text = ""
-
-            # 无效回复重试
-            if is_unusable_reply_text(text):
-                logger.warning("[TutorAgent] spark_summary 重试 原因=无效回复")
-                retry_messages = full_messages + [
-                    HumanMessage(content="请基于搜索结果重新回答，给出完整、可读、适合教学场景的中文回答。")
-                ]
-                try:
-                    retry_response = await self.llm_manager.ainvoke(
-                        "spark_max",
-                        retry_messages,
-                        model_kwargs=self.spark_model_kwargs,
-                    )
-                    text = normalize_message_content(getattr(retry_response, "content", retry_response))
-                except Exception as exc:
-                    logger.warning("[TutorAgent] spark_summary 重试调用失败 err=%s", exc)
-                    text = ""
-
-            if is_unusable_reply_text(text):
-                text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
+            text = await self._invoke_with_retry(
+                full_messages,
+                node_name="spark_summary",
+                fallback_text=search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。",
+                retry_prompt="请基于搜索结果重新回答，给出完整、可读、适合教学场景的中文回答。",
+            )
 
             response_msg = AIMessage(content=text)
             logger.debug("[TutorAgent] spark_summary 完成 preview=%s", truncate(text, 220))
@@ -559,36 +557,7 @@ class TutorAgent:
 
             full_messages = build_messages(system_prompt, [HumanMessage(content=answer_prompt)])
 
-            try:
-                response = await self.llm_manager.ainvoke(
-                    "spark_max",
-                    full_messages,
-                    model_kwargs=self.spark_model_kwargs,
-                )
-                text = normalize_message_content(getattr(response, "content", response))
-            except Exception as exc:
-                logger.warning("[TutorAgent] attachment_answer Spark MAX 调用失败 err=%s", exc)
-                text = ""
-
-            # 无效回复重试
-            if is_unusable_reply_text(text):
-                logger.warning("[TutorAgent] attachment_answer 重试 原因=无效回复")
-                retry_messages = full_messages + [
-                    HumanMessage(content="请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。")
-                ]
-                try:
-                    retry_response = await self.llm_manager.ainvoke(
-                        "spark_max",
-                        retry_messages,
-                        model_kwargs=self.spark_model_kwargs,
-                    )
-                    text = normalize_message_content(getattr(retry_response, "content", retry_response))
-                except Exception as exc:
-                    logger.warning("[TutorAgent] attachment_answer 重试调用失败 err=%s", exc)
-                    text = ""
-
-            if is_unusable_reply_text(text):
-                text = "抱歉，我暂时无法回答这个问题，请稍后重试。"
+            text = await self._invoke_with_retry(full_messages, node_name="attachment_answer")
 
             response_msg = AIMessage(content=text)
             logger.debug("[TutorAgent] attachment_answer 完成 preview=%s", truncate(text, 220))
@@ -610,7 +579,16 @@ class TutorAgent:
         answer: str,
         state: TutorState,
     ) -> DiagramDecision:
-        """Decide whether to generate a diagram for final answer."""
+        """判断是否需要为最终回答生成图解。
+
+        Args:
+            question: 用户问题。
+            answer: 最终回答文本。
+            state: LangGraph 状态。
+
+        Returns:
+            图解决策结果。
+        """
         requested = state.get("need_diagram")
         if requested is False:
             return DiagramDecision(
@@ -635,14 +613,7 @@ class TutorAgent:
                 ],
             )
 
-            # User explicitly requested diagram: force safe fallback if model says no/empty.
-            if requested is True and not decision.need_diagram:
-                return DiagramDecision(
-                    need_diagram=True,
-                    diagram_type=decision.diagram_type or "flow",
-                    reason=decision.reason or "forced_by_user_request",
-                )
-            if requested is True and not decision.diagram_type:
+            if requested is True and decision.need_diagram and not decision.diagram_type:
                 return DiagramDecision(
                     need_diagram=True,
                     diagram_type="flow",
@@ -716,14 +687,14 @@ class TutorAgent:
 
     @staticmethod
     def _trim_text(value: Any, max_len: int) -> Any:
-        """Trim text to specified length if value is a string.
+        """将文本截断到指定长度。
 
         Args:
-            value: Value to trim, only strings are modified.
-            max_len: Maximum character length.
+            value: 要截断的值，仅字符串会被修改。
+            max_len: 最大字符长度。
 
         Returns:
-            Trimmed string or original value.
+            截断后的字符串或原始值。
         """
         if not isinstance(value, str):
             return value
@@ -734,14 +705,14 @@ class TutorAgent:
 
     @classmethod
     def _trim_mapping_fields(cls, mapping: dict[str, Any], limits: dict[str, int]) -> dict[str, Any]:
-        """Trim multiple fields in a mapping to their specified limits.
+        """批量截断字典中多个字段到指定长度。
 
         Args:
-            mapping: Dictionary with fields to trim.
-            limits: Mapping of field names to character limits.
+            mapping: 包含待截断字段的字典。
+            limits: 字段名到字符限制的映射。
 
         Returns:
-            Modified mapping with trimmed fields.
+            修改后的字典，字段已截断。
         """
         for key, limit in limits.items():
             if key in mapping:
@@ -750,14 +721,14 @@ class TutorAgent:
 
     @classmethod
     def _normalize_diagram_payload(cls, model_cls: type[Any], payload: dict[str, Any]) -> dict[str, Any]:
-        """Normalize common model drift outputs to match local schema expectations.
+        """规范化 LLM 输出以匹配本地模式预期。
 
         Args:
-            model_cls: Pydantic model class for schema reference.
-            payload: Raw payload dictionary from LLM.
+            model_cls: Pydantic 模型类，用于模式参考。
+            payload: LLM 返回的原始载荷字典。
 
         Returns:
-            Normalized payload matching expected schema.
+            规范化后的载荷，匹配预期模式。
         """
         payload = dict(payload)
         cls._trim_mapping_fields(payload, {"title": 20, "summary": 50})

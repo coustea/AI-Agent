@@ -12,12 +12,12 @@ from __future__ import annotations
 from app.config import PROFILE_GATE_EVERY_N_ASSISTANT_TURNS
 from app.infra.logging import get_logger
 from app.memory.core.types import ModuleName
+from app.memory.core.utils import estimate_token_count
 from app.memory.message.store import MessageStore
 from app.memory.memory.service import LongTermMemoryService
 from app.memory.profile.service import ProfileService
 from app.memory.session.store import SessionStore
 from app.memory.summary.service import SummaryService
-from app.memory.summary.types import SUMMARY_TOKEN_THRESHOLD
 
 logger = get_logger(__name__)
 
@@ -43,19 +43,18 @@ class PipelineService:
     ) -> None:
         """运行后处理流水线。"""
         # 累加 token
-        await self.session_store.accumulate_tokens(
-            user_id=user_id,
+        token_delta = estimate_token_count(f"{user_message}\n{assistant_reply}")
+        await self.session_store.add_token_count(
             session_id=session_id,
+            user_id=user_id,
             module=self.module,
-            content=f"{user_message}\n{assistant_reply}",
+            delta=token_delta,
         )
 
         # 生成会话概要
         if await self.summary_service.should_create(
             user_id=user_id,
             session_id=session_id,
-            module=self.module,
-            threshold=SUMMARY_TOKEN_THRESHOLD,
         ):
             await self._compress_session(user_id, session_id)
 
@@ -69,7 +68,7 @@ class PipelineService:
             )
 
         # 构建画像
-        await self._maybe_build_profile(user_id, session_id)
+        await self._maybe_build_profile(user_id, session_id, user_message)
 
     async def _compress_session(
         self,
@@ -77,47 +76,18 @@ class PipelineService:
         session_id: str,
     ) -> bool:
         """生成会话概要并压缩旧消息。"""
-        msgs = await self.message_store.get_recent(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module,
-            limit=50,
-        )
-        dialogue = [m for m in msgs if m.role in {"user", "assistant"} and m.content.strip()]
-        if not dialogue:
-            return False
-
-        chat_text = "\n".join(
-            f"[{m.created_at.strftime('%m-%d %H:%M')}] {m.role}: {m.content[:500]}"
-            for m in dialogue
-        )
         logger.info("[Pipeline] 创建会话概要")
-
-        await self.summary_service.compress(
+        return await self.summary_service.compress(
             user_id=user_id,
             session_id=session_id,
-            module=self.module,
-            summary_markdown=f"# 会话概要\n\n## 最近对话\n\n{chat_text[:3000]}",
-            summarized_count=len(dialogue),
-        )
-
-        await self.message_store.delete_old(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module,
             keep_recent=10,
         )
-        await self.session_store.reset_token_count(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module,
-        )
-        return True
 
     async def _maybe_build_profile(
         self,
         user_id: int,
         session_id: str,
+        user_message: str,
     ) -> None:
         """检查并触发画像构建。"""
         msgs = await self.message_store.get_recent(
@@ -141,14 +111,20 @@ class PipelineService:
         if assistant_turns and assistant_turns % PROFILE_GATE_EVERY_N_ASSISTANT_TURNS == 0:
             should_build = True
             build_reason = f"定期触发（第 {assistant_turns} 轮）"
+        elif self._has_profile_signal(user_message):
+            should_build = True
+            build_reason = "显式画像信号触发"
         elif assistant_turns == 1:
-            profile = await self.profile_service.get(user_id)
-            if profile and profile.profile_json:
-                dims = profile.profile_json.get("dimensions") or {}
-                filled_dims = sum(
-                    1 for k in dims
-                    if (dims.get(k) or {}).get("summary") or (dims.get(k) or {}).get("evidence")
-                )
+            profile = await self.profile_service.get(user_id=user_id)
+            dims = (profile.profile_json or {}).get("dimensions") if profile and profile.profile_json else {}
+            filled_dims = sum(
+                1 for k in (dims or {})
+                if ((dims or {}).get(k) or {}).get("summary") or ((dims or {}).get(k) or {}).get("evidence")
+            )
+            if not profile or not profile.profile_json:
+                should_build = True
+                build_reason = "首次对话后初始化画像"
+            else:
                 if filled_dims < 5:
                     should_build = True
                     build_reason = f"新用户首次对话后立即构建（当前 {filled_dims} 个维度有内容）"
@@ -167,3 +143,26 @@ class PipelineService:
                 logger.info("[Pipeline] 画像无变化 user=%s", user_id)
             else:
                 logger.warning("[Pipeline] 画像构建失败 user=%s", user_id)
+
+    def _has_profile_signal(self, message: str) -> bool:
+        """识别需要立即沉淀到画像的对话信号。"""
+        text = (message or "").strip()
+        if not text:
+            return False
+        return any(
+            marker in text
+            for marker in (
+                "以后",
+                "偏好",
+                "喜欢",
+                "请按",
+                "尽量",
+                "我总是",
+                "分不清",
+                "不太懂",
+                "正在",
+                "备考",
+                "准备",
+                "目标",
+            )
+        )

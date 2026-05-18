@@ -20,4 +20,4 @@ class BaseStore:
 
     async def _get_session(self) -> AsyncSession:
         """获取数据库会话。"""
-        return AsyncSession(self.engine)
+        return AsyncSession(self.engine, expire_on_commit=False)

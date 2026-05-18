@@ -78,6 +78,20 @@ class MemoryLayer:
         """更新会话标题。"""
         return await self.session_store.update_title(session_id=session_id, user_id=user_id, title=title)
 
+    async def generate_session_title(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        first_message: str,
+    ) -> str | None:
+        """基于首条消息生成并保存会话标题。"""
+        return await self.session_service.generate_title(
+            user_id=user_id,
+            session_id=session_id,
+            first_message=first_message,
+        )
+
     # ------------------------------------------------------------------
     # 消息管理
     # ------------------------------------------------------------------

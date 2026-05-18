@@ -16,7 +16,9 @@ from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm_manager
 from app.infra.logging import get_logger
+from app.memory.message.types import DIALOGUE_ROLES
 from app.memory.message.store import MessageStore
+from app.memory.prompts import render_prompt
 from app.memory.profile.store import ProfileStore
 from app.memory.profile.types import (
     ALL_DIMENSIONS,
@@ -228,7 +230,8 @@ class ProfileService:
 
         # 调用 LLM 构建画像
         try:
-            prompt = self._build_prompt(old_json)
+            recent_dialogue = await self._build_recent_dialogue(user_id, session_id)
+            prompt = self._build_prompt(old_json, recent_dialogue)
             resp = await self.llm.ainvoke_structured(
                 "spark_max",
                 ProfileOutput,
@@ -244,6 +247,7 @@ class ProfileService:
         new_json = self._parse_response(resp.model_dump())
         if not new_json:
             return True, False
+        new_json = self._merge_with_old_profile(new_json, old_json)
 
         score_json = calculate_score(new_json)
 
@@ -306,14 +310,45 @@ class ProfileService:
         profile["overall_confidence"] = _avg_confidence(profile)
         return profile
 
-    def _build_prompt(self, old_json: dict[str, Any]) -> str:
+    async def _build_recent_dialogue(
+        self,
+        user_id: int,
+        session_id: str | None,
+        limit: int = 40,
+    ) -> str:
+        """构建画像使用的近期原始对话。"""
+        if not session_id:
+            return "暂无近期原始对话。"
+
+        messages = await self.message_store.get_recent(
+            user_id=user_id,
+            session_id=session_id,
+            module=self.module,
+            limit=limit,
+        )
+        lines: list[str] = []
+        for msg in messages:
+            if msg.role not in DIALOGUE_ROLES:
+                continue
+            content = str(msg.content or "").strip()
+            if not content:
+                continue
+            role = "用户" if msg.role == "user" else "助手"
+            lines.append(f"{role}: {content[:1200]}")
+        return "\n".join(lines)[-6000:] or "暂无近期原始对话。"
+
+    def _build_prompt(self, old_json: dict[str, Any], recent_dialogue: str) -> str:
         """构建 LLM prompt。"""
-        return f"""请根据旧画像生成新的学生画像。
-
-旧画像：
-{json.dumps(old_json, ensure_ascii=False, indent=2)}
-
-请返回包含各维度信息的画像。"""
+        return render_prompt(
+            "profile_builder.md",
+            student_profile=json.dumps(
+                old_json.get("student_profile") or {},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            old_profile=json.dumps(old_json, ensure_ascii=False, indent=2),
+            recent_dialogue=recent_dialogue,
+        )
 
     def _parse_response(self, payload: dict[str, Any]) -> dict[str, Any]:
         """解析 LLM 响应。"""
@@ -338,6 +373,40 @@ class ProfileService:
         profile["last_update_reason"] = str(payload.get("last_update_reason") or "").strip()
         profile["overall_confidence"] = _avg_confidence(profile)
         return profile
+
+    def _merge_with_old_profile(
+        self,
+        new_json: dict[str, Any],
+        old_json: dict[str, Any],
+    ) -> dict[str, Any]:
+        """保留旧画像中的稳定事实，并用新对话补充更新。"""
+        merged = deepcopy(new_json)
+        if old_json.get("student_profile"):
+            merged["student_profile"] = deepcopy(old_json["student_profile"])
+
+        old_dims = old_json.get("dimensions") or {}
+        merged_dims = merged.get("dimensions") or {}
+        for key in ALL_DIMENSIONS:
+            new_dim = merged_dims.get(key) or {}
+            old_dim = old_dims.get(key) or {}
+            has_new_signal = bool(new_dim.get("summary")) or bool(new_dim.get("evidence"))
+            has_old_signal = bool(old_dim.get("summary")) or bool(old_dim.get("evidence"))
+            if not has_new_signal and has_old_signal:
+                restored = deepcopy(old_dim)
+                restored.setdefault("name", DIMENSION_NAMES.get(key, key))
+                restored.setdefault("confidence", 0.0)
+                restored.setdefault("summary", None)
+                restored.setdefault("evidence", [])
+                restored.setdefault("updated_at", None)
+                merged_dims[key] = restored
+
+        merged["dimensions"] = merged_dims
+        if not merged.get("recommended_strategy") and old_json.get("recommended_strategy"):
+            merged["recommended_strategy"] = deepcopy(old_json["recommended_strategy"])
+        if not merged.get("last_update_reason") and old_json.get("last_update_reason"):
+            merged["last_update_reason"] = old_json["last_update_reason"]
+        merged["overall_confidence"] = _avg_confidence(merged)
+        return merged
 
     def _is_same(self, new: dict[str, Any], old: dict[str, Any]) -> bool:
         """比较画像是否相同。"""
