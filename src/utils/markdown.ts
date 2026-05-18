@@ -1,3 +1,5 @@
+import MarkdownIt from 'markdown-it'
+
 const copiedCodeLanguages = new Set([
   'bash', 'c', 'cpp', 'c++', 'css', 'go', 'html', 'java', 'javascript',
   'js', 'json', 'jsx', 'python', 'py', 'sql', 'ts', 'tsx', 'typescript',
@@ -5,7 +7,24 @@ const copiedCodeLanguages = new Set([
 ])
 
 const fencePattern = /(^|\n)(`{3,}|~{3,})/g
-const sectionHeadingPattern = /^([一二三四五六七八九十]+、|方式\d+[:：]|第\d+[步点][:：]|最后[:：]|总结[:：])/
+const sectionHeadingPattern = /^([一二三四五六七八九十]+、|方式\d+[:：]|第\d+[步骤点][:：]|最后[：:]|总结[：:])/
+
+const streamingMarkdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: false,
+  typographer: false,
+})
+
+const defaultLinkOpen =
+  streamingMarkdown.renderer.rules.link_open
+  || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+
+streamingMarkdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  tokens[idx]?.attrSet('target', '_blank')
+  tokens[idx]?.attrSet('rel', 'noopener noreferrer nofollow')
+  return defaultLinkOpen(tokens, idx, options, env, self)
+}
 
 function isCopiedCodeStart(lines: string[], index: number): boolean {
   const language = lines[index]?.trim().toLowerCase()
@@ -64,4 +83,10 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
   if (!fences || fences.length % 2 === 0) return repaired
 
   return `${repaired}\n\`\`\``
+}
+
+export function renderStreamingMarkdownHtml(text: string): string {
+  const normalized = normalizeStreamingMarkdown(text, true)
+  if (!normalized.trim()) return ''
+  return streamingMarkdown.render(normalized)
 }

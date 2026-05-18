@@ -768,7 +768,7 @@ const {
   onAssistantComplete: () => {
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
-    isStreamDone = false
+    isStreamDone = true
     flushPendingStreamText(true)
     if (streamingMsgId.value !== null) {
       commitStreamTextToMessage(streamingMsgId.value)
@@ -952,7 +952,7 @@ const startAvatarThinkingTimeout = () => {
 }
 
 let scrollPending = false
-let streamFlushHandle: ReturnType<typeof setInterval> | null = null
+let streamFlushHandle: ReturnType<typeof setTimeout> | null = null
 const streamDisplayText = ref('')
 const pendingRenderQueue: string[] = []
 let pendingRenderQueueStart = 0
@@ -961,14 +961,18 @@ let pendingRenderChars = 0
 let isStreamDone = false
 const streamRenderedChunks: string[] = []
 let lastAutoScrollAt = 0
-const STREAM_FLUSH_INTERVAL_MS = 16
-const STREAM_MIN_CHARS_PER_TICK = 2
-const STREAM_BASE_CHARS_PER_TICK = 2
-const STREAM_MAX_CHARS_PER_TICK = 4
-const STREAM_TARGET_BUFFER_CHARS = 42
-const STREAM_TAIL_CHARS_PER_TICK = 1
-let streamAdaptiveLevel = 0
-const STREAM_SCROLL_INTERVAL_MS = 220
+let lastChunkArrivedAt = 0
+const STREAM_FIRST_PAINT_UNITS = 1
+const STREAM_DEFAULT_UNITS_PER_TICK = 1
+const STREAM_FAST_UNITS_PER_TICK = 2
+const STREAM_BURST_UNITS_PER_TICK = 3
+const STREAM_DONE_UNITS_PER_TICK = 4
+const STREAM_BACKLOG_FAST_THRESHOLD = 120
+const STREAM_BACKLOG_BURST_THRESHOLD = 320
+const STREAM_BASE_DELAY_MS = 14
+const STREAM_MIN_DELAY_MS = 6
+const STREAM_MAX_DELAY_MS = 44
+const STREAM_SCROLL_INTERVAL_MS = 64
 const STREAM_AUTO_SCROLL_BOTTOM_GAP_PX = 96
 
 // 计算属性
@@ -1157,24 +1161,116 @@ const isNearBottom = () => {
   return gap <= STREAM_AUTO_SCROLL_BOTTOM_GAP_PX
 }
 
-const flushPendingStreamText = (forceScroll = false) => {
+const isCjkCharacter = (char: string): boolean => {
+  return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(char)
+}
+
+const isInsideOpenFence = (text: string): boolean => {
+  const fences = text.match(/(^|\n)(`{3,}|~{3,})/g)
+  return !!fences && fences.length % 2 === 1
+}
+
+const takeAsciiWordUnit = (text: string): number => {
+  const word = text.match(/^[A-Za-z0-9_]+(?:['-][A-Za-z0-9_]+)*/)
+  if (!word) return 1
+  let take = word[0].length
+  while (take < text.length && /\s/.test(text[take] || '')) {
+    take += 1
+  }
+  return take
+}
+
+const takeNextStreamUnit = (text: string, inCodeBlock: boolean): number => {
+  if (!text) return 0
+
+  if (text.startsWith('\r\n')) return 2
+  if (text.startsWith('\n')) return 1
+
+  const listMarker = text.match(/^(?:[-*+]\s|\d+\.\s)/)
+  if (listMarker) return listMarker[0].length
+
+  const fenceMarker = text.match(/^(?:`{3,}|~{3,})/)
+  if (fenceMarker) return fenceMarker[0].length
+
+  const currentChar = text[0] || ''
+  if (inCodeBlock) {
+    if (/^[ \t]+/.test(text)) {
+      return (text.match(/^[ \t]+/)?.[0].length) || 1
+    }
+    if (/[A-Za-z0-9_]/.test(currentChar)) {
+      return Math.min(takeAsciiWordUnit(text), 3)
+    }
+    return 1
+  }
+
+  if (isCjkCharacter(currentChar)) return 1
+
+  if (/[A-Za-z0-9_]/.test(currentChar)) {
+    return takeAsciiWordUnit(text)
+  }
+
+  if (/\s/.test(currentChar)) {
+    return 1
+  }
+
+  return 1
+}
+
+const getUnitsPerTick = (backlogChars: number, inCodeBlock: boolean, streamDone: boolean): number => {
+  if (streamDone) {
+    if (backlogChars >= STREAM_BACKLOG_BURST_THRESHOLD) return STREAM_DONE_UNITS_PER_TICK + 1
+    return STREAM_DONE_UNITS_PER_TICK
+  }
+  if (backlogChars >= STREAM_BACKLOG_BURST_THRESHOLD) {
+    return inCodeBlock ? STREAM_BURST_UNITS_PER_TICK + 1 : STREAM_BURST_UNITS_PER_TICK
+  }
+  if (backlogChars >= STREAM_BACKLOG_FAST_THRESHOLD) {
+    return inCodeBlock ? STREAM_FAST_UNITS_PER_TICK + 1 : STREAM_FAST_UNITS_PER_TICK
+  }
+  return inCodeBlock ? STREAM_DEFAULT_UNITS_PER_TICK + 1 : STREAM_DEFAULT_UNITS_PER_TICK
+}
+
+const getNextStreamDelay = (
+  emittedText: string,
+  backlogChars: number,
+  inCodeBlock: boolean,
+  streamDone: boolean,
+): number => {
+  let delay = inCodeBlock ? 8 : STREAM_BASE_DELAY_MS
+
+  if (/[。！？.!?]\s*$/.test(emittedText)) {
+    delay += 20
+  } else if (/[,，；;：:]\s*$/.test(emittedText)) {
+    delay += 10
+  } else if (/\n\s*$/.test(emittedText)) {
+    delay += 14
+  } else if (/[A-Za-z0-9_]\s$/.test(emittedText)) {
+    delay += 4
+  }
+
+  if (backlogChars >= STREAM_BACKLOG_BURST_THRESHOLD) {
+    delay -= 6
+  } else if (backlogChars >= STREAM_BACKLOG_FAST_THRESHOLD) {
+    delay -= 3
+  }
+
+  if (streamDone) {
+    delay -= 4
+  }
+
+  return Math.max(STREAM_MIN_DELAY_MS, Math.min(STREAM_MAX_DELAY_MS, delay))
+}
+
+const flushPendingStreamText = (forceScroll = false, unitOverride?: number): number => {
   if (pendingRenderQueueStart >= pendingRenderQueue.length) return
   const aiMsg = streamingMsgRef.value
   if (aiMsg) {
-    // Controlled adaptive pacing: speed up gently when backlog builds,
-    // but keep a hard ceiling so late-stage output won't "suddenly sprint".
-    const error = (pendingRenderChars - STREAM_TARGET_BUFFER_CHARS) / STREAM_TARGET_BUFFER_CHARS
-    if (error > 0) {
-      streamAdaptiveLevel = Math.min(1, streamAdaptiveLevel + 0.14 * error)
-    } else {
-      streamAdaptiveLevel = Math.max(0, streamAdaptiveLevel - 0.06)
-    }
-    let remaining = STREAM_BASE_CHARS_PER_TICK + Math.floor(streamAdaptiveLevel * (STREAM_MAX_CHARS_PER_TICK - STREAM_BASE_CHARS_PER_TICK))
-    if (remaining < STREAM_MIN_CHARS_PER_TICK) remaining = STREAM_MIN_CHARS_PER_TICK
-    if (remaining > STREAM_MAX_CHARS_PER_TICK) remaining = STREAM_MAX_CHARS_PER_TICK
-    if (isStreamDone) remaining = STREAM_TAIL_CHARS_PER_TICK
+    let unitsRemaining = typeof unitOverride === 'number'
+      ? unitOverride
+      : getUnitsPerTick(pendingRenderChars, isInsideOpenFence(streamDisplayText.value), isStreamDone)
     let out = ''
-    while (remaining > 0 && pendingRenderQueueStart < pendingRenderQueue.length) {
+    let inCodeBlock = isInsideOpenFence(streamDisplayText.value)
+    while (unitsRemaining > 0 && pendingRenderQueueStart < pendingRenderQueue.length) {
       const part = pendingRenderQueue[pendingRenderQueueStart] || ''
       const available = part.length - pendingRenderOffset
       if (available <= 0) {
@@ -1182,11 +1278,12 @@ const flushPendingStreamText = (forceScroll = false) => {
         pendingRenderOffset = 0
         continue
       }
-      const take = Math.min(remaining, available)
+      const take = Math.min(available, Math.max(1, takeNextStreamUnit(part.slice(pendingRenderOffset), inCodeBlock)))
       out += part.slice(pendingRenderOffset, pendingRenderOffset + take)
       pendingRenderOffset += take
       pendingRenderChars -= take
-      remaining -= take
+      unitsRemaining -= 1
+      inCodeBlock = isInsideOpenFence(streamDisplayText.value + out)
       if (pendingRenderOffset >= part.length) {
         pendingRenderQueueStart += 1
         pendingRenderOffset = 0
@@ -1203,28 +1300,46 @@ const flushPendingStreamText = (forceScroll = false) => {
       pendingRenderChars = 0
     }
     scrollToBottomThrottled(forceScroll)
+    return getNextStreamDelay(out, pendingRenderChars, inCodeBlock, isStreamDone)
   }
+  return STREAM_BASE_DELAY_MS
+}
+
+const scheduleStreamFlush = (forceScroll = false, delayMs = STREAM_BASE_DELAY_MS) => {
+  if (streamFlushHandle != null) return
+  streamFlushHandle = window.setTimeout(() => {
+    streamFlushHandle = null
+    const nextDelay = flushPendingStreamText(forceScroll)
+    if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+      if (isStreamDone && streamingMsgId.value != null) {
+        const doneId = streamingMsgId.value
+        finishStream(doneId)
+      }
+      return
+    }
+    scheduleStreamFlush(false, nextDelay)
+  }, delayMs)
 }
 
 const enqueueStreamChunk = (messageId: number, chunk: string) => {
   if (!chunk) return
   if (streamingMsgRef.value?.id !== messageId) return
+  lastChunkArrivedAt = Date.now()
   pendingRenderQueue.push(chunk)
   pendingRenderChars += chunk.length
-  if (streamFlushHandle != null) return
-  streamFlushHandle = setInterval(() => {
-    flushPendingStreamText()
-    if (pendingRenderQueueStart >= pendingRenderQueue.length && isStreamDone && streamingMsgId.value != null) {
-      const doneId = streamingMsgId.value
-      stopStreamFlushLoop()
-      finishStream(doneId)
-      return
-    }
-    if (pendingRenderQueueStart >= pendingRenderQueue.length && streamFlushHandle != null) {
-      clearInterval(streamFlushHandle)
-      streamFlushHandle = null
-    }
-  }, STREAM_FLUSH_INTERVAL_MS)
+  const shouldPrimeFirstPaint =
+    streamRenderedChunks.length === 0
+    && !streamDisplayText.value
+    && pendingRenderQueueStart === 0
+    && pendingRenderOffset === 0
+    && pendingRenderChars === chunk.length
+  if (shouldPrimeFirstPaint) {
+    flushPendingStreamText(true, STREAM_FIRST_PAINT_UNITS)
+  }
+  if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+    return
+  }
+  scheduleStreamFlush()
 }
 
 const finishStream = (messageId: number) => {
@@ -1259,7 +1374,7 @@ const commitStreamTextToMessage = (messageId: number) => {
   pendingRenderOffset = 0
   pendingRenderChars = 0
   isStreamDone = false
-  streamAdaptiveLevel = 0
+  lastChunkArrivedAt = 0
   streamRenderedChunks.length = 0
   streamDisplayText.value = ''
   streamingMsgRef.value = null
@@ -1267,7 +1382,7 @@ const commitStreamTextToMessage = (messageId: number) => {
 
 const stopStreamFlushLoop = () => {
   if (streamFlushHandle != null) {
-    clearInterval(streamFlushHandle)
+    clearTimeout(streamFlushHandle)
     streamFlushHandle = null
   }
 }
@@ -1738,7 +1853,6 @@ const handleSend = async () => {
   streamingMsgId.value = aiMsgId
   streamingMsgRef.value = messages.value[messages.value.length - 1] || null
   isStreamDone = false
-  streamAdaptiveLevel = 0
   streamRenderedChunks.length = 0
   streamDisplayText.value = ''
 
@@ -2687,10 +2801,9 @@ onBeforeUnmount(() => {
 .bubble {
   padding: 10px 14px;
   font-size: 0.95rem;
-  line-height: 1.6;
+  line-height: 1.65;
   word-break: break-word;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
   max-width: 100%;
 }
 
@@ -2742,6 +2855,8 @@ onBeforeUnmount(() => {
   color: inherit;
   overflow-wrap: anywhere;
   text-align: left; /* 确保严格左对齐 */
+  word-break: normal;
+  line-height: 1.65;
 }
 
 :deep(.markdown-body > :first-child) {
@@ -2753,39 +2868,60 @@ onBeforeUnmount(() => {
 }
 
 :deep(.markdown-body p) {
-  margin: 0 0 0.45rem 0; /* 收紧段落底部间距，减少气泡底部留白 */
+  margin: 0 0 0.55rem 0;
 }
 
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
-  margin: 0.55rem 0 0.75rem;
-  padding-left: 1.35rem;
+  margin: 0.4rem 0 0.55rem;
+  padding-left: 1.15rem;
+}
+
+:deep(.markdown-body ul ul),
+:deep(.markdown-body ul ol),
+:deep(.markdown-body ol ul),
+:deep(.markdown-body ol ol) {
+  margin: 0.16rem 0 0.1rem;
+  padding-left: 1rem;
+}
+
+:deep(.markdown-body li) {
+  margin: 0.08rem 0;
+}
+
+:deep(.markdown-body li > p) {
+  margin: 0;
 }
 
 :deep(.markdown-body li + li) {
-  margin-top: 0.25rem;
+  margin-top: 0.16rem;
 }
 
 :deep(.markdown-body h1),
 :deep(.markdown-body h2),
 :deep(.markdown-body h3),
 :deep(.markdown-body h4) {
-  margin: 0.9rem 0 0.5rem;
+  margin: 0.8rem 0 0.38rem;
   padding-bottom: 0;
   border-bottom: 0;
-  line-height: 1.35;
+  line-height: 1.4;
+  font-weight: 700;
 }
 
 :deep(.markdown-body h1) {
-  font-size: 1.25rem;
+  font-size: 1.16rem;
 }
 
 :deep(.markdown-body h2) {
-  font-size: 1.15rem;
+  font-size: 1.08rem;
 }
 
 :deep(.markdown-body h3) {
-  font-size: 1.05rem;
+  font-size: 1rem;
+}
+
+:deep(.markdown-body h4) {
+  font-size: 0.95rem;
 }
 
 /* 内联代码优化 */
@@ -2798,8 +2934,8 @@ onBeforeUnmount(() => {
 }
 
 :deep(.markdown-body blockquote) {
-  margin: 0.7rem 0;
-  padding: 0.15rem 0 0.15rem 0.85rem;
+  margin: 0.55rem 0;
+  padding: 0.08rem 0 0.08rem 0.75rem;
   color: #64748B;
   border-left: 3px solid #CBD5E1;
 }

@@ -265,7 +265,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight, Warning, Aim, Position, Collection, Service,
-  List, Compass, Clock, Right, Cpu, DataAnalysis, Check
+  List, Compass, Right, Cpu, DataAnalysis
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
