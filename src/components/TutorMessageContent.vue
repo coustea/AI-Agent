@@ -1,24 +1,14 @@
 <template>
   <div class="tutor-message-content">
-    <template v-if="isStreaming">
-      <div
-        class="stream-markdown markdown-body"
-        v-html="streamingHtml"
-      ></div>
-    </template>
-    <template v-else>
-      <MarkdownPreview
-        class="tutor-markdown-block"
-        :content="content"
-        :is-streaming="false"
-      />
-    </template>
+    <div
+      class="stream-markdown markdown-body tutor-markdown-block"
+      v-html="streamingHtml"
+    ></div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { renderStreamingMarkdownHtml } from '@/utils/markdown'
 
 const props = defineProps<{
