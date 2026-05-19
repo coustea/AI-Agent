@@ -618,6 +618,7 @@ import {
   type ChatSession,
 } from '@/api/chat'
 import { getMe } from '@/api/auth'
+import { useLearningTracker } from '@/composables/useLearningTracker'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
@@ -889,6 +890,17 @@ const profileUpdated = ref(false)
 const memoryEnabled = ref(false)
 const profileCards = ref<ProfileCard[]>([])
 let profilePollTimers: ReturnType<typeof setTimeout>[] = []
+
+const tutorTracker = useLearningTracker({
+  context: 'tutor',
+  get sessionId() {
+    return currentSessionId.value ?? null
+  },
+  getMetadata: () => ({
+    chat_mode: chatMode.value,
+    session_id: currentSessionId.value ?? null,
+  }),
+})
 
 const fabPos = ref({ x: 16, y: 0 })
 const isDragging = ref(false)
@@ -1584,12 +1596,14 @@ const refreshSessionTitleWithRetry = async (sessionId: string) => {
 }
 
 const newSession = () => {
+  void tutorTracker.flush()
   currentSessionId.value = undefined
   messages.value = []
   pendingFiles.value = []
 }
 
 const switchSession = async (sessionId: string) => {
+  await tutorTracker.flush()
   currentSessionId.value = sessionId
   messages.value = []
 
@@ -1992,9 +2006,11 @@ onMounted(async () => {
     await switchSession(sessions.value[0]!.id)
   }
   await fetchProfile()
+  tutorTracker.start()
 })
 
 onBeforeUnmount(() => {
+  void tutorTracker.stop()
   clearAvatarThinkingTimeout()
   disconnectAvatar()
   flushPendingStreamText()

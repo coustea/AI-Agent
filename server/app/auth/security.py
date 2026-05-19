@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -16,6 +16,7 @@ from app.infra.database import session_scope
 from app.infra.models import ActiveToken, User
 
 bearer_scheme = HTTPBearer()
+optional_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -41,7 +42,11 @@ def _is_expired(expires_at: datetime | None) -> bool:
 async def create_token(user_id: int, session: AsyncSession) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS)
     payload = {"sub": str(user_id), "exp": expire}
-    token = jwt.encode(payload, JWT_SECRET_KEY or "dev-secret-change-in-production-long-enough", algorithm=JWT_ALGORITHM)
+    token = jwt.encode(
+        payload,
+        JWT_SECRET_KEY or "dev-secret-change-in-production-long-enough",
+        algorithm=JWT_ALGORITHM,
+    )
     session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))
     await session.commit()
     return token
@@ -79,10 +84,7 @@ async def revoke_token(token: str, session: AsyncSession) -> None:
         await session.commit()
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> User:
-    token = credentials.credentials
+async def _resolve_current_user_from_token(token: str) -> User:
     async with session_scope() as session:
         if not await is_token_valid(token, session):
             raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
@@ -92,3 +94,19 @@ async def get_current_user(
             raise HTTPException(status_code=401, detail="用户不存在")
         await session.refresh(user)
         return user
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> User:
+    return await _resolve_current_user_from_token(credentials.credentials)
+
+
+async def get_current_user_flexible(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
+    token: str | None = Query(default=None),
+) -> User:
+    resolved_token = credentials.credentials if credentials else token
+    if not resolved_token:
+        raise HTTPException(status_code=401, detail="缺少 Token")
+    return await _resolve_current_user_from_token(resolved_token)

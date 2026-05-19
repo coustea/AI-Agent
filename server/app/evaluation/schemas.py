@@ -15,6 +15,7 @@ LearningEventType = Literal[
     "path_feedback",
     "tutor_helpful",
     "resource_feedback",
+    "learning_heartbeat",
 ]
 
 
@@ -66,4 +67,31 @@ class EvaluationSummary(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
     metrics: list[EvaluationMetric] = Field(default_factory=list)
     recent_events: list[LearningEventItem] = Field(default_factory=list)
+
+
+class DailyTimeEntry(BaseModel):
+    """Daily learning time entry."""
+
+    date: str
+    seconds: int = Field(default=0, ge=0)
+
+
+class HourlyDistributionEntry(BaseModel):
+    """Hourly learning time distribution entry."""
+
+    hour: int = Field(ge=0, le=23)
+    seconds: int = Field(default=0, ge=0)
+
+
+class LearningTimeStats(BaseModel):
+    """Learning time statistics response."""
+
+    today_seconds: int = Field(default=0, ge=0)
+    week_seconds: int = Field(default=0, ge=0)
+    month_seconds: int = Field(default=0, ge=0)
+    total_seconds: int = Field(default=0, ge=0)
+    streak_days: int = Field(default=0, ge=0)
+    daily_breakdown: list[DailyTimeEntry] = Field(default_factory=list)
+    hourly_distribution: list[HourlyDistributionEntry] = Field(default_factory=list)
+    context_breakdown: dict[str, int] = Field(default_factory=dict)
 

@@ -191,6 +191,7 @@ export type LearningEventType =
   | 'path_feedback'
   | 'tutor_helpful'
   | 'resource_feedback'
+  | 'learning_heartbeat'
 
 export interface LearningEventCreate {
   event_type: LearningEventType
@@ -234,6 +235,27 @@ export interface EvaluationSummary {
   recent_events: LearningEventItem[]
 }
 
+export interface DailyTimeEntry {
+  date: string
+  seconds: number
+}
+
+export interface HourlyDistributionEntry {
+  hour: number
+  seconds: number
+}
+
+export interface LearningTimeStats {
+  today_seconds: number
+  week_seconds: number
+  month_seconds: number
+  total_seconds: number
+  streak_days: number
+  daily_breakdown: DailyTimeEntry[]
+  hourly_distribution: HourlyDistributionEntry[]
+  context_breakdown?: Record<string, number>
+}
+
 export function recordLearningEvent(payload: LearningEventCreate) {
   return http.post<ApiResponse<{ id: number }>>('/ai/evaluation/events', payload)
 }
@@ -241,6 +263,12 @@ export function recordLearningEvent(payload: LearningEventCreate) {
 export function getEvaluationSummary(limit = 100) {
   return http.get<ApiResponse<EvaluationSummary>>('/ai/evaluation/summary', {
     params: { limit },
+  })
+}
+
+export function getLearningTimeStats(days = 30) {
+  return http.get<ApiResponse<LearningTimeStats>>('/ai/evaluation/time-stats', {
+    params: { days },
   })
 }
 
