@@ -18,7 +18,7 @@ from wsgiref.handlers import format_date_time
 import websockets
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.config import SPARK_VISION_API_KEY, SPARK_VISION_API_SECRET, SPARK_VISION_APPID
+from app.config import SPARK_API_KEY, SPARK_API_SECRET, SPARK_APP_ID
 from app.infra.llm import LlmManager, get_llm_manager
 from app.infra.logging import get_logger
 from app.utils.files import resolve_uploaded_image_path
@@ -66,9 +66,9 @@ class SparkImageService:
     """讯飞 Spark 图片理解服务。"""
 
     def __init__(self):
-        self.appid = SPARK_VISION_APPID
-        self.api_key = SPARK_VISION_API_KEY
-        self.api_secret = SPARK_VISION_API_SECRET
+        self.appid = SPARK_APP_ID
+        self.api_key = SPARK_API_KEY
+        self.api_secret = SPARK_API_SECRET
         if not all([self.appid, self.api_key, self.api_secret]):
             logger.warning("[SparkImage] 凭据未完整配置，图片理解将回退到 GLM")
 

@@ -7,7 +7,7 @@ import re
 from langchain_community.tools import DuckDuckGoSearchRun, TavilySearchResults
 from langchain_core.tools import tool
 
-from app.config import SERPAPI_API_KEY, TAVILY_API_KEY
+from app.config import SERPAPI_KEY, TAVILY_KEY
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -41,11 +41,11 @@ def duckduckgo_search(query: str) -> str:
 @tool("tavily_search")
 def tavily_search(query: str) -> str:
     """使用 Tavily 搜索网页，返回结构化搜索结果摘要。"""
-    if not (TAVILY_API_KEY or "").strip():
-        return "Tavily 搜索不可用: 未配置 TAVILY_API_KEY"
+    if not (TAVILY_KEY or "").strip():
+        return "Tavily 搜索不可用: 未配置 TAVILY_KEY"
 
     try:
-        search_tool = TavilySearchResults(tavily_api_key=TAVILY_API_KEY, max_results=3)
+        search_tool = TavilySearchResults(tavily_api_key=TAVILY_KEY, max_results=3)
         result = search_tool.run(query)
         logger.info(
             "[tavily_search] query=%r result_preview=%r",
@@ -70,11 +70,11 @@ def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str 
     Returns:
         搜索结果摘要字符串。
     """
-    if not (SERPAPI_API_KEY or "").strip():
-        return "SerpApi 搜索不可用: 未配置 SERPAPI_API_KEY"
+    if not (SERPAPI_KEY or "").strip():
+        return "SerpApi 搜索不可用: 未配置 SERPAPI_KEY"
 
     try:
-        client = serpapi.Client(api_key=SERPAPI_API_KEY)
+        client = serpapi.Client(api_key=SERPAPI_KEY)
         results = client.search({
             "q": query,
             "location": location,

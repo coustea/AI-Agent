@@ -55,8 +55,8 @@ class CodeAgent(Agent):
 
         # 尝试 JSON 结构化输出
         try:
-            response = await llm.ainvoke(
-                "spark_max",
+            response = await llm.generate_json(
+                None,
                 f"{prompt}\n\n{full_input}\n\n请以 JSON 格式输出，包含 code 和 explanation 字段。",
                 model_kwargs={"temperature": 0.2, "model_kwargs": {"response_format": {"type": "json_object"}}},
             )
@@ -64,8 +64,7 @@ class CodeAgent(Agent):
             code_data = self._parse_code_json(raw)
         except Exception as exc:
             logger.warning("[CodeAgent] JSON 输出失败，回退到纯文本: %s", exc)
-            response = await llm.ainvoke(
-                "spark_max",
+            response = await llm.generate(
                 f"{prompt}\n\n{full_input}",
                 model_kwargs={"temperature": 0.2},
             )

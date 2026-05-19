@@ -128,8 +128,7 @@ class DiagramAgent(Agent):
         if extra_hint:
             suffix = f"\n\n{extra_hint}" + suffix
 
-        response = await llm.ainvoke(
-            "spark_max",
+        response = await llm.generate(
             f"{prompt}\n\n{input_text}{suffix}",
             model_kwargs={"temperature": 0.2},
         )

@@ -1421,6 +1421,7 @@ const appendEventToAgentRuntime = (event: ResourceGenerateEvent) => {
   runtime.layer = event.payload?.layer ?? runtime.layer
   runtime.agent_role = (event.payload?.agent_role as string | undefined) || runtime.agent_role
   runtime.current_action = (event.payload?.action as string | undefined) || runtime.current_action || ''
+  runtime.step_label = (event.payload?.step_label as string | undefined) || runtime.step_label
   runtime.message = event.message || runtime.message
   runtime.current_step = event.payload?.current_step ?? runtime.current_step
   runtime.total_steps = event.payload?.total_steps ?? runtime.total_steps

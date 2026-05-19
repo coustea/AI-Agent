@@ -1090,37 +1090,6 @@ const getProfileCardIcon = (key: string) => {
   return PROFILE_CARD_ICON_MAP[key] || DataLine
 }
 
-const parseProfileMarkdown = (profileMarkdown: string): ProfileCard[] => {
-  const cards: ProfileCard[] = []
-  let currentTitle = ''
-  const currentLines: string[] = []
-
-  const flush = () => {
-    if (!currentTitle) return
-    const text = currentLines.join('\n').trim() || '暂无明显信息'
-    cards.push({
-      key: normalizeCardKey(currentTitle),
-      title: currentTitle,
-      content: text,
-    })
-  }
-
-  for (const line of profileMarkdown.split('\n')) {
-    const heading = line.match(/^##\s+(.+?)\s*$/)
-    if (heading) {
-      flush()
-      currentTitle = (heading[1] ?? '').trim()
-      currentLines.length = 0
-      continue
-    }
-    if (currentTitle) {
-      currentLines.push(line)
-    }
-  }
-  flush()
-  return cards
-}
-
 const formatRelativeTime = (dateStr: string) => {
   if (!dateStr) return ''
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -1533,8 +1502,51 @@ const fetchProfile = async () => {
     const data = res.data.data
     if (!data) return
 
-    const markdown = (data.profile_markdown || '').trim()
-    const nextCards = markdown ? parseProfileMarkdown(markdown) : []
+    // 从 profile_json.dimensions 提取画像数据
+    const profileJson = data.profile_json || {}
+    const dimensions = profileJson.dimensions || {}
+    const nextCards: ProfileCard[] = []
+
+    // 维度名称映射（后端 key -> 前端显示名称）
+    const dimensionNames: Record<string, string> = {
+      knowledge_foundation: '知识基础',
+      learning_goal: '学习目标',
+      cognitive_style: '认知风格',
+      weakness_points: '薄弱环节',
+      practice_ability: '实践能力',
+      mistake_preference: '易错偏好',
+      interaction_preference: '交互偏好',
+      learning_history: '学习历史',
+    }
+
+    // 提取有内容的维度
+    for (const [key, dim] of Object.entries(dimensions)) {
+      const dimData = dim as { name?: string; summary?: string; evidence?: string[]; confidence?: number }
+      if (dimData.summary || (dimData.evidence && dimData.evidence.length > 0)) {
+        const title = dimensionNames[key] || dimData.name || key
+        let content = dimData.summary || ''
+        if (dimData.evidence && dimData.evidence.length > 0) {
+          content += '\n' + dimData.evidence.map(e => `- ${e}`).join('\n')
+        }
+        nextCards.push({
+          key: normalizeCardKey(title),
+          title: title,
+          content: content.trim() || '暂无明显信息',
+        })
+      }
+    }
+
+    // 添加推荐策略
+    const strategiesRaw = profileJson.recommended_strategy
+    const strategies: string[] = Array.isArray(strategiesRaw) ? strategiesRaw : []
+    if (strategies.length > 0) {
+      nextCards.push({
+        key: '推荐辅导策略',
+        title: '推荐辅导策略',
+        content: strategies.map((s: string) => `- ${s}`).join('\n'),
+      })
+    }
+
     const changed = JSON.stringify(nextCards) !== JSON.stringify(profileCards.value)
     profileCards.value = nextCards
 

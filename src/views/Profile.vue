@@ -383,8 +383,8 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { RadarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { getMe, uploadAvatar } from '@/api/auth'
-import { getProfileOnboarding, updateProfileOnboarding, getGeneratedResources, searchSchools } from '@/api/ai'
-import type { ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem, SchoolItem } from '@/api/ai'
+import { getProfileOnboarding, updateProfileOnboarding, getGeneratedResources, searchSchools, getProfileScore } from '@/api/ai'
+import type { ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem, SchoolItem, ProfileScoreData } from '@/api/ai'
 
 use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
 
@@ -440,6 +440,8 @@ const studentProfile = ref<StudentProfileData & { learning_duration_total?: numb
   preferred_language: null,
   learning_duration_total: 0
 })
+
+const profileScoreData = ref<ProfileScoreData | null>(null)
 
 const profileForm = reactive<ProfileOnboardingUpdate>({
   education_level: '',
@@ -530,15 +532,17 @@ const fillProfileForm = (payload: StudentProfileData) => {
 }
 
 const loadProfileInfo = async () => {
-  const [userRes, onboardingRes] = await Promise.all([
+  const [userRes, onboardingRes, scoreRes] = await Promise.all([
     getMe(),
     getProfileOnboarding(),
+    getProfileScore(),
   ])
   userName.value = userRes.data.data.username
   userAvatar.value = userRes.data.data.avatar
   userEmail.value = userRes.data.data.email
   studentProfile.value = onboardingRes.data.data.student_profile
   fillProfileForm(studentProfile.value)
+  profileScoreData.value = scoreRes.data.data
 }
 
 const beforeAvatarUpload = (file: File) => {
@@ -615,33 +619,56 @@ onMounted(() => {
   loadResourceHistory().catch(console.error)
 })
 
-const radarOption = computed(() => ({
-  radar: {
-    indicator: [
-      { name: '知识基础', max: 100 },
-      { name: '学习节奏', max: 100 },
-      { name: '认知风格', max: 100 },
-      { name: '兴趣偏好', max: 100 },
-      { name: '薄弱环节', max: 100 },
-      { name: '学习历史', max: 100 }
-    ],
-    shape: 'polygon',
-    radius: '70%',
-    axisName: { color: '#64748B', fontSize: 10 },
-    splitArea: { show: false },
-    splitLine: { lineStyle: { color: '#E2E8F0' } }
-  },
-  series: [{
-    type: 'radar',
-    data: [{
-      value: [82, 78, 88, 85, 72, 79],
-      areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
-      lineStyle: { color: '#4F46E5', width: 2 },
-      itemStyle: { color: '#4F46E5' },
-      symbol: 'none'
+const radarOption = computed(() => {
+  // 后端维度名称映射到前端雷达图维度
+  const dimensionMap: Record<string, { name: string; index: number }> = {
+    knowledge_foundation: { name: '知识基础', index: 0 },
+    learning_goal: { name: '学习目标', index: 1 },
+    cognitive_style: { name: '认知风格', index: 2 },
+    weakness_points: { name: '薄弱环节', index: 3 },
+    practice_ability: { name: '实践能力', index: 4 },
+    interaction_preference: { name: '交互偏好', index: 5 },
+  }
+
+  // 从 API 数据获取评分，如果没有则使用默认值
+  const scores = profileScoreData.value?.metrics?.dimension_scores || {}
+  const radarValues = [50, 50, 50, 50, 50, 50] // 默认值
+
+  for (const [key, mapping] of Object.entries(dimensionMap)) {
+    const score = scores[key]
+    if (score !== null && score !== undefined) {
+      radarValues[mapping.index] = score
+    }
+  }
+
+  return {
+    radar: {
+      indicator: [
+        { name: '知识基础', max: 100 },
+        { name: '学习目标', max: 100 },
+        { name: '认知风格', max: 100 },
+        { name: '薄弱环节', max: 100 },
+        { name: '实践能力', max: 100 },
+        { name: '交互偏好', max: 100 },
+      ],
+      shape: 'polygon',
+      radius: '70%',
+      axisName: { color: '#64748B', fontSize: 10 },
+      splitArea: { show: false },
+      splitLine: { lineStyle: { color: '#E2E8F0' } }
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: radarValues,
+        areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
+        lineStyle: { color: '#4F46E5', width: 2 },
+        itemStyle: { color: '#4F46E5' },
+        symbol: 'none'
+      }]
     }]
-  }]
-}))
+  }
+})
 
 const lineOption = computed(() => ({
   grid: { top: 20, right: 10, bottom: 20, left: 30 },

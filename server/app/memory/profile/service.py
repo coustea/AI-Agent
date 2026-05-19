@@ -243,8 +243,7 @@ class ProfileService:
         try:
             recent_dialogue = await self._build_recent_dialogue(user_id, session_id)
             prompt = self._build_prompt(old_json, recent_dialogue, long_term_text)
-            resp = await self.llm.ainvoke_structured(
-                "spark_max",
+            resp = await self.llm.generate_json(
                 ProfileOutput,
                 prompt,
                 function_name="update_student_profile",

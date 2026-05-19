@@ -197,8 +197,7 @@ class TutorAgent:
             LLM 返回的文本内容。
         """
         try:
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm_manager.chat(
                 messages,
                 model_kwargs=self.spark_model_kwargs,
             )
@@ -212,8 +211,7 @@ class TutorAgent:
             logger.warning("[TutorAgent] %s 重试 原因=无效回复", node_name)
             retry_messages = messages + [HumanMessage(content=retry_prompt)]
             try:
-                retry_response = await self.llm_manager.ainvoke(
-                    "spark_max",
+                retry_response = await self.llm_manager.chat(
                     retry_messages,
                     model_kwargs=self.spark_model_kwargs,
                 )
@@ -401,17 +399,11 @@ class TutorAgent:
 
             # 绑定搜索工具
             llm_with_tools = self.llm_manager.bind_tools(
-                "spark_max",
                 [duckduckgo_search, tavily_search, serp_search],
-                model_kwargs=self.search_model_kwargs,
             )
 
             try:
-                response = await self.llm_manager.ainvoke_runnable(
-                    llm_with_tools,
-                    full_messages,
-                    model_type="spark_max",
-                )
+                response = await llm_with_tools.ainvoke(full_messages)
             except Exception:
                 logger.exception("[TutorAgent] search_node Spark MAX 调用失败")
                 raise
@@ -661,8 +653,7 @@ class TutorAgent:
             验证后的模型实例。
         """
         try:
-            validated = await self.llm_manager.ainvoke_structured(
-                "spark_max",
+            validated = await self.llm_manager.chat_json(
                 model_cls,
                 messages,
                 strict=True,
@@ -671,8 +662,7 @@ class TutorAgent:
             payload = validated.model_dump(by_alias=True)
         except Exception:
             # 兼容测试替身或历史宽松 payload，必要时退回普通 JSON 解析路径
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm_manager.chat(
                 messages,
                 model_kwargs={
                     **self.diagram_model_kwargs,
@@ -827,8 +817,7 @@ class TutorAgent:
         )
 
         try:
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm_manager.chat(
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),

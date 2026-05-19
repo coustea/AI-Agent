@@ -107,7 +107,7 @@ class ReadingAgent(Agent):
         )
 
         try:
-            response = await llm.ainvoke("spark_x", prompt_text, model_kwargs={"temperature": 0.2})
+            response = await llm.generate(prompt_text, model_kwargs={"temperature": 0.2})
             raw = response.content if hasattr(response, "content") else str(response)
             match = re.search(r"\[.*?\]", raw, re.DOTALL)
             if match:
@@ -161,7 +161,7 @@ class ReadingAgent(Agent):
         )
 
         try:
-            response = await llm.ainvoke("spark_x", prompt_text, model_kwargs={"temperature": 0.3})
+            response = await llm.generate(prompt_text, model_kwargs={"temperature": 0.3})
             raw = response.content if hasattr(response, "content") else str(response)
             match = re.search(r"\[.*\]", raw, re.DOTALL)
             if match:

@@ -315,8 +315,7 @@ class AvatarAgent:
         # LLM 分类
         try:
             classifier_prompt = _get_prompt("classifier")
-            result = await self.llm_manager.ainvoke(
-                "spark_max",
+            result = await self.llm_manager.chat(
                 classifier_prompt.format(
                     user_message=user_msg,
                     has_attachments="是" if (file_urls or image_urls) else "否",
@@ -344,8 +343,7 @@ class AvatarAgent:
     async def _direct_answer_node(self, state: AvatarState) -> dict:
         """直接回答路径"""
         messages = [SystemMessage(content=state["system_prompt"])] + state["messages"]
-        response = await self.llm_manager.ainvoke(
-            "spark_max",
+        response = await self.llm_manager.chat(
             messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -389,8 +387,7 @@ class AvatarAgent:
         )
 
         full_messages = [SystemMessage(content=state["system_prompt"]), HumanMessage(content=answer_prompt)]
-        response = await self.llm_manager.ainvoke(
-            "spark_max",
+        response = await self.llm_manager.chat(
             full_messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -411,19 +408,11 @@ class AvatarAgent:
         full_messages = [SystemMessage(content=state["tool_system_prompt"])] + list(messages)
 
         # 绑定搜索工具
-        llm_with_tools = self.llm_manager.bind_tools(
-            "spark_max",
-            AVATAR_TOOLS,
-            model_kwargs=self.tool_model_kwargs,
-        )
+        llm_with_tools = self.llm_manager.bind_tools(AVATAR_TOOLS)
 
         response = None
         try:
-            response = await self.llm_manager.ainvoke_runnable(
-                llm_with_tools,
-                full_messages,
-                model_type="spark_max",
-            )
+            response = await llm_with_tools.ainvoke(full_messages)
         except Exception as exc:
             # 讯飞 Spark 偶尔返回 tool_calls.args 为 JSON 字符串而非 dict，
             # 导致 pydantic ValidationError。降级到无工具调用直接回答。
@@ -441,8 +430,7 @@ class AvatarAgent:
                 return {"search_result": f"【duckduckgo_search】\n{search_content}"}
             except Exception:
                 # 搜索也失败，降级到直接回答
-                response = await self.llm_manager.ainvoke(
-                    "spark_max",
+                response = await self.llm_manager.chat(
                     [SystemMessage(content=state["system_prompt"])] + list(messages),
                     model_kwargs=self.spark_model_kwargs,
                 )
@@ -501,8 +489,7 @@ class AvatarAgent:
             HumanMessage(content=prompt),
         ]
 
-        response = await self.llm_manager.ainvoke(
-            "spark_max",
+        response = await self.llm_manager.chat(
             full_messages,
             model_kwargs=self.spark_model_kwargs,
         )
@@ -563,8 +550,7 @@ class AvatarAgent:
         )
 
         try:
-            decision = await self.llm_manager.ainvoke_structured(
-                "spark_max",
+            decision = await self.llm_manager.chat_json(
                 DiagramDecision,
                 [
                     SystemMessage(content=_get_prompt("diagram_decision_system")),
@@ -605,8 +591,7 @@ class AvatarAgent:
         )
 
         try:
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm_manager.chat(
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),

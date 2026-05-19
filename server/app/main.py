@@ -27,7 +27,7 @@ from app.infra.school_import import import_schools
 from app.utils.storage import local_file_store
 from app.auth.security import decode_token
 from app.avatar.bridge.manager import avatar_bridge_manager
-from app.config import SERVER_HOST, SERVER_PORT
+from app.config import HOST, PORT
 
 logger = get_logger(__name__)
 
@@ -48,7 +48,7 @@ async def app_lifespan(app: FastAPI):
     except (OperationalError, DBAPIError, ConnectionRefusedError, OSError) as exc:
         logger.error(
             "[Startup] 数据库初始化失败，应用无法启动: error_type=%s error=%s\n"
-            "请检查数据库服务是否运行，以及 .env 中的数据库配置是否正确。",
+            "请检查数据库服务是否运行，以及 config.yaml 中的数据库配置是否正确。",
             type(exc).__name__,
             exc,
         )
@@ -167,8 +167,8 @@ async def avatar_websocket(
 
 def main() -> None:
     """统一后端启动入口函数。"""
-    host = SERVER_HOST
-    port = SERVER_PORT
+    host = HOST
+    port = PORT
     uvicorn.run(app, host=host, port=port, log_config=None)
 
 

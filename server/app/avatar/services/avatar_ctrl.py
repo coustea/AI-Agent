@@ -10,7 +10,7 @@ import uuid
 import websockets
 
 from app.avatar.services import xfyun_auth
-from app.config import ANCHOR_ID, AVATAR_API_KEY, AVATAR_API_SECRET, AVATAR_APP_ID, AVATAR_URL, VCN
+from app.config import AVATAR_ANCHOR, AVATAR_API_KEY, AVATAR_API_SECRET, AVATAR_APP_ID, AVATAR_URL, AVATAR_VCN
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -73,10 +73,10 @@ class AvatarController:
                     "ctrl": "start"
                 },
                 "parameter": {
-                    "tts": {"vcn": VCN},
+                    "tts": {"vcn": AVATAR_VCN},
                     "avatar": {
                         "stream": {"protocol": "xrtc"},
-                        "avatar_id": ANCHOR_ID,
+                        "avatar_id": AVATAR_ANCHOR,
                         "width": 720,
                         "height": 1280
                     }
@@ -253,7 +253,7 @@ class AvatarController:
                 "ctrl": "text_driver"
             },
             "parameter": {
-                "tts": {"vcn": VCN, "speed": int(max(0.5, min(2.0, speech_rate)) * 50)},
+                "tts": {"vcn": AVATAR_VCN, "speed": int(max(0.5, min(2.0, speech_rate)) * 50)},
                 "avatar_dispatch": {"interactive_mode": 1}  # Enable interactive mode (gesture linkage)
             },
             "payload": {

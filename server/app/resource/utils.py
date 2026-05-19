@@ -397,8 +397,7 @@ async def generate_summary_with_llm(markdown: str, learning_need: str = "") -> s
 
     try:
         llm_manager = get_llm_manager()
-        response = await llm_manager.ainvoke(
-            "spark_x",
+        response = await llm_manager.generate(
             [HumanMessage(content=prompt)],
             model_kwargs={"temperature": 0.3},
         )
@@ -496,8 +495,7 @@ JSON 字段：
 {markdown[:4500]}"""
 
     try:
-        response = await manager.ainvoke(
-            "spark_max",
+        response = await manager.generate(
             [HumanMessage(content=prompt)],
             model_kwargs={"temperature": 0.1},
         )

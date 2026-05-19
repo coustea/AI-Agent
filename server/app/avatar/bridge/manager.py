@@ -401,7 +401,7 @@ class RealtimeBridge:
         """Continuous ASR loop."""
         from app.avatar.services.asr import IatClient
         from app.avatar.services.xfyun_auth import assemble_auth_url
-        from app.config import ASR_SPARK_APP_ID, ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET, IAT_URL
+        from app.config import ASR_APP_ID, ASR_API_KEY, ASR_API_SECRET, AVATAR_IAT_URL
         import websockets, json, base64, time
 
         while self.is_listening:
@@ -421,7 +421,7 @@ class RealtimeBridge:
         """Run one ASR recognition round."""
         import websockets, json, base64, time, asyncio
         from app.avatar.services.xfyun_auth import assemble_auth_url
-        from app.config import ASR_SPARK_APP_ID, ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET, IAT_URL
+        from app.config import ASR_APP_ID, ASR_API_KEY, ASR_API_SECRET, AVATAR_IAT_URL
 
         if not self.current_audio_queue:
             return
@@ -466,7 +466,7 @@ class RealtimeBridge:
         # VAD 参数
         vad_eos = self._compute_adaptive_vad_eos()
 
-        auth_url = assemble_auth_url(IAT_URL, 'GET', ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET)
+        auth_url = assemble_auth_url(AVATAR_IAT_URL, 'GET', ASR_API_KEY, ASR_API_SECRET)
         async with websockets.connect(auth_url) as ws:
             send_task = asyncio.create_task(self._send_audio_to_asr(ws, first_chunk, vad_eos))
             recv_task = asyncio.create_task(self._receive_asr_result(ws))
@@ -542,12 +542,12 @@ class RealtimeBridge:
     async def _send_audio_to_asr(self, ws, first_chunk: bytes, vad_eos: int) -> dict:
         """Send ASR audio stream with first frame carrying first audio chunk."""
         import base64
-        from app.config import ASR_SPARK_APP_ID
+        from app.config import ASR_APP_ID
 
         # First frame: status=0 with first chunk audio (align with working demo/common iat usage)
         first_audio_b64 = base64.b64encode(first_chunk).decode()
         start_params = {
-            "common": {"app_id": ASR_SPARK_APP_ID},
+            "common": {"app_id": ASR_APP_ID},
             "business": {
                 "language": "zh_cn",
                 "domain": "iat",

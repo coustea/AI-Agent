@@ -74,8 +74,7 @@ class SummaryService:
                 "- references: 对话中提到的参考资料或资源\n\n"
                 f"对话记录：\n{chat_text[:4000]}"
             )
-            resp = await self.llm.ainvoke_structured(
-                "spark_x",
+            resp = await self.llm.generate_json(
                 SummaryLLMOutput,
                 prompt,
                 function_name="generate_session_summary",

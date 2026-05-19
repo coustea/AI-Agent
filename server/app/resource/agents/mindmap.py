@@ -45,8 +45,7 @@ class MindmapAgent(Agent):
 
     async def _generate(self, state: WorkerState, prompt: str, input_text: str) -> WorkerResult:
         llm = get_llm_manager()
-        response = await llm.ainvoke(
-            "spark_x",
+        response = await llm.generate(
             f"{prompt}\n\n{input_text}",
             model_kwargs={"temperature": 0.3},
         )

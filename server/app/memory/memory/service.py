@@ -118,8 +118,7 @@ class LongTermMemoryService:
                 summary_text=summary_text,
                 old_memory_text=old_memory_text,
             )
-            resp = await self.llm.ainvoke_structured(
-                "spark_x",
+            resp = await self.llm.generate_json(
                 MemoryUpdateOutput,
                 prompt,
                 function_name="update_long_term_memory",

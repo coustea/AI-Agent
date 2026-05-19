@@ -74,8 +74,7 @@ class QuizAgent(Agent):
 
         # 尝试结构化输出
         try:
-            result = await llm.ainvoke_structured(
-                "spark_max",
+            result = await llm.generate_json(
                 QuizPayload,
                 f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。",
                 model_kwargs={"temperature": 0.3},
@@ -87,8 +86,7 @@ class QuizAgent(Agent):
 
         except Exception as exc:
             logger.warning("[QuizAgent] 结构化输出失败，尝试 JSON 文本解析: %s", exc)
-            response = await llm.ainvoke(
-                "spark_max",
+            response = await llm.generate(
                 f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。",
                 model_kwargs={"temperature": 0.3, "model_kwargs": {"response_format": {"type": "json_object"}}},
             )

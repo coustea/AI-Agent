@@ -66,8 +66,7 @@ class SessionService:
 
         try:
             logger.info("[SessionService] 生成会话标题")
-            response = await self.llm.ainvoke(
-                "spark_x2_flash",
+            response = await self.llm.generate_light(
                 [
                     SystemMessage(content="你是一个会话标题生成助手。"),
                     HumanMessage(content=prompt),
