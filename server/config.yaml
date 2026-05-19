@@ -20,46 +20,19 @@ jwt:
   expire_days: 7
 
 # ============ 模型配置 ============
-# cloud: true = 云端模型, false = 本地模型
+# 切换本地/云端只需修改 base_url、api_key、model_name
 models:
-  cloud: true
+  # 文本模型（修改以下三项即可切换本地/云端）
+  base_url: "https://spark-api-open.xf-yun.com/v1"
+  api_key: "FvxNBbopqlFUuPhAJLao:fBrnRiJXyuSgymznRJAI"
+  model_name: "generalv3.5"
+  concurrency: 10
 
-  # 模型策略配置（按生成类型路由）
-  policy:
-    default: "spark_x"
-    chat: "spark_max"
-    json: "spark_max"
-    tools: "spark_max"
-    light: "spark_flash"
-
-  spark_max:
-    base_url: "https://spark-api-open.xf-yun.com/v1"
-    api_key: "FvxNBbopqlFUuPhAJLao:fBrnRiJXyuSgymznRJAI"
-    model_name: "generalv3.5"
-    concurrency: 10
-
-  spark_x:
-    base_url: "https://spark-api-open.xf-yun.com/v2"
-    api_key: "FvxNBbopqlFUuPhAJLao:fBrnRiJXyuSgymznRJAI"
-    model_name: "spark-x"
-    concurrency: 20
-
-  spark_flash:
-    base_url: "https://spark-api-open.xf-yun.com/v1"
-    api_key: "YdHFcHCefgHIBcsSJKhB:OwVejzSWNFMqkQzFkpnd"
-    model_name: "generalv3.5"
-    concurrency: 20
-
-  glm_vision:
+  # 图片理解模型（独立配置）
+  vision:
     base_url: "https://open.bigmodel.cn/api/paas/v4/"
     api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
     model_name: "glm-4.6v-flash"
-    concurrency: 10
-
-  local:
-    base_url: "http://localhost:8000/v1"
-    api_key: "dummy"
-    model_name: "Qwen2.5-7B-Instruct"
     concurrency: 10
 
 # 星火 WebSocket API（Vision 用）

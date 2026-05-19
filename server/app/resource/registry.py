@@ -11,27 +11,9 @@ from typing import Any
 
 from app.infra.logging import get_logger
 from app.resource.agents import AGENT_CLASSES
-from app.resource.orchestrator import AGENT_META
+from app.resource.manifest import RESOURCE_AGENT_MANIFESTS
 
 logger = get_logger(__name__)
-
-DEPENDS: dict[str, list[str]] = {
-    "content": [],
-    "mindmap": [],
-    "diagram": ["content"],
-    "quiz": ["content"],
-    "code": ["content"],
-    "reading": ["content"],
-}
-
-ROLE_NAMES: dict[str, str] = {
-    "content": "ContentAgent",
-    "mindmap": "MindmapAgent",
-    "diagram": "DiagramAgent",
-    "quiz": "QuizAgent",
-    "code": "CodeAgent",
-    "reading": "ReadingAgent",
-}
 
 
 @dataclass
@@ -60,18 +42,21 @@ def ensure_initialized() -> None:
         return
 
     _registry = {}
-    for agent_id, agent_class in AGENT_CLASSES.items():
-        meta = AGENT_META.get(agent_id, {})
-        _registry[agent_id] = AgentEntry(
-            id=agent_id,
-            name=str(meta.get("name") or agent_id),
-            role=ROLE_NAMES.get(agent_id, f"{agent_id.capitalize()}Agent"),
-            description=str(meta.get("description") or ""),
+    for manifest in RESOURCE_AGENT_MANIFESTS:
+        agent_class = AGENT_CLASSES.get(manifest.id)
+        if agent_class is None:
+            logger.warning("[ResourceRegistry] Agent class missing for manifest: %s", manifest.id)
+            continue
+        _registry[manifest.id] = AgentEntry(
+            id=manifest.id,
+            name=manifest.name,
+            role=manifest.role,
+            description=manifest.description,
             agent_class=agent_class,
-            dependencies=DEPENDS.get(agent_id, []),
-            execution_layer=int(meta.get("layer", 0)),
-            resource_type=agent_id,
-            output_format=_format_for_agent(agent_id),
+            dependencies=list(manifest.dependencies),
+            execution_layer=manifest.layer,
+            resource_type=manifest.id,
+            output_format=manifest.output_format,
         )
 
     _initialized = True
@@ -88,11 +73,3 @@ def get_enabled_agent_ids() -> list[str]:
     """获取启用的 Agent ID 列表。"""
     ensure_initialized()
     return list(_registry)
-
-
-def _format_for_agent(agent_id: str) -> str:
-    if agent_id == "diagram":
-        return "mermaid"
-    if agent_id in {"quiz", "code", "reading"}:
-        return "json"
-    return "markdown"

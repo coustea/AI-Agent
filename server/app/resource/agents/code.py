@@ -7,12 +7,22 @@ from __future__ import annotations
 import json
 import re
 
-from app.infra.llm import get_llm_manager
+from pydantic import BaseModel, Field
+
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import Agent
 from app.resource.schemas import WorkerResult, WorkerState
 
 logger = get_logger(__name__)
+
+
+class CodePayload(BaseModel):
+    """代码资源的结构化输出。"""
+
+    code: str = Field(description="完整代码内容")
+    explanation: str = Field(default="", description="代码说明")
+    language: str = Field(default="python", description="编程语言")
 
 
 class CodeAgent(Agent):
@@ -51,22 +61,23 @@ class CodeAgent(Agent):
         code_instruction = self._build_code_instruction(lang, case_type, comment_level, include_test, difficulty)
         full_input = f"{input_text}\n\n{code_instruction}"
 
-        llm = get_llm_manager()
+        llm = get_llm()
 
-        # 尝试 JSON 结构化输出
+        # 尝试结构化 JSON 输出
         try:
-            response = await llm.generate_json(
-                None,
+            payload = await llm.ainvoke_json(
+                CodePayload,
                 f"{prompt}\n\n{full_input}\n\n请以 JSON 格式输出，包含 code 和 explanation 字段。",
-                model_kwargs={"temperature": 0.2, "model_kwargs": {"response_format": {"type": "json_object"}}},
+                temperature=0.2,
+                function_name="generate_code_example",
+                function_description="生成代码示例，包含代码、说明和编程语言",
             )
-            raw = response.content if hasattr(response, "content") else str(response)
-            code_data = self._parse_code_json(raw)
+            code_data = payload.model_dump(mode="json")
         except Exception as exc:
             logger.warning("[CodeAgent] JSON 输出失败，回退到纯文本: %s", exc)
-            response = await llm.generate(
+            response = await llm.ainvoke(
                 f"{prompt}\n\n{full_input}",
-                model_kwargs={"temperature": 0.2},
+                temperature=0.2,
             )
             raw = response.content if hasattr(response, "content") else str(response)
             code_data = {

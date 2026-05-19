@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.memory.message.store import MessageStore
 from app.memory.message.types import DIALOGUE_ROLES
@@ -26,7 +26,7 @@ class SummaryService:
         self.summary_store = SummaryStore()
         self.message_store = MessageStore()
         self.session_store = SessionStore()
-        self.llm = get_llm_manager()
+        self.llm = get_llm()
 
     async def should_create(self, user_id: int, session_id: str) -> bool:
         """判断是否需要生成概要。"""
@@ -74,12 +74,12 @@ class SummaryService:
                 "- references: 对话中提到的参考资料或资源\n\n"
                 f"对话记录：\n{chat_text[:4000]}"
             )
-            resp = await self.llm.generate_json(
+            resp = await self.llm.ainvoke_json(
                 SummaryLLMOutput,
                 prompt,
                 function_name="generate_session_summary",
                 function_description="分析学习对话记录，提取结构化概要信息。",
-                model_kwargs={"temperature": 0.1, "streaming": False},
+                temperature=0.1,
             )
             summary_json = resp.model_dump()
             logger.info("[SummaryService] LLM 结构化概要生成成功")

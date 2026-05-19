@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import Agent
 from app.resource.schemas import WorkerResult, WorkerState
@@ -44,7 +44,7 @@ class ReadingAgent(Agent):
         return result
 
     async def _generate(self, state: WorkerState, prompt: str, input_text: str) -> WorkerResult:
-        llm = get_llm_manager()
+        llm = get_llm()
 
         # Step 3: 提取搜索关键词
         await self._emit(
@@ -107,7 +107,7 @@ class ReadingAgent(Agent):
         )
 
         try:
-            response = await llm.generate(prompt_text, model_kwargs={"temperature": 0.2})
+            response = await llm.ainvoke(prompt_text, temperature=0.2)
             raw = response.content if hasattr(response, "content") else str(response)
             match = re.search(r"\[.*?\]", raw, re.DOTALL)
             if match:
@@ -148,7 +148,7 @@ class ReadingAgent(Agent):
 
     async def _llm_recommend(self, keywords: list[str], state: WorkerState, count: int) -> list[dict]:
         """使用 LLM 推荐学习资源 (搜索不足时的补充)。"""
-        llm = get_llm_manager()
+        llm = get_llm()
         lang_pref = state.agent_config.get("language_preference", "chinese")
         quality = state.agent_config.get("resource_quality", "balanced")
 
@@ -161,7 +161,7 @@ class ReadingAgent(Agent):
         )
 
         try:
-            response = await llm.generate(prompt_text, model_kwargs={"temperature": 0.3})
+            response = await llm.ainvoke(prompt_text, temperature=0.3)
             raw = response.content if hasattr(response, "content") else str(response)
             match = re.search(r"\[.*\]", raw, re.DOTALL)
             if match:

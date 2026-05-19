@@ -13,13 +13,15 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.resource.manifest import agent_order, default_agent_ids
+
 
 # ======================================================================
 # 请求模型
 # ======================================================================
 
 LearningScenario = Literal["exam_prep", "daily_review", "project_practice", "self_study"]
-AGENT_DEFAULT_ORDER = ["content", "mindmap", "diagram", "code", "quiz", "reading"]
+AGENT_DEFAULT_ORDER = agent_order()
 
 
 class ResourceAgentId(str, Enum):
@@ -34,12 +36,8 @@ class ResourceAgentId(str, Enum):
 
 
 DEFAULT_SELECTED_AGENT_IDS: list[ResourceAgentId] = [
-    ResourceAgentId.CONTENT,
-    ResourceAgentId.MINDMAP,
-    ResourceAgentId.DIAGRAM,
-    ResourceAgentId.CODE,
-    ResourceAgentId.QUIZ,
-    ResourceAgentId.READING,
+    ResourceAgentId(agent_id)
+    for agent_id in default_agent_ids()
 ]
 
 

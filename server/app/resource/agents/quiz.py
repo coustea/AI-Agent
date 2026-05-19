@@ -9,7 +9,7 @@ import re
 
 from pydantic import BaseModel, Field
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import Agent
 from app.resource.schemas import WorkerResult, WorkerState
@@ -70,14 +70,14 @@ class QuizAgent(Agent):
         return result
 
     async def _generate(self, state: WorkerState, prompt: str, input_text: str) -> WorkerResult:
-        llm = get_llm_manager()
+        llm = get_llm()
 
         # 尝试结构化输出
         try:
-            result = await llm.generate_json(
+            result = await llm.ainvoke_json(
                 QuizPayload,
                 f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。",
-                model_kwargs={"temperature": 0.3},
+                temperature=0.3,
                 function_name="generate_quiz",
                 function_description="生成习题集，包含题目、选项、答案和解析",
             )
@@ -86,9 +86,9 @@ class QuizAgent(Agent):
 
         except Exception as exc:
             logger.warning("[QuizAgent] 结构化输出失败，尝试 JSON 文本解析: %s", exc)
-            response = await llm.generate(
+            response = await llm.ainvoke(
                 f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。",
-                model_kwargs={"temperature": 0.3, "model_kwargs": {"response_format": {"type": "json_object"}}},
+                temperature=0.3,
             )
             raw = response.content if hasattr(response, "content") else str(response)
             quiz_data = self._salvage_quiz_payload(raw)

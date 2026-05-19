@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.config import JWT_ALGORITHM, JWT_EXPIRE_DAYS, JWT_SECRET_KEY
+from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET
 from app.infra.database import session_scope
 from app.infra.models import ActiveToken, User
 
@@ -40,12 +40,12 @@ def _is_expired(expires_at: datetime | None) -> bool:
 
 
 async def create_token(user_id: int, session: AsyncSession) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS)
+    expire = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE)
     payload = {"sub": str(user_id), "exp": expire}
     token = jwt.encode(
         payload,
-        JWT_SECRET_KEY or "dev-secret-change-in-production-long-enough",
-        algorithm=JWT_ALGORITHM,
+        JWT_SECRET or "dev-secret-change-in-production-long-enough",
+        algorithm=JWT_ALGO,
     )
     session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))
     await session.commit()
@@ -56,8 +56,8 @@ def decode_token(token: str) -> int:
     try:
         payload = jwt.decode(
             token,
-            JWT_SECRET_KEY or "dev-secret-change-in-production-long-enough",
-            algorithms=[JWT_ALGORITHM],
+            JWT_SECRET or "dev-secret-change-in-production-long-enough",
+            algorithms=[JWT_ALGO],
         )
         return int(payload["sub"])
     except jwt.ExpiredSignatureError as exc:

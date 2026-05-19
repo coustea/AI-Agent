@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import ChatSession
 from app.memory.session.store import SessionStore
@@ -23,7 +23,7 @@ class SessionService:
     def __init__(self, module: str = "mentor") -> None:
         self.module = module
         self.store = SessionStore()
-        self.llm = get_llm_manager()
+        self.llm = get_llm()
 
     async def create(self, user_id: int, title: str = "新对话") -> ChatSession:
         """创建会话。"""
@@ -66,12 +66,13 @@ class SessionService:
 
         try:
             logger.info("[SessionService] 生成会话标题")
-            response = await self.llm.generate_light(
+            response = await self.llm.ainvoke(
                 [
                     SystemMessage(content="你是一个会话标题生成助手。"),
                     HumanMessage(content=prompt),
                 ],
-                model_kwargs={"temperature": 0.3, "max_tokens": 20},
+                temperature=0.3,
+                max_tokens=20,
             )
             title = self._normalize_title(response.content)
             if not title:
