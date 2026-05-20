@@ -370,7 +370,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   UserFilled, CircleCheckFilled, Edit, Clock, Reading, DocumentCopy, StarFilled,
   InfoFilled, Timer, Checked, VideoPlay, Cpu, Search, Check, ArrowRight, ArrowLeft
@@ -389,6 +389,7 @@ import type { ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem
 use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
 
 const router = useRouter()
+const route = useRoute()
 
 const timeRange = ref('7')
 const historyFilter = ref('全部')
@@ -579,6 +580,12 @@ const openProfileEditor = () => {
   profileEditorVisible.value = true
 }
 
+const openProfileEditorFromRoute = () => {
+  if (route.query.action === 'edit-profile') {
+    openProfileEditor()
+  }
+}
+
 const nextEditorStep = (formEl: FormInstance | undefined) => {
   if (!formEl) return
   formEl.validateField(['major', 'courses', 'learning_goal'], (valid) => {
@@ -614,9 +621,14 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
   }
 }
 
-onMounted(() => {
-  loadProfileInfo().catch(console.error)
+onMounted(async () => {
+  await loadProfileInfo().catch(console.error)
+  openProfileEditorFromRoute()
   loadResourceHistory().catch(console.error)
+})
+
+watch(() => route.query.action, () => {
+  openProfileEditorFromRoute()
 })
 
 const radarOption = computed(() => {

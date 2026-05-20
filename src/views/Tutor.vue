@@ -1239,10 +1239,15 @@ const getNextStreamDelay = (
     delay -= 4
   }
 
+  const idleMs = lastChunkArrivedAt ? Date.now() - lastChunkArrivedAt : 0
+  if (!streamDone && idleMs > 800 && backlogChars < STREAM_BACKLOG_FAST_THRESHOLD) {
+    delay += 6
+  }
+
   return Math.max(STREAM_MIN_DELAY_MS, Math.min(STREAM_MAX_DELAY_MS, delay))
 }
 
-const flushPendingStreamText = (forceScroll = false, unitOverride?: number): number => {
+const flushPendingStreamText = (forceScroll = false, unitOverride?: number): number | undefined => {
   if (pendingRenderQueueStart >= pendingRenderQueue.length) return
   const aiMsg = streamingMsgRef.value
   if (aiMsg) {
