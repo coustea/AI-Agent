@@ -26,7 +26,7 @@
             <span>{{ getStatusText(resource.status).toUpperCase() }}</span>
           </div>
           <h1 class="hero-title gradient-text">{{ resource.title || resource.learning_need || '学习资源包' }}</h1>
-          
+
           <div class="hero-context-pills">
             <div class="context-pill glass-pill">
               <span class="pill-label">创建时间</span>
@@ -45,22 +45,22 @@
           <div class="section-header">
             <h3>生成资源 ({{ resource.resources?.length || 0 }})</h3>
           </div>
-          
+
           <div v-if="!resource.resources?.length" class="empty-resources">
             <el-empty description="暂无生成资源" />
           </div>
           <div v-else class="premium-resource-grid">
             <article
-              v-for="(item, index) in resource.resources"
-              :key="item.id"
-              class="premium-res-card"
-              :class="[getAgentMeta(item.type).color, { 'is-clickable': hasPreviewContent(item) }]"
-              :style="{ animationDelay: `${index * 0.08}s` }"
-              @click="openResourcePreview(item)"
-              @keydown.enter.prevent="openResourcePreview(item)"
-              @keydown.space.prevent="openResourcePreview(item)"
-              :role="hasPreviewContent(item) ? 'button' : undefined"
-              :tabindex="hasPreviewContent(item) ? 0 : undefined"
+                v-for="(item, index) in resource.resources"
+                :key="item.id"
+                class="premium-res-card"
+                :class="[getAgentMeta(item.type).color, { 'is-clickable': hasPreviewContent(item) }]"
+                :style="{ animationDelay: `${index * 0.08}s` }"
+                @click="openResourcePreview(item)"
+                @keydown.enter.prevent="openResourcePreview(item)"
+                @keydown.space.prevent="openResourcePreview(item)"
+                :role="hasPreviewContent(item) ? 'button' : undefined"
+                :tabindex="hasPreviewContent(item) ? 0 : undefined"
             >
               <div class="card-bg-glow"></div>
               <div class="card-header">
@@ -78,7 +78,7 @@
               <div class="card-body">
                 <h4 class="card-title">{{ item.title || `${getAgentTypeName(item.type)}资源` }}</h4>
                 <p v-if="item.summary" class="card-summary">{{ item.summary }}</p>
-                
+
                 <div v-if="item.error_message" class="item-error">
                   <el-icon><WarningFilled /></el-icon>
                   {{ item.error_message }}
@@ -89,6 +89,17 @@
                 <button class="modern-text-btn" :class="{ disabled: !hasPreviewContent(item) }">
                   {{ hasPreviewContent(item) ? '查看详情' : '暂无可预览内容' }} <span>&rarr;</span>
                 </button>
+
+                <el-button
+                    v-if="hasPreviewContent(item)"
+                    class="export-btn"
+                    type="primary"
+                    link
+                    title="导出到本地"
+                    @click.stop="exportToLocal(item)"
+                >
+                  <el-icon :size="18"><Download /></el-icon>
+                </el-button>
               </div>
             </article>
           </div>
@@ -97,12 +108,12 @@
     </template>
 
     <el-dialog
-      v-model="previewVisible"
-      :title="previewTitle"
-      width="78%"
-      top="6vh"
-      destroy-on-close
-      class="resource-preview-dialog"
+        v-model="previewVisible"
+        :title="previewTitle"
+        width="78%"
+        top="6vh"
+        destroy-on-close
+        class="resource-preview-dialog"
     >
       <div v-if="previewItem" class="preview-dialog-body">
         <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem" />
@@ -119,7 +130,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, VideoPlay, Monitor, Share } from '@element-plus/icons-vue'
+import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, VideoPlay, Monitor, Share, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getGeneratedResourceDetail } from '@/api/ai'
 import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
@@ -232,6 +243,84 @@ const openResourcePreview = (item: ResourceItemDetail) => {
   if (!hasPreviewContent(item)) return
   previewItem.value = item
   previewVisible.value = true
+}
+
+// === 核心：导出资源到本地并支持选择路径的逻辑 ===
+const exportToLocal = async (item: ResourceItemDetail) => {
+  if (!hasPreviewContent(item)) {
+    ElMessage.warning('暂无可导出的内容')
+    return
+  }
+
+  let contentStr = ''
+  let ext = '.md'
+  let mimeType = 'text/markdown'
+
+  // 1. 尝试从不同字段获取可导出的内容，并自动判断格式
+  if (item.content != null && String(item.content).trim()) {
+    contentStr = String(item.content)
+    // 简单试探内容是否为原生 JSON
+    if (contentStr.trim().startsWith('{') || contentStr.trim().startsWith('[')) {
+      try {
+        JSON.parse(contentStr)
+        ext = '.json'
+        mimeType = 'application/json'
+      } catch (e) {
+        // 如果解析失败，则按正常的 markdown/普通文本处理
+      }
+    }
+  } else if (item.summary_data && Object.keys(item.summary_data).length > 0) {
+    contentStr = JSON.stringify(item.summary_data, null, 2)
+    ext = '.json'
+    mimeType = 'application/json'
+  } else if (item.metadata && Object.keys(item.metadata).length > 0) {
+    contentStr = JSON.stringify(item.metadata, null, 2)
+    ext = '.json'
+    mimeType = 'application/json'
+  }
+
+  // 2. 构造默认文件名
+  const fileName = `${item.title || getAgentTypeName(item.type) || '导出资源'}${ext}`
+
+  try {
+    // 3. 尝试使用现代 File System Access API（允许用户在弹窗中选择具体保存路径）
+    if ('showSaveFilePicker' in window) {
+      // @ts-ignore (规避 TypeScript 可能找不到 DOM 文件系统 API 声明的问题)
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [
+          {
+            description: `${getAgentTypeName(item.type)}文件`,
+            accept: {
+              [mimeType]: [ext]
+            }
+          }
+        ]
+      })
+      const writable = await handle.createWritable()
+      await writable.write(contentStr)
+      await writable.close()
+      ElMessage.success('已成功导出到本地')
+    } else {
+      // 4. 降级方案：使用传统 <a> 标签下载（路径由浏览器控制，通常在浏览器设置里可以开启“下载前询问每个文件的保存位置”）
+      const blob = new Blob([contentStr], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      ElMessage.success('已开始下载')
+    }
+  } catch (error: any) {
+    // 捕获异常，如果是用户在选择路径面板点击了“取消”(AbortError)，则静默处理
+    if (error.name !== 'AbortError') {
+      console.error('导出失败:', error)
+      ElMessage.error('导出失败，可能缺少权限或不支持此操作')
+    }
+  }
 }
 
 const formatTime = (time: string | null) => {
@@ -490,6 +579,20 @@ onMounted(() => {
 .premium-res-card.is-clickable:focus-visible .modern-text-btn:not(.disabled) { color: #2563EB; }
 .premium-res-card.is-clickable:hover .modern-text-btn:not(.disabled) span,
 .premium-res-card.is-clickable:focus-visible .modern-text-btn:not(.disabled) span { transform: translateX(4px); }
+
+/* 导出按钮动画样式 */
+.export-btn {
+  color: #64748B !important;
+  transition: color 0.2s ease, transform 0.2s ease !important;
+}
+.premium-res-card.is-clickable:hover .export-btn,
+.premium-res-card.is-clickable:focus-visible .export-btn {
+  color: #2563EB !important;
+}
+.export-btn:hover {
+  transform: translateY(-2px) scale(1.1);
+  color: #1D4ED8 !important;
+}
 
 .resource-preview-dialog :deep(.el-dialog) { border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25); }
 .resource-preview-dialog :deep(.el-dialog__header) { padding: 24px 32px 20px; margin-right: 0; border-bottom: 1px solid #F1F5F9; }

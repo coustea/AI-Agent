@@ -3,12 +3,12 @@
     <section class="hub-hero">
       <div class="hero-main">
         <el-tag class="hero-kicker" effect="plain" round>
-          <span class="status-dot"></span>
-          学习画像已同步
+          <span class="status-dot" :class="{ 'is-new': isNewUser }"></span>
+          {{ isNewUser ? '全新学习旅程已开启' : '学习画像已同步' }}
         </el-tag>
-        <h1>今天建议从{{ recommendedGoal.topic }}开始</h1>
+        <h1>{{ isNewUser ? '欢迎来到智能学习中心' : `今天建议从${recommendedGoal.topic}开始` }}</h1>
         <p>
-          基于你的学习画像、最近生成资源和当前路径进度，系统已整理出下一步目标。
+          {{ isNewUser ? '完善你的个人画像并生成首个学习资源，AI 协同智能体将为你量身定制专属的高效学习路径' : '基于你的学习画像、最近生成资源和当前路径进度，系统已整理出下一步目标' }}
         </p>
 
         <div class="portrait-strip">
@@ -21,7 +21,7 @@
 
       <aside class="goal-panel">
         <div class="panel-topline">
-          <span>推荐学习目标</span>
+          <span>{{ isNewUser ? '上手指南' : '推荐学习目标' }}</span>
           <el-tag size="small" effect="plain" round>{{ recommendedGoal.confidence }}</el-tag>
         </div>
         <h2>{{ recommendedGoal.title }}</h2>
@@ -43,11 +43,11 @@
 
     <section class="feature-row" aria-label="主要功能">
       <article
-        v-for="action in primaryActions"
-        :key="action.title"
-        class="feature-card"
-        :class="action.tone"
-        @click="goTo(action.path)"
+          v-for="action in primaryActions"
+          :key="action.title"
+          class="feature-card"
+          :class="action.tone"
+          @click="goTo(action.path)"
       >
         <div class="feature-icon">
           <el-icon><component :is="action.icon" /></el-icon>
@@ -68,7 +68,9 @@
             <span class="section-label">LEARNING PORTRAIT</span>
             <h2>你的学习画像</h2>
           </div>
-          <el-button class="home-link-button" @click="goTo('/profile')">查看画像</el-button>
+          <el-button class="home-link-button" @click="goTo('/tutor')">
+            {{ isNewUser ? '开始学习' : '继续学习' }}
+          </el-button>
         </div>
 
         <div class="profile-summary">
@@ -81,7 +83,7 @@
           </div>
         </div>
 
-        <div class="profile-tags">
+        <div class="profile-tags" v-if="learnerProfile.tags.length > 0">
           <span v-for="tag in learnerProfile.tags" :key="tag">{{ tag }}</span>
         </div>
 
@@ -90,16 +92,19 @@
             <span>当前薄弱点</span>
             <b>{{ learnerProfile.weakPoints.length }} 项</b>
           </div>
-          <div class="weak-list">
+          <div class="weak-list" v-if="learnerProfile.weakPoints.length > 0">
             <button
-              v-for="point in learnerProfile.weakPoints"
-              :key="point.name"
-              type="button"
-              @click="goTo('/resource-generator')"
+                v-for="point in learnerProfile.weakPoints"
+                :key="point.name"
+                type="button"
+                @click="goTo('/resource-generator')"
             >
               <strong>{{ point.name }}</strong>
               <span>{{ point.hint }}</span>
             </button>
+          </div>
+          <div class="empty-state-text" v-else>
+            暂无薄弱点记录，开始学习评测或生成资源后将自动同步
           </div>
         </div>
       </article>
@@ -113,73 +118,59 @@
           <el-button class="home-link-button" @click="goTo('/resource-generator')">进入资源引擎</el-button>
         </div>
 
-        <div class="resource-flow">
-          <button
-            v-for="resource in multiAgentResources"
-            :key="resource.id"
-            type="button"
-            class="resource-item"
-            :class="resource.tone"
-            @click="goTo('/resource-generator')"
-          >
-            <div class="resource-icon">
-              <el-icon><component :is="resource.icon" /></el-icon>
-            </div>
-            <div class="resource-info">
-              <div class="resource-meta">
-                <span>{{ resource.agent }}</span>
-                <em>{{ resource.time }}</em>
+        <div class="resource-flow" :class="{ 'is-empty': multiAgentResources.length === 0 }">
+          <template v-if="multiAgentResources.length > 0">
+            <button
+                v-for="resource in multiAgentResources"
+                :key="resource.id"
+                type="button"
+                class="resource-item"
+                :class="resource.tone"
+                @click="goTo('/resource-generator')"
+            >
+              <div class="resource-icon">
+                <el-icon><component :is="resource.icon" /></el-icon>
               </div>
-              <h3>{{ resource.title }}</h3>
-              <p>{{ resource.hint }}</p>
-            </div>
-          </button>
+              <div class="resource-info">
+                <div class="resource-meta">
+                  <span>{{ resource.agent }}</span>
+                  <em>{{ resource.time }}</em>
+                </div>
+                <h3>{{ resource.title }}</h3>
+                <p>{{ resource.hint }}</p>
+              </div>
+            </button>
+          </template>
+          <div class="empty-resource-state" v-else>
+            <el-icon class="empty-icon"><Cpu /></el-icon>
+            <p>还没有生成的资源流</p>
+            <span>点击上方“多智能体资源生成”卡片，让 AI 导师为你构建第一份讲义、代码模板或自测题</span>
+          </div>
         </div>
       </article>
-    </section>
-
-    <section class="bottom-utility">
-      <div class="utility-copy">
-        <span class="section-label">START SMART</span>
-        <h2>先确认学习目标，再选择合适的工具继续推进</h2>
-      </div>
-      <div class="utility-actions">
-        <button
-          v-for="tip in starterTips"
-          :key="tip.label"
-          type="button"
-          class="tip-pill"
-          @click="goTo(tip.path)"
-        >
-          <el-icon><component :is="tip.icon" /></el-icon>
-          <span>{{ tip.label }}</span>
-        </button>
-      </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
   ChatDotRound,
   CircleCheckFilled,
-  Clock,
   Collection,
   Connection,
   Cpu,
   DataLine,
   Document,
   Edit,
-  MagicStick,
   Monitor,
-  Odometer,
-  Position,
   Share,
   User
 } from '@element-plus/icons-vue'
+
+import { getProfileOnboarding, getGeneratedResources, getPathPlan } from '@/api/ai'
 
 const router = useRouter()
 
@@ -187,39 +178,40 @@ const goTo = (path: string) => {
   router.push(path)
 }
 
+// 默认设为 true，即默认展示新用户状态，直到加载到数据才切换
+const isNewUser = ref(true)
+
 const recommendedGoal = ref({
-  topic: '操作系统死锁复习',
-  confidence: '基于 5 份资源',
-  title: '完成死锁四条件图解与自测闭环',
+  topic: '智能学习',
+  confidence: '核心指南',
+  title: '开启个性化定制路径',
   steps: [
-    '复习最近生成的图解讲义',
-    '完成 5 道自适应测验',
-    '把错题加入本周学习路径'
+    '在个人中心建立精准画像',
+    '利用多智能体生成配套资源',
+    '将薄弱点一键转化为学习路径'
   ]
 })
 
 const portraitStats = ref([
-  { label: '当前阶段', value: '软件工程大二' },
-  { label: '学习场景', value: '考试备考' },
-  { label: '资源偏好', value: '图解 + 自测' }
+  { label: '当前阶段', value: '未设置' },
+  { label: '学习目标', value: '未设置' },
+  { label: '主修专业', value: '未设置' }
 ])
 
 const learnerProfile = ref({
-  role: '软件工程学习者',
-  summary: '更适合先建立结构图，再通过题目和代码样例巩固概念。',
-  tags: ['图解优先', '考点驱动', '偏好短任务', '需要错题回流'],
-  weakPoints: [
-    { name: '死锁必要条件', hint: '建议先看图解再做判断题' },
-    { name: '动态规划状态转移', hint: '适合生成代码模板和例题' },
-    { name: '红黑树旋转', hint: '需要流程图和逐步演示' }
-  ]
+  role: '新晋学习者',
+  summary: '完成画像多维评测后，AI 将在此为你输出核心认知偏好与学习节奏建议',
+  tags: [] as string[],
+  weakPoints: [] as { name: string; hint: string }[]
 })
+
+const multiAgentResources = ref<any[]>([])
 
 const primaryActions = ref([
   {
     title: '多智能体资源生成',
     badge: 'RESOURCE ENGINE',
-    description: '生成讲解、导图、图解、代码、测验和阅读材料。',
+    description: '生成讲解、导图、图解、代码、测验和阅读材料',
     icon: Cpu,
     path: '/resource-generator',
     tone: 'tone-blue'
@@ -227,7 +219,7 @@ const primaryActions = ref([
   {
     title: '继续学习路径',
     badge: 'LEARNING PATH',
-    description: '把资源和薄弱点整理成可执行的阶段目标。',
+    description: '把资源和薄弱点整理成可执行的阶段目标',
     icon: Connection,
     path: '/path-planner',
     tone: 'tone-emerald'
@@ -235,7 +227,7 @@ const primaryActions = ref([
   {
     title: '向智能导师提问',
     badge: 'AI TUTOR',
-    description: '围绕当前画像和学习目标获得即时解释。',
+    description: '围绕当前画像和学习目标获得即时解释',
     icon: ChatDotRound,
     path: '/tutor',
     tone: 'tone-indigo'
@@ -243,96 +235,101 @@ const primaryActions = ref([
   {
     title: '查看多维评估',
     badge: 'EVALUATION',
-    description: '查看掌握度、练习表现和下一步建议。',
+    description: '查看掌握度、练习表现和下一步建议',
     icon: DataLine,
     path: '/evaluation',
     tone: 'tone-amber'
   }
 ])
 
-const multiAgentResources = ref([
-  {
-    id: 1,
-    title: '死锁四条件图解讲义',
-    agent: '图解智能体',
-    time: '12 分钟前',
-    hint: '适合作为今日目标的第一步',
-    icon: Share,
-    tone: 'tone-blue'
-  },
-  {
-    id: 2,
-    title: '操作系统同步互斥自测题',
-    agent: '测验智能体',
-    time: '34 分钟前',
-    hint: '建议完成后更新薄弱点',
-    icon: Edit,
-    tone: 'tone-amber'
-  },
-  {
-    id: 3,
-    title: '动态规划状态设计模板',
-    agent: '代码智能体',
-    time: '昨天',
-    hint: '可加入算法强化路径',
-    icon: Monitor,
-    tone: 'tone-emerald'
-  },
-  {
-    id: 4,
-    title: '红黑树旋转知识树',
-    agent: '导图智能体',
-    time: '昨天',
-    hint: '适合配合导师问答复盘',
-    icon: Document,
-    tone: 'tone-indigo'
-  },
-  {
-    id: 5,
-    title: '进程调度算法对比表',
-    agent: '阅读智能体',
-    time: '2 天前',
-    hint: '适合考前横向复习',
-    icon: Collection,
-    tone: 'tone-blue'
-  },
-  {
-    id: 6,
-    title: '数据库索引错题解析',
-    agent: '评估智能体',
-    time: '2 天前',
-    hint: '已关联到掌握度评估',
-    icon: DataLine,
-    tone: 'tone-amber'
-  },
-  {
-    id: 7,
-    title: '网络分层速记卡片',
-    agent: '卡片智能体',
-    time: '3 天前',
-    hint: '可用于碎片时间复习',
-    icon: MagicStick,
-    tone: 'tone-emerald'
-  },
-  {
-    id: 8,
-    title: '链表反转代码练习',
-    agent: '代码智能体',
-    time: '3 天前',
-    hint: '建议加入算法训练任务',
-    icon: Monitor,
-    tone: 'tone-indigo'
-  }
-])
+const loadDashboardData = async () => {
+  try {
+    const [profileRes, resourcesRes, pathRes] = await Promise.allSettled([
+      getProfileOnboarding(),
+      getGeneratedResources(8),
+      getPathPlan()
+    ])
 
-const starterTips = ref([
-  { label: '建立画像', icon: User, path: '/profile?action=edit-profile' },
-  { label: '生成资源', icon: MagicStick, path: '/resource-generator' },
-  { label: '继续任务', icon: Position, path: '/path-planner' },
-  { label: '查看进度', icon: Odometer, path: '/evaluation' },
-  { label: '最近资源', icon: Collection, path: '/resource-generator' },
-  { label: '学习时长', icon: Clock, path: '/dashboard' }
-])
+    let hasProfile = false
+    let hasResources = false
+    let hasPath = false
+
+    // 1. 画像解析
+    if (profileRes.status === 'fulfilled' && profileRes.value.data?.data) {
+      const profile = profileRes.value.data.data.student_profile
+      if (profile && (profile.grade || profile.learning_goal || profile.major)) {
+        hasProfile = true
+        portraitStats.value = [
+          { label: '当前阶段', value: profile.grade || '未填写' },
+          { label: '学习目标', value: profile.learning_goal || '未填写' },
+          { label: '主修专业', value: profile.major || '未填写' }
+        ]
+
+        learnerProfile.value.role = `${profile.major || ''} 学习者`
+        learnerProfile.value.tags = profile.courses || []
+
+        const weakPoints = profile.weakness_points || []
+        learnerProfile.value.weakPoints = weakPoints.map((point: string) => ({
+          name: point,
+          hint: '建议生成对应资源进行巩固'
+        }))
+
+        learnerProfile.value.summary = weakPoints.length > 0
+            ? '系统已为您捕获部分薄弱环节，建议针对性攻克。'
+            : '暂未发现明显薄弱点，继续保持当前学习节奏。'
+      }
+    }
+
+    // 2. 资源流解析
+    if (resourcesRes.status === 'fulfilled' && resourcesRes.value.data?.data) {
+      const resources = resourcesRes.value.data.data
+      if (Array.isArray(resources) && resources.length > 0) {
+        hasResources = true
+        const toneMap = ['tone-blue', 'tone-amber', 'tone-emerald', 'tone-indigo']
+        const iconMap = [Share, Edit, Monitor, Document, Collection, DataLine]
+
+        multiAgentResources.value = resources.map((res: any, index: number) => ({
+          id: res.id,
+          title: res.learning_need || '未命名学习资源',
+          agent: '智能体协同',
+          time: res.created_at ? new Date(res.created_at).toLocaleDateString() : '最近',
+          hint: res.status === 'completed' ? '已就绪，随时可查阅' : '资源生成或处理中',
+          icon: iconMap[index % iconMap.length],
+          tone: toneMap[index % toneMap.length]
+        }))
+      }
+    }
+
+    // 3. 学习路径解析
+    if (pathRes.status === 'fulfilled' && pathRes.value.data?.data) {
+      const plan = pathRes.value.data.data
+      const currentStage = plan.stages?.find((s: any) => s.status === 'processing') || plan.stages?.[0]
+
+      if (currentStage && plan.summary) {
+        hasPath = true
+        recommendedGoal.value = {
+          topic: plan.summary.current_stage || '日常学习',
+          confidence: `完成度 ${plan.summary.overall_progress || 0}%`,
+          title: plan.insights?.next_action || currentStage.title,
+          steps: currentStage.nodes?.slice(0, 3).map((n: any) => n.title) || []
+        }
+      }
+    }
+
+    // 根据是否有数据决定是否取消新用户引导状态
+    if (hasProfile || hasResources || hasPath) {
+      isNewUser.value = false
+    }
+
+  } catch (error) {
+    // 异常情况下维持新用户UI，不暴露错误和加载态
+    console.error('Failed to load dashboard data:', error)
+  }
+}
+
+onMounted(() => {
+  loadDashboardData()
+})
 </script>
 
 <style scoped>
@@ -392,6 +389,10 @@ const starterTips = ref([
   background: #10B981;
 }
 
+.status-dot.is-new {
+  background: #3B82F6;
+}
+
 .hero-main h1 {
   margin: 22px 0 12px;
   max-width: 100%;
@@ -407,10 +408,13 @@ const starterTips = ref([
 
 .hero-main p {
   margin: 0;
-  max-width: 640px;
+  max-width: 100%; /* 放宽原本的 640px 限制 */
   color: #64748B;
   line-height: 1.7;
   font-size: 1.02rem;
+  white-space: nowrap; /* 强制在一行显示 */
+  overflow: hidden;
+  text-overflow: ellipsis; /* 超出部分优雅省略 */
 }
 
 .portrait-strip {
@@ -677,6 +681,16 @@ const starterTips = ref([
   color: var(--home-primary);
 }
 
+.empty-state-text {
+  padding: 16px;
+  text-align: center;
+  background: #F8FAFC;
+  border: 1px dashed #E2E8F0;
+  border-radius: 8px;
+  color: #94A3B8;
+  font-size: 0.88rem;
+}
+
 .weak-list,
 .resource-flow {
   display: grid;
@@ -725,6 +739,44 @@ const starterTips = ref([
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   flex: 1;
+}
+
+.resource-flow.is-empty {
+  grid-template-columns: 1fr;
+}
+
+.empty-resource-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  background: #F8FAFC;
+  border: 1px dashed #E2E8F0;
+  border-radius: 8px;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.empty-icon {
+  font-size: 2.2rem;
+  color: #CBD5E1;
+  margin-bottom: 12px;
+}
+
+.empty-resource-state p {
+  margin: 0 0 6px;
+  color: #475569;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.empty-resource-state span {
+  color: #94A3B8;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  max-width: 380px;
 }
 
 .resource-item {
@@ -889,6 +941,10 @@ const starterTips = ref([
 
   .hero-main h1 {
     font-size: 2rem;
+  }
+
+  .hero-main p {
+    white-space: normal; /* 移动端为了防止内容被截断，允许换行 */
   }
 
   .bottom-utility {
