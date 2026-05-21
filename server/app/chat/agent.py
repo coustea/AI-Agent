@@ -39,7 +39,7 @@ from app.chat.utils import (
 )
 from app.config import LANGGRAPH_DEBUG
 from app.memory import MemoryLayer
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.utils.search import duckduckgo_search, serp_search, tavily_search
 
@@ -148,10 +148,7 @@ class TutorAgent:
         创建 LLM 实例、上下文服务、图和工具。
         """
         # LLM 实例
-        self.llm_manager = get_llm_manager()
-        self.spark_model_kwargs = {"temperature": 1.0, "streaming": True}
-        self.search_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1200}
-        self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
+        self.llm = get_llm()
         # 上下文服务
         self.memory_layer = MemoryLayer(module="mentor")
 
@@ -197,10 +194,9 @@ class TutorAgent:
             LLM 返回的文本内容。
         """
         try:
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm.ainvoke(
                 messages,
-                model_kwargs=self.spark_model_kwargs,
+                temperature=1.0,
             )
             text = normalize_message_content(getattr(response, "content", response))
         except Exception as exc:
@@ -212,10 +208,9 @@ class TutorAgent:
             logger.warning("[TutorAgent] %s 重试 原因=无效回复", node_name)
             retry_messages = messages + [HumanMessage(content=retry_prompt)]
             try:
-                retry_response = await self.llm_manager.ainvoke(
-                    "spark_max",
+                retry_response = await self.llm.ainvoke(
                     retry_messages,
-                    model_kwargs=self.spark_model_kwargs,
+                    temperature=1.0,
                 )
                 text = normalize_message_content(getattr(retry_response, "content", retry_response))
             except Exception as exc:
@@ -400,18 +395,12 @@ class TutorAgent:
             full_messages = build_messages(system_prompt, list(messages) + [search_instruction])
 
             # 绑定搜索工具
-            llm_with_tools = self.llm_manager.bind_tools(
-                "spark_max",
+            llm_with_tools = self.llm.model.bind_tools(
                 [duckduckgo_search, tavily_search, serp_search],
-                model_kwargs=self.search_model_kwargs,
             )
 
             try:
-                response = await self.llm_manager.ainvoke_runnable(
-                    llm_with_tools,
-                    full_messages,
-                    model_type="spark_max",
-                )
+                response = await self.llm.ainvoke(full_messages, model=llm_with_tools)
             except Exception:
                 logger.exception("[TutorAgent] search_node Spark MAX 调用失败")
                 raise
@@ -661,23 +650,17 @@ class TutorAgent:
             验证后的模型实例。
         """
         try:
-            validated = await self.llm_manager.ainvoke_structured(
-                "spark_max",
+            validated = await self.llm.ainvoke_json(
                 model_cls,
                 messages,
-                strict=True,
-                model_kwargs=self.diagram_model_kwargs,
+                temperature=0.1,
             )
             payload = validated.model_dump(by_alias=True)
         except Exception:
             # 兼容测试替身或历史宽松 payload，必要时退回普通 JSON 解析路径
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm.ainvoke(
                 messages,
-                model_kwargs={
-                    **self.diagram_model_kwargs,
-                    "response_format": {"type": "json_object"},
-                },
+                temperature=0.1,
             )
             payload = parse_first_json_object(
                 normalize_message_content(getattr(response, "content", response))
@@ -827,13 +810,13 @@ class TutorAgent:
         )
 
         try:
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm.ainvoke(
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),
                 ],
-                model_kwargs=self.diagram_model_kwargs,
+                temperature=0.1,
+                max_tokens=1600,
             )
             mermaid_source = normalize_message_content(getattr(response, "content", response))
             rendered = {

@@ -18,8 +18,8 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from app.memory.core.types import ModuleName
 from app.memory.context.policy import (
-    RECENT_CHAT_MESSAGE_LIMIT,
-    SUMMARY_CHAR_BUDGET,
+    MSG_LIMIT,
+    SUMMARY_BUDGET,
     render_priority_long_term_memory,
     render_recent_chat_context,
     select_recent_chat_messages,
@@ -184,7 +184,7 @@ class ContextService:
             user_id=user_id,
             session_id=session_id,
             module=self.module,
-            limit=RECENT_CHAT_MESSAGE_LIMIT,
+            limit=MSG_LIMIT,
         )
         selected = select_recent_chat_messages(msgs, user_message=user_message)
 
@@ -206,7 +206,7 @@ class ContextService:
             summary_ctx = await self.build_session_summary_context(user_id, session_id)
             if summary_ctx != "暂无会话概要。":
                 recent_ctx = (
-                    f"# 会话概要\n{truncate_text(summary_ctx, SUMMARY_CHAR_BUDGET)}\n\n"
+                    f"# 会话概要\n{truncate_text(summary_ctx, SUMMARY_BUDGET)}\n\n"
                     f"# 最近对话\n{recent_ctx}"
                 )
             # 跨会话检索：用户引用过去话题时，补充其他会话的相关概要

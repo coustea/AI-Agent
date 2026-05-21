@@ -1,127 +1,95 @@
-"""
-统一配置模块。
+"""配置加载。
 
-从环境变量读取所有配置，提供 typed settings。
-此模块是唯一的 `.env` 读取入口。
+只负责读取 config.yaml，不负责业务逻辑。
 """
 
-import os
+from pathlib import Path
 
-from dotenv import load_dotenv
+import yaml
 
-load_dotenv()
-
-
-def _env(key: str, default: str = "") -> str:
-    return os.getenv(key, default)
+_CONFIG_FILE = Path(__file__).parent.parent / "config.yaml"
+_config: dict = {}
 
 
-def _env_int(key: str, default: int = 0) -> int:
-    return int(os.getenv(key, str(default)))
+def _load() -> dict:
+    """加载配置文件。"""
+    if not _CONFIG_FILE.exists():
+        return {}
+    with open(_CONFIG_FILE, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
 
 
-def _env_float(key: str, default: float = 0.0) -> float:
-    return float(os.getenv(key, str(default)))
+_config = _load()
 
 
-def _env_bool(key: str, default: bool = False) -> bool:
-    return os.getenv(key, str(default).lower()) in ("true", "1", "yes")
+def get(path: str, default=None):
+    """获取配置值，支持嵌套路径。"""
+    value = _config
+    for key in path.split("."):
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        else:
+            return default
+    return value
 
 
-# Server
-SERVER_HOST: str = _env("SERVER_HOST", "0.0.0.0")
-SERVER_PORT: int = _env_int("SERVER_PORT", 9999)
+# ============ App ============
+DEBUG = get("app.debug", False)
+HOST = get("app.host", "0.0.0.0")
+PORT = get("app.port", 9999)
 
-# Database
-DB_SCHEME: str = _env("DB_SCHEME", "postgresql+asyncpg")
-DB_HOST: str = _env("DB_HOST", "localhost")
-DB_PORT: int = _env_int("DB_PORT", 5432)
-DB_USER: str = _env("DB_USER", "postgres")
-DB_PASSWORD: str = _env("DB_PASSWORD")
-DB_NAME: str = _env("DB_NAME", "agent")
-DATABASE_URL: str = _env("DATABASE_URL", "")
-DB_ECHO: bool = _env_bool("DB_ECHO", False)
-DB_POOL_SIZE: int = _env_int("DB_POOL_SIZE", 10)
-DB_MAX_OVERFLOW: int = _env_int("DB_MAX_OVERFLOW", 20)
-DB_POOL_RECYCLE: int = _env_int("DB_POOL_RECYCLE", 1800)
-DB_POOL_TIMEOUT: int = _env_int("DB_POOL_TIMEOUT", 30)
-DB_INIT_MAX_RETRIES: int = _env_int("DB_INIT_MAX_RETRIES", 5)
-DB_INIT_RETRY_DELAY_SEC: float = _env_float("DB_INIT_RETRY_DELAY_SEC", 1.5)
+# ============ Database ============
+DB_URL = get("database.url", "")
+DB_ECHO = get("database.echo", False)
+DB_POOL_SIZE = get("database.pool_size", 10)
+DB_MAX_OVERFLOW = get("database.max_overflow", 20)
+DB_POOL_RECYCLE = get("database.pool_recycle", 1800)
+DB_POOL_TIMEOUT = get("database.pool_timeout", 30)
+DB_INIT_RETRIES = 5
+DB_INIT_RETRY_DELAY = 1.5
 
-# JWT
-JWT_SECRET_KEY: str = _env("JWT_SECRET_KEY", "")
-JWT_ALGORITHM: str = _env("JWT_ALGORITHM", "HS256")
-JWT_EXPIRE_DAYS: int = _env_int("JWT_EXPIRE_DAYS", 7)
+# ============ JWT ============
+JWT_SECRET = get("jwt.secret_key", "")
+JWT_ALGO = get("jwt.algorithm", "HS256")
+JWT_EXPIRE = get("jwt.expire_days", 7)
 
-# Vision
-GLM_VISION_MODEL: str = _env("GLM_VISION_MODEL", "glm-4v-flash")
-GLM_API_KEY: str = _env("GLM_API_KEY", "")
+# ============ Paths ============
+WORKPLACE_DIR = get("paths.workplace", "workplace")
+LOGS_DIR = get("paths.logs", "logs")
+KB_DIR = get("paths.knowledge", "data")
 
-# Agent
-LLM_TIMEOUT: int = _env_int("LLM_TIMEOUT", 300)
-PROFILE_GATE_EVERY_N_ASSISTANT_TURNS: int = _env_int("PROFILE_GATE_EVERY_N_ASSISTANT_TURNS", 2)
+# ============ Logging ============
+LOG_LEVEL = get("logging.level", "INFO")
+LANGCHAIN_DEBUG = False
+LANGCHAIN_VERBOSE = False
+LANGGRAPH_DEBUG = False
+DEEPAGENTS_DEBUG = False
 
-# Memory context budgets
-RECENT_CHAT_MESSAGE_LIMIT: int = _env_int("RECENT_CHAT_MESSAGE_LIMIT", 10)
-RECENT_CHAT_CONTEXT_CHAR_BUDGET: int = _env_int("RECENT_CHAT_CONTEXT_CHAR_BUDGET", 700)
-LONG_TERM_MEMORY_CHAR_BUDGET: int = _env_int("LONG_TERM_MEMORY_CHAR_BUDGET", 1600)
-SUMMARY_CHAR_BUDGET: int = _env_int("SUMMARY_CHAR_BUDGET", 900)
+# ============ Search ============
+TAVILY_KEY = get("search.tavily_key", "")
+SERPAPI_KEY = ""
 
-# Debug
-APP_DEBUG: bool = _env_bool("APP_DEBUG", False)
-LOG_LEVEL: str = _env("LOG_LEVEL", "INFO")
-LANGCHAIN_DEBUG: bool = _env_bool("LANGCHAIN_DEBUG", False)
-LANGCHAIN_VERBOSE: bool = _env_bool("LANGCHAIN_VERBOSE", False)
-LANGGRAPH_DEBUG: bool = _env_bool("LANGGRAPH_DEBUG", False)
-DEEPAGENTS_DEBUG: bool = _env_bool("DEEPAGENTS_DEBUG", False)
+# ============ Avatar ============
+AVATAR_APP_ID = get("avatar.app_id", "")
+AVATAR_API_KEY = get("avatar.api_key", "")
+AVATAR_API_SECRET = get("avatar.api_secret", "")
+AVATAR_URL = get("avatar.url", "")
+AVATAR_ANCHOR = get("avatar.anchor_id", "")
+AVATAR_VCN = get("avatar.vcn", "")
+AVATAR_IAT_URL = get("avatar.iat_url", "")
+AVATAR_BRIDGE_PORT = get("avatar.bridge_port", 8765)
+ASR_APP_ID = get("avatar.asr_app_id", "")
+ASR_API_KEY = get("avatar.asr_api_key", "")
+ASR_API_SECRET = get("avatar.asr_api_secret", "")
 
-# Spark LLM (星火大模型 WebSocket API) — 用于 Spark Vision 默认值
-SPARK_APP_ID: str = _env("SPARK_APP_ID", "")
-SPARK_API_KEY: str = _env("SPARK_API_KEY", "")
-SPARK_API_SECRET: str = _env("SPARK_API_SECRET", "")
+# ============ Spark WebSocket ============
+SPARK_APP_ID = get("spark.app_id", "")
+SPARK_API_KEY = get("spark.api_key", "")
+SPARK_API_SECRET = get("spark.api_secret", "")
 
-# Spark Vision (星火图片理解) — 默认复用 Spark LLM 凭证
-SPARK_VISION_APPID: str = _env("SPARK_VISION_APPID", SPARK_APP_ID)
-SPARK_VISION_API_KEY: str = _env("SPARK_VISION_API_KEY", SPARK_API_KEY)
-SPARK_VISION_API_SECRET: str = _env("SPARK_VISION_API_SECRET", SPARK_API_SECRET)
-
-# Avatar (数字人)
-AVATAR_ASR_APP_ID: str = _env("AVATAR_ASR_APP_ID", "")
-AVATAR_ASR_API_KEY: str = _env("AVATAR_ASR_API_KEY", "")
-AVATAR_ASR_API_SECRET: str = _env("AVATAR_ASR_API_SECRET", "")
-AVATAR_APP_ID: str = _env("AVATAR_APP_ID", "")
-AVATAR_API_KEY: str = _env("AVATAR_API_KEY", "")
-AVATAR_API_SECRET: str = _env("AVATAR_API_SECRET", "")
-AVATAR_URL: str = _env("AVATAR_URL", "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact")
-ANCHOR_ID: str = _env("ANCHOR_ID", "110017006")
-VCN: str = _env("VCN", "x4_yezi")
-IAT_URL: str = _env("IAT_URL", "wss://iat-api.xfyun.cn/v2/iat")
-AVATAR_BRIDGE_PORT: int = _env_int("AVATAR_BRIDGE_PORT", 8765)
-
-# Aliases for ASR (shared app_id/key/secret for ASR and Spark LLM)
-ASR_SPARK_APP_ID: str = AVATAR_ASR_APP_ID or _env("ASR_SPARK_APP_ID", "")
-ASR_SPARK_API_KEY: str = AVATAR_ASR_API_KEY or _env("ASR_SPARK_API_KEY", "")
-ASR_SPARK_API_SECRET: str = AVATAR_ASR_API_SECRET or _env("ASR_SPARK_API_SECRET", "")
-
-# Paths
-WORKPLACE_DIR: str = _env("WORKPLACE_DIR", "workplace")
-LOGS_DIR: str = _env("LOGS_DIR", "logs")
-KNOWLEDGE_BASE_DIR: str = _env("KNOWLEDGE_BASE_DIR", "data")
-
-TAVILY_API_KEY: str = _env("TAVILY_API_KEY", "")
-SERPAPI_API_KEY: str = _env("SERPAPI_API_KEY", "")
-
-# Spark X (星火X模型 OpenAI兼容API)
-SPARK_X_API_PASSWORD: str = _env("SPARK_X_API_PASSWORD", "")
-SPARK_X_API_BASE: str = _env("SPARK_X_API_BASE", "https://spark-api-open.xf-yun.com/v2")
-
-SPARK_X2_FLASH_API_PASSWORD: str = _env("SPARK_X2_FLASH_API_PASSWORD", "")
-SPARK_X2_FLASH_API_BASE: str = _env("SPARK_X2_FLASH_API_BASE", "https://spark-api-open.xf-yun.com/agent/v1/chat/completions")
-
-# Spark Max (星火语言模型 OpenAI兼容API，OpenAI SDK base_url 使用 /v1)
-SPARK_MAX_API_PASSWORD: str = _env("SPARK_MAX_API_PASSWORD", "")
-SPARK_MAX_API_BASE: str = _env("SPARK_MAX_API_BASE", "https://spark-api-open.xf-yun.com/v1")
-
-# Spark (别名，使用 Spark Max 配置)
-SPARK_API_PASSWORD: str = SPARK_MAX_API_PASSWORD
-SPARK_API_BASE: str = SPARK_MAX_API_BASE
+# ============ Memory ============
+PROFILE_GATE = get("memory.profile_gate_turns", 2)
+MSG_LIMIT = get("memory.msg_limit", 10)
+CHAT_BUDGET = get("memory.chat_budget", 700)
+LTM_BUDGET = get("memory.ltm_budget", 1600)
+SUMMARY_BUDGET = get("memory.summary_budget", 900)

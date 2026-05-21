@@ -13,6 +13,7 @@ from typing import Any
 from app.infra.logging import get_logger
 from app.resource.agents import AGENT_CLASSES
 from app.resource.events import AgentEventEmitter
+from app.resource.manifest import agent_meta_map, content_outline_agent_ids
 from app.resource.schemas import (
     GeneratedResourceItem,
     ResourceBundle,
@@ -27,59 +28,10 @@ from app.resource.utils import load_user_profile
 logger = get_logger(__name__)
 
 # Agent 依赖关系: content 先生成大纲，下游 Agent 依赖大纲
-_DEPENDS_ON_CONTENT: set[str] = {"mindmap", "diagram", "quiz", "code", "reading"}
+_DEPENDS_ON_CONTENT: set[str] = set(content_outline_agent_ids())
 
 # Agent 元信息 (用于 /agents 接口)
-AGENT_META: dict[str, dict[str, Any]] = {
-    "content": {
-        "name": "课程内容",
-        "description": "生成专业课程讲解文档",
-        "icon": "Document",
-        "layer": 0,
-        "layer_name": "核心内容层",
-        "default_enabled": True,
-    },
-    "mindmap": {
-        "name": "思维导图",
-        "description": "生成知识结构思维导图",
-        "icon": "Mindmap",
-        "layer": 0,
-        "layer_name": "核心内容层",
-        "default_enabled": True,
-    },
-    "diagram": {
-        "name": "图表",
-        "description": "生成 Mermaid 图表",
-        "icon": "Diagram",
-        "layer": 1,
-        "layer_name": "辅助理解层",
-        "default_enabled": True,
-    },
-    "quiz": {
-        "name": "习题",
-        "description": "生成练习习题",
-        "icon": "Quiz",
-        "layer": 1,
-        "layer_name": "辅助理解层",
-        "default_enabled": True,
-    },
-    "code": {
-        "name": "代码",
-        "description": "生成代码示例",
-        "icon": "Code",
-        "layer": 1,
-        "layer_name": "辅助理解层",
-        "default_enabled": False,
-    },
-    "reading": {
-        "name": "阅读推荐",
-        "description": "推荐学习资源",
-        "icon": "Reading",
-        "layer": 2,
-        "layer_name": "拓展学习层",
-        "default_enabled": True,
-    },
-}
+AGENT_META: dict[str, dict[str, Any]] = agent_meta_map()
 
 
 class Orchestrator:

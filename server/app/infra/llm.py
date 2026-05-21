@@ -1,636 +1,328 @@
-"""统一 LLM 管理器。
+"""LLM 管理器。
 
 职责：
-- 创建模型：根据 model_type 创建对应的 ChatOpenAI 实例
-- 缓存模型：使用 LRU 缓存避免重复创建相同配置的模型
-- 获取模型：通过 get_model() 获取缓存的模型实例
-- 控制并发：使用 Semaphore 限制每种模型的并发调用数
-- 异步调用（ainvoke）：非流式调用，返回完整响应
-- 异步流式调用（astream）：流式调用，逐块返回响应
-
-支持的模型类型：
-- spark_max：讯飞星火大模型 generalv3.5（主要对话模型）
-- spark_x：讯飞星火大模型 spark-x（高并发场景）
-- glm_vision：智谱 GLM 视觉模型（图像理解）
+- 从 config.yaml 加载模型配置
+- 提供统一的文本生成和结构化输出接口
+- 并发控制：Semaphore 限制并发调用
 
 使用方式：
-    manager = get_llm_manager()  # 获取单例
-    
-    # 简单调用
-    response = await manager.ainvoke("spark_max", [HumanMessage(content="你好")])
-    
-    # 流式调用
-    for chunk in manager.astream("spark_max", messages):
-        print(chunk.content)
-    
-    # 结构化输出（JSON）
-    result = await manager.ainvoke_structured("spark_max", MySchema, messages)
+    llm = get_llm()
+
+    # 文本生成
+    response = await llm.ainvoke(messages)
+
+    # 使用 LangChain 原生工具绑定
+    tool_model = llm.model.bind_tools(tools)
+    response = await llm.ainvoke(messages, model=tool_model)
+
+    # 结构化 JSON 输出
+    result = await llm.ainvoke_json(MySchema, messages)
+
+    # 流式输出
+    async for chunk in llm.astream(messages):
+        ...
+
+    # 图片理解
+    response = await llm.vision(messages)
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections import OrderedDict
-from functools import lru_cache
-from typing import Any, AsyncIterator, Hashable
+from typing import Any, AsyncIterator
 
 from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
-from app.config import (
-    GLM_API_KEY,
-    GLM_VISION_MODEL,
-    LLM_TIMEOUT,
-    SPARK_MAX_API_PASSWORD,
-    SPARK_MAX_API_BASE,
-    SPARK_X_API_PASSWORD,
-    SPARK_X_API_BASE,
-    SPARK_X2_FLASH_API_PASSWORD,
-    SPARK_X2_FLASH_API_BASE,
-)
+from app.config import get
 from app.infra.logging import get_logger
-from app.utils.json import parse_first_json_object, preview_for_log
+from app.utils.json import parse_first_json_object
 
 logger = get_logger(__name__)
 
 
-# ----------------------------
-# 异常定义
-# ----------------------------
+# ============ 异常 ============
 
-class LLMConcurrencyBusyError(Exception):
-    """并发超限时抛出。"""
+class LLMBusyError(Exception):
+    """并发超限。"""
 
 
-class LLMStructuredOutputError(Exception):
-    """结构化输出解析或校验失败时抛出。"""
+class LLMOutputError(Exception):
+    """结构化输出失败。"""
 
-    def __init__(
-        self,
-        *,
-        model_type: str,
-        schema_name: str,
-        function_name: str,
-        stage: str,
-        message: str,
-        payload: Any = None,
-    ) -> None:
-        payload_text = ""
-        if payload is not None:
-            payload_text = f", payload={preview_for_log(payload)}"
-        super().__init__(
-            f"LLM structured output failed: model_type={model_type}, "
-            f"schema={schema_name}, function_name={function_name}, "
-            f"stage={stage}, error={message}{payload_text}"
-        )
-        self.model_type = model_type
-        self.schema_name = schema_name
-        self.function_name = function_name
-        self.stage = stage
-        self.payload = payload
+    def __init__(self, schema: str, msg: str):
+        super().__init__(f"[{schema}] {msg}")
 
 
-# ----------------------------
-# LLM 工厂类
-# ----------------------------
+class LLMConfigError(Exception):
+    """模型配置缺失。"""
 
-class LlmFactory:
-    """根据 model_type 创建 ChatOpenAI 实例。"""
 
-    @staticmethod
-    def _require_non_empty(name: str, value: str) -> None:
-        """检查配置项非空。"""
-        if not (value or "").strip():
-            raise ValueError(f"Missing required config: {name}")
+# ============ LLM 管理器 ============
 
-    @staticmethod
-    def _openai_base_url(value: str) -> str:
-        """归一化 OpenAI 兼容客户端 base_url，避免重复拼接 completions 路径。"""
-        base_url = (value or "").strip().rstrip("/")
-        suffix = "/chat/completions"
-        if base_url.endswith(suffix):
-            return base_url[: -len(suffix)]
-        return base_url
+class Llm:
+    """统一 LLM 管理器。
 
-    @classmethod
-    def create(cls, model_type: str, **kwargs: Any) -> Any:
-        """创建 ChatOpenAI 实例。
+    提供四种核心方法：
+    - ainvoke(): 异步文本生成
+    - astream(): 异步流式输出
+    - ainvoke_json(): 异步结构化 JSON 输出
+    - vision(): 图片理解
+    """
 
-        Args:
-            model_type: 模型类型，支持 spark_max / spark_x / glm_vision
-            **kwargs: 传递给 ChatOpenAI 的参数
+    def __init__(self):
+        self._text_model: ChatOpenAI | None = None
+        self._vision_model: ChatOpenAI | None = None
+        self._text_semaphore: asyncio.Semaphore | None = None
+        self._vision_semaphore: asyncio.Semaphore | None = None
+        self._init()
 
-        Returns:
-            ChatOpenAI 实例
-        """
-        kwargs.pop("model", None)  # 忽略外部传入的 model 参数
+    @property
+    def model(self) -> Any:
+        """默认文本模型，供调用方使用 LangChain 原生 bind/bind_tools。"""
+        if not self._text_model:
+            raise LLMConfigError("文本模型配置缺失")
+        return self._text_model
 
-        # 提取通用参数
-        temperature = kwargs.pop("temperature", 0.3)
-        streaming = kwargs.pop("streaming", False)
-        max_tokens = kwargs.pop("max_tokens", None)
-        max_retries = kwargs.pop("max_retries", 2)
-        timeout = kwargs.pop("timeout", None)
+    def _init(self):
+        """初始化模型和并发控制。"""
+        # 文本模型配置
+        text_cfg = get("models", {})
+        text_cfg = {k: v for k, v in text_cfg.items() if k != "vision"}
 
-        # spark_max: 讯飞星火 generalv3.5（主力模型）
-        if model_type == "spark_max":
-            cls._require_non_empty("SPARK_MAX_API_PASSWORD", SPARK_MAX_API_PASSWORD)
-            cls._require_non_empty("SPARK_MAX_API_BASE", SPARK_MAX_API_BASE)
-            return ChatOpenAI(
-                model="generalv3.5",
-                api_key=SPARK_MAX_API_PASSWORD,
-                base_url=cls._openai_base_url(SPARK_MAX_API_BASE),
-                temperature=temperature,
-                streaming=streaming,
-                max_tokens=max_tokens,
-                max_retries=max_retries,
-                timeout=timeout,
-                **kwargs,
+        if text_cfg and "model_name" in text_cfg:
+            self._text_model = ChatOpenAI(
+                model=text_cfg["model_name"],
+                api_key=text_cfg["api_key"],
+                base_url=text_cfg["base_url"].rstrip("/chat/completions").rstrip("/"),
+                temperature=0.3,
+                max_retries=text_cfg.get("max_retries", 2),
+                timeout=text_cfg.get("timeout", 300),
             )
+            limit = text_cfg.get("concurrency", 10)
+            if limit > 0:
+                self._text_semaphore = asyncio.Semaphore(limit)
 
-        # spark_x: 讯飞星火 spark-x（高并发场景）
-        if model_type == "spark_x":
-            cls._require_non_empty("SPARK_X_API_PASSWORD", SPARK_X_API_PASSWORD)
-            cls._require_non_empty("SPARK_X_API_BASE", SPARK_X_API_BASE)
-            return ChatOpenAI(
-                model="spark-x",
-                api_key=SPARK_X_API_PASSWORD,
-                base_url=cls._openai_base_url(SPARK_X_API_BASE),
-                temperature=temperature,
-                streaming=streaming,
-                max_tokens=max_tokens,
-                max_retries=max_retries,
-                timeout=timeout,
-                **kwargs,
+        # 图片理解模型配置
+        vision_cfg = get("models.vision", {})
+        if vision_cfg and "model_name" in vision_cfg:
+            self._vision_model = ChatOpenAI(
+                model=vision_cfg["model_name"],
+                api_key=vision_cfg["api_key"],
+                base_url=vision_cfg["base_url"].rstrip("/chat/completions").rstrip("/"),
+                temperature=0.3,
+                max_retries=vision_cfg.get("max_retries", 2),
+                timeout=vision_cfg.get("timeout", 300),
             )
+            limit = vision_cfg.get("concurrency", 10)
+            if limit > 0:
+                self._vision_semaphore = asyncio.Semaphore(limit)
 
-        # spark_x2_flash: 讯飞星火 generalv3.5（轻量快速模型，用于标题生成等）
-        # 使用标准 /v1 端点，model 名称为 generalv3.5
-        if model_type == "spark_x2_flash":
-            cls._require_non_empty("SPARK_X2_FLASH_API_PASSWORD", SPARK_X2_FLASH_API_PASSWORD)
-            cls._require_non_empty("SPARK_X2_FLASH_API_BASE", SPARK_X2_FLASH_API_BASE)
-            return ChatOpenAI(
-                model="generalv3.5",
-                api_key=SPARK_X2_FLASH_API_PASSWORD,
-                base_url=cls._openai_base_url(SPARK_X2_FLASH_API_BASE),
-                temperature=temperature,
-                streaming=streaming,
-                max_tokens=max_tokens,
-                max_retries=max_retries,
-                timeout=timeout,
-                **kwargs,
-            )
-
-        # glm_vision: 智谱 GLM 视觉模型（图像理解）
-        if model_type == "glm_vision":
-            cls._require_non_empty("GLM_API_KEY", GLM_API_KEY)
-            cls._require_non_empty("GLM_VISION_MODEL", GLM_VISION_MODEL)
-            return ChatOpenAI(
-                model=GLM_VISION_MODEL,
-                api_key=GLM_API_KEY,
-                base_url="https://open.bigmodel.cn/api/paas/v4/",
-                temperature=temperature,
-                streaming=streaming,
-                max_tokens=max_tokens,
-                max_retries=max_retries,
-                timeout=timeout,
-                **kwargs,
-            )
-
-        raise ValueError(f"Unsupported model_type: {model_type}")
-
-
-# ----------------------------
-# LLM 管理器
-# ----------------------------
-
-class LlmManager:
-    """统一 LLM 管理器，提供模型缓存、并发控制、异步调用能力。"""
-
-    DEFAULT_TIMEOUT_SECONDS = float(LLM_TIMEOUT)
-    DEFAULT_MODEL_CACHE_SIZE = 64  # LRU 缓存大小
-
-    # 各模型类型的并发限制
-    DEFAULT_CONCURRENCY_LIMITS: dict[str, int] = {
-        "spark_max": 10,  # 主力模型，并发较低
-        "spark_x": 20,    # 高并发场景
-        "spark_x2_flash": 20,  # 轻量模型，高并发
-    }
-
-    def __init__(
-        self,
-        *,
-        concurrency_limits: dict[str, int] | None = None,
-        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-        model_cache_size: int = DEFAULT_MODEL_CACHE_SIZE,
-    ) -> None:
-        """初始化管理器。
-
-        Args:
-            concurrency_limits: 自定义并发限制，会覆盖默认值
-            timeout_seconds: 获取并发槽位的超时时间
-            model_cache_size: 模型 LRU 缓存大小
-        """
-        # 模型缓存：key=(model_type, frozen_kwargs), value=ChatOpenAI
-        self._models: OrderedDict[tuple[str, tuple[tuple[str, Hashable], ...]], Any] = OrderedDict()
-        self._model_cache_size = max(1, model_cache_size)
-
-        # 合并默认和自定义并发限制
-        self._limits = dict(self.DEFAULT_CONCURRENCY_LIMITS)
-        if concurrency_limits:
-            self._limits.update(concurrency_limits)
-        
-        # 为每种模型创建 Semaphore
-        self._semaphores: dict[str, asyncio.Semaphore] = {
-            model_type: asyncio.Semaphore(limit)
-            for model_type, limit in self._limits.items()
-            if limit > 0
-        }
-
-        self._timeout_seconds = timeout_seconds
-
-    @staticmethod
-    def _freeze(value: Any) -> Hashable:
-        """将任意值转换为可哈希类型，用于生成缓存 key。"""
-        if isinstance(value, dict):
-            return tuple((k, LlmManager._freeze(v)) for k, v in sorted(value.items()))
-        if isinstance(value, (list, tuple)):
-            return tuple(LlmManager._freeze(v) for v in value)
-        if isinstance(value, set):
-            return tuple(sorted(LlmManager._freeze(v) for v in value))
-        return value
-
-    def _cache_key(
-        self,
-        model_type: str,
-        kwargs: dict[str, Any],
-    ) -> tuple[str, tuple[tuple[str, Hashable], ...]]:
-        """生成缓存 key。"""
-        frozen_kwargs = tuple((k, self._freeze(v)) for k, v in sorted(kwargs.items()))
-        return model_type, frozen_kwargs
-
-    def _get_model(
-        self,
-        model_type: str,
-        **kwargs: Any,
-    ) -> Any:
-        """获取模型实例（带 LRU 缓存）。"""
-        kwargs.pop("model", None)
-
-        key = self._cache_key(model_type, kwargs)
-        model = self._models.get(key)
-        if model is not None:
-            self._models.move_to_end(key)  # LRU: 移到队尾
-            return model
-
-        # 缓存未命中，创建新模型
-        logger.debug("[LLM] 创建模型: type=%s kwargs=%s", model_type, kwargs)
-        model = LlmFactory.create(model_type, **kwargs)
-        self._models[key] = model
-        if len(self._models) > self._model_cache_size:
-            self._models.popitem(last=False)  # LRU: 删除队首
-
-        return model
-
-    def get_model(self, model_type: str, **kwargs: Any) -> Any:
-        """获取模型实例。"""
-        return self._get_model(model_type, **kwargs)
-
-    async def _acquire(
-        self,
-        model_type: str,
-        timeout: float | None = None,
-    ) -> asyncio.Semaphore | None:
-        """获取并发槽位，超时抛出 LLMConcurrencyBusyError。"""
-        semaphore = self._semaphores.get(model_type)
-        if semaphore is None:
+    async def _acquire(self, sem: asyncio.Semaphore | None) -> asyncio.Semaphore | None:
+        """获取并发槽位。"""
+        if not sem:
             return None
-
-        effective_timeout = self._timeout_seconds if timeout is None else timeout
-
         try:
-            await asyncio.wait_for(semaphore.acquire(), timeout=effective_timeout)
-        except asyncio.TimeoutError as exc:
-            raise LLMConcurrencyBusyError(
-                f"LLM 并发繁忙: model_type={model_type}, timeout={effective_timeout}s"
-            ) from exc
+            await asyncio.wait_for(sem.acquire(), timeout=300)
+        except asyncio.TimeoutError as e:
+            raise LLMBusyError("并发超限") from e
+        return sem
 
-        return semaphore
+    # ============ 核心方法 ============
+
+    def _bind_text_model(
+        self,
+        *,
+        model: Any | None = None,
+        temperature: float = 0.3,
+        max_tokens: int | None = None,
+    ) -> Any:
+        """按调用参数绑定文本模型。"""
+        runnable = model or self.model
+
+        bind_kwargs: dict[str, Any] = {}
+        if temperature != 0.3:
+            bind_kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            bind_kwargs["max_tokens"] = max_tokens
+        if not bind_kwargs:
+            return runnable
+        return runnable.bind(**bind_kwargs)
 
     async def ainvoke(
         self,
-        model_type: str,
-        input_data: Any,
+        input_data,
         *,
-        timeout: float | None = None,
-        model_kwargs: dict[str, Any] | None = None,
-        **invoke_kwargs: Any,
+        model: Any | None = None,
+        temperature: float = 0.3,
+        max_tokens: int | None = None,
     ) -> Any:
-        """异步调用 LLM（非流式）。"""
-        semaphore = await self._acquire(model_type, timeout=timeout)
-        llm = self._get_model(model_type, **(model_kwargs or {}))
+        """异步文本生成。
 
+        Args:
+            input_data: 输入数据（消息列表或提示词）。
+            temperature: 温度参数。
+            max_tokens: 最大 token 数。
+
+        Returns:
+            模型响应。
+        """
+        sem = await self._acquire(self._text_semaphore)
         try:
-            return await llm.ainvoke(input_data, **invoke_kwargs)
+            runnable = self._bind_text_model(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return await runnable.ainvoke(input_data)
         finally:
-            if semaphore is not None:
-                semaphore.release()
-
-    async def ainvoke_runnable(
-        self,
-        runnable: Any,
-        input_data: Any,
-        *,
-        model_type: str | None = None,
-        timeout: float | None = None,
-        **invoke_kwargs: Any,
-    ) -> Any:
-        """异步调用 Runnable（如 bind_tools/structured_output 返回的对象）。"""
-        semaphore: asyncio.Semaphore | None = None
-
-        if model_type is not None:
-            semaphore = await self._acquire(model_type, timeout=timeout)
-
-        try:
-            return await runnable.ainvoke(input_data, **invoke_kwargs)
-        finally:
-            if semaphore is not None:
-                semaphore.release()
+            if sem:
+                sem.release()
 
     async def astream(
         self,
-        model_type: str,
-        input_data: Any,
+        input_data,
         *,
-        timeout: float | None = None,
-        model_kwargs: dict[str, Any] | None = None,
-        **stream_kwargs: Any,
+        model: Any | None = None,
+        temperature: float = 0.3,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[Any]:
-        """异步流式调用 LLM。"""
-        semaphore = await self._acquire(model_type, timeout=timeout)
-        llm = self._get_model(model_type, **(model_kwargs or {}))
+        """异步流式生成。
 
+        Args:
+            input_data: 输入数据。
+            temperature: 温度参数。
+            max_tokens: 最大 token 数。
+
+        Yields:
+            流式响应块。
+        """
+        sem = await self._acquire(self._text_semaphore)
         try:
-            async for chunk in llm.astream(input_data, **stream_kwargs):
+            runnable = self._bind_text_model(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            async for chunk in runnable.astream(input_data):
                 yield chunk
         finally:
-            if semaphore is not None:
-                semaphore.release()
+            if sem:
+                sem.release()
 
-    async def astream_runnable(
+    async def ainvoke_json(
         self,
-        runnable: Any,
-        input_data: Any,
+        schema: type,
+        input_data,
         *,
-        model_type: str | None = None,
-        timeout: float | None = None,
-        **stream_kwargs: Any,
-    ) -> AsyncIterator[Any]:
-        """异步流式调用 Runnable。"""
-        semaphore: asyncio.Semaphore | None = None
-
-        if model_type is not None:
-            semaphore = await self._acquire(model_type, timeout=timeout)
-
-        try:
-            async for chunk in runnable.astream(input_data, **stream_kwargs):
-                yield chunk
-        finally:
-            if semaphore is not None:
-                semaphore.release()
-
-    def bind_tools(
-        self,
-        model_type: str,
-        tools: list[Any],
-        *,
-        model_kwargs: dict[str, Any] | None = None,
-    ) -> Any:
-        """绑定工具到模型，返回 Runnable。"""
-        llm = self.get_model(model_type, **(model_kwargs or {}))
-        return llm.bind_tools(tools)
-
-    def with_structured_output(
-        self,
-        model_type: str,
-        schema: type[Any],
-        *,
-        model_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """创建结构化输出 Runnable。"""
-        llm = self.get_model(model_type, **(model_kwargs or {}))
-        return llm.with_structured_output(schema, **kwargs)
-
-    @staticmethod
-    def _tool_call_name(tool_call: Any) -> str | None:
-        """兼容 LangChain/OpenAI 常见 tool_call 结构，提取函数名。"""
-        if isinstance(tool_call, dict):
-            if isinstance(tool_call.get("name"), str):
-                return tool_call["name"]
-            function = tool_call.get("function")
-            if isinstance(function, dict) and isinstance(function.get("name"), str):
-                return function["name"]
-            return None
-        name = getattr(tool_call, "name", None)
-        return name if isinstance(name, str) else None
-
-    @staticmethod
-    def _tool_call_args(tool_call: Any) -> Any:
-        """兼容 LangChain/OpenAI 常见 tool_call 结构，提取函数参数。"""
-        if isinstance(tool_call, dict):
-            if "args" in tool_call:
-                return tool_call.get("args")
-            function = tool_call.get("function")
-            if isinstance(function, dict):
-                return function.get("arguments")
-            return None
-        if hasattr(tool_call, "args"):
-            return getattr(tool_call, "args")
-        function = getattr(tool_call, "function", None)
-        if function is not None:
-            return getattr(function, "arguments", None)
-        return None
-
-    @staticmethod
-    def _coerce_structured_payload(raw_payload: Any) -> dict[str, Any]:
-        """把模型返回的工具参数转换为 dict；字符串走非正则 JSON 解析。"""
-        if isinstance(raw_payload, dict):
-            return raw_payload
-        if isinstance(raw_payload, str):
-            return parse_first_json_object(raw_payload)
-        if raw_payload is None:
-            return {}
-        if hasattr(raw_payload, "model_dump"):
-            dumped = raw_payload.model_dump()
-            if isinstance(dumped, dict):
-                return dumped
-        if isinstance(raw_payload, bytes):
-            return parse_first_json_object(raw_payload.decode("utf-8"))
-        raise TypeError(f"expected structured payload dict or JSON string, got {type(raw_payload).__name__}")
-
-    def _select_tool_call(self, tool_calls: list[Any], tool_name: str) -> Any | None:
-        """优先按函数名选择 tool_call，缺少 name 时回退第一个。"""
-        for tool_call in tool_calls:
-            if self._tool_call_name(tool_call) == tool_name:
-                return tool_call
-        if len(tool_calls) == 1:
-            return tool_calls[0]
-        return None
-
-    def _validate_structured_payload(
-        self,
-        *,
-        schema: type[Any],
-        payload: Any,
-        model_type: str,
-        tool_name: str,
-        stage: str,
-    ) -> Any:
-        try:
-            coerced = self._coerce_structured_payload(payload)
-            return schema.model_validate(coerced)
-        except (json.JSONDecodeError, TypeError, ValueError, ValidationError) as exc:
-            raise LLMStructuredOutputError(
-                model_type=model_type,
-                schema_name=schema.__name__,
-                function_name=tool_name,
-                stage=stage,
-                message=str(exc),
-                payload=payload,
-            ) from exc
-
-    async def ainvoke_structured(
-        self,
-        model_type: str,
-        schema: type[Any],
-        input_data: Any,
-        *,
-        timeout: float | None = None,
-        strict: bool = True,
+        temperature: float = 0.3,
         function_name: str | None = None,
         function_description: str | None = None,
-        fallback_to_json: bool = True,
-        model_kwargs: dict[str, Any] | None = None,
-        **invoke_kwargs: Any,
     ) -> Any:
-        """使用 function calling 获取结构化输出（JSON）。
+        """异步结构化 JSON 输出。
 
-        通过 bind_tools + tool_choice="required" 强制模型调用指定函数。
-        若 provider 没有返回 tool_calls，默认退回普通 JSON 文本解析。
+        Args:
+            schema: Pydantic 模型类。
+            input_data: 输入数据。
+            temperature: 温度参数。
+            function_name: 函数名（可选，默认使用 schema 类名）。
+            function_description: 函数描述（可选）。
+
+        Returns:
+            验证后的 schema 实例。
         """
-        semaphore = await self._acquire(model_type, timeout=timeout)
-        base_model_kwargs = dict(model_kwargs or {})
-        llm = self._get_model(model_type, **base_model_kwargs)
+        sem = await self._acquire(self._text_semaphore)
+        try:
+            model = self._bind_text_model(temperature=temperature)
 
-        # 构建 function calling 工具定义
-        tool_name = function_name or schema.__name__
-        tool_description = function_description or f"Return a structured {schema.__name__} object."
-        tools = [
-            {
+            name = function_name or schema.__name__
+            desc = function_description or f"Return {schema.__name__}"
+
+            tools = [{
                 "type": "function",
                 "function": {
-                    "name": tool_name,
-                    "description": tool_description,
-                    "strict": strict,
+                    "name": name,
+                    "description": desc,
+                    "strict": True,
                     "parameters": schema.model_json_schema(),
                 },
-            }
-        ]
+            }]
 
-        try:
-            structured_error: LLMStructuredOutputError | None = None
+            errors: list[str] = []
+
+            # 方式1: 使用 function calling
             try:
-                runnable = llm.bind_tools(tools, tool_choice="required")
-                response = await runnable.ainvoke(input_data, **invoke_kwargs)
-                tool_calls = getattr(response, "tool_calls", []) or []
-                selected_tool_call = self._select_tool_call(tool_calls, tool_name)
-                if selected_tool_call is not None:
-                    payload = self._tool_call_args(selected_tool_call)
-                    try:
-                        return self._validate_structured_payload(
-                            schema=schema,
-                            payload=payload,
-                            model_type=model_type,
-                            tool_name=tool_name,
-                            stage="tool_args",
-                        )
-                    except LLMStructuredOutputError as exc:
-                        structured_error = exc
-                else:
-                    # 某些模型（如讯飞星火）即使设置了 tool_choice="required" 也不返回
-                    # tool_calls，而是直接将 JSON 放在 response.content 中。先尝试从
-                    # content 提取 JSON 作为快速回退，避免多一次网络调用。
-                    response_content = getattr(response, "content", "") or ""
-                    content_parsed = parse_first_json_object(response_content)
-                    if content_parsed:
-                        try:
-                            return self._validate_structured_payload(
-                                schema=schema,
-                                payload=content_parsed,
-                                model_type=model_type,
-                                tool_name=tool_name,
-                                stage="content_json",
-                            )
-                        except LLMStructuredOutputError as exc:
-                            structured_error = exc
-                    else:
-                        structured_error = LLMStructuredOutputError(
-                            model_type=model_type,
-                            schema_name=schema.__name__,
-                            function_name=tool_name,
-                            stage="no_tool_calls",
-                            message="model returned no matching tool_calls for structured output",
-                            payload=tool_calls,
-                        )
+                runnable = model.bind_tools(tools, tool_choice="required")
+                resp = await runnable.ainvoke(input_data)
+                tool_calls = getattr(resp, "tool_calls", []) or []
+
+                for tool_call in tool_calls:
+                    call_name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
+                    if call_name and call_name != name:
+                        continue
+                    args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
+                    if args:
+                        if isinstance(args, str):
+                            args = json.loads(args)
+                        return schema.model_validate(args)
+
+                # 尝试从 content 解析
+                content = getattr(resp, "content", "") or ""
+                if content:
+                    parsed = parse_first_json_object(content)
+                    if parsed:
+                        return schema.model_validate(parsed)
             except Exception as exc:
-                structured_error = LLMStructuredOutputError(
-                    model_type=model_type,
-                    schema_name=schema.__name__,
-                    function_name=tool_name,
-                    stage="tool_call_failed",
-                    message=str(exc),
-                )
+                errors.append(f"tool_call={type(exc).__name__}: {exc}")
 
-            if not fallback_to_json:
-                raise structured_error
-
-            fallback_model_kwargs = {
-                **base_model_kwargs,
-                "streaming": False,
-                "model_kwargs": {"response_format": {"type": "json_object"}},
-            }
-            fallback_llm = self._get_model(model_type, **fallback_model_kwargs)
-            fallback_response = await fallback_llm.ainvoke(input_data, **invoke_kwargs)
-            raw_content = getattr(fallback_response, "content", fallback_response)
+            # 方式2: 使用 response_format fallback
             try:
-                return self._validate_structured_payload(
-                    schema=schema,
-                    payload=raw_content,
-                    model_type=model_type,
-                    tool_name=tool_name,
-                    stage="json_fallback",
-                )
-            except LLMStructuredOutputError as exc:
-                raise LLMStructuredOutputError(
-                    model_type=model_type,
-                    schema_name=schema.__name__,
-                    function_name=tool_name,
-                    stage="fallback_failed",
-                    message=f"{structured_error}; {exc}",
-                    payload=raw_content,
-                ) from exc
+                fallback = model.bind(response_format={"type": "json_object"})
+                resp = await fallback.ainvoke(input_data)
+                parsed = parse_first_json_object(getattr(resp, "content", "") or "")
+                return schema.model_validate(parsed)
+            except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as e:
+                errors.append(f"fallback={type(e).__name__}: {e}")
+                raise LLMOutputError(schema.__name__, "; ".join(errors))
+
         finally:
-            if semaphore is not None:
-                semaphore.release()
+            if sem:
+                sem.release()
 
+    async def vision(
+        self,
+        input_data,
+        *,
+        temperature: float = 0.3,
+    ) -> Any:
+        """图片理解生成。
 
-# ----------------------------
-# 单例获取
-# ----------------------------
+        Args:
+            input_data: 输入数据（包含图片的消息）。
+            temperature: 温度参数。
+
+        Returns:
+            模型响应。
+        """
+        if not self._vision_model:
+            raise LLMConfigError("图片理解模型配置缺失")
+
+        sem = await self._acquire(self._vision_semaphore)
+        try:
+            model = self._vision_model
+            if temperature != 0.3:
+                model = model.bind(temperature=temperature)
+            return await model.ainvoke(input_data)
+        finally:
+            if sem:
+                sem.release()
+
+# ============ 单例 ============
+
+from functools import lru_cache
 
 @lru_cache(maxsize=1)
-def get_llm_manager() -> LlmManager:
-    """获取 LlmManager 单例。"""
-    return LlmManager()
+def get_llm() -> Llm:
+    """获取 LLM 单例。"""
+    return Llm()

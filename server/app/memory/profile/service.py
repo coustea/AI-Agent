@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.memory.message.types import DIALOGUE_ROLES
 from app.memory.message.store import MessageStore
@@ -169,7 +169,7 @@ class ProfileService:
         self.store = ProfileStore()
         self.message_store = MessageStore()
         self.memory_store = LongTermMemoryStore()
-        self.llm = get_llm_manager()
+        self.llm = get_llm()
 
     async def get(self, user_id: int):
         """获取画像。"""
@@ -243,13 +243,12 @@ class ProfileService:
         try:
             recent_dialogue = await self._build_recent_dialogue(user_id, session_id)
             prompt = self._build_prompt(old_json, recent_dialogue, long_term_text)
-            resp = await self.llm.ainvoke_structured(
-                "spark_max",
+            resp = await self.llm.ainvoke_json(
                 ProfileOutput,
                 prompt,
                 function_name="update_student_profile",
                 function_description="根据旧画像和近期对话返回学生画像。",
-                model_kwargs={"temperature": 0.1, "streaming": False},
+                temperature=0.1,
             )
         except Exception as e:
             logger.error("[ProfileService] LLM 失败: %s", e)

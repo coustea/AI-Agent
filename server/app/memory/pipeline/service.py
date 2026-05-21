@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from app.config import PROFILE_GATE_EVERY_N_ASSISTANT_TURNS
+from app.config import PROFILE_GATE
 from app.infra.logging import get_logger
 from app.memory.core.types import ModuleName
 from app.memory.core.utils import estimate_token_count
@@ -102,13 +102,13 @@ class PipelineService:
             user_id,
             session_id,
             assistant_turns,
-            PROFILE_GATE_EVERY_N_ASSISTANT_TURNS,
+            PROFILE_GATE,
         )
 
         should_build = False
         build_reason = ""
 
-        if assistant_turns and assistant_turns % PROFILE_GATE_EVERY_N_ASSISTANT_TURNS == 0:
+        if assistant_turns and assistant_turns % PROFILE_GATE == 0:
             should_build = True
             build_reason = f"定期触发（第 {assistant_turns} 轮）"
         elif self._has_profile_signal(user_message):

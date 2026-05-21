@@ -1,820 +1,903 @@
 <template>
-  <div class="home-dashboard">
-    <!-- User Profile & Welcome Banner -->
-    <header class="welcome-banner fade-in-up">
-      <div class="banner-content">
-        <div class="user-profile">
-          <el-avatar :size="80" :src="userInfo.avatar" class="user-avatar" />
-          <div class="user-greeting">
-            <h1 class="greeting-text">早安，{{ userInfo.name }} <span class="wave">👋</span></h1>
-            <p class="greeting-sub">
-              <span class="level-tag">{{ userInfo.level }}</span>
-              今日有 <strong>{{ userInfo.todayTasks }}</strong> 个学习任务待完成，继续保持！
-            </p>
-          </div>
-        </div>
-        <div class="user-stats">
-          <div class="stat-item">
-            <div class="stat-val">{{ userInfo.studyDays }} <span>天</span></div>
-            <div class="stat-label">连续学习</div>
-          </div>
-          <div class="divider"></div>
-          <div class="stat-item">
-            <div class="stat-val">{{ userInfo.masteryScore }} <span>分</span></div>
-            <div class="stat-label">掌握度评估</div>
-          </div>
-          <div class="divider"></div>
-          <div class="stat-item">
-            <div class="stat-val">{{ userInfo.resourcesCount }} <span>份</span></div>
-            <div class="stat-label">已生成资源</div>
+  <div class="home-hub">
+    <section class="hub-hero">
+      <div class="hero-main">
+        <el-tag class="hero-kicker" effect="plain" round>
+          <span class="status-dot"></span>
+          学习画像已同步
+        </el-tag>
+        <h1>今天建议从{{ recommendedGoal.topic }}开始</h1>
+        <p>
+          基于你的学习画像、最近生成资源和当前路径进度，系统已整理出下一步目标。
+        </p>
+
+        <div class="portrait-strip">
+          <div v-for="item in portraitStats" :key="item.label" class="portrait-stat">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
           </div>
         </div>
       </div>
-    </header>
 
-    <div class="dashboard-bento">
-      <!-- Row 1: Current Path & Tutor -->
-      <section class="bento-card path-card fade-in-up" style="animation-delay: 0.1s">
-        <div class="card-header">
-          <div class="header-title">
-            <div class="icon-box bg-indigo-soft"><el-icon><Position /></el-icon></div>
-            <h3>当前学习路径</h3>
-          </div>
-          <el-button link type="primary" @click="router.push('/path-planner')">查看完整路径 <el-icon><ArrowRight /></el-icon></el-button>
+      <aside class="goal-panel">
+        <div class="panel-topline">
+          <span>推荐学习目标</span>
+          <el-tag size="small" effect="plain" round>{{ recommendedGoal.confidence }}</el-tag>
         </div>
-        <div class="path-content">
-          <div class="path-info">
-            <h4 class="path-title">{{ activePath.title }}</h4>
-            <p class="path-next"><strong>下一步：</strong>{{ activePath.nextTask }}</p>
-            <div class="path-meta">
-              <span><el-icon><Clock /></el-icon> 预计 {{ activePath.remaining }}</span>
-            </div>
-          </div>
-          <div class="path-action">
-            <div class="progress-wrap">
-              <span class="progress-text">进度 {{ activePath.progress }}%</span>
-              <el-progress :percentage="activePath.progress" :show-text="false" color="#4F46E5" :stroke-width="10" />
-            </div>
-            <el-button type="primary" round class="continue-btn" @click="router.push('/tutor')">继续学习</el-button>
+        <h2>{{ recommendedGoal.title }}</h2>
+        <div class="goal-steps">
+          <div v-for="step in recommendedGoal.steps" :key="step" class="goal-step">
+            <el-icon><CircleCheckFilled /></el-icon>
+            <span>{{ step }}</span>
           </div>
         </div>
-      </section>
-
-      <section class="bento-card tutor-card fade-in-up" style="animation-delay: 0.2s">
-        <div class="card-header">
-          <div class="header-title">
-            <div class="icon-box bg-cyan-soft"><el-icon><ChatDotRound /></el-icon></div>
-            <h3>向导师提问</h3>
-          </div>
-        </div>
-        <div class="tutor-content">
-          <p class="tutor-desc">遇到难题？随时向你的专属智能导师求助。</p>
-          <el-input
-            v-model="quickQuestion"
-            type="textarea"
-            :rows="3"
-            placeholder="例如：为什么快排的最坏时间复杂度是O(n²)？"
-            resize="none"
-            class="custom-textarea"
-            @keydown.enter.prevent="askTutor"
-          />
-          <el-button type="primary" class="w-full mt-3 submit-btn" size="large" @click="askTutor">
-            发送提问 <el-icon class="el-icon--right"><Position /></el-icon>
+        <div class="goal-actions">
+          <el-button class="home-primary-button" type="primary" @click="goTo('/resource-generator')">
+            生成配套资源
+            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
           </el-button>
+          <el-button class="home-primary-button" type="primary" @click="goTo('/path-planner')">加入学习路径</el-button>
         </div>
-      </section>
+      </aside>
+    </section>
 
-      <!-- Row 2: Learning Activity & Weak Points -->
-      <section class="bento-card activity-card fade-in-up" style="animation-delay: 0.3s">
-        <div class="card-header">
-          <div class="header-title">
-            <div class="icon-box bg-blue-soft"><el-icon><DataLine /></el-icon></div>
-            <h3>学习活跃度</h3>
-          </div>
-          <div class="chart-legend">
-            <span class="legend-item"><i class="dot study"></i> 学习时长</span>
-            <span class="legend-item"><i class="dot resource"></i> 资源生成</span>
-          </div>
+    <section class="feature-row" aria-label="主要功能">
+      <article
+        v-for="action in primaryActions"
+        :key="action.title"
+        class="feature-card"
+        :class="action.tone"
+        @click="goTo(action.path)"
+      >
+        <div class="feature-icon">
+          <el-icon><component :is="action.icon" /></el-icon>
         </div>
-        <div class="chart-container">
-          <v-chart class="chart" :option="chartOption" autoresize />
+        <div class="feature-copy">
+          <span>{{ action.badge }}</span>
+          <h3>{{ action.title }}</h3>
+          <p>{{ action.description }}</p>
         </div>
-      </section>
+        <el-icon class="feature-arrow"><ArrowRight /></el-icon>
+      </article>
+    </section>
 
-      <section class="bento-card weak-card fade-in-up" style="animation-delay: 0.4s">
-        <div class="card-header">
-          <div class="header-title">
-            <div class="icon-box bg-rose-soft"><el-icon><Warning /></el-icon></div>
-            <h3>薄弱知识点</h3>
+    <section class="hub-grid">
+      <article class="insight-card profile-card">
+        <div class="section-heading">
+          <div>
+            <span class="section-label">LEARNING PORTRAIT</span>
+            <h2>你的学习画像</h2>
+          </div>
+          <el-button class="home-link-button" @click="goTo('/profile')">查看画像</el-button>
+        </div>
+
+        <div class="profile-summary">
+          <div class="profile-avatar">
+            <el-icon><User /></el-icon>
+          </div>
+          <div>
+            <h3>{{ learnerProfile.role }}</h3>
+            <p>{{ learnerProfile.summary }}</p>
           </div>
         </div>
-        <div class="weak-list" v-if="weakPoints.length > 0">
-          <div v-for="(wp, idx) in weakPoints" :key="idx" class="weak-item">
-            <div class="weak-info">
-              <span class="weak-name">{{ wp.name }}</span>
-              <span class="weak-level">{{ wp.level }}</span>
+
+        <div class="profile-tags">
+          <span v-for="tag in learnerProfile.tags" :key="tag">{{ tag }}</span>
+        </div>
+
+        <div class="weak-focus">
+          <div class="focus-header">
+            <span>当前薄弱点</span>
+            <b>{{ learnerProfile.weakPoints.length }} 项</b>
+          </div>
+          <div class="weak-list">
+            <button
+              v-for="point in learnerProfile.weakPoints"
+              :key="point.name"
+              type="button"
+              @click="goTo('/resource-generator')"
+            >
+              <strong>{{ point.name }}</strong>
+              <span>{{ point.hint }}</span>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <article class="insight-card resource-card">
+        <div class="section-heading">
+          <div>
+            <span class="section-label">MULTI-AGENT RESOURCES</span>
+            <h2>多智能体资源流</h2>
+          </div>
+          <el-button class="home-link-button" @click="goTo('/resource-generator')">进入资源引擎</el-button>
+        </div>
+
+        <div class="resource-flow">
+          <button
+            v-for="resource in multiAgentResources"
+            :key="resource.id"
+            type="button"
+            class="resource-item"
+            :class="resource.tone"
+            @click="goTo('/resource-generator')"
+          >
+            <div class="resource-icon">
+              <el-icon><component :is="resource.icon" /></el-icon>
             </div>
-            <el-button link type="primary" @click="router.push('/resource-generator')">生成强化资源</el-button>
-          </div>
-        </div>
-        <div v-else class="empty-state">
-          <el-empty description="太棒了，暂无明显薄弱点" :image-size="60" />
-        </div>
-      </section>
-
-      <!-- Row 3: Multi-Agent Resources & Achievements -->
-      <section class="bento-card resources-card fade-in-up" style="animation-delay: 0.5s">
-        <div class="card-header">
-          <div class="header-title">
-            <div class="icon-box bg-emerald-soft"><el-icon><Share /></el-icon></div>
-            <h3>最近生成资源</h3>
-          </div>
-          <el-button link type="primary" @click="router.push('/resource-generator')">查看全部 <el-icon><ArrowRight /></el-icon></el-button>
-        </div>
-        
-        <div v-if="multiAgentResources.length > 0" class="resources-grid">
-          <div v-for="res in multiAgentResources" :key="res.id" class="resource-item">
-            <div class="res-icon-wrap" :class="res.colorClass">
-              <el-icon><component :is="res.icon" /></el-icon>
-            </div>
-            <div class="res-details">
-              <h4 class="res-title" :title="res.title">{{ res.title }}</h4>
-              <div class="res-meta">
-                <span class="agent-badge">{{ res.agent }}</span>
-                <span class="res-time">{{ res.time }}</span>
+            <div class="resource-info">
+              <div class="resource-meta">
+                <span>{{ resource.agent }}</span>
+                <em>{{ resource.time }}</em>
               </div>
+              <h3>{{ resource.title }}</h3>
+              <p>{{ resource.hint }}</p>
             </div>
-            <div class="res-actions">
-              <el-button circle size="small" :icon="View" @click="router.push('/resource-generator')" />
-            </div>
-          </div>
+          </button>
         </div>
-        <div v-else class="empty-state">
-          <el-empty description="暂无生成的资源" :image-size="80" />
-        </div>
-      </section>
+      </article>
+    </section>
 
-      <section class="bento-card achievement-card fade-in-up" style="animation-delay: 0.6s">
-        <div class="card-header">
-          <div class="header-title">
-            <div class="icon-box bg-amber-soft"><el-icon><Lightning /></el-icon></div>
-            <h3>近期成就</h3>
-          </div>
-        </div>
-        <div class="achievement-list">
-          <div v-for="ach in achievements" :key="ach.id" class="achievement-item">
-            <div class="ach-icon">{{ ach.emoji }}</div>
-            <div class="ach-info">
-              <span class="ach-name">{{ ach.name }}</span>
-              <span class="ach-date">{{ ach.date }}</span>
-            </div>
-            <div class="ach-status">
-              <el-tag size="small" type="success" effect="plain" round>已达成</el-tag>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
+    <section class="bottom-utility">
+      <div class="utility-copy">
+        <span class="section-label">START SMART</span>
+        <h2>先确认学习目标，再选择合适的工具继续推进</h2>
+      </div>
+      <div class="utility-actions">
+        <button
+          v-for="tip in starterTips"
+          :key="tip.label"
+          type="button"
+          class="tip-pill"
+          @click="goTo(tip.path)"
+        >
+          <el-icon><component :is="tip.icon" /></el-icon>
+          <span>{{ tip.label }}</span>
+        </button>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Clock, DataLine, Lightning, Position, ArrowRight,
-  Share, Document, Edit, VideoPlay, ChatDotRound, Warning, View
+  ArrowRight,
+  ChatDotRound,
+  CircleCheckFilled,
+  Clock,
+  Collection,
+  Connection,
+  Cpu,
+  DataLine,
+  Document,
+  Edit,
+  MagicStick,
+  Monitor,
+  Odometer,
+  Position,
+  Share,
+  User
 } from '@element-plus/icons-vue'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, LineChart } from 'echarts/charts'
-import {
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  TitleComponent
-} from 'echarts/components'
-import VChart from 'vue-echarts'
-
-// 注册 ECharts 组件
-use([
-  CanvasRenderer,
-  BarChart,
-  LineChart,
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  TitleComponent
-])
 
 const router = useRouter()
 
-// 用户信息
-const userInfo = ref({
-  name: '学习者',
-  avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-  level: 'Lv.4 知识达人',
-  studyDays: 24,
-  todayTasks: 3,
-  masteryScore: 88,
-  resourcesCount: 15
-})
-
-// 当前学习路径
-const activePath = ref({
-  title: '数据结构与算法强化',
-  progress: 65,
-  nextTask: '完成图的广度优先遍历',
-  remaining: '1.5 小时'
-})
-
-// 多智能体最近生成的资源
-const multiAgentResources = ref([
-  { id: 1, title: '二叉树遍历原理详解', agent: '内容规划', type: 'document', time: '10分钟前', icon: Document, colorClass: 'icon-indigo' },
-  { id: 2, title: '数据结构全景思维导图', agent: '导图智能体', type: 'mindmap', time: '2小时前', icon: Share, colorClass: 'icon-cyan' },
-  { id: 3, title: '排序算法专项练习题', agent: '测试智能体', type: 'quiz', time: '昨天', icon: Edit, colorClass: 'icon-amber' },
-  { id: 4, title: '红黑树原理解析视频', agent: '视频智能体', type: 'video', time: '昨天', icon: VideoPlay, colorClass: 'icon-emerald' }
-])
-
-// 薄弱知识点
-const weakPoints = ref([
-  { name: '动态规划：背包问题', level: '待突破' },
-  { name: '红黑树：左旋右旋', level: '需巩固' }
-])
-
-// 近期成就
-const achievements = ref([
-  { id: 1, name: '七日连续打卡', date: '2026-05-15', emoji: '🔥' },
-  { id: 2, name: '算法之星：快速排序', date: '2026-05-12', emoji: '⭐' },
-  { id: 3, name: '资源收集家', date: '2026-05-10', emoji: '📚' }
-])
-
-// 导师提问
-const quickQuestion = ref('')
-
-const askTutor = () => {
-  router.push('/tutor')
+const goTo = (path: string) => {
+  router.push(path)
 }
 
-// ECharts 配置
-const chartOption = computed(() => ({
-  backgroundColor: 'transparent',
-  tooltip: {
-    trigger: 'axis',
-    axisPointer: { type: 'shadow' }
-  },
-  grid: {
-    top: '10%',
-    left: '3%',
-    right: '4%',
-    bottom: '3%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'category',
-    data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-    axisLine: { show: false },
-    axisTick: { show: false },
-    axisLabel: { color: '#64748B' }
-  },
-  yAxis: {
-    type: 'value',
-    splitLine: { lineStyle: { type: 'dashed', color: '#E2E8F0' } },
-    axisLabel: { color: '#64748B' }
-  },
-  series: [
-    {
-      name: '学习时长 (min)',
-      type: 'bar',
-      barWidth: '25%',
-      itemStyle: {
-        borderRadius: [4, 4, 0, 0],
-        color: '#4F46E5'
-      },
-      data: [45, 60, 85, 40, 95, 120, 80]
-    },
-    {
-      name: '资源生成 (份)',
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 8,
-      itemStyle: { color: '#06B6D4' },
-      lineStyle: { width: 3 },
-      data: [2, 3, 5, 1, 4, 6, 3]
-    }
+const recommendedGoal = ref({
+  topic: '操作系统死锁复习',
+  confidence: '基于 5 份资源',
+  title: '完成死锁四条件图解与自测闭环',
+  steps: [
+    '复习最近生成的图解讲义',
+    '完成 5 道自适应测验',
+    '把错题加入本周学习路径'
   ]
-}))
+})
+
+const portraitStats = ref([
+  { label: '当前阶段', value: '软件工程大二' },
+  { label: '学习场景', value: '考试备考' },
+  { label: '资源偏好', value: '图解 + 自测' }
+])
+
+const learnerProfile = ref({
+  role: '软件工程学习者',
+  summary: '更适合先建立结构图，再通过题目和代码样例巩固概念。',
+  tags: ['图解优先', '考点驱动', '偏好短任务', '需要错题回流'],
+  weakPoints: [
+    { name: '死锁必要条件', hint: '建议先看图解再做判断题' },
+    { name: '动态规划状态转移', hint: '适合生成代码模板和例题' },
+    { name: '红黑树旋转', hint: '需要流程图和逐步演示' }
+  ]
+})
+
+const primaryActions = ref([
+  {
+    title: '多智能体资源生成',
+    badge: 'RESOURCE ENGINE',
+    description: '生成讲解、导图、图解、代码、测验和阅读材料。',
+    icon: Cpu,
+    path: '/resource-generator',
+    tone: 'tone-blue'
+  },
+  {
+    title: '继续学习路径',
+    badge: 'LEARNING PATH',
+    description: '把资源和薄弱点整理成可执行的阶段目标。',
+    icon: Connection,
+    path: '/path-planner',
+    tone: 'tone-emerald'
+  },
+  {
+    title: '向智能导师提问',
+    badge: 'AI TUTOR',
+    description: '围绕当前画像和学习目标获得即时解释。',
+    icon: ChatDotRound,
+    path: '/tutor',
+    tone: 'tone-indigo'
+  },
+  {
+    title: '查看多维评估',
+    badge: 'EVALUATION',
+    description: '查看掌握度、练习表现和下一步建议。',
+    icon: DataLine,
+    path: '/evaluation',
+    tone: 'tone-amber'
+  }
+])
+
+const multiAgentResources = ref([
+  {
+    id: 1,
+    title: '死锁四条件图解讲义',
+    agent: '图解智能体',
+    time: '12 分钟前',
+    hint: '适合作为今日目标的第一步',
+    icon: Share,
+    tone: 'tone-blue'
+  },
+  {
+    id: 2,
+    title: '操作系统同步互斥自测题',
+    agent: '测验智能体',
+    time: '34 分钟前',
+    hint: '建议完成后更新薄弱点',
+    icon: Edit,
+    tone: 'tone-amber'
+  },
+  {
+    id: 3,
+    title: '动态规划状态设计模板',
+    agent: '代码智能体',
+    time: '昨天',
+    hint: '可加入算法强化路径',
+    icon: Monitor,
+    tone: 'tone-emerald'
+  },
+  {
+    id: 4,
+    title: '红黑树旋转知识树',
+    agent: '导图智能体',
+    time: '昨天',
+    hint: '适合配合导师问答复盘',
+    icon: Document,
+    tone: 'tone-indigo'
+  },
+  {
+    id: 5,
+    title: '进程调度算法对比表',
+    agent: '阅读智能体',
+    time: '2 天前',
+    hint: '适合考前横向复习',
+    icon: Collection,
+    tone: 'tone-blue'
+  },
+  {
+    id: 6,
+    title: '数据库索引错题解析',
+    agent: '评估智能体',
+    time: '2 天前',
+    hint: '已关联到掌握度评估',
+    icon: DataLine,
+    tone: 'tone-amber'
+  },
+  {
+    id: 7,
+    title: '网络分层速记卡片',
+    agent: '卡片智能体',
+    time: '3 天前',
+    hint: '可用于碎片时间复习',
+    icon: MagicStick,
+    tone: 'tone-emerald'
+  },
+  {
+    id: 8,
+    title: '链表反转代码练习',
+    agent: '代码智能体',
+    time: '3 天前',
+    hint: '建议加入算法训练任务',
+    icon: Monitor,
+    tone: 'tone-indigo'
+  }
+])
+
+const starterTips = ref([
+  { label: '建立画像', icon: User, path: '/profile?action=edit-profile' },
+  { label: '生成资源', icon: MagicStick, path: '/resource-generator' },
+  { label: '继续任务', icon: Position, path: '/path-planner' },
+  { label: '查看进度', icon: Odometer, path: '/evaluation' },
+  { label: '最近资源', icon: Collection, path: '/resource-generator' },
+  { label: '学习时长', icon: Clock, path: '/dashboard' }
+])
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
-
-.home-dashboard {
-  padding: 32px;
-  width: 100%;
-  margin: 0;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-  background-color: #F8FAFC;
-  min-height: 100vh;
-  box-sizing: border-box;
-}
-
-/* ================= Welcome Banner ================= */
-.welcome-banner {
-  background: linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #06B6D4 100%);
-  border-radius: 32px;
-  padding: 48px;
-  color: #FFFFFF;
-  box-shadow: 0 20px 50px -15px rgba(79, 70, 229, 0.4);
-  margin-bottom: 32px;
-  position: relative;
-  overflow: hidden;
-}
-.welcome-banner::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -20%;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-  border-radius: 50%;
-}
-
-.banner-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  max-width: 1800px;
-  margin: 0 auto;
-  position: relative;
-  z-index: 1;
-}
-
-.user-profile {
-  display: flex;
-  align-items: center;
-  gap: 32px;
-}
-.user-avatar {
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
-}
-.greeting-text {
-  margin: 0 0 12px 0;
-  font-size: 2.6rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-.wave {
-  display: inline-block;
-  animation: wave-animation 2.5s infinite;
-  transform-origin: 70% 70%;
-}
-@keyframes wave-animation {
-  0% { transform: rotate( 0.0deg) }
-  10% { transform: rotate(14.0deg) }
-  20% { transform: rotate(-8.0deg) }
-  30% { transform: rotate(14.0deg) }
-  40% { transform: rotate(-4.0deg) }
-  50% { transform: rotate(10.0deg) }
-  60% { transform: rotate( 0.0deg) }
-  100% { transform: rotate( 0.0deg) }
-}
-.greeting-sub {
-  margin: 0;
-  font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.95);
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.level-tag {
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 20px;
-  padding: 6px 18px;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #FFFFFF;
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.user-stats {
-  display: flex;
-  align-items: center;
-  gap: 48px;
-  background: rgba(15, 23, 42, 0.3);
-  padding: 28px 48px;
-  border-radius: 28px;
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-}
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.stat-val {
-  font-size: 2.2rem;
-  font-weight: 800;
-  line-height: 1;
-}
-.stat-val span {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
-}
-.stat-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.divider {
-  width: 1px;
-  height: 56px;
-  background: rgba(255, 255, 255, 0.15);
-}
-
-/* ================= Bento Grid ================= */
-.dashboard-bento {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: auto;
-  gap: 28px;
-  max-width: 1800px;
-  margin: 0 auto;
-}
-
-/* Card Spanning */
-.path-card { grid-column: span 2; }
-.tutor-card { grid-column: span 1; }
-.activity-card { grid-column: span 2; }
-.weak-card { grid-column: span 1; }
-.resources-card { grid-column: span 2; }
-.achievement-card { grid-column: span 1; }
-
-/* ================= Cards General ================= */
-.bento-card {
-  background: #FFFFFF;
-  border-radius: 28px;
-  padding: 36px;
-  box-shadow: 0 4px 24px -6px rgba(15, 23, 42, 0.04);
-  border: 1px solid #E2E8F0;
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
-}
-.bento-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.1);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 28px;
-}
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.header-title h3 {
-  margin: 0;
-  font-size: 1.3rem;
-  font-weight: 800;
-  color: #0F172A;
-}
-.icon-box {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-}
-
-/* Updated Icon Colors */
-.bg-indigo-soft { background: #EEF2FF; color: #4F46E5; }
-.bg-cyan-soft { background: #ECFEFF; color: #0891B2; }
-.bg-blue-soft { background: #EFF6FF; color: #3B82F6; }
-.bg-rose-soft { background: #FFF1F2; color: #E11D48; }
-.bg-emerald-soft { background: #ECFDF5; color: #059669; }
-.bg-amber-soft { background: #FFFBEB; color: #D97706; }
-
-/* ================= Path Card ================= */
-.path-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.home-hub {
+  --home-primary: var(--primary, #4F46E5);
+  --home-primary-soft: var(--primary-light, #EEF2FF);
+  --home-primary-border: #C7D2FE;
+  min-height: calc(100vh - 64px);
+  padding: 28px;
   background: #F8FAFC;
-  border-radius: 24px;
-  padding: 32px;
-  border: 1px solid #F1F5F9;
-}
-.path-info {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.path-title {
-  margin: 0;
-  font-size: 1.4rem;
-  font-weight: 800;
   color: #0F172A;
-}
-.path-next {
-  margin: 0;
-  font-size: 1.05rem;
-  color: #475569;
-}
-.path-meta {
-  margin-top: 6px;
-  font-size: 0.95rem;
-  color: #64748B;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.path-action {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 20px;
-  width: 280px;
-}
-.progress-wrap {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.progress-text {
-  font-size: 1rem;
-  font-weight: 800;
-  color: #4F46E5;
-  text-align: right;
-}
-.continue-btn {
-  width: 100%;
-  height: 52px;
-  font-weight: 700;
-  font-size: 1.1rem;
-  background: #4F46E5 !important;
-  border-color: #4F46E5 !important;
-  box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
+  box-sizing: border-box;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* ================= Activity Card ================= */
-.chart-container {
-  height: 300px;
-  width: 100%;
-}
-.chart {
-  height: 100%;
-}
-.chart-legend {
-  display: flex;
-  gap: 24px;
-}
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.9rem;
-  color: #64748B;
-  font-weight: 600;
-}
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-.dot.study { background: #4F46E5; }
-.dot.resource { background: #06B6D4; }
-
-/* ================= Multi-Agent Resources ================= */
-.resources-grid {
+.hub-hero {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  gap: 20px;
+  max-width: 1680px;
+  margin: 0 auto 20px;
 }
-.resource-item {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 24px;
-  border-radius: 24px;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  transition: all 0.3s ease;
-}
-.resource-item:hover {
-  box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.08);
-  border-color: #CBD5E1;
-}
-.res-icon-wrap {
-  width: 60px; height: 60px;
-  border-radius: 18px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.8rem;
-  flex-shrink: 0;
-}
-.icon-indigo { background: #EEF2FF; color: #4F46E5; }
-.icon-cyan { background: #ECFEFF; color: #0891B2; }
-.icon-amber { background: #FFFBEB; color: #D97706; }
-.icon-emerald { background: #ECFDF5; color: #059669; }
 
-.res-details {
-  flex: 1;
-  min-width: 0;
+.hero-main,
+.goal-panel,
+.feature-card,
+.insight-card,
+.bottom-utility {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
-.res-title {
-  margin: 0 0 10px 0;
-  font-size: 1.15rem;
-  font-weight: 700;
+
+.hero-main {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 280px;
+}
+
+.hero-kicker {
+  width: fit-content;
+  color: var(--home-primary) !important;
+  border-color: var(--home-primary-border) !important;
+  background: var(--home-primary-soft) !important;
+  font-weight: 800;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: #10B981;
+}
+
+.hero-main h1 {
+  margin: 22px 0 12px;
+  max-width: 100%;
+  font-size: 2.85rem;
+  line-height: 1.05;
+  letter-spacing: 0;
+  font-weight: 850;
   color: #0F172A;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.res-meta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.agent-badge {
-  background: #F1F5F9;
-  color: #475569;
-  font-size: 0.85rem;
-  font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 10px;
-}
-.res-time {
-  font-size: 0.9rem;
-  color: #94A3B8;
-  font-weight: 500;
-}
 
-/* ================= Tutor Card ================= */
-.tutor-content {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-.tutor-desc {
+.hero-main p {
   margin: 0;
-  font-size: 1.05rem;
-  color: #475569;
-  line-height: 1.6;
-}
-.custom-textarea :deep(.el-textarea__inner) {
-  border-radius: 20px;
-  background: #F8FAFC;
-  border: 2px solid #E2E8F0;
-  box-shadow: none !important;
-  font-size: 1.05rem;
-  padding: 20px;
-  font-family: inherit;
-  transition: all 0.3s ease;
-}
-.custom-textarea :deep(.el-textarea__inner:focus) {
-  border-color: #4F46E5;
-  background: #FFFFFF;
-}
-.submit-btn {
-  background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%) !important;
-  border: none;
-  font-weight: 700;
-  height: 56px;
-  border-radius: 18px;
-  font-size: 1.1rem;
-  box-shadow: 0 8px 20px -5px rgba(79, 70, 229, 0.4);
+  max-width: 640px;
+  color: #64748B;
+  line-height: 1.7;
+  font-size: 1.02rem;
 }
 
-/* ================= Weak Points ================= */
-.weak-list {
+.portrait-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.portrait-stat {
+  padding: 16px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.portrait-stat span,
+.section-label,
+.panel-topline span {
+  display: block;
+  color: #94A3B8;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.portrait-stat strong {
+  display: block;
+  margin-top: 8px;
+  color: #1E293B;
+  font-size: 1rem;
+}
+
+.goal-panel {
+  padding: 26px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
-.weak-item {
+
+.panel-topline {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   align-items: center;
-  padding: 20px 24px;
-  background: #F8FAFC;
-  border-radius: 20px;
-  border: 1px solid #F1F5F9;
-  transition: all 0.2s ease;
-}
-.weak-item:hover {
-  background: #FFF1F2;
-  border-color: #FECDD3;
-}
-.weak-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.weak-name {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #0F172A;
-}
-.weak-level {
-  font-size: 0.9rem;
-  color: #E11D48;
-  font-weight: 700;
-  background: rgba(225, 29, 72, 0.1);
-  padding: 2px 10px;
-  border-radius: 6px;
 }
 
-/* ================= Achievements ================= */
-.achievement-list {
+.goal-panel h2 {
+  margin: 18px 0 18px;
+  font-size: 1.45rem;
+  line-height: 1.3;
+  font-weight: 850;
+}
+
+.goal-steps {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.goal-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.goal-step .el-icon {
+  margin-top: 2px;
+  color: #10B981;
+}
+
+.goal-actions {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: auto;
 }
-.achievement-item {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 16px 0;
+
+.home-primary-button {
+  border-radius: 12px !important;
+  font-weight: 600 !important;
 }
-.achievement-item:not(:last-child) {
-  border-bottom: 1px solid #F1F5F9;
+
+.home-link-button {
+  min-height: 32px;
+  padding: 8px 14px !important;
+  border: 1px solid var(--home-primary-border) !important;
+  border-radius: 12px !important;
+  background: var(--home-primary-soft) !important;
+  color: var(--home-primary) !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease !important;
 }
-.ach-icon {
-  width: 52px;
-  height: 52px;
-  background: #F8FAFC;
-  border-radius: 16px;
+
+.home-link-button:hover {
+  background: var(--home-primary-soft) !important;
+  border-color: var(--home-primary) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px -8px rgba(79, 70, 229, 0.35) !important;
+}
+
+.home-link-button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px -8px rgba(79, 70, 229, 0.3) !important;
+}
+
+.feature-row {
+  max-width: 1680px;
+  margin: 0 auto 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.feature-card {
+  border: 0;
+  cursor: pointer;
+  min-height: 150px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  text-align: left;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: #CBD5E1;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.07);
+}
+
+.feature-icon,
+.resource-icon,
+.profile-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.8rem;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+  flex: 0 0 auto;
+  background: var(--tone-soft);
+  color: var(--tone-accent);
+  font-size: 1.25rem;
 }
-.ach-info {
-  flex: 1;
+
+.feature-copy span {
+  color: var(--tone-accent);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.feature-copy h3 {
+  margin: 8px 0 8px;
+  color: #0F172A;
+  font-size: 1.05rem;
+  font-weight: 850;
+}
+
+.feature-copy p {
+  margin: 0;
+  color: #64748B;
+  line-height: 1.52;
+  font-size: 0.9rem;
+}
+
+.feature-arrow {
+  color: #CBD5E1;
+  margin-top: 2px;
+}
+
+.hub-grid {
+  max-width: 1680px;
+  margin: 0 auto 20px;
+  display: grid;
+  grid-template-columns: minmax(340px, 0.8fr) minmax(0, 1.2fr);
+  gap: 20px;
+}
+
+.insight-card {
+  padding: 24px;
+}
+
+.resource-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
-.ach-name {
-  font-size: 1.1rem;
-  font-weight: 700;
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.section-heading h2 {
+  margin: 6px 0 0;
   color: #0F172A;
+  font-size: 1.25rem;
+  font-weight: 850;
 }
-.ach-date {
-  font-size: 0.9rem;
+
+.profile-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 16px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.profile-summary h3 {
+  margin: 0 0 6px;
+  color: #0F172A;
+  font-size: 1rem;
+}
+
+.profile-summary p {
+  margin: 0;
+  color: #64748B;
+  line-height: 1.58;
+}
+
+.profile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.profile-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #F1F5F9;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.weak-focus {
+  border-top: 1px solid #E2E8F0;
+  padding-top: 16px;
+}
+
+.focus-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #64748B;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.focus-header b {
+  color: var(--home-primary);
+}
+
+.weak-list,
+.resource-flow {
+  display: grid;
+  gap: 10px;
+}
+
+.weak-list button,
+.resource-item,
+.tip-pill {
+  font: inherit;
+  cursor: pointer;
+}
+
+.weak-list button {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  text-align: left;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.weak-list button:hover {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+}
+
+.weak-list strong,
+.weak-list span {
+  display: block;
+}
+
+.weak-list strong {
+  color: #0F172A;
+  font-size: 0.95rem;
+  margin-bottom: 5px;
+}
+
+.weak-list span {
+  color: #64748B;
+  font-size: 0.84rem;
+}
+
+.resource-flow {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  flex: 1;
+}
+
+.resource-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  text-align: left;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.resource-item:hover {
+  transform: translateY(-2px);
+  border-color: #CBD5E1;
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.06);
+}
+
+.resource-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--tone-accent);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.resource-meta em {
   color: #94A3B8;
+  font-style: normal;
+  font-weight: 650;
 }
 
-/* ================= Animations ================= */
-.fade-in-up {
-  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+.resource-info h3 {
+  margin: 6px 0 4px;
+  color: #0F172A;
+  font-size: 0.94rem;
+  font-weight: 850;
+  line-height: 1.32;
 }
 
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(40px); }
-  to { opacity: 1; transform: translateY(0); }
+.resource-info p {
+  margin: 0;
+  color: #64748B;
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
-/* ================= Responsive ================= */
-@media (max-width: 1440px) {
-  .dashboard-bento { grid-template-columns: repeat(2, 1fr); gap: 24px; }
-  .path-card, .activity-card, .resources-card { grid-column: span 2; }
-  .tutor-card, .weak-card, .achievement-card { grid-column: span 1; }
+.bottom-utility {
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
 }
 
-@media (max-width: 1024px) {
-  .dashboard-bento { grid-template-columns: 1fr; }
-  .path-card, .tutor-card, .activity-card, .weak-card, .resources-card, .achievement-card {
-    grid-column: span 1;
+.utility-copy {
+  min-width: 0;
+}
+
+.utility-copy h2 {
+  margin: 6px 0 0;
+  font-size: 1.08rem;
+  color: #0F172A;
+  white-space: nowrap;
+}
+
+.utility-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.tip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: #475569;
+  font-weight: 750;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.tip-pill:hover {
+  background: var(--home-primary-soft);
+  color: var(--home-primary);
+  border-color: var(--home-primary-border);
+}
+
+.tone-blue {
+  --tone-accent: #2563EB;
+  --tone-soft: #EFF6FF;
+}
+
+.tone-emerald {
+  --tone-accent: #059669;
+  --tone-soft: #ECFDF5;
+}
+
+.tone-indigo {
+  --tone-accent: #4F46E5;
+  --tone-soft: #EEF2FF;
+}
+
+.tone-amber {
+  --tone-accent: #D97706;
+  --tone-soft: #FFFBEB;
+}
+
+:deep(.el-button--primary) {
+  --el-button-bg-color: var(--home-primary) !important;
+  --el-button-border-color: var(--home-primary) !important;
+  --el-button-hover-bg-color: var(--home-primary) !important;
+  --el-button-hover-border-color: var(--home-primary) !important;
+  background: var(--home-primary) !important;
+  border-color: var(--home-primary) !important;
+}
+
+:deep(.el-button--primary:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.3);
+}
+
+@media (max-width: 1280px) {
+  .feature-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .banner-content { flex-direction: column; gap: 40px; align-items: flex-start; }
-  .user-stats { width: 100%; justify-content: space-between; padding: 24px 32px; }
+
+  .hub-grid,
+  .hub-hero {
+    grid-template-columns: 1fr;
+  }
 }
 
-@media (max-width: 768px) {
-  .home-dashboard { padding: 20px; }
-  .welcome-banner { padding: 32px; border-radius: 24px; }
-  .user-stats { flex-direction: column; gap: 24px; align-items: flex-start; padding: 24px; }
-  .divider { width: 100%; height: 1px; }
-  .resources-grid { grid-template-columns: 1fr; }
-  .path-content { flex-direction: column; align-items: flex-start; gap: 28px; }
-  .path-action { width: 100%; align-items: flex-start; }
-  .greeting-text { font-size: 2rem; }
+@media (max-width: 760px) {
+  .home-hub {
+    padding: 18px;
+  }
+
+  .hero-main,
+  .goal-panel,
+  .insight-card {
+    padding: 20px;
+  }
+
+  .portrait-strip,
+  .feature-row,
+  .resource-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-main h1 {
+    font-size: 2rem;
+  }
+
+  .bottom-utility {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .utility-actions {
+    justify-content: flex-start;
+  }
 }
 </style>

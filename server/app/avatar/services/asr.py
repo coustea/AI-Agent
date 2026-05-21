@@ -10,7 +10,7 @@ import json
 import websockets
 
 from app.avatar.services import xfyun_auth
-from app.config import ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET, ASR_SPARK_APP_ID, IAT_URL
+from app.config import ASR_API_KEY, ASR_API_SECRET, ASR_APP_ID, AVATAR_IAT_URL
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -22,7 +22,7 @@ class IatClient:
     def __init__(self):
         """Initialize the ASR client with authenticated URL."""
         self.auth_url = xfyun_auth.assemble_auth_url(
-            IAT_URL, 'GET', ASR_SPARK_API_KEY, ASR_SPARK_API_SECRET
+            AVATAR_IAT_URL, 'GET', ASR_API_KEY, ASR_API_SECRET
         )
 
     async def recognize_stream(self, audio_queue):
@@ -44,7 +44,7 @@ class IatClient:
             async with websockets.connect(self.auth_url) as ws:
                 # Send start frame
                 start_params = {
-                    "common": {"app_id": ASR_SPARK_APP_ID},
+                    "common": {"app_id": ASR_APP_ID},
                     "business": {
                         "language": "zh_cn",
                         "domain": "iat",

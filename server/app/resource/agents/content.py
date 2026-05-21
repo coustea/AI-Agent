@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import Agent
 from app.resource.schemas import WorkerResult, WorkerState
@@ -61,8 +61,8 @@ class ContentAgent(Agent):
         """阶段一: 仅生成大纲。"""
         outline_prompt = f"{prompt}\n\n{input_text}\n\n请只生成内容大纲，不要展开详细讲解。大纲需要包含各分支主题和关键知识点，以便其他 Agent 参考使用。"
 
-        llm = get_llm_manager()
-        response = await llm.ainvoke("spark_x", outline_prompt, model_kwargs={"temperature": 0.3})
+        llm = get_llm()
+        response = await llm.ainvoke(outline_prompt, temperature=0.3)
 
         content = response.content if hasattr(response, "content") else str(response)
         markdown = self._extract_markdown(content)
@@ -84,8 +84,8 @@ class ContentAgent(Agent):
         if outline:
             input_text = f"{input_text}\n\n## 参考大纲\n{outline}\n\n请基于以上大纲，生成完整的专业课程讲解文档。"
 
-        llm = get_llm_manager()
-        response = await llm.ainvoke("spark_x", f"{prompt}\n\n{input_text}", model_kwargs={"temperature": 0.3})
+        llm = get_llm()
+        response = await llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
 
         content = response.content if hasattr(response, "content") else str(response)
         markdown = self._extract_markdown(content)

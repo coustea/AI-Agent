@@ -23,7 +23,7 @@ from typing_extensions import TypedDict
 
 from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 from app.chat.utils import load_prompts, truncate
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.memory import MemoryLayer
 from app.utils.mermaid import build_mermaid_render
@@ -85,13 +85,9 @@ class AvatarAgent:
     """
 
     def __init__(self) -> None:
-        self.llm_manager = get_llm_manager()
-        self.spark_model_kwargs = {"temperature": 0.7, "streaming": True}
-        self.classifier_model_kwargs = {"temperature": 0.0, "max_tokens": 100}
-        self.tool_model_kwargs = {"temperature": 0.2, "streaming": False}
-        self.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
+        self.llm = get_llm()
         self.memory_layer = MemoryLayer(module="avatar")
-        self.vision_service = build_vision_service(self.llm_manager)
+        self.vision_service = build_vision_service(self.llm)
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -315,13 +311,13 @@ class AvatarAgent:
         # LLM 分类
         try:
             classifier_prompt = _get_prompt("classifier")
-            result = await self.llm_manager.ainvoke(
-                "spark_max",
+            result = await self.llm.ainvoke(
                 classifier_prompt.format(
                     user_message=user_msg,
                     has_attachments="是" if (file_urls or image_urls) else "否",
                 ),
-                model_kwargs=self.classifier_model_kwargs,
+                temperature=0.0,
+                max_tokens=100,
             )
             route = result.content.strip().strip('"').strip("'")
             if route not in ("direct", "tool_needed", "vision_needed", "attachment_needed"):
@@ -344,10 +340,9 @@ class AvatarAgent:
     async def _direct_answer_node(self, state: AvatarState) -> dict:
         """直接回答路径"""
         messages = [SystemMessage(content=state["system_prompt"])] + state["messages"]
-        response = await self.llm_manager.ainvoke(
-            "spark_max",
+        response = await self.llm.ainvoke(
             messages,
-            model_kwargs=self.spark_model_kwargs,
+            temperature=0.7,
         )
         text = getattr(response, "content", "")
         return {"messages": [response], "answer_text": text}
@@ -389,10 +384,9 @@ class AvatarAgent:
         )
 
         full_messages = [SystemMessage(content=state["system_prompt"]), HumanMessage(content=answer_prompt)]
-        response = await self.llm_manager.ainvoke(
-            "spark_max",
+        response = await self.llm.ainvoke(
             full_messages,
-            model_kwargs=self.spark_model_kwargs,
+            temperature=0.7,
         )
         text = getattr(response, "content", "")
         return {"messages": [response], "answer_text": text}
@@ -411,19 +405,11 @@ class AvatarAgent:
         full_messages = [SystemMessage(content=state["tool_system_prompt"])] + list(messages)
 
         # 绑定搜索工具
-        llm_with_tools = self.llm_manager.bind_tools(
-            "spark_max",
-            AVATAR_TOOLS,
-            model_kwargs=self.tool_model_kwargs,
-        )
+        llm_with_tools = self.llm.model.bind_tools(AVATAR_TOOLS)
 
         response = None
         try:
-            response = await self.llm_manager.ainvoke_runnable(
-                llm_with_tools,
-                full_messages,
-                model_type="spark_max",
-            )
+            response = await self.llm.ainvoke(full_messages, model=llm_with_tools)
         except Exception as exc:
             # 讯飞 Spark 偶尔返回 tool_calls.args 为 JSON 字符串而非 dict，
             # 导致 pydantic ValidationError。降级到无工具调用直接回答。
@@ -441,10 +427,9 @@ class AvatarAgent:
                 return {"search_result": f"【duckduckgo_search】\n{search_content}"}
             except Exception:
                 # 搜索也失败，降级到直接回答
-                response = await self.llm_manager.ainvoke(
-                    "spark_max",
+                response = await self.llm.ainvoke(
                     [SystemMessage(content=state["system_prompt"])] + list(messages),
-                    model_kwargs=self.spark_model_kwargs,
+                    temperature=0.7,
                 )
                 text = getattr(response, "content", "")
                 return {"messages": [response], "answer_text": text, "search_result": ""}
@@ -501,10 +486,9 @@ class AvatarAgent:
             HumanMessage(content=prompt),
         ]
 
-        response = await self.llm_manager.ainvoke(
-            "spark_max",
+        response = await self.llm.ainvoke(
             full_messages,
-            model_kwargs=self.spark_model_kwargs,
+            temperature=0.7,
         )
         text = getattr(response, "content", "")
         return {"messages": [response], "answer_text": text}
@@ -563,15 +547,13 @@ class AvatarAgent:
         )
 
         try:
-            decision = await self.llm_manager.ainvoke_structured(
-                "spark_max",
+            decision = await self.llm.ainvoke_json(
                 DiagramDecision,
                 [
                     SystemMessage(content=_get_prompt("diagram_decision_system")),
                     HumanMessage(content=prompt),
                 ],
-                strict=True,
-                model_kwargs=self.diagram_model_kwargs,
+                temperature=0.1,
             )
 
             if decision.diagram_type not in DIAGRAM_MODEL_MAP:
@@ -605,13 +587,13 @@ class AvatarAgent:
         )
 
         try:
-            response = await self.llm_manager.ainvoke(
-                "spark_max",
+            response = await self.llm.ainvoke(
                 [
                     SystemMessage(content=_get_prompt("diagram_generation_system")),
                     HumanMessage(content=prompt),
                 ],
-                model_kwargs=self.diagram_model_kwargs,
+                temperature=0.1,
+                max_tokens=1600,
             )
             content = response.content if hasattr(response, "content") else str(response)
             return {

@@ -1,0 +1,78 @@
+# 应用配置
+app:
+  debug: true
+  host: "0.0.0.0"
+  port: 9999
+
+# 数据库配置
+database:
+  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+  echo: false
+  pool_size: 10
+  max_overflow: 20
+  pool_recycle: 1800
+  pool_timeout: 30
+
+# JWT 配置
+jwt:
+  secret_key: "agent-platform-secret-key-2024-min-32-bytes"
+  algorithm: "HS256"
+  expire_days: 7
+
+# ============ 模型配置 ============
+# 切换本地/云端只需修改 base_url、api_key、model_name
+models:
+  # 文本模型（修改以下三项即可切换本地/云端）
+  base_url: "https://spark-api-open.xf-yun.com/v1"
+  api_key: "FvxNBbopqlFUuPhAJLao:fBrnRiJXyuSgymznRJAI"
+  model_name: "generalv3.5"
+  concurrency: 10
+
+  # 图片理解模型（独立配置）
+  vision:
+    base_url: "https://open.bigmodel.cn/api/paas/v4/"
+    api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
+    model_name: "glm-4.6v-flash"
+    concurrency: 10
+
+# 星火 WebSocket API（Vision 用）
+spark:
+  app_id: "97c2a0c6"
+  api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
+  api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
+
+# Avatar 数字人
+avatar:
+  app_id: "5ec3e8ba"
+  api_key: "f3acd6dac65bcb50003111992868f700"
+  api_secret: "Nzk5ZmJlNTMwNTA0ZDJlOTM2OWY4MDM4"
+  url: "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact"
+  anchor_id: "111204004"
+  vcn: "x5_lingxiaoyue_flow"
+  iat_url: "wss://iat-api.xfyun.cn/v2/iat"
+  bridge_port: 8765
+  asr_app_id: "5ec3e8ba"
+  asr_api_key: "f3acd6dac65bcb50003111992868f700"
+  asr_api_secret: "Nzk5ZmJlNTMwNTA0ZDJlOTM2OWY4MDM4"
+
+# 搜索服务
+search:
+  tavily_key: "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"
+
+# 路径配置
+paths:
+  workplace: "workplace"
+  logs: "logs"
+  knowledge: "data"
+
+# 日志配置
+logging:
+  level: "INFO"
+
+# Memory 配置
+memory:
+  profile_gate_turns: 2
+  msg_limit: 10
+  chat_budget: 700
+  ltm_budget: 1600
+  summary_budget: 900

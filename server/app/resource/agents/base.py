@@ -14,7 +14,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.schemas import WorkerResult, WorkerState
 from app.resource.utils import (
@@ -52,7 +52,7 @@ class Agent:
         self.user_id = user_id
         self.resource_id = resource_id
         self.emitter = emitter
-        self.llm_manager = get_llm_manager()
+        self.llm = get_llm()
         self._prompt_path = _PROMPTS_DIR / f"{self.AGENT_NAME}.md"
 
     # ------------------------------------------------------------------

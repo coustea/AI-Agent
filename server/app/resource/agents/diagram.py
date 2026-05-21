@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import Agent
 from app.resource.schemas import WorkerResult, WorkerState
@@ -75,7 +75,7 @@ class DiagramAgent(Agent):
         diagram_instruction = self._build_diagram_instruction(diagram_type, visual_style, highlight_mode, detail_level)
         full_input = f"{input_text}\n\n{diagram_instruction}"
 
-        llm = get_llm_manager()
+        llm = get_llm()
 
         # 第一次生成
         mermaid_code = await self._generate_mermaid(llm, prompt, full_input, diagram_type)
@@ -129,9 +129,8 @@ class DiagramAgent(Agent):
             suffix = f"\n\n{extra_hint}" + suffix
 
         response = await llm.ainvoke(
-            "spark_max",
             f"{prompt}\n\n{input_text}{suffix}",
-            model_kwargs={"temperature": 0.2},
+            temperature=0.2,
         )
 
         content = response.content if hasattr(response, "content") else str(response)

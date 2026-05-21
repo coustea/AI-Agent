@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.memory.core.types import ModuleName
 from app.memory.memory.store import LongTermMemoryStore
@@ -46,7 +46,7 @@ class LongTermMemoryService:
         self.store = LongTermMemoryStore()
         self.profile_store = ProfileStore()
         self.summary_store = SummaryStore()
-        self.llm = get_llm_manager()
+        self.llm = get_llm()
         # 冷却期缓存：user_id -> 上次 LLM 调用的 Unix 时间戳
         self._last_update_at: dict[int, float] = {}
 
@@ -118,13 +118,12 @@ class LongTermMemoryService:
                 summary_text=summary_text,
                 old_memory_text=old_memory_text,
             )
-            resp = await self.llm.ainvoke_structured(
-                "spark_x",
+            resp = await self.llm.ainvoke_json(
                 MemoryUpdateOutput,
                 prompt,
                 function_name="update_long_term_memory",
                 function_description="判断是否需要更新长期记忆，如需更新返回新的记忆 JSON。",
-                model_kwargs={"temperature": 0.1, "streaming": False},
+                temperature=0.1,
             )
         except Exception as e:
             logger.error("[LongTermMemory] LLM 失败: %s", e)

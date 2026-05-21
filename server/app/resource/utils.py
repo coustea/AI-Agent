@@ -378,7 +378,7 @@ def append_backend_context_for_prompt(parts: list[str], state) -> None:
 async def generate_summary_with_llm(markdown: str, learning_need: str = "") -> str:
     """使用 LLM 为学习资源生成文本摘要。"""
     from langchain_core.messages import HumanMessage
-    from app.infra.llm import get_llm_manager
+    from app.infra.llm import get_llm
 
     if not markdown or not markdown.strip():
         return ""
@@ -396,11 +396,10 @@ async def generate_summary_with_llm(markdown: str, learning_need: str = "") -> s
 3. 不要添加额外解释"""
 
     try:
-        llm_manager = get_llm_manager()
-        response = await llm_manager.ainvoke(
-            "spark_x",
+        llm = get_llm()
+        response = await llm.ainvoke(
             [HumanMessage(content=prompt)],
-            model_kwargs={"temperature": 0.3},
+            temperature=0.3,
         )
         summary = response.content if hasattr(response, "content") else str(response)
         return summary.strip()
@@ -457,23 +456,23 @@ def _build_content_summary_data_local(markdown: str, learning_need: str = "") ->
     }
 
 
-async def build_content_summary_data_with_llm(markdown: str, llm_manager=None, learning_need: str = "") -> dict[str, Any]:
+async def build_content_summary_data_with_llm(markdown: str, llm=None, learning_need: str = "") -> dict[str, Any]:
     """用 LLM 提取 ContentAgent 的结构化交接摘要，失败时回退到本地解析。
 
     Args:
         markdown: 资源 markdown 内容。
-        llm_manager: LLM 管理器实例（可选，默认通过 get_llm_manager 获取）。
+        llm: LLM 管理器实例（可选，默认通过 get_llm 获取）。
         learning_need: 学习需求描述（可选）。
     """
     from langchain_core.messages import HumanMessage
-    from app.infra.llm import get_llm_manager
+    from app.infra.llm import get_llm
     from app.utils.json import parse_first_json_object
 
     fallback = _build_content_summary_data_local(markdown, learning_need)
     if not markdown or not markdown.strip():
         return fallback
 
-    manager = llm_manager or get_llm_manager()
+    manager = llm or get_llm()
 
     prompt = f"""请从课程讲解中提取供下游多智能体协作使用的结构化摘要。
 只输出严格 JSON，不要 Markdown 或解释文本。
@@ -497,9 +496,8 @@ JSON 字段：
 
     try:
         response = await manager.ainvoke(
-            "spark_max",
             [HumanMessage(content=prompt)],
-            model_kwargs={"temperature": 0.1},
+            temperature=0.1,
         )
         content = response.content if hasattr(response, "content") else str(response)
         parsed = parse_first_json_object(content)

@@ -15,10 +15,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import (
-    LONG_TERM_MEMORY_CHAR_BUDGET as _CFG_LTM_BUDGET,
-    RECENT_CHAT_CONTEXT_CHAR_BUDGET as _CFG_CHAT_BUDGET,
-    RECENT_CHAT_MESSAGE_LIMIT as _CFG_MSG_LIMIT,
-    SUMMARY_CHAR_BUDGET as _CFG_SUMMARY_BUDGET,
+    LTM_BUDGET as _CFG_LTM_BUDGET,
+    CHAT_BUDGET as _CFG_CHAT_BUDGET,
+    MSG_LIMIT as _CFG_MSG_LIMIT,
+    SUMMARY_BUDGET as _CFG_SUMMARY_BUDGET,
 )
 
 
@@ -26,10 +26,10 @@ from app.config import (
 # 字符预算（从 config 读取，保留模块级常量供默认参数使用）
 # ---------------------------------------------------------------------------
 
-RECENT_CHAT_MESSAGE_LIMIT: int = _CFG_MSG_LIMIT
-RECENT_CHAT_CONTEXT_CHAR_BUDGET: int = _CFG_CHAT_BUDGET
-LONG_TERM_MEMORY_CHAR_BUDGET: int = _CFG_LTM_BUDGET
-SUMMARY_CHAR_BUDGET: int = _CFG_SUMMARY_BUDGET
+MSG_LIMIT: int = _CFG_MSG_LIMIT
+CHAT_BUDGET: int = _CFG_CHAT_BUDGET
+LTM_BUDGET: int = _CFG_LTM_BUDGET
+SUMMARY_BUDGET: int = _CFG_SUMMARY_BUDGET
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ def select_recent_chat_messages(
     messages: list[Any],
     *,
     user_message: str,
-    char_budget: int = RECENT_CHAT_CONTEXT_CHAR_BUDGET,
+    char_budget: int = CHAT_BUDGET,
 ) -> list[Any]:
     """从最近消息中按预算保留最新上下文。
 
@@ -146,7 +146,7 @@ def select_recent_chat_messages(
 def render_recent_chat_context(
     messages: list[Any],
     *,
-    char_budget: int = RECENT_CHAT_CONTEXT_CHAR_BUDGET,
+    char_budget: int = CHAT_BUDGET,
 ) -> str:
     """渲染近期对话上下文。"""
     lines = []
@@ -174,7 +174,7 @@ def _append_with_budget(lines: list[str], addition: str, char_budget: int) -> bo
 def render_priority_long_term_memory(
     memory_json: dict[str, Any],
     *,
-    char_budget: int = LONG_TERM_MEMORY_CHAR_BUDGET,
+    char_budget: int = LTM_BUDGET,
 ) -> str:
     """按优先级渲染长期记忆。"""
     if not memory_json:

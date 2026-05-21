@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from app.infra.llm import get_llm_manager
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import Agent
 from app.resource.schemas import WorkerResult, WorkerState
@@ -44,11 +44,10 @@ class MindmapAgent(Agent):
         return result
 
     async def _generate(self, state: WorkerState, prompt: str, input_text: str) -> WorkerResult:
-        llm = get_llm_manager()
+        llm = get_llm()
         response = await llm.ainvoke(
-            "spark_x",
             f"{prompt}\n\n{input_text}",
-            model_kwargs={"temperature": 0.3},
+            temperature=0.3,
         )
 
         content = response.content if hasattr(response, "content") else str(response)
