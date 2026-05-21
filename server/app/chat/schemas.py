@@ -1,6 +1,6 @@
 """Chat 模块数据模式定义。
 
-包含 API 层请求/响应模型、Agent 内部状态类型、图解 Schema 等。
+包含 API 层请求/响应模型、Agent 内部状态类型、知识图谱 Schema 等。
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ class MentorChatRequest(BaseModel):
     session_id: Optional[str] = None  # 会话ID，为空则使用默认会话
     image_urls: Optional[list[str]] = None  # 图片URL列表
     file_urls: Optional[list[str]] = None  # 文件URL列表
-    need_diagram: Optional[bool] = False  # 是否生成图解（Mermaid SVG）
+    need_knowledge_graph: Optional[bool] = False  # 是否生成知识图谱
     generate_video: Optional[bool] = False  # 是否生成视频
     enable_search: Optional[bool] = False  # 是否启用联网搜索
     enable_long_term_memory: Optional[bool] = False  # 是否启用长期记忆读写
@@ -56,13 +56,13 @@ class ToolCallRecord(BaseModel):
 class ChatMessageItem(BaseModel):
     """返回给前端的消息条目。
 
-    包含角色、内容、附件、工具调用记录、图解等。
+    包含角色、内容、附件、工具调用记录、知识图谱等。
     """
     role: str  # 消息角色: "user" | "assistant" | "tool"
     content: str  # 消息文本内容
     attachments: Optional[list[AttachmentInfo]] = None  # 附件列表
     tool_calls: Optional[list[ToolCallRecord]] = None  # 工具调用记录
-    diagram: Optional[dict[str, Any]] = None  # 图解数据（包含 Mermaid 源码和 PNG URL）
+    knowledge_graph: Optional[dict[str, Any]] = None  # 知识图谱数据
     created_at: Optional[datetime] = None  # 创建时间
 
 
@@ -105,17 +105,19 @@ class TutorState(TypedDict, total=False):
     session_id: str  # 会话ID
     image_urls: Optional[list[str]]  # 图片URL列表
     file_urls: Optional[list[str]]  # 文件URL列表
-    need_diagram: bool  # 是否生成图解
+    need_knowledge_graph: bool  # 是否生成知识图谱
     generate_video: bool  # 是否生成视频
     request_generate_video: bool  # 请求生成视频标志
     enable_search: bool  # 是否启用搜索
     enable_long_term_memory: bool  # 是否启用长期记忆读写
-    diagram: Optional[dict[str, Any]]  # 生成的图解数据
-    diagram_error: Optional[str]  # 图解生成错误信息
+    knowledge_graph: Optional[dict[str, Any]]  # 生成的知识图谱数据
+    knowledge_graph_error: Optional[str]  # 知识图谱生成错误信息
 
     # ---- 路由与执行模式 ----
-    route: str  # 路由结果: "direct" | "attachment_needed"
-    execution_mode: str  # 执行模式: "direct" | "attachment"
+    route: str  # 路由结果: "direct" | "search" | "attachment_needed" | "direct_graph" | "search_graph" | "attachment_graph" | "graph_only"
+    execution_mode: str  # 执行模式: "direct" | "search" | "attachment" | "search_graph" | "attachment_graph" | "graph_only"
+    summary_type: str  # 总结类型: "brief"（图谱简要总结） | None（详细回答）
+    search_result: str  # 搜索节点返回的搜索结果
 
     # ---- 上下文信息 ----
     profile_context: str  # 用户画像上下文
@@ -133,7 +135,7 @@ class TutorState(TypedDict, total=False):
 
     # ---- 终止与调试信息 ----
     answer_text: str  # 最终回答文本
-    last_guard_decision: str  # 最近守卫决策: "need_diagram" | "generate_video" | "end"
+    last_guard_decision: str  # 最近守卫决策: "need_knowledge_graph" | "generate_video" | "end"
     guard_reason: str  # 守卫决策原因
     termination_reason: str  # 终止原因
     image_generation_status: str  # 图片生成状态
@@ -145,7 +147,54 @@ class TutorState(TypedDict, total=False):
 
 
 # ===================================================================
-# 图解 Schema（从 diagram_schemas.py 合并）
+# 知识图谱 Schema
+# ===================================================================
+
+class ChatKnowledgeGraphNode(BaseModel):
+    """聊天知识图谱节点。"""
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=24)
+    description: str = Field(default="", max_length=120)
+    category: Literal["core", "important", "supplementary", "weak"] = "important"
+
+
+class ChatKnowledgeGraphEdge(BaseModel):
+    """聊天知识图谱关系。"""
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1, max_length=40)
+    target: str = Field(min_length=1, max_length=40)
+    relation_type: Literal["prerequisite", "extends", "related", "includes"] = "related"
+    label: str = Field(default="相关", max_length=16)
+
+
+class ChatKnowledgeGraph(BaseModel):
+    """聊天 Agent 输出的结构化知识图谱。"""
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(min_length=1, max_length=40)
+    summary: str = Field(default="", max_length=160)
+    nodes: list[ChatKnowledgeGraphNode] = Field(min_length=1, max_length=24)
+    edges: list[ChatKnowledgeGraphEdge] = Field(default_factory=list, max_length=48)
+    focus_areas: list[str] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_edges(self) -> "ChatKnowledgeGraph":
+        node_ids = {node.id for node in self.nodes}
+        invalid_edges = [
+            edge
+            for edge in self.edges
+            if edge.source not in node_ids or edge.target not in node_ids
+        ]
+        if invalid_edges:
+            raise ValueError("knowledge graph edge source/target must reference existing node ids")
+        return self
+
+
+# ===================================================================
+# 旧图解 Schema（仅供未迁移模块单独引用，聊天 Agent 不再使用）
 # ===================================================================
 
 # 图解类型字面量

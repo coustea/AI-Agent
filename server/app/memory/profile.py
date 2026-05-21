@@ -1,0 +1,333 @@
+"""用户画像构建与更新。"""
+
+from __future__ import annotations
+
+import json
+from copy import deepcopy
+from typing import Any
+
+from app.infra.llm import get_llm
+from app.infra.logging import get_logger
+from app.memory.store import MemoryStore
+from app.memory.types import (
+    ALL_DIMENSIONS,
+    DIMENSION_NAMES,
+    DIALOGUE_ROLES,
+    ONBOARDING_OPTIONAL_FIELDS,
+    ONBOARDING_REQUIRED_FIELDS,
+    PROFILE_GATE_ASSISTANT_TURNS,
+    PROFILE_MIN_COVERAGE,
+    ProfileOutput,
+    has_profile_signal,
+    make_default_profile_json,
+    make_default_score_json,
+    now,
+)
+from app.prompts import registry
+
+logger = get_logger(__name__)
+
+
+def normalize_onboarding(data: dict[str, Any] | None) -> dict[str, Any]:
+    src = data or {}
+    result: dict[str, Any] = {}
+    for field in ONBOARDING_REQUIRED_FIELDS + ONBOARDING_OPTIONAL_FIELDS:
+        if field == "courses":
+            raw = src.get("courses", [])
+            values = raw if isinstance(raw, list) else [raw]
+            courses: list[str] = []
+            seen: set[str] = set()
+            for item in values:
+                course = str(item or "").strip()
+                if course and course not in seen:
+                    seen.add(course)
+                    courses.append(course)
+            result["courses"] = courses
+        elif field == "weakness_points":
+            raw = src.get("weakness_points")
+            if isinstance(raw, list):
+                result[field] = [str(item).strip() for item in raw if str(item).strip()]
+            else:
+                text = str(raw or "").strip()
+                result[field] = [text] if text else []
+        else:
+            text = str(src.get(field) or "").strip()
+            result[field] = text or None
+    return result
+
+
+def is_onboarding_complete(data: dict[str, Any] | None) -> bool:
+    normalized = normalize_onboarding(data)
+    for field in ONBOARDING_REQUIRED_FIELDS:
+        if field == "courses":
+            if not normalized.get("courses"):
+                return False
+        elif not normalized.get(field):
+            return False
+    return True
+
+
+def _now_iso() -> str:
+    return now().isoformat()
+
+
+def _clamp_confidence(value: Any) -> float:
+    try:
+        return round(max(0.0, min(1.0, float(value))), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _avg_confidence(profile_json: dict[str, Any]) -> float:
+    dims = profile_json.get("dimensions") or {}
+    values = [
+        float((dims.get(key) or {}).get("confidence") or 0)
+        for key in ALL_DIMENSIONS
+        if (dims.get(key) or {}).get("summary") or (dims.get(key) or {}).get("evidence")
+    ]
+    return round(sum(values) / len(values), 2) if values else 0.0
+
+
+def calculate_score(profile_json: dict[str, Any]) -> dict[str, Any]:
+    dims = profile_json.get("dimensions") or {}
+    dim_scores: dict[str, int | None] = {}
+    for key in ALL_DIMENSIONS:
+        dim = dims.get(key) or {}
+        summary = str(dim.get("summary") or "").strip()
+        evidence = dim.get("evidence") or []
+        if not summary and not evidence:
+            dim_scores[key] = None
+            continue
+        dim_scores[key] = max(1, min(100, round(_clamp_confidence(dim.get("confidence")) * 55 + (20 if summary else 0) + min(25, len(evidence) * 8))))
+    valid_scores = [score for score in dim_scores.values() if score is not None]
+    missing = [key for key, score in dim_scores.items() if score is None]
+    score_json = make_default_score_json()
+    score_json.update(
+        {
+            "overall_score": round(sum(valid_scores) / len(valid_scores)) if valid_scores else None,
+            "confidence": _avg_confidence(profile_json),
+            "dimension_scores": dim_scores,
+            "section_coverage": round((len(ALL_DIMENSIONS) - len(missing)) / len(ALL_DIMENSIONS) * 100),
+            "evidence_quality": min(100, sum(len((dims.get(key) or {}).get("evidence") or []) for key in ALL_DIMENSIONS) * 20),
+            "missing_sections": missing,
+            "scored_at": _now_iso(),
+        }
+    )
+    return score_json
+
+
+class ProfileBuilder:
+    """统一处理首次登录画像与对话画像更新。"""
+
+    def __init__(self, *, module: str = "mentor", store: MemoryStore | None = None) -> None:
+        self.module = module
+        self.store = store or MemoryStore()
+        self.llm = get_llm()
+
+    async def get_onboarding(self, user_id: int) -> dict[str, Any]:
+        profile = await self.store.get_profile(user_id=user_id, module=self.module)
+        profile_json = profile.profile_json if profile and profile.profile_json else {}
+        student = normalize_onboarding(profile_json.get("student_profile"))
+        return {"student_profile": student, "profile_initialized": is_onboarding_complete(student)}
+
+    async def upsert(
+        self,
+        *,
+        user_id: int,
+        session_id: str | None = None,
+        onboarding: dict[str, Any] | None = None,
+        reason: str = "manual",
+    ):
+        old = await self.store.get_profile(user_id=user_id, module=self.module)
+        old_json = old.profile_json if old and old.profile_json else make_default_profile_json()
+
+        if onboarding is not None:
+            normalized = normalize_onboarding(onboarding)
+            if not is_onboarding_complete(normalized):
+                raise ValueError("首次登录必填字段不完整")
+            profile_json = self._build_onboarding_profile(normalized, old_json)
+            updated_reason = "基于首次登录学习资料生成画像"
+        else:
+            success, updated, profile_json = await self._build_from_dialogue(user_id=user_id, session_id=session_id, old_json=old_json)
+            if not success or not updated:
+                return None
+            updated_reason = "基于近期对话更新画像"
+
+        score_json = calculate_score(profile_json)
+        return await self.store.update_profile(
+            user_id=user_id,
+            module=self.module,
+            profile_json=profile_json,
+            score_json=score_json,
+            updated_reason=updated_reason if reason == "onboarding" else f"{updated_reason}（{reason}）",
+            source_session_ids=[session_id] if session_id else None,
+            confidence=score_json["confidence"],
+            expected_version=old.version if old and onboarding is not None else None,
+        )
+
+    async def maybe_upsert(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        assistant_reply: str,
+        compression_result: Any | None = None,
+    ) -> bool:
+        try:
+            if not await self._should_update(user_id, session_id, user_message, compression_result):
+                return False
+            return await self.upsert(user_id=user_id, session_id=session_id, reason="post_turn") is not None
+        except Exception as exc:
+            logger.error("[MemoryProfile] 更新画像失败 user=%s session=%s err=%s", user_id, session_id, exc)
+            return False
+
+    async def _should_update(self, user_id: int, session_id: str, user_message: str, compression_result: Any | None) -> bool:
+        profile = await self.store.get_profile(user_id=user_id, module=self.module)
+        score = profile.profile_score_json if profile and profile.profile_score_json else {}
+        if profile is None or int(score.get("section_coverage") or 0) < PROFILE_MIN_COVERAGE:
+            return True
+        if has_profile_signal(user_message):
+            return True
+        summary_json = getattr(compression_result, "summary_json", None) if compression_result else None
+        if summary_json and (summary_json.get("profile_candidates") or summary_json.get("memory_candidates")):
+            return True
+        messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=80)
+        assistant_turns = sum(1 for msg in messages if msg.role == "assistant")
+        return assistant_turns > 0 and assistant_turns % PROFILE_GATE_ASSISTANT_TURNS == 0 and has_profile_signal(user_message)
+
+    def _build_onboarding_profile(self, onboarding: dict[str, Any], old_json: dict[str, Any] | None) -> dict[str, Any]:
+        profile = deepcopy(old_json) if old_json else make_default_profile_json()
+        dims = profile.get("dimensions")
+        if not isinstance(dims, dict):
+            dims = make_default_profile_json()["dimensions"]
+        courses_text = "、".join(onboarding.get("courses", []))
+        lang_text = f"，常用编程语言为 {onboarding['preferred_language']}" if onboarding.get("preferred_language") else ""
+        dims["knowledge_foundation"] = {
+            "name": "知识基础",
+            "confidence": 0.85,
+            "summary": f"{onboarding.get('education_level')} {onboarding.get('major')} 学生，正在学习 {courses_text}{lang_text}。",
+            "evidence": ["来自首次登录学习资料"],
+            "updated_at": _now_iso(),
+        }
+        dims["learning_goal"] = {
+            "name": "学习目标",
+            "confidence": 0.85,
+            "summary": f"围绕 {courses_text} 的当前目标是：{onboarding.get('learning_goal')}。",
+            "evidence": ["来自首次登录学习资料"],
+            "updated_at": _now_iso(),
+        }
+        if onboarding.get("cognitive_style"):
+            dims["cognitive_style"] = {
+                "name": "认知风格",
+                "confidence": 0.75,
+                "summary": onboarding["cognitive_style"],
+                "evidence": ["来自首次登录学习资料"],
+                "updated_at": _now_iso(),
+            }
+        if onboarding.get("interaction_preference"):
+            dims["interaction_preference"] = {
+                "name": "交互偏好",
+                "confidence": 0.75,
+                "summary": onboarding["interaction_preference"],
+                "evidence": ["来自首次登录学习资料"],
+                "updated_at": _now_iso(),
+            }
+        profile["student_profile"] = onboarding
+        profile["dimensions"] = dims
+        profile["recommended_strategy"] = [
+            f"优先围绕 {courses_text} 生成学习资源",
+            f"资源难度参考 {onboarding.get('education_level')} / {onboarding.get('grade')} 阶段",
+        ]
+        profile["last_update_reason"] = "基于首次登录学习资料生成画像"
+        profile["overall_confidence"] = _avg_confidence(profile)
+        return profile
+
+    async def _build_from_dialogue(self, *, user_id: int, session_id: str | None, old_json: dict[str, Any]) -> tuple[bool, bool, dict[str, Any]]:
+        long_term = await self.store.get_long_term_memory(user_id=user_id, module=self.module)
+        recent_dialogue = await self._build_recent_dialogue(user_id=user_id, session_id=session_id)
+        prompt = registry.render(
+            "memory/profile",
+            student_profile=json.dumps(old_json.get("student_profile") or {}, ensure_ascii=False, indent=2),
+            old_profile=json.dumps(old_json, ensure_ascii=False, indent=2),
+            recent_dialogue=recent_dialogue,
+            long_term_memory=(long_term.memory_markdown if long_term and long_term.memory_markdown else "暂无长期记忆。")[:3000],
+        )
+        try:
+            resp = await self.llm.ainvoke_json(
+                ProfileOutput,
+                prompt,
+                function_name="update_student_profile",
+                function_description="根据旧画像和近期对话返回学生画像。",
+                temperature=0.1,
+            )
+        except Exception as exc:
+            logger.error("[MemoryProfile] LLM 构建画像失败: %s", exc)
+            return False, False, old_json
+        new_json = self._merge_with_old_profile(self._parse_response(resp.model_dump()), old_json)
+        if self._is_same(new_json, old_json):
+            return True, False, old_json
+        return True, True, new_json
+
+    async def _build_recent_dialogue(self, *, user_id: int, session_id: str | None, limit: int = 40) -> str:
+        if not session_id:
+            return "暂无近期原始对话。"
+        messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=limit)
+        lines: list[str] = []
+        for msg in messages:
+            if msg.role not in DIALOGUE_ROLES:
+                continue
+            content = str(msg.content or "").strip()
+            if content:
+                lines.append(f"{'用户' if msg.role == 'user' else '助手'}: {content[:1200]}")
+        return "\n".join(lines)[-6000:] or "暂无近期原始对话。"
+
+    def _parse_response(self, payload: dict[str, Any]) -> dict[str, Any]:
+        profile = make_default_profile_json()
+        raw_dims = payload.get("dimensions") or {}
+        dims: dict[str, Any] = {}
+        for key in ALL_DIMENSIONS:
+            raw = raw_dims.get(key) or {}
+            summary = raw.get("summary")
+            evidence = raw.get("evidence") or []
+            has_signal = bool(summary) or bool(evidence)
+            dims[key] = {
+                "name": DIMENSION_NAMES.get(key, key),
+                "confidence": _clamp_confidence(raw.get("confidence")) if has_signal else 0.0,
+                "summary": str(summary).strip() if summary else None,
+                "evidence": [str(item).strip() for item in evidence if str(item).strip()][:5],
+                "updated_at": _now_iso() if has_signal else None,
+            }
+        profile["dimensions"] = dims
+        profile["recommended_strategy"] = payload.get("recommended_strategy", [])[:5]
+        profile["last_update_reason"] = str(payload.get("last_update_reason") or "").strip()
+        profile["overall_confidence"] = _avg_confidence(profile)
+        return profile
+
+    def _merge_with_old_profile(self, new_json: dict[str, Any], old_json: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(new_json)
+        if old_json.get("student_profile"):
+            merged["student_profile"] = deepcopy(old_json["student_profile"])
+        old_dims = old_json.get("dimensions") or {}
+        merged_dims = merged.get("dimensions") or {}
+        for key in ALL_DIMENSIONS:
+            new_dim = merged_dims.get(key) or {}
+            old_dim = old_dims.get(key) or {}
+            if not (new_dim.get("summary") or new_dim.get("evidence")) and (old_dim.get("summary") or old_dim.get("evidence")):
+                merged_dims[key] = deepcopy(old_dim)
+        merged["dimensions"] = merged_dims
+        if not merged.get("recommended_strategy") and old_json.get("recommended_strategy"):
+            merged["recommended_strategy"] = deepcopy(old_json["recommended_strategy"])
+        merged["overall_confidence"] = _avg_confidence(merged)
+        return merged
+
+    def _is_same(self, new: dict[str, Any], old: dict[str, Any]) -> bool:
+        def strip(data: dict[str, Any]) -> dict[str, Any]:
+            value = deepcopy(data)
+            value.pop("overall_confidence", None)
+            for dim in (value.get("dimensions") or {}).values():
+                if isinstance(dim, dict):
+                    dim.pop("updated_at", None)
+            return value
+
+        return strip(new) == strip(old)

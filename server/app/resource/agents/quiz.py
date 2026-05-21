@@ -1,5 +1,5 @@
 """
-习题 Agent — 生成选择题/判断题等习题，支持 JSON 结构化输出。
+习题智能体 — 生成选择题/判断题等习题，支持 JSON 结构化输出。
 """
 
 from __future__ import annotations
@@ -11,9 +11,10 @@ from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.resource.agents.base import Agent
+from app.prompts import registry
+from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
-from app.resource.utils import learning_need_from_task
+from app.resource.utils import format_learner_profile_for_prompt
 
 logger = get_logger(__name__)
 
@@ -43,53 +44,34 @@ class QuizPayload(BaseModel):
     difficulty_distribution: dict[str, int] = Field(default_factory=dict, description="难度分布")
 
 
-class QuizAgent(Agent):
+class QuizAgent:
     """习题生成 Agent。"""
 
-    AGENT_NAME = "quiz"
-    ROLE_NAME = "习题生成智能体"
-    STEPS = ["分析输入", "融合画像与依赖", "生成习题", "整理输出"]
+    def __init__(self, emitter: AgentEventEmitter):
+        self.emitter = emitter
+        self.llm = get_llm()
 
-    def _default_template_values(self) -> dict[str, str]:
-        return {
-            "question_count": "5",
-            "difficulty_mode": "basic",
-            "exam_style": "school",
-            "include_analysis_instruction": "包含答案解析",
-            "weak_point_weight": "0.3",
-        }
+    async def run(self, state: WorkerState) -> WorkerResult:
+        await self.emitter.emit_agent("quiz", status="running", message="正在生成习题")
 
-    def _resolve_template_variables(self, variables: set, state: WorkerState) -> dict[str, str]:
-        """Quiz Agent 特殊变量解析。"""
-        result = super()._resolve_template_variables(variables, state)
-        config = state.agent_config or {}
-
-        if "include_analysis_instruction" in variables:
-            result["include_analysis_instruction"] = "每题包含详细解析" if config.get("include_analysis", True) else "不包含解析"
-
-        return result
-
-    async def _generate(self, state: WorkerState, prompt: str, input_text: str) -> WorkerResult:
-        llm = get_llm()
+        prompt = registry.get("resource/quiz")
+        input_text = self._build_input(state)
+        full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
         # 尝试结构化输出
         try:
-            result = await llm.ainvoke_json(
+            result = await self.llm.ainvoke_json(
                 QuizPayload,
-                f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。",
+                full_prompt,
                 temperature=0.3,
                 function_name="generate_quiz",
                 function_description="生成习题集，包含题目、选项、答案和解析",
             )
             quiz_data = result.model_dump(mode="json")
             content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
-
         except Exception as exc:
             logger.warning("[QuizAgent] 结构化输出失败，尝试 JSON 文本解析: %s", exc)
-            response = await llm.ainvoke(
-                f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。",
-                temperature=0.3,
-            )
+            response = await self.llm.ainvoke(full_prompt, temperature=0.3)
             raw = response.content if hasattr(response, "content") else str(response)
             quiz_data = self._salvage_quiz_payload(raw)
             if quiz_data is None:
@@ -109,11 +91,12 @@ class QuizAgent(Agent):
             "exam_style": state.agent_config.get("exam_style", "school"),
         }
 
+        await self.emitter.emit_agent("quiz", status="success", message=f"已生成 {len(questions)} 道习题")
         return WorkerResult(
             success=True,
             content=content,
             file_type="json",
-            title=self._title(state, "习题集"),
+            title=f"{state.learning_need[:32]} - 习题集",
             summary=f"生成 {len(questions)} 道习题",
             summary_data=summary_data,
             metadata={
@@ -123,6 +106,38 @@ class QuizAgent(Agent):
                 "agent_id": "quiz",
             },
         )
+
+    def _build_input(self, state: WorkerState) -> str:
+        parts = [f"## 学习需求\n{state.learning_need}"]
+
+        # 学习者画像（首要依据）
+        profile_text = format_learner_profile_for_prompt(state.profile)
+        if profile_text:
+            parts.append(f"## 学习者画像摘要\n{profile_text}")
+
+        if state.knowledge_graph:
+            parts.append(f"## 知识图谱\n{state.knowledge_graph.model_dump_json(indent=2)}")
+
+        if state.instruction:
+            lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]
+            for c in state.instruction.constraints:
+                lines.append(f"- 约束: {c}")
+            parts.append("\n".join(lines))
+
+        # Quiz-specific config
+        config = state.agent_config
+        if config:
+            cfg_lines = ["## 习题配置"]
+            cfg_lines.append(f"- 题目数量: {config.get('question_count', 5)}")
+            cfg_lines.append(f"- 难度模式: {config.get('difficulty_mode', 'basic')}")
+            cfg_lines.append(f"- 考试风格: {config.get('exam_style', 'school')}")
+            cfg_lines.append(f"- 薄弱点权重: {config.get('weak_point_weight', 50)}%")
+            cfg_lines.append(
+                "- 每题包含详细解析" if config.get("include_analysis", True) else "- 不包含解析"
+            )
+            parts.append("\n".join(cfg_lines))
+
+        return "\n\n".join(parts)
 
     def _salvage_quiz_payload(self, raw: str) -> dict | None:
         """从原始文本中抢救 JSON 数据。"""
@@ -154,6 +169,3 @@ class QuizAgent(Agent):
                 pass
 
         return None
-
-    def _input_suffix(self) -> str:
-        return "请生成习题集，以 JSON 格式输出。"

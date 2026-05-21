@@ -25,6 +25,7 @@ export interface LoginData {
     email: string | null
     avatar: string | null
     created_at: string
+    is_first_login?: boolean
   }
 }
 
@@ -35,6 +36,7 @@ export interface UserData {
     email: string | null
     avatar: string | null
     created_at: string
+    is_first_login?: boolean
   }
 }
 

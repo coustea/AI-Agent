@@ -30,6 +30,7 @@ class UserRead(BaseModel):
     username: str
     email: str | None
     avatar: str | None
+    is_first_login: bool = True
     created_at: datetime
 
 

@@ -47,6 +47,8 @@ class User(SQLModel, table=True):
     password: str = Field(max_length=255, exclude=True)  # bcrypt 哈希密码，exclude=True 防止序列化泄露
     email: str | None = Field(default=None, max_length=100)
     avatar: str | None = Field(default=None, max_length=500)  # 头像 URL
+    is_first_login: bool = Field(default=True)  # 是否首次登录，完成后置 False
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -125,7 +127,7 @@ class ChatMessage(SQLModel, table=True):
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
-    diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 图解数据（Mermaid 源码等）
+    knowledge_graph: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 知识图谱数据
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
@@ -331,10 +333,10 @@ class GeneratedResourceItem(SQLModel, table=True):
     resource_id: int = Field(index=True, foreign_key="generated_resources.id")
     user_id: int = Field(index=True)
 
-    # Agent 类型（content/mindmap/diagram/quiz/code/reading）
+    # Agent 类型（content/mindmap/knowledge_graph/quiz/code/reading）
     agent_type: str = Field(max_length=50, index=True)
 
-    # 内容格式（markdown/json/mermaid）
+    # 内容格式（markdown/json/text/code）
     content_format: str = Field(default="json", max_length=50)
 
     # 展示与契约信息

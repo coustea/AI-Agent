@@ -111,9 +111,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  color: #94A3AF;
-  font-size: 0.85rem;
+  gap: var(--space-3);
+  color: var(--color-text-faint);
+  font-size: var(--text-sm);
   z-index: 1;
 }
 
@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   border: 3px solid rgba(79, 70, 229, 0.2);
-  border-top-color: #4F46E5;
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -139,19 +139,19 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 20px;
-  background: #4F46E5;
-  color: #fff;
+  padding: var(--space-2) var(--space-5);
+  background: var(--color-primary);
+  color: var(--color-surface);
   border: none;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .reconnect-btn:hover {
-  background: #4338CA;
+  background: var(--color-primary-hover);
   transform: scale(1.05);
 }
 
@@ -166,17 +166,17 @@ onBeforeUnmount(() => {
 .audio-enable-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
   background: rgba(79, 70, 229, 0.9);
-  color: #fff;
+  color: var(--color-surface);
   border: none;
-  border-radius: 10px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
-  transition: all 0.2s;
+  transition: all var(--transition-base);
   animation: pulse-btn 2s infinite;
 }
 
@@ -192,21 +192,21 @@ onBeforeUnmount(() => {
 
 .disconnect-bar {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: var(--space-3);
+  right: var(--space-3);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   z-index: 10;
 }
 
 .idle-hint {
-  font-size: 0.7rem;
-  color: #F59E0B;
-  background: rgba(245, 158, 11, 0.1);
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
   animation: idle-pulse 1s infinite;
 }
 
@@ -218,16 +218,16 @@ onBeforeUnmount(() => {
 .disconnect-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   background: rgba(239, 68, 68, 0.85);
-  color: #fff;
+  color: var(--color-surface);
   border: none;
-  border-radius: 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
   backdrop-filter: blur(4px);
 }
 

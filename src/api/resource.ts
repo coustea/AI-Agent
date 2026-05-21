@@ -15,7 +15,7 @@ function parseSseFrames(raw: string): { frames: string[]; rest: string } {
   return { frames: parts, rest }
 }
 
-export type ResourceAgentId = 'content' | 'mindmap' | 'diagram' | 'quiz' | 'reading' | 'code'
+export type ResourceAgentId = 'content' | 'mindmap' | 'knowledge_graph' | 'quiz' | 'reading' | 'code'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study'
 
@@ -42,30 +42,13 @@ interface ResourceGenerationRequest {
       expand_weak_points: boolean
       include_prerequisites: boolean
     }
-    diagram: {
-      diagram_type:
-        | 'auto'
-        | 'hierarchy'
-        | 'flow'
-        | 'compare'
-        | 'relation'
-        | 'state'
-        | 'class'
-        | 'er'
-        | 'block'
-        | 'packet'
-        | 'git'
-        | 'sequence'
-        | 'activity'
-        | 'usecase'
-        | 'component'
-        | 'package'
-        | 'deployment'
-        | 'object'
-        | 'communication'
-      visual_style: 'minimal' | 'exam'
+    knowledge_graph: {
+      layout_mode: 'force' | 'radial' | 'hierarchy'
+      max_nodes: number
+      relation_depth: number
       highlight_mode: 'weak_points' | 'key_points' | 'all'
-      detail_level: 'concise' | 'standard' | 'detailed'
+      store_neo4j: boolean
+      include_orphan_points: boolean
     }
     quiz: {
       question_count: number
@@ -73,6 +56,7 @@ interface ResourceGenerationRequest {
       weak_point_weight: number
       exam_style: 'school' | '考研' | '考证' | 'interview'
       include_analysis: boolean
+      question_types: ('single' | 'multiple' | 'judge' | 'fill')[]
     }
     code: {
       programming_language: 'python' | 'cpp' | 'java' | 'go' | 'javascript'

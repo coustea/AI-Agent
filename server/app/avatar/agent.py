@@ -25,7 +25,7 @@ from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision
 from app.chat.utils import load_prompts, truncate
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.memory import MemoryLayer
+from app.memory import MemoryService
 from app.utils.mermaid import build_mermaid_render
 from app.utils.vision import build_vision_service
 from app.utils.json import parse_first_json_object
@@ -86,7 +86,7 @@ class AvatarAgent:
 
     def __init__(self) -> None:
         self.llm = get_llm()
-        self.memory_layer = MemoryLayer(module="avatar")
+        self.memory_layer = MemoryService(module="avatar")
         self.vision_service = build_vision_service(self.llm)
         self._graph = self._build_graph()
 

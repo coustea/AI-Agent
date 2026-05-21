@@ -36,27 +36,11 @@ from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
 from app.config import get
+from app.infra.errors import ServiceError
 from app.infra.logging import get_logger
 from app.utils.json import parse_first_json_object
 
 logger = get_logger(__name__)
-
-
-# ============ 异常 ============
-
-class LLMBusyError(Exception):
-    """并发超限。"""
-
-
-class LLMOutputError(Exception):
-    """结构化输出失败。"""
-
-    def __init__(self, schema: str, msg: str):
-        super().__init__(f"[{schema}] {msg}")
-
-
-class LLMConfigError(Exception):
-    """模型配置缺失。"""
 
 
 # ============ LLM 管理器 ============
@@ -76,13 +60,14 @@ class Llm:
         self._vision_model: ChatOpenAI | None = None
         self._text_semaphore: asyncio.Semaphore | None = None
         self._vision_semaphore: asyncio.Semaphore | None = None
+        self._agent_models: dict[str, ChatOpenAI] = {}
         self._init()
 
     @property
     def model(self) -> Any:
         """默认文本模型，供调用方使用 LangChain 原生 bind/bind_tools。"""
         if not self._text_model:
-            raise LLMConfigError("文本模型配置缺失")
+            raise ServiceError("文本模型配置缺失")
         return self._text_model
 
     def _init(self):
@@ -97,6 +82,7 @@ class Llm:
                 api_key=text_cfg["api_key"],
                 base_url=text_cfg["base_url"].rstrip("/chat/completions").rstrip("/"),
                 temperature=0.3,
+                streaming=False,
                 max_retries=text_cfg.get("max_retries", 2),
                 timeout=text_cfg.get("timeout", 300),
             )
@@ -112,6 +98,7 @@ class Llm:
                 api_key=vision_cfg["api_key"],
                 base_url=vision_cfg["base_url"].rstrip("/chat/completions").rstrip("/"),
                 temperature=0.3,
+                streaming=False,
                 max_retries=vision_cfg.get("max_retries", 2),
                 timeout=vision_cfg.get("timeout", 300),
             )
@@ -126,7 +113,7 @@ class Llm:
         try:
             await asyncio.wait_for(sem.acquire(), timeout=300)
         except asyncio.TimeoutError as e:
-            raise LLMBusyError("并发超限") from e
+            raise ServiceError("并发超限") from e
         return sem
 
     # ============ 核心方法 ============
@@ -282,9 +269,9 @@ class Llm:
                 resp = await fallback.ainvoke(input_data)
                 parsed = parse_first_json_object(getattr(resp, "content", "") or "")
                 return schema.model_validate(parsed)
-            except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as e:
+            except Exception as e:
                 errors.append(f"fallback={type(e).__name__}: {e}")
-                raise LLMOutputError(schema.__name__, "; ".join(errors))
+                raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
         finally:
             if sem:
@@ -306,7 +293,7 @@ class Llm:
             模型响应。
         """
         if not self._vision_model:
-            raise LLMConfigError("图片理解模型配置缺失")
+            raise ServiceError("图片理解模型配置缺失")
 
         sem = await self._acquire(self._vision_semaphore)
         try:

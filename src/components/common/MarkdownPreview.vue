@@ -74,11 +74,11 @@ const normalizedContent = computed(() => normalizeStreamingMarkdown(props.conten
 .app-markdown-preview :deep(.md-editor-preview pre),
 .app-markdown-preview :deep(.md-editor-preview pre code),
 .app-markdown-preview :deep(.md-editor-preview figure.md-editor-code) {
-  background-color: #FFFFFF !important;
+  background-color: var(--color-surface) !important;
 }
 
 /* 确保内置代码的外部容器也无背景色 */
 .app-markdown-preview :deep(.md-editor-preview .default-theme pre) {
-  background-color: #FFFFFF !important;
+  background-color: var(--color-surface) !important;
 }
 </style>

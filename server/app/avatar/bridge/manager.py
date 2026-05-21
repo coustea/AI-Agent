@@ -344,10 +344,10 @@ class RealtimeBridge:
     async def _handle_clear_history(self):
         """Clear current session chat history."""
         from app.avatar.bridge.state import MessageType
-        from app.memory import MemoryLayer
+        from app.memory import MemoryService
         from app.chat.service import CHAT_MODULE_NAME
 
-        memory_layer = MemoryLayer(module=CHAT_MODULE_NAME)
+        memory_layer = MemoryService(module=CHAT_MODULE_NAME)
 
         if not self.session_id:
             await self._send_to_frontend(
@@ -636,13 +636,13 @@ class RealtimeBridge:
     ):
         """Core pipeline: user text -> agent -> frontend + avatar."""
         from app.chat.service import get_chat_usecases, CHAT_MODULE_NAME
-        from app.memory import MemoryLayer
+        from app.memory import MemoryService
 
         image_urls = list(dict.fromkeys(image_urls or []))
         file_urls = list(dict.fromkeys(file_urls or []))
         # Keep memory module aligned with text AI pipeline to avoid
         # cross-module session permission errors.
-        memory_layer = MemoryLayer(module=CHAT_MODULE_NAME)
+        memory_layer = MemoryService(module=CHAT_MODULE_NAME)
         attachments_payload = None
         if image_urls or file_urls:
             attachments_payload = json.dumps(
@@ -828,14 +828,14 @@ class RealtimeBridge:
 
     async def _post_avatar_pipeline(self, user_msg: str, assistant_msg: str):
         """Run async memory/profile post-processing."""
-        from app.memory import MemoryLayer
+        from app.memory import MemoryService
         from app.chat.service import CHAT_MODULE_NAME
 
         if not self.session_id:
             return
 
         try:
-            await MemoryLayer(module=CHAT_MODULE_NAME).post_turn_pipeline(
+            await MemoryService(module=CHAT_MODULE_NAME).after_turn(
                 user_id=self.user_id,
                 session_id=self.session_id,
                 user_message=user_msg,
@@ -937,7 +937,6 @@ class AvatarBridgeManager:
 
 # 全局单例
 avatar_bridge_manager = AvatarBridgeManager()
-
 
 
 

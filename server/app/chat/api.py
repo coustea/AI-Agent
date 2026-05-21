@@ -11,12 +11,14 @@ from fastapi.responses import FileResponse, StreamingResponse
 from app.auth.security import get_current_user
 from app.infra.models import User
 from app.chat.service import get_chat_usecases
-from app.memory.layer import MemoryLayer
-from app.memory.profile.schemas import OnboardingResponse, OnboardingUpdate
+from app.memory import MemoryService, OnboardingResponse, OnboardingUpdate
 from app.utils.response import HttpResponse
 
 # 路由器实例
 router = APIRouter()
+
+# 模块级 MemoryService 单例，避免每次请求重复创建 store/service 实例
+_memory_service = MemoryService()
 
 
 @router.post("/chat/stream")
@@ -25,7 +27,7 @@ async def mentor_chat_stream(
     session_id: str | None = Form(default=None),
     image_urls: str | None = Form(default=None),
     file_urls: str | None = Form(default=None),
-    need_diagram: bool = Form(default=False),
+    need_knowledge_graph: bool = Form(default=False),
     generate_video: bool = Form(default=False),
     enable_search: bool = Form(default=False),
     enable_long_term_memory: bool = Form(default=False),
@@ -40,7 +42,7 @@ async def mentor_chat_stream(
         session_id: 可选的会话ID。
         image_urls: 图片URL字符串（逗号分隔）。
         file_urls: 文件URL字符串（逗号分隔）。
-        need_diagram: 是否生成图解。
+        need_knowledge_graph: 是否生成知识图谱。
         generate_video: 是否生成视频。
         enable_search: 是否启用联网搜索。
         enable_long_term_memory: 是否启用长期记忆读写。
@@ -69,7 +71,7 @@ async def mentor_chat_stream(
             session_id=effective_session,
             image_urls=parsed_image_urls or None,
             file_urls=parsed_file_urls or None,
-            need_diagram=need_diagram,
+            need_knowledge_graph=need_knowledge_graph,
             generate_video=generate_video,
             enable_search=enable_search,
             enable_long_term_memory=enable_long_term_memory,
@@ -340,51 +342,6 @@ async def chat_history(
     return HttpResponse.success(data=[item.model_dump() for item in items])
 
 
-@router.post("/chat/diagram/upload")
-async def upload_diagram_image(
-    file: UploadFile = File(...),
-    session_id: str = Form(...),
-    message_id: int | None = Form(default=None),
-    current_user: User = Depends(get_current_user),
-):
-    """上传图解 PNG 图片。
-
-    前端将 SVG 渲染为 PNG 后上传，后端保存到本地文件系统，
-    并更新对应消息的 diagram.image_url 字段。
-
-    Args:
-        file: PNG 图片文件。
-        session_id: 会话ID。
-        message_id: 可选的消息ID，用于关联更新。
-        current_user: 当前登录用户。
-
-    Returns:
-        上传成功响应，包含文件URL等信息。
-    """
-    if not file.filename:
-        return HttpResponse.error(code=400, message="文件名不能为空")
-
-    # 验证文件类型
-    if not file.filename.lower().endswith(".png"):
-        return HttpResponse.error(code=400, message="仅支持 PNG 格式图片")
-
-    uc = get_chat_usecases()
-    content = await file.read()
-
-    try:
-        saved = await uc.save_diagram_image(
-            filename=file.filename,
-            content=content,
-            user_id=current_user.id,
-            session_id=session_id,
-            message_id=message_id,
-        )
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-
-    return HttpResponse.success(data=saved)
-
-
 # ---------------------------------------------------------------------------
 # 画像 API
 # ---------------------------------------------------------------------------
@@ -393,7 +350,7 @@ async def upload_diagram_image(
 @router.get("/profile")
 async def get_profile(current_user: User = Depends(get_current_user)):
     """获取当前用户画像。"""
-    memory = MemoryLayer()
+    memory = _memory_service
     profile = await memory.get_or_create_profile(user_id=current_user.id)
     return HttpResponse.success(data={
         "user_id": profile.user_id,
@@ -410,7 +367,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
 @router.get("/profile/score")
 async def get_profile_score(current_user: User = Depends(get_current_user)):
     """获取当前用户画像评分。"""
-    memory = MemoryLayer()
+    memory = _memory_service
     profile = await memory.get_or_create_profile(user_id=current_user.id)
     score_json = profile.profile_score_json or {}
     return HttpResponse.success(data={
@@ -437,7 +394,7 @@ async def get_profile_onboarding(
     current_user: User = Depends(get_current_user),
 ):
     """获取首次登录状态。"""
-    memory = MemoryLayer()
+    memory = _memory_service
     data = await memory.get_onboarding(user_id=current_user.id)
     return HttpResponse.success(data=OnboardingResponse(**data).model_dump())
 
@@ -448,13 +405,14 @@ async def update_profile_onboarding(
     current_user: User = Depends(get_current_user),
 ):
     """更新首次登录数据。"""
-    memory = MemoryLayer()
+    memory = _memory_service
     student_profile = payload.model_dump()
     student_profile["school_level"] = await _resolve_school_level(student_profile.get("school"))
     try:
-        profile = await memory.update_onboarding(
+        profile = await memory.upsert_profile(
             user_id=current_user.id,
-            student_profile=student_profile,
+            onboarding=student_profile,
+            reason="onboarding",
         )
     except ValueError as e:
         return HttpResponse.error(code=400, message=str(e))
@@ -481,7 +439,7 @@ async def get_profile_history(
     current_user: User = Depends(get_current_user),
 ):
     """获取画像历史。"""
-    memory = MemoryLayer()
+    memory = _memory_service
     history = await memory.list_profile_history(user_id=current_user.id, limit=limit)
     return HttpResponse.success(data=[
         {

@@ -27,6 +27,12 @@
           <span class="status-dot pulsing"></span>
           <span class="status-text">System Synced</span>
         </div>
+        
+        <div class="profile-trigger-btn" @click="isGlobalProfileVisible = true" title="查看动态特征画像">
+          <el-icon class="profile-icon"><DataBoard /></el-icon>
+          <span class="profile-text">动态特征</span>
+        </div>
+
         <div class="time-display">
           <el-icon class="time-icon"><Clock /></el-icon>
           <span class="time-text">{{ currentTime }}</span>
@@ -72,6 +78,7 @@
     <OnboardingDialog
         v-model="onboardingDialogVisible"
     />
+    <GlobalProfileDialog />
   </div>
 </template>
 
@@ -81,10 +88,12 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Menu, Connection, Cpu, DataLine, ChatDotRound,
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
-  User
+  User, DataBoard
 } from '@element-plus/icons-vue'
 import { logout } from '@/api/auth'
 import OnboardingDialog from '@/components/OnboardingDialog.vue'
+import GlobalProfileDialog from '@/components/GlobalProfileDialog.vue'
+import { isGlobalProfileVisible } from '@/composables/useGlobalProfile'
 
 const route = useRoute()
 const router = useRouter()
@@ -103,22 +112,11 @@ const activePath = computed(() => route.path)
 const currentTime = ref('')
 let timer: number
 
-const loadOnboardingStatus = async () => {
-  // 1. 强制设为 true，让它每次都弹出来测试
-  onboardingDialogVisible.value = true
-
-
-  // 新增逻辑：检查本地存储，如果用户选择了不再弹出，则会直接返回
-  // if (localStorage.getItem('hide_onboarding_dialog') === 'true') {
-  //   return
-  // }
-  //
-  // try {
-  //   const res = await getProfileOnboarding()
-  //   onboardingDialogVisible.value = !res.data.data.profile_initialized
-  // } catch (e) {
-  //   console.error('Failed to load onboarding status', e)
-  // }
+const loadOnboardingStatus = () => {
+  // 从 URL 参数判断是否首次登录需要弹窗
+  if (route.query.onboarding === 'true') {
+    onboardingDialogVisible.value = true
+  }
 }
 
 onMounted(() => {
@@ -238,28 +236,26 @@ const handleCommand = async (command: string) => {
 </style>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 .app-layout {
   display: flex;
   flex-direction: column;
   width: 100vw;
   height: 100vh;
-  background-color: #F8FAFC;
-  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--color-bg);
+  font-family: var(--font-sans);
   overflow: hidden;
 }
 
 /* ================== 顶部导航栏 ================== */
 .top-navbar {
   position: relative;
-  height: 64px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E2E8F0;
+  height: var(--navbar-height);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 var(--space-6);
   flex-shrink: 0;
   z-index: 20;
 }
@@ -267,16 +263,16 @@ const handleCommand = async (command: string) => {
 .navbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   width: 200px;
 }
 
 .brand-logo {
   width: 32px;
   height: 32px;
-  background-color: #4F46E5;
-  color: #FFFFFF;
-  border-radius: 8px;
+  background-color: var(--color-primary);
+  color: var(--color-surface);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -285,8 +281,8 @@ const handleCommand = async (command: string) => {
 
 .brand-name {
   font-size: 1.25rem;
-  font-weight: 700;
-  color: #0F172A;
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
   letter-spacing: -0.02em;
 }
 
@@ -301,31 +297,31 @@ const handleCommand = async (command: string) => {
 .nav-menu {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  color: #475569;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   position: relative;
   font-size: 0.95rem;
 }
 
 .nav-item:hover {
-  background: #F1F5F9;
-  color: #0F172A;
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 .nav-item.active {
-  background: #EEF2FF;
-  color: #4F46E5;
-  font-weight: 600;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: var(--weight-semibold);
 }
 
 .nav-icon {
@@ -336,7 +332,7 @@ const handleCommand = async (command: string) => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
   width: auto;
   min-width: 320px;
   justify-content: flex-end;
@@ -347,11 +343,11 @@ const handleCommand = async (command: string) => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: #F8FAFC;
-  border-radius: 20px;
-  border: 1px solid #E2E8F0;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--color-bg);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
   cursor: help;
   white-space: nowrap;
 }
@@ -360,7 +356,7 @@ const handleCommand = async (command: string) => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #10B981;
+  background-color: var(--color-success);
 }
 
 .status-dot.pulsing {
@@ -368,36 +364,65 @@ const handleCommand = async (command: string) => {
 }
 
 .status-text {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #10B981;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-success);
   margin: 0;
 }
 
 .time-display {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: #F8FAFC;
-  padding: 6px 12px;
-  border-radius: 20px;
-  border: 1px solid #E2E8F0;
+  gap: var(--space-2);
+  background: var(--color-bg);
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
 .time-icon {
   font-size: 0.9rem;
-  color: #4F46E5;
+  color: var(--color-primary);
 }
 
 .time-text {
   font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   letter-spacing: -0.02em;
   margin: 0;
+}
+
+.profile-trigger-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-primary-soft);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-primary-border);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.profile-trigger-btn:hover {
+  background: #E0E7FF;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
+}
+
+.profile-icon {
+  font-size: 1rem;
+}
+
+.profile-text {
+  font-size: 0.85rem;
+  font-weight: var(--weight-semibold);
 }
 
 .user-profile {
@@ -406,22 +431,22 @@ const handleCommand = async (command: string) => {
   gap: 10px;
   cursor: pointer;
   padding: 4px 8px 4px 4px;
-  border-radius: 20px;
+  border-radius: var(--radius-pill);
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .user-profile:hover {
-  background: #F8FAFC;
-  border-color: #E2E8F0;
+  background: var(--color-bg);
+  border-color: var(--color-border);
 }
 
 .user-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #E2E8F0;
-  color: #64748B;
+  background: var(--color-border);
+  color: var(--color-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -432,20 +457,20 @@ const handleCommand = async (command: string) => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .user-name {
   font-size: 0.9rem;
-  font-weight: 600;
-  color: #1E293B;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   margin: 0;
   white-space: nowrap;
 }
 
 .dropdown-icon {
   font-size: 0.8rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
 }
 
 /* ================== 页面内容区 ================== */

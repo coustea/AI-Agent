@@ -67,29 +67,24 @@ async def generate_resources(
 async def list_agents():
     """查询可用 Agent 列表。
 
-    返回 6 个活跃 Agent：content, mindmap, diagram, quiz, reading, code
+    返回活跃 Agent：content, mindmap, knowledge_graph, quiz, reading, code
     """
     logger.info("[ResourceAPI] 查询可用 Agent 列表")
-    from app.resource.registry import ensure_initialized, get_enabled_agent_ids, get_agent_entry
-    ensure_initialized()
+    from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER
 
-    agent_ids = get_enabled_agent_ids()
     agents: list[dict[str, Any]] = []
-
-    for agent_id in agent_ids:
-        entry = get_agent_entry(agent_id)
-        if entry:
-            agents.append({
-                "id": agent_id,
-                "name": entry.agent_class.__name__,
-                "role": entry.role,
-                "description": entry.description,
-                "dependencies": entry.dependencies,
-                "execution_layer": entry.execution_layer,
-                "configurable": True,
-            })
+    for agent_id in AGENT_DEFAULT_ORDER:
+        meta = AGENT_META.get(agent_id, {})
+        agents.append({
+            "id": agent_id,
+            "name": meta.get("name", agent_id),
+            "icon": meta.get("icon", ""),
+            "description": meta.get("description", ""),
+            "configurable": True,
+        })
 
     return HttpResponse.success(data=agents)
+
 
 
 @router.get("/resources")
@@ -156,45 +151,8 @@ async def get_resource(
     logger.info("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
 
     usecases = ResourceUsecases(session)
-    resource = await usecases.get_resource(current_user.id, resource_id)
-    if resource is None:
+    bundle = await usecases.get_resource_bundle(current_user.id, resource_id)
+    if bundle is None:
         logger.warning("[ResourceAPI] 资源不存在或无权限: user_id=%s resource_id=%s", current_user.id, resource_id)
         return HttpResponse.error(code=404, message="资源不存在")
-
-    db_items = await usecases.list_resource_items(current_user.id, resource_id)
-    resources: list[dict[str, Any]] = [
-        {
-            "id": item.id,
-            "type": item.agent_type,
-            "title": ((item.content_json or {}).get("title") if isinstance(item.content_json, dict) else "") or f"学习资源 - {item.agent_type}",
-            "format": ((item.content_json or {}).get("format") if isinstance(item.content_json, dict) else "") or item.content_format,
-            "content": ((item.content_json or {}).get("content") if isinstance(item.content_json, dict) else None)
-            if item.content_json is not None else item.content_text,
-            "summary": ((item.content_json or {}).get("summary") if isinstance(item.content_json, dict) else "") or "",
-            "summary_data": ((item.content_json or {}).get("summary_data") if isinstance(item.content_json, dict) else {}) or {},
-            "metadata": ((item.content_json or {}).get("metadata") if isinstance(item.content_json, dict) else {}) or {},
-            "status": item.status,
-            "error_message": item.error_message,
-            "created_at": item.created_at,
-            "updated_at": item.updated_at,
-        }
-        for item in db_items
-    ]
-
-    bundle = {
-        "id": str(resource.id),
-        "task_id": str(resource.id),
-        "title": "个性化学习资源包",
-        "learning_need": resource.learning_need or "",
-        "selected_agents": resource.selected_agents or [],
-        "resources": resources,
-        "study_path": [],
-        "review_result": None,
-        "status": resource.status,
-        "created_at": resource.created_at.isoformat() if resource.created_at else None,
-        "updated_at": resource.updated_at.isoformat() if resource.updated_at else None,
-        "metadata": {
-            "source": "database",
-        },
-    }
-    return HttpResponse.success(data=bundle)
+    return HttpResponse.success(data=bundle.model_dump(mode="json"))

@@ -80,7 +80,7 @@
           <el-form-item prop="email">
             <template #label>
               <span class="field-label">
-                <span><span style="margin-right: 4px">*</span>电子邮箱（选填）</span>
+                <span><span style="margin-right: var(--space-1)">*</span>电子邮箱（选填）</span>
                 <small>EMAIL</small>
               </span>
             </template>
@@ -193,25 +193,23 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 </script>
 
 <style scoped>
-/* 1. 根容器：复用 Login 的严格分屏结构 */
 .split-auth-page {
   height: 100vh;
   width: 100vw;
   display: flex;
   overflow: hidden;
-  background: #FCFDFE;
+  background: var(--color-bg);
 }
 
-/* 2. 左侧：视觉叙事区 */
 .visual-side {
   flex: 1.2;
   position: relative;
-  background: #F8FAFC;
-  color: #312E81;
+  background: var(--color-bg);
+  color: var(--color-primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4rem; /* 移除 padding-left: 10%，保证对称 */
+  padding: 4rem;
   overflow: hidden;
 }
 
@@ -220,10 +218,9 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
   z-index: 10;
   width: 100%;
   max-width: 500px;
-  text-align: center; /* 新增：让文本居中对称 */
+  text-align: center;
 }
 
-/* 动态背景层 */
 .neural-bg {
   position: absolute;
   inset: 0;
@@ -249,7 +246,7 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 .orb-emerald-1 {
   width: 500px;
   height: 500px;
-  background: #10B981;
+  background: var(--color-success);
   top: -100px;
   left: -100px;
 }
@@ -257,7 +254,7 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 .orb-emerald-2 {
   width: 400px;
   height: 400px;
-  background: #059669;
+  background: var(--tone-emerald);
   bottom: -50px;
   right: 10%;
 }
@@ -271,24 +268,23 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
   }
 }
 
-/* 左侧内容样式 */
 .brand-top {
   display: flex;
   align-items: center;
-  justify-content: center; /* 新增：让 Logo 组居中 */
+  justify-content: center;
   gap: 0.75rem;
   margin-bottom: 4rem;
-  font-weight: 800;
-  font-family: 'JetBrains Mono';
+  font-weight: var(--weight-extrabold);
+  font-family: var(--font-mono);
   letter-spacing: 0.2em;
 }
 
 .logo-core.emerald {
-  background: #10B981;
+  background: var(--color-success);
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  box-shadow: 0 0 10px #10B981;
+  box-shadow: 0 0 10px var(--color-success);
 }
 
 .brand-text {
@@ -302,7 +298,7 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 .main-title {
   font-size: 4.5rem;
   line-height: 1.1;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
   margin-bottom: 2rem;
   color: #064E3B;
   letter-spacing: -0.02em;
@@ -313,51 +309,49 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
   line-height: 1.8;
   color: #0F766E;
   max-width: 450px;
-  margin: 0 auto; /* 新增：让居中后的文本块仍保持原先的限制宽度并在父级中居中 */
+  margin: 0 auto;
 }
 
 .system-status {
   margin-top: 5rem;
   display: flex;
-  justify-content: center; /* 新增：让底部状态区居中 */
+  justify-content: center;
   gap: 3rem;
 }
 
 .status-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .status-item .label {
   font-size: 0.75rem;
-  color: #64748B;
-  font-family: monospace;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
 }
 
 .status-item .value {
-  font-weight: 700;
-  font-family: 'JetBrains Mono';
+  font-weight: var(--weight-bold);
+  font-family: var(--font-mono);
 }
 
 .val-text {
-  color: #334155;
+  color: var(--color-text-secondary);
 }
 
 .emerald-text {
-  color: #10B981 !important;
+  color: var(--color-success) !important;
 }
 
-
-/* 3. 右侧：交互表单区 */
 .form-side {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 2rem 4rem;
-  background: #fff;
-  box-shadow: -20px 0 50px rgba(0, 0, 0, 0.03);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
   z-index: 5;
 }
 
@@ -373,21 +367,21 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 
 .form-header h2 {
   font-size: 2.2rem;
-  font-weight: 800;
-  color: #10B981;
+  font-weight: var(--weight-extrabold);
+  color: var(--color-success);
   margin-bottom: 0.5rem;
 }
 
 .form-header p {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
-  color: #059669;
+  color: var(--tone-emerald);
   letter-spacing: 0.1em;
 }
 
 .field-label {
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   color: #334155;
   display: flex;
   justify-content: space-between;
@@ -395,33 +389,32 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 }
 
 .field-label small {
-  font-family: 'JetBrains Mono';
+  font-family: var(--font-mono);
   font-size: 0.65rem;
-  color: #94A3B8;
-  font-weight: 400;
+  color: var(--color-text-faint);
+  font-weight: var(--weight-normal);
 }
 
 :deep(.el-form-item) {
-  margin-bottom: 16px !important;
+  margin-bottom: var(--space-4) !important;
 }
 
-/* 表单输入框与按钮 */
 :deep(.el-input__wrapper) {
-  background: #F1F5F9 !important;
-  border-radius: 12px !important;
-  border: 1px solid #E2E8F0 !important;
+  background: var(--color-surface-hover) !important;
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--color-border) !important;
   box-shadow: none !important;
   padding: 6px 14px !important;
-  transition: all 0.3s ease !important;
+  transition: all var(--transition-slow) !important;
 }
 
 :deep(.el-input__inner) {
-  color: #1E293B !important;
+  color: var(--color-text-strong) !important;
 }
 
 :deep(.el-input__wrapper.is-focus) {
-  background: white !important;
-  border-color: #10B981 !important;
+  background: var(--color-surface) !important;
+  border-color: var(--color-success) !important;
   box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1) !important;
 }
 
@@ -432,12 +425,12 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 .connect-btn.emerald-btn {
   width: 100%;
   height: 48px;
-  border-radius: 12px !important;
-  background: #10B981 !important;
+  border-radius: var(--radius-lg) !important;
+  background: var(--color-success) !important;
   border: none !important;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   font-size: 1.05rem;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow);
 }
 
 .connect-btn:hover {
@@ -448,13 +441,13 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
 
 .terminal-log {
   margin-top: 1rem;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   color: #047857;
-  background: #ECFDF5;
+  background: var(--color-success-soft);
   border: 1px solid #A7F3D0;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   line-height: 1.6;
 }
 
@@ -462,31 +455,30 @@ const handleRegister = async (formEl: FormInstance | undefined) => {
   margin-top: 1.25rem;
   text-align: center;
   font-size: 0.95rem;
-  color: #64748B;
+  color: var(--color-text-muted);
 }
 
 .form-nav .el-link {
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   margin-left: 0.5rem;
-  color: #10B981;
+  color: var(--color-success);
 }
 
 .required-star {
-  color: #F56C6C;
-  margin-right: 4px;
-  font-family: sans-serif;
+  color: var(--color-danger);
+  margin-right: var(--space-1);
+  font-family: var(--font-sans);
 }
 
-/* 安全连接系统标签样式 */
 .system-tag {
   margin-top: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  font-family: 'JetBrains Mono';
+  font-family: var(--font-mono);
   font-size: 0.7rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   letter-spacing: 0.05em;
 }
 

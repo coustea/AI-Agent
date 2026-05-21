@@ -93,3 +93,10 @@ MSG_LIMIT = get("memory.msg_limit", 10)
 CHAT_BUDGET = get("memory.chat_budget", 700)
 LTM_BUDGET = get("memory.ltm_budget", 1600)
 SUMMARY_BUDGET = get("memory.summary_budget", 900)
+
+# ============ Neo4j Knowledge Graph ============
+NEO4J_ENABLED = get("neo4j.enabled", False)
+NEO4J_URI = get("neo4j.uri", "")
+NEO4J_USER = get("neo4j.user", "")
+NEO4J_PASSWORD = get("neo4j.password", "")
+NEO4J_DATABASE = get("neo4j.database", "neo4j")

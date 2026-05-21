@@ -4,7 +4,7 @@ import Register from '../views/Register.vue'
 import MainLayout from '../layouts/MainLayout.vue'
 import Home from '../views/Home.vue'
 import ResourceGenerator from '../views/ResourceGenerator.vue'
-import PathPlanner from '../views/PathPlanner.vue'
+import LearnPath from '../views/LearnPath.vue'
 import Tutor from '../views/Tutor.vue'
 import Evaluation from '../views/Evaluation.vue'
 import Profile from "@/views/Profile.vue";
@@ -20,7 +20,7 @@ const routes = [
     children: [
         {path: 'dashboard', name: 'Dashboard', component: Home},
         {path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator},
-        {path: 'path-planner', name: 'PathPlanner', component: PathPlanner},
+        {path: 'path-planner', name: 'LearnPath', component: LearnPath},
         {path: 'tutor', name: 'Tutor', component: Tutor},
         {path: 'evaluation', name: 'Evaluation', component: Evaluation},
         {path: 'profile', name: 'Profile', component: Profile,},

@@ -25,7 +25,7 @@
     <div class="res-body">
       <div class="resource-preview-shell">
         <MindmapView v-if="agentId === 'mindmap'" :result-data="resultData" compact />
-        <DiagramView v-else-if="agentId === 'diagram'" :result-data="resultData" compact />
+        <KnowledgeGraphView v-else-if="agentId === 'knowledge_graph'" :result-data="resultData" compact />
         <QuizView v-else-if="agentId === 'quiz'" :result-data="resultData" compact />
         <CodeView v-else-if="agentId === 'code'" :result-data="resultData" compact />
         <ReadingView v-else-if="agentId === 'reading'" :result-data="resultData" compact />
@@ -97,7 +97,7 @@ import { recordLearningEvent } from '@/api/ai'
 import MindmapView from '@/components/resource/MindmapView.vue'
 import MarkdownView from '@/components/resource/MarkdownView.vue'
 import QuizView from '@/components/resource/QuizView.vue'
-import DiagramView from '@/components/resource/DiagramView.vue'
+import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
 import {
@@ -116,7 +116,7 @@ const props = defineProps<{
   resultData?: any
 }>()
 
-const stepOrder = ['content', 'diagram', 'mindmap', 'code', 'quiz', 'reading']
+const stepOrder = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading']
 const stepNumber = computed(() => {
   const idx = stepOrder.indexOf(props.agentId)
   return idx !== -1 ? idx + 1 : null
@@ -163,7 +163,7 @@ const resourceTypeLabel = computed(() => {
   const labelMap: Record<string, string> = {
     content: '专业讲解',
     mindmap: '知识导图',
-    diagram: '知识图解',
+    knowledge_graph: '知识图谱',
     code: '代码案例',
     quiz: '自测题',
     reading: '拓展阅读',
@@ -178,7 +178,7 @@ const resourceFormatLabel = computed(() => {
   const formatMap: Record<string, string> = {
     content: 'Markdown',
     mindmap: 'Tree',
-    diagram: 'Diagram',
+    knowledge_graph: 'Graph',
     code: 'Code',
     quiz: 'Quiz',
     reading: 'Reading List',
@@ -200,7 +200,7 @@ const resourceSummary = computed(() => {
   if (props.agentId === 'reading') return `已推荐 ${readingCount.value || '多'} 条拓展阅读资源，用于课后延伸学习。`
   if (props.agentId === 'code') return '已生成可实践的代码案例，适合结合讲解内容运行和修改。'
   if (props.agentId === 'mindmap') return '已生成结构化知识导图，用于快速梳理概念层级。'
-  if (props.agentId === 'diagram') return '已生成知识图解，用于理解流程、结构和关键关系。'
+  if (props.agentId === 'knowledge_graph') return '已生成知识图谱，用于探索知识点之间的前置、包含和扩展关系。'
   return '资源已生成，可点击查看详情进入完整内容。'
 })
 
@@ -208,7 +208,7 @@ const usageHint = computed(() => {
   const hintMap: Record<string, string> = {
     content: '先阅读讲解，建立核心概念。',
     mindmap: '用于复习前快速回顾知识结构。',
-    diagram: '用于理解抽象关系和运行流程。',
+    knowledge_graph: '用于理解抽象关系和知识依赖。',
     code: '建议边运行边修改，形成实践记忆。',
     quiz: '完成后对照解析，定位薄弱点。',
     reading: '完成基础学习后再阅读拓展内容。',
@@ -222,7 +222,7 @@ const toneClass = computed(() => {
   const toneMap: Record<string, string> = {
     content: 'tone-blue',
     mindmap: 'tone-purple',
-    diagram: 'tone-amber',
+    knowledge_graph: 'tone-amber',
     code: 'tone-rose',
     quiz: 'tone-emerald',
     reading: 'tone-indigo',

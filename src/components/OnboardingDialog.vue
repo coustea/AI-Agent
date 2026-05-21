@@ -1,201 +1,257 @@
 <template>
   <el-dialog
       v-model="visible"
-      width="680px"
+      width="640px"
       :show-close="false"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
-      class="custom-onboarding-dialog"
+      class="ai-native-dialog-light"
       align-center
   >
-    <div class="onboarding-wrapper">
-      <header class="onboarding-header">
-        <h2 class="header-title">欢迎来到学枢</h2>
-
-        <div class="custom-step-indicator">
-          <div class="step-item" :class="{ 'is-active': currentStep >= 1 }">
-            <div class="step-icon"><el-icon><Check /></el-icon></div>
-            <div class="step-text">基础档案</div>
+    <div class="chat-wrapper">
+      <header class="chat-header">
+        <div class="header-content">
+          <div class="header-left">
+            <div class="bot-avatar-container">
+              <div class="bot-avatar-header">
+                <el-icon><Service /></el-icon>
+              </div>
+            </div>
+            <div class="header-info">
+              <h3 class="header-title">学枢 AI 学习规划师</h3>
+              <div class="status-wrap">
+                <span class="status-dot"></span>
+                <span class="header-status">在线并准备就绪</span>
+              </div>
+            </div>
           </div>
-          <div class="step-line" :class="{ 'is-active': currentStep === 2 }"></div>
-          <div class="step-item" :class="{ 'is-active': currentStep === 2 }">
-            <div class="step-icon">2</div>
-            <div class="step-text">学校阶段</div>
+          <div class="header-right">
+            <el-dropdown trigger="click" @command="handleHeaderCommand">
+              <el-button link class="more-btn">
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu class="premium-dropdown">
+                  <el-dropdown-item command="skip">
+                    <el-icon><Clock /></el-icon> 稍后完善
+                  </el-dropdown-item>
+                  <el-dropdown-item command="never" divided>
+                    <el-icon><Close /></el-icon> 不再弹出
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
       </header>
 
-      <main class="onboarding-main">
-        <div v-show="currentStep === 1" class="step-content">
-          <div class="section-block">
-            <h3 class="section-title">1. 选择主修专业 <span class="required">*</span></h3>
-            <div class="tag-group">
+      <main class="chat-messages" ref="messagesRef">
+        <transition-group name="msg-list">
+          <div v-for="msg in messages" :key="msg.id" class="message-row" :class="msg.role">
+            <div class="avatar" v-if="msg.role === 'bot'">
+              <el-icon><Service /></el-icon>
+            </div>
+            <div class="bubble" v-html="msg.content"></div>
+            <div class="avatar" v-if="msg.role === 'user'">
+              <el-icon><User /></el-icon>
+            </div>
+          </div>
+
+          <div v-if="isTyping" key="typing" class="message-row bot typing-row">
+            <div class="avatar">
+              <el-icon><Service /></el-icon>
+            </div>
+            <div class="bubble typing-bubble">
+              <div class="typing-indicator">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+        </transition-group>
+      </main>
+
+      <footer class="chat-footer">
+        <transition name="panel-slide" mode="out-in">
+          <div v-if="currentQuestion === 'major' && !isTyping && !isStreaming" class="action-panel" key="major">
+            <div class="panel-header">
+              <span class="panel-tip">✨ 请选择或输入您的专业</span>
+            </div>
+            <div class="chips-container stagger-animation">
               <div
-                  v-for="major in PRESET_MAJORS"
-                  :key="major"
-                  class="selectable-tag"
-                  :class="{ active: onboardingForm.major === major || (major === '其他专业' && isCustomMajor) }"
-                  @click="handleMajorClick(major)"
+                v-for="(major, idx) in PRESET_MAJORS"
+                :key="major"
+                class="ai-chip"
+                :style="{ animationDelay: `${idx * 0.03}s` }"
+                @click="submitMajor(major)"
               >
                 {{ major }}
               </div>
             </div>
-            <div v-if="isCustomMajor" class="custom-input-wrap mt-3">
+            <div class="ai-input-wrap mt-3 slide-up-anim" style="animation-delay: 0.2s">
               <el-input
-                  v-model="customInputs.major"
-                  placeholder="请输入您的专业名称"
-                  class="custom-input"
-                  @input="syncCustomMajor"
-              />
-            </div>
-          </div>
-
-          <div class="section-block mt-4">
-            <h3 class="section-title">2. 选择当前课程 (可多选) <span class="required">*</span></h3>
-            <div class="tag-group">
-              <div
-                  v-for="course in PRESET_COURSES"
-                  :key="course"
-                  class="selectable-tag"
-                  :class="{ active: onboardingForm.courses.includes(course) }"
-                  @click="toggleCourse(course)"
+                v-model="customInputs.major"
+                placeholder="直接输入其他专业..."
+                @keyup.enter="submitMajor(customInputs.major)"
+                class="pill-input"
               >
-                {{ course }}
-              </div>
-              <div
-                  v-for="customCourse in customAddedCourses"
-                  :key="customCourse"
-                  class="selectable-tag active"
-                  @click="toggleCourse(customCourse)"
-              >
-                {{ customCourse }}
-              </div>
-            </div>
-            <div class="custom-input-wrap add-course-wrap mt-3">
-              <el-input
-                  v-model="customInputs.course"
-                  placeholder="输入其他课程名称，按回车添加"
-                  class="custom-input add-course-input"
-                  @keyup.enter="addCustomCourse"
-              >
-                <template #append>
-                  <el-button @click="addCustomCourse" class="add-btn">添加</el-button>
+                <template #suffix>
+                  <el-button @click="submitMajor(customInputs.major)" class="inside-action-btn" circle>
+                    <el-icon><Position/></el-icon>
+                  </el-button>
                 </template>
               </el-input>
             </div>
           </div>
-        </div>
 
-        <div v-show="currentStep === 2" class="step-content">
-          <div class="section-block">
-            <h3 class="section-title">3. 学校与阶段</h3>
-            <div class="form-grid-2x2 mt-3">
-              <div class="grid-item">
-                <label class="field-label">院校 <span class="required">*</span></label>
-                <el-autocomplete
-                    v-model="onboardingForm.school"
-                    :fetch-suggestions="querySearchSchool"
-                    placeholder="可以直接输入或搜索"
-                    clearable
-                    class="custom-input w-full"
-                    @select="handleSchoolSelect"
-                >
-                  <template #prefix><el-icon><Search /></el-icon></template>
-                  <template #default="{ item }">
-                    <span>{{ item.value }}</span>
-                    <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
-                  </template>
-                </el-autocomplete>
+          <div v-else-if="currentQuestion === 'courses' && !isTyping && !isStreaming" class="action-panel" key="courses">
+            <div class="panel-header">
+              <span class="panel-tip">📚 可多选当前正在学习的课程</span>
+              <span class="selected-count" v-if="onboardingForm.courses.length">
+                已选 {{ onboardingForm.courses.length }} 项
+              </span>
+            </div>
+            <div class="chips-container stagger-animation">
+              <div
+                v-for="(course, idx) in PRESET_COURSES"
+                :key="course"
+                class="ai-chip"
+                :class="{ active: onboardingForm.courses.includes(course) }"
+                :style="{ animationDelay: `${idx * 0.03}s` }"
+                @click="toggleCourse(course)"
+              >
+                {{ course }}
               </div>
-
-              <div class="grid-item">
-                <label class="field-label">院校层次 <span class="required">*</span></label>
-                <el-select v-model="onboardingForm.school_level" filterable allow-create default-first-option clearable placeholder="请选择或从院校带出" class="custom-input w-full">
-                  <el-option v-for="level in PRESET_SCHOOL_LEVELS" :key="level" :label="level" :value="level" />
-                </el-select>
-              </div>
-
-              <div class="grid-item">
-                <label class="field-label">学历层次 <span class="required">*</span></label>
-                <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" class="custom-input w-full" filterable>
-                  <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
-                </el-select>
-              </div>
-
-              <div class="grid-item">
-                <label class="field-label">年级 <span class="required">*</span></label>
-                <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级" class="custom-input w-full">
-                  <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
-                </el-select>
-              </div>
-
-              <div class="grid-item">
-                <label class="field-label">当前学习目标 <span class="required">*</span></label>
-                <el-select v-model="onboardingForm.learning_goal" filterable allow-create default-first-option clearable placeholder="请选择或输入" class="custom-input w-full">
-                  <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
-                </el-select>
-              </div>
-
-              <div class="grid-item">
-                <label class="field-label">常用编程语言 <span class="optional">（选填）</span></label>
-                <el-select v-model="onboardingForm.preferred_language" filterable allow-create default-first-option clearable placeholder="请选择语言" class="custom-input w-full">
-                  <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
-                </el-select>
+              <div
+                v-for="customCourse in customAddedCourses"
+                :key="customCourse"
+                class="ai-chip active pop-in"
+                @click="toggleCourse(customCourse)"
+              >
+                {{ customCourse }}
               </div>
             </div>
+            <div class="ai-input-wrap mt-3 slide-up-anim" style="animation-delay: 0.2s">
+              <el-input
+                v-model="customInputs.course"
+                placeholder="直接输入其他课程..."
+                @keyup.enter="addCustomCourse"
+                class="pill-input"
+              >
+                <template #suffix>
+                  <el-button @click="addCustomCourse" class="inside-action-btn ghost-circle" circle>
+                    <el-icon><Plus/></el-icon>
+                  </el-button>
+                </template>
+              </el-input>
+            </div>
+            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.3s">
+              <el-button type="primary" class="primary-send-btn w-full" @click="submitCourses">
+                确认并继续 <el-icon class="ml-1"><Position/></el-icon>
+              </el-button>
+            </div>
           </div>
-        </div>
-      </main>
 
-      <footer class="onboarding-footer">
-        <div class="footer-left">
-          <el-button v-if="currentStep === 2" class="nav-btn prev-btn" @click="currentStep = 1">
-            <el-icon class="mr-1"><ArrowLeft /></el-icon> 上一步
-          </el-button>
-
-          <div v-else class="outline-links">
-            <el-button class="outline-btn btn-skip" @click="skipOnboarding">稍后完善</el-button>
-            <el-button class="outline-btn btn-never" @click="disableOnboarding">不再弹出</el-button>
+          <div v-else-if="currentQuestion === 'school' && !isTyping && !isStreaming" class="action-panel form-panel" key="school">
+            <div class="panel-header">
+              <span class="panel-tip">🏫 完善院校信息</span>
+            </div>
+            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+              <el-autocomplete
+                  v-model="onboardingForm.school"
+                  :fetch-suggestions="querySearchSchool"
+                  placeholder="搜索并选择院校名称"
+                  clearable
+                  class="glass-select w-full"
+                  @select="handleSchoolSelect"
+                  placement="top-start"
+              >
+                <template #prefix><el-icon><Search /></el-icon></template>
+                <template #default="{ item }">
+                  <div class="autocomplete-item">
+                    <span>{{ item.value }}</span>
+                    <span v-if="item.level" class="school-tag">{{ item.level }}</span>
+                  </div>
+                </template>
+              </el-autocomplete>
+            </div>
+            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.2s">
+              <el-select v-model="onboardingForm.school_level" filterable allow-create default-first-option placeholder="院校层次 (可搜索带出)" class="glass-select w-full" placement="top-start">
+                <el-option v-for="level in PRESET_SCHOOL_LEVELS" :key="level" :label="level" :value="level" />
+              </el-select>
+            </div>
+            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.3s">
+              <el-button type="primary" class="primary-send-btn w-full" @click="submitSchool">
+                确认发送 <el-icon class="ml-1"><Position/></el-icon>
+              </el-button>
+            </div>
           </div>
 
-          <el-button v-if="currentStep === 2" class="outline-btn btn-skip ml-4" @click="skipOnboarding">
-            稍后完善
-          </el-button>
-        </div>
+          <div v-else-if="currentQuestion === 'grade' && !isTyping && !isStreaming" class="action-panel form-panel" key="grade">
+            <div class="panel-header">
+              <span class="panel-tip">🎓 你的学习阶段</span>
+            </div>
+            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+              <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" class="glass-select w-full" filterable placement="top-start">
+                <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
+              </el-select>
+            </div>
+            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.2s">
+              <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option placeholder="请选择当前年级" class="glass-select w-full" placement="top-start">
+                <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
+              </el-select>
+            </div>
+            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.3s">
+              <el-button type="primary" class="primary-send-btn w-full" @click="submitGrade">
+                确认发送 <el-icon class="ml-1"><Position/></el-icon>
+              </el-button>
+            </div>
+          </div>
 
-        <div class="footer-right">
-          <el-button
-              v-if="currentStep === 1"
-              class="action-btn next-btn"
-              @click="nextStep"
-          >
-            下一步 <el-icon class="ml-1"><ArrowRight /></el-icon>
-          </el-button>
-          <el-button
-              v-if="currentStep === 2"
-              class="action-btn finish-btn"
-              :loading="submitting"
-              @click="submitForm"
-          >
-            完成
-          </el-button>
-        </div>
+          <div v-else-if="currentQuestion === 'goal' && !isTyping && !isStreaming" class="action-panel form-panel" key="goal">
+            <div class="panel-header">
+              <span class="panel-tip">🎯 设定目标，开始启航</span>
+            </div>
+            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+              <el-select v-model="onboardingForm.learning_goal" filterable allow-create default-first-option placeholder="请选择核心学习目标" class="glass-select w-full" placement="top-start">
+                <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
+              </el-select>
+            </div>
+            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.2s">
+              <el-select v-model="onboardingForm.preferred_language" filterable allow-create default-first-option clearable placeholder="常用编程语言 (选填)" class="glass-select w-full" placement="top-start">
+                <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
+              </el-select>
+            </div>
+            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.3s">
+              <el-button type="primary" class="primary-send-btn finish-btn w-full" :loading="submitting" @click="submitGoal">
+                <span class="finish-text">完成配置，生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
+              </el-button>
+            </div>
+          </div>
+
+          <div v-else class="action-panel empty-panel" key="empty">
+            <div v-if="isTyping || isStreaming" class="status-pulse">
+              <div class="pulse-ring"></div>
+              <span>AI 规划师正在思考与输出...</span>
+            </div>
+          </div>
+        </transition>
       </footer>
     </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getProfileOnboarding, updateProfileOnboarding, searchSchools } from '@/api/ai'
 import type { ProfileOnboardingUpdate, SchoolItem } from '@/api/ai'
-import { Check, Search, ArrowRight, ArrowLeft } from '@element-plus/icons-vue'
+import { User, Service, Position, Search, MoreFilled, Clock, Close, Check, Plus } from '@element-plus/icons-vue'
 
-const props = defineProps<{
-  modelValue: boolean
-}>()
+const route = useRoute()
+const router = useRouter()
 
+const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'success'): void
@@ -206,15 +262,23 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-const currentStep = ref(1)
-const submitting = ref(false)
-const isCustomMajor = ref(false)
+interface Message {
+  id: number;
+  role: 'bot' | 'user';
+  content: string;
+}
+const messages = ref<Message[]>([])
+const isTyping = ref(false)
+const isStreaming = ref(false)
+const currentQuestion = ref('major')
+const messagesRef = ref<HTMLElement | null>(null)
 
-const PRESET_MAJORS = ['计算机科学', '软件工程', '人工智能', '数据科学', '网络安全', '电子信息', '其他专业']
-const PRESET_COURSES = ['数据结构', '操作系统', '计算机网络', '数据库原理', '算法分析', '机器学习']
+const submitting = ref(false)
+const PRESET_MAJORS = ['计算机科学', '软件工程', '人工智能', '数据科学', '网络安全', '电子信息', '其他']
+const PRESET_COURSES = ['数据结构', '操作系统', '计算机网络', '数据库原理', '算法', '机器学习']
 const PRESET_GOALS = [
   '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
-  '系统学习进阶', '零基础快速入门', '竞赛夺奖(ACM/蓝桥)', '个人兴趣拓展', '行业证书考取'
+  '系统学习进阶', '零基础快速入门', '竞赛夺奖', '兴趣拓展', '行业证书考取'
 ]
 const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
 const PRESET_SCHOOL_LEVELS = ['985', '211', '双一流', '普通本科', '高职高专', '海外高校', '其他']
@@ -222,35 +286,170 @@ const PRESET_GRADES = [
   '大一', '大二', '大三', '大四', '大五',
   '研一', '研二', '研三',
   '博一', '博二', '博三',
-  '高职一年级', '高职二年级', '高职三年级'
+  '高职一年级', '二年级', '三年级'
 ]
 const PRESET_LANGUAGES = [
-  'Python', 'Java', 'C/C++', 'Go', 'Rust', 'JavaScript', 'TypeScript',
-  'SQL', 'Shell', 'Kotlin', 'Swift', 'PHP', 'HTML/CSS'
+  'Python', 'Java', 'C/C++', 'Go', 'Rust', 'JavaScript', 'TypeScript', 'SQL', 'Swift'
 ]
 
 const onboardingForm = reactive<ProfileOnboardingUpdate>({
-  education_level: '',
-  grade: '',
-  major: '',
-  courses: [],
-  learning_goal: '',
-  school: '',
-  school_level: '',
-  preferred_language: ''
+  education_level: '', grade: '', major: '', courses: [],
+  learning_goal: '', school: '', school_level: '', preferred_language: ''
 })
 
-const customInputs = reactive({
-  course: '',
-  major: ''
-})
+const customInputs = reactive({ course: '', major: '' })
 const customAddedCourses = ref<string[]>([])
 const profileSchoolOptions = ref<SchoolItem[]>([])
 
-const querySearchSchool = async (queryString: string, cb: any) => {
-  if (!queryString) {
-    cb([]); return;
+const scrollToBottom = async () => {
+  await nextTick()
+  if (messagesRef.value) {
+    messagesRef.value.scrollTo({
+      top: messagesRef.value.scrollHeight,
+      behavior: 'smooth'
+    })
   }
+}
+
+// 优化的流式文本输出，修复了HTML标签闭合解析导致多余 '>' 的问题
+const streamMessageContent = (msgObj: Message, fullText: string, speed = 25): Promise<void> => {
+  return new Promise((resolve) => {
+    isStreaming.value = true
+    let index = 0
+    const timer = setInterval(() => {
+      if (index >= fullText.length) {
+        clearInterval(timer)
+        isStreaming.value = false
+        resolve()
+        return
+      }
+
+      let char = fullText[index]
+      if (char === '<') {
+        let tag = ''
+        while (index < fullText.length && fullText[index] !== '>') {
+          tag += fullText[index]
+          index++
+        }
+        tag += '>'
+        msgObj.content += tag
+        index++ // 核心修复：跳过 '>' 字符本身，防止进入下次循环当成文本输出
+      } else {
+        msgObj.content += char
+        index++
+      }
+
+      scrollToBottom()
+    }, speed)
+  })
+}
+
+const addBotMessage = async (content: string, delay = 600) => {
+  isTyping.value = true
+  scrollToBottom()
+  await new Promise(resolve => setTimeout(resolve, delay))
+  isTyping.value = false
+
+  const msgObj: Message = reactive({ id: Date.now(), role: 'bot', content: '' })
+  messages.value.push(msgObj)
+  scrollToBottom()
+
+  await streamMessageContent(msgObj, content)
+}
+
+const addUserMessage = (content: string) => {
+  messages.value.push({ id: Date.now(), role: 'user', content })
+  scrollToBottom()
+}
+
+const startChat = async () => {
+  messages.value = []
+  currentQuestion.value = ''
+  await addBotMessage('👋 欢迎来到学枢！我是你的专属 AI 学习规划师。', 500)
+  await addBotMessage('为了给你生成最精准的个性化学习资源，我们需要构建一下你的专属画像。首先，能告诉我你目前<b>主修什么专业</b>吗？', 800)
+  currentQuestion.value = 'major'
+}
+
+const submitMajor = async (majorVal: string) => {
+  const val = majorVal.trim()
+  if (!val) { ElMessage.warning('请输入专业名称'); return }
+  onboardingForm.major = val
+  addUserMessage(val)
+  currentQuestion.value = ''
+
+  await addBotMessage(`太棒了！针对 <b>${val}</b> 专业，你目前主要在学<b>哪些核心课程</b>呢？（可多选）`, 600)
+  currentQuestion.value = 'courses'
+}
+
+const toggleCourse = (course: string) => {
+  const idx = onboardingForm.courses.indexOf(course)
+  if (idx > -1) {
+    onboardingForm.courses.splice(idx, 1)
+  } else {
+    onboardingForm.courses.push(course)
+  }
+}
+
+const addCustomCourse = () => {
+  const course = customInputs.course.trim()
+  if (course && !onboardingForm.courses.includes(course)) {
+    onboardingForm.courses.push(course)
+    if (!PRESET_COURSES.includes(course)) {
+      customAddedCourses.value.push(course)
+    }
+  }
+  customInputs.course = ''
+}
+
+const submitCourses = async () => {
+  if (onboardingForm.courses.length === 0) {
+    ElMessage.warning('请至少选择或添加一门课程'); return
+  }
+  addUserMessage(onboardingForm.courses.join('、'))
+  currentQuestion.value = ''
+
+  await addBotMessage('了解了！为了匹配合适的学习难度，请问你是<b>哪个院校</b>的同学呢？', 600)
+  currentQuestion.value = 'school'
+}
+
+const submitSchool = async () => {
+  if (!onboardingForm.school || !onboardingForm.school_level) {
+    ElMessage.warning('请输入并选择您的院校与层次'); return
+  }
+  let text = onboardingForm.school
+  if (onboardingForm.school_level) text += ` <span style="opacity:0.6;font-size:0.9em">(${onboardingForm.school_level})</span>`
+  addUserMessage(text)
+  currentQuestion.value = ''
+
+  await addBotMessage('收到！你的<b>学历层次</b>和<b>当前年级</b>是？', 600)
+  currentQuestion.value = 'grade'
+}
+
+const submitGrade = async () => {
+  if (!onboardingForm.education_level) { ElMessage.warning('请选择学历层次'); return }
+  if (!onboardingForm.grade) { ElMessage.warning('请选择年级'); return }
+
+  addUserMessage(`${onboardingForm.education_level} - ${onboardingForm.grade}`)
+  currentQuestion.value = ''
+
+  await addBotMessage('最后两个小问题！你当前的<b>主要学习目标</b>是什么？有比较常用的编程语言吗？', 600)
+  currentQuestion.value = 'goal'
+}
+
+const submitGoal = async () => {
+  if (!onboardingForm.learning_goal) { ElMessage.warning('请选择当前学习目标'); return }
+
+  let text = onboardingForm.learning_goal
+  if (onboardingForm.preferred_language) text += ` <span style="opacity:0.6;font-size:0.9em">(语言: ${onboardingForm.preferred_language})</span>`
+  addUserMessage(text)
+  currentQuestion.value = ''
+
+  await addBotMessage('🎉 感谢配合！正在为你进行 AI 运算并生成专属学习画像...', 600)
+  submitForm()
+}
+
+const querySearchSchool = async (queryString: string, cb: any) => {
+  if (!queryString) { cb([]); return; }
   try {
     const res = await searchSchools(queryString, 20);
     profileSchoolOptions.value = res.data.data;
@@ -259,9 +458,7 @@ const querySearchSchool = async (queryString: string, cb: any) => {
       level: school.level
     }));
     cb(options);
-  } catch (e) {
-    cb([]);
-  }
+  } catch (e) { cb([]); }
 }
 
 const handleSchoolSelect = (item: any) => {
@@ -269,91 +466,16 @@ const handleSchoolSelect = (item: any) => {
 }
 
 watch(() => onboardingForm.school, (newVal) => {
-  if (!newVal) {
-    onboardingForm.school_level = '';
-    return;
-  }
+  if (!newVal) { onboardingForm.school_level = ''; return; }
   const matched = profileSchoolOptions.value.find((s: any) => s.name === newVal);
-  onboardingForm.school_level = matched ? (matched.level || '') : '';
+  if (matched) onboardingForm.school_level = matched.level || '';
 })
-
-const handleMajorClick = (major: string) => {
-  if (major === '其他专业') {
-    if (isCustomMajor.value) {
-      isCustomMajor.value = false;
-      onboardingForm.major = '';
-    } else {
-      isCustomMajor.value = true;
-      onboardingForm.major = customInputs.major;
-    }
-  } else {
-    if (onboardingForm.major === major && !isCustomMajor.value) {
-      onboardingForm.major = '';
-    } else {
-      isCustomMajor.value = false;
-      onboardingForm.major = major;
-    }
-  }
-}
-
-const syncCustomMajor = () => {
-  onboardingForm.major = customInputs.major;
-}
-
-const toggleCourse = (course: string) => {
-  const index = onboardingForm.courses.indexOf(course);
-  if (index > -1) {
-    onboardingForm.courses.splice(index, 1);
-    const customIdx = customAddedCourses.value.indexOf(course);
-    if (customIdx > -1) customAddedCourses.value.splice(customIdx, 1);
-  } else {
-    onboardingForm.courses.push(course);
-  }
-}
-
-const addCustomCourse = () => {
-  const course = customInputs.course.trim();
-  if (course && !onboardingForm.courses.includes(course)) {
-    onboardingForm.courses.push(course);
-    if (!PRESET_COURSES.includes(course)) {
-      customAddedCourses.value.push(course);
-    }
-  }
-  customInputs.course = '';
-}
-
-const nextStep = () => {
-  if (!onboardingForm.major || (isCustomMajor.value && !customInputs.major.trim())) {
-    ElMessage.warning('请选择或填写主修专业'); return;
-  }
-  if (onboardingForm.courses.length === 0) {
-    ElMessage.warning('请至少选择一门课程'); return;
-  }
-  currentStep.value = 2;
-}
-
-const skipOnboarding = () => {
-  visible.value = false;
-  emit('success');
-}
-
-const disableOnboarding = () => {
-  localStorage.setItem('hide_onboarding_dialog', 'true');
-  visible.value = false;
-  emit('success');
-}
 
 const loadStatus = async () => {
   try {
     const res = await getProfileOnboarding();
     const profile = res.data.data.student_profile;
-    if (profile.major) {
-      if (!PRESET_MAJORS.includes(profile.major)) {
-        isCustomMajor.value = true;
-        customInputs.major = profile.major;
-      }
-      onboardingForm.major = profile.major;
-    }
+    if (profile.major) { onboardingForm.major = profile.major; }
     if (profile.courses) onboardingForm.courses = profile.courses;
     if (profile.education_level) onboardingForm.education_level = profile.education_level;
     if (profile.grade) onboardingForm.grade = profile.grade;
@@ -369,19 +491,6 @@ const loadStatus = async () => {
 }
 
 const submitForm = async () => {
-  if (!onboardingForm.school || !onboardingForm.school_level) {
-    ElMessage.warning('请输入并选择您的院校与层次'); return;
-  }
-  if (!onboardingForm.education_level) {
-    ElMessage.warning('请选择学历层次'); return;
-  }
-  if (!onboardingForm.grade) {
-    ElMessage.warning('请选择年级'); return;
-  }
-  if (!onboardingForm.learning_goal) {
-    ElMessage.warning('请选择当前学习目标'); return;
-  }
-
   submitting.value = true;
   try {
     const payload = {
@@ -390,329 +499,480 @@ const submitForm = async () => {
       school_level: onboardingForm.school_level || null,
       preferred_language: onboardingForm.preferred_language || null,
     };
-
     await updateProfileOnboarding(payload as any);
-    visible.value = false;
-    ElMessage.success('配置已完成');
-    emit('success');
+    ElMessage.success({
+      message: '画像构建完成！',
+      customClass: 'premium-toast'
+    });
+    setTimeout(() => {
+      visible.value = false;
+      emit('success');
+      if (route.query.onboarding) {
+        router.replace({ path: route.path, query: {} })
+      }
+    }, 1000);
   } catch (e) {
     ElMessage.error('保存失败，请重试');
-  } finally {
     submitting.value = false;
   }
 }
 
+const handleHeaderCommand = (cmd: string) => {
+  if (cmd === 'skip' || cmd === 'never') {
+    visible.value = false;
+    emit('success');
+  }
+  if (route.query.onboarding) {
+    router.replace({ path: route.path, query: {} })
+  }
+}
+
 watch(visible, (newVal) => {
-  if (newVal) { currentStep.value = 1; }
+  if (newVal) {
+    onboardingForm.courses = [];
+    customInputs.major = '';
+    customInputs.course = '';
+    loadStatus().then(() => {
+      startChat();
+    });
+  }
 })
 
-onMounted(() => { loadStatus() })
+onMounted(() => { if (visible.value) { loadStatus().then(() => startChat()) } })
 </script>
 
 <style scoped>
-.custom-onboarding-dialog :deep(.el-dialog__header) { display: none; }
-.custom-onboarding-dialog :deep(.el-dialog__body) { padding: 0; }
-.custom-onboarding-dialog :deep(.el-dialog) {
-  border-radius: 12px;
+/* Dialog Base Overrides */
+.ai-native-dialog-light :deep(.el-dialog__header) { display: none; }
+.ai-native-dialog-light :deep(.el-dialog__body) { padding: 0; }
+.ai-native-dialog-light :deep(.el-dialog) {
+  border-radius: var(--radius-2xl);
   overflow: hidden;
-  background: #FFFFFF;
-  box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.15);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl), 0 0 0 1px rgba(0,0,0,0.02) inset;
+  margin-top: 8vh !important;
+  font-family: var(--font-sans);
 }
 
-.onboarding-wrapper { display: flex; flex-direction: column; }
-
-/* 头部样式 */
-.onboarding-header {
-  padding: 40px 40px 24px;
-  text-align: center;
-  position: relative;
-}
-
-.header-title {
-  margin: 0 0 12px;
-  font-size: 1.45rem;
-  font-weight: 700;
-  color: #1F2937;
-}
-
-.header-subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #6B7280;
-  line-height: 1.6;
-}
-
-/* 自定义步骤指示器 */
-.custom-step-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 32px;
-}
-
-.step-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #9CA3AF;
-}
-
-.step-item.is-active {
-  color: #10B981;
-}
-
-.step-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px solid #9CA3AF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: bold;
-  background-color: #FFFFFF;
-}
-
-.step-item.is-active .step-icon {
-  border-color: #10B981;
-  color: #10B981;
-}
-
-.step-text {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.step-line {
-  width: 100px;
-  height: 1px;
-  background-color: #E5E7EB;
-}
-
-.step-line.is-active {
-  background-color: #10B981;
-}
-
-/* 主体内容 */
-.onboarding-main {
+.chat-wrapper {
   display: flex;
   flex-direction: column;
-  padding: 0 40px;
-  min-height: 320px;
+  height: 680px;
+  background: var(--color-surface);
+  position: relative;
+  overflow: hidden;
+  color: #1d1d1f;
 }
 
-.step-content {
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.section-block { margin-bottom: 24px; }
-.section-title {
-  margin: 0 0 16px;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #374151;
-}
-.required { color: #EF4444; margin-left: 4px; }
-.optional { color: #9CA3AF; font-size: 0.85rem; font-weight: normal; margin-left: 4px; }
-
-/* 标签样式 */
-.tag-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.selectable-tag {
-  border: 1px solid #E5E7EB;
-  background: #FFFFFF;
-  color: #374151;
-  padding: 8px 18px;
-  border-radius: 6px;
-  font-size: 13.5px;
-  cursor: pointer;
-  transition: all 0.2s;
-  user-select: none;
-}
-
-.selectable-tag:hover {
-  background: #F9FAFB;
-}
-
-.selectable-tag.active {
-  border-color: #10B981;
-  color: #10B981;
-  background: #ECFDF5;
-}
-
-/* 输入框定制 */
-.custom-input-wrap { width: 100%; max-width: 400px; }
-.add-course-wrap { max-width: 100%; }
-
-.custom-input :deep(.el-input__wrapper),
-.custom-input :deep(.el-select__wrapper) {
-  box-shadow: none !important;
-  border: 1px solid #E5E7EB !important;
-  background: #FFFFFF !important;
-  border-radius: 6px !important;
-  min-height: 40px !important;
-}
-
-.custom-input :deep(.el-input__wrapper.is-focus),
-.custom-input :deep(.el-select__wrapper.is-focus) {
-  border-color: #10B981 !important;
-}
-
-.custom-input :deep(.el-input__inner) {
-  font-size: 0.9rem;
-  color: #374151;
-}
-
-/* 添加课程特殊拼接框样式还原 */
-.add-course-input :deep(.el-input__wrapper) {
-  border-right: none !important;
-  border-top-right-radius: 0 !important;
-  border-bottom-right-radius: 0 !important;
-}
-
-.add-course-input :deep(.el-input-group__append) {
-  background: #FFFFFF !important;
-  border: 1px solid #E5E7EB !important;
-  border-left: 1px solid #E5E7EB !important;
-  border-radius: 0 6px 6px 0 !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-}
-
-.add-btn {
-  border: none !important;
-  background: transparent !important;
-  color: #4B5563 !important;
-  font-weight: 500;
-  height: 38px;
-  padding: 0 36px;
-  border-radius: 0;
-  transition: all 0.2s ease;
-}
-.add-btn:hover {
-  color: #10B981 !important;
-  background-color: #F9FAFB !important;
-}
-
-/* 网格布局 */
-.form-grid-2x2 {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px 24px;
-}
-.grid-item { display: flex; flex-direction: column; gap: 8px; }
-.field-label { font-size: 0.9rem; color: #374151; font-weight: 500; margin: 0; }
-.school-level-tag { margin-left: 8px; font-size: 0.75rem; color: #6B7280; background: #F3F4F6; padding: 2px 8px; border-radius: 4px; }
-.w-full { width: 100%; }
-
-/* 底部按钮区 */
-.onboarding-footer {
+/* Header */
+.chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px 40px 32px;
+  padding: var(--space-4) var(--space-6);
+  position: relative;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid #e5e5ea;
 }
 
-.footer-left { display: flex; align-items: center; }
-
-/* 轮廓按钮组与样式 */
-.outline-links {
+.header-content {
   display: flex;
-  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
-.outline-btn {
-  border-radius: 6px !important;
-  padding: 0 20px !important;
-  height: 42px !important;
-  font-size: 0.9rem !important;
-  font-weight: 600 !important;
-  transition: all 0.2s !important;
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
-/* 稍后完善 按钮 (蓝色主题) */
-.btn-skip {
-  background: #F0F5FF !important;
-  border: 1px solid #BFDBFE !important;
-  color: #3B82F6 !important;
+.bot-avatar-container {
+  position: relative;
+  width: 38px;
+  height: 38px;
 }
 
-.btn-skip:hover {
-  background: #E0E7FF !important;
-  border-color: #93C5FD !important;
-  color: #2563EB !important;
+.bot-avatar-header {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: var(--radius-pill);
+  background: #000000;
+  color: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  z-index: 2;
+  box-shadow: var(--shadow-sm);
 }
 
-/* 不再弹出 按钮 (灰白主题) */
-.btn-never {
-  background: #FFFFFF !important;
-  border: 1px solid #E5E7EB !important;
-  color: #4B5563 !important;
+.header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.btn-never:hover {
-  background: #F9FAFB !important;
-  border-color: #D1D5DB !important;
-  color: #1F2937 !important;
+.header-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: var(--weight-semibold);
+  color: #1d1d1f;
+  letter-spacing: -0.3px;
 }
 
-/* 核心操作按钮颜色修改 */
-.action-btn {
-  background: #10B981 !important;
-  color: #FFFFFF !important;
+.status-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background-color: #34c759;
+  border-radius: var(--radius-pill);
+}
+
+.header-status {
+  font-size: var(--text-xs);
+  color: #86868b;
+  font-weight: var(--weight-medium);
+}
+
+.more-btn {
+  font-size: 18px;
+  color: #86868b;
+  transition: color var(--transition-slow);
+}
+.more-btn:hover { color: #1d1d1f; }
+
+/* Messages Area */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  background: var(--color-surface);
+}
+
+.msg-list-enter-active,
+.msg-list-leave-active {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.msg-list-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+.msg-list-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.message-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-end;
+  width: 100%;
+}
+
+.message-row.bot { justify-content: flex-start; }
+.message-row.user { justify-content: flex-end; }
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.bot .avatar {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  border: 1px solid #e5e5ea;
+}
+
+.user .avatar {
+  background: #000000;
+  color: var(--color-surface);
+}
+
+.bubble {
+  max-width: 75%;
+  padding: var(--space-3) var(--space-4);
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: break-word;
+  position: relative;
+}
+
+.bot .bubble {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  border-radius: 18px 18px 18px 4px;
+  border: 1px solid rgba(0,0,0,0.02);
+}
+
+.bot .bubble :deep(b) {
+  color: #1d1d1f;
+  font-weight: var(--weight-semibold);
+}
+
+.user .bubble {
+  background: #000000;
+  color: var(--color-surface);
+  border-radius: 18px 18px 4px 18px;
+  font-weight: var(--weight-medium);
+}
+.user .bubble :deep(span) {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Typing Indicator */
+.typing-bubble {
+  padding: 14px var(--space-4) !important;
+}
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.typing-indicator span {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background-color: #86868b;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+.typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+.typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-4px); background-color: #1d1d1f; }
+}
+
+/* Footer / Action Area */
+.chat-footer {
+  background: var(--color-surface);
+  border-top: 1px solid #e5e5ea;
+  padding: var(--space-5) var(--space-6) 28px;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.action-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.panel-tip {
+  font-size: 13px;
+  color: #86868b;
+  font-weight: var(--weight-medium);
+}
+
+.selected-count {
+  font-size: var(--text-xs);
+  color: #1d1d1f;
+  background: #f5f5f7;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-lg);
+  font-weight: var(--weight-medium);
+}
+
+.chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.ai-chip {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-2xl);
+  font-size: 14px;
+  font-weight: var(--weight-normal);
+  background: var(--color-surface);
+  color: #1d1d1f;
+  cursor: pointer;
+  border: 1px solid #e5e5ea;
+  transition: all var(--transition-base);
+  user-select: none;
+}
+
+.ai-chip:hover {
+  background: #f5f5f7;
+  border-color: #d1d1d6;
+}
+
+/* 这里是修复缺失样式的关键：直接硬编码黑底白字 */
+.ai-chip.active {
+  background: #000000 !important;
+  color: var(--color-surface) !important;
+  border-color: #000000 !important;
+  font-weight: var(--weight-medium);
+}
+
+.stagger-animation .ai-chip {
+  animation: slideUpFade 0.4s ease forwards;
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.pop-in {
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+
+/* Inputs */
+.ai-input-wrap { width: 100%; }
+
+.pill-input :deep(.el-input__wrapper) {
+  border-radius: var(--radius-2xl) !important;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4) !important;
+  background: #f5f5f7 !important;
+  box-shadow: none !important;
+  border: 1px solid transparent !important;
+  transition: all var(--transition-base);
+}
+
+.pill-input :deep(.el-input__wrapper.is-focus) {
+  background: var(--color-surface) !important;
+  border-color: #000000 !important;
+  box-shadow: 0 0 0 1px #000000 !important;
+}
+
+/* Buttons */
+.inside-action-btn {
+  background: #000000 !important;
+  color: var(--color-surface) !important;
   border: none !important;
-  border-radius: 6px !important;
-  padding: 0 24px !important;
-  font-size: 0.95rem !important;
-  height: 42px !important;
-  transition: background 0.2s !important;
+  width: 30px !important;
+  height: 30px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  transition: all var(--transition-base) !important;
 }
 
-.action-btn:hover {
-  background: #059669 !important;
+.inside-action-btn:hover {
+  transform: scale(1.05);
+  background: #333333 !important;
 }
 
-.nav-btn {
-  background: #FFFFFF !important;
-  border: 1px solid #E5E7EB !important;
-  color: #374151 !important;
-  border-radius: 6px !important;
-  padding: 0 20px !important;
-  height: 42px !important;
-  transition: all 0.2s !important;
+.ghost-circle {
+  background: #f5f5f7 !important;
+  color: #1d1d1f !important;
+}
+.ghost-circle:hover {
+  background: #e5e5ea !important;
 }
 
-.nav-btn:hover {
-  background: #F9FAFB !important;
-  color: #111827 !important;
+/* 彻底修复主按钮不可见的样式 */
+.primary-send-btn {
+  background: #000000 !important;
+  color: var(--color-surface) !important;
+  border: none !important;
+  border-radius: var(--radius-lg) !important;
+  font-weight: var(--weight-medium) !important;
+  padding: var(--space-3) 28px !important;
+  height: 44px !important;
+  transition: all var(--transition-base) !important;
+}
+.primary-send-btn:hover {
+  background: #333333 !important;
 }
 
-.mt-3 { margin-top: 12px; }
-.mt-4 { margin-top: 24px; }
-.ml-1 { margin-left: 4px; }
-.mr-1 { margin-right: 4px; }
-.ml-3 { margin-left: 12px; }
-.ml-4 { margin-left: 20px; }
+/* Forms */
+.form-panel { max-width: 100%; }
+
+.glass-select :deep(.el-input__wrapper),
+.glass-select :deep(.el-select__wrapper) {
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-4);
+  background: #f5f5f7 !important;
+  box-shadow: none !important;
+  border: 1px solid transparent !important;
+}
+
+.glass-select :deep(.el-input__wrapper.is-focus),
+.glass-select :deep(.el-select__wrapper.is-focused) {
+  background: var(--color-surface) !important;
+  box-shadow: 0 0 0 1px #000000 !important;
+}
+
+.school-tag {
+  margin-left: var(--space-2); font-size: var(--text-xs); color: #1d1d1f; background: #e5e5ea;
+  padding: 2px var(--space-2); border-radius: var(--radius-sm); font-weight: var(--weight-medium);
+}
+.autocomplete-item { display: flex; align-items: center; justify-content: space-between; }
+
+/* Transitions & Animations */
+.panel-slide-enter-active, .panel-slide-leave-active { transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1); }
+.panel-slide-enter-from { opacity: 0; transform: translateY(15px) scale(0.98); }
+.panel-slide-leave-to { opacity: 0; transform: translateY(-15px) scale(0.98); }
+
+.slide-up-anim {
+  animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0; transform: translateY(15px);
+}
+
+@keyframes slideUpFade {
+  0% { opacity: 0; transform: translateY(15px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Empty status pulse */
+.empty-panel { align-items: center; justify-content: center; height: 60px; }
+.status-pulse { display: flex; align-items: center; gap: var(--space-2); color: #86868b; font-size: 13px; font-weight: var(--weight-medium); }
+.pulse-ring {
+  width: 12px; height: 12px; border-radius: var(--radius-pill);
+  background: #86868b;
+  animation: pulseShadow 2s infinite;
+}
+@keyframes pulseShadow {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0.5; }
+}
+
+/* Utilities */
+.w-full { width: 100%; }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.ml-1 { margin-left: var(--space-1); }
+.flex-1 { flex: 1; }
 
 @media (max-width: 640px) {
-  .form-grid-2x2 { grid-template-columns: 1fr; gap: 16px; }
-  .onboarding-header { padding: 32px 24px 20px; }
-  .onboarding-main { padding: 0 24px; }
-  .onboarding-footer { padding: 20px 24px 24px; flex-direction: column; gap: 20px; align-items: stretch; }
-  .footer-left { justify-content: center; }
-  .footer-right { display: flex; }
-  .footer-right .action-btn { width: 100%; justify-content: center; }
-  .step-line { width: 60px; }
+  .chat-wrapper { height: 100vh; border-radius: 0; }
+  .ai-native-dialog-light :deep(.el-dialog) { margin-top: 0 !important; border-radius: 0; }
+  .bubble { max-width: 85%; }
 }
 </style>

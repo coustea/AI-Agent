@@ -10,7 +10,7 @@
 
 通用服务已提取到 app/shared/ 与 app/memory/：
 - request_context: ContextVar 请求上下文
-- memory facade: MemoryLayer（记忆/画像/上下文构建）
+- memory facade: MemoryService（记忆/画像/上下文构建）
 - vision: VisionService（图片分析）
 - file_service: 文件路径解析、内容读取
 """
@@ -31,7 +31,7 @@ from app.utils.context import (
     set_user_id,
     set_session_id,
 )
-from app.memory import MemoryLayer
+from app.memory import MemoryService
 from app.utils.vision import build_vision_service
 from app.utils.files import (
     resolve_uploaded_path,
@@ -413,7 +413,7 @@ class ConversationStore:
         Returns:
             会话信息列表，包含 id、title、updated_at 字段。
         """
-        memory_layer = MemoryLayer(module=module_name)
+        memory_layer = MemoryService(module=module_name)
         sessions = await memory_layer.list_sessions(user_id=user_id, limit=limit)
         return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in sessions]
 
@@ -433,7 +433,7 @@ class ConversationStore:
         Returns:
             新创建的会话信息。
         """
-        memory_layer = MemoryLayer(module=module_name)
+        memory_layer = MemoryService(module=module_name)
         session = await memory_layer.create_session(user_id=user_id, title=title)
         return {"id": session.id, "title": session.title}
 
@@ -448,7 +448,7 @@ class ConversationStore:
         Returns:
             操作是否成功。
         """
-        memory_layer = MemoryLayer(module=module_name)
+        memory_layer = MemoryService(module=module_name)
         return await memory_layer.archive_session(user_id=user_id, session_id=session_id)
 
     async def update_session_title(
@@ -469,7 +469,7 @@ class ConversationStore:
         Returns:
             操作是否成功。
         """
-        memory_layer = MemoryLayer(module=module_name)
+        memory_layer = MemoryService(module=module_name)
         return await memory_layer.update_session_title(user_id=user_id, session_id=session_id, title=title)
 
     async def generate_session_title(
@@ -490,7 +490,7 @@ class ConversationStore:
         Returns:
             生成的标题，失败返回 None。
         """
-        memory_layer = MemoryLayer(module=module_name)
+        memory_layer = MemoryService(module=module_name)
         return await memory_layer.generate_session_title(
             user_id=user_id,
             session_id=session_id,
@@ -516,7 +516,7 @@ class ConversationStore:
         Returns:
             消息条目列表。
         """
-        memory_layer = MemoryLayer(module=module_name)
+        memory_layer = MemoryService(module=module_name)
         target_session = session_id
         # 未指定会话时获取最近的会话
         if not target_session:
@@ -555,7 +555,7 @@ class ConversationStore:
                     content=msg.content,
                     attachments=attachments,
                     tool_calls=tool_calls,
-                    diagram=msg.diagram,
+                    knowledge_graph=msg.knowledge_graph,
                     created_at=msg.created_at,
                 )
             )
@@ -689,7 +689,7 @@ class ChatUseCases:
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
-        need_diagram: bool = False,
+        need_knowledge_graph: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
         enable_long_term_memory: bool = False,
@@ -705,7 +705,7 @@ class ChatUseCases:
             session_id: 可选的会话ID。
             image_urls: 图片URL列表。
             file_urls: 文件URL列表。
-            need_diagram: 是否生成图解。
+            need_knowledge_graph: 是否生成知识图谱。
             generate_video: 是否生成视频。
             enable_search: 是否启用搜索。
             enable_long_term_memory: 是否启用长期记忆读写。
@@ -740,7 +740,7 @@ class ChatUseCases:
             "session_id": effective_session,
             "image_urls": merged_image_urls,
             "file_urls": merged_file_urls,
-            "need_diagram": bool(need_diagram),
+            "need_knowledge_graph": bool(need_knowledge_graph),
             "generate_video": bool(generate_video),
             "enable_long_term_memory": bool(enable_long_term_memory),
             "attachment_analysis": prepared_attachment_analysis,
@@ -908,7 +908,7 @@ class ChatUseCases:
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
-        need_diagram: bool = False,
+        need_knowledge_graph: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
         enable_long_term_memory: bool = False,
@@ -924,7 +924,7 @@ class ChatUseCases:
             session_id: 可选的会话ID。
             image_urls: 图片URL列表。
             file_urls: 文件URL列表。
-            need_diagram: 是否生成图解。
+            need_knowledge_graph: 是否生成知识图谱。
             generate_video: 是否生成视频。
             enable_search: 是否启用搜索。
             enable_long_term_memory: 是否启用长期记忆读写。
@@ -941,7 +941,7 @@ class ChatUseCases:
             session_id=session_id,
             image_urls=image_urls,
             file_urls=file_urls,
-            need_diagram=need_diagram,
+            need_knowledge_graph=need_knowledge_graph,
             generate_video=generate_video,
             enable_search=enable_search,
             enable_long_term_memory=enable_long_term_memory,
@@ -976,61 +976,6 @@ class ChatUseCases:
             user_id=user_id,
             session_id=session_id,
         )
-
-    async def save_diagram_image(
-        self,
-        *,
-        filename: str,
-        content: bytes,
-        user_id: int,
-        session_id: str,
-        message_id: int | None = None,
-    ) -> dict:
-        """保存图解 PNG 图片。
-
-        将前端渲染的图解 PNG 保存到 diagrams 子目录，
-        并可选地更新对应消息的 diagram.image_url 字段。
-
-        Args:
-            filename: 文件名。
-            content: PNG 文件内容。
-            user_id: 用户ID。
-            session_id: 会话ID。
-            message_id: 可选的消息ID，用于更新 diagram.image_url。
-
-        Returns:
-            保存结果，包含 url、file_type 等字段。
-        """
-        # 保存 PNG 文件
-        saved = await self.file_store.save_diagram_image(
-            filename=filename,
-            content=content,
-            user_id=user_id,
-            session_id=session_id,
-        )
-
-        # 如果提供了 message_id，更新消息的 diagram.image_url
-        if message_id:
-            from app.infra.database import engine
-            from sqlmodel import select
-            from sqlmodel.ext.asyncio.session import AsyncSession
-            from app.infra.models import ChatMessage
-
-            async with AsyncSession(engine) as session:
-                stmt = select(ChatMessage).where(
-                    ChatMessage.id == message_id,
-                    ChatMessage.user_id == user_id,
-                    ChatMessage.session_id == session_id,
-                )
-                msg = (await session.exec(stmt)).first()
-                if msg and msg.diagram:
-                    diagram = dict(msg.diagram)
-                    diagram["image_url"] = saved["url"]
-                    msg.diagram = diagram
-                    session.add(msg)
-                    await session.commit()
-
-        return saved
 
     def resolve_uploaded_file(
         self,

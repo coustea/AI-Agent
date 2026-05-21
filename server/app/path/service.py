@@ -20,7 +20,7 @@ from app.infra.models import (
     LearningPathAdjustment,
     LearningPathNode,
 )
-from app.memory import MemoryLayer
+from app.memory import MemoryService
 from app.path.planner import (
     ALL_NODE_IDS,
     NODE_TITLES,
@@ -43,8 +43,8 @@ from app.path.schemas import PathInsight, PathPlan, PathPlanData, PathPlanMeta, 
 class PathService:
     """学习路径规划服务。"""
 
-    def __init__(self, memory_layer: MemoryLayer | None = None) -> None:
-        self.memory_layer = memory_layer or MemoryLayer(module="mentor")
+    def __init__(self, memory_layer: MemoryService | None = None) -> None:
+        self.memory_layer = memory_layer or MemoryService(module="mentor")
 
     # =========================================================================
     # 路径规划核心方法

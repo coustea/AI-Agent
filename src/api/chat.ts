@@ -22,7 +22,7 @@ export interface ChatMessageItem {
   content: string
   attachments: AttachmentInfo[] | null
   tool_calls: ToolCallRecord[] | null
-  diagram: Record<string, unknown> | null
+  knowledge_graph: Record<string, unknown> | null
   created_at: string | null
 }
 
@@ -44,7 +44,7 @@ export interface StreamChatParams {
   session_id?: string
   image_urls?: string[]
   file_urls?: string[]
-  need_diagram?: boolean
+  need_knowledge_graph?: boolean
   generate_video?: boolean
   enable_search?: boolean
   enable_long_term_memory?: boolean
@@ -100,27 +100,6 @@ export function uploadFile(file: File, sessionId: string) {
 }
 
 // ==========================================
-// 图解 PNG 上传 API
-// ==========================================
-
-export function uploadDiagramImage(file: Blob, sessionId: string, messageId?: number) {
-  const formData = new FormData()
-  formData.append('file', file, `diagram-${Date.now()}.png`)
-  formData.append('session_id', sessionId)
-  if (messageId != null) {
-    formData.append('message_id', String(messageId))
-  }
-  return http.post<{ code: number; message: string; data: UploadResult }>(
-    '/ai/chat/diagram/upload',
-    formData,
-    {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 30000,
-    }
-  )
-}
-
-// ==========================================
 // SSE 流式聊天
 // ==========================================
 
@@ -162,8 +141,8 @@ export function streamChat(
   if (params.file_urls && params.file_urls.length > 0) {
     formData.append('file_urls', params.file_urls.join(','))
   }
-  if (params.need_diagram != null) {
-    formData.append('need_diagram', String(Boolean(params.need_diagram)))
+  if (params.need_knowledge_graph != null) {
+    formData.append('need_knowledge_graph', String(Boolean(params.need_knowledge_graph)))
   }
   if (params.generate_video != null) {
     formData.append('generate_video', String(Boolean(params.generate_video)))

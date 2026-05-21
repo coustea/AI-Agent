@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 import traceback
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,12 +17,14 @@ import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import OperationalError, DBAPIError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.logging import get_logger, setup_logging
 from app.infra.database import init_db, engine
+from app.infra.errors import AppError, ServiceError, NotFoundError, ForbiddenError
+from app.infra.health import check_all
 from app.infra.school_import import import_schools
+from app.prompts import init_prompts
 from app.utils.storage import local_file_store
 from app.auth.security import decode_token
 from app.avatar.bridge.manager import avatar_bridge_manager
@@ -43,19 +44,19 @@ async def app_lifespan(app: FastAPI):
     logging.getLogger("uvicorn.access").addFilter(_SuppressRtcCollectAccessFilter())
     logger.info("Application starting up")
 
+    # 启动健康检测：并行检测数据库和 LLM，失败不阻塞
+    report = await check_all()
+    app.state.health_report = report
+
+    # 数据库初始化：失败时警告但不阻塞
     try:
         await init_db()
-    except (OperationalError, DBAPIError, ConnectionRefusedError, OSError) as exc:
+    except Exception as exc:
         logger.error(
-            "[Startup] 数据库初始化失败，应用无法启动: error_type=%s error=%s\n"
-            "请检查数据库服务是否运行，以及 config.yaml 中的数据库配置是否正确。",
+            "[Startup] 数据库初始化失败，部分功能不可用: %s: %s",
             type(exc).__name__,
             exc,
         )
-        raise
-    except Exception as exc:
-        logger.exception("[Startup] 数据库初始化发生未知异常: %s", exc)
-        raise
 
     local_file_store.ensure_roots()
 
@@ -65,6 +66,13 @@ async def app_lifespan(app: FastAPI):
             await import_schools(session)
     except Exception:
         logger.exception("[Startup] 学校数据导入失败")
+
+    # 预加载所有 prompt 到内存
+    try:
+        init_prompts()
+        logger.info("[Startup] Prompt 预加载完成")
+    except Exception:
+        logger.exception("[Startup] Prompt 预加载失败")
 
     try:
         yield
@@ -111,6 +119,27 @@ app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
 app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
 
 
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    status_map = {
+        ServiceError: 503,
+        NotFoundError: 404,
+        ForbiddenError: 403,
+    }
+    status = status_map.get(type(exc), 500)
+    logger.error(
+        "[%s] %s %s: %s",
+        type(exc).__name__,
+        request.method,
+        request.url.path,
+        exc.message,
+    )
+    return JSONResponse(
+        status_code=status,
+        content={"code": status, "message": exc.message, "data": None},
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(
     request: Request, exc: Exception
@@ -131,6 +160,14 @@ async def global_exception_handler(
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "AI Learning Platform is running"}
+
+
+@app.get("/api/v1/health")
+async def health_check(request: Request) -> dict:
+    report = getattr(request.app.state, "health_report", None)
+    if report:
+        return report.to_dict()
+    return {"status": "unknown", "services": {}}
 
 
 @app.api_route(

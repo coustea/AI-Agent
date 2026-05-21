@@ -337,23 +337,23 @@ const starterTips = ref([
 
 <style scoped>
 .home-hub {
-  --home-primary: var(--primary, #4F46E5);
-  --home-primary-soft: var(--primary-light, #EEF2FF);
-  --home-primary-border: #C7D2FE;
-  min-height: calc(100vh - 64px);
-  padding: 28px;
-  background: #F8FAFC;
-  color: #0F172A;
+  --home-primary: var(--color-primary);
+  --home-primary-soft: var(--color-primary-soft);
+  --home-primary-border: var(--color-primary-border);
+  min-height: calc(100vh - var(--navbar-height));
+  padding: var(--space-8);
+  background: var(--color-bg);
+  color: var(--color-text);
   box-sizing: border-box;
-  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .hub-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
-  gap: 20px;
-  max-width: 1680px;
-  margin: 0 auto 20px;
+  gap: var(--space-5);
+  max-width: var(--page-max-width);
+  margin: 0 auto var(--space-5);
 }
 
 .hero-main,
@@ -363,12 +363,12 @@ const starterTips = ref([
 .bottom-utility {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .hero-main {
-  padding: 32px;
+  padding: var(--space-8);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -380,26 +380,26 @@ const starterTips = ref([
   color: var(--home-primary) !important;
   border-color: var(--home-primary-border) !important;
   background: var(--home-primary-soft) !important;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
 }
 
 .status-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: var(--space-2);
+  height: var(--space-2);
   margin-right: 6px;
-  border-radius: 999px;
-  background: #10B981;
+  border-radius: var(--radius-pill);
+  background: var(--color-success);
 }
 
 .hero-main h1 {
-  margin: 22px 0 12px;
+  margin: 22px 0 var(--space-3);
   max-width: 100%;
-  font-size: 2.85rem;
+  font-size: var(--text-3xl);
   line-height: 1.05;
   letter-spacing: 0;
   font-weight: 850;
-  color: #0F172A;
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -408,7 +408,7 @@ const starterTips = ref([
 .hero-main p {
   margin: 0;
   max-width: 640px;
-  color: #64748B;
+  color: var(--color-text-muted);
   line-height: 1.7;
   font-size: 1.02rem;
 }
@@ -416,22 +416,22 @@ const starterTips = ref([
 .portrait-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
   margin-top: 28px;
 }
 
 .portrait-stat {
-  padding: 16px;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .portrait-stat span,
 .section-label,
 .panel-topline span {
   display: block;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   font-size: 0.76rem;
   font-weight: 850;
   letter-spacing: 0.04em;
@@ -439,8 +439,8 @@ const starterTips = ref([
 
 .portrait-stat strong {
   display: block;
-  margin-top: 8px;
-  color: #1E293B;
+  margin-top: var(--space-2);
+  color: var(--color-text-strong);
   font-size: 1rem;
 }
 
@@ -453,7 +453,7 @@ const starterTips = ref([
 .panel-topline {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
 }
 
@@ -466,7 +466,7 @@ const starterTips = ref([
 
 .goal-steps {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
   margin-bottom: 22px;
 }
 
@@ -475,13 +475,13 @@ const starterTips = ref([
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  color: #475569;
+  color: var(--color-text-secondary);
   line-height: 1.55;
 }
 
 .goal-step .el-icon {
   margin-top: 2px;
-  color: #10B981;
+  color: var(--color-success);
 }
 
 .goal-actions {
@@ -492,20 +492,20 @@ const starterTips = ref([
 }
 
 .home-primary-button {
-  border-radius: 12px !important;
-  font-weight: 600 !important;
+  border-radius: var(--radius-lg) !important;
+  font-weight: var(--weight-semibold) !important;
 }
 
 .home-link-button {
   min-height: 32px;
-  padding: 8px 14px !important;
+  padding: var(--space-2) 14px !important;
   border: 1px solid var(--home-primary-border) !important;
-  border-radius: 12px !important;
+  border-radius: var(--radius-lg) !important;
   background: var(--home-primary-soft) !important;
   color: var(--home-primary) !important;
-  font-weight: 700 !important;
+  font-weight: var(--weight-bold) !important;
   box-shadow: none !important;
-  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease !important;
+  transition: transform var(--transition-base), border-color var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base) !important;
 }
 
 .home-link-button:hover {
@@ -521,8 +521,8 @@ const starterTips = ref([
 }
 
 .feature-row {
-  max-width: 1680px;
-  margin: 0 auto 20px;
+  max-width: var(--page-max-width);
+  margin: 0 auto var(--space-5);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
@@ -532,17 +532,17 @@ const starterTips = ref([
   border: 0;
   cursor: pointer;
   min-height: 150px;
-  padding: 20px;
+  padding: var(--space-5);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
   text-align: left;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .feature-card:hover {
   transform: translateY(-3px);
-  border-color: #CBD5E1;
+  border-color: var(--color-border-hover);
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.07);
 }
 
@@ -551,7 +551,7 @@ const starterTips = ref([
 .profile-avatar {
   width: 42px;
   height: 42px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -569,34 +569,34 @@ const starterTips = ref([
 }
 
 .feature-copy h3 {
-  margin: 8px 0 8px;
-  color: #0F172A;
+  margin: var(--space-2) 0 var(--space-2);
+  color: var(--color-text);
   font-size: 1.05rem;
   font-weight: 850;
 }
 
 .feature-copy p {
   margin: 0;
-  color: #64748B;
+  color: var(--color-text-muted);
   line-height: 1.52;
   font-size: 0.9rem;
 }
 
 .feature-arrow {
-  color: #CBD5E1;
+  color: var(--color-border-hover);
   margin-top: 2px;
 }
 
 .hub-grid {
-  max-width: 1680px;
-  margin: 0 auto 20px;
+  max-width: var(--page-max-width);
+  margin: 0 auto var(--space-5);
   display: grid;
   grid-template-columns: minmax(340px, 0.8fr) minmax(0, 1.2fr);
-  gap: 20px;
+  gap: var(--space-5);
 }
 
 .insight-card {
-  padding: 24px;
+  padding: var(--space-6);
 }
 
 .resource-card {
@@ -607,15 +607,15 @@ const starterTips = ref([
 .section-heading {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: flex-start;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .section-heading h2 {
   margin: 6px 0 0;
-  color: #0F172A;
-  font-size: 1.25rem;
+  color: var(--color-text);
+  font-size: var(--text-lg);
   font-weight: 850;
 }
 
@@ -624,43 +624,43 @@ const starterTips = ref([
   grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
   align-items: start;
-  padding: 16px;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .profile-summary h3 {
   margin: 0 0 6px;
-  color: #0F172A;
+  color: var(--color-text);
   font-size: 1rem;
 }
 
 .profile-summary p {
   margin: 0;
-  color: #64748B;
+  color: var(--color-text-muted);
   line-height: 1.58;
 }
 
 .profile-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 16px 0;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
 }
 
 .profile-tags span {
   padding: 6px 10px;
-  border-radius: 999px;
-  background: #F1F5F9;
-  color: #475569;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 .weak-focus {
-  border-top: 1px solid #E2E8F0;
-  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4);
 }
 
 .focus-header {
@@ -668,9 +668,9 @@ const starterTips = ref([
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
-  color: #64748B;
+  color: var(--color-text-muted);
   font-size: 0.88rem;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
 }
 
 .focus-header b {
@@ -693,16 +693,16 @@ const starterTips = ref([
 .weak-list button {
   width: 100%;
   padding: 13px 14px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   text-align: left;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition: background-color var(--transition-base), border-color var(--transition-base);
 }
 
 .weak-list button:hover {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
+  background: var(--color-bg);
+  border-color: var(--color-border-hover);
 }
 
 .weak-list strong,
@@ -711,13 +711,13 @@ const starterTips = ref([
 }
 
 .weak-list strong {
-  color: #0F172A;
+  color: var(--color-text);
   font-size: 0.95rem;
   margin-bottom: 5px;
 }
 
 .weak-list span {
-  color: #64748B;
+  color: var(--color-text-muted);
   font-size: 0.84rem;
 }
 
@@ -730,27 +730,27 @@ const starterTips = ref([
 .resource-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
   align-items: start;
   min-height: 0;
-  padding: 12px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  background: #FFFFFF;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   text-align: left;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
 }
 
 .resource-item:hover {
   transform: translateY(-2px);
-  border-color: #CBD5E1;
+  border-color: var(--color-border-hover);
   box-shadow: 0 12px 22px rgba(15, 23, 42, 0.06);
 }
 
 .resource-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   color: var(--tone-accent);
   font-size: 0.76rem;
@@ -758,14 +758,14 @@ const starterTips = ref([
 }
 
 .resource-meta em {
-  color: #94A3B8;
+  color: var(--color-text-faint);
   font-style: normal;
   font-weight: 650;
 }
 
 .resource-info h3 {
-  margin: 6px 0 4px;
-  color: #0F172A;
+  margin: 6px 0 var(--space-1);
+  color: var(--color-text);
   font-size: 0.94rem;
   font-weight: 850;
   line-height: 1.32;
@@ -773,15 +773,15 @@ const starterTips = ref([
 
 .resource-info p {
   margin: 0;
-  color: #64748B;
+  color: var(--color-text-muted);
   font-size: 0.8rem;
   line-height: 1.45;
 }
 
 .bottom-utility {
-  max-width: 1680px;
+  max-width: var(--page-max-width);
   margin: 0 auto;
-  padding: 18px 20px;
+  padding: 18px var(--space-5);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -795,7 +795,7 @@ const starterTips = ref([
 .utility-copy h2 {
   margin: 6px 0 0;
   font-size: 1.08rem;
-  color: #0F172A;
+  color: var(--color-text);
   white-space: nowrap;
 }
 
@@ -809,14 +809,14 @@ const starterTips = ref([
 .tip-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid #E2E8F0;
-  border-radius: 999px;
-  background: #FFFFFF;
-  color: #475569;
+  gap: var(--space-2);
+  padding: 10px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   font-weight: 750;
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  transition: background-color var(--transition-base), color var(--transition-base), border-color var(--transition-base);
 }
 
 .tip-pill:hover {
@@ -826,23 +826,23 @@ const starterTips = ref([
 }
 
 .tone-blue {
-  --tone-accent: #2563EB;
-  --tone-soft: #EFF6FF;
+  --tone-accent: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
 }
 
 .tone-emerald {
-  --tone-accent: #059669;
-  --tone-soft: #ECFDF5;
+  --tone-accent: var(--tone-emerald);
+  --tone-soft: var(--tone-emerald-soft);
 }
 
 .tone-indigo {
-  --tone-accent: #4F46E5;
-  --tone-soft: #EEF2FF;
+  --tone-accent: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
 }
 
 .tone-amber {
-  --tone-accent: #D97706;
-  --tone-soft: #FFFBEB;
+  --tone-accent: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
 }
 
 :deep(.el-button--primary) {
@@ -878,7 +878,7 @@ const starterTips = ref([
   .hero-main,
   .goal-panel,
   .insight-card {
-    padding: 20px;
+    padding: var(--space-5);
   }
 
   .portrait-strip,
@@ -888,7 +888,7 @@ const starterTips = ref([
   }
 
   .hero-main h1 {
-    font-size: 2rem;
+    font-size: var(--text-2xl);
   }
 
   .bottom-utility {

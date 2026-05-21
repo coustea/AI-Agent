@@ -1,7 +1,7 @@
 """
-阅读推荐 Agent — 搜索并推荐学习资源。
+阅读推荐智能体 — 推荐学习资源。
 
-6 步流程: 分析 → 融合 → 提取关键词 → 搜索资源 → 验证筛选 → 整理输出
+流程: 构建输入 → 搜索补充 → LLM 生成推荐
 """
 
 from __future__ import annotations
@@ -11,122 +11,106 @@ import re
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.resource.agents.base import Agent
+from app.prompts import registry
+from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
+from app.resource.utils import format_learner_profile_for_prompt
 
 logger = get_logger(__name__)
 
 
-class ReadingAgent(Agent):
-    """阅读推荐 Agent。"""
+class ReadingAgent:
+    """阅读推荐 Agent — 推荐拓展阅读资源。"""
 
-    AGENT_NAME = "reading"
-    ROLE_NAME = "阅读推荐智能体"
-    STEPS = ["分析输入", "融合画像与依赖", "提取搜索关键词", "搜索资源", "验证筛选", "整理输出"]
+    def __init__(self, emitter: AgentEventEmitter):
+        self.emitter = emitter
+        self.llm = get_llm()
 
-    def _default_template_values(self) -> dict[str, str]:
-        return {
-            "reading_depth": "course_extended",
-            "max_items": "5",
-            "resource_quality": "balanced",
-            "include_practice_instruction": "包含实践资源",
-            "language_preference": "chinese",
-        }
+    async def run(self, state: WorkerState) -> WorkerResult:
+        await self.emitter.emit_agent("reading", status="running", message="正在生成阅读推荐")
 
-    def _resolve_template_variables(self, variables: set, state: WorkerState) -> dict[str, str]:
-        """Reading Agent 特殊变量解析。"""
-        result = super()._resolve_template_variables(variables, state)
-        config = state.agent_config or {}
+        prompt = registry.get("resource/reading")
+        input_text = self._build_input(state)
 
-        if "include_practice_instruction" in variables:
-            result["include_practice_instruction"] = "包含实践练习资源" if config.get("include_practice", True) else "不包含实践资源"
+        # 搜索补充：获取已验证的真实资源链接
+        search_context = await self._search_supplement(state)
+        if search_context:
+            input_text += f"\n\n## 已验证的真实资源\n{search_context}"
 
-        return result
+        full_prompt = f"{prompt}\n\n{input_text}"
 
-    async def _generate(self, state: WorkerState, prompt: str, input_text: str) -> WorkerResult:
-        llm = get_llm()
+        try:
+            response = await self.llm.ainvoke(full_prompt, temperature=0.3)
+            raw = response.content if hasattr(response, "content") else str(response)
+            content = self._extract_json(raw)
+        except Exception as exc:
+            logger.warning("[ReadingAgent] LLM 生成失败: %s", exc)
+            return WorkerResult(
+                success=False,
+                error=f"阅读推荐生成失败: {exc}",
+            )
 
-        # Step 3: 提取搜索关键词
-        await self._emit(
-            state, "extract_keywords", f"{self.ROLE_NAME}正在提取搜索关键词",
-            step=3, total=7, step_label=self.STEPS[2],
-        )
-        keywords = await self._extract_keywords(llm, state, input_text)
-
-        # Step 4: 搜索资源
-        await self._emit(
-            state, "search_resources", f"{self.ROLE_NAME}正在搜索学习资源",
-            step=4, total=7, step_label=self.STEPS[3],
-        )
-        raw_resources = await self._search_resources(keywords, state)
-
-        # Step 5: 验证筛选
-        await self._emit(
-            state, "validate_filter", f"{self.ROLE_NAME}正在验证和筛选资源",
-            step=5, total=7, step_label=self.STEPS[4],
-        )
-        filtered = self._validate_and_filter(raw_resources, state)
-
-        # Step 6: 整理输出
-        await self._emit(
-            state, "finalize_output", f"{self.ROLE_NAME}正在整理输出 ({len(filtered)} 条资源)",
-            step=6, total=7, step_label=self.STEPS[5],
-        )
-
-        content = json.dumps(filtered, ensure_ascii=False, indent=2)
+        if not content:
+            return WorkerResult(
+                success=False,
+                error="阅读推荐 JSON 解析失败",
+            )
 
         summary_data = {
-            "total_items": len(filtered),
             "reading_depth": state.agent_config.get("reading_depth", "course_extended"),
             "language_preference": state.agent_config.get("language_preference", "chinese"),
         }
 
+        await self.emitter.emit_agent("reading", status="success", message="阅读推荐生成完成")
         return WorkerResult(
             success=True,
             content=content,
             file_type="json",
-            title=self._title(state, "阅读推荐"),
-            summary=f"推荐 {len(filtered)} 条学习资源",
+            title=f"{state.learning_need[:32]} - 阅读推荐",
+            summary="阅读推荐生成完成",
             summary_data=summary_data,
             metadata={
                 "engine": "reading_json",
-                "total_items": len(filtered),
-                "keywords_used": keywords,
                 "agent_id": "reading",
             },
         )
 
-    async def _extract_keywords(self, llm, state: WorkerState, input_text: str) -> list[str]:
-        """使用 LLM 提取搜索关键词。"""
-        lang_pref = state.agent_config.get("language_preference", "chinese")
-        prompt_text = (
-            f"请从以下学习需求中提取 3-5 个用于搜索学习资源的关键词。\n"
-            f"语言偏好: {lang_pref}\n\n"
-            f"{input_text}\n\n"
-            f"请以 JSON 数组格式输出关键词，例如: [\"关键词1\", \"关键词2\"]"
-        )
+    def _build_input(self, state: WorkerState) -> str:
+        parts = [f"## 学习需求\n{state.learning_need}"]
 
-        try:
-            response = await llm.ainvoke(prompt_text, temperature=0.2)
-            raw = response.content if hasattr(response, "content") else str(response)
-            match = re.search(r"\[.*?\]", raw, re.DOTALL)
-            if match:
-                keywords = json.loads(match.group())
-                if isinstance(keywords, list):
-                    return [str(k) for k in keywords][:5]
-        except Exception as exc:
-            logger.warning("[ReadingAgent] 关键词提取失败: %s", exc)
+        profile_text = format_learner_profile_for_prompt(state.profile)
+        if profile_text:
+            parts.append(f"## 学习者画像摘要\n{profile_text}")
 
-        need = state.task.get("learning_need", "") or ""
-        return [need[:20]] if need else ["学习资源"]
+        if state.knowledge_graph:
+            parts.append(f"## 知识图谱\n{state.knowledge_graph.model_dump_json(indent=2)}")
 
-    async def _search_resources(self, keywords: list[str], state: WorkerState) -> list[dict]:
-        """搜索外部学习资源。"""
+        if state.instruction:
+            lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]
+            for c in state.instruction.constraints:
+                lines.append(f"- 约束: {c}")
+            parts.append("\n".join(lines))
+
+        # 阅读配置
+        config = state.agent_config
+        if config:
+            cfg_lines = ["## 阅读配置"]
+            cfg_lines.append(f"- 阅读深度: {config.get('reading_depth', 'course_extended')}")
+            cfg_lines.append(f"- 最大推荐数量: {config.get('max_items', 5)}")
+            cfg_lines.append(f"- 语言偏好: {config.get('language_preference', 'chinese')}")
+            cfg_lines.append(f"- 生成模式: {config.get('generation_mode', 'balanced')}")
+            parts.append("\n".join(cfg_lines))
+
+        return "\n\n".join(parts)
+
+    async def _search_supplement(self, state: WorkerState) -> str:
+        """搜索外部资源作为已验证的补充上下文。"""
         max_items = state.agent_config.get("max_items", 5)
         resources: list[dict] = []
 
         try:
             from langchain_community.tools import DuckDuckGoSearchResults
+            keywords = state.learning_need[:50].split()
             for kw in keywords[:3]:
                 if len(resources) >= max_items:
                     break
@@ -140,54 +124,44 @@ class ReadingAgent(Agent):
         except Exception as exc:
             logger.warning("[ReadingAgent] 搜索失败: %s", exc)
 
-        if len(resources) < max_items:
-            llm_recs = await self._llm_recommend(keywords, state, max_items - len(resources))
-            resources.extend(llm_recs)
+        if not resources:
+            return ""
 
-        return resources[:max_items]
+        return json.dumps(resources, ensure_ascii=False, indent=2)
 
-    async def _llm_recommend(self, keywords: list[str], state: WorkerState, count: int) -> list[dict]:
-        """使用 LLM 推荐学习资源 (搜索不足时的补充)。"""
-        llm = get_llm()
-        lang_pref = state.agent_config.get("language_preference", "chinese")
-        quality = state.agent_config.get("resource_quality", "balanced")
-
-        prompt_text = (
-            f"请推荐 {count} 个与以下关键词相关的学习资源 (书籍、论文、在线课程等)。\n"
-            f"关键词: {', '.join(keywords)}\n"
-            f"语言偏好: {lang_pref}\n"
-            f"资源质量: {quality}\n\n"
-            f"请以 JSON 数组格式输出，每项包含 title, author, type, description, url 字段。"
-        )
-
+    def _extract_json(self, raw: str) -> str | None:
+        """从 LLM 输出中提取 JSON。"""
+        # 直接解析
         try:
-            response = await llm.ainvoke(prompt_text, temperature=0.3)
-            raw = response.content if hasattr(response, "content") else str(response)
-            match = re.search(r"\[.*\]", raw, re.DOTALL)
-            if match:
-                items = json.loads(match.group())
-                if isinstance(items, list):
-                    return items[:count]
-        except Exception as exc:
-            logger.warning("[ReadingAgent] LLM 推荐失败: %s", exc)
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return json.dumps(data, ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            pass
 
-        return []
+        # 去除代码围栏
+        pattern = r"```(?:json)?\s*\n(.*?)```"
+        match = re.search(pattern, raw, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                if isinstance(data, dict):
+                    return json.dumps(data, ensure_ascii=False, indent=2)
+            except json.JSONDecodeError:
+                pass
 
-    def _validate_and_filter(self, resources: list[dict], state: WorkerState) -> list[dict]:
-        """验证和筛选资源。"""
-        include_practice = state.agent_config.get("include_practice", True)
-        filtered = []
+        # 提取第一个 JSON 对象
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                data = json.loads(raw[start:end + 1])
+                if isinstance(data, dict):
+                    return json.dumps(data, ensure_ascii=False, indent=2)
+            except json.JSONDecodeError:
+                pass
 
-        for r in resources:
-            if not isinstance(r, dict):
-                continue
-            if not r.get("title"):
-                continue
-            if not include_practice and r.get("type") in ("练习", "实践", "practice"):
-                continue
-            filtered.append(r)
-
-        return filtered
+        return None
 
     def _parse_ddg_results(self, results_str: str) -> list[dict]:
         """解析 DuckDuckGo 搜索结果字符串。"""
@@ -206,6 +180,3 @@ class ReadingAgent(Agent):
                     "type": "web",
                 })
         return items
-
-    def _input_suffix(self) -> str:
-        return "请推荐学习资源。"

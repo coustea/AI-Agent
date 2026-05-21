@@ -3,34 +3,36 @@
 
 当前工作流：
     START -> classify
-      ├─ direct_answer (Spark MAX 直接回答) -> diagram_generate -> END
-      ├─ search_node (Spark MAX 搜索，可结合附件预分析上下文) -> spark_summary -> diagram_generate -> END
-      └─ attachment_answer (Spark MAX 总结) -> diagram_generate -> END
+      ├─ direct → direct_answer → END（无图谱）
+      ├─ direct+graph → direct_answer → knowledge_graph_generate → END
+      ├─ search → search_node → spark_summary → END（无图谱）
+      ├─ search+graph → search_node → knowledge_graph_generate → spark_summary(brief) → END
+      ├─ attachment → attachment_answer → END（无图谱）
+      ├─ attachment+graph → attachment_answer → knowledge_graph_generate → END
+      ├─ attachment+search → search_node → spark_summary → END（无图谱）
+      ├─ attachment+search+graph → search_node → knowledge_graph_generate → spark_summary(brief) → END
+      └─ graph_only → knowledge_graph_generate → spark_summary(brief) → END
 
-职责：
-- 接收请求
-- 识别问题应该走哪条回答路径
-- 调用对应的回答能力
-- 返回统一响应
+优先级：附件分析 → 搜索 → 知识图谱
+图谱生成必须用户显式请求（前端按钮或文字明确要求），不自动触发。
+涉及图谱时：先生成图谱，再简要总结；无图谱时：详细回答。
 """
 
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any, Optional
 
-from app.utils.mermaid import build_mermaid_render
-from app.chat.schemas import DIAGRAM_MODEL_MAP, DiagramDecision, TutorState
-from app.utils.json import parse_first_json_object
+from app.chat.schemas import ChatKnowledgeGraph, TutorState
 from app.utils.context import runtime_context as chat_runtime_context
 from app.utils.paths import CHAT_DIR
 from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
+from app.resource.graph_store import get_graph_store
+from app.resource.utils.graph_utils import normalize_render_graph
 from app.chat.utils import (
     classify_route,
     extract_question,
     is_unusable_reply_text,
-    load_prompts,
     node_timer,
     normalize_message_content,
     stream_event,
@@ -38,13 +40,15 @@ from app.chat.utils import (
     build_messages,
 )
 from app.config import LANGGRAPH_DEBUG
-from app.memory import MemoryLayer
+from app.memory import MemoryService
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.prompts import registry
 from app.utils.search import duckduckgo_search, serp_search, tavily_search
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel, Field
 
 logger = get_logger(__name__)
 
@@ -52,8 +56,6 @@ logger = get_logger(__name__)
 # 常量
 # ---------------------------------------------------------------------------
 
-# Agent 所在目录
-AGENT_DIR = Path(__file__).resolve().parent
 # LangGraph 递归限制
 GRAPH_RECURSION_LIMIT = 30
 # 图节点名称集合
@@ -63,29 +65,15 @@ GRAPH_NODE_NAMES = {
     "search_node",
     "spark_summary",
     "attachment_answer",
-    "diagram_generate",
+    "knowledge_graph_generate",
 }
 # 回答节点名称集合（会发送 token 事件）
 ANSWER_NODE_NAMES = {"direct_answer", "spark_summary", "attachment_answer"}
 
-# ---------------------------------------------------------------------------
-# Prompt 加载
-# ---------------------------------------------------------------------------
-
-# 加载提示词区段
-PROMPTS: dict[str, str] = load_prompts(AGENT_DIR)
-
 
 def _get_prompt(name: str) -> str:
-    """获取提示词，如果不存在返回空字符串。
-
-    Args:
-        name: 提示词名称。
-
-    Returns:
-        提示词内容。
-    """
-    return PROMPTS.get(name, "")
+    """获取聊天模块的 prompt 文本。"""
+    return registry.get(f"chat/{name}")
 
 
 def _graph_stream_kwargs() -> dict[str, Any]:
@@ -130,6 +118,12 @@ def _stream_chunk_text(chunk: Any) -> str:
     return ""
 
 
+class Intent(BaseModel):
+    """用户意图分类。"""
+    search: bool = Field(description="是否需要使用联网搜索工具获取最新信息或文档")
+    graph: bool = Field(description="用户是否显式要求生成知识图谱（前端按钮或文字明确请求）")
+
+
 class TutorAgent:
     """智能辅导 Agent — 轻量级编排器。
 
@@ -150,7 +144,7 @@ class TutorAgent:
         # LLM 实例
         self.llm = get_llm()
         # 上下文服务
-        self.memory_layer = MemoryLayer(module="mentor")
+        self.memory_layer = MemoryService(module="mentor")
 
         # 图与工具
         self.graph = None
@@ -246,7 +240,7 @@ class TutorAgent:
             graph.add_node("search_node", self._search_node)
             graph.add_node("spark_summary", self._spark_summary_node)
             graph.add_node("attachment_answer", self._attachment_answer_node)
-            graph.add_node("diagram_generate", self._diagram_generate_node)
+            graph.add_node("knowledge_graph_generate", self._knowledge_graph_generate_node)
 
             # 添加边
             graph.add_edge(START, "classify")
@@ -255,35 +249,97 @@ class TutorAgent:
                 classify_route,
                 {
                     "direct": "direct_answer",
+                    "direct_graph": "direct_answer",
                     "search": "search_node",
+                    "search_graph": "search_node",
                     "attachment_needed": "attachment_answer",
+                    "attachment_graph": "attachment_answer",
+                    "graph_only": "knowledge_graph_generate",
                 },
             )
-            graph.add_edge("direct_answer", "diagram_generate")
-            graph.add_edge("search_node", "spark_summary")
-            graph.add_edge("spark_summary", "diagram_generate")
-            graph.add_edge("attachment_answer", "diagram_generate")
-            graph.add_edge("diagram_generate", END)
+            # direct_answer 后：有图谱 → knowledge_graph_generate，无图谱 → END
+            graph.add_conditional_edges(
+                "direct_answer",
+                self._route_after_answer,
+                {
+                    "kg": "knowledge_graph_generate",
+                    "end": END,
+                },
+            )
+            # search_node 后：有图谱 → knowledge_graph_generate，无图谱 → spark_summary
+            graph.add_conditional_edges(
+                "search_node",
+                self._route_after_search,
+                {
+                    "kg": "knowledge_graph_generate",
+                    "summary": "spark_summary",
+                },
+            )
+            # attachment_answer 后：有图谱 → knowledge_graph_generate，无图谱 → END
+            graph.add_conditional_edges(
+                "attachment_answer",
+                self._route_after_answer,
+                {
+                    "kg": "knowledge_graph_generate",
+                    "end": END,
+                },
+            )
+            # knowledge_graph_generate 后：需要简要总结 → spark_summary，否则 → END
+            graph.add_conditional_edges(
+                "knowledge_graph_generate",
+                self._route_after_kg,
+                {
+                    "brief_summary": "spark_summary",
+                    "end": END,
+                },
+            )
+            graph.add_edge("spark_summary", END)
 
             self.graph = graph.compile()
+
+    # ------------------------------------------------------------------
+    # 条件路由
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _route_after_answer(state: dict) -> str:
+        """direct_answer / attachment_answer 后的路由：有图谱需求 → kg，否则结束。"""
+        route = state.get("route", "")
+        if "graph" in route:
+            return "kg"
+        return "end"
+
+    @staticmethod
+    def _route_after_search(state: dict) -> str:
+        """search_node 后的路由：有图谱需求 → kg，否则 → spark_summary。"""
+        route = state.get("route", "")
+        if "graph" in route:
+            return "kg"
+        return "summary"
+
+    @staticmethod
+    def _route_after_kg(state: dict) -> str:
+        """knowledge_graph_generate 后的路由：需要简要总结 → spark_summary，否则结束。
+
+        search+graph 和 graph_only 路径需要 spark_summary 简要总结。
+        direct+graph 和 attachment+graph 路径前面已有详细回答，直接结束。
+        """
+        if state.get("summary_type") == "brief":
+            return "brief_summary"
+        return "end"
 
     # ------------------------------------------------------------------
     # 节点: classify
     # ------------------------------------------------------------------
 
     async def _classify_node(self, state: TutorState) -> dict[str, Any]:
-        """分类节点：区分 direct / search / attachment_needed。
+        """分类节点：根据用户意图和显式请求决定路由。
 
         路由规则：
-        1. 启用搜索 → search_node（可同时结合附件预分析上下文）
-        2. 有附件 → attachment_answer
-        3. 无附件 + 无搜索 → direct_answer
-
-        Args:
-            state: LangGraph 状态。
-
-        Returns:
-            更新后的状态片段。
+        - 图谱必须用户显式请求（前端按钮 need_knowledge_graph 或文字明确要求）
+        - 优先级：附件分析 → 搜索 → 知识图谱
+        - 有图谱时：search+graph 走 search→kg→summary(brief)，
+          graph_only 走 kg→summary(brief)，其他有图谱路径先回答再生成图谱
         """
         user_id = state.get("user_id")
         session_id = state.get("session_id")
@@ -292,36 +348,92 @@ class TutorAgent:
         image_urls = state.get("image_urls") or []
         resource_mode = state.get("resource_mode", "none")
         enable_search = bool(state.get("enable_search", False))
+        need_knowledge_graph = bool(state.get("need_knowledge_graph", False))
         user_message = extract_question(messages)
+        recent_chat_context = str(state.get("recent_chat_context", "")).strip()
+
+        has_attachments = bool(file_urls or image_urls)
 
         with node_timer("classify", user=user_id, session=session_id):
-            # 路径1：搜索优先，支持与附件预分析上下文组合
-            if enable_search:
-                execution_mode = "attachment_search" if (file_urls or image_urls) else "search"
-                logger.debug(
-                    "[TutorAgent] 路由分类 route=search reason=enable_search question=%s attachments(images=%s,files=%s)",
-                    truncate(user_message, 120),
-                    len(image_urls),
-                    len(file_urls),
+            # 动态意图分类（仅判断 search 和 graph）
+            intent_graph = False
+            try:
+                classify_prompt = _get_prompt("intent_classify")
+                prompt_content = f"用户最新问题：\n{user_message}\n\n近期对话上下文：\n{recent_chat_context}"
+                intent = await self.llm.ainvoke_json(
+                    Intent,
+                    [
+                        SystemMessage(content=classify_prompt),
+                        HumanMessage(content=prompt_content),
+                    ],
+                    temperature=0.1,
                 )
-                return {"route": "search", "execution_mode": execution_mode}
+                if intent.search:
+                    enable_search = True
+                if intent.graph:
+                    intent_graph = True
+            except Exception as exc:
+                logger.warning("[TutorAgent] 意图分类失败，降级为默认参数 err=%s", exc)
 
-            # 路径2：仅附件
-            if file_urls or image_urls:
-                logger.debug(
-                    "[TutorAgent] 路由分类 route=attachment_needed reason=attachments_present images=%s files=%s resource_mode=%s",
-                    len(image_urls),
-                    len(file_urls),
-                    resource_mode,
-                )
-                return {"route": "attachment_needed", "execution_mode": "attachment"}
+            # 图谱需求：前端显式按钮 或 文字明确要求（二者取其一即可）
+            need_kg = need_knowledge_graph or intent_graph
 
-            # 路径3：直接回答
+            # 构造 state_updates
+            state_updates: dict[str, Any] = {}
+            if need_kg != state.get("need_knowledge_graph"):
+                state_updates["need_knowledge_graph"] = need_kg
+
+            # 路由决策
+            if need_kg:
+                # --- 有图谱需求的路径 ---
+                if enable_search:
+                    # search+graph: search → kg → spark_summary(brief)
+                    route = "search_graph"
+                    execution_mode = "search_graph"
+                    summary_type = "brief"
+                elif has_attachments:
+                    # attachment+graph: attachment_answer → kg → END（前面已有详细回答）
+                    route = "attachment_graph"
+                    execution_mode = "attachment_graph"
+                    summary_type = None
+                else:
+                    # graph_only: kg → spark_summary(brief)
+                    route = "graph_only"
+                    execution_mode = "graph_only"
+                    summary_type = "brief"
+            else:
+                # --- 无图谱需求的路径 ---
+                if enable_search:
+                    route = "search"
+                    execution_mode = "attachment_search" if has_attachments else "search"
+                    summary_type = None
+                elif has_attachments:
+                    route = "attachment_needed"
+                    execution_mode = "attachment"
+                    summary_type = None
+                else:
+                    route = "direct"
+                    execution_mode = "direct"
+                    summary_type = None
+
             logger.debug(
-                "[TutorAgent] 路由分类 route=direct reason=no_attachments_no_search question=%s",
+                "[TutorAgent] 路由分类 route=%s execution_mode=%s need_kg=%s question=%s",
+                route,
+                execution_mode,
+                need_kg,
                 truncate(user_message, 120),
             )
-            return {"route": "direct", "execution_mode": "direct"}
+
+            state_updates.update({
+                "route": route,
+                "execution_mode": execution_mode,
+            })
+            if summary_type:
+                state_updates["summary_type"] = summary_type
+            if enable_search:
+                state_updates["enable_search"] = True
+
+            return state_updates
 
     # ------------------------------------------------------------------
     # 节点: direct_answer
@@ -443,13 +555,11 @@ class TutorAgent:
     # ------------------------------------------------------------------
 
     async def _spark_summary_node(self, state: TutorState) -> dict[str, Any]:
-        """Spark 总结节点：基于搜索结果生成教学回答。
+        """Spark 总结节点：基于参考资料生成教学回答。
 
-        Args:
-            state: LangGraph 状态。
-
-        Returns:
-            更新后的状态片段。
+        支持两种模式：
+        - detailed（默认）：基于搜索结果详细回答
+        - brief：基于知识图谱数据简要总结（1-3句话）
         """
         messages = state.get("messages") or []
         user_id = state.get("user_id")
@@ -457,15 +567,34 @@ class TutorAgent:
         search_result = state.get("search_result", "")
         system_prompt = state.get("system_prompt", "")
         question = extract_question(messages)
+        summary_type = state.get("summary_type")
 
         with node_timer("spark_summary", user=user_id, session=session_id):
-            logger.debug("[TutorAgent] Spark 总结 question=%s", truncate(question, 180))
+            logger.debug("[TutorAgent] Spark 总结 question=%s summary_type=%s", truncate(question, 180), summary_type)
 
-            prompt = (
-                f"用户问题：{question}\n\n"
-                f"搜索结果：\n{search_result}\n\n"
-                "请基于搜索结果回答用户问题，语言自然、清晰、有教学价值。"
-            )
+            # 构建参考资料
+            reference = search_result
+            if not reference and state.get("knowledge_graph"):
+                import json as _json
+                reference = _json.dumps(state["knowledge_graph"], ensure_ascii=False, default=str)
+
+            if summary_type == "brief":
+                prompt = (
+                    f"用户问题：{question}\n\n"
+                    f"参考资料（知识图谱数据）：\n{reference}\n\n"
+                    "请基于以上知识图谱数据，用 1-3 句话简要总结核心概念和关键关系，"
+                    "帮助用户快速理解图谱内容。不要重复罗列所有节点，只提炼最重要的信息。"
+                )
+                fallback_text = "知识图谱已生成，请查看上方可视化展示。"
+                retry_prompt = "请用 1-3 句话简要总结知识图谱的核心内容。"
+            else:
+                prompt = (
+                    f"用户问题：{question}\n\n"
+                    f"参考资料：\n{reference}\n\n"
+                    "请结合参考资料直接回答用户问题。语言自然、清晰、有教学价值。注意：绝对不要在回答中提及「根据参考资料」、「搜索结果表明」等任何揭示你进行了检索的词语，要表现得就如同你原本就知道这些知识一样。"
+                )
+                fallback_text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
+                retry_prompt = "请基于搜索结果重新回答，给出完整、可读、适合教学场景的中文回答。"
 
             full_messages = [
                 SystemMessage(content=system_prompt),
@@ -475,8 +604,8 @@ class TutorAgent:
             text = await self._invoke_with_retry(
                 full_messages,
                 node_name="spark_summary",
-                fallback_text=search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。",
-                retry_prompt="请基于搜索结果重新回答，给出完整、可读、适合教学场景的中文回答。",
+                fallback_text=fallback_text,
+                retry_prompt=retry_prompt,
             )
 
             response_msg = AIMessage(content=text)
@@ -561,298 +690,27 @@ class TutorAgent:
                 "termination_reason": "attachment_answer_done",
             }
 
-    async def _decide_diagram(
-        self,
-        *,
-        question: str,
-        answer: str,
-        state: TutorState,
-    ) -> DiagramDecision:
-        """判断是否需要为最终回答生成图解。
+    async def _knowledge_graph_generate_node(self, state: TutorState) -> TutorState:
+        """知识图谱生成节点；失败时仅跳过图谱。
 
-        Args:
-            question: 用户问题。
-            answer: 最终回答文本。
-            state: LangGraph 状态。
-
-        Returns:
-            图解决策结果。
+        支持两种输入：
+        - 有 answer_text（direct/attachment 路径）：基于回答生成图谱
+        - 有 search_result（search+graph 路径）：基于搜索结果生成图谱
+        - 仅有 question（graph_only 路径）：直接基于问题生成图谱
         """
-        requested = state.get("need_diagram")
-        if requested is False:
-            return DiagramDecision(
-                need_diagram=False,
-                diagram_type=None,
-                reason="diagram_disabled_by_user",
-            )
-
-        prompt = (
-            f"User question:\n{question}\n\n"
-            f"Final answer:\n{answer}\n\n"
-            f"User explicitly requests diagram: {bool(requested)}\n\n"
-            "Decide whether to generate a diagram and choose the best diagram_type."
-        )
-
-        try:
-            decision = await self._ainvoke_diagram_model(
-                DiagramDecision,
-                [
-                    SystemMessage(content=_get_prompt("diagram_decision_system")),
-                    HumanMessage(content=prompt),
-                ],
-            )
-
-            if requested is True and decision.need_diagram and not decision.diagram_type:
-                return DiagramDecision(
-                    need_diagram=True,
-                    diagram_type="flow",
-                    reason=decision.reason or "fallback_flow_for_requested_diagram",
-                )
-
-            if decision.diagram_type not in DIAGRAM_MODEL_MAP:
-                if not decision.need_diagram:
-                    return decision
-                return DiagramDecision(
-                    need_diagram=False,
-                    diagram_type=None,
-                    reason="diagram_type_not_supported",
-                )
-
-            if not decision.need_diagram:
-                return decision
-            return decision
-        except Exception as exc:
-            logger.warning("[TutorAgent] diagram decision failed: %s", exc)
-            if requested is True:
-                return DiagramDecision(
-                    need_diagram=True,
-                    diagram_type="flow",
-                    reason="fallback_flow_after_decision_error",
-                )
-            return DiagramDecision(
-                need_diagram=False,
-                diagram_type=None,
-                reason="diagram_decision_failed",
-            )
-
-    async def _ainvoke_diagram_model(
-        self,
-        model_cls: type[Any],
-        messages: list[Any],
-    ) -> Any:
-        """使用 Spark MAX strict function calling 调用图解模型并本地校验。
-
-        Args:
-            model_cls: Pydantic 模型类。
-            messages: 消息列表。
-
-        Returns:
-            验证后的模型实例。
-        """
-        try:
-            validated = await self.llm.ainvoke_json(
-                model_cls,
-                messages,
-                temperature=0.1,
-            )
-            payload = validated.model_dump(by_alias=True)
-        except Exception:
-            # 兼容测试替身或历史宽松 payload，必要时退回普通 JSON 解析路径
-            response = await self.llm.ainvoke(
-                messages,
-                temperature=0.1,
-            )
-            payload = parse_first_json_object(
-                normalize_message_content(getattr(response, "content", response))
-            )
-        payload = self._normalize_diagram_payload(model_cls, payload)
-        return model_cls.model_validate(payload)
-
-    @staticmethod
-    def _trim_text(value: Any, max_len: int) -> Any:
-        """将文本截断到指定长度。
-
-        Args:
-            value: 要截断的值，仅字符串会被修改。
-            max_len: 最大字符长度。
-
-        Returns:
-            截断后的字符串或原始值。
-        """
-        if not isinstance(value, str):
-            return value
-        value = value.strip()
-        if len(value) <= max_len:
-            return value
-        return value[:max_len]
-
-    @classmethod
-    def _trim_mapping_fields(cls, mapping: dict[str, Any], limits: dict[str, int]) -> dict[str, Any]:
-        """批量截断字典中多个字段到指定长度。
-
-        Args:
-            mapping: 包含待截断字段的字典。
-            limits: 字段名到字符限制的映射。
-
-        Returns:
-            修改后的字典，字段已截断。
-        """
-        for key, limit in limits.items():
-            if key in mapping:
-                mapping[key] = cls._trim_text(mapping.get(key), limit)
-        return mapping
-
-    @classmethod
-    def _normalize_diagram_payload(cls, model_cls: type[Any], payload: dict[str, Any]) -> dict[str, Any]:
-        """规范化 LLM 输出以匹配本地模式预期。
-
-        Args:
-            model_cls: Pydantic 模型类，用于模式参考。
-            payload: LLM 返回的原始载荷字典。
-
-        Returns:
-            规范化后的载荷，匹配预期模式。
-        """
-        payload = dict(payload)
-        cls._trim_mapping_fields(payload, {"title": 20, "summary": 50})
-
-        if model_cls.__name__ == "HierarchyDiagram" and "spec" not in payload:
-            nodes = payload.pop("nodes", None)
-            if isinstance(nodes, list) and nodes and isinstance(nodes[0], dict):
-                payload["spec"] = {"root": nodes[0]}
-
-        spec = payload.get("spec")
-        if not isinstance(spec, dict):
-            return payload
-
-        if model_cls.__name__ == "HierarchyDiagram":
-            def _walk(node: dict[str, Any]) -> None:
-                cls._trim_mapping_fields(node, {"label": 16, "description": 40})
-                children = node.get("children")
-                if isinstance(children, list):
-                    for child in children:
-                        if isinstance(child, dict):
-                            _walk(child)
-
-            root = spec.get("root")
-            if isinstance(root, dict):
-                _walk(root)
-            return payload
-
-        list_field_limits = {
-            "steps": {"label": 16, "description": 40},
-            "nodes": {"label": 16, "description": 40},
-            "states": {"label": 16, "description": 40},
-            "actors": {"label": 16, "description": 40},
-            "items": {"label": 16, "description": 40},
-            "edges": {"label": 16, "description": 40},
-            "messages": {"label": 16, "description": 40},
-            "transitions": {"label": 16, "description": 40},
-        }
-        for field_name, limits in list_field_limits.items():
-            values = spec.get(field_name)
-            if isinstance(values, list):
-                for item in values:
-                    if isinstance(item, dict):
-                        cls._trim_mapping_fields(item, limits)
-
-        return payload
-
-    async def _generate_diagram_by_type(
-        self,
-        *,
-        diagram_type: str,
-        question: str,
-        answer: str,
-        state: TutorState,
-    ) -> Optional[dict[str, Any]]:
-        """按已决策的类型生成前端可渲染的结构化图解。
-
-        Args:
-            diagram_type: 图解类型。
-            question: 用户问题。
-            answer: 最终回答。
-            state: LangGraph 状态。
-
-        Returns:
-            图解数据字典，失败返回 None。
-        """
-        model_cls = DIAGRAM_MODEL_MAP.get(diagram_type)
-        if model_cls is None:
-            return None
-
-        # 提取上下文
-        profile_context = str(state.get("profile_context", "")).strip()
-        fact_context = str(state.get("fact_context", "")).strip()
-        recent_chat_context = str(state.get("recent_chat_context", "")).strip()
-        attachment_context = str(state.get("attachment_analysis_context", "")).strip()
-
-        context_parts = []
-        if profile_context:
-            context_parts.append(f"用户画像上下文：\n{profile_context}")
-        if fact_context:
-            context_parts.append(f"长期记忆上下文：\n{fact_context}")
-        if recent_chat_context:
-            context_parts.append(f"近期对话上下文：\n{recent_chat_context}")
-        if attachment_context:
-            context_parts.append(f"附件预分析上下文：\n{attachment_context}")
-
-        context_text = "\n\n".join(context_parts) if context_parts else "无额外上下文。"
-        prompt = (
-            f"diagram_type：{diagram_type}\n\n"
-            f"学生问题：\n{question}\n\n"
-            f"最终文字回答：\n{answer}\n\n"
-            f"上下文：\n{context_text}\n\n"
-            "请直接生成指定 diagram_type 对应的 Mermaid 源码。"
-            "只输出 Mermaid 源码，不要输出解释、代码围栏或对象格式。"
-            "必须是完整知识图解，不是 demo；覆盖主要概念、关系、步骤、边界条件或易混点。"
-            "优先拆成 8 到 18 个原子知识节点。"
-        )
-
-        try:
-            response = await self.llm.ainvoke(
-                [
-                    SystemMessage(content=_get_prompt("diagram_generation_system")),
-                    HumanMessage(content=prompt),
-                ],
-                temperature=0.1,
-                max_tokens=1600,
-            )
-            mermaid_source = normalize_message_content(getattr(response, "content", response))
-            rendered = {
-                "type": diagram_type,
-                "title": f"{diagram_type} 图解",
-                "summary": "Mermaid 知识图解",
-                "render": build_mermaid_render(mermaid_source),
-            }
-
-            return rendered
-        except Exception as exc:
-            logger.warning("[TutorAgent] 图解生成失败 type=%s error=%s", diagram_type, exc)
-            return None
-
-    async def _diagram_generate_node(self, state: TutorState) -> TutorState:
-        """回答后的可选图解生成节点；失败时降级为无图解。
-
-        Args:
-            state: LangGraph 状态。
-
-        Returns:
-            更新后的状态。
-        """
-        user_id = state.get("user_id")
-        session_id = state.get("session_id")
-        with node_timer("diagram_generate", user=user_id, session=session_id):
+        user_id = int(state.get("user_id") or 0)
+        session_id = str(state.get("session_id") or "")
+        with node_timer("knowledge_graph_generate", user=user_id, session=session_id):
             try:
                 question = extract_question(state.get("messages") or [])
+
+                # 收集可用上下文：优先 answer_text，其次 search_result
                 answer = ""
-                # 从多个可能的键中提取回答
                 for key in ("final_answer", "answer_text", "answer", "response"):
                     value = state.get(key)  # type: ignore[literal-required]
                     if value:
                         answer = normalize_message_content(value)
                         break
-                # 从消息列表中提取最后的 AI 消息
                 if not answer:
                     final_ai = next(
                         (
@@ -864,36 +722,90 @@ class TutorAgent:
                     )
                     answer = normalize_message_content(final_ai.content if final_ai else "")
 
-                # 缺少问题或回答时跳过
-                if not question or not answer:
-                    state["diagram"] = None
-                    state["diagram_error"] = "缺少问题或回答，跳过图解生成"
+                # search+graph 路径：搜索结果作为补充上下文
+                search_result = state.get("search_result", "")
+                if search_result and not answer:
+                    answer = f"搜索参考资料：\n{search_result}"
+                elif search_result and answer:
+                    answer = f"{answer}\n\n搜索参考资料：\n{search_result}"
+
+                if not question:
+                    state["knowledge_graph"] = None
+                    state["knowledge_graph_error"] = "缺少问题，跳过知识图谱生成"
                     return state
 
-                # 决策是否需要图解
-                decision = await self._decide_diagram(
+                if not answer:
+                    answer = "用户要求直接生成图谱，无大模型文本回答。请直接基于上述问题构建知识图谱。"
+
+                state["knowledge_graph"] = await self._generate_knowledge_graph(
                     question=question,
                     answer=answer,
                     state=state,
                 )
-                if not decision.need_diagram or not decision.diagram_type:
-                    state["diagram"] = None
-                    return state
-
-                # 生成图解
-                diagram = await self._generate_diagram_by_type(
-                    diagram_type=decision.diagram_type,
-                    question=question,
-                    answer=answer,
-                    state=state,
-                )
-                state["diagram"] = diagram
                 return state
             except Exception as exc:
-                logger.warning("[TutorAgent] 图解节点失败: %s", exc)
-                state["diagram"] = None
-                state["diagram_error"] = str(exc)
+                logger.exception("[TutorAgent] 知识图谱节点失败")
+                state["knowledge_graph"] = None
+                state["knowledge_graph_error"] = str(exc)
                 return state
+
+    async def _generate_knowledge_graph(
+        self,
+        *,
+        question: str,
+        answer: str,
+        state: TutorState,
+    ) -> dict[str, Any] | None:
+        profile_context = str(state.get("profile_context", "")).strip()
+        fact_context = str(state.get("fact_context", "")).strip()
+        recent_chat_context = str(state.get("recent_chat_context", "")).strip()
+        attachment_context = str(state.get("attachment_analysis_context", "")).strip()
+        context_parts = []
+        if profile_context:
+            context_parts.append(f"用户画像上下文：\n{profile_context}")
+        if fact_context:
+            context_parts.append(f"长期记忆上下文：\n{fact_context}")
+        if recent_chat_context:
+            context_parts.append(f"近期对话上下文：\n{recent_chat_context}")
+        if attachment_context:
+            context_parts.append(f"附件预分析上下文：\n{attachment_context}")
+
+        prompt = (
+            f"学生问题：\n{question}\n\n"
+            f"最终回答：\n{answer}\n\n"
+            f"上下文：\n{chr(10).join(context_parts) if context_parts else '无额外上下文。'}\n\n"
+            "请生成适合 Neo4j 与前端关系图渲染的知识图谱 JSON。"
+            "节点必须是原子知识点，优先 6 到 14 个节点；"
+            "关系只能使用 prerequisite、extends、includes、related；"
+            "不要输出 Mermaid，不要输出 Markdown。"
+        )
+        payload = await self.llm.ainvoke_json(
+            ChatKnowledgeGraph,
+            [
+                SystemMessage(content=_get_prompt("knowledge_graph")),
+                HumanMessage(content=prompt),
+            ],
+            temperature=0.1,
+        )
+        graph = normalize_render_graph(
+            payload.model_dump(mode="json"),
+            layout_mode="force",
+            relation_depth=2,
+        )
+        graph["neo4j"] = await self._store_chat_knowledge_graph(state=state, graph=graph)
+        return graph
+
+    async def _store_chat_knowledge_graph(self, *, state: TutorState, graph: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return await get_graph_store().upsert_graph(
+                user_id=int(state.get("user_id") or 0),
+                resource_id=str(state.get("session_id") or "chat"),
+                agent_id="chat",
+                graph=graph,
+            )
+        except Exception as exc:
+            logger.exception("[TutorAgent] 聊天知识图谱 Neo4j 存储失败")
+            return {"stored": False, "error": str(exc)}
 
     # ------------------------------------------------------------------
     # 后台任务
@@ -932,7 +844,7 @@ class TutorAgent:
         session_id: Optional[str] = None,
         image_urls: Optional[list[str]] = None,
         file_urls: Optional[list[str]] = None,
-        need_diagram: bool = False,
+        need_knowledge_graph: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
         enable_long_term_memory: bool = False,
@@ -947,7 +859,7 @@ class TutorAgent:
             session_id: 可选的会话ID。
             image_urls: 图片URL列表。
             file_urls: 文件URL列表。
-            need_diagram: 是否生成图解。
+            need_knowledge_graph: 是否生成知识图谱。
             generate_video: 是否生成视频。
             enable_search: 是否启用搜索。
             enable_long_term_memory: 是否启用长期记忆读写。
@@ -997,7 +909,6 @@ class TutorAgent:
         # 准备对话轮次
         prepared_turn = await prepare_tutor_turn(
             ctx_service=self.memory_layer,
-            prompts=PROMPTS,
             user_id=user_id,
             user_message=user_message,
             session_id=effective_session,
@@ -1005,7 +916,7 @@ class TutorAgent:
             file_urls=requested_file_urls,
             enable_search=enable_search,
             enable_long_term_memory=enable_long_term_memory,
-            need_diagram=need_diagram,
+            need_knowledge_graph=need_knowledge_graph,
             attachment_analysis=attachment_analysis,
         )
         initial_state = prepared_turn.initial_state
@@ -1033,12 +944,12 @@ class TutorAgent:
                                     "message": "正在检索和组织答案，请稍候...",
                                 },
                             )
-                        elif name == "diagram_generate":
+                        elif name == "knowledge_graph_generate":
                             yield stream_event(
                                 "status",
                                 {
                                     "stage": name,
-                                    "message": "正在生成图解说明...",
+                                    "message": "正在生成知识图谱...",
                                 },
                             )
 
@@ -1090,6 +1001,7 @@ class TutorAgent:
         # 发送错误事件
         if graph_error_text:
             yield stream_event("error", graph_error_text)
+            yield stream_event("done", {"session_id": effective_session, "error": True})
             return
 
         # 从状态中提取回复
@@ -1104,6 +1016,7 @@ class TutorAgent:
         # 检查无效回复
         if is_unusable_reply_text(full_reply):
             yield stream_event("error", "模型未返回有效内容，请重试。")
+            yield stream_event("done", {"session_id": effective_session, "error": True})
             return
 
         # 保存回复
@@ -1113,12 +1026,12 @@ class TutorAgent:
                 session_id=effective_session,
                 role="assistant",
                 content=full_reply,
-                diagram=runtime_state.get("diagram"),
+                knowledge_graph=runtime_state.get("knowledge_graph"),
             )
 
             # 启动后台任务处理后续流程
             self._spawn_background(
-                self.memory_layer.post_turn_pipeline(
+                self.memory_layer.after_turn(
                     user_id=user_id,
                     session_id=effective_session,
                     user_message=user_message,
@@ -1130,6 +1043,7 @@ class TutorAgent:
         except Exception as exc:
             logger.exception("[TutorAgent] 回复保存失败")
             yield stream_event("error", f"保存回复失败: {exc}")
+            yield stream_event("done", {"session_id": effective_session, "error": True})
             return
 
         # 发送完成事件
@@ -1140,7 +1054,7 @@ class TutorAgent:
                 "resource_mode": "none",
                 "resource": None,
                 "resources": {
-                    "diagram": runtime_state.get("diagram"),
+                    "knowledge_graph": runtime_state.get("knowledge_graph"),
                     "video": None,
                 },
             },

@@ -43,8 +43,16 @@ class UserAccountStore:
         await session.refresh(user)
         if not verify_password(password, user.password):
             return None
+        # 记录首次登录状态，返回给前端判断是否弹窗
+        is_first_login = user.is_first_login
+        user_read = _read_user(user)
         token = await create_token(user.id, session)
-        return {"token": token, "user": _read_user(user)}
+        # 首次登录后标记为 False
+        if is_first_login:
+            user.is_first_login = False
+            session.add(user)
+            await session.commit()
+        return {"token": token, "user": user_read}
 
     async def update(self, session: AsyncSession, user_id: int, data: UserUpdate) -> User | None:
         user = await session.get(User, user_id)
@@ -79,11 +87,11 @@ class AuthUseCases:
     async def logout(self, session: AsyncSession, token: str) -> None:
         await revoke_token(token, session)
 
-    async def build_profile_on_logout(self, user_id: int) -> None:
+    async def upsert_profile_on_logout(self, user_id: int) -> None:
         """登出后触发画像构建（懒加载 memory runtime）。"""
-        from app.memory import MemoryLayer
+        from app.memory import MemoryService
 
-        await MemoryLayer(module="mentor").build_profile(user_id=user_id)
+        await MemoryService(module="mentor").upsert_profile(user_id=user_id, reason="logout")
 
 
 # 模块级单例

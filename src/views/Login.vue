@@ -158,7 +158,11 @@ const handleLogin = async (formEl: any) => {
         if (data.token) {
           localStorage.setItem('token', data.token)
           ElMessage.success('登录成功！')
-          router.push('/dashboard')
+          if (data.user?.is_first_login) {
+            router.push('/dashboard?onboarding=true')
+          } else {
+            router.push('/dashboard')
+          }
         }
       } catch (err: any) {
         ElMessage.error(getErrorMessage(err, '登录失败，请检查用户名和密码输入是否有误'))
@@ -171,25 +175,23 @@ const handleLogin = async (formEl: any) => {
 </script>
 
 <style scoped>
-/*对于所有JetBrains Mono等宽字体*/
 .split-auth-page {
   height: 100vh;
   width: 100vw;
   display: flex;
   overflow: hidden;
-  background: #FCFDFE;
+  background: var(--color-bg);
 }
 
-/* 左侧样式 - 改为明亮/靛蓝风格 */
 .visual-side {
   flex: 1.2;
   position: relative;
-  background: #EEF2FF;
-  color: #312E81;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4rem; /* 移除了 padding-left，因为内部元素将居中对称 */
+  padding: 4rem;
   overflow: hidden;
 }
 
@@ -198,74 +200,74 @@ const handleLogin = async (formEl: any) => {
   z-index: 10;
   width: 100%;
   max-width: 500px;
-  text-align: center; /* 新增：让内部所有文本居中对称 */
+  text-align: center;
 }
 
 .brand-top {
   display: flex;
   align-items: center;
-  justify-content: center; /* 新增：让 Logo 和文字水平居中 */
-  gap: 1rem;
+  justify-content: center;
+  gap: var(--space-4);
   margin-bottom: 6rem;
 }
 
 .logo-orb {
   width: 44px;
   height: 44px;
-  background: #4F46E5;
-  color: #fff;
-  border-radius: 12px;
+  background: var(--color-primary);
+  color: var(--color-surface);
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .logo-name {
-  font-family: 'Poppins', sans-serif;
-  font-weight: 800;
+  font-family: var(--font-sans);
+  font-weight: var(--weight-extrabold);
   font-size: 1.35rem;
   letter-spacing: -0.05em;
-  color: #4F46E5;
+  color: var(--color-primary);
 }
 
 .hero-title {
   font-size: 4rem;
   line-height: 1.1;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
   margin-bottom: 2rem;
   letter-spacing: -0.03em;
-  color: #312E81;
+  color: var(--color-primary-text);
 }
 
 .hero-desc {
   font-size: 1.15rem;
   line-height: 1.8;
-  color: #475569;
+  color: var(--color-text-secondary);
   margin-bottom: 4rem;
 }
 
 .tech-stats {
   display: flex;
-  justify-content: center; /* 新增：让底部标签水平居中 */
+  justify-content: center;
   gap: 3rem;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .stat-item .val {
-  font-family: 'JetBrains Mono';
+  font-family: var(--font-mono);
   font-size: 0.95rem;
-  font-weight: 700;
-  color: #4F46E5;
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
 }
 
 .stat-item .lab {
   font-size: 0.75rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   letter-spacing: 0.05em;
 }
 
@@ -308,18 +310,17 @@ const handleLogin = async (formEl: any) => {
   height: 300px;
   bottom: -50px;
   left: -50px;
-  background: #C7D2FE;
+  background: var(--color-primary-border);
 }
 
-/* 右侧样式 */
 .form-side {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4rem;
-  background: #fff;
-  box-shadow: -20px 0 50px rgba(0, 0, 0, 0.03);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
   z-index: 5;
 }
 
@@ -332,9 +333,9 @@ const handleLogin = async (formEl: any) => {
   display: none;
   width: 44px;
   height: 44px;
-  background: #4F46E5;
-  color: #fff;
-  border-radius: 12px;
+  background: var(--color-primary);
+  color: var(--color-surface);
+  border-radius: var(--radius-lg);
   align-items: center;
   justify-content: center;
   margin-bottom: 2rem;
@@ -347,44 +348,44 @@ const handleLogin = async (formEl: any) => {
 
 .form-header h2 {
   font-size: 2.2rem;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
   margin-bottom: 0.5rem;
-  color: #1E293B;
+  color: var(--color-text-strong);
 }
 
 .form-header p {
-  color: #64748B;
+  color: var(--color-text-muted);
   font-size: 1.05rem;
 }
 
 .field-label {
   font-size: 0.9rem;
-  font-weight: 700;
-  color: #334155;
+  font-weight: var(--weight-bold);
+  color: var(--color-text-secondary);
   display: flex;
   justify-content: space-between;
   width: 100%;
 }
 
 .field-label small {
-  font-family: 'JetBrains Mono';
+  font-family: var(--font-mono);
   font-size: 0.65rem;
-  color: #94A3B8;
-  font-weight: 400;
+  color: var(--color-text-faint);
+  font-weight: var(--weight-normal);
 }
 
 :deep(.el-input__wrapper) {
-  background: #F8FAFC !important;
-  border-radius: 12px !important;
+  background: var(--color-bg) !important;
+  border-radius: var(--radius-lg) !important;
   box-shadow: none !important;
-  border: 1px solid #E2E8F0 !important;
-  padding: 4px 15px !important;
-  transition: all 0.3s ease !important;
+  border: 1px solid var(--color-border) !important;
+  padding: var(--space-1) 15px !important;
+  transition: all var(--transition-slow) !important;
 }
 
 :deep(.el-input__wrapper.is-focus) {
-  border-color: #4F46E5 !important;
-  background: #fff !important;
+  border-color: var(--color-primary) !important;
+  background: var(--color-surface) !important;
   box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1) !important;
 }
 
@@ -397,14 +398,14 @@ const handleLogin = async (formEl: any) => {
   height: 56px;
   border-radius: 14px !important;
   font-size: 1.1rem;
-  font-weight: 700;
-  background: #4F46E5 !important;
+  font-weight: var(--weight-bold);
+  background: var(--color-primary) !important;
   border: none !important;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow);
 }
 
 .auth-btn:hover {
-  background: #4338CA !important;
+  background: var(--color-primary-hover) !important;
   transform: translateY(-2px);
   box-shadow: 0 10px 25px rgba(79, 70, 229, 0.2);
 }
@@ -413,13 +414,13 @@ const handleLogin = async (formEl: any) => {
   margin-top: 2rem;
   text-align: center;
   font-size: 0.95rem;
-  color: #64748B;
+  color: var(--color-text-muted);
 }
 
 .form-footer .el-link {
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   margin-left: 0.5rem;
-  color: #4F46E5;
+  color: var(--color-primary);
 }
 
 .system-tag {
@@ -428,9 +429,9 @@ const handleLogin = async (formEl: any) => {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  font-family: 'JetBrains Mono';
+  font-family: var(--font-mono);
   font-size: 0.7rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   letter-spacing: 0.05em;
 }
 
@@ -449,8 +450,8 @@ const handleLogin = async (formEl: any) => {
 }
 
 .required-star {
-  color: #F56C6C;
-  margin-right: 4px;
-  font-family: sans-serif;
+  color: var(--color-danger);
+  margin-right: var(--space-1);
+  font-family: var(--font-sans);
 }
 </style>

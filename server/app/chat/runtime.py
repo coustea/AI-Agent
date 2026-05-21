@@ -12,6 +12,7 @@ from typing import Any, Protocol
 from langchain_core.messages import AnyMessage
 
 from app.chat.schemas import TutorState
+from app.prompts import registry
 
 # 支持的图片扩展名集合
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -133,7 +134,6 @@ def build_user_message_record(
 async def prepare_tutor_turn(
     *,
     ctx_service: TutorContextService,
-    prompts: dict[str, str],
     user_id: int,
     user_message: str,
     session_id: str | None,
@@ -141,7 +141,7 @@ async def prepare_tutor_turn(
     file_urls: list[str] | None,
     enable_search: bool,
     enable_long_term_memory: bool,
-    need_diagram: bool | None,
+    need_knowledge_graph: bool | None,
     attachment_analysis: dict[str, Any] | None,
 ) -> PreparedTutorTurn:
     """准备 TutorAgent 对话轮次。
@@ -150,14 +150,13 @@ async def prepare_tutor_turn(
 
     Args:
         ctx_service: 上下文服务。
-        prompts: 提示词字典。
         user_id: 用户ID。
         user_message: 用户消息。
         session_id: 可选的会话ID。
         image_urls: 图片URL列表。
         file_urls: 文件URL列表。
         enable_search: 是否启用搜索。
-        need_diagram: 是否生成图解。
+        need_knowledge_graph: 是否生成知识图谱。
         attachment_analysis: 附件预分析结果。
 
     Returns:
@@ -199,7 +198,7 @@ async def prepare_tutor_turn(
         else ""
     )
     # 格式化系统提示词
-    system_prompt = prompts["tutor_system"].format(
+    system_prompt = registry.get("chat/tutor_system").format(
         profile_context=profile_str,
         fact_context=fact_str,
         recent_chat_context=recent_chat_context,
@@ -214,9 +213,9 @@ async def prepare_tutor_turn(
         "resource_mode": "none",
         "enable_search": bool(enable_search),
         "enable_long_term_memory": bool(enable_long_term_memory),
-        "need_diagram": need_diagram,
-        "diagram": None,
-        "diagram_error": None,
+        "need_knowledge_graph": need_knowledge_graph,
+        "knowledge_graph": None,
+        "knowledge_graph_error": None,
         "route": "",
         "execution_mode": "",
         "profile_context": profile_str,

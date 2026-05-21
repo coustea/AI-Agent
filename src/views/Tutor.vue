@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div :class="['tutor-dashboard', `mode-${chatMode}`]">
 
     <main class="dashboard-main">
@@ -175,13 +175,14 @@
                 :key="msg.id"
                 v-memo="[
                   msg.id === streamingMsgId ? streamDisplayText : msg.content,
-                  msg.diagramGenerating,
-                  msg.diagram,
+                  msg.id === streamingMsgId ? isAIThinking : false,
+                  msg.searchStage,
+                  msg.knowledgeGraphGenerating,
+                  msg.knowledgeGraph,
                   msg.illustrations,
                   msg.attachments
                 ]"
                 :class="['message-row', msg.role]"
-                v-show="!(msg.role === 'ai' && msg.id === streamingMsgId && !getDisplayContent(msg))"
             >
               <div class="msg-avatar">
                 <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
@@ -199,10 +200,23 @@
                     <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
                   </template>
                   <template v-else>
+                    <div v-if="msg.searchStage && !getDisplayContent(msg)" class="search-status-indicator">
+                      <span class="diagram-spinner"></span>
+                      <span class="search-status-text">{{ msg.searchMessage }}</span>
+                    </div>
+                    <div v-else-if="isStreamingMessage(msg) && !getDisplayContent(msg) && !msg.knowledgeGraphGenerating" class="thinking-loader">
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                    </div>
                     <TutorMessageContent
+                        v-else-if="getDisplayContent(msg)"
                         :content="getDisplayContent(msg)"
                         :is-streaming="isStreamingMessage(msg)"
                     />
+                    <div v-else-if="msg.knowledgeGraphGenerating || msg.knowledgeGraph" class="direct-graph-text" style="color: var(--color-text-secondary); font-size: 0.95rem;">
+                      根据您的需求，直接为您生成了知识图谱 👇
+                    </div>
                   </template>
                 </div>
 
@@ -224,38 +238,30 @@
                   />
                 </div>
 
-                <div v-if="msg.diagramGenerating" class="diagram-generating">
-                  <span class="diagram-spinner"></span>
-                  <span>图解正在生成...</span>
+                <div v-if="msg.knowledgeGraphGenerating" class="knowledge-graph-generating-premium">
+                  <div class="kg-gen-header">
+                    <span class="diagram-spinner"></span>
+                    <span class="kg-gen-title">知识图谱构建中</span>
+                    <span class="kg-gen-subtitle">正在深层分析节点关联与脉络...</span>
+                  </div>
+                  <div class="kg-gen-skeleton-area">
+                    <div class="skel-node main"></div>
+                    <div class="skel-edge e1"></div>
+                    <div class="skel-node sub n1"></div>
+                    <div class="skel-edge e2"></div>
+                    <div class="skel-node sub n2"></div>
+                    <div class="skel-edge e3"></div>
+                    <div class="skel-node sub n3"></div>
+                  </div>
                 </div>
 
-                <div v-if="msg.diagram && !isLegacyFallbackDiagram(msg.diagram)" class="msg-diagram" @click="previewDiagram(msg.diagram)">
+                <div v-if="msg.knowledgeGraph" class="msg-knowledge-graph" @click="previewKnowledgeGraph(msg.knowledgeGraph)">
                   <div class="diagram-header">
-                    <span class="diagram-title">{{ msg.diagram.title }}</span>
-                    <span class="diagram-type-tag">{{ msg.diagram.type }}</span>
+                    <span class="diagram-title">{{ msg.knowledgeGraph.topic || '知识图谱' }}</span>
+                    <span class="diagram-type-tag">Graph</span>
                   </div>
-                  <div class="diagram-summary" v-if="msg.diagram.summary">{{ msg.diagram.summary }}</div>
-
-                  <div v-if="msg.diagram.image_url" class="diagram-image-wrapper">
-                    <el-image
-                        :src="msg.diagram.image_url"
-                        :preview-src-list="[msg.diagram.image_url]"
-                        :alt="msg.diagram.title || 'AI 图解'"
-                        class="diagram-image"
-                        fit="contain"
-                        @click.stop
-                    />
-                  </div>
-                  <div
-                      v-else
-                      class="diagram-svg-container"
-                  >
-                    <MarkdownPreview
-                      class="diagram-markdown-preview"
-                      :id="`chat-diagram-${msg.id}`"
-                      :content="toMermaidMarkdown(msg.diagram.render.source)"
-                    />
-                  </div>
+                  <div class="diagram-summary" v-if="msg.knowledgeGraph.summary">{{ msg.knowledgeGraph.summary }}</div>
+                  <KnowledgeGraphView :result-data="msg.knowledgeGraph" compact />
                 </div>
               </div>
             </div>
@@ -307,12 +313,12 @@
                         <el-icon class="item-arrow"><ArrowRight /></el-icon>
                       </div>
                     </div>
-                    <div class="action-item" @click="handleImageToggle">
-                      <div class="item-icon-wrapper" :class="needDiagram ? 'bg-active' : 'bg-purple'">
+                    <div class="action-item" @click="handleKnowledgeGraphToggle">
+                      <div class="item-icon-wrapper" :class="needKnowledgeGraph ? 'bg-active' : 'bg-purple'">
                         <el-icon><DataLine /></el-icon>
                       </div>
                       <div class="item-content">
-                        <span class="item-text">{{ needDiagram ? '取消生成图解' : '生成图解' }}</span>
+                        <span class="item-text">{{ needKnowledgeGraph ? '取消生成图谱' : '生成图谱' }}</span>
                         <el-icon class="item-arrow"><ArrowRight /></el-icon>
                       </div>
                     </div>
@@ -341,12 +347,12 @@
                   </button>
                 </el-tooltip>
 
-                <div class="active-media-chip" v-if="needDiagram" @click="handleImageToggle" title="取消生成图解">
+                <div class="active-media-chip" v-if="needKnowledgeGraph" @click="handleKnowledgeGraphToggle" title="取消生成图谱">
                   <div class="chip-icon-circle">
                     <el-icon class="icon-default"><DataLine /></el-icon>
                     <el-icon class="icon-hover"><Close /></el-icon>
                   </div>
-                  <span>图解</span>
+                  <span>图谱</span>
                 </div>
 
                 <div class="active-media-chip" v-if="generateVideo" @click="handleVideoToggle" title="取消生成视频">
@@ -420,81 +426,6 @@
 
         <input ref="fileInput" type="file" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onCombinedFileSelected" />
       </section>
-
-      <aside class="profile-sidebar">
-        <div class="sidebar-header">
-          <div class="header-title-row">
-            <h3>动态学习画像</h3>
-            <div class="sync-badge" :class="{ 'is-syncing': profileUpdated }">
-              <span class="dot"></span> <span>Live</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="profile-cards-container" v-if="profileCards.length > 0">
-          <div
-              v-for="card in profileCards"
-              :key="card.key"
-              :class="['insight-card', { 'special-card': card.key === '最近变化' || card.key === '推荐辅导策略' }]"
-          >
-            <div class="card-header">
-              <div class="card-icon-wrap">
-                <el-icon><component :is="getProfileCardIcon(card.key)" /></el-icon>
-              </div>
-              <span class="card-title">{{ card.title }}</span>
-            </div>
-            <div class="card-body">
-              <div class="card-content">
-                <div v-for="(line, idx) in card.content.split('\n')" :key="idx" class="content-line">
-                  <template v-if="line.trim().startsWith('-') || line.trim().startsWith('*') || line.trim().startsWith('•')">
-                    <span class="bullet-item">
-                      <span class="dot-marker"></span>
-                      <span class="text">{{ line.trim().replace(/^[-*•]\s*/, '') }}</span>
-                    </span>
-                  </template>
-                  <template v-else-if="line.trim()">
-                    <p class="plain-text">{{ line }}</p>
-                  </template>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="profile-empty-state" v-else>
-          <div class="empty-visual-container">
-            <div class="pulse-ring"></div>
-            <div class="pulse-ring delay-1"></div>
-            <div class="pulse-ring delay-2"></div>
-            <div class="empty-visual">
-              <el-icon><Cpu /></el-icon>
-            </div>
-          </div>
-          <div class="empty-text-wrap">
-            <h4>待捕获画像特征</h4>
-            <p>由于对话样本较少，您的动态学习画像仍在生成中。多和我交流，我会为您建立更精准的画像。</p>
-          </div>
-          <div class="empty-hints">
-            <div class="hint-item"><el-icon><ChatLineRound /></el-icon> <span>深度交流</span></div>
-            <div class="hint-item"><el-icon><Aim /></el-icon> <span>定位痛点</span></div>
-            <div class="hint-item"><el-icon><TrendCharts /></el-icon> <span>反馈进度</span></div>
-          </div>
-        </div>
-
-        <div class="long-term-memory-section">
-          <div class="memory-header-row">
-            <div class="memory-title-wrap">
-              <span class="memory-title">长期记忆</span>
-              <el-icon class="info-icon"><InfoFilled /></el-icon>
-            </div>
-            <div class="memory-switch-wrap">
-              <span class="switch-status">{{ memoryEnabled ? '已启用' : '未启用' }}</span>
-              <el-switch v-model="memoryEnabled" size="small" />
-            </div>
-          </div>
-          <p class="memory-desc">将重要信息存入长期记忆，以提供更个性化的辅导服务。</p>
-        </div>
-      </aside>
     </main>
 
     <div
@@ -549,43 +480,28 @@
       </transition>
     </div>
 
-    <!-- 知识图解预览对话框 -->
+    <!-- 知识图谱预览对话框 -->
     <el-dialog
-        v-model="diagramPreviewVisible"
-        :title="diagramPreviewData?.title || '知识图解预览'"
+        v-model="knowledgeGraphPreviewVisible"
+        :title="knowledgeGraphPreviewData?.topic || '知识图谱预览'"
         width="85%"
         top="5vh"
         destroy-on-close
         class="diagram-preview-dialog"
     >
-      <div class="diagram-preview-body" v-if="diagramPreviewData">
+      <div class="diagram-preview-body" v-if="knowledgeGraphPreviewData">
         <div class="preview-header-meta">
-          <span class="preview-type-tag">{{ diagramPreviewData.type }}</span>
-          <p class="preview-summary">{{ diagramPreviewData.summary }}</p>
+          <span class="preview-type-tag">Knowledge Graph</span>
+          <p class="preview-summary">{{ knowledgeGraphPreviewData.summary }}</p>
         </div>
         
         <div class="preview-content">
-          <img
-              v-if="diagramPreviewData.image_url"
-              :src="diagramPreviewData.image_url"
-              :alt="diagramPreviewData.title"
-              class="preview-image"
-          />
-          <div
-              v-else
-              class="preview-svg-container"
-          >
-            <MarkdownPreview
-              class="diagram-markdown-preview"
-              id="diagram-preview-dialog"
-              :content="toMermaidMarkdown(diagramPreviewData.render.source)"
-            />
-          </div>
+          <KnowledgeGraphView :result-data="knowledgeGraphPreviewData" />
         </div>
         
         <div class="preview-footer">
-          <el-button type="primary" plain @click="copyDiagramSource(diagramPreviewData)">复制 Mermaid 源码</el-button>
-          <el-button @click="diagramPreviewVisible = false">关闭</el-button>
+          <el-button type="primary" plain @click="copyKnowledgeGraphJson(knowledgeGraphPreviewData)">复制图谱 JSON</el-button>
+          <el-button @click="knowledgeGraphPreviewVisible = false">关闭</el-button>
         </div>
       </div>
     </el-dialog>
@@ -599,14 +515,13 @@ import {
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
   Plus, Delete, Close, Top, ArrowRight,
   EditPen, Search, Timer, VideoCamera, DataLine,
-  CircleCheckFilled,
-  InfoFilled, Medal, Aim, TrendCharts
+  CircleCheckFilled
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getErrorMessage } from '@/utils/http'
 import TutorMessageContent from '@/components/TutorMessageContent.vue'
 
-import { getProfile } from '@/api/ai'
+import { triggerGlobalProfileRefresh } from '@/composables/useGlobalProfile'
 import {
   streamChat,
   uploadFile,
@@ -621,7 +536,7 @@ import { getMe } from '@/api/auth'
 import { useLearningTracker } from '@/composables/useLearningTracker'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
-import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
 
 defineOptions({ name: 'Tutor' })
 
@@ -637,23 +552,12 @@ interface Attachment {
   type: string;
   name: string
 }
-interface DiagramData {
-  type: string
-  title: string
+interface KnowledgeGraphData {
+  topic: string
   summary: string
-  spec: Record<string, unknown>
-  render: {
-    engine: string
-    format: string
-    source: string
-  }
-  image_url?: string
-}
-
-const isLegacyFallbackDiagram = (diagram: DiagramData | null | undefined): boolean => {
-  if (!diagram) return false
-  const title = String(diagram.title || '')
-  return title.includes('语音图解（即时）') || title.includes('自动图解（兜底）')
+  nodes: Record<string, unknown>[]
+  edges: Record<string, unknown>[]
+  neo4j?: Record<string, unknown>
 }
 
 interface ChatMsg {
@@ -663,20 +567,16 @@ interface ChatMsg {
   time: string
   attachments?: Attachment[] | null
   illustrations?: string[]
-  diagram?: DiagramData | null
-  diagramGenerating?: boolean
-}
-interface ProfileCard {
-  key: string
-  title: string
-  content: string
+  knowledgeGraph?: KnowledgeGraphData | null
+  knowledgeGraphGenerating?: boolean
+  searchStage?: string
+  searchMessage?: string
 }
 
-const normalizeDiagramData = (diagram: Record<string, unknown> | null | undefined): DiagramData | null => {
-  if (!diagram || typeof diagram !== 'object') return null
-  const render = diagram.render
-  if (!render || typeof render !== 'object') return null
-  return diagram as unknown as DiagramData
+const normalizeKnowledgeGraphData = (graph: Record<string, unknown> | null | undefined): KnowledgeGraphData | null => {
+  if (!graph || typeof graph !== 'object') return null
+  if (!Array.isArray(graph.nodes)) return null
+  return graph as unknown as KnowledgeGraphData
 }
 
 const DEFAULT_SESSION_TITLE = '新对话'
@@ -691,7 +591,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
 const enableWebSearch = ref(false)
-const needDiagram = ref(false)
+const needKnowledgeGraph = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
 
@@ -699,10 +599,10 @@ const isRecording = ref(false)
 const isVoiceChatting = ref(false)
 const lastAsrText = ref('')
 const hasSpeechDetected = ref(false)
-const debugNeedDiagramEnabled = ref(false)
-const debugDiagramReceivedAt = ref(0)
-const debugBackendNeedDiagram = ref<boolean | null>(null)
-const debugBackendDiagramGenerated = ref<boolean | null>(null)
+const debugNeedKnowledgeGraphEnabled = ref(false)
+const debugKnowledgeGraphReceivedAt = ref(0)
+const debugBackendNeedKnowledgeGraph = ref<boolean | null>(null)
+const debugBackendKnowledgeGraphGenerated = ref<boolean | null>(null)
 const lastAsrCommittedText = ref('')
 let lastAsrCommitAt = 0
 
@@ -744,8 +644,8 @@ const {
   },
   onDiagram: (diagram) => {
     if (!diagram) return
-    debugDiagramReceivedAt.value = Date.now()
-    debugBackendDiagramGenerated.value = true
+    debugKnowledgeGraphReceivedAt.value = Date.now()
+    debugBackendKnowledgeGraphGenerated.value = true
     const aiMsg = (
       (streamingMsgId.value !== null
         ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
@@ -753,17 +653,17 @@ const {
       || [...messages.value].reverse().find(m => m.role === 'ai')
     )
     if (!aiMsg) return
-    aiMsg.diagram = diagram as DiagramData
-    aiMsg.diagramGenerating = false
+    aiMsg.knowledgeGraph = normalizeKnowledgeGraphData(diagram as Record<string, unknown>)
+    aiMsg.knowledgeGraphGenerating = false
     scrollToBottom()
   },
   onDiagramDebug: (data) => {
     if (!data) return
     if (typeof data.need_diagram === 'boolean') {
-      debugBackendNeedDiagram.value = data.need_diagram
+      debugBackendNeedKnowledgeGraph.value = data.need_diagram
     }
     if (data.phase === 'end' && typeof data.diagram_generated === 'boolean') {
-      debugBackendDiagramGenerated.value = data.diagram_generated
+      debugBackendKnowledgeGraphGenerated.value = data.diagram_generated
     }
   },
   onAssistantComplete: () => {
@@ -775,25 +675,25 @@ const {
       commitStreamTextToMessage(streamingMsgId.value)
     }
     const lastAiMsg = [...messages.value].reverse().find(m => m.role === 'ai')
-    if (lastAiMsg && lastAiMsg.diagramGenerating && !lastAiMsg.diagram) {
-      lastAiMsg.diagramGenerating = false
+    if (lastAiMsg && lastAiMsg.knowledgeGraphGenerating && !lastAiMsg.knowledgeGraph) {
+      lastAiMsg.knowledgeGraphGenerating = false
     }
     isAIThinking.value = false
     streamingMsgId.value = null
     streamingMsgRef.value = null
-    scheduleProfilePoll()
+    triggerGlobalProfileRefresh()
     if (isVoiceChatting.value && chatMode.value === 'digital_human' && isAvatarConnected.value) {
       window.setTimeout(async () => {
         if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
-        await startVad(needDiagram.value)
+        await startVad(needKnowledgeGraph.value)
         isRecording.value = isVadListening.value
       }, 350)
     }
   },
   onAsrResult: (text) => {
     if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
-      setAvatarNeedDiagram(needDiagram.value)
-      debugNeedDiagramEnabled.value = needDiagram.value
+      setAvatarNeedDiagram(needKnowledgeGraph.value)
+      debugNeedKnowledgeGraphEnabled.value = needKnowledgeGraph.value
     }
     const normalized = text.replace(/\s+/g, ' ').trim()
     lastAsrText.value = normalized
@@ -817,11 +717,11 @@ const {
         messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
         streamingMsgId.value = aiMsgId
       }
-      if (needDiagram.value) {
+      if (needKnowledgeGraph.value) {
         const aiMsg = streamingMsgId.value !== null
           ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
           : null
-        if (aiMsg) aiMsg.diagramGenerating = true
+        if (aiMsg) aiMsg.knowledgeGraphGenerating = true
       }
       isAIThinking.value = true
       scrollToBottom()
@@ -845,7 +745,7 @@ const {
   onError: (msg) => {
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
-    stopDiagramGeneratingForCurrentAi()
+    stopKnowledgeGraphGeneratingForCurrentAi()
     if (streamingMsgId.value !== null) {
       flushPendingStreamText(true)
       commitStreamTextToMessage(streamingMsgId.value)
@@ -886,11 +786,6 @@ let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 const isAsrProcessing = ref(false)
 let asrProcessingTimer: ReturnType<typeof setTimeout> | null = null
 
-const profileUpdated = ref(false)
-const memoryEnabled = ref(false)
-const profileCards = ref<ProfileCard[]>([])
-let profilePollTimers: ReturnType<typeof setTimeout>[] = []
-
 const tutorTracker = useLearningTracker({
   context: 'tutor',
   get sessionId() {
@@ -922,7 +817,7 @@ const clearAvatarThinkingTimeout = () => {
   }
 }
 
-const stopDiagramGeneratingForCurrentAi = () => {
+const stopKnowledgeGraphGeneratingForCurrentAi = () => {
   const target = (
     (streamingMsgId.value !== null
       ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
@@ -930,7 +825,7 @@ const stopDiagramGeneratingForCurrentAi = () => {
     || [...messages.value].reverse().find(m => m.role === 'ai')
   )
   if (target) {
-    target.diagramGenerating = false
+    target.knowledgeGraphGenerating = false
   }
 }
 
@@ -957,7 +852,7 @@ const startAvatarThinkingTimeout = () => {
     if (chatMode.value !== 'digital_human') return
     if (!isAIThinking.value) return
     isAIThinking.value = false
-    stopDiagramGeneratingForCurrentAi()
+    stopKnowledgeGraphGeneratingForCurrentAi()
     streamingMsgId.value = null
     ElMessage.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
   }, 30000)
@@ -1022,17 +917,18 @@ const digitalHumanStatusText = computed(() => {
   return '倾听就绪'
 })
 
-const diagramPreviewVisible = ref(false)
-const diagramPreviewData = ref<DiagramData | null>(null)
+const knowledgeGraphPreviewVisible = ref(false)
+const knowledgeGraphPreviewData = ref<KnowledgeGraphData | null>(null)
 
-const previewDiagram = (diagram: DiagramData) => {
-  diagramPreviewData.value = diagram
-  diagramPreviewVisible.value = true
+const previewKnowledgeGraph = (graph: KnowledgeGraphData) => {
+  knowledgeGraphPreviewData.value = graph
+  knowledgeGraphPreviewVisible.value = true
 }
 
-const copyDiagramSource = async (diagram: DiagramData) => {
-  if (diagram?.render?.source) {
-    await copyToClipboard(diagram.render.source)
+const copyKnowledgeGraphJson = async (graph: KnowledgeGraphData) => {
+  if (graph) {
+    await copyToClipboard(JSON.stringify(graph, null, 2))
+    ElMessage.success({ message: '知识图谱 JSON 已复制', plain: true })
   }
 }
 
@@ -1071,23 +967,6 @@ const handleMessageClick = (e: MouseEvent) => {
       }, 2000)
     }
   }
-}
-
-const PROFILE_CARD_ICON_MAP: Record<string, any> = {
-  基础信息: Medal,
-  当前学习项目背景: Aim,
-  技术能力判断: Aim,
-  学习偏好: Timer,
-  当前薄弱点: Aim,
-  兴趣方向: Medal,
-  推荐辅导策略: Service,
-  最近变化: Timer,
-}
-
-const normalizeCardKey = (title: string) => title.replace(/[\/\s]/g, '')
-
-const getProfileCardIcon = (key: string) => {
-  return PROFILE_CARD_ICON_MAP[key] || DataLine
 }
 
 const formatRelativeTime = (dateStr: string) => {
@@ -1333,7 +1212,7 @@ const finishStream = (messageId: number) => {
   isAIThinking.value = false
   streamingMsgId.value = null
   streamingMsgRef.value = null
-  scheduleProfilePoll()
+  triggerGlobalProfileRefresh()
   abortController = null
 }
 
@@ -1386,12 +1265,6 @@ const autoResize = () => {
     isExpandedInput.value = false
     el.style.height = '24px'
   }
-}
-
-const toMermaidMarkdown = (source: string | undefined): string => {
-  const trimmed = String(source || '').trim()
-  if (!trimmed) return ''
-  return /^```/.test(trimmed) ? trimmed : `\`\`\`mermaid\n${trimmed}\n\`\`\``
 }
 
 const getPointerPosition = (e: MouseEvent | TouchEvent) => {
@@ -1501,79 +1374,6 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
   }
 }
 
-const fetchProfile = async () => {
-  try {
-    const res = await getProfile()
-    const data = res.data.data
-    if (!data) return
-
-    // 从 profile_json.dimensions 提取画像数据
-    const profileJson = data.profile_json || {}
-    const dimensions = profileJson.dimensions || {}
-    const nextCards: ProfileCard[] = []
-
-    // 维度名称映射（后端 key -> 前端显示名称）
-    const dimensionNames: Record<string, string> = {
-      knowledge_foundation: '知识基础',
-      learning_goal: '学习目标',
-      cognitive_style: '认知风格',
-      weakness_points: '薄弱环节',
-      practice_ability: '实践能力',
-      mistake_preference: '易错偏好',
-      interaction_preference: '交互偏好',
-      learning_history: '学习历史',
-    }
-
-    // 提取有内容的维度
-    for (const [key, dim] of Object.entries(dimensions)) {
-      const dimData = dim as { name?: string; summary?: string; evidence?: string[]; confidence?: number }
-      if (dimData.summary || (dimData.evidence && dimData.evidence.length > 0)) {
-        const title = dimensionNames[key] || dimData.name || key
-        let content = dimData.summary || ''
-        if (dimData.evidence && dimData.evidence.length > 0) {
-          content += '\n' + dimData.evidence.map(e => `- ${e}`).join('\n')
-        }
-        nextCards.push({
-          key: normalizeCardKey(title),
-          title: title,
-          content: content.trim() || '暂无明显信息',
-        })
-      }
-    }
-
-    // 添加推荐策略
-    const strategiesRaw = profileJson.recommended_strategy
-    const strategies: string[] = Array.isArray(strategiesRaw) ? strategiesRaw : []
-    if (strategies.length > 0) {
-      nextCards.push({
-        key: '推荐辅导策略',
-        title: '推荐辅导策略',
-        content: strategies.map((s: string) => `- ${s}`).join('\n'),
-      })
-    }
-
-    const changed = JSON.stringify(nextCards) !== JSON.stringify(profileCards.value)
-    profileCards.value = nextCards
-
-    if (changed) {
-      profileUpdated.value = true
-      setTimeout(() => { profileUpdated.value = false }, 4000)
-    }
-  } catch {
-  }
-}
-
-const scheduleProfilePoll = () => {
-  profilePollTimers.forEach(t => clearTimeout(t))
-  profilePollTimers = []
-
-  const delays = [2000, 5000, 10000]
-  delays.forEach((delay) => {
-    const timer = setTimeout(() => fetchProfile(), delay)
-    profilePollTimers.push(timer)
-  })
-}
-
 const fetchCurrentUser = async () => {
   if (currentUserId.value) return
   try {
@@ -1634,7 +1434,7 @@ const switchSession = async (sessionId: string) => {
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
       illustrations: [],
-      diagram: normalizeDiagramData(msg.diagram),
+      knowledgeGraph: normalizeKnowledgeGraphData(msg.knowledge_graph),
     }))
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = mapped.filter((item, idx) => {
@@ -1684,12 +1484,12 @@ const removeAttachment = (idx: number) => {
   pendingFiles.value.splice(idx, 1)
 }
 
-const handleImageToggle = () => {
+const handleKnowledgeGraphToggle = () => {
   hasToggledMedia.value = true
-  if (needDiagram.value) {
-    needDiagram.value = false
+  if (needKnowledgeGraph.value) {
+    needKnowledgeGraph.value = false
   } else {
-    needDiagram.value = true
+    needKnowledgeGraph.value = true
     generateVideo.value = false
   }
 }
@@ -1700,7 +1500,7 @@ const handleVideoToggle = () => {
     generateVideo.value = false
   } else {
     generateVideo.value = true
-    needDiagram.value = false
+    needKnowledgeGraph.value = false
   }
 }
 
@@ -1712,7 +1512,7 @@ const handleVoiceToggle = async () => {
       hasSpeechDetected.value = true
       startAsrProcessing(8000)
     } else {
-      await startVad(needDiagram.value)
+      await startVad(needKnowledgeGraph.value)
       isRecording.value = isVadListening.value
       clearAsrProcessing()
     }
@@ -1737,7 +1537,7 @@ const handleVoiceChatToggle = async () => {
         setPlayerContainer(container)
       }
     })
-    await startVad(needDiagram.value)
+    await startVad(needKnowledgeGraph.value)
     isRecording.value = isVadListening.value
     ElMessage.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
@@ -1768,7 +1568,7 @@ const handleSend = async () => {
   const text = userInput.value.trim()
   const hasFiles = pendingFiles.value.length > 0
   if ((!text && !hasFiles) || isAIThinking.value) return
-  const shouldGenerateDiagram = needDiagram.value
+  const shouldGenerateKnowledgeGraph = needKnowledgeGraph.value
 
   if (chatMode.value === 'digital_human' && !isAvatarConnected.value) {
     ElMessage.warning({ message: '数字人连接已断开，请先点击“重新连接”后再发送', plain: true })
@@ -1822,7 +1622,6 @@ const handleSend = async () => {
   })
 
   isAIThinking.value = true
-  profileUpdated.value = false
   scrollToBottom()
 
   const currentPending = [...pendingFiles.value]
@@ -1891,11 +1690,11 @@ const handleSend = async () => {
     startAvatarThinkingTimeout()
     const aiMsg = messages.value.find(m => m.id === aiMsgId)
     if (aiMsg) {
-      aiMsg.diagramGenerating = shouldGenerateDiagram
+      aiMsg.knowledgeGraphGenerating = shouldGenerateKnowledgeGraph
     }
     sendAvatarText({
       text: text || '请分析附件',
-      need_diagram: shouldGenerateDiagram,
+      need_diagram: shouldGenerateKnowledgeGraph,
       image_urls: imageUrls.length > 0 ? imageUrls : undefined,
       file_urls: fileUrls.length > 0 ? fileUrls : undefined,
       speech_rate: avatarSpeechRate.value,
@@ -1909,7 +1708,7 @@ const handleSend = async () => {
         session_id: currentSessionId.value,
         image_urls: imageUrls.length > 0 ? imageUrls : undefined,
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
-        need_diagram: shouldGenerateDiagram,
+        need_knowledge_graph: shouldGenerateKnowledgeGraph,
         generate_video: generateVideo.value,
         enable_search: enableWebSearch.value,
       },
@@ -1921,7 +1720,7 @@ const handleSend = async () => {
         const finishedSessionId = currentSessionId.value
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
-          aiMsg.diagramGenerating = false
+          aiMsg.knowledgeGraphGenerating = false
         }
         if (pendingRenderQueueStart >= pendingRenderQueue.length) {
           stopStreamFlushLoop()
@@ -1938,12 +1737,12 @@ const handleSend = async () => {
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
-          aiMsg.diagramGenerating = false
+          aiMsg.knowledgeGraphGenerating = false
           if (!aiMsg.content) {
             aiMsg.content = `Generate failed: ${err.message}`
           }
         }
-        stopDiagramGeneratingForCurrentAi()
+        stopKnowledgeGraphGeneratingForCurrentAi()
         isAIThinking.value = false
         streamingMsgId.value = null
         streamingMsgRef.value = null
@@ -1952,11 +1751,25 @@ const handleSend = async () => {
       (evt) => {
         if (evt.event === 'status') {
           const payload = evt.data as { stage?: string; message?: string }
-          if (payload?.stage !== 'diagram_generate' || !shouldGenerateDiagram) return
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg) return
-          aiMsg.diagramGenerating = true
-          scrollToBottom()
+
+          if (payload?.stage === 'search_node' || payload?.stage === 'spark_summary') {
+            aiMsg.searchStage = payload.stage
+            aiMsg.searchMessage = payload.message || '正在检索和组织答案，请稍候...'
+            scrollToBottom()
+            return
+          }
+          if (payload?.stage === 'direct_answer' || payload?.stage === 'attachment_answer') {
+            aiMsg.searchStage = undefined
+            aiMsg.searchMessage = undefined
+            return
+          }
+          if (payload?.stage === 'knowledge_graph_generate') {
+            aiMsg.knowledgeGraphGenerating = true
+            scrollToBottom()
+            return
+          }
           return
         }
 
@@ -1974,13 +1787,13 @@ const handleSend = async () => {
         }
 
         if (evt.event === 'done') {
-          const payload = evt.data as { resources?: { diagram?: DiagramData | null } }
-          const diagram = payload?.resources?.diagram
+          const payload = evt.data as { resources?: { knowledge_graph?: KnowledgeGraphData | null } }
+          const graph = payload?.resources?.knowledge_graph
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg) return
-          aiMsg.diagramGenerating = false
-          if (!diagram) return
-          aiMsg.diagram = diagram
+          aiMsg.knowledgeGraphGenerating = false
+          if (!graph) return
+          aiMsg.knowledgeGraph = graph
           scrollToBottom()
         }
       },
@@ -1991,7 +1804,7 @@ watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
     sessionSidebarCollapsed.value = true
     await connectAvatar()
-    setAvatarNeedDiagram(needDiagram.value)
+    setAvatarNeedDiagram(needKnowledgeGraph.value)
     nextTick(() => {
       const container = canvasRef.value?.getContainer()
       if (container) {
@@ -2004,8 +1817,8 @@ watch(chatMode, async (newMode) => {
   }
 })
 
-watch(needDiagram, (enabled) => {
-  debugNeedDiagramEnabled.value = enabled
+watch(needKnowledgeGraph, (enabled) => {
+  debugNeedKnowledgeGraphEnabled.value = enabled
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     setAvatarNeedDiagram(enabled)
   }
@@ -2022,7 +1835,6 @@ onMounted(async () => {
   if (sessions.value.length > 0) {
     await switchSession(sessions.value[0]!.id)
   }
-  await fetchProfile()
   tutorTracker.start()
 })
 
@@ -2038,7 +1850,6 @@ onBeforeUnmount(() => {
   isStreamDone = false
   streamingMsgRef.value = null
   abortController?.abort()
-  profilePollTimers.forEach(t => clearTimeout(t))
   if (dimTimer) clearTimeout(dimTimer)
   document.removeEventListener('mousedown', handleGlobalClick)
   document.removeEventListener('touchstart', handleGlobalClick)
@@ -2049,23 +1860,41 @@ onBeforeUnmount(() => {
 /* 覆盖 ElPopover 的默认内边距 */
 .el-popover.custom-plus-popover {
   padding: 0 !important;
-  border-radius: 16px !important;
+  border-radius: var(--radius-xl) !important;
   border: none !important;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.search-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--el-color-primary-light-9);
+  border: 1px solid var(--el-color-primary-light-8);
+  border-radius: 10px;
+  margin-top: 10px;
+  color: var(--el-color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  width: fit-content;
+}
+
+.search-status-text {
+  animation: pulse-text 1.5s infinite ease-in-out;
 }
 </style>
 
 <style scoped>
-@import url('https://gs.jurieo.com/gemini/fonts-googleapis/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
 .tutor-dashboard {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden; /* 防止最外层溢出 */
-  background-color: #FFFFFF;
-  font-family: 'Inter', system-ui, sans-serif;
-  color: #0F172A;
+  overflow: hidden;
+  background-color: var(--color-surface);
+  font-family: var(--font-sans);
+  color: var(--color-text);
   box-sizing: border-box;
 }
 
@@ -2079,11 +1908,11 @@ onBeforeUnmount(() => {
 .session-sidebar {
   position: relative;
   width: 240px;
-  background: #FAFAFA;
-  border-right: 1px solid #E2E8F0;
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease;
+  transition: width var(--transition-slow);
   flex-shrink: 0;
 }
 
@@ -2091,7 +1920,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 12px 8px 16px;
+  padding: var(--space-4) var(--space-3) var(--space-2) var(--space-4);
   height: 56px;
   box-sizing: border-box;
   flex-shrink: 0;
@@ -2100,27 +1929,27 @@ onBeforeUnmount(() => {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #0F172A;
-  font-weight: 700;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-weight: var(--weight-bold);
   font-size: 1.05rem;
 }
 
 .brand-icon {
-  color: #4F46E5;
+  color: var(--color-primary);
   font-size: 1.25rem;
 }
 
 .collapse-toggle-btn {
   background: transparent;
   border: none;
-  color: #64748B;
+  color: var(--color-text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
   width: 36px;
   height: 36px;
   padding: 0;
@@ -2128,8 +1957,8 @@ onBeforeUnmount(() => {
 }
 
 .collapse-toggle-btn:hover:not([disabled]) {
-  background: #E2E8F0;
-  color: #0F172A;
+  background: var(--color-border);
+  color: var(--color-text);
 }
 
 .collapse-toggle-btn[disabled] {
@@ -2144,7 +1973,7 @@ onBeforeUnmount(() => {
 }
 
 .standard-sidebar-nav {
-  padding: 8px 16px 16px;
+  padding: var(--space-2) var(--space-4) var(--space-4);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -2154,54 +1983,54 @@ onBeforeUnmount(() => {
   background: transparent;
   border: 1px solid transparent;
   box-shadow: none;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-radius: 999px;
+  gap: var(--space-3);
+  padding: 10px var(--space-4);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-size: 0.95rem;
-  transition: all 0.2s ease;
-  color: #475569;
+  transition: all var(--transition-base);
+  color: var(--color-text-secondary);
 }
 
 .nav-item:hover {
-  background: #EBF0F5;
-  color: #475569;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
 }
 
 .nav-item.search-item {
-  font-weight: 400 !important;
+  font-weight: var(--weight-normal) !important;
 }
 
 .nav-item.new-chat-btn {
-  font-weight: 400 !important;
+  font-weight: var(--weight-normal) !important;
 }
 
 .nav-item.history-collapsed-btn {
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 .nav-item.history-collapsed-btn:hover {
-  background: #E2E8F0;
-  color: #0F172A;
+  background: var(--color-border);
+  color: var(--color-text);
 }
 
 .history-section-header {
-  padding: 12px 16px 8px 16px;
+  padding: var(--space-3) var(--space-4) var(--space-2) var(--space-4);
   font-size: 1.05rem;
-  font-weight: 700;
-  color: #0F172A;
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   text-transform: none;
   letter-spacing: normal;
   user-select: none;
 }
 .history-section-header .el-icon {
   font-size: 1.25rem;
-  color: #4F46E5;
+  color: var(--color-primary);
 }
 
 .popover-search-container {
@@ -2210,12 +2039,12 @@ onBeforeUnmount(() => {
 }
 
 :deep(.el-input__wrapper) {
-  border-radius: 8px;
-  box-shadow: 0 0 0 1px #E2E8F0 inset;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px var(--color-border) inset;
 }
 
 :deep(.el-input__wrapper:hover) {
-  box-shadow: 0 0 0 1px #CBD5E1 inset;
+  box-shadow: 0 0 0 1px var(--color-border-hover) inset;
 }
 
 :deep(.el-input__wrapper.is-focus) {
@@ -2227,14 +2056,14 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .search-results-scroll {
-  margin-top: 12px;
+  margin-top: var(--space-3);
   max-height: 250px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: var(--space-1);
 }
 
 .search-results-scroll .session-empty {
@@ -2244,16 +2073,16 @@ onBeforeUnmount(() => {
 
 .popover-title {
   font-size: 0.8rem;
-  font-weight: 600;
-  color: #94A3B8;
-  padding: 4px 8px 8px;
-  border-bottom: 1px solid #E2E8F0;
-  margin-bottom: 8px;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-faint);
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-2);
 }
 
 .popover-session-scroll .session-item {
   margin: 0;
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
 }
 
 .session-list {
@@ -2265,27 +2094,27 @@ onBeforeUnmount(() => {
 }
 
 .session-item {
-  margin-bottom: 4px;
-  color: #475569;
+  margin-bottom: var(--space-1);
+  color: var(--color-text-secondary);
 }
 .session-item:hover {
-  background: #FFFFFF;
-  border-color: #E2E8F0;
-  color: #334155;
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
 .session-item.active {
-  color: #4F46E5;
-  font-weight: 600;
+  color: var(--color-primary);
+  font-weight: var(--weight-semibold);
 }
 
 .session-icon {
   font-size: 1.15rem;
-  color: #94A3B8;
-  transition: color 0.2s;
+  color: var(--color-text-faint);
+  transition: color var(--transition-base);
 }
 
 .session-item.active .session-icon {
-  color: #4F46E5;
+  color: var(--color-primary);
 }
 
 .session-info {
@@ -2305,14 +2134,14 @@ onBeforeUnmount(() => {
 
 .session-time {
   font-size: 0.7rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   white-space: nowrap;
 }
 
 .del-btn {
   opacity: 0;
-  color: #EF4444;
-  padding: 4px;
+  color: var(--color-danger);
+  padding: var(--space-1);
 }
 
 .session-item:hover .del-btn {
@@ -2323,26 +2152,26 @@ onBeforeUnmount(() => {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .illustration-image {
   width: min(480px, 100%);
   border-radius: 10px;
-  border: 1px solid #E2E8F0;
-  background: #F8FAFC;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
 }
 
-.diagram-generating {
+.knowledge-graph-generating {
   width: min(560px, 100%);
-  margin-top: 12px;
-  padding: 10px 12px;
+  margin-top: var(--space-3);
+  padding: 10px var(--space-3);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: #475569;
-  background: #F8FAFC;
-  border: 1px dashed #CBD5E1;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border-hover);
   border-radius: 10px;
   font-size: 0.85rem;
 }
@@ -2350,9 +2179,9 @@ onBeforeUnmount(() => {
 .diagram-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid #CBD5E1;
-  border-top-color: #4F46E5;
-  border-radius: 50%;
+  border: 2px solid var(--color-border-hover);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-pill);
   animation: diagramSpin 0.8s linear infinite;
   flex-shrink: 0;
 }
@@ -2363,85 +2192,144 @@ onBeforeUnmount(() => {
   }
 }
 
-.msg-diagram {
-  margin-top: 12px;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
-  padding: 16px;
-  max-width: 560px;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+.knowledge-graph-generating-premium {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  width: min(100%, 680px);
+  max-width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-hover);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
 }
 
-.msg-diagram:hover {
+.knowledge-graph-generating-premium::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -150%; width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: skewX(-20deg);
+  animation: kg-shimmer 2.5s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes kg-shimmer {
+  100% { left: 150%; }
+}
+
+.kg-gen-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kg-gen-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.kg-gen-subtitle {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  animation: pulse-text 2s infinite;
+}
+
+.kg-gen-skeleton-area {
+  position: relative;
+  height: 120px;
+  background: rgba(0, 0, 0, 0.015);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skel-node {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--color-border);
+  animation: pulse-bg 1.5s infinite alternate;
+}
+
+.skel-node.main { width: 44px; height: 44px; background: var(--color-primary-light-5); z-index: 2; }
+.skel-node.sub { width: 28px; height: 28px; background: var(--color-border-hover); z-index: 2; }
+.skel-node.sub.n1 { transform: translate(-80px, -30px); animation-delay: 0.3s; }
+.skel-node.sub.n2 { transform: translate(70px, -40px); animation-delay: 0.6s; }
+.skel-node.sub.n3 { transform: translate(20px, 40px); animation-delay: 0.9s; }
+
+.skel-edge {
+  position: absolute;
+  background: var(--color-border);
+  height: 2px;
+  transform-origin: 0 50%;
+  animation: pulse-bg 1.5s infinite alternate 0.2s;
+  z-index: 1;
+}
+
+.skel-edge.e1 { width: 85px; transform: translate(-20px, 0) rotate(160deg); }
+.skel-edge.e2 { width: 80px; transform: translate(20px, 0) rotate(-30deg); }
+.skel-edge.e3 { width: 50px; transform: translate(0, 20px) rotate(60deg); }
+
+@keyframes pulse-bg {
+  0% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.msg-knowledge-graph {
+  margin-top: var(--space-3);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(5, 150, 105, 0.08), transparent 30%),
+    var(--color-surface);
+  border: 1px solid var(--color-surface-hover);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  width: min(100%, 680px);
+  max-width: 100%;
+  cursor: pointer;
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.msg-knowledge-graph:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border-color: var(--color-surface-hover);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
 }
 
 .diagram-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .diagram-title {
   font-size: 0.95rem;
-  font-weight: 600;
-  color: #0F172A;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
 }
 
 .diagram-type-tag {
   font-size: 0.7rem;
-  padding: 2px 8px;
-  background: #E0E7FF;
-  color: #4F46E5;
+  padding: 2px var(--space-2);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   border-radius: 4px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .diagram-summary {
   font-size: 0.85rem;
-  color: #64748B;
-  margin-bottom: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
   line-height: 1.5;
-}
-
-.diagram-image-wrapper {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-}
-
-.diagram-svg-container {
-  display: flex;
-  justify-content: center;
-  overflow-x: auto;
-}
-
-.diagram-svg-container .diagram-markdown-preview,
-.diagram-svg-container :deep(.md-editor-preview),
-.diagram-svg-container :deep(.md-editor-mermaid) {
-  width: 100%;
-}
-
-.diagram-svg-container :deep(.md-editor-mermaid) {
-  display: flex;
-  justify-content: center;
-}
-
-.diagram-svg-container :deep(svg) {
-  max-width: 100%;
-  height: auto;
-}
-
-.diagram-image {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-  display: block;
-  margin: 0 auto;
 }
 
 /* 预览对话框样式 */
@@ -2450,10 +2338,10 @@ onBeforeUnmount(() => {
 }
 
 .diagram-preview-body {
-  padding: 24px;
+  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
   max-height: 80vh;
   overflow-y: auto;
 }
@@ -2461,31 +2349,35 @@ onBeforeUnmount(() => {
 .preview-header-meta {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .preview-type-tag {
   align-self: flex-start;
   font-size: 0.75rem;
-  padding: 4px 12px;
-  background: #EEF2FF;
-  color: #4F46E5;
-  border-radius: 6px;
-  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
 }
 
 .preview-summary {
   font-size: 1rem;
-  color: #475569;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
 .preview-content {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
-  padding: 20px;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    var(--color-bg);
+  background-size: 28px 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -2498,39 +2390,17 @@ onBeforeUnmount(() => {
   object-fit: contain;
 }
 
-.preview-svg-container {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-}
-
-.preview-svg-container .diagram-markdown-preview,
-.preview-svg-container :deep(.md-editor-preview),
-.preview-svg-container :deep(.md-editor-mermaid) {
-  width: 100%;
-}
-
-.preview-svg-container :deep(.md-editor-mermaid) {
-  display: flex;
-  justify-content: center;
-}
-
-.preview-svg-container :deep(svg) {
-  max-width: 100%;
-  height: auto;
-}
-
 .preview-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #F1F5F9;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-surface-hover);
 }
 
 .session-empty {
   font-size: 0.8rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   text-align: center;
   margin-top: 2rem;
 }
@@ -2555,13 +2425,13 @@ onBeforeUnmount(() => {
 }
 
 .session-sidebar.collapsed .sidebar-top-header {
-  padding-top: 16px;
-  padding-bottom: 8px;
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-2);
 }
 
 .session-sidebar.collapsed .standard-sidebar-nav {
-  padding-top: 8px;
-  padding-bottom: 16px;
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-4);
 }
 
 .session-sidebar.collapsed .collapse-toggle-btn,
@@ -2571,7 +2441,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 0;
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--space-2) 0;
   width: 42px !important;
   height: 42px !important;
   min-width: 42px !important;
@@ -2579,7 +2449,7 @@ onBeforeUnmount(() => {
   min-height: 42px !important;
   max-height: 42px !important;
   box-sizing: border-box !important;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .session-sidebar.collapsed .sidebar-top-header .collapse-toggle-btn {
@@ -2590,7 +2460,7 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   flex-direction: row;
-  background: #FFFFFF;
+  background: var(--color-surface);
   position: relative;
   overflow: hidden;
   height: 100%;
@@ -2601,8 +2471,8 @@ onBeforeUnmount(() => {
   width: 45%;
   min-width: 320px;
   max-width: 600px;
-  background: #F8FAFC;
-  border-right: 1px solid #E2E8F0;
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -2615,7 +2485,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #94A3B8;
+  color: var(--color-text-faint);
 }
 
 .digital-human-canvas-placeholder .placeholder-icon {
@@ -2631,15 +2501,15 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
-  padding: 12px 24px;
-  border-radius: 20px;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-2xl);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  border: 1px solid #E2E8F0;
-  transition: all 0.3s ease;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  transition: all var(--transition-slow);
   z-index: 10;
 }
 
@@ -2675,7 +2545,7 @@ onBeforeUnmount(() => {
 .asr-processing-dot {
   width: 12px;
   height: 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .listening-dot {
@@ -2685,7 +2555,7 @@ onBeforeUnmount(() => {
 }
 
 .asr-processing-dot {
-  background: #F59E0B;
+  background: var(--color-warning);
   box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.42);
   animation: processing-pulse 1s infinite;
 }
@@ -2713,8 +2583,8 @@ onBeforeUnmount(() => {
 
 .status-badge {
   font-size: 0.75rem;
-  color: #64748B;
-  font-family: 'Space Grotesk', monospace;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
 }
 
 .chat-interaction-area {
@@ -2729,7 +2599,7 @@ onBeforeUnmount(() => {
 .chat-viewport {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -2739,18 +2609,18 @@ onBeforeUnmount(() => {
 .welcome-banner {
   text-align: center;
   margin: auto 0;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .welcome-icon {
   font-size: 2.5rem;
-  color: #E2E8F0;
+  color: var(--color-border);
   margin-bottom: 1rem;
 }
 
 .welcome-banner h3 {
   font-size: 1.2rem;
-  color: #0F172A;
+  color: var(--color-text);
   margin: 0 0 0.5rem;
 }
 
@@ -2765,7 +2635,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 1rem;
   max-width: 60%;
-  animation: msg-appear 0.3s ease-out;
+  animation: msg-appear var(--transition-slow)-out;
 }
 
 @keyframes msg-appear {
@@ -2785,7 +2655,7 @@ onBeforeUnmount(() => {
 .avatar-circle {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2794,13 +2664,13 @@ onBeforeUnmount(() => {
 }
 
 .ai-av {
-  background: #0F172A;
-  color: #FFF;
+  background: var(--color-text);
+  color: var(--color-surface);
 }
 
 .user-av {
-  background: #E2E8F0;
-  color: #475569;
+  background: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .bubble-wrapper {
@@ -2816,9 +2686,9 @@ onBeforeUnmount(() => {
 
 .msg-meta {
   font-size: 0.75rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .message-row.user .msg-meta {
@@ -2826,49 +2696,96 @@ onBeforeUnmount(() => {
 }
 
 .sender {
-  font-weight: 600;
-  color: #475569;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
 }
 
-/* AI 和 User 气泡基础样式：低饱和、干净 */
+/* AI 和 User 气泡高级质感样式 */
 .bubble {
-  padding: 10px 14px;
-  font-size: 0.95rem;
+  padding: 14px 18px;
+  font-size: 0.98rem;
   line-height: 1.65;
   word-break: break-word;
   overflow-wrap: anywhere;
   max-width: 100%;
 }
 
-/* AI 气泡：白底带极细边框 */
+/* AI 气泡：柔和浮动悬浮卡片 */
 .message-row.ai .bubble {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  border-radius: var(--radius-xl);
   border-top-left-radius: 4px;
-  color: #0F172A;
+  color: var(--color-text);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* 用户气泡：极淡灰蓝色 */
+.message-row.ai .bubble:hover {
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06), 0 3px 10px rgba(15, 23, 42, 0.03);
+}
+
+/* AI 正在思考/输入指示器 */
+.thinking-loader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-2);
+  height: 20px;
+}
+
+.thinking-loader .dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--tone-indigo);
+  border-radius: var(--radius-pill);
+  opacity: 0.4;
+  animation: thinking-bounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-loader .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.thinking-loader .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+    background-color: var(--color-primary);
+  }
+}
+
+
+/* 用户气泡：现代渐变蓝紫与发光阴影 */
 .message-row.user .bubble {
-  background: #F8FAFC !important;
-  color: #0F172A;
-  border: 1px solid #CBD5E1 !important;
-  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
+  color: #ffffff;
+  border: none !important;
+  border-radius: var(--radius-xl);
   border-top-right-radius: 4px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25), 0 2px 6px rgba(99, 102, 241, 0.15);
 }
 
 /* 覆盖用户气泡内的 Markdown 颜色 */
 .message-row.user :deep(.markdown-body) {
-  color: #0F172A !important;
+  color: #ffffff !important;
 }
 .message-row.user :deep(.markdown-body a) {
-  color: #2563EB !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  text-decoration: underline;
 }
 .message-row.user :deep(.markdown-body code:not(pre code)) {
-  background: #E2E8F0 !important;
-  color: #E11D48 !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border: none;
 }
 
 .user-plain-text {
@@ -2882,7 +2799,7 @@ onBeforeUnmount(() => {
 
 /* markdown 渲染排版及对齐优化 */
 :deep(.markdown-body) {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 0.95rem !important;
   background: transparent !important;
   color: inherit;
@@ -2938,7 +2855,7 @@ onBeforeUnmount(() => {
   padding-bottom: 0;
   border-bottom: 0;
   line-height: 1.4;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 :deep(.markdown-body h1) {
@@ -2961,7 +2878,7 @@ onBeforeUnmount(() => {
 :deep(.markdown-body code:not(pre code)) {
   padding: 0.12rem 0.32rem;
   border-radius: 5px;
-  background: #F1F5F9;
+  background: var(--color-surface-hover);
   color: #E11D48;
   font-size: 0.88em;
 }
@@ -2969,17 +2886,17 @@ onBeforeUnmount(() => {
 :deep(.markdown-body blockquote) {
   margin: 0.55rem 0;
   padding: 0.08rem 0 0.08rem 0.75rem;
-  color: #64748B;
-  border-left: 3px solid #CBD5E1;
+  color: var(--color-text-muted);
+  border-left: 3px solid var(--color-border-hover);
 }
 
 :deep(.markdown-body pre) {
   margin: 0.8rem 0;
-  padding: 14px 16px;
+  padding: 1var(--space-1) var(--space-4);
   overflow-x: auto;
-  background: #F8FAFC !important;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
+  background: var(--color-bg) !important;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
@@ -2988,7 +2905,7 @@ onBeforeUnmount(() => {
   display: block;
   padding: 0;
   background: transparent !important;
-  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   line-height: 1.6;
 }
@@ -2997,32 +2914,32 @@ onBeforeUnmount(() => {
 .msg-attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .attachment-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
+  padding: 6px var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 0.8rem;
-  color: #334155;
+  color: var(--color-text-secondary);
   text-decoration: none;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .attachment-link:hover {
-  border-color: #CBD5E1;
-  background: #F8FAFC;
+  border-color: var(--color-border-hover);
+  background: var(--color-bg);
 }
 
 /* ================= 针对输入框的优化 ================= */
 .input-panel {
-  padding: 0 20px 20px 20px;
+  padding: 0 var(--space-5) var(--space-5) var(--space-5);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -3034,8 +2951,8 @@ onBeforeUnmount(() => {
 
 .attachments-preview {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
   width: 100%;
   max-width: 800px;
   flex-wrap: wrap;
@@ -3047,42 +2964,42 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  background: #F1F5F9;
-  border: 1px solid #E2E8F0;
-  border-radius: 6px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .close-icon {
   cursor: pointer;
-  color: #94A3B8;
+  color: var(--color-text-faint);
 }
 
 .close-icon:hover {
-  color: #EF4444;
+  color: var(--color-danger);
 }
 
 .input-wrapper {
   width: 100%;
   max-width: 800px;
-  background: #F8FAFC; /* 扁平化浅灰底色 */
-  border: 1px solid #E2E8F0;
-  border-radius: 16px; /* 扁平化圆角 */
-  padding: 12px 20px;
+  background: var(--color-bg); /* 扁平化浅灰底色 */
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl); /* 扁平化圆角 */
+  padding: var(--space-3) var(--space-5);
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 8px 12px;
-  transition: all 0.3s ease;
+  gap: var(--space-2) var(--space-3);
+  transition: all var(--transition-slow);
   box-sizing: border-box;
   box-shadow: none; /* 移除发光效果 */
 }
 
 .input-wrapper:focus-within {
-  background: #FFFFFF;
-  border-color: #CBD5E1;
+  background: var(--color-surface);
+  border-color: var(--color-border-hover);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02); /* 极其克制的焦点阴影 */
 }
 
@@ -3091,7 +3008,7 @@ onBeforeUnmount(() => {
   grid-row: 1;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .input-wrapper textarea {
@@ -3107,7 +3024,7 @@ onBeforeUnmount(() => {
   outline: none;
   font-family: inherit;
   font-size: 1rem;
-  color: #0F172A;
+  color: var(--color-text);
   line-height: 1.5;
   padding: 0;
   margin: 0;
@@ -3118,7 +3035,7 @@ onBeforeUnmount(() => {
   grid-row: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .speech-rate-control {
@@ -3126,18 +3043,18 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   min-width: 150px;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
 }
 
 .speech-rate-label {
   font-size: 12px;
-  color: #64748B;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .speech-rate-value {
   font-size: 12px;
-  color: #334155;
+  color: var(--color-text-secondary);
   min-width: 34px;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -3148,15 +3065,15 @@ onBeforeUnmount(() => {
 }
 
 .input-wrapper.is-expanded {
-  border-radius: 16px;
-  padding: 16px 20px;
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
   align-items: end;
 }
 
 .input-wrapper.is-expanded textarea {
   grid-column: 1 / 4;
   grid-row: 1;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .input-wrapper.is-expanded .toolbar-left {
@@ -3171,15 +3088,15 @@ onBeforeUnmount(() => {
 }
 
 .input-wrapper textarea::placeholder {
-  color: #94A3B8;
+  color: var(--color-text-faint);
 }
 
 .standard-plus-btn {
   font-size: 1.2rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   width: 28px;
   height: 28px;
-  border-radius: 8px; /* 弱化圆角 */
+  border-radius: var(--radius-md); /* 弱化圆角 */
   border: none;
   display: flex;
   align-items: center;
@@ -3187,63 +3104,63 @@ onBeforeUnmount(() => {
   cursor: pointer;
   background: transparent;
   padding: 0;
-  transition: background 0.2s, color 0.2s;
+  transition: background var(--transition-base), color var(--transition-base);
 }
 
 .standard-plus-btn:hover {
-  background: #E2E8F0;
-  color: #334155;
+  background: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .media-gen-btn {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   font-size: 1.15rem;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
   margin-left: 2px;
   padding: 0;
   background: transparent;
 }
 
 .media-gen-btn.btn-web {
-  color: #64748B;
+  color: var(--color-text-muted);
 }
 
 .media-gen-btn.btn-web:hover {
-  background: #E2E8F0;
-  color: #334155;
+  background: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .media-gen-btn.btn-web.active {
-  color: #0F172A;
-  background: #E2E8F0;
+  color: var(--color-text);
+  background: var(--color-border);
 }
 
 .active-media-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px 4px 4px;
-  color: #334155; /* 取消高饱和颜色 */
-  border-radius: 6px;
+  gap: var(--space-1);
+  padding: var(--space-1) 10px var(--space-1) var(--space-1);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   cursor: pointer;
-  transition: all 0.2s ease;
-  background: #F1F5F9;
-  border: 1px solid #E2E8F0;
+  transition: all var(--transition-base);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
   user-select: none;
-  margin-left: 4px;
+  margin-left: var(--space-1);
 }
 
 .active-media-chip:hover {
-  background: #E2E8F0;
+  background: var(--color-border);
 }
 
 .active-media-chip .chip-icon-circle {
@@ -3263,7 +3180,7 @@ onBeforeUnmount(() => {
 .active-media-chip .icon-hover {
   display: none;
   font-size: 1.05rem;
-  color: #EF4444;
+  color: var(--color-danger);
 }
 
 .active-media-chip:hover .icon-default {
@@ -3279,43 +3196,43 @@ onBeforeUnmount(() => {
   border: none;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  color: #64748B;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   font-size: 1.2rem;
   margin: 0;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
 }
 
 .voice-btn:hover {
-  background: #E2E8F0;
-  color: #334155;
+  background: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .voice-btn.is-recording {
-  background: #EF4444;
-  color: #FFFFFF;
+  background: var(--color-danger);
+  color: var(--color-surface);
 }
 
 .direct-voice-chat-btn {
-  background: #0F172A;
+  background: var(--color-text);
   border: none;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all var(--transition-slow);
   flex-shrink: 0;
 }
 
 .direct-voice-chat-btn:hover {
-  background: #334155;
+  background: var(--color-text-strong);
 }
 
 .voice-bars-icon {
@@ -3327,9 +3244,9 @@ onBeforeUnmount(() => {
 
 .voice-bars-icon .bar {
   width: 2px;
-  background-color: #ffffff;
+  background-color: var(--color-surface);
   border-radius: 1px;
-  transition: height 0.2s ease;
+  transition: height var(--transition-base);
 }
 
 .voice-bars-icon .bar:nth-child(1) { height: 8px; }
@@ -3338,7 +3255,7 @@ onBeforeUnmount(() => {
 .voice-bars-icon .bar:nth-child(4) { height: 6px; }
 
 .direct-voice-chat-btn.is-active {
-  background: #0F172A;
+  background: var(--color-text);
 }
 
 .direct-voice-chat-btn.is-active .bar {
@@ -3353,26 +3270,26 @@ onBeforeUnmount(() => {
 .send-btn {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  background: #E2E8F0;
-  color: #94A3B8;
+  border-radius: var(--radius-md);
+  background: var(--color-border);
+  color: var(--color-text-faint);
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: default;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow);
   font-size: 1.2rem;
 }
 
 .send-btn.can-send {
-  background: #0F172A;
-  color: #FFFFFF;
+  background: var(--color-text);
+  color: var(--color-surface);
   cursor: pointer;
 }
 
 .send-btn.can-send:hover {
-  background: #334155;
+  background: var(--color-text-strong);
 }
 
 @keyframes bar-dance {
@@ -3383,156 +3300,8 @@ onBeforeUnmount(() => {
 .input-footer {
   text-align: center;
   font-size: 0.7rem;
-  color: #94A3B8;
-  margin-top: 8px;
-}
-
-.profile-sidebar {
-  width: 340px;
-  padding: 1.5rem;
-  background: #F8FAFC;
-  border-left: 1px solid #E2E8F0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-  flex-shrink: 0;
-  box-sizing: border-box;
-}
-
-.sidebar-header {
-  margin-bottom: 4px;
-}
-
-.header-title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-title-row h3 {
-  margin: 0;
-  font-size: 1.15rem;
-  color: #0F172A;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.sync-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.7rem;
-  color: #64748B;
-  background: #FFFFFF;
-  padding: 4px 10px;
-  border-radius: 99px;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  border: 1px solid #E2E8F0;
-}
-
-.sync-badge .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10B981;
-}
-
-.is-syncing .dot {
-  animation: pulse-green 2s infinite;
-}
-
-@keyframes pulse-green {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
-/* Insight Cards */
-.profile-cards-container {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.insight-card {
-  background: #FFFFFF;
-  border-radius: 14px;
-  border: 1px solid #E2E8F0;
-  padding: 14px;
-  transition: all 0.2s ease;
-}
-
-.insight-card:hover {
-  border-color: #CBD5E1;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-  transform: translateY(-1px);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.card-icon-wrap {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #F1F5F9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-}
-
-.card-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #334155;
-}
-
-.card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.content-line {
-  font-size: 0.825rem;
-  color: #475569;
-  line-height: 1.5;
-}
-
-.bullet-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.dot-marker {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #94A3B8;
-  margin-top: 7px;
-  flex-shrink: 0;
-}
-
-.plain-text {
-  margin: 0;
-}
-
-/* Special Cards Styling */
-.special-card {
-  background: linear-gradient(to bottom right, #FFFFFF, #F8FAFC);
-  border-left: 3px solid #334155; /* 弱化高亮颜色 */
-}
-
-.special-card.recent-changes-card {
-  border-left-color: #94A3B8;
+  color: var(--color-text-faint);
+  margin-top: var(--space-2);
 }
 
 /* Empty State */
@@ -3542,13 +3311,13 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 24px;
+  padding: var(--space-10) var(--space-6);
   text-align: center;
-  background: #FFFFFF;
-  border-radius: 20px;
-  border: 1px solid #E2E8F0;
+  background: var(--color-surface);
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--color-border);
   box-shadow: inset 0 0 20px rgba(148, 163, 184, 0.05);
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .empty-visual-container {
@@ -3558,15 +3327,15 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .pulse-ring {
   position: absolute;
   width: 100%;
   height: 100%;
-  border: 1px solid #CBD5E1;
-  border-radius: 50%;
+  border: 1px solid var(--color-border-hover);
+  border-radius: var(--radius-pill);
   opacity: 0;
   animation: pulse-out 3s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
 }
@@ -3588,28 +3357,28 @@ onBeforeUnmount(() => {
 .empty-visual {
   width: 60px;
   height: 60px;
-  background: #F8FAFC;
+  background: var(--color-bg);
   border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2.2rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   z-index: 2;
   animation: float 4s ease-in-out infinite;
 }
 
 .empty-text-wrap h4 {
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--space-2) 0;
   font-size: 1.05rem;
-  color: #1E293B;
-  font-weight: 700;
+  color: var(--color-text-strong);
+  font-weight: var(--weight-bold);
 }
 
 .empty-text-wrap p {
   margin: 0;
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   line-height: 1.6;
 }
 
@@ -3617,41 +3386,41 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
-  margin-top: 24px;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
 }
 
 .hint-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #F8FAFC;
-  padding: 6px 12px;
-  border-radius: 8px;
+  background: var(--color-bg);
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-md);
   font-size: 0.75rem;
-  color: #475569;
-  font-weight: 600;
-  border: 1px solid #F1F5F9;
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-semibold);
+  border: 1px solid var(--color-surface-hover);
 }
 
 .hint-item .el-icon {
   font-size: 0.9rem;
-  color: #64748B;
+  color: var(--color-text-muted);
 }
 
 .long-term-memory-section {
   margin-top: auto;
-  padding: 16px;
-  background: #FFFFFF;
-  border-radius: 16px;
-  border: 1px solid #E2E8F0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
 }
 
 .memory-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .memory-title-wrap {
@@ -3662,49 +3431,49 @@ onBeforeUnmount(() => {
 
 .memory-title {
   font-size: 0.95rem;
-  font-weight: 700;
-  color: #0F172A;
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
 }
 
 .info-icon {
   font-size: 0.9rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   cursor: help;
 }
 
 .memory-switch-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .switch-status {
   font-size: 0.75rem;
-  color: #64748B;
-  font-weight: 500;
+  color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
 }
 
 .memory-desc {
   margin: 0;
   font-size: 0.75rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   line-height: 1.6;
 }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--color-border-hover); border-radius: 2px; }
 
 .mode-standard .session-sidebar {
-  background: #F9F9F9;
-  border-right: 1px solid #F0F0F0;
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-bg);
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
 .mode-standard .chat-viewport {
-  background: #FFFFFF;
+  background: var(--color-surface);
 }
 
 .standard-welcome {
@@ -3716,8 +3485,8 @@ onBeforeUnmount(() => {
 
 .standard-welcome h2 {
   font-size: 1.8rem;
-  font-weight: 500;
-  color: #111;
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
   margin-top: -10vh;
 }
 
@@ -3725,7 +3494,7 @@ onBeforeUnmount(() => {
   position: fixed;
   z-index: 1000;
   touch-action: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
 }
 .fab-container.is-dragging {
   transition: none !important;
@@ -3740,15 +3509,15 @@ onBeforeUnmount(() => {
 .fab-button {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
-  background: #0F172A; /* 与整体风格统一 */
+  border-radius: var(--radius-pill);
+  background: var(--color-text); /* 与整体风格统一 */
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
 }
 .fab-button:hover {
   transform: scale(1.05);
@@ -3763,13 +3532,13 @@ onBeforeUnmount(() => {
   bottom: 70px;
   left: 0;
   width: 240px;
-  background: #FFFFFF;
-  border-radius: 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
   box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
-  padding: 12px;
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   transform-origin: bottom left;
 }
 .fab-container.stick-right .fab-menu {
@@ -3779,39 +3548,39 @@ onBeforeUnmount(() => {
 }
 
 .fab-menu-item {
-  padding: 12px;
+  padding: var(--space-3);
   display: flex;
   align-items: center;
-  gap: 12px;
-  border-radius: 12px;
+  gap: var(--space-3);
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
   position: relative;
   background: transparent;
 }
 .fab-menu-item:hover {
-  background: #F8FAFC;
+  background: var(--color-bg);
 }
 .fab-menu-item.active {
-  background: #F1F5F9;
+  background: var(--color-surface-hover);
 }
 
 .menu-icon-box {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F1F5F9;
-  color: #64748B;
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
   font-size: 1.3rem;
-  transition: all 0.2s;
+  transition: all var(--transition-base);
   flex-shrink: 0;
 }
 .fab-menu-item.active .menu-icon-box {
-  background: #E2E8F0;
-  color: #0F172A;
+  background: var(--color-border);
+  color: var(--color-text);
 }
 
 .menu-text-content {
@@ -3822,16 +3591,16 @@ onBeforeUnmount(() => {
 }
 .menu-title {
   font-size: 0.95rem;
-  font-weight: 600;
-  color: #334155;
-  transition: color 0.2s;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  transition: color var(--transition-base);
 }
 .fab-menu-item.active .menu-title {
-  color: #0F172A;
+  color: var(--color-text);
 }
 .menu-desc {
   font-size: 0.75rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
 }
 
 .check-icon {
@@ -3839,14 +3608,14 @@ onBeforeUnmount(() => {
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #0F172A;
+  color: var(--color-text);
   font-size: 1.2rem;
   display: flex;
 }
 
 .fab-menu-fade-enter-active,
 .fab-menu-fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity var(--transition-base), transform var(--transition-base);
 }
 .fab-menu-fade-enter-from,
 .fab-menu-fade-leave-to {
@@ -3858,22 +3627,22 @@ onBeforeUnmount(() => {
 .action-menu {
   display: flex;
   flex-direction: column;
-  padding: 4px 0;
-  background: #ffffff;
-  border-radius: 16px;
+  padding: var(--space-1) 0;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
 }
 
 .action-item {
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 var(--space-4);
   cursor: pointer;
-  transition: background-color 0.2s ease;
-  border-radius: 8px;
+  transition: background-color var(--transition-base);
+  border-radius: var(--radius-md);
 }
 
 .action-item:hover {
-  background-color: #f9fafb;
+  background-color: var(--color-bg);
 }
 
 .item-icon-wrapper {
@@ -3884,24 +3653,24 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  margin-right: 14px;
-  margin-top: 8px;
-  margin-bottom: 8px;
+  margin-right: 1var(--space-1);
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
   flex-shrink: 0;
 }
 
-.bg-blue { background-color: #F1F5F9; color: #475569; }
-.bg-purple { background-color: #F1F5F9; color: #475569; }
-.bg-teal { background-color: #F1F5F9; color: #475569; }
-.bg-active { background-color: #E2E8F0; color: #0F172A; }
+.bg-blue { background-color: var(--color-surface-hover); color: var(--color-text-secondary); }
+.bg-purple { background-color: var(--color-surface-hover); color: var(--color-text-secondary); }
+.bg-teal { background-color: var(--color-surface-hover); color: var(--color-text-secondary); }
+.bg-active { background-color: var(--color-border); color: var(--color-text); }
 
 .item-content {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 0;
-  border-bottom: 1px solid #f3f4f6;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-bg);
 }
 
 .action-item:last-child .item-content {
@@ -3910,13 +3679,15 @@ onBeforeUnmount(() => {
 
 .item-text {
   font-size: 14px;
-  color: #1f2937;
-  font-weight: 500;
+  color: var(--color-text-strong);
+  font-weight: var(--weight-medium);
   letter-spacing: 0.5px;
 }
 
 .item-arrow {
-  color: #9ca3af;
+  color: var(--color-text-faint);
   font-size: 14px;
 }
 </style>
+
+

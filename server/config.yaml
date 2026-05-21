@@ -28,6 +28,11 @@ models:
   model_name: "generalv3.5"
   concurrency: 10
 
+#  base_url: https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
+#  api_key: 6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx
+#  model_name: astron-code-latest
+#  concurrency: 10
+
   # 图片理解模型（独立配置）
   vision:
     base_url: "https://open.bigmodel.cn/api/paas/v4/"
@@ -76,3 +81,11 @@ memory:
   chat_budget: 700
   ltm_budget: 1600
   summary_budget: 900
+
+# Neo4j 知识图谱存储
+neo4j:
+  enabled: false
+  uri: "neo4j://127.0.0.1:7687"
+  user: "neo4j"
+  password: ""
+  database: "neo4j"

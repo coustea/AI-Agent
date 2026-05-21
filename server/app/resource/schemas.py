@@ -13,7 +13,23 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.resource.manifest import agent_order, default_agent_ids
+
+# ======================================================================
+# Agent 元信息（替代 manifest.py）
+# ======================================================================
+
+AGENT_META: dict[str, dict[str, str]] = {
+    "knowledge_graph": {"name": "知识图谱", "icon": "Graph", "description": "知识点关系图谱"},
+    "content": {"name": "课程内容", "icon": "Document", "description": "专业课程讲解文档"},
+    "mindmap": {"name": "思维导图", "icon": "Mindmap", "description": "知识结构思维导图"},
+    "quiz": {"name": "练习题", "icon": "Quiz", "description": "练习习题"},
+    "code": {"name": "代码示例", "icon": "Code", "description": "代码实操案例"},
+    "reading": {"name": "拓展阅读", "icon": "Reading", "description": "拓展阅读推荐"},
+}
+
+# 默认 Agent 顺序和默认启用列表
+AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "knowledge_graph", "quiz", "code", "reading"]
+AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "knowledge_graph", "quiz", "reading"]
 
 
 # ======================================================================
@@ -21,15 +37,14 @@ from app.resource.manifest import agent_order, default_agent_ids
 # ======================================================================
 
 LearningScenario = Literal["exam_prep", "daily_review", "project_practice", "self_study"]
-AGENT_DEFAULT_ORDER = agent_order()
 
 
 class ResourceAgentId(str, Enum):
     """资源 Agent ID。"""
 
+    KNOWLEDGE_GRAPH = "knowledge_graph"
     CONTENT = "content"
     MINDMAP = "mindmap"
-    DIAGRAM = "diagram"
     QUIZ = "quiz"
     READING = "reading"
     CODE = "code"
@@ -37,7 +52,7 @@ class ResourceAgentId(str, Enum):
 
 DEFAULT_SELECTED_AGENT_IDS: list[ResourceAgentId] = [
     ResourceAgentId(agent_id)
-    for agent_id in default_agent_ids()
+    for agent_id in AGENT_DEFAULT_ENABLED
 ]
 
 
@@ -66,17 +81,14 @@ class MindmapConfig(BaseModel):
     include_prerequisites: bool = False
 
 
-class DiagramConfig(BaseModel):
-    """图表 Agent 配置。"""
-    diagram_type: Literal[
-        "auto", "hierarchy", "flow", "compare", "relation", "state",
-        "class", "er", "block", "packet", "git", "sequence",
-        "activity", "usecase", "component", "package", "deployment",
-        "object", "communication",
-    ] = "auto"
-    visual_style: Literal["minimal", "exam"] = "minimal"
+class KnowledgeGraphConfig(BaseModel):
+    """知识图谱 Agent 配置。"""
+    layout_mode: Literal["force", "radial", "hierarchy"] = "force"
+    max_nodes: int = Field(default=18, ge=3, le=50)
+    relation_depth: int = Field(default=2, ge=1, le=4)
     highlight_mode: Literal["weak_points", "key_points", "all"] = "key_points"
-    detail_level: Literal["concise", "standard", "detailed"] = "standard"
+    store_neo4j: bool = True
+    include_orphan_points: bool = True
 
 
 class QuizConfig(BaseModel):
@@ -123,10 +135,11 @@ class OutputOptions(BaseModel):
 
 class AgentConfigs(BaseModel):
     """Agent 配置集合。"""
+    model_config = ConfigDict(extra="forbid")
 
     content: ContentConfig = Field(default_factory=ContentConfig)
     mindmap: MindmapConfig = Field(default_factory=MindmapConfig)
-    diagram: DiagramConfig = Field(default_factory=DiagramConfig)
+    knowledge_graph: KnowledgeGraphConfig = Field(default_factory=KnowledgeGraphConfig)
     quiz: QuizConfig = Field(default_factory=QuizConfig)
     code: CodeConfig = Field(default_factory=CodeConfig)
     reading: ReadingConfig = Field(default_factory=ReadingConfig)
@@ -191,23 +204,70 @@ class ResourceGenerationRequest(BaseModel):
 
 
 # ======================================================================
+# 知识图谱 & 执行计划模型（Planning Agent 输出）
+# ======================================================================
+
+class KnowledgePoint(BaseModel):
+    """知识图谱中的知识点。"""
+    id: str = Field(description="知识点唯一标识，如 kp1, kp2")
+    name: str = Field(description="知识点名称")
+    description: str = Field(default="", description="简要描述")
+    difficulty: Literal["basic", "intermediate", "advanced"] = "intermediate"
+    importance: Literal["core", "important", "supplementary"] = "important"
+    is_weak: bool = Field(default=False, description="是否为学生薄弱点")
+    prerequisites: list[str] = Field(default_factory=list, description="前置知识点 ID")
+
+
+class KnowledgeRelation(BaseModel):
+    """知识点之间的关系。"""
+    source: str = Field(description="起始知识点 ID")
+    target: str = Field(description="目标知识点 ID")
+    relation_type: Literal["prerequisite", "extends", "related", "includes"] = "related"
+
+
+class KnowledgeGraph(BaseModel):
+    """Planning Agent 生成的结构化知识图谱。"""
+    topic: str = Field(description="学习主题")
+    summary: str = Field(default="", description="主题概要")
+    points: list[KnowledgePoint] = Field(default_factory=list)
+    relations: list[KnowledgeRelation] = Field(default_factory=list)
+    focus_areas: list[str] = Field(default_factory=list, description="重点关注领域")
+
+
+class AgentInstruction(BaseModel):
+    """Planning Agent 为单个下游 Agent 生成的个性化指令。"""
+    agent_id: str
+    focus: str = Field(default="", description="该 Agent 应重点关注的方面")
+    difficulty: str = Field(default="intermediate", description="建议难度")
+    personalization_notes: str = Field(default="", description="个性化建议")
+    constraints: list[str] = Field(default_factory=list, description="特殊约束")
+
+
+class ExecutionPlan(BaseModel):
+    """Planning Agent 的完整输出。"""
+    knowledge_graph: KnowledgeGraph
+    agent_instructions: list[AgentInstruction] = Field(default_factory=list)
+    personalization_summary: str = Field(default="", description="个性化分析总结")
+
+
+# ======================================================================
 # 内部状态模型
 # ======================================================================
 
 class WorkerState(BaseModel):
-    """Agent 执行状态。"""
-    task: dict[str, Any] = Field(default_factory=dict)
+    """Agent 运行时需要的所有输入，扁平结构。"""
+    # 请求信息
+    resource_id: int | None = None
+    learning_need: str = ""
+    learning_scenario: str = "self_study"
     agent_name: str = ""
     agent_config: dict[str, Any] = Field(default_factory=dict)
-    learning_scenario: str = "self_study"
-    layer_index: int = 0
-    # 上游依赖结果
-    dependencies: list[dict[str, Any]] = Field(default_factory=list)
+    # Planning Agent 的产出（所有 Agent 共享）
+    knowledge_graph: KnowledgeGraph | None = None
+    # Planning Agent 为该 Agent 定制的指令
+    instruction: AgentInstruction | None = None
     # 用户画像
     profile: dict[str, Any] = Field(default_factory=dict)
-    # 内容大纲 (content outline-first 模式)
-    outline_only: bool = False
-    outline: str | None = None
 
 
 class WorkerResult(BaseModel):
@@ -236,22 +296,24 @@ class GeneratedResourceItem(BaseModel):
 
 
 class StudyPathStep(BaseModel):
-    """资源包内的轻量学习路径步骤。"""
+    """Review Agent 生成的个性化学习路径步骤。"""
     order: int
-    resource_type: ResourceAgentId
+    resource_type: str
     title: str
-    reason: str
-    estimated_time: int | None = None
+    reason: str = Field(default="", description="为什么在这个位置学习该资源")
+    estimated_time: int | None = Field(default=None, description="预估学习时间(分钟)")
+    focus_points: list[str] = Field(default_factory=list, description="学习时应重点关注的知识点")
 
 
 class ReviewResult(BaseModel):
-    """轻量资源审查结果。"""
+    """Review Agent 的审查结果。"""
     passed: bool = True
-    score: int = Field(default=100, ge=0, le=100)
-    issues: list[dict[str, Any]] = Field(default_factory=list)
+    overall_score: int = Field(default=100, ge=0, le=100)
+    consistency_score: int = Field(default=100, ge=0, le=100, description="知识一致性评分")
+    personalization_score: int = Field(default=100, ge=0, le=100, description="个性化匹配度评分")
+    issues: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     failed_agents: list[str] = Field(default_factory=list)
-    skipped_agents: list[str] = Field(default_factory=list)
 
 
 class ResourceBundle(BaseModel):
@@ -284,8 +346,6 @@ class AgentMeta(BaseModel):
     name: str
     description: str
     icon: str = ""
-    layer: int = 0
-    layer_name: str = ""
     default_enabled: bool = True
 
 

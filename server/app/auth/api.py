@@ -51,7 +51,7 @@ async def logout(
     session: AsyncSession = Depends(get_session),
 ):
     await auth_usecases.logout(session, credentials.credentials)
-    background_tasks.add_task(auth_usecases.build_profile_on_logout, current_user.id)
+    background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)
     return HttpResponse.success(message="退出登录成功")
 
 
