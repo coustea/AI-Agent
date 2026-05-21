@@ -150,8 +150,7 @@ class ChatSessionSummary(SQLModel, table=True):
     session_id: str = Field(index=True)  # 关联 ChatSession
     module: str = Field(default="mentor", index=True)  # 所属功能模块
 
-    summary_markdown: str = Field(sa_column=Column(Text))  # 概要主体 Markdown
-    summary_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 结构化概要
+    summary_markdown: str = Field(sa_column=Column(Text))  # 概要主体 Markdown（唯一权威来源）
 
     summary_type: str = Field(default="incremental", max_length=50)  # 概要类型：incremental | full
     version: int = Field(default=1)  # 概要版本号
@@ -159,11 +158,6 @@ class ChatSessionSummary(SQLModel, table=True):
     start_message_id: int | None = Field(default=None)  # 起始消息 ID
     end_message_id: int | None = Field(default=None)  # 结束消息 ID
     summarized_message_count: int = Field(default=0)  # 已压缩消息数量
-
-    current_topic: str | None = Field(default=None, max_length=200)  # 当前话题
-    current_goal: str | None = Field(default=None, max_length=200)  # 当前目标
-    current_status: str | None = Field(default=None, sa_column=Column(Text))  # 当前状态
-    next_action: str | None = Field(default=None, sa_column=Column(Text))  # 下一步行动
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -181,11 +175,11 @@ class ChatSessionSummary(SQLModel, table=True):
 
 class UserLongTermMemory(SQLModel, table=True):
     """用户长期记忆表 — 一个用户在一个 module 下只有一条长期记忆
-    
+
     设计原则：
     - 只保存长期稳定、未来可复用的信息
     - 不保存当前会话临时状态、一次性作业中间状态
-    - 同时保存 Markdown 和 JSONB 格式
+    - memory_markdown 是唯一权威来源（给 LLM 上下文用）
     """
     __tablename__ = "user_long_term_memories"
     __table_args__ = (
@@ -196,8 +190,8 @@ class UserLongTermMemory(SQLModel, table=True):
     user_id: int = Field(index=True)
     module: str = Field(default="mentor", index=True)  # 所属功能模块
 
-    memory_markdown: str = Field(sa_column=Column(Text))  # 记忆主体 Markdown
-    memory_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 结构化记忆
+    memory_markdown: str = Field(sa_column=Column(Text))  # 记忆主体 Markdown（唯一权威来源）
+    category: str = Field(default="general", max_length=50, index=True)  # 记忆分类
 
     version: int = Field(default=1)  # 记忆版本号
     confidence: float = Field(default=0.7)  # 记忆置信度

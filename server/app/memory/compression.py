@@ -11,15 +11,16 @@ from app.memory.types import (
     SUMMARY_MESSAGE_THRESHOLD,
     SUMMARY_TOKEN_THRESHOLD,
     SummaryLLMOutput,
-    make_default_summary_json,
-    render_summary_markdown,
+    extract_fallback_summary_markdown,
+    make_default_summary_markdown,
 )
+from app.prompts import registry
 
 logger = get_logger(__name__)
 
 
 class SessionCompressor:
-    """按触发条件把旧消息压缩为结构化概要。"""
+    """按触发条件把旧消息压缩为 Markdown 概要。"""
 
     def __init__(self, *, module: str = "mentor", store: MemoryStore | None = None) -> None:
         self.module = module
@@ -58,49 +59,33 @@ class SessionCompressor:
             return None
 
         chat_text = "\n".join(f"[{msg.created_at:%m-%d %H:%M}] {msg.role}: {msg.content[:500]}" for msg in target)
-        summary_json = None
+        summary_markdown = None
         try:
-            prompt = (
-                "请压缩以下学习对话，保留后续教学真正需要的信息。\n\n"
-                "必须提取：current_learning_task、original_user_questions、explained_content、"
-                "current_understanding、current_confusions、teaching_methods_used、conversation_position、"
-                "next_action、references、profile_candidates、memory_candidates。\n"
-                "profile_candidates 记录可更新用户画像的信息；memory_candidates 只记录长期稳定偏好、固定事实、反复薄弱点。\n\n"
-                f"对话记录：\n{chat_text[:5000]}"
-            )
-
+            prompt = registry.render("memory/compression", dialogue_text=chat_text[:5000])
             logger.info("[MemoryCompression] LLM 开始会话压缩。")
 
             resp = await self.llm.ainvoke_json(
                 SummaryLLMOutput,
                 prompt,
                 function_name="compress_learning_dialogue",
-                function_description="压缩学习对话并提取画像/长期记忆候选。",
+                function_description="压缩学习对话为 Markdown 概要。",
                 temperature=0.1,
             )
-            summary_json = resp.model_dump()
+            summary_markdown = resp.summary_markdown
         except Exception as exc:
-            logger.warning("[MemoryCompression] LLM 压缩失败，降级拼接概要: %s", exc)
+            logger.warning("[MemoryCompression] LLM 压缩失败，降级启发式提取: %s", exc)
 
-        if summary_json is None:
-            summary_json = make_default_summary_json()
-            summary_json["current_learning_task"] = "对话概要（LLM 不可用，降级为文本拼接）"
-            summary_json["original_user_questions"] = [chat_text[:800]]
-            summary_json["conversation_position"] = reason
+        if not summary_markdown or not summary_markdown.strip():
+            summary_markdown = extract_fallback_summary_markdown(chat_text)
 
         summary = await self.store.create_summary(
             user_id=user_id,
             session_id=session_id,
             module=self.module,
-            summary_markdown=render_summary_markdown(summary_json),
-            summary_json=summary_json,
+            summary_markdown=summary_markdown,
             summarized_message_count=len(target),
             start_message_id=target[0].id,
             end_message_id=target[-1].id,
-            current_topic=(summary_json.get("current_learning_task") or "")[:200] or None,
-            current_goal=(summary_json.get("next_action") or "")[:200] or None,
-            current_status=summary_json.get("conversation_position") or None,
-            next_action=summary_json.get("next_action") or None,
         )
         first_kept = dialogue[-keep_recent].id if keep_recent > 0 else (target[-1].id + 1 if target[-1].id else 0)
         if first_kept:

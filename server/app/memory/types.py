@@ -30,7 +30,6 @@ TITLE_MAX_LENGTH: Final[int] = 100
 SUMMARY_TOKEN_THRESHOLD: Final[int] = 150
 SUMMARY_MESSAGE_THRESHOLD: Final[int] = 30
 SUMMARY_KEEP_RECENT: Final[int] = 10
-PROFILE_GATE_ASSISTANT_TURNS: Final[int] = 6
 PROFILE_MIN_COVERAGE: Final[int] = 60
 MEMORY_UPDATE_COOLDOWN_SECONDS: Final[float] = 300.0
 
@@ -39,6 +38,37 @@ CHAT_BUDGET: int = _CFG_CHAT_BUDGET
 LTM_BUDGET: int = _CFG_LTM_BUDGET
 SUMMARY_BUDGET: int = _CFG_SUMMARY_BUDGET
 PROFILE_BUDGET: int = 2000
+
+# 长期记忆周期触发阈值（每 N 轮 LLM 判断一次）
+LTM_PERIODIC_THRESHOLD: Final[int] = 10
+
+# 画像更新周期触发配置（coverage 分段 → 轮次间隔）
+PROFILE_UPDATE_INTERVALS: Final[dict[str, dict[str, Any]]] = {
+    "low": {"max_coverage": 0.4, "interval": 3},
+    "medium": {"max_coverage": 0.8, "interval": 8},
+    "high": {"max_coverage": 1.0, "interval": 15},
+}
+
+# 长期记忆分类（7 分类，去掉 recent_important_changes，合并 project_context 到 learning_background）
+LTM_CATEGORIES: Final[tuple[str, ...]] = (
+    "learning_background",
+    "long_term_goals",
+    "learning_preferences",
+    "stable_weaknesses",
+    "interaction_rules",
+    "effective_strategies",
+    "corrections",
+)
+
+LTM_CATEGORY_NAMES: Final[dict[str, str]] = {
+    "learning_background": "学习背景",
+    "long_term_goals": "长期目标",
+    "learning_preferences": "学习偏好",
+    "stable_weaknesses": "稳定薄弱点",
+    "interaction_rules": "交互规则",
+    "effective_strategies": "有效辅导策略",
+    "corrections": "用户纠正记录",
+}
 
 
 def now() -> datetime:
@@ -95,6 +125,30 @@ DIMENSION_NAMES: Final[dict[str, str]] = {
     ProfileDimension.LEARNING_HISTORY: "学习历史",
 }
 
+# 置信度分档阈值
+CONFIDENCE_HIGH: Final[float] = 0.7
+CONFIDENCE_MEDIUM: Final[float] = 0.4
+CONFIDENCE_LOW: Final[float] = 0.0
+
+CONFIDENCE_LABELS: Final[dict[str, str]] = {
+    "high": "确定",
+    "medium": "推测",
+    "low": "初步",
+    "empty": "待探索",
+}
+
+
+def confidence_label(value: float) -> str:
+    """将 confidence 数值映射为文字标签。"""
+    if value >= CONFIDENCE_HIGH:
+        return "high"
+    if value >= CONFIDENCE_MEDIUM:
+        return "medium"
+    if value > CONFIDENCE_LOW:
+        return "low"
+    return "empty"
+
+
 ONBOARDING_REQUIRED_FIELDS: Final[tuple[str, ...]] = (
     "education_level",
     "grade",
@@ -149,48 +203,26 @@ def make_default_score_json() -> dict[str, Any]:
     }
 
 
-def make_default_memory_json() -> dict[str, Any]:
-    return {
-        "learning_background": {"major": None, "grade": None, "description": ""},
-        "long_term_goals": [],
-        "learning_preferences": [],
-        "stable_weaknesses": [],
-        "project_context": [],
-        "interaction_rules": [],
-        "effective_strategies": [],
-        "corrections": [],
-        "recent_important_changes": [],
-    }
+def make_default_memory_markdown() -> str:
+    """长期记忆默认 Markdown（7 分类）。"""
+    lines = ["# 长期记忆", "\n## 学习背景", "暂无学习背景信息。"]
+    for key in LTM_CATEGORIES[1:]:
+        lines.append(f"\n## {LTM_CATEGORY_NAMES[key]}")
+        lines.append("暂无信息。")
+    return "\n".join(lines)
 
 
-def make_default_summary_json() -> dict[str, Any]:
-    return {
-        "current_learning_task": "",
-        "original_user_questions": [],
-        "explained_content": [],
-        "current_understanding": [],
-        "current_confusions": [],
-        "teaching_methods_used": [],
-        "conversation_position": "",
-        "next_action": "",
-        "references": [],
-        "profile_candidates": [],
-        "memory_candidates": [],
-    }
+def make_default_summary_markdown() -> str:
+    """会话概要默认 Markdown（3 字段）。"""
+    return "# 会话概要\n\n## 学习任务\n暂无。\n\n## 困惑点\n暂无。\n\n## 关键主题\n暂无。"
 
 
 class SummaryLLMOutput(BaseModel):
-    current_learning_task: str = Field(default="")
-    original_user_questions: list[str] = Field(default_factory=list)
-    explained_content: list[str] = Field(default_factory=list)
-    current_understanding: list[str] = Field(default_factory=list)
-    current_confusions: list[str] = Field(default_factory=list)
-    teaching_methods_used: list[str] = Field(default_factory=list)
-    conversation_position: str = Field(default="")
-    next_action: str = Field(default="")
-    references: list[str] = Field(default_factory=list)
-    profile_candidates: list[str] = Field(default_factory=list)
-    memory_candidates: list[str] = Field(default_factory=list)
+    """压缩概要 LLM 输出（Markdown 格式，3 字段）。"""
+
+    summary_markdown: str = Field(
+        description="会话概要 Markdown，用 ## 分节：学习任务、困惑点、关键主题",
+    )
 
 
 class DimensionOutput(BaseModel):
@@ -206,8 +238,13 @@ class ProfileOutput(BaseModel):
 
 
 class MemoryUpdateOutput(BaseModel):
-    need_update: bool = Field(default=False)
-    memory_json: dict[str, Any] | None = None
+    """长期记忆更新 LLM 输出（Markdown 格式）。"""
+
+    need_update: bool = Field(description="是否需要更新长期记忆")
+    memory_markdown: str | None = Field(
+        default=None,
+        description="更新后的长期记忆 Markdown，用 ## 分类名 分节",
+    )
 
 
 STABLE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
@@ -248,60 +285,39 @@ def should_include_session_summary(user_message: str) -> bool:
     return bool(normalized) and any(trigger in normalized for trigger in SUMMARY_RECALL_TRIGGERS)
 
 
-def render_summary_markdown(summary_json: dict[str, Any]) -> str:
-    if not summary_json:
-        return "# 会话概要\n\n暂无概要信息。"
-    sections = [
-        ("当前学习任务", summary_json.get("current_learning_task")),
-        ("对话进度", summary_json.get("conversation_position")),
-        ("下一步行动", summary_json.get("next_action")),
-    ]
-    list_sections = [
-        ("用户原始问题", summary_json.get("original_user_questions") or []),
-        ("已解释内容", summary_json.get("explained_content") or []),
-        ("当前理解状态", summary_json.get("current_understanding") or []),
-        ("当前困惑点", summary_json.get("current_confusions") or []),
-        ("已使用教学方法", summary_json.get("teaching_methods_used") or []),
-        ("画像候选", summary_json.get("profile_candidates") or []),
-        ("长期记忆候选", summary_json.get("memory_candidates") or []),
-    ]
-    lines = ["# 会话概要"]
-    for title, value in sections:
-        if value:
-            lines.append(f"\n## {title}\n\n{value}")
-    for title, values in list_sections:
-        if values:
-            lines.append(f"\n## {title}")
-            lines.extend(f"- {item}" for item in values if item)
+# 压缩降级启发式提取正则
+COMPRESSION_FALLBACK_TASK_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"(?:学|理解|搞清楚|弄明白|想知道|想了解|想掌握|想学会|研究|探索).+"),
+)
+COMPRESSION_FALLBACK_CONFUSION_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"(?:不懂|不明白|困惑|为什么|怎么会|搞不清|搞不懂|不理解|没搞懂|不太懂|有点懵|一头雾水).+"),
+)
+COMPRESSION_FALLBACK_TOPIC_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"[A-Z][a-zA-Z]+(?:\.js|\.py|\.ts|\.java|\.go|\.rs|\.cpp)?"),
+    re.compile(r"(?:算法|数据结构|排序|搜索|递归|动态规划|图|树|链表|栈|队列|哈希|数据库|网络|操作系统|编译|机器学习|深度学习|Python|Java|Go|Rust|C\+\+|JavaScript|TypeScript|React|Vue|Spring|Docker|Kubernetes|SQL|REST|API|HTTP|TCP|UDP|OS|CPU|GPU|内存|线程|进程|锁|并发|异步|微服务|设计模式|测试|CI|CD)"),
+)
+
+
+def extract_fallback_summary_markdown(dialogue_text: str) -> str:
+    """LLM 失败时用启发式正则提取概要 Markdown。"""
+    task_matches = [m.group().strip() for m in COMPRESSION_FALLBACK_TASK_PATTERNS if m.search(dialogue_text)]
+    confusion_matches = [m.group().strip() for m in COMPRESSION_FALLBACK_CONFUSION_PATTERNS if m.search(dialogue_text)]
+    topic_matches = [m.group().strip() for m in COMPRESSION_FALLBACK_TOPIC_PATTERNS if m.search(dialogue_text)]
+
+    lines = ["# 会话概要（降级提取）"]
+    lines.append("\n## 学习任务")
+    if task_matches:
+        lines.extend(f"- {t}" for t in task_matches[:5])
+    else:
+        lines.append("未能自动提取学习任务。")
+    lines.append("\n## 困惑点")
+    if confusion_matches:
+        lines.extend(f"- {c}" for c in confusion_matches[:5])
+    else:
+        lines.append("未能自动提取困惑点。")
+    lines.append("\n## 关键主题")
+    if topic_matches:
+        lines.extend(f"- {t}" for t in topic_matches[:8])
+    else:
+        lines.append("未能自动提取关键主题。")
     return "\n".join(lines)
-
-
-def render_memory_markdown(memory_json: dict[str, Any]) -> str:
-    if not memory_json:
-        return "# 长期记忆\n\n暂无长期记忆信息。"
-    titles = {
-        "long_term_goals": "长期目标",
-        "learning_preferences": "学习偏好",
-        "stable_weaknesses": "稳定薄弱点",
-        "project_context": "项目背景",
-        "interaction_rules": "交互规则",
-        "effective_strategies": "有效辅导策略",
-        "corrections": "用户纠正记录",
-        "recent_important_changes": "最近重要变化",
-    }
-    lines = ["# 长期记忆"]
-    background = memory_json.get("learning_background") or {}
-    if isinstance(background, dict) and (background.get("description") or background.get("major") or background.get("grade")):
-        lines.append("\n## 学习背景")
-        if background.get("description"):
-            lines.append(str(background["description"]))
-        if background.get("major"):
-            lines.append(f"- 专业: {background['major']}")
-        if background.get("grade"):
-            lines.append(f"- 年级: {background['grade']}")
-    for key, title in titles.items():
-        values = memory_json.get(key) or []
-        if values:
-            lines.append(f"\n## {title}")
-            lines.extend(f"- {item}" for item in values if item)
-    return "\n".join(lines) if len(lines) > 1 else "# 长期记忆\n\n暂无长期记忆。"

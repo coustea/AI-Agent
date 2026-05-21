@@ -22,10 +22,9 @@ from app.memory.types import (
     MESSAGE_EXPIRE_DAYS,
     TITLE_MAX_LENGTH,
     days_ago,
-    make_default_memory_json,
+    make_default_memory_markdown,
     make_default_profile_json,
     make_default_score_json,
-    make_default_summary_json,
     now,
 )
 
@@ -232,14 +231,9 @@ class MemoryStore:
         session_id: str,
         module: str,
         summary_markdown: str,
-        summary_json: dict[str, Any] | None,
         summarized_message_count: int,
         start_message_id: int | None = None,
         end_message_id: int | None = None,
-        current_topic: str | None = None,
-        current_goal: str | None = None,
-        current_status: str | None = None,
-        next_action: str | None = None,
     ) -> ChatSessionSummary:
         async with await self._get_session() as session:
             summary = ChatSessionSummary(
@@ -247,14 +241,9 @@ class MemoryStore:
                 session_id=session_id,
                 module=module,
                 summary_markdown=summary_markdown,
-                summary_json=summary_json or make_default_summary_json(),
                 summarized_message_count=summarized_message_count,
                 start_message_id=start_message_id,
                 end_message_id=end_message_id,
-                current_topic=current_topic,
-                current_goal=current_goal,
-                current_status=current_status,
-                next_action=next_action,
             )
             session.add(summary)
             await session.commit()
@@ -328,6 +317,7 @@ class MemoryStore:
         module: str,
         profile_json: dict[str, Any],
         score_json: dict[str, Any],
+        profile_markdown: str | None = None,
         updated_reason: str,
         source_session_ids: list[str] | None = None,
         source_summary_ids: list[int] | None = None,
@@ -347,6 +337,7 @@ class MemoryStore:
                     profile.version = (profile.version or 1) + 1
                 profile.profile_json = profile_json
                 profile.profile_score_json = score_json
+                profile.profile_markdown = profile_markdown
                 profile.updated_reason = updated_reason
                 profile.source_session_ids = source_session_ids
                 profile.source_summary_ids = source_summary_ids
@@ -369,6 +360,7 @@ class MemoryStore:
                         version=0 if latest_version is None else int(latest_version) + 1,
                         profile_json=profile_json,
                         profile_score_json=score_json,
+                        profile_markdown=profile_markdown,
                         change_reason=updated_reason,
                         source_session_ids=source_session_ids,
                         source_summary_ids=source_summary_ids,
@@ -403,8 +395,8 @@ class MemoryStore:
             memory = UserLongTermMemory(
                 user_id=user_id,
                 module=module,
-                memory_markdown="# 长期记忆\n\n暂无长期记忆信息。",
-                memory_json=make_default_memory_json(),
+                memory_markdown=make_default_memory_markdown(),
+                category="general",
             )
             session.add(memory)
             await session.commit()
@@ -417,7 +409,7 @@ class MemoryStore:
         user_id: int,
         module: str,
         memory_markdown: str,
-        memory_json: dict[str, Any],
+        category: str = "general",
         updated_reason: str,
         source_session_ids: list[str] | None = None,
         source_message_ids: list[int] | None = None,
@@ -432,7 +424,7 @@ class MemoryStore:
             else:
                 memory.version = (memory.version or 1) + 1
             memory.memory_markdown = memory_markdown
-            memory.memory_json = memory_json
+            memory.category = category
             memory.updated_reason = updated_reason
             memory.source_session_ids = source_session_ids
             memory.source_message_ids = source_message_ids

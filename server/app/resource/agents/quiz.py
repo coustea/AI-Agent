@@ -23,25 +23,30 @@ logger = get_logger(__name__)
 class QuizOption(BaseModel):
     label: str = Field(description="选项标签，如 A/B/C/D")
     content: str = Field(description="选项内容")
-    is_correct: bool = Field(default=False, description="是否为正确答案")
 
 
 class QuizQuestion(BaseModel):
-    question_id: int = Field(description="题目编号")
-    question_type: str = Field(default="single_choice", description="题目类型: single_choice/multiple_choice/true_false")
-    question_text: str = Field(description="题目内容")
+    id: int = Field(description="题目编号")
+    type: str = Field(default="single_choice", description="题目类型: single_choice/multiple_choice/blank/true_false/short_answer/coding")
+    question: str = Field(description="题目内容")
     options: list[QuizOption] = Field(default_factory=list, description="选项列表")
-    correct_answer: str = Field(description="正确答案")
-    analysis: str = Field(default="", description="解析说明")
-    difficulty: str = Field(default="medium", description="难度: easy/medium/hard")
-    knowledge_point: str = Field(default="", description="考查知识点")
+    answer: str | bool | list[str] = Field(description="正确答案")
+    explanation: str = Field(default="", description="解析说明")
+    difficulty: str = Field(default="medium", description="难度: basic/medium/advanced")
+    knowledge_points: list[str] = Field(default_factory=list, description="考查知识点")
+    reference_answer: str | None = Field(default=None, description="简答题参考答案")
+    scoring_points: list[str] = Field(default_factory=list, description="简答题评分要点")
+    input_description: str | None = Field(default=None, description="编程题输入说明")
+    output_description: str | None = Field(default=None, description="编程题输出说明")
+    constraints: list[str] = Field(default_factory=list, description="编程题约束条件")
+    sample_cases: list[dict] = Field(default_factory=list, description="编程题样例")
+    reference_solution: str | None = Field(default=None, description="编程题参考代码")
 
 
 class QuizPayload(BaseModel):
     title: str = Field(description="习题集标题")
+    summary: str = Field(default="", description="考查重点简介")
     questions: list[QuizQuestion] = Field(default_factory=list, description="题目列表")
-    total_count: int = Field(default=0, description="题目总数")
-    difficulty_distribution: dict[str, int] = Field(default_factory=dict, description="难度分布")
 
 
 class QuizAgent:
@@ -76,6 +81,11 @@ class QuizAgent:
             quiz_data = self._salvage_quiz_payload(raw)
             if quiz_data is None:
                 return WorkerResult(success=False, error=f"习题 JSON 解析失败: {exc}")
+            try:
+                validated = QuizPayload.model_validate(quiz_data)
+                quiz_data = validated.model_dump(mode="json")
+            except Exception:
+                pass  # 验证失败，兜底使用原始 dict
             content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
 
         # 统计难度分布

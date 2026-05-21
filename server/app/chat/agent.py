@@ -469,9 +469,6 @@ class TutorAgent:
                 "termination_reason": "direct_answer_done",
             }
 
-    # ------------------------------------------------------------------
-    # 节点: search_node
-    # ------------------------------------------------------------------
 
     async def _search_node(self, state: TutorState) -> dict[str, Any]:
         """搜索节点：Spark MAX 使用搜索工具查找信息。
@@ -550,9 +547,7 @@ class TutorAgent:
                 "termination_reason": "search_done",
             }
 
-    # ------------------------------------------------------------------
-    # 节点: spark_summary
-    # ------------------------------------------------------------------
+
 
     async def _spark_summary_node(self, state: TutorState) -> dict[str, Any]:
         """Spark 总结节点：基于参考资料生成教学回答。
@@ -617,9 +612,6 @@ class TutorAgent:
                 "termination_reason": "spark_summary_done",
             }
 
-    # ------------------------------------------------------------------
-    # 节点: attachment_answer
-    # ------------------------------------------------------------------
 
     async def _attachment_answer_node(self, state: TutorState) -> dict[str, Any]:
         """附件理解路径：Spark MAX 基于附件预分析结果回答。
@@ -787,11 +779,13 @@ class TutorAgent:
             ],
             temperature=0.1,
         )
+
         graph = normalize_render_graph(
             payload.model_dump(mode="json"),
             layout_mode="force",
             relation_depth=2,
         )
+
         graph["neo4j"] = await self._store_chat_knowledge_graph(state=state, graph=graph)
         return graph
 

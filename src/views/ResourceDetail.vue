@@ -118,7 +118,7 @@
       <div v-if="previewItem" class="preview-dialog-body">
         <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem" />
         <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem" />
-        <DiagramView v-else-if="previewItem.type === 'diagram'" :result-data="previewItem" />
+        <MarkdownView v-else-if="previewItem.type === 'diagram'" :result-data="previewItem" />
         <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
         <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem" />
         <MarkdownView v-else :result-data="previewItem" />
@@ -137,7 +137,6 @@ import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
 import MindmapView from '@/components/resource/MindmapView.vue'
 import MarkdownView from '@/components/resource/MarkdownView.vue'
 import QuizView from '@/components/resource/QuizView.vue'
-import DiagramView from '@/components/resource/DiagramView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
 

@@ -166,7 +166,7 @@ class ChatKnowledgeGraphEdge(BaseModel):
 
     source: str = Field(min_length=1, max_length=40)
     target: str = Field(min_length=1, max_length=40)
-    relation_type: Literal["prerequisite", "extends", "related", "includes"] = "related"
+    relation_type: str = Field(default="related", max_length=20)
     label: str = Field(default="相关", max_length=16)
 
 
@@ -174,7 +174,7 @@ class ChatKnowledgeGraph(BaseModel):
     """聊天 Agent 输出的结构化知识图谱。"""
     model_config = ConfigDict(extra="forbid")
 
-    topic: str = Field(min_length=1, max_length=40)
+    topic: str = Field(default="", max_length=40)
     summary: str = Field(default="", max_length=160)
     nodes: list[ChatKnowledgeGraphNode] = Field(min_length=1, max_length=24)
     edges: list[ChatKnowledgeGraphEdge] = Field(default_factory=list, max_length=48)
