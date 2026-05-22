@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -125,7 +125,7 @@ async def get_resource_file(
     token: str = Query(default="", description="资源文件访问 token"),
 ):
     """旧文件下载接口已废弃。"""
-    raise HTTPException(status_code=410, detail="资源已改为数据库存储，请使用资源详情接口读取 content")
+    return HttpResponse.error(code=410, message="资源已改为数据库存储，请使用资源详情接口读取 content")
 
 
 @router.get("/resources/{resource_id}")

@@ -17,7 +17,6 @@ from app.resource.schemas import (
     KnowledgeGraph,
     ResourceGenerationRequest,
     ReviewResult,
-    StudyPathStep,
     WorkerResult,
     WorkerState,
 )
@@ -58,7 +57,7 @@ class ResourceGenerationWorkflow:
                 profile=profile,
                 plan=plan,
             )
-            review_result, study_path = await self._run_review(
+            review_result = await self._run_review(
                 request=request,
                 profile=profile,
                 plan=plan,
@@ -71,7 +70,6 @@ class ResourceGenerationWorkflow:
                 request=request,
                 results=results,
                 review_result=review_result,
-                study_path=study_path,
                 plan=plan,
             )
 
@@ -196,7 +194,7 @@ class ResourceGenerationWorkflow:
         profile: dict[str, Any],
         plan: ExecutionPlan,
         results: dict[str, WorkerResult],
-    ) -> tuple[ReviewResult, list[StudyPathStep]]:
+    ) -> ReviewResult:
         await self.emitter.emit_workflow("reviewing", "质量审查中", progress=85)
         reviewer = ReviewAgent(self.emitter)
         try:
@@ -222,17 +220,7 @@ class ResourceGenerationWorkflow:
                 suggestions=["已保留成功生成的资源，请优先人工检查资源一致性。"],
                 failed_agents=failed_agents,
             )
-            study_path = [
-                StudyPathStep(
-                    order=index + 1,
-                    resource_type=agent_id,
-                    title=result.title or f"{agent_id} 资源",
-                    reason="审核智能体失败，按成功生成顺序保留资源。",
-                )
-                for index, (agent_id, result) in enumerate(results.items())
-                if result.success
-            ]
-            return review_result, study_path
+            return review_result
 
     def _enabled_agents(self, request: ResourceGenerationRequest) -> list[str]:
         if not request.selected_agents:

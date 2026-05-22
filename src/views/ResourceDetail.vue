@@ -121,6 +121,7 @@
         <MarkdownView v-else-if="previewItem.type === 'diagram'" :result-data="previewItem" />
         <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
         <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem" />
+        <PptView v-else-if="previewItem.type === 'ppt'" :result-data="previewItem" />
         <MarkdownView v-else :result-data="previewItem" />
       </div>
     </el-dialog>
@@ -139,6 +140,7 @@ import MarkdownView from '@/components/resource/MarkdownView.vue'
 import QuizView from '@/components/resource/QuizView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
+import PptView from '@/components/resource/PptView.vue'
 
 const route = useRoute()
 const router = useRouter()

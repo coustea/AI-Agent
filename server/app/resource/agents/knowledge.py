@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app import config
 from app.infra.logging import get_logger
 from app.resource.events import AgentEventEmitter
 from app.resource.graph_store import get_graph_store
@@ -21,9 +22,9 @@ class KnowledgeGraphAgent:
         self.emitter = emitter
 
     async def run(self, state: WorkerState) -> WorkerResult:
-        config = state.agent_config or {}
-        graph = self._build_graph(state.knowledge_graph, state, config)
-        neo4j_meta = await self._store_graph(state=state, graph=graph, enabled=bool(config.get("store_neo4j", True)))
+        agent_cfg = state.agent_config or {}
+        graph = self._build_graph(state.knowledge_graph, state, agent_cfg)
+        neo4j_meta = await self._store_graph(state=state, graph=graph, enabled=bool(agent_cfg.get("store_neo4j", config.NEO4J_ENABLED)))
         graph["neo4j"] = neo4j_meta
 
         node_count = len(graph["nodes"])
@@ -50,11 +51,11 @@ class KnowledgeGraphAgent:
         self,
         knowledge_graph: KnowledgeGraph | None,
         state: WorkerState,
-        config: dict[str, Any],
+        agent_cfg: dict[str, Any],
     ) -> dict[str, Any]:
         source = knowledge_graph or KnowledgeGraph(topic=state.learning_need, summary="")
-        max_nodes = int(config.get("max_nodes") or 18)
-        include_orphans = bool(config.get("include_orphan_points", True))
+        max_nodes = int(agent_cfg.get("max_nodes") or config.NEO4J_MAX_NODES)
+        include_orphans = bool(agent_cfg.get("include_orphan_points", config.NEO4J_INCLUDE_ORPHAN_POINTS))
 
         points = list(source.points)
         if not points:
@@ -101,13 +102,13 @@ class KnowledgeGraphAgent:
             {
                 "topic": source.topic or state.learning_need,
                 "summary": source.summary,
-                "highlight_mode": config.get("highlight_mode") or "key_points",
+                "highlight_mode": agent_cfg.get("highlight_mode") or "key_points",
                 "focus_areas": list(source.focus_areas),
                 "nodes": nodes,
                 "edges": edges,
             },
-            layout_mode=str(config.get("layout_mode") or "force"),
-            relation_depth=int(config.get("relation_depth") or 2),
+            layout_mode=str(agent_cfg.get("layout_mode") or "force"),
+            relation_depth=int(agent_cfg.get("relation_depth") or config.NEO4J_RELATION_DEPTH),
         )
 
     @staticmethod

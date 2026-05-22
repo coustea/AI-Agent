@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, Query
+from fastapi import Depends, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -14,9 +14,18 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET
 from app.infra.database import session_scope
 from app.infra.models import ActiveToken, User
+from app.utils.response import HttpResponse
 
 bearer_scheme = HTTPBearer()
 optional_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+class AuthError(Exception):
+    """Authentication error that the global handler converts to HttpResponse envelope."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
 
 
 def hash_password(password: str) -> str:
@@ -61,9 +70,9 @@ def decode_token(token: str) -> int:
         )
         return int(payload["sub"])
     except jwt.ExpiredSignatureError as exc:
-        raise HTTPException(status_code=401, detail="Token 已过期") from exc
+        raise AuthError("Token 已过期") from exc
     except jwt.InvalidTokenError as exc:
-        raise HTTPException(status_code=401, detail="无效 Token") from exc
+        raise AuthError("无效 Token") from exc
 
 
 async def is_token_valid(token: str, session: AsyncSession) -> bool:
@@ -87,11 +96,11 @@ async def revoke_token(token: str, session: AsyncSession) -> None:
 async def _resolve_current_user_from_token(token: str) -> User:
     async with session_scope() as session:
         if not await is_token_valid(token, session):
-            raise HTTPException(status_code=401, detail="Token 已失效或已退出登录")
+            raise AuthError("Token 已失效或已退出登录")
         user_id = decode_token(token)
         user = await session.get(User, user_id)
         if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
+            raise AuthError("用户不存在")
         await session.refresh(user)
         return user
 
@@ -108,5 +117,5 @@ async def get_current_user_flexible(
 ) -> User:
     resolved_token = credentials.credentials if credentials else token
     if not resolved_token:
-        raise HTTPException(status_code=401, detail="缺少 Token")
+        raise AuthError("缺少 Token")
     return await _resolve_current_user_from_token(resolved_token)

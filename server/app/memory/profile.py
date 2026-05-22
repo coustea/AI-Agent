@@ -11,13 +11,17 @@ from app.infra.logging import get_logger
 from app.memory.store import MemoryStore
 from app.memory.types import (
     ALL_DIMENSIONS,
+    CONFIDENCE_HIGH,
+    CONFIDENCE_LOW,
+    CONFIDENCE_MEDIUM,
     DIMENSION_NAMES,
     DIALOGUE_ROLES,
     ONBOARDING_OPTIONAL_FIELDS,
     ONBOARDING_REQUIRED_FIELDS,
-    PROFILE_GATE_ASSISTANT_TURNS,
     PROFILE_MIN_COVERAGE,
+    PROFILE_UPDATE_INTERVALS,
     ProfileOutput,
+    confidence_label,
     has_profile_signal,
     make_default_profile_json,
     make_default_score_json,
@@ -88,6 +92,32 @@ def _avg_confidence(profile_json: dict[str, Any]) -> float:
     return round(sum(values) / len(values), 2) if values else 0.0
 
 
+def render_profile_markdown(profile_json: dict[str, Any]) -> str:
+    """将画像 JSON 渲染为 Markdown，供 LLM 上下文使用。"""
+    dims = profile_json.get("dimensions") or {}
+    lines = ["# 用户画像"]
+    for key in ALL_DIMENSIONS:
+        dim = dims.get(key) or {}
+        summary = dim.get("summary")
+        evidence = dim.get("evidence") or []
+        if not summary and not evidence:
+            continue
+        title = DIMENSION_NAMES.get(key, key)
+        conf = _clamp_confidence(dim.get("confidence"))
+        label = confidence_label(conf)
+        lines.append(f"\n## {title}（{label}）")
+        if summary:
+            lines.append(str(summary))
+        for item in evidence[:3]:
+            lines.append(f"- {item}")
+    strategies = profile_json.get("recommended_strategy") or []
+    if strategies:
+        lines.append("\n## 推荐策略")
+        for s in strategies[:5]:
+            lines.append(f"- {s}")
+    return "\n".join(lines) if len(lines) > 1 else "# 用户画像\n\n暂无画像信息。"
+
+
 def calculate_score(profile_json: dict[str, Any]) -> dict[str, Any]:
     dims = profile_json.get("dimensions") or {}
     dim_scores: dict[str, int | None] = {}
@@ -114,6 +144,14 @@ def calculate_score(profile_json: dict[str, Any]) -> dict[str, Any]:
         }
     )
     return score_json
+
+
+def _get_update_interval(coverage: float) -> int:
+    """根据覆盖率返回更新间隔轮次。"""
+    for tier_info in PROFILE_UPDATE_INTERVALS.values():
+        if coverage <= tier_info["max_coverage"]:
+            return tier_info["interval"]
+    return PROFILE_UPDATE_INTERVALS["high"]["interval"]
 
 
 class ProfileBuilder:
@@ -154,11 +192,13 @@ class ProfileBuilder:
             updated_reason = "基于近期对话更新画像"
 
         score_json = calculate_score(profile_json)
+        profile_markdown = render_profile_markdown(profile_json)
         return await self.store.update_profile(
             user_id=user_id,
             module=self.module,
             profile_json=profile_json,
             score_json=score_json,
+            profile_markdown=profile_markdown,
             updated_reason=updated_reason if reason == "onboarding" else f"{updated_reason}（{reason}）",
             source_session_ids=[session_id] if session_id else None,
             confidence=score_json["confidence"],
@@ -172,29 +212,31 @@ class ProfileBuilder:
         session_id: str,
         user_message: str,
         assistant_reply: str,
-        compression_result: Any | None = None,
+        turn_count: int = 0,
     ) -> bool:
         try:
-            if not await self._should_update(user_id, session_id, user_message, compression_result):
+            if not await self._should_update(user_id, session_id, user_message, turn_count):
                 return False
             return await self.upsert(user_id=user_id, session_id=session_id, reason="post_turn") is not None
         except Exception as exc:
             logger.error("[MemoryProfile] 更新画像失败 user=%s session=%s err=%s", user_id, session_id, exc)
             return False
 
-    async def _should_update(self, user_id: int, session_id: str, user_message: str, compression_result: Any | None) -> bool:
+    async def _should_update(self, user_id: int, session_id: str, user_message: str, turn_count: int) -> bool:
         profile = await self.store.get_profile(user_id=user_id, module=self.module)
         score = profile.profile_score_json if profile and profile.profile_score_json else {}
-        if profile is None or int(score.get("section_coverage") or 0) < PROFILE_MIN_COVERAGE:
+        coverage = int(score.get("section_coverage") or 0)
+
+        if profile is None or coverage < PROFILE_MIN_COVERAGE:
             return True
         if has_profile_signal(user_message):
             return True
-        summary_json = getattr(compression_result, "summary_json", None) if compression_result else None
-        if summary_json and (summary_json.get("profile_candidates") or summary_json.get("memory_candidates")):
+
+        interval = _get_update_interval(coverage / 100.0)
+        if turn_count > 0 and turn_count % interval == 0:
             return True
-        messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=80)
-        assistant_turns = sum(1 for msg in messages if msg.role == "assistant")
-        return assistant_turns > 0 and assistant_turns % PROFILE_GATE_ASSISTANT_TURNS == 0 and has_profile_signal(user_message)
+
+        return False
 
     def _build_onboarding_profile(self, onboarding: dict[str, Any], old_json: dict[str, Any] | None) -> dict[str, Any]:
         profile = deepcopy(old_json) if old_json else make_default_profile_json()

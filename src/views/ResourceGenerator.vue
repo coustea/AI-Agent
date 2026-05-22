@@ -256,6 +256,39 @@
                     </div>
                   </template>
 
+                  <template v-if="agent.id === 'ppt'">
+                    <div class="ctrl-group">
+                      <label>输出格式</label>
+                      <el-radio-group v-model="agentConfigs.ppt.output_format" size="small" class="custom-radio-group">
+                        <el-radio-button label="preview">在线预览</el-radio-button>
+                        <el-radio-button label="pptx">生成PPTX源文件</el-radio-button>
+                      </el-radio-group>
+                    </div>
+                    <div class="ctrl-group">
+                      <label>幻灯片主题风格</label>
+                      <el-select v-model="agentConfigs.ppt.template_id" size="default" class="w-full custom-select">
+                        <el-option label="经典学术蓝 (Logic Blue)" value="theme-logic-blue" />
+                        <el-option label="现代开发绿 (Dev Green)" value="theme-dev-green" />
+                        <el-option label="未来科技靛 (Tech Indigo)" value="theme-tech-indigo" />
+                      </el-select>
+                    </div>
+                    <div class="ctrl-group">
+                      <label>内容深度/难度</label>
+                      <el-radio-group v-model="agentConfigs.ppt.difficulty" size="small" class="custom-radio-group">
+                        <el-radio-button label="beginner">入门演示</el-radio-button>
+                        <el-radio-button label="intermediate">进阶讲解</el-radio-button>
+                        <el-radio-button label="advanced">硬核干货</el-radio-button>
+                      </el-radio-group>
+                    </div>
+                    <div class="ctrl-group">
+                      <div class="slider-label-row">
+                        <label>期望生成页数</label>
+                        <span class="slider-value"><b>{{ agentConfigs.ppt.page_count }}</b> 页</span>
+                      </div>
+                      <el-slider v-model="agentConfigs.ppt.page_count" :min="3" :max="20" :step="1" class="custom-slider-v2" />
+                    </div>
+                  </template>
+
                   <template v-if="agent.id === 'video'">
                     <div class="coming-soon-panel">
                       <el-icon><VideoPlay /></el-icon>
@@ -622,6 +655,7 @@
         <KnowledgeGraphView v-else-if="previewData.agentId === 'knowledge_graph'" :result-data="previewData.resultData" />
         <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
         <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
+        <PptView v-else-if="previewData.agentId === 'ppt'" :result-data="previewData.resultData" />
         <MarkdownView v-else :result-data="previewData.resultData" />
       </div>
     </el-dialog>
@@ -630,13 +664,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   MagicStick, ArrowRight, Cpu,
   CircleCheckFilled, RefreshLeft, Position, VideoPlay,
   Document, Share, Edit, Collection,
-  Clock, Odometer
+  Clock, Odometer, DataBoard
 } from '@element-plus/icons-vue'
 
 import MindmapView from '@/components/resource/MindmapView.vue'
@@ -645,12 +678,11 @@ import QuizView from '@/components/resource/QuizView.vue'
 import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
+import PptView from '@/components/resource/PptView.vue'
 
 import { generateResources, type ResourceAgentId, type LearningScenario, type ResourceGenerateEvent } from '@/api/resource'
 
 defineOptions({ name: 'ResourceGenerator' })
-
-const router = useRouter()
 
 type WorkflowStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 
@@ -737,13 +769,14 @@ type AnyAgentConfigs = {
   code: { programming_language: string; case_type: string; comment_level: string; include_test: boolean; difficulty: string }
   reading: { reading_depth: string; max_items: number; resource_quality: string; include_practice: boolean; language_preference: string }
   video: { script_style: string; estimated_duration: number }
+  ppt: { template_id: string; page_count: number; difficulty: string; output_format: string }
 }
 
 const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
-  exam_prep: { content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' }, quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 70, exam_style: '考研', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 18, relation_depth: 2, highlight_mode: 'weak_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'algorithm_template', comment_level: 'standard', include_test: false, difficulty: 'intermediate' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'classic', include_practice: false, language_preference: 'chinese' } },
-  daily_review: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 16, relation_depth: 2, highlight_mode: 'key_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' } },
-  project_practice: { content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 30, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'radial', max_nodes: 24, relation_depth: 3, highlight_mode: 'all', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: true, difficulty: 'intermediate' }, reading: { reading_depth: 'engineering', max_items: 5, resource_quality: 'latest', include_practice: true, language_preference: 'chinese' } },
-  self_study: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 20, relation_depth: 2, highlight_mode: 'key_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'verbose', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' } },
+  exam_prep: { content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' }, quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 70, exam_style: '考研', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 18, relation_depth: 2, highlight_mode: 'weak_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'algorithm_template', comment_level: 'standard', include_test: false, difficulty: 'intermediate' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'classic', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 8, difficulty: 'advanced', output_format: 'preview' } },
+  daily_review: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 16, relation_depth: 2, highlight_mode: 'key_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-dev-green', page_count: 5, difficulty: 'intermediate', output_format: 'preview' } },
+  project_practice: { content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 30, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'radial', max_nodes: 24, relation_depth: 3, highlight_mode: 'all', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: true, difficulty: 'intermediate' }, reading: { reading_depth: 'engineering', max_items: 5, resource_quality: 'latest', include_practice: true, language_preference: 'chinese' }, ppt: { template_id: 'theme-tech-indigo', page_count: 10, difficulty: 'intermediate', output_format: 'preview' } },
+  self_study: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 20, relation_depth: 2, highlight_mode: 'key_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'verbose', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 6, difficulty: 'beginner', output_format: 'preview' } },
 }
 
 // ===================== 1. 核心状态 =====================
@@ -770,11 +803,12 @@ const agentMetaList = [
   { id: 'code', name: '实战代码沙箱', icon: Cpu, colorClass: 'text-red' },
   { id: 'quiz', name: '自测题训练', icon: Edit, colorClass: 'text-emerald' },
   { id: 'reading', name: '拓展阅读推荐', icon: Collection, colorClass: 'text-indigo' },
+  { id: 'ppt', name: 'PPT文稿生成', icon: DataBoard, colorClass: 'text-pink' },
   { id: 'video', name: '视频动画脚本', icon: VideoPlay, colorClass: 'text-slate', disabled: true }
 ]
 
 const getAgentMeta = (id: string) => agentMetaList.find(a => a.id === id) || { name: id, icon: Document, colorClass: 'text-blue' }
-const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading'])
+const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading', 'ppt'])
 
 const isAgentEnabled = (id: string) => enabledAgentIds.value.includes(id as ResourceAgentId)
 
@@ -814,6 +848,7 @@ const agentConfigs = reactive({
   code: { programming_language: 'python' as const, case_type: 'basic_demo' as const, comment_level: 'standard' as const, include_test: false, difficulty: 'beginner' as const },
   reading: { reading_depth: 'course_extended' as const, max_items: 3, resource_quality: 'balanced' as const, include_practice: false, language_preference: 'chinese' as const },
   video: { script_style: 'concept_animation', estimated_duration: 3 },
+  ppt: { template_id: 'theme-logic-blue' as const, page_count: 6, difficulty: 'intermediate' as const, output_format: 'preview' as const },
 })
 
 const applyScenarioDefaults = (scenario: LearningScenario) => {
@@ -897,13 +932,13 @@ const currentStageLabel = computed(() => {
 const completedResourceCount = computed(() => generatedResources.value.length)
 const expectedResourceCount = computed(() => Math.max(Object.keys(activeAgents).length, enabledAgentIds.value.length))
 
-const DEFAULT_RESOURCE_SEQUENCE = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading', 'video']
+const DEFAULT_RESOURCE_SEQUENCE = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading', 'ppt', 'video']
 
 // 每个 agent 属于哪个「阶段层」及在流图中的 x 坐标（固定）
 const PHASE_LAYOUT: { x: number; agents: string[] }[] = [
   { x: 28, agents: ['content', 'mindmap'] },
   { x: 52, agents: ['knowledge_graph', 'code', 'quiz'] },
-  { x: 72, agents: ['reading'] },
+  { x: 72, agents: ['reading', 'ppt'] },
 ]
 
 const flowAgentMeta: Record<string, { label: string; icon: any }> = {
@@ -913,6 +948,7 @@ const flowAgentMeta: Record<string, { label: string; icon: any }> = {
   code: { label: '代码案例', icon: Cpu },
   quiz: { label: '练习题', icon: Edit },
   reading: { label: '拓展阅读', icon: Collection },
+  ppt: { label: 'PPT生成', icon: DataBoard },
 }
 
 // 动态只保留已启用 agent 所在的 phase
@@ -938,11 +974,14 @@ const ALL_FLOW_EDGES: [string, string][] = [
   ['knowledge_graph', 'reading'],
   ['code', 'reading'],
   ['quiz', 'reading'],
+  ['knowledge_graph', 'ppt'],
+  ['mindmap', 'ppt'],
   ['content', 'reviewer'],
   ['mindmap', 'reviewer'],
   ['knowledge_graph', 'reviewer'],
   ['code', 'reviewer'],
   ['reading', 'reviewer'],
+  ['ppt', 'reviewer'],
   ['quiz', 'reviewer'],
   ['reviewer', 'assembler'],
 ]
@@ -1059,6 +1098,7 @@ const getResourceTypeLabel = (type: string) => {
     code: '代码案例',
     quiz: '自测题',
     reading: '拓展阅读',
+    ppt: '演示文稿',
     video: '视频脚本',
     reviewer: '质量审查',
   }
@@ -1073,6 +1113,7 @@ const getResourceUsageHint = (type: string) => {
     code: '通过代码案例把知识点落到实践，适合边运行边理解。',
     quiz: '完成自测题，检查掌握情况并定位仍然薄弱的知识点。',
     reading: '用于课后拓展和深入理解，适合完成基础资源后阅读。',
+    ppt: '精美的自动生成幻灯片，可用于直接演示或快速概览。',
     video: '可作为后续视频或动画讲解的脚本基础。',
   }
   return hintMap[type] || '建议结合本次学习目标使用该资源。'
@@ -1086,6 +1127,7 @@ const getResourceStageLabel = (type: string) => {
     code: '实践验证',
     quiz: '检测巩固',
     reading: '拓展提升',
+    ppt: '总结展示',
     video: '讲解呈现',
   }
   return stageMap[type] || '资源学习'
@@ -1099,6 +1141,7 @@ const getDefaultResourceFormat = (type: string) => {
     code: 'Code',
     quiz: 'Quiz JSON',
     reading: 'Reading List',
+    ppt: 'PPT JSON',
     video: 'Script',
   }
   return formatMap[type] || 'Resource'
@@ -1112,6 +1155,7 @@ const getEstimatedTime = (type: string) => {
     code: '15-25 分钟',
     quiz: '10-20 分钟',
     reading: '20-30 分钟',
+    ppt: '5-10 分钟',
     video: '3-5 分钟',
   }
   return timeMap[type] || '待评估'
@@ -1137,6 +1181,7 @@ const getResourceToneClass = (type: string) => {
     code: 'tone-rose',
     quiz: 'tone-emerald',
     reading: 'tone-indigo',
+    ppt: 'tone-pink',
     video: 'tone-slate',
   }
   return toneMap[type] || 'tone-blue'
@@ -1192,6 +1237,7 @@ const startGeneration = async () => {
     quiz: agentConfigs.quiz,
     code: agentConfigs.code,
     reading: agentConfigs.reading,
+    ppt: agentConfigs.ppt,
   }
 
   streamController.value = generateResources(

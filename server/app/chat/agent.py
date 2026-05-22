@@ -21,14 +21,15 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+import json
+from typing import Any
 
-from app.chat.schemas import ChatKnowledgeGraph, TutorState
+from app.chat.request import ChatHistoryMessage
+from app.chat.schemas import ChatKnowledgeGraph, TutorAgentContext, TutorState
 from app.utils.context import runtime_context as chat_runtime_context
-from app.utils.paths import CHAT_DIR
-from app.chat.runtime import build_user_message_record, prepare_tutor_turn, resolve_session_id
-from app.resource.graph_store import get_graph_store
+from app.chat.runtime import prepare_tutor_state
 from app.resource.utils.graph_utils import normalize_render_graph
+from app.resource.graph_store import get_graph_store
 from app.chat.utils import (
     classify_route,
     extract_question,
@@ -40,7 +41,6 @@ from app.chat.utils import (
     build_messages,
 )
 from app.config import LANGGRAPH_DEBUG
-from app.memory import MemoryService
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
@@ -51,6 +51,24 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 logger = get_logger(__name__)
+
+
+async def store_knowledge_graph(
+    *,
+    user_id: int,
+    session_id: str,
+    graph: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return await get_graph_store().upsert_graph(
+            user_id=user_id,
+            resource_id=session_id or "chat",
+            agent_id="chat",
+            graph=graph,
+        )
+    except Exception as exc:
+        logger.exception("[TutorAgent] 聊天知识图谱 Neo4j 存储失败")
+        return {"stored": False, "error": str(exc)}
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -133,18 +151,14 @@ class TutorAgent:
     3. attachment_answer — Spark MAX 基于附件分析结果回答
     """
 
-    # 单例实例
-    _shared_instance: "TutorAgent | None" = None
-
-    def __init__(self) -> None:
+    def __init__(self, context: TutorAgentContext) -> None:
         """初始化 TutorAgent。
 
-        创建 LLM 实例、上下文服务、图和工具。
+        创建 LLM 实例、保存服务层构造好的上下文、初始化图。
         """
+        self.context = context
         # LLM 实例
         self.llm = get_llm()
-        # 上下文服务
-        self.memory_layer = MemoryService(module="mentor")
 
         # 图与工具
         self.graph = None
@@ -152,17 +166,6 @@ class TutorAgent:
         self._background_tasks: set[asyncio.Task] = set()
 
         logger.info("[TutorAgent] 初始化完成")
-
-    @classmethod
-    def get_shared(cls) -> "TutorAgent":
-        """获取全局单例。
-
-        Returns:
-            TutorAgent 单例实例。
-        """
-        if cls._shared_instance is None:
-            cls._shared_instance = cls()
-        return cls._shared_instance
 
     # ------------------------------------------------------------------
     # 内部辅助方法
@@ -346,7 +349,7 @@ class TutorAgent:
         messages = state.get("messages") or []
         file_urls = state.get("file_urls") or []
         image_urls = state.get("image_urls") or []
-        resource_mode = state.get("resource_mode", "none")
+        messages = state.get("messages") or []
         enable_search = bool(state.get("enable_search", False))
         need_knowledge_graph = bool(state.get("need_knowledge_graph", False))
         user_message = extract_question(messages)
@@ -380,7 +383,8 @@ class TutorAgent:
 
             # 构造 state_updates
             state_updates: dict[str, Any] = {}
-            if need_kg != state.get("need_knowledge_graph"):
+            current_need_kg = state.get("need_knowledge_graph")
+            if current_need_kg is not None and need_kg != current_need_kg:
                 state_updates["need_knowledge_graph"] = need_kg
 
             # 路由决策
@@ -430,7 +434,7 @@ class TutorAgent:
             })
             if summary_type:
                 state_updates["summary_type"] = summary_type
-            if enable_search:
+            if enable_search != bool(state.get("enable_search", False)):
                 state_updates["enable_search"] = True
 
             return state_updates
@@ -548,7 +552,6 @@ class TutorAgent:
             }
 
 
-
     async def _spark_summary_node(self, state: TutorState) -> dict[str, Any]:
         """Spark 总结节点：基于参考资料生成教学回答。
 
@@ -570,8 +573,7 @@ class TutorAgent:
             # 构建参考资料
             reference = search_result
             if not reference and state.get("knowledge_graph"):
-                import json as _json
-                reference = _json.dumps(state["knowledge_graph"], ensure_ascii=False, default=str)
+                reference = json.dumps(state["knowledge_graph"], ensure_ascii=False, default=str)
 
             if summary_type == "brief":
                 prompt = (
@@ -748,6 +750,16 @@ class TutorAgent:
         answer: str,
         state: TutorState,
     ) -> dict[str, Any] | None:
+        """调用 LLM 生成知识图谱 JSON 并持久化到 Neo4j。
+
+        Args:
+            question: 用户问题。
+            answer: 大模型回答或搜索结果文本。
+            state: 当前 LangGraph 状态，用于提取上下文和用户信息。
+
+        Returns:
+            归一化后的图谱数据字典，失败时返回 None。
+        """
         profile_context = str(state.get("profile_context", "")).strip()
         fact_context = str(state.get("fact_context", "")).strip()
         recent_chat_context = str(state.get("recent_chat_context", "")).strip()
@@ -786,20 +798,12 @@ class TutorAgent:
             relation_depth=2,
         )
 
-        graph["neo4j"] = await self._store_chat_knowledge_graph(state=state, graph=graph)
+        graph["neo4j"] = await store_knowledge_graph(
+            user_id=int(state.get("user_id") or 0),
+            session_id=str(state.get("session_id") or "chat"),
+            graph=graph,
+        )
         return graph
-
-    async def _store_chat_knowledge_graph(self, *, state: TutorState, graph: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return await get_graph_store().upsert_graph(
-                user_id=int(state.get("user_id") or 0),
-                resource_id=str(state.get("session_id") or "chat"),
-                agent_id="chat",
-                graph=graph,
-            )
-        except Exception as exc:
-            logger.exception("[TutorAgent] 聊天知识图谱 Neo4j 存储失败")
-            return {"stored": False, "error": str(exc)}
 
     # ------------------------------------------------------------------
     # 后台任务
@@ -833,87 +837,40 @@ class TutorAgent:
 
     async def chat_stream(
         self,
-        user_id: int,
-        user_message: str,
-        session_id: Optional[str] = None,
-        image_urls: Optional[list[str]] = None,
-        file_urls: Optional[list[str]] = None,
-        need_knowledge_graph: bool = False,
-        generate_video: bool = False,
-        enable_search: bool = False,
-        enable_long_term_memory: bool = False,
-        resource_mode: Optional[str] = None,
-        attachment_analysis: Optional[dict[str, Any]] = None,
+        history: list[ChatHistoryMessage],
     ):
         """流式生成对话响应。
 
+        TutorAgent 是无状态决策层：只消费初始化上下文和本轮传入的历史，不读写记忆。
+
         Args:
-            user_id: 用户ID。
-            user_message: 用户消息。
-            session_id: 可选的会话ID。
-            image_urls: 图片URL列表。
-            file_urls: 文件URL列表。
-            need_knowledge_graph: 是否生成知识图谱。
-            generate_video: 是否生成视频。
-            enable_search: 是否启用搜索。
-            enable_long_term_memory: 是否启用长期记忆读写。
-            resource_mode: 资源模式。
-            attachment_analysis: 附件预分析结果。
+            history: 调用方传入的完整对话历史，最后一条用户消息是本轮问题。
 
         Yields:
             SSE 事件字典。
         """
-        requested_image_urls = image_urls or []
-        requested_file_urls = file_urls or []
-        resource_requested = bool(resource_mode and resource_mode != "none") or generate_video
+        context = self.context
+        current_message = ""
+        for item in reversed(history):
+            if item.role == "user" and item.content.strip():
+                current_message = item.content.strip()
+                break
+
+        resource_requested = bool(context.resource_mode and context.resource_mode != "none") or context.generate_video
         if resource_requested:
             logger.info("[TutorAgent] 当前版本仅生成文字回答，已忽略多模态资源请求")
 
         logger.info(
             "[TutorAgent] 对话开始 message=%s attachments(images=%s,files=%s) enable_search=%s",
-            truncate(user_message, 180),
-            len(requested_image_urls),
-            len(requested_file_urls),
-            enable_search,
-        )
-
-        effective_session = resolve_session_id(user_id, session_id)
-        user_record = build_user_message_record(
-            user_message,
-            image_urls=requested_image_urls,
-            file_urls=requested_file_urls,
+            truncate(current_message, 180),
+            len(context.image_urls),
+            len(context.file_urls),
+            context.enable_search,
         )
 
         await self._ensure_graph()
 
-        # 保存用户消息
-        try:
-            await self.memory_layer.save_message(
-                user_id=user_id,
-                session_id=effective_session,
-                role="user",
-                content=user_record.content,
-                attachments=user_record.attachments,
-            )
-        except Exception as exc:
-            logger.exception("[TutorAgent] 用户消息保存失败")
-            yield stream_event("error", f"保存消息失败: {exc}")
-            return
-
-        # 准备对话轮次
-        prepared_turn = await prepare_tutor_turn(
-            ctx_service=self.memory_layer,
-            user_id=user_id,
-            user_message=user_message,
-            session_id=effective_session,
-            image_urls=requested_image_urls,
-            file_urls=requested_file_urls,
-            enable_search=enable_search,
-            enable_long_term_memory=enable_long_term_memory,
-            need_knowledge_graph=need_knowledge_graph,
-            attachment_analysis=attachment_analysis,
-        )
-        initial_state = prepared_turn.initial_state
+        initial_state = prepare_tutor_state(context, history)
 
         full_reply = ""
         runtime_state: dict[str, Any] = dict(initial_state)
@@ -922,7 +879,7 @@ class TutorAgent:
 
         try:
             # 在上下文中运行图
-            with chat_runtime_context(user_id, effective_session):
+            with chat_runtime_context(context.user_id, context.session_id):
                 async for event in self.graph.astream_events(initial_state, **_graph_stream_kwargs()):
                     kind = event.get("event", "")
                     name = event.get("name", "")
@@ -995,7 +952,7 @@ class TutorAgent:
         # 发送错误事件
         if graph_error_text:
             yield stream_event("error", graph_error_text)
-            yield stream_event("done", {"session_id": effective_session, "error": True})
+            yield stream_event("done", {"session_id": context.session_id, "error": True})
             return
 
         # 从状态中提取回复
@@ -1010,41 +967,15 @@ class TutorAgent:
         # 检查无效回复
         if is_unusable_reply_text(full_reply):
             yield stream_event("error", "模型未返回有效内容，请重试。")
-            yield stream_event("done", {"session_id": effective_session, "error": True})
-            return
-
-        # 保存回复
-        try:
-            await self.memory_layer.save_message(
-                user_id=user_id,
-                session_id=effective_session,
-                role="assistant",
-                content=full_reply,
-                knowledge_graph=runtime_state.get("knowledge_graph"),
-            )
-
-            # 启动后台任务处理后续流程
-            self._spawn_background(
-                self.memory_layer.after_turn(
-                    user_id=user_id,
-                    session_id=effective_session,
-                    user_message=user_message,
-                    assistant_reply=full_reply,
-                    enable_long_term_memory=enable_long_term_memory,
-                ),
-                task_name="post_chat_pipeline",
-            )
-        except Exception as exc:
-            logger.exception("[TutorAgent] 回复保存失败")
-            yield stream_event("error", f"保存回复失败: {exc}")
-            yield stream_event("done", {"session_id": effective_session, "error": True})
+            yield stream_event("done", {"session_id": context.session_id, "error": True})
             return
 
         # 发送完成事件
         yield stream_event(
             "done",
             {
-                "session_id": effective_session,
+                "session_id": context.session_id,
+                "full_response": full_reply,
                 "resource_mode": "none",
                 "resource": None,
                 "resources": {

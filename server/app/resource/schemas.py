@@ -1,5 +1,4 @@
-"""
-资源生成模块 Pydantic 模型。
+"""资源生成模块 Pydantic 模型。
 
 包含请求/响应/内部状态的所有数据结构。
 """
@@ -370,3 +369,43 @@ class ResourceResponse(BaseModel):
     learning_scenario: str
     status: str = "completed"
     items: list[ResourceItemResponse] = Field(default_factory=list)
+
+
+# ======================================================================
+# Re-exports from request.py / response.py for backward compatibility
+# ======================================================================
+
+from app.resource.request import ResourceGenerateRequest  # noqa: E402
+from app.resource.response import (  # noqa: E402
+    ResourceDetailResponse,
+    ResourceListResponse,
+)
+
+__all__ = [
+    # Constants
+    "AGENT_META",
+    "AGENT_DEFAULT_ORDER",
+    "AGENT_DEFAULT_ENABLED",
+    # Request models
+    "ResourceGenerationRequest",
+    "ResourceGenerateRequest",
+    # Knowledge graph & planning
+    "KnowledgePoint",
+    "KnowledgeRelation",
+    "KnowledgeGraph",
+    "AgentInstruction",
+    "ExecutionPlan",
+    # Internal state
+    "WorkerState",
+    "WorkerResult",
+    "GeneratedResourceItem",
+    "StudyPathStep",
+    "ReviewResult",
+    "ResourceBundle",
+    # Response models
+    "AgentMeta",
+    "ResourceItemResponse",
+    "ResourceResponse",
+    "ResourceDetailResponse",
+    "ResourceListResponse",
+]

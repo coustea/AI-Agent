@@ -1,4 +1,5 @@
 import http from '@/utils/http'
+import type { ApiResponse } from '@/utils/http'
 
 // ==========================================
 // 类型定义
@@ -10,18 +11,10 @@ export interface AttachmentInfo {
   name: string
 }
 
-export interface ToolCallRecord {
-  tool: string
-  args: Record<string, unknown> | string
-  result: string
-  status: string  // "success" | "error"
-}
-
 export interface ChatMessageItem {
   role: string
   content: string
   attachments: AttachmentInfo[] | null
-  tool_calls: ToolCallRecord[] | null
   knowledge_graph: Record<string, unknown> | null
   created_at: string | null
 }
@@ -40,7 +33,8 @@ export interface UploadResult {
 }
 
 export interface StreamChatParams {
-  message: string
+  message?: string
+  history?: StreamChatHistoryItem[]
   session_id?: string
   image_urls?: string[]
   file_urls?: string[]
@@ -50,13 +44,20 @@ export interface StreamChatParams {
   enable_long_term_memory?: boolean
 }
 
+export interface StreamChatHistoryItem {
+  role: 'user' | 'assistant' | 'ai' | 'system'
+  content: string
+  attachments?: AttachmentInfo[] | null
+  knowledge_graph?: Record<string, unknown> | null
+}
+
 export interface StreamChatEvent {
   event: string
   data: unknown
 }
 
 export function getChatHistory(sessionId?: string, limit = 50) {
-  return http.get<{ code: number; message: string; data: ChatMessageItem[] }>('/ai/chat/history', {
+  return http.get<ApiResponse<ChatMessageItem[]>>('/ai/chat/history', {
     params: { session_id: sessionId, limit }
   })
 }
@@ -66,23 +67,23 @@ export function getChatHistory(sessionId?: string, limit = 50) {
 // ==========================================
 
 export function getSessions(limit = 20) {
-  return http.get<{ code: number; message: string; data: ChatSession[] }>('/ai/chat/sessions', {
+  return http.get<ApiResponse<ChatSession[]>>('/ai/chat/sessions', {
     params: { limit }
   })
 }
 
 export function createSession() {
-  return http.post<{ code: number; message: string; data: { id: string; title: string } }>('/ai/chat/sessions')
+  return http.post<ApiResponse<{ id: string; title: string }>>('/ai/chat/sessions')
 }
 
 export function deleteSession(sessionId: string) {
-  return http.delete<{ code: number; message: string }>(`/ai/chat/sessions/${sessionId}`)
+  return http.delete<ApiResponse>(`/ai/chat/sessions/${sessionId}`)
 }
 
 export function updateSessionTitle(sessionId: string, title: string) {
   const formData = new FormData()
   formData.append('title', title)
-  return http.patch<{ code: number; message: string }>(`/ai/chat/sessions/${sessionId}`, formData)
+  return http.patch<ApiResponse>(`/ai/chat/sessions/${sessionId}`, formData)
 }
 
 // ==========================================
@@ -93,7 +94,7 @@ export function uploadFile(file: File, sessionId: string) {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('session_id', sessionId)
-  return http.post<{ code: number; message: string; data: UploadResult }>('/ai/chat/upload', formData, {
+  return http.post<ApiResponse<UploadResult>>('/ai/chat/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 30000,
   })
@@ -131,7 +132,12 @@ export function streamChat(
   const token = localStorage.getItem('token')
 
   const formData = new FormData()
-  formData.append('message', params.message)
+  if (params.message) {
+    formData.append('message', params.message)
+  }
+  if (params.history && params.history.length > 0) {
+    formData.append('history', JSON.stringify(params.history))
+  }
   if (params.session_id) {
     formData.append('session_id', params.session_id)
   }

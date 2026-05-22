@@ -9,9 +9,9 @@
     @open="handleOpen"
   >
     <div class="dialog-body-container">
-      <div class="profile-header-meta" v-if="profileUpdated">
-        <div class="sync-badge is-syncing">
-          <span class="dot"></span> <span>Live (刚刚更新)</span>
+      <div class="profile-header-meta" v-if="profileUpdated" aria-live="polite">
+        <div class="sync-badge">
+          <span>Live (刚刚更新)</span>
         </div>
       </div>
 
@@ -19,13 +19,14 @@
         <div
           v-for="card in profileCards"
           :key="card.key"
-          class="insight-card"
+          :class="['insight-card', { 'is-featured': isFeaturedCard(card.title) }]"
         >
           <div class="card-header">
             <div class="card-icon-wrap">
-              <el-icon><component :is="getProfileCardIcon(card.key)" /></el-icon>
+              <el-icon aria-hidden="true"><component :is="getProfileCardIcon(card.key)" /></el-icon>
             </div>
             <span class="card-title">{{ card.title }}</span>
+            <span :class="['confidence-tag', `confidence-${card.confidence}`]">{{ card.confidenceLabel }}</span>
           </div>
           <div class="card-body">
             <div class="card-content">
@@ -45,17 +46,15 @@
         </div>
       </div>
 
-      <div class="profile-empty-state" v-else>
+      <div class="profile-empty-state" v-else aria-live="polite">
         <div class="empty-visual-container">
-          <div class="pulse-ring"></div>
-          <div class="pulse-ring delay-1"></div>
           <div class="empty-visual">
-            <el-icon><Cpu /></el-icon>
+            <el-icon aria-hidden="true"><Cpu /></el-icon>
           </div>
         </div>
         <div class="empty-text-wrap">
           <h4>待捕获画像特征</h4>
-          <p>由于对话样本较少，您的动态学习画像仍在生成中。多和AI导师交流，我们会为您建立更精准的画像。</p>
+          <p>由于对话样本较少，您的动态学习画像仍在生成中。多参与学习活动，我们会为您建立更精准的画像。</p>
         </div>
       </div>
     </div>
@@ -74,6 +73,8 @@ interface ProfileCard {
   key: string
   title: string
   content: string
+  confidence: string
+  confidenceLabel: string
 }
 
 const profileCards = ref<ProfileCard[]>([])
@@ -90,10 +91,31 @@ const PROFILE_CARD_ICON_MAP: Record<string, any> = {
   学习历史: Clock,
 }
 
+const CONFIDENCE_LABELS: Record<string, string> = {
+  high: '确定',
+  medium: '推测',
+  low: '初步',
+  empty: '待探索',
+}
+
+const DEFAULT_CONFIDENCE_LABEL = '待探索'
+
+function getConfidenceTier(value: number): string {
+  if (value >= 0.7) return 'high'
+  if (value >= 0.4) return 'medium'
+  if (value > 0) return 'low'
+  return 'empty'
+}
+
 const normalizeCardKey = (title: string) => title.replace(/[\/\s]/g, '')
 
 const getProfileCardIcon = (key: string) => {
   return PROFILE_CARD_ICON_MAP[key] || DataLine
+}
+
+// 核心特征卡片判断
+const isFeaturedCard = (title: string) => {
+  return ['知识基础', '学习目标'].includes(title)
 }
 
 const fetchProfile = async () => {
@@ -135,13 +157,14 @@ const fetchProfile = async () => {
       if (dimData.summary || (dimData.evidence && dimData.evidence.length > 0)) {
         const title = dimensionNames[key] || key
         let content = dimData.summary || ''
-        if (dimData.evidence && dimData.evidence.length > 0) {
-          content += '\n' + dimData.evidence.map((e: string) => `- ${e}`).join('\n')
-        }
+        const confidenceValue = dimData.confidence ?? 0
+        const tier = getConfidenceTier(confidenceValue)
         nextCards.push({
           key: normalizeCardKey(title),
           title: title,
           content: content.trim() || '暂无明显信息',
+          confidence: tier,
+          confidenceLabel: CONFIDENCE_LABELS[tier] ?? DEFAULT_CONFIDENCE_LABEL,
         })
       }
     }
@@ -172,24 +195,22 @@ watch(profileRefreshTrigger, () => {
 <style>
 .global-profile-dialog {
   border-radius: var(--radius-2xl) !important;
-  box-shadow: var(--shadow-xl) !important;
-  background: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
+  background: #ffffff !important;
+  border: 1px solid #eaeaea !important;
 }
 
 .global-profile-dialog .el-dialog__header {
   padding: var(--space-6) var(--space-8) var(--space-4);
   margin-right: 0;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .global-profile-dialog .el-dialog__title {
   font-weight: var(--weight-bold);
   font-size: 1.25rem;
-  color: var(--color-text);
-  letter-spacing: -0.02em;
+  color: #1a1a1a;
+  letter-spacing: -0.01em;
 }
 
 .global-profile-dialog .el-dialog__body {
@@ -201,7 +222,7 @@ watch(profileRefreshTrigger, () => {
 .dialog-body-container {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .profile-header-meta {
@@ -212,110 +233,122 @@ watch(profileRefreshTrigger, () => {
 .sync-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: var(--space-1) var(--space-2);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  padding: 4px 10px;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-muted);
-}
-
-.sync-badge.is-syncing {
-  background: #F0FDF4;
-  border-color: #BBF7D0;
-  color: #16A34A;
-}
-
-.sync-badge .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-}
-
-.sync-badge.is-syncing .dot {
-  animation: pulse-dot 1.5s infinite;
-}
-
-@keyframes pulse-dot {
-  0% { transform: scale(0.95); opacity: 1; }
-  50% { transform: scale(1.5); opacity: 0.5; }
-  100% { transform: scale(0.95); opacity: 1; }
+  font-weight: var(--weight-medium);
+  color: #52c41a;
 }
 
 .profile-cards-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .insight-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: var(--radius-lg);
   padding: var(--space-5);
-  transition: all var(--transition-base);
-  box-shadow: var(--shadow-xs);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.insight-card:hover {
-  border-color: var(--color-border-hover);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.insight-card.special-card {
-  grid-column: 1 / -1;
-  background: linear-gradient(to right bottom, var(--color-bg), var(--color-surface));
-  border-color: #E0E7FF;
+.insight-card.is-featured {
+  grid-column: span 2;
+  background: #fafafa;
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .card-icon-wrap {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-md);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: #f0f5ff;
+  color: #2f54eb;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
+  flex-shrink: 0;
 }
 
-.special-card .card-icon-wrap {
-  background: #F0FDF4;
-  color: #16A34A;
+.insight-card.is-featured .card-icon-wrap {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  background: #e6f7ff;
+  color: #1890ff;
 }
 
 .card-title {
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-strong);
+  font-weight: 600;
+  color: #262626;
   font-size: 1rem;
+  flex: 1;
+}
+
+.insight-card.is-featured .card-title {
+  font-size: 1.1rem;
+}
+
+.confidence-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.confidence-high {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.confidence-medium {
+  background: #fffbe6;
+  color: #faad14;
+  border: 1px solid #ffe58f;
+}
+
+.confidence-low {
+  background: #f5f5f5;
+  color: #8c8c8c;
+  border: 1px solid #d9d9d9;
+}
+
+.confidence-empty {
+  background: #fafafa;
+  color: #bfbfbf;
+  border: 1px solid #f0f0f0;
 }
 
 .card-body {
   flex: 1;
+  min-width: 0; /* Web Interface Guidelines: flex child needs min-w-0 */
 }
 
 .card-content {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   line-height: 1.6;
-  color: var(--color-text-secondary);
+  color: #595959;
+  word-break: break-word; /* Prevents overflow with long text */
 }
 
 .content-line {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .content-line:last-child {
@@ -325,20 +358,21 @@ watch(profileRefreshTrigger, () => {
 .bullet-item {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-2);
+  gap: 8px;
 }
 
 .dot-marker {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: var(--radius-pill);
-  background: var(--color-text-faint);
-  margin-top: var(--space-2);
+  background: #8c8c8c;
+  margin-top: 10px;
   flex-shrink: 0;
 }
 
 .text {
   flex: 1;
+  min-width: 0;
 }
 
 .plain-text {
@@ -350,60 +384,46 @@ watch(profileRefreshTrigger, () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px var(--space-5);
+  padding: 80px 20px;
   text-align: center;
 }
 
 .empty-visual-container {
   position: relative;
-  width: 80px;
-  height: 80px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--space-6);
-}
-
-.pulse-ring {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  border: 2px solid #E0E7FF;
-  animation: ripple 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
-}
-
-.pulse-ring.delay-1 { animation-delay: -0.5s; }
-
-@keyframes ripple {
-  0% { top: 36px; left: 36px; width: 8px; height: 8px; opacity: 1; }
-  100% { top: -10px; left: -10px; width: 100px; height: 100px; opacity: 0; }
+  margin-bottom: var(--space-4);
 }
 
 .empty-visual {
-  width: 56px;
-  height: 56px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-radius: var(--radius-xl);
+  width: 64px;
+  height: 64px;
+  background: #fafafa;
+  color: #d9d9d9;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
-  z-index: 1;
+  font-size: 32px;
+  border: 1px solid #f0f0f0;
 }
 
 .empty-text-wrap h4 {
-  margin: 0 0 var(--space-3) 0;
-  color: var(--color-text-strong);
-  font-size: 1.1rem;
+  margin: 0 0 12px 0;
+  color: #262626;
+  font-size: 1.15rem;
+  font-weight: 600;
 }
 
 .empty-text-wrap p {
   margin: 0;
-  color: var(--color-text-muted);
+  color: #8c8c8c;
   font-size: 0.95rem;
-  max-width: 400px;
+  max-width: 360px;
   line-height: 1.6;
 }
 </style>
+

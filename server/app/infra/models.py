@@ -233,6 +233,7 @@ class UserProfile(SQLModel, table=True):
 
     profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 文字画像 JSON
     profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 分数画像 JSON
+    profile_markdown: str | None = Field(default=None, sa_column=Column(Text))  # 画像 Markdown 渲染缓存
 
     version: int = Field(default=1)  # 画像版本号
     confidence: float = Field(default=0.7)  # 画像整体置信度
@@ -268,6 +269,7 @@ class UserProfileHistory(SQLModel, table=True):
 
     profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 文字画像快照 JSON
     profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 分数画像快照 JSON
+    profile_markdown: str | None = Field(default=None, sa_column=Column(Text))  # 画像 Markdown 快照缓存
 
     change_reason: str | None = Field(default=None, sa_column=Column(Text))  # 变更原因
 
@@ -402,18 +404,14 @@ class LearningEvent(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Path — 学习路径规划
+# Path — 课程级学习路径规划 (Course Path)
 # ---------------------------------------------------------------------------
 
-class LearningPath(SQLModel, table=True):
-    """学习路径表 — 保存用户的个性化学习路径规划。
-
-    一个用户在一个 module 下可以拥有多条学习路径。
-    """
-    __tablename__ = "learning_paths"
+class CoursePath(SQLModel, table=True):
+    """课程级学习路径表 — 记录用户在特定目标下的学习路线图。"""
+    __tablename__ = "course_paths"
     __table_args__ = (
-        Index("ix_learning_paths_user_module_active", "user_id", "module", "is_active"),
-        Index("ix_learning_paths_user_source_resource", "user_id", "source_resource_id"),
+        Index("ix_course_paths_user_module_status", "user_id", "module", "status"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -421,14 +419,9 @@ class LearningPath(SQLModel, table=True):
     module: str = Field(default="mentor", index=True)
 
     # 路径配置
-    path_key: str | None = Field(default=None, max_length=100, index=True)
-    title: str | None = Field(default=None, max_length=200)
-    course: str | None = Field(default=None, max_length=200)
-    topic: str | None = Field(default=None, max_length=200, index=True)
-    source_resource_id: int | None = Field(default=None, index=True)
-    learning_goal: str | None = Field(default=None, sa_column=Column(Text))
-    knowledge_level: str | None = Field(default=None, max_length=100)
-
+    title: str = Field(max_length=200)
+    goal: str = Field(sa_column=Column(Text))
+    
     # 进度信息
     overall_progress: int = Field(default=0, ge=0, le=100)
     current_stage_id: str | None = Field(default=None, max_length=50)
@@ -438,13 +431,12 @@ class LearningPath(SQLModel, table=True):
     eta_days: int = Field(default=14, ge=1)
     confidence: int = Field(default=60, ge=0, le=100)
 
-    # 画像快照（生成路径时的画像状态）
-    profile_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-
     # 版本与状态
     version: int = Field(default=1)
-    status: str = Field(default="active", max_length=30, index=True)
-    is_active: bool = Field(default=True)
+    status: str = Field(default="active", max_length=30, index=True)  # active, completed, archived
+
+    # 规划原因/依据 (来自大模型)
+    adjustment_rationale: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -456,30 +448,33 @@ class LearningPath(SQLModel, table=True):
     )
 
 
-class LearningPathNode(SQLModel, table=True):
-    """学习路径节点表 — 保存路径中每个节点的状态。
-
-    记录节点的进度、优先级、完成时间等信息。
-    """
-    __tablename__ = "learning_path_nodes"
+class CoursePathNode(SQLModel, table=True):
+    """课程路径节点表 — 记录地图上的每一个学习节点（能力点/知识点）。"""
+    __tablename__ = "course_path_nodes"
     __table_args__ = (
-        Index("ix_learning_path_nodes_path_stage", "path_id", "stage_id"),
-        Index("ix_learning_path_nodes_user_status", "user_id", "status"),
+        Index("ix_course_path_nodes_path_stage", "path_id", "stage_id"),
+        Index("ix_course_path_nodes_user_status", "user_id", "status"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    path_id: int = Field(index=True, foreign_key="learning_paths.id")
+    path_id: int = Field(index=True, foreign_key="course_paths.id")
     user_id: int = Field(index=True)
 
     # 节点标识
-    node_id: str = Field(max_length=50, index=True)  # content, mindmap, quiz, etc.
-    stage_id: str = Field(max_length=50)  # foundation, enhancement, application
+    node_id: str = Field(max_length=50, index=True)  # 节点唯一标识
+    stage_id: str = Field(max_length=50)  # 所属阶段 (如 foundation, core, extension)
     title: str = Field(max_length=200)
 
     # 节点状态
-    status: str = Field(default="wait", max_length=20)  # wait, processing, success
+    status: str = Field(default="locked", max_length=20)  # locked, available, in_progress, completed
     progress: int = Field(default=0, ge=0, le=100)
     priority: int = Field(default=50, ge=0, le=100)
+
+    # 节点元数据
+    prerequisites: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 前置节点 ID 列表
+    mastery_target: str | None = Field(default=None, sa_column=Column(Text))  # 掌握目标
+    estimated_minutes: int | None = Field(default=None)  # 预计花费时间
+    difficulty: str | None = Field(default=None, max_length=30)  # beginner, intermediate, advanced
 
     # 推荐原因（基于画像维度的推荐理由）
     recommendation_reason: str | None = Field(default=None, sa_column=Column(Text))
@@ -488,12 +483,6 @@ class LearningPathNode(SQLModel, table=True):
     started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
     completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
 
-    # 关联资源
-    resource_id: int | None = Field(default=None, index=True)
-    resource_item_id: int | None = Field(default=None, index=True)
-    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    weak_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -504,32 +493,20 @@ class LearningPathNode(SQLModel, table=True):
     )
 
 
-class LearningPathAdjustment(SQLModel, table=True):
-    """学习路径调整记录表 — 记录路径的每次调整。
-
-    用于追踪路径变化历史和分析调整效果。
-    """
-    __tablename__ = "learning_path_adjustments"
+class CoursePathResourceBinding(SQLModel, table=True):
+    """课程路径节点与实际生成资源的绑定关系。"""
+    __tablename__ = "course_path_resource_bindings"
     __table_args__ = (
-        Index("ix_learning_path_adjustments_path_created", "path_id", "created_at"),
+        Index("ix_course_path_resource_bindings_node", "node_id"),
+        Index("ix_course_path_resource_bindings_resource", "resource_id"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    path_id: int = Field(index=True, foreign_key="learning_paths.id")
     user_id: int = Field(index=True)
-
-    # 调整信息
-    adjustment_type: str = Field(max_length=50)  # feedback, progress, profile_update, manual
-    reason: str = Field(sa_column=Column(Text))
-
-    # 影响的节点
-    impacted_node_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
-    # 调整前的状态快照
-    before_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-
-    # 调整后的状态快照
-    after_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    
+    node_id: int = Field(index=True, foreign_key="course_path_nodes.id")
+    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    resource_item_id: int | None = Field(default=None, index=True)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -552,9 +529,9 @@ REGISTERED_MODELS = (
     GeneratedResource,
     GeneratedResourceItem,
     LearningEvent,
-    LearningPath,
-    LearningPathNode,
-    LearningPathAdjustment,
+    CoursePath,
+    CoursePathNode,
+    CoursePathResourceBinding,
     User,
     School,
 )

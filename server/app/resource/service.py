@@ -23,7 +23,6 @@ from app.resource.schemas import (
     ResourceBundle,
     ResourceGenerationRequest,
     ReviewResult,
-    StudyPathStep,
     WorkerResult,
 )
 from app.resource.workflow import ResourceGenerationWorkflow
@@ -202,7 +201,6 @@ class ResourceUsecases:
         request: ResourceGenerationRequest,
         results: dict[str, WorkerResult],
         review_result: ReviewResult,
-        study_path: list[StudyPathStep],
         plan: ExecutionPlan,
     ) -> None:
         """保存一次完整多智能体资源生成的结果。"""
@@ -227,7 +225,6 @@ class ResourceUsecases:
         resource.updated_at = datetime.now(timezone.utc)
         resource.personalization = {
             "review_result": review_result.model_dump(mode="json"),
-            "study_path": [step.model_dump(mode="json") for step in study_path],
             "execution_plan": plan.model_dump(mode="json"),
             "failed_agents": failed_agents,
             "selected_agents": request.enabled_agent_ids(),
@@ -272,14 +269,8 @@ class ResourceUsecases:
         db_items = await self.list_resource_items(user_id, resource_id)
         workflow_data = resource.personalization if isinstance(resource.personalization, dict) else {}
         review_data = workflow_data.get("review_result")
-        study_path_data = workflow_data.get("study_path") or []
 
         review_result = ReviewResult.model_validate(review_data) if isinstance(review_data, dict) else None
-        study_path = [
-            StudyPathStep.model_validate(step)
-            for step in study_path_data
-            if isinstance(step, dict)
-        ]
 
         metadata = {
             "source": "database",
@@ -295,7 +286,6 @@ class ResourceUsecases:
             learning_need=resource.learning_need or "",
             selected_agents=resource.selected_agents or [],
             resources=[self._db_item_to_resource_item(item) for item in db_items],
-            study_path=study_path,
             review_result=review_result,
             status=resource.status,
             created_at=resource.created_at.isoformat() if resource.created_at else "",

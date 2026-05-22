@@ -68,7 +68,7 @@
         >
           <!-- 阶段标识 -->
           <div class="phase-indicator">
-            <div class="phase-number">{{ index + 1 }}</div>
+            <div class="phase-number">{{ Number(index) + 1 }}</div>
             <div v-if="index !== coursePath.phases.length - 1" class="phase-line"></div>
           </div>
 

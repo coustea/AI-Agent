@@ -5,11 +5,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+import json
+
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.auth.security import get_current_user
 from app.infra.models import User
+from app.chat.request import ChatHistoryMessage
 from app.chat.service import get_chat_usecases
 from app.memory import MemoryService, OnboardingResponse, OnboardingUpdate
 from app.utils.response import HttpResponse
@@ -23,7 +26,8 @@ _memory_service = MemoryService()
 
 @router.post("/chat/stream")
 async def mentor_chat_stream(
-    message: str = Form(...),
+    message: str | None = Form(default=None),
+    history: str | None = Form(default=None),
     session_id: str | None = Form(default=None),
     image_urls: str | None = Form(default=None),
     file_urls: str | None = Form(default=None),
@@ -38,7 +42,8 @@ async def mentor_chat_stream(
     附件由前端先上传到 /chat/upload，再通过 image_urls/file_urls 传入。
 
     Args:
-        message: 用户消息内容。
+        message: 兼容字段；为空时使用 history 最后一条用户消息。
+        history: JSON 编码的历史消息列表。
         session_id: 可选的会话ID。
         image_urls: 图片URL字符串（逗号分隔）。
         file_urls: 文件URL字符串（逗号分隔）。
@@ -61,6 +66,16 @@ async def mentor_chat_stream(
     if file_urls:
         parsed_file_urls = [u.strip() for u in file_urls.split(",") if u.strip()]
 
+    parsed_history: list[ChatHistoryMessage] | None = None
+    if history:
+        try:
+            raw_history = json.loads(history)
+            if not isinstance(raw_history, list):
+                raise ValueError("history must be a list")
+            parsed_history = [ChatHistoryMessage(**item) for item in raw_history]
+        except Exception as exc:
+            return HttpResponse.error(code=400, message=f"history 格式错误: {exc}")
+
     effective_session = session_id or uc.default_session_id(current_user.id)
 
     # 返回 SSE 流式响应
@@ -68,6 +83,7 @@ async def mentor_chat_stream(
         uc.stream_chat(
             user_id=current_user.id,
             user_message=message,
+            history=parsed_history,
             session_id=effective_session,
             image_urls=parsed_image_urls or None,
             file_urls=parsed_file_urls or None,
@@ -138,9 +154,6 @@ async def get_uploaded_file(
 
     Returns:
         文件响应。
-
-    Raises:
-        HTTPException: 权限不足、文件不存在等错误。
     """
     uc = get_chat_usecases()
     try:
@@ -151,11 +164,11 @@ async def get_uploaded_file(
             filename=filename,
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        return HttpResponse.error(code=403, message=str(exc))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return HttpResponse.error(code=400, message=str(exc))
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return HttpResponse.error(code=404, message=str(exc))
 
     return FileResponse(path=str(file_path), filename=filename)
 
@@ -179,9 +192,6 @@ async def get_diagram_file(
 
     Returns:
         文件响应。
-
-    Raises:
-        HTTPException: 权限不足、文件不存在等错误。
     """
     uc = get_chat_usecases()
     try:
@@ -192,11 +202,11 @@ async def get_diagram_file(
             filename=f"diagrams/{filename}",
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        return HttpResponse.error(code=403, message=str(exc))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return HttpResponse.error(code=400, message=str(exc))
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return HttpResponse.error(code=404, message=str(exc))
 
     return FileResponse(path=str(file_path), filename=filename)
 
@@ -220,19 +230,16 @@ async def get_chat_file(
 
     Returns:
         文件响应。
-
-    Raises:
-        HTTPException: 权限不足、文件不存在等错误。
     """
     from app.utils.paths import CHAT_DIR
 
     # 权限校验：只允许所有者访问
     if current_user.id != owner_id:
-        raise HTTPException(status_code=403, detail="无权访问此文件")
+        return HttpResponse.error(code=403, message="无权访问此文件")
 
     file_path = CHAT_DIR / str(owner_id) / str(session_id) / filename
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="文件不存在")
+        return HttpResponse.error(code=404, message="文件不存在")
 
     return FileResponse(path=str(file_path), filename=filename)
 

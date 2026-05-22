@@ -30,19 +30,7 @@
         <CodeView v-else-if="agentId === 'code'" :result-data="resultData" compact />
         <ReadingView v-else-if="agentId === 'reading'" :result-data="resultData" compact />
         <MarkdownView v-else-if="isMarkdownAgent" :result-data="resultData" compact />
-        <div v-else-if="agentId === 'ppt'" class="ppt-card-body">
-          <div class="ppt-info-row">
-            <el-icon class="ppt-file-icon"><DataBoard /></el-icon>
-            <span class="ppt-file-name">{{ pptFileName }}</span>
-          </div>
-          <div class="ppt-meta" v-if="pptSlideCount > 0">共 {{ pptSlideCount }} 页教学演示</div>
-          <div class="ppt-titles" v-if="pptSlideTitles.length > 0">
-            <div v-for="(title, idx) in pptSlideTitles.slice(0, 5)" :key="idx" class="ppt-title-item">
-              <span class="ppt-title-num">{{ Number(idx) + 1 }}</span>
-              <span class="ppt-title-text">{{ title }}</span>
-            </div>
-          </div>
-        </div>
+        <PptView v-else-if="agentId === 'ppt'" :result-data="resultData" compact />
         <div v-else-if="agentId === 'image'" class="image-card-body">
           <div class="image-preview-container">
             <el-image
@@ -100,6 +88,7 @@ import QuizView from '@/components/resource/QuizView.vue'
 import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
+import PptView from '@/components/resource/PptView.vue'
 import {
   getFileCategory,
   getFileName,

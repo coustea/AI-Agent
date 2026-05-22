@@ -199,18 +199,6 @@ def classify_route(state: dict) -> str:
     return state.get("route", "direct")
 
 
-def guard_route(state: dict) -> str:
-    """LangGraph 条件路由：根据 last_guard_decision 选择下一步节点。
-
-    Args:
-        state: LangGraph 状态字典。
-
-    Returns:
-        守卫决策结果对应的节点名称。
-    """
-    return state.get("last_guard_decision", "end")
-
-
 # ---------------------------------------------------------------------------
 # SSE 事件
 # ---------------------------------------------------------------------------

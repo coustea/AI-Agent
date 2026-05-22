@@ -1,135 +1,126 @@
-"""Path planning schemas.
+"""路径规划模块 Pydantic 模型。
 
-定义学习路径规划相关的数据模型。
+包含请求/响应/内部状态的所有数据结构。
 """
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-NodeStatus = Literal["success", "processing", "wait"]
-StageStatus = Literal["success", "processing", "wait"]
+# ======================================================================
+# 请求模型
+# ======================================================================
 
 
-class PathNode(BaseModel):
-    """学习路径节点。"""
-    id: str
-    title: str
-    status: NodeStatus = "wait"
-    progress: int = Field(default=0, ge=0, le=100)
-    priority: int = Field(default=50, ge=0, le=100)
-    desc: str | None = None
+class GeneratePathRequest(BaseModel):
+    """路径生成请求。"""
+
+    goal: str = Field(description="学习目标")
+    topic: str = Field(default="", description="学习主题")
+    module: str = Field(default="mentor", description="模块名称")
+    current_knowledge: list[str] = Field(default_factory=list, description="当前已掌握的知识点")
+    preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
+
+
+# ======================================================================
+# Agent 结构化输出模型
+# ======================================================================
+
+
+class AgentPathNode(BaseModel):
+    """规划 Agent 输出的单个路径节点。"""
+
+    node_id: str = Field(description="节点唯一标识")
+    stage_id: str = Field(description="阶段标识")
+    title: str = Field(description="节点标题")
+    prerequisites: list[str] = Field(default_factory=list, description="前置节点 ID")
+    mastery_target: str = Field(default="", description="掌握目标")
+    estimated_minutes: int = Field(default=30, description="预估学习时间(分钟)")
+    difficulty: str = Field(default="intermediate", description="难度等级")
+    recommendation_reason: str = Field(default="", description="推荐理由")
+    priority: int = Field(default=0, description="优先级")
+
+
+class AgentCoursePathPlan(BaseModel):
+    """规划 Agent 的结构化输出。"""
+
+    title: str = Field(description="路径标题")
+    eta_days: int = Field(default=14, description="预估学习天数")
+    confidence: float = Field(default=0.5, description="置信度")
+    adjustment_rationale: str = Field(default="", description="调整理由")
+    nodes: list[AgentPathNode] = Field(default_factory=list, description="路径节点列表")
+
+
+# ======================================================================
+# 响应模型
+# ======================================================================
+
+
+class CoursePathNodeDTO(BaseModel):
+    """课程路径节点 DTO。"""
+
+    id: int | None = None
+    node_id: str = ""
+    stage_id: str = ""
+    title: str = ""
+    status: str = "pending"
+    progress: float = 0.0
+    priority: int = 0
+    prerequisites: list[str] = Field(default_factory=list)
+    mastery_target: str | None = None
+    estimated_minutes: int | None = None
+    difficulty: str | None = None
     recommendation_reason: str | None = None
-    resource_id: int | None = None
-    resource_item_id: int | None = None
-    resource_type: str | None = None
-    resource_title: str | None = None
-    resource_summary: str | None = None
-    resource_format: str | None = None
-    resource_status: Literal["available", "missing", "pending", "failed"] | None = None
 
 
-class PathStage(BaseModel):
-    """学习路径阶段。"""
-    id: str
-    title: str
-    status: StageStatus = "wait"
-    progress: int = Field(default=0, ge=0, le=100)
-    nodes: list[PathNode] = Field(default_factory=list)
+class CoursePathResponse(BaseModel):
+    """课程路径响应。"""
 
-
-class PathProgress(BaseModel):
-    """学习路径进度。"""
-    overall: int = Field(default=0, ge=0, le=100)
+    id: int | None = None
+    module: str = ""
+    title: str = ""
+    goal: str | None = None
+    overall_progress: float = 0.0
     current_stage_id: str | None = None
     current_node_id: str | None = None
-    confidence: int = Field(default=60, ge=0, le=100)
-    eta_days: int = Field(default=14, ge=1)
+    eta_days: int = 0
+    confidence: float = 0.0
+    status: str = "pending"
+    nodes: list[CoursePathNodeDTO] = Field(default_factory=list)
+    created_at: str = ""
 
 
-class Adjustment(BaseModel):
-    """路径调整记录。"""
-    at: datetime
-    reason: str
-    impacted_nodes: list[str] = Field(default_factory=list)
+# ======================================================================
+# Re-exports from request.py / response.py
+# ======================================================================
 
+from app.path.request import PathPlanFeedbackRequest  # noqa: E402
+from app.path.response import (  # noqa: E402
+    PathNodeStatus,
+    PathPlanInsights,
+    PathPlanMeta,
+    PathRecommendedNode,
+    PathPlanResponse,
+    PathPlanSummary,
+)
 
-class PathPlan(BaseModel):
-    """学习路径计划。"""
-    version: int = 1
-    generated_at: datetime
-    knowledge_level: str | None = None
-    learning_goal: str | None = None
-    weak_points: list[str] = Field(default_factory=list)
-    stages: list[PathStage] = Field(default_factory=list)
-    progress: PathProgress
-    adjustments: list[Adjustment] = Field(default_factory=list)
-    profile_dimensions: dict[str, Any] | None = None
-
-
-class PathSummary(BaseModel):
-    """路径摘要。"""
-    overall_progress: int = Field(default=0, ge=0, le=100)
-    current_stage: str | None = None
-    current_node: str | None = None
-    knowledge_level: str | None = None
-    eta_days: int = Field(default=14, ge=1)
-    confidence: int = Field(default=60, ge=0, le=100)
-
-
-class PathInsight(BaseModel):
-    """路径洞察。"""
-    adjustment_reason: str
-    next_action: str
-    recommended_nodes: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class PathPlanMeta(BaseModel):
-    """路径元数据。"""
-    generated_at: datetime
-    data_sources: list[str] = Field(default_factory=list)
-    resource_id: int | None = None
-    plan_version: int = 1
-    profile_version: int | None = None
-
-
-class PathPlanData(BaseModel):
-    """路径计划响应数据。"""
-    summary: PathSummary
-    stages: list[PathStage]
-    insights: PathInsight
-    meta: PathPlanMeta
-
-
-class PathRebuildRequest(BaseModel):
-    """路径重建请求。"""
-    resource_id: int | None = Field(default=None, ge=1)
-    force_refresh_profile: bool = Field(default=False)
-
-
-class PathFeedbackRequest(BaseModel):
-    """路径反馈请求。"""
-    feedback: str = Field(..., min_length=1, max_length=1000)
-    weak_points: list[str] = Field(default_factory=list)
-    resource_id: int | None = Field(default=None, ge=1)
-
-
-class NodeRecommendation(BaseModel):
-    """节点推荐。"""
-    node_id: str
-    title: str
-    priority: int = Field(ge=0, le=100)
-    stage_id: str
-    reason: str
-    estimated_duration_minutes: int | None = None
-
-
-class PathRecommendationResponse(BaseModel):
-    """路径推荐响应。"""
-    recommendations: list[NodeRecommendation]
-    total_candidates: int
-    profile_based: bool
+__all__ = [
+    # Request
+    "GeneratePathRequest",
+    "PathPlanFeedbackRequest",
+    # Agent output
+    "AgentPathNode",
+    "AgentCoursePathPlan",
+    # Response
+    "CoursePathNodeDTO",
+    "CoursePathResponse",
+    "PathNodeStatus",
+    "PathPlanSummary",
+    "PathRecommendedNode",
+    "PathPlanInsights",
+    "PathPlanMeta",
+    "PathPlanResponse",
+]

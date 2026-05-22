@@ -15,7 +15,6 @@ from app.resource.events import AgentEventEmitter
 from app.resource.schemas import (
     KnowledgeGraph,
     ReviewResult,
-    StudyPathStep,
     WorkerResult,
 )
 from app.resource.utils import format_learner_profile_for_prompt
@@ -31,7 +30,6 @@ class _ReviewOutput(BaseModel):
     personalization_score: int = Field(default=100, ge=0, le=100)
     issues: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
-    study_path: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ReviewAgent:
@@ -47,7 +45,7 @@ class ReviewAgent:
         knowledge_graph: KnowledgeGraph,
         profile: dict[str, Any],
         learning_need: str,
-    ) -> tuple[ReviewResult, list[StudyPathStep]]:
+    ) -> ReviewResult:
         await self.emitter.emit_agent("review", status="running", message="正在审查资源质量")
 
         prompt = registry.get("resource/review")
@@ -67,20 +65,9 @@ class ReviewAgent:
             issues=output.issues,
             suggestions=output.suggestions,
         )
-        path = [
-            StudyPathStep(
-                order=step.get("order", idx + 1),
-                resource_type=step.get("resource_type", ""),
-                title=step.get("title", ""),
-                reason=step.get("reason", ""),
-                estimated_time=step.get("estimated_time"),
-                focus_points=step.get("focus_points", []),
-            )
-            for idx, step in enumerate(output.study_path)
-        ]
 
         await self.emitter.emit_agent("review", status="success", message="审查完成")
-        return review, path
+        return review
 
     def _build_input(
         self,

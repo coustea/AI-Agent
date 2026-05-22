@@ -1,4 +1,5 @@
 import http from '@/utils/http'
+import type { ApiResponse } from '@/utils/http'
 
 export interface LoginParams {
   username: string
@@ -9,12 +10,6 @@ export interface RegisterParams {
   username: string
   password: string
   email?: string
-}
-
-export interface ApiResponse<T = any> {
-  code: number
-  message: string
-  data: T
 }
 
 export interface LoginData {

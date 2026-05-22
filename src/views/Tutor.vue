@@ -268,9 +268,9 @@
 
           </div>
 
-          <div class="input-panel">
-            <div v-if="pendingFiles.length > 0" class="attachments-preview">
-              <div v-for="(f, idx) in pendingFiles" :key="idx" class="attachment-chip">
+          <div class="minimal-input-panel">
+            <div v-if="pendingFiles.length > 0" class="minimal-attachments-preview">
+              <div v-for="(f, idx) in pendingFiles" :key="idx" class="minimal-attachment-chip">
                 <el-icon v-if="f.fileType === 'image'"><Picture /></el-icon>
                 <el-icon v-else><Document /></el-icon>
                 <span class="attachment-name">{{ f.name }}</span>
@@ -278,92 +278,7 @@
               </div>
             </div>
 
-            <div class="input-wrapper" :class="{ 'is-expanded': isExpandedInput }">
-              <div class="toolbar-left">
-                <el-popover
-                    placement="top-start"
-                    trigger="click"
-                    :width="220"
-                    popper-class="custom-plus-popover"
-                    :show-arrow="false"
-                    :offset="12"
-                >
-                  <template #reference>
-                    <button class="standard-plus-btn" :disabled="uploadingFile" title="更多功能">
-                      <el-icon><Plus /></el-icon>
-                    </button>
-                  </template>
-
-                  <div class="action-menu">
-                    <div class="action-item" @click="triggerFileUpload">
-                      <div class="item-icon-wrapper bg-blue">
-                        <el-icon><Document /></el-icon>
-                      </div>
-                      <div class="item-content">
-                        <span class="item-text">上传文件</span>
-                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
-                      </div>
-                    </div>
-                    <div class="action-item" @click="triggerFileUpload">
-                      <div class="item-icon-wrapper bg-blue">
-                        <el-icon><Picture /></el-icon>
-                      </div>
-                      <div class="item-content">
-                        <span class="item-text">上传图片</span>
-                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
-                      </div>
-                    </div>
-                    <div class="action-item" @click="handleKnowledgeGraphToggle">
-                      <div class="item-icon-wrapper" :class="needKnowledgeGraph ? 'bg-active' : 'bg-purple'">
-                        <el-icon><DataLine /></el-icon>
-                      </div>
-                      <div class="item-content">
-                        <span class="item-text">{{ needKnowledgeGraph ? '取消生成图谱' : '生成图谱' }}</span>
-                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
-                      </div>
-                    </div>
-                    <div class="action-item" @click="handleVideoToggle">
-                      <div class="item-icon-wrapper" :class="generateVideo ? 'bg-active' : 'bg-teal'">
-                        <el-icon><VideoCamera /></el-icon>
-                      </div>
-                      <div class="item-content">
-                        <span class="item-text">{{ generateVideo ? '取消生成视频' : '生成视频' }}</span>
-                        <el-icon class="item-arrow"><ArrowRight /></el-icon>
-                      </div>
-                    </div>
-                  </div>
-                </el-popover>
-
-                <el-tooltip content="联网搜索" placement="top" :show-after="500">
-                  <button class="media-gen-btn btn-web" :class="{ active: enableWebSearch }" @click="enableWebSearch = !enableWebSearch">
-                    <el-icon>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <ellipse cx="12" cy="12" rx="5" ry="10"></ellipse>
-                        <line x1="12" y1="2" x2="12" y2="22"></line>
-                        <line x1="2" y1="12" x2="22" y2="12"></line>
-                      </svg>
-                    </el-icon>
-                  </button>
-                </el-tooltip>
-
-                <div class="active-media-chip" v-if="needKnowledgeGraph" @click="handleKnowledgeGraphToggle" title="取消生成图谱">
-                  <div class="chip-icon-circle">
-                    <el-icon class="icon-default"><DataLine /></el-icon>
-                    <el-icon class="icon-hover"><Close /></el-icon>
-                  </div>
-                  <span>图谱</span>
-                </div>
-
-                <div class="active-media-chip" v-if="generateVideo" @click="handleVideoToggle" title="取消生成视频">
-                  <div class="chip-icon-circle">
-                    <el-icon class="icon-default"><VideoCamera /></el-icon>
-                    <el-icon class="icon-hover"><Close /></el-icon>
-                  </div>
-                  <span>视频</span>
-                </div>
-              </div>
-
+            <div class="minimal-input-wrapper" :class="{ 'is-expanded': isExpandedInput }">
               <textarea
                   ref="textareaRef"
                   v-model="userInput"
@@ -372,53 +287,83 @@
                   @input="autoResize"
               ></textarea>
 
-              <div class="toolbar-right">
-                <el-tooltip :content="isRecording ? '结束录音' : '语音提问'" placement="top" :show-after="500">
-                  <button class="voice-btn" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle">
-                    <el-icon><Microphone /></el-icon>
-                  </button>
-                </el-tooltip>
+              <div class="minimal-action-bar">
+                <div class="action-left">
+                  <el-tooltip content="上传附件" placement="top" :show-after="500">
+                    <button class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload">
+                      <el-icon><Paperclip /></el-icon>
+                    </button>
+                  </el-tooltip>
 
-                <el-tooltip
-                    v-if="chatMode === 'digital_human'"
-                    :content="isVoiceChatting ? '结束语音对话' : '开启语音通话模式'"
-                    placement="top"
-                    :show-after="500"
-                >
-                  <button
-                      class="direct-voice-chat-btn"
-                      :class="{ 'is-active': isVoiceChatting }"
-                      @click="handleVoiceChatToggle"
-                  >
-                    <div class="voice-bars-icon">
-                      <span class="bar"></span>
-                      <span class="bar"></span>
-                      <span class="bar"></span>
-                      <span class="bar"></span>
-                    </div>
-                  </button>
-                </el-tooltip>
+                  <el-tooltip content="联网搜索" placement="top" :show-after="500">
+                    <button class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch">
+                      <el-icon>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <ellipse cx="12" cy="12" rx="5" ry="10"></ellipse>
+                          <line x1="12" y1="2" x2="12" y2="22"></line>
+                          <line x1="2" y1="12" x2="22" y2="12"></line>
+                        </svg>
+                      </el-icon>
+                    </button>
+                  </el-tooltip>
 
-                <div v-if="chatMode === 'digital_human'" class="speech-rate-control">
-                  <span class="speech-rate-label">语速</span>
-                  <el-slider
-                    v-model="avatarSpeechRate"
-                    :min="0.5"
-                    :max="2"
-                    :step="0.1"
-                    :show-tooltip="false"
-                    @change="handleAvatarSpeechRateChange"
-                  />
-                  <span class="speech-rate-value">{{ avatarSpeechRate.toFixed(1) }}x</span>
+                  <el-tooltip content="生成图解" placement="top" :show-after="500">
+                    <button class="minimal-icon-btn" :class="{ 'is-active-purple': needKnowledgeGraph }" @click="handleKnowledgeGraphToggle">
+                      <el-icon><DataLine /></el-icon>
+                    </button>
+                  </el-tooltip>
+
+                  <el-tooltip content="生成视频" placement="top" :show-after="500">
+                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': generateVideo }" @click="handleVideoToggle">
+                      <el-icon><VideoCamera /></el-icon>
+                    </button>
+                  </el-tooltip>
                 </div>
 
-                <el-tooltip content="发送问题" placement="top" :show-after="500">
-                  <button class="send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend">
+                <div class="action-right">
+                  <div v-if="chatMode === 'digital_human'" class="minimal-speech-rate">
+                    <span class="rate-label">语速</span>
+                    <el-slider
+                      v-model="avatarSpeechRate"
+                      :min="0.5"
+                      :max="2"
+                      :step="0.1"
+                      :show-tooltip="false"
+                      @change="handleAvatarSpeechRateChange"
+                      class="rate-slider"
+                    />
+                    <span class="rate-value">{{ avatarSpeechRate.toFixed(1) }}x</span>
+                  </div>
+
+                  <el-tooltip
+                      v-if="chatMode === 'digital_human'"
+                      :content="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
+                      placement="top"
+                      :show-after="500"
+                  >
+                    <button
+                        class="minimal-icon-btn voice-chat-btn"
+                        :class="{ 'is-active': isVoiceChatting }"
+                        @click="handleVoiceChatToggle"
+                    >
+                      <div class="voice-bars-icon">
+                        <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                      </div>
+                    </button>
+                  </el-tooltip>
+
+                  <el-tooltip :content="isRecording ? '结束录音' : '语音提问'" placement="top" :show-after="500">
+                    <button class="minimal-icon-btn voice" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle">
+                      <el-icon><Microphone /></el-icon>
+                    </button>
+                  </el-tooltip>
+
+                  <button class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend">
                     <el-icon><Top /></el-icon>
                   </button>
-                </el-tooltip>
+                </div>
               </div>
-
             </div>
             <div class="input-footer">内容由 AI 生成，仅供参考。</div>
           </div>
@@ -513,7 +458,7 @@ import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
-  Plus, Delete, Close, Top, ArrowRight,
+  Delete, Close, Top, Paperclip,
   EditPen, Search, Timer, VideoCamera, DataLine,
   CircleCheckFilled
 } from '@element-plus/icons-vue'
@@ -531,6 +476,7 @@ import {
   updateSessionTitle,
   getChatHistory,
   type ChatSession,
+  type StreamChatHistoryItem,
 } from '@/api/chat'
 import { getMe } from '@/api/auth'
 import { useLearningTracker } from '@/composables/useLearningTracker'
@@ -577,6 +523,18 @@ const normalizeKnowledgeGraphData = (graph: Record<string, unknown> | null | und
   if (!graph || typeof graph !== 'object') return null
   if (!Array.isArray(graph.nodes)) return null
   return graph as unknown as KnowledgeGraphData
+}
+
+const buildStreamHistory = (): StreamChatHistoryItem[] => {
+  return messages.value
+    .filter(msg => msg.role === 'user' || msg.role === 'ai')
+    .filter(msg => msg.content.trim())
+    .map(msg => ({
+      role: msg.role === 'ai' ? 'assistant' : 'user',
+      content: msg.content,
+      attachments: msg.attachments || null,
+      knowledge_graph: (msg.knowledgeGraph as Record<string, unknown> | null) || null,
+    }))
 }
 
 const DEFAULT_SESSION_TITLE = '新对话'
@@ -1677,6 +1635,7 @@ const handleSend = async () => {
   if (userMsg) {
     userMsg.attachments = uploadedAttachments.length > 0 ? uploadedAttachments : null
   }
+  const streamHistory = buildStreamHistory()
 
   const aiMsgId = Date.now() + 1
   messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
@@ -1704,7 +1663,7 @@ const handleSend = async () => {
 
   abortController = streamChat(
       {
-        message: text || '请分析附件',
+        history: streamHistory,
         session_id: currentSessionId.value,
         image_urls: imageUrls.length > 0 ? imageUrls : undefined,
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
@@ -2937,8 +2896,8 @@ onBeforeUnmount(() => {
   background: var(--color-bg);
 }
 
-/* ================= 针对输入框的优化 ================= */
-.input-panel {
+/* ================= 针对极简输入框的优化 ================= */
+.minimal-input-panel {
   padding: 0 var(--space-5) var(--space-5) var(--space-5);
   flex-shrink: 0;
   display: flex;
@@ -2949,7 +2908,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.attachments-preview {
+.minimal-attachments-preview {
   display: flex;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
@@ -2960,159 +2919,84 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.attachment-chip {
+.minimal-attachment-chip {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: var(--space-1) var(--space-2);
-  background: var(--color-surface-hover);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.8rem;
   color: var(--color-text-secondary);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
-.close-icon {
+.minimal-attachment-chip .close-icon {
   cursor: pointer;
   color: var(--color-text-faint);
+  transition: color var(--transition-base);
 }
 
-.close-icon:hover {
+.minimal-attachment-chip .close-icon:hover {
   color: var(--color-danger);
 }
 
-.input-wrapper {
+.minimal-input-wrapper {
   width: 100%;
   max-width: 800px;
-  background: var(--color-bg); /* 扁平化浅灰底色 */
+  background: var(--color-surface); /* 卡片底色 */
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl); /* 扁平化圆角 */
-  padding: var(--space-3) var(--space-5);
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-  transition: all var(--transition-slow);
-  box-sizing: border-box;
-  box-shadow: none; /* 移除发光效果 */
-}
-
-.input-wrapper:focus-within {
-  background: var(--color-surface);
-  border-color: var(--color-border-hover);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02); /* 极其克制的焦点阴影 */
-}
-
-.toolbar-left {
-  grid-column: 1;
-  grid-row: 1;
+  border-radius: 20px; /* 极简大圆角 */
+  padding: var(--space-3) var(--space-4);
   display: flex;
-  align-items: center;
-  gap: var(--space-1);
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: all var(--transition-base);
+  box-sizing: border-box;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
-.input-wrapper textarea {
-  grid-column: 2;
-  grid-row: 1;
+.minimal-input-wrapper:focus-within {
+  border-color: var(--color-border-hover);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.minimal-input-wrapper textarea {
   width: 100%;
   border: none;
   background: transparent;
   resize: none;
   height: 24px;
-  max-height: 72px;
+  max-height: 120px;
   overflow-y: auto;
   outline: none;
   font-family: inherit;
   font-size: 1rem;
   color: var(--color-text);
   line-height: 1.5;
-  padding: 0;
+  padding: 0 var(--space-1);
   margin: 0;
 }
 
-.toolbar-right {
-  grid-column: 3;
-  grid-row: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.speech-rate-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 150px;
-  padding: 0 var(--space-1);
-}
-
-.speech-rate-label {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.speech-rate-value {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  min-width: 34px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.speech-rate-control :deep(.el-slider) {
-  width: 78px;
-}
-
-.input-wrapper.is-expanded {
-  border-radius: var(--radius-xl);
-  padding: var(--space-4) var(--space-5);
-  align-items: end;
-}
-
-.input-wrapper.is-expanded textarea {
-  grid-column: 1 / 4;
-  grid-row: 1;
-  margin-bottom: var(--space-1);
-}
-
-.input-wrapper.is-expanded .toolbar-left {
-  grid-column: 1 / 3;
-  grid-row: 2;
-}
-
-.input-wrapper.is-expanded .toolbar-right {
-  grid-column: 3;
-  grid-row: 2;
-  justify-self: end;
-}
-
-.input-wrapper textarea::placeholder {
+.minimal-input-wrapper textarea::placeholder {
   color: var(--color-text-faint);
 }
 
-.standard-plus-btn {
-  font-size: 1.2rem;
-  color: var(--color-text-muted);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md); /* 弱化圆角 */
-  border: none;
+.minimal-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.action-left, .action-right {
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background: transparent;
-  padding: 0;
-  transition: background var(--transition-base), color var(--transition-base);
+  gap: 4px;
 }
 
-.standard-plus-btn:hover {
-  background: var(--color-border);
-  color: var(--color-text-secondary);
-}
-
-.media-gen-btn {
+.minimal-icon-btn {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-md);
@@ -3122,129 +3006,108 @@ onBeforeUnmount(() => {
   justify-content: center;
   cursor: pointer;
   font-size: 1.15rem;
+  background: transparent;
+  color: var(--color-text-muted);
   transition: all var(--transition-base);
-  margin-left: 2px;
   padding: 0;
-  background: transparent;
 }
 
-.media-gen-btn.btn-web {
-  color: var(--color-text-muted);
-}
-
-.media-gen-btn.btn-web:hover {
+.minimal-icon-btn:hover {
   background: var(--color-border);
   color: var(--color-text-secondary);
 }
 
-.media-gen-btn.btn-web.active {
-  color: var(--color-text);
-  background: var(--color-border);
+/* Active states (theme colors) */
+.minimal-icon-btn.is-active-blue {
+  color: #3b82f6;
+}
+.minimal-icon-btn.is-active-blue:hover {
+  background: rgba(59, 130, 246, 0.1);
 }
 
-.active-media-chip {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) 10px var(--space-1) var(--space-1);
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  background: var(--color-surface-hover);
-  border: 1px solid var(--color-border);
-  user-select: none;
-  margin-left: var(--space-1);
+.minimal-icon-btn.is-active-purple {
+  color: #8b5cf6;
+}
+.minimal-icon-btn.is-active-purple:hover {
+  background: rgba(139, 92, 246, 0.1);
 }
 
-.active-media-chip:hover {
-  background: var(--color-border);
+.minimal-icon-btn.is-active-teal {
+  color: #14b8a6;
+}
+.minimal-icon-btn.is-active-teal:hover {
+  background: rgba(20, 184, 166, 0.1);
 }
 
-.active-media-chip .chip-icon-circle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: transparent;
-}
-
-.active-media-chip .icon-default {
-  display: inline-flex;
-  font-size: 1.1rem;
-}
-
-.active-media-chip .icon-hover {
-  display: none;
-  font-size: 1.05rem;
-  color: var(--color-danger);
-}
-
-.active-media-chip:hover .icon-default {
-  display: none;
-}
-
-.active-media-chip:hover .icon-hover {
-  display: inline-flex;
-}
-
-.voice-btn {
-  background: transparent;
-  border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 1.2rem;
-  margin: 0;
-  transition: all var(--transition-base);
-}
-
-.voice-btn:hover {
-  background: var(--color-border);
-  color: var(--color-text-secondary);
-}
-
-.voice-btn.is-recording {
+.minimal-icon-btn.voice.is-recording {
   background: var(--color-danger);
   color: var(--color-surface);
 }
 
-.direct-voice-chat-btn {
-  background: var(--color-text);
-  border: none;
+.minimal-send-btn {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
+  background: var(--color-border);
+  color: var(--color-text-faint);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: all var(--transition-slow);
-  flex-shrink: 0;
+  cursor: default;
+  transition: all var(--transition-base);
+  font-size: 1.1rem;
+  margin-left: 4px;
 }
 
-.direct-voice-chat-btn:hover {
+.minimal-send-btn.can-send {
+  background: var(--color-text);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+.minimal-send-btn.can-send:hover {
   background: var(--color-text-strong);
+  transform: scale(1.05);
+}
+
+/* 语音语速调整 */
+.minimal-speech-rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+.minimal-speech-rate .rate-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.minimal-speech-rate .rate-value {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.minimal-speech-rate :deep(.el-slider) {
+  width: 60px;
+}
+
+/* Digital human voice chat button */
+.voice-chat-btn.is-active {
+  color: var(--color-text-strong);
 }
 
 .voice-bars-icon {
   display: flex;
   align-items: center;
-  gap: 3px;
-  height: 16px;
+  gap: 2px;
+  height: 14px;
 }
 
 .voice-bars-icon .bar {
   width: 2px;
-  background-color: var(--color-surface);
+  background-color: currentColor;
   border-radius: 1px;
   transition: height var(--transition-base);
 }
@@ -3254,47 +3117,19 @@ onBeforeUnmount(() => {
 .voice-bars-icon .bar:nth-child(3) { height: 10px; }
 .voice-bars-icon .bar:nth-child(4) { height: 6px; }
 
-.direct-voice-chat-btn.is-active {
-  background: var(--color-text);
-}
-
-.direct-voice-chat-btn.is-active .bar {
+.voice-chat-btn.is-active .bar {
   animation: bar-dance 0.8s infinite ease-in-out alternate;
+  background-color: #f43f5e;
 }
 
-.direct-voice-chat-btn.is-active .bar:nth-child(1) { animation-delay: 0.0s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(2) { animation-delay: 0.2s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(3) { animation-delay: 0.1s; }
-.direct-voice-chat-btn.is-active .bar:nth-child(4) { animation-delay: 0.3s; }
-
-.send-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--color-border);
-  color: var(--color-text-faint);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: default;
-  transition: all var(--transition-slow);
-  font-size: 1.2rem;
-}
-
-.send-btn.can-send {
-  background: var(--color-text);
-  color: var(--color-surface);
-  cursor: pointer;
-}
-
-.send-btn.can-send:hover {
-  background: var(--color-text-strong);
-}
+.voice-chat-btn.is-active .bar:nth-child(1) { animation-delay: 0.0s; }
+.voice-chat-btn.is-active .bar:nth-child(2) { animation-delay: 0.2s; }
+.voice-chat-btn.is-active .bar:nth-child(3) { animation-delay: 0.1s; }
+.voice-chat-btn.is-active .bar:nth-child(4) { animation-delay: 0.3s; }
 
 @keyframes bar-dance {
-  from { transform: scaleY(0.7); }
-  to { transform: scaleY(1.5); }
+  from { transform: scaleY(0.6); }
+  to { transform: scaleY(1.4); }
 }
 
 .input-footer {
@@ -3689,5 +3524,3 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 </style>
-
-

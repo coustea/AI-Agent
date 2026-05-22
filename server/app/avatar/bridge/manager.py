@@ -636,6 +636,7 @@ class RealtimeBridge:
     ):
         """Core pipeline: user text -> agent -> frontend + avatar."""
         from app.chat.service import get_chat_usecases, CHAT_MODULE_NAME
+        from app.chat.request import ChatHistoryMessage
         from app.memory import MemoryService
 
         image_urls = list(dict.fromkeys(image_urls or []))
@@ -686,10 +687,12 @@ class RealtimeBridge:
                 async for event in chat_uc.stream_chat_events(
                     user_id=self.user_id,
                     user_message=user_text,
+                    history=[ChatHistoryMessage(role="user", content=user_text)],
                     session_id=self.session_id,
                     image_urls=image_urls,
                     file_urls=file_urls,
                     need_diagram=need_diagram,
+                    persist=False,
                 ):
                     event_count += 1
                     if not self.frontend_ws:
@@ -937,8 +940,6 @@ class AvatarBridgeManager:
 
 # 全局单例
 avatar_bridge_manager = AvatarBridgeManager()
-
-
 
 
 

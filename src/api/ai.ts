@@ -1,5 +1,5 @@
 import http from '@/utils/http'
-import type { ApiResponse } from '@/api/auth'
+import type { ApiResponse } from '@/utils/http'
 
 // ==========================================
 // 类型定义
@@ -165,19 +165,19 @@ export interface PathPlanFeedbackParams {
 }
 
 export function getPathPlan(resourceId?: number) {
-  return http.get<{ code: number; message: string; data: PathPlan }>('/ai/path-plan', {
+  return http.get<ApiResponse<PathPlan>>('/ai/path-plan', {
     params: resourceId ? { resource_id: resourceId } : undefined,
   })
 }
 
 export function rebuildPathPlan(resourceId?: number) {
-  return http.post<{ code: number; message: string; data: PathPlan }>('/ai/path-plan/rebuild', {
+  return http.post<ApiResponse<PathPlan>>('/ai/path-plan/rebuild', {
     resource_id: resourceId ?? null,
   })
 }
 
 export function applyPathFeedback(params: PathPlanFeedbackParams) {
-  return http.post<{ code: number; message: string; data: PathPlan }>('/ai/path-plan/feedback', params)
+  return http.post<ApiResponse<PathPlan>>('/ai/path-plan/feedback', params)
 }
 
 // ==========================================
@@ -278,12 +278,12 @@ export function getLearningTimeStats(days = 30) {
 
 export function getProfile(userId?: number | string) {
   const path = userId ? `/ai/profile/${userId}` : '/ai/profile'
-  return http.get<{ code: number; message: string; data: ProfileData }>(path)
+  return http.get<ApiResponse<ProfileData>>(path)
 }
 
 export function getProfileScore(userId?: number | string) {
   const path = userId ? `/ai/profile/${userId}/score` : '/ai/profile/score'
-  return http.get<{ code: number; message: string; data: ProfileScoreData }>(path)
+  return http.get<ApiResponse<ProfileScoreData>>(path)
 }
 
 export function getProfileOnboarding() {
@@ -296,7 +296,7 @@ export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
 
 export function getProfileHistory(limit = 20, userId?: number | string) {
   const path = userId ? `/ai/profile/${userId}/history` : '/ai/profile/history'
-  return http.get<{ code: number; message: string; data: ProfileHistoryItem[] }>(path, {
+  return http.get<ApiResponse<ProfileHistoryItem[]>>(path, {
     params: { limit }
   })
 }

@@ -18,33 +18,27 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 from pathlib import Path
 from typing import Any, Callable
 
 # ---- 通用服务（从 utils 导入） ----
-from app.utils.context import (
-    runtime_context as chat_runtime_context,
-    get_current_user_id,
-    get_current_session_id,
-    set_user_id,
-    set_session_id,
-)
+from app.utils.context import runtime_context as chat_runtime_context
 from app.memory import MemoryService
 from app.utils.vision import build_vision_service
-from app.utils.files import (
-    resolve_uploaded_path,
-    resolve_uploaded_image_path,
-    read_uploaded_file_content,
-)
+from app.utils.files import resolve_uploaded_path
 
-from app.chat.utils import truncate
+from app.chat.agent import TutorAgent
+from app.chat.runtime import build_user_message_record, latest_user_message, render_recent_chat_context
+from app.chat.utils import normalize_message_content, truncate
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.utils.storage import local_file_store
 
-from app.chat.schemas import AttachmentInfo, ChatMessageItem, ToolCallRecord
+from app.chat.request import ChatHistoryMessage
+from app.chat.schemas import AttachmentInfo, ChatMessageItem, TutorAgentContext
+from app.prompts import registry
+from app.resource.graph_store import get_graph_store
 
 # 模块名称常量
 CHAT_MODULE_NAME = "mentor"
@@ -393,6 +387,38 @@ async def analyze_attachments_parallel(
 
 
 # ---------------------------------------------------------------------------
+# 知识图谱持久化
+# ---------------------------------------------------------------------------
+
+async def store_knowledge_graph(
+    *,
+    user_id: int,
+    session_id: str,
+    graph: dict[str, Any],
+) -> dict[str, Any]:
+    """将知识图谱存储到 Neo4j。
+
+    Args:
+        user_id: 用户ID。
+        session_id: 会话ID。
+        graph: 归一化后的图谱数据。
+
+    Returns:
+        存储结果元数据。
+    """
+    try:
+        return await get_graph_store().upsert_graph(
+            user_id=user_id,
+            resource_id=session_id or "chat",
+            agent_id="chat",
+            graph=graph,
+        )
+    except Exception as exc:
+        logger.exception("[ChatService] 聊天知识图谱 Neo4j 存储失败")
+        return {"stored": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
 # 会话与历史持久化
 # ---------------------------------------------------------------------------
 
@@ -542,19 +568,11 @@ class ConversationStore:
                 except (TypeError, ValueError):
                     attachments = None
 
-            tool_calls = None
-            if msg.tool_calls:
-                try:
-                    tool_calls = [ToolCallRecord(**value) for value in msg.tool_calls]
-                except (TypeError, ValueError):
-                    tool_calls = None
-
             items.append(
                 ChatMessageItem(
                     role=msg.role,
                     content=msg.content,
                     attachments=attachments,
-                    tool_calls=tool_calls,
                     knowledge_graph=msg.knowledge_graph,
                     created_at=msg.created_at,
                 )
@@ -608,19 +626,49 @@ class ChatUseCases:
         return f"user-{user_id}-default-{self.default_session_suffix}"
 
     @staticmethod
-    def _default_tutor_stream_runner() -> Callable[..., Any]:
-        """获取默认的 Tutor 流式运行器。
+    def _normalize_history(
+        *,
+        history: list[ChatHistoryMessage | dict[str, Any]] | None,
+        user_message: str | None,
+    ) -> list[ChatHistoryMessage]:
+        normalized: list[ChatHistoryMessage] = []
+        for item in history or []:
+            try:
+                normalized.append(item if isinstance(item, ChatHistoryMessage) else ChatHistoryMessage(**item))
+            except Exception:
+                logger.warning("[ChatUseCases] 忽略无效 history item=%s", truncate(item, 160))
+        if not normalized and (user_message or "").strip():
+            normalized.append(ChatHistoryMessage(role="user", content=str(user_message).strip()))
+        return normalized
 
-        延迟导入以避免循环依赖。
+    @staticmethod
+    def _normalize_stream_event(event: Any) -> dict[str, Any]:
+        if isinstance(event, dict):
+            if "event" in event and "data" in event:
+                return event
+            if "type" in event:
+                normalized_data = event.get("data")
+                if normalized_data is None and "content" in event:
+                    normalized_data = event.get("content")
+                if normalized_data is None and "full_response" in event:
+                    normalized_data = {"full_response": event.get("full_response", "")}
+                if normalized_data is None:
+                    normalized_data = ""
+                return {"event": str(event.get("type")), "data": normalized_data}
+        return {"event": "message", "data": event}
 
-        Returns:
-            TutorAgent.chat_stream 方法。
-        """
-        # Delay import to avoid the service <-> agent circular import at module load time.
-        from app.chat.agent import TutorAgent
+    def _spawn_background(self, coro: Any, *, task_name: str) -> None:
+        task = asyncio.create_task(coro, name=task_name)
 
-        agent = TutorAgent.get_shared()
-        return agent.chat_stream
+        def _done_callback(done_task: asyncio.Task) -> None:
+            if done_task.cancelled():
+                return
+            try:
+                done_task.result()
+            except Exception:
+                logger.exception("[ChatUseCases] 后台任务异常 task=%s", task_name)
+
+        task.add_done_callback(_done_callback)
 
     async def _build_attachment_analysis(
         self,
@@ -681,11 +729,99 @@ class ChatUseCases:
             )
             return None
 
+    async def build_tutor_agent_context(
+        self,
+        *,
+        memory_layer: MemoryService,
+        user_id: int,
+        session_id: str,
+        history: list[ChatHistoryMessage],
+        image_urls: list[str],
+        file_urls: list[str],
+        attachment_analysis: dict[str, Any] | None,
+        enable_search: bool,
+        enable_long_term_memory: bool,
+        need_knowledge_graph: bool,
+        generate_video: bool,
+        resource_mode: str = "none",
+    ) -> TutorAgentContext:
+        """Build initialized TutorAgent context; all persistence stays in service layer."""
+        profile_context = await memory_layer.build_profile_context(user_id)
+        long_term_context = (
+            await memory_layer.build_memory_context(user_id)
+            if enable_long_term_memory
+            else "长期记忆未启用。"
+        )
+        session_summary_context = await self._build_session_summary_context(
+            memory_layer=memory_layer,
+            user_id=user_id,
+            session_id=session_id,
+        )
+        recent_chat_context = render_recent_chat_context(history)
+        file_context = memory_layer.build_file_context(image_urls, file_urls)
+        attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
+
+        recent_sections: list[str] = []
+        if session_summary_context:
+            recent_sections.append(f"# 会话概要\n{session_summary_context}")
+        recent_sections.append(f"# 最近对话\n{recent_chat_context}")
+        if file_context:
+            recent_sections.append(f"# 文件上下文\n{file_context}")
+        prompt_recent_context = "\n\n".join(recent_sections)
+        analysis_hint = (
+            f"\n\n### 附件并行预分析结果\n{attachment_analysis_context}\n"
+            if attachment_analysis_context
+            else ""
+        )
+        system_prompt = registry.get("chat/tutor_system").format(
+            profile_context=profile_context,
+            fact_context=long_term_context,
+            recent_chat_context=prompt_recent_context,
+        ) + analysis_hint
+
+        return TutorAgentContext(
+            user_id=user_id,
+            session_id=session_id,
+            system_prompt=system_prompt,
+            profile_context=profile_context,
+            long_term_memory_context=long_term_context,
+            session_summary_context=session_summary_context,
+            recent_chat_context=recent_chat_context,
+            file_context=file_context,
+            attachment_analysis_context=attachment_analysis_context,
+            attachment_analysis=attachment_analysis or {},
+            image_urls=list(image_urls),
+            file_urls=list(file_urls),
+            enable_search=enable_search,
+            need_knowledge_graph=need_knowledge_graph,
+            generate_video=generate_video,
+            resource_mode=resource_mode,
+        )
+
+    async def _build_session_summary_context(
+        self,
+        *,
+        memory_layer: MemoryService,
+        user_id: int,
+        session_id: str,
+    ) -> str:
+        try:
+            summaries = await memory_layer.list_summaries(user_id=user_id, session_id=session_id, limit=2)
+        except Exception:
+            logger.debug("[ChatUseCases] build session summary context failed", exc_info=True)
+            return ""
+        return "\n\n---\n\n".join(
+            str(getattr(summary, "summary_markdown", "") or "").strip()
+            for summary in summaries
+            if str(getattr(summary, "summary_markdown", "") or "").strip()
+        )
+
     async def stream_chat_events(
         self,
         *,
         user_id: int,
-        user_message: str,
+        user_message: str | None = None,
+        history: list[ChatHistoryMessage | dict[str, Any]] | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
@@ -696,12 +832,14 @@ class ChatUseCases:
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
+        persist: bool = True,
     ):
         """流式生成对话事件。
 
         Args:
             user_id: 用户ID。
-            user_message: 用户消息。
+            user_message: 兼容字段；为空时从 history 最后一条用户消息读取。
+            history: 调用方传入的对话历史。
             session_id: 可选的会话ID。
             image_urls: 图片URL列表。
             file_urls: 文件URL列表。
@@ -712,6 +850,7 @@ class ChatUseCases:
             attachment_analysis: 可选的附件预分析结果。
             stream_runner: 可选的流式运行器。
             input_source: 输入来源标识。
+            persist: 是否由 chat 服务层保存消息并触发后处理。
 
         Yields:
             事件字典，包含 event 和 data 字段。
@@ -720,75 +859,126 @@ class ChatUseCases:
         # 去重URL
         merged_image_urls = list(dict.fromkeys(image_urls or []))
         merged_file_urls = list(dict.fromkeys(file_urls or []))
+        normalized_history = self._normalize_history(history=history, user_message=user_message)
+        current_user_message = latest_user_message(normalized_history)
+        if not current_user_message:
+            yield {"event": "error", "data": "缺少用户消息：请在 history 中传入至少一条 user 消息。"}
+            yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+            return
+
         # 构建附件分析
         prepared_attachment_analysis = await self._build_attachment_analysis(
             user_id=user_id,
             session_id=effective_session,
-            user_message=user_message,
+            user_message=current_user_message,
             image_urls=merged_image_urls,
             file_urls=merged_file_urls,
             attachment_analysis=attachment_analysis,
         )
-
-        # 获取流式运行器
-        runner = stream_runner or self._stream_runner or self._default_tutor_stream_runner()
-
-        # 构建运行参数
-        kwargs: dict[str, Any] = {
-            "user_id": user_id,
-            "user_message": user_message,
-            "session_id": effective_session,
-            "image_urls": merged_image_urls,
-            "file_urls": merged_file_urls,
-            "need_knowledge_graph": bool(need_knowledge_graph),
-            "generate_video": bool(generate_video),
-            "enable_long_term_memory": bool(enable_long_term_memory),
-            "attachment_analysis": prepared_attachment_analysis,
-        }
-        if enable_search:
-            kwargs["enable_search"] = True
-        if input_source is not None:
-            kwargs["input_source"] = input_source
-
-        # 在上下文中运行
-        try:
-            runner_sig = inspect.signature(runner)
-            accepted = {
-                name
-                for name, param in runner_sig.parameters.items()
-                if param.kind in (
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                    inspect.Parameter.KEYWORD_ONLY,
+        memory_layer = MemoryService(module=self.module_name)
+        user_record = build_user_message_record(
+            current_user_message,
+            image_urls=merged_image_urls,
+            file_urls=merged_file_urls,
+        )
+        if persist:
+            try:
+                await memory_layer.save_message(
+                    user_id=user_id,
+                    session_id=effective_session,
+                    role="user",
+                    content=user_record.content,
+                    attachments=user_record.attachments,
                 )
-            }
-            has_var_kw = any(
-                param.kind == inspect.Parameter.VAR_KEYWORD
-                for param in runner_sig.parameters.values()
-            )
-            if not has_var_kw:
-                kwargs = {k: v for k, v in kwargs.items() if k in accepted}
-        except Exception:
-            logger.debug("[ChatUseCases] inspect runner signature failed; fallback with full kwargs", exc_info=True)
+            except Exception as exc:
+                logger.exception("[ChatUseCases] 用户消息保存失败")
+                yield {"event": "error", "data": f"保存消息失败: {exc}"}
+                yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+                return
+
+        agent_context = await self.build_tutor_agent_context(
+            memory_layer=memory_layer,
+            user_id=user_id,
+            session_id=effective_session,
+            history=normalized_history,
+            image_urls=merged_image_urls,
+            file_urls=merged_file_urls,
+            attachment_analysis=prepared_attachment_analysis,
+            enable_search=bool(enable_search),
+            enable_long_term_memory=bool(enable_long_term_memory),
+            need_knowledge_graph=bool(need_knowledge_graph),
+            generate_video=bool(generate_video),
+        )
+        runner = stream_runner or self._stream_runner
+
+        full_reply = ""
+        final_done_payload: Any = None
+        knowledge_graph: dict[str, Any] | None = None
+        stream_had_error = False
 
         with chat_runtime_context(user_id, effective_session):
-            async for event in runner(**kwargs):
-                # 标准化事件格式
-                if isinstance(event, dict):
-                    if "event" in event and "data" in event:
-                        yield event
-                        continue
-                    if "type" in event:
-                        normalized_data = event.get("data")
-                        if normalized_data is None and "content" in event:
-                            normalized_data = event.get("content")
-                        if normalized_data is None and "full_response" in event:
-                            normalized_data = {"full_response": event.get("full_response", "")}
-                        if normalized_data is None:
-                            normalized_data = ""
-                        yield {"event": str(event.get("type")), "data": normalized_data}
-                        continue
+            event_source = (
+                runner(context=agent_context, history=normalized_history)
+                if runner is not None
+                else TutorAgent(agent_context).chat_stream(normalized_history)
+            )
+            async for event in event_source:
+                normalized_event = self._normalize_stream_event(event)
+                event_name = str(normalized_event.get("event", "message"))
+                payload = normalized_event.get("data")
 
-                yield {"event": "message", "data": event}
+                if event_name == "token":
+                    full_reply += normalize_message_content(payload)
+                    yield normalized_event
+                    continue
+                if event_name == "error":
+                    stream_had_error = True
+                    yield normalized_event
+                    continue
+                if event_name == "done":
+                    final_done_payload = payload
+                    if isinstance(payload, dict):
+                        maybe_reply = normalize_message_content(
+                            payload.get("full_response") or payload.get("response") or ""
+                        )
+                        if maybe_reply:
+                            full_reply = maybe_reply
+                        resources = payload.get("resources")
+                        if isinstance(resources, dict) and isinstance(resources.get("knowledge_graph"), dict):
+                            knowledge_graph = resources["knowledge_graph"]
+                    continue
+                yield normalized_event
+
+        if stream_had_error:
+            yield {"event": "done", "data": final_done_payload or {"session_id": effective_session, "error": True}}
+            return
+
+        if persist and full_reply:
+            try:
+                await memory_layer.save_message(
+                    user_id=user_id,
+                    session_id=effective_session,
+                    role="assistant",
+                    content=full_reply,
+                    knowledge_graph=knowledge_graph,
+                )
+                self._spawn_background(
+                    memory_layer.after_turn(
+                        user_id=user_id,
+                        session_id=effective_session,
+                        user_message=current_user_message,
+                        assistant_reply=full_reply,
+                        enable_long_term_memory=enable_long_term_memory,
+                    ),
+                    task_name="post_chat_pipeline",
+                )
+            except Exception as exc:
+                logger.exception("[ChatUseCases] 回复保存失败")
+                yield {"event": "error", "data": f"保存回复失败: {exc}"}
+                yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+                return
+
+        yield {"event": "done", "data": final_done_payload or {"session_id": effective_session}}
 
     async def prepare_uploads(
         self,
@@ -904,7 +1094,8 @@ class ChatUseCases:
         self,
         *,
         user_id: int,
-        user_message: str,
+        user_message: str | None = None,
+        history: list[ChatHistoryMessage | dict[str, Any]] | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
@@ -915,12 +1106,14 @@ class ChatUseCases:
         attachment_analysis: dict[str, Any] | None = None,
         stream_runner: Callable[..., Any] | None = None,
         input_source: str | None = None,
+        persist: bool = True,
     ):
         """流式生成对话响应（SSE 格式）。
 
         Args:
             user_id: 用户ID。
-            user_message: 用户消息。
+            user_message: 兼容字段；为空时从 history 最后一条用户消息读取。
+            history: 调用方传入的对话历史。
             session_id: 可选的会话ID。
             image_urls: 图片URL列表。
             file_urls: 文件URL列表。
@@ -938,6 +1131,7 @@ class ChatUseCases:
         async for event in self.stream_chat_events(
             user_id=user_id,
             user_message=user_message,
+            history=history,
             session_id=session_id,
             image_urls=image_urls,
             file_urls=file_urls,
@@ -948,6 +1142,7 @@ class ChatUseCases:
             attachment_analysis=attachment_analysis,
             stream_runner=stream_runner,
             input_source=input_source,
+            persist=persist,
         ):
             yield format_sse(event["event"], event["data"])
 
@@ -1128,7 +1323,6 @@ def get_avatar_chat_usecases() -> ChatUseCases:
 
 __all__ = [
     "CHAT_MODULE_NAME",
-    "ChatContextService",
     "ChatUseCases",
     "ConversationStore",
     "chat_runtime_context",
@@ -1137,15 +1331,10 @@ __all__ = [
     "format_sse",
     "get_avatar_chat_usecases",
     "get_chat_usecases",
-    "get_current_user_id",
-    "get_current_session_id",
-    "set_user_id",
-    "set_session_id",
     "resolve_uploaded_path",
-    "resolve_uploaded_image_path",
-    "read_uploaded_file_content",
     "read_uploaded_file_content_with_meta",
     "analyze_documents",
     "analyze_attachments_parallel",
     "build_vision_service",
+    "store_knowledge_graph",
 ]

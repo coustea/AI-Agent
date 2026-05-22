@@ -9,9 +9,10 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 
-from app.chat.schemas import TutorState
+from app.chat.request import ChatHistoryMessage
+from app.chat.schemas import TutorAgentContext, TutorState
 from app.prompts import registry
 
 # 支持的图片扩展名集合
@@ -227,7 +228,6 @@ async def prepare_tutor_turn(
         "system_prompt": system_prompt,
         "messages": initial_messages,
         "answer_text": "",
-        "retrieved_docs": [],
         "termination_reason": "",
     }
 
@@ -238,6 +238,83 @@ async def prepare_tutor_turn(
         user_record=user_record,
         initial_state=initial_state,
     )
+
+
+def prepare_tutor_state(context: TutorAgentContext, history: list[ChatHistoryMessage]) -> TutorState:
+    """Build LangGraph state from initialized agent context and provided history."""
+    messages = history_to_langchain_messages(history)
+    attachment_context = (
+        context.attachment_analysis_context
+        or str((context.attachment_analysis or {}).get("analysis_context", "")).strip()
+    )
+    return {
+        "user_id": context.user_id,
+        "session_id": context.session_id,
+        "image_urls": list(context.image_urls),
+        "file_urls": list(context.file_urls),
+        "resource_mode": context.resource_mode,
+        "enable_search": context.enable_search,
+        "enable_long_term_memory": False,
+        "need_knowledge_graph": context.need_knowledge_graph,
+        "knowledge_graph": None,
+        "knowledge_graph_error": None,
+        "route": "",
+        "execution_mode": "",
+        "profile_context": context.profile_context,
+        "fact_context": context.long_term_memory_context,
+        "recent_chat_context": context.recent_chat_context,
+        "file_context": context.file_context,
+        "attachment_analysis_context": attachment_context,
+        "attachment_analysis": context.attachment_analysis,
+        "system_prompt": context.system_prompt,
+        "messages": messages,
+        "answer_text": "",
+        "retrieved_docs": [],
+        "termination_reason": "",
+    }
+
+
+def history_to_langchain_messages(history: list[ChatHistoryMessage]) -> list[AnyMessage]:
+    messages: list[AnyMessage] = []
+    for item in history:
+        content = (item.content or "").strip()
+        if not content:
+            continue
+        if item.role == "user":
+            messages.append(HumanMessage(content=content))
+        elif item.role in {"assistant", "ai"}:
+            messages.append(AIMessage(content=content))
+        elif item.role == "system":
+            messages.append(SystemMessage(content=content))
+    return messages
+
+
+def latest_user_message(history: list[ChatHistoryMessage]) -> str:
+    for item in reversed(history):
+        if item.role == "user" and (item.content or "").strip():
+            return item.content.strip()
+    return ""
+
+
+def render_recent_chat_context(history: list[ChatHistoryMessage], char_budget: int = 4000) -> str:
+    lines: list[str] = []
+    used = 0
+    for item in reversed(history):
+        if item.role not in {"user", "assistant", "ai"}:
+            continue
+        content = (item.content or "").strip()
+        if not content:
+            continue
+        role_label = "用户" if item.role == "user" else "助手"
+        line = f"- {role_label}: {content}"
+        next_size = len(line) + 1
+        if lines and used + next_size > char_budget:
+            break
+        lines.append(line)
+        used += next_size
+    if not lines:
+        return "本次请求未提供历史对话。"
+    return "\n".join(reversed(lines))
 
 
 def _is_image_url(url: str) -> bool:

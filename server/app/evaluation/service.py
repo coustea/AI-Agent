@@ -11,14 +11,14 @@ from zoneinfo import ZoneInfo
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.evaluation.schemas import (
+from app.evaluation.request import LearningEventCreate
+from app.evaluation.response import (
     DailyTimeEntry,
     EvaluationMetric,
-    EvaluationSummary,
+    EvaluationSummaryResponse,
     HourlyDistributionEntry,
-    LearningEventCreate,
     LearningEventItem,
-    LearningTimeStats,
+    LearningTimeStatsResponse,
 )
 from app.infra.logging import get_logger
 from app.infra.models import LearningEvent
@@ -71,7 +71,7 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
     return signals[:2]
 
 
-def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummary:
+def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryResponse:
     score_values = [event.score for event in events if event.score is not None]
     average_score = round(sum(score_values) / len(score_values), 1) if score_values else None
     completed_resources = sum(1 for event in events if event.event_type == "resource_completed")
@@ -117,7 +117,7 @@ def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummary:
         EvaluationMetric(label="活跃学习", value=f"{active_seconds // 60} 分钟"),
     ]
 
-    return EvaluationSummary(
+    return EvaluationSummaryResponse(
         event_count=len(events),
         average_score=average_score,
         completed_resources=completed_resources,
@@ -174,7 +174,7 @@ class EvaluationService:
         *,
         user_id: int,
         limit: int = 100,
-    ) -> EvaluationSummary:
+    ) -> EvaluationSummaryResponse:
         stmt = (
             select(LearningEvent)
             .where(LearningEvent.user_id == user_id)
@@ -190,7 +190,7 @@ class EvaluationService:
         *,
         user_id: int,
         days: int = 30,
-    ) -> LearningTimeStats:
+    ) -> LearningTimeStatsResponse:
         window_days = max(1, min(days, 90))
         now_local = datetime.now(SHANGHAI_TZ)
         bounds = _get_time_boundaries(now_local)
@@ -250,7 +250,7 @@ class EvaluationService:
         total_seconds = sum(_normalized_duration_for_summary(event) for event in all_heartbeat_events)
         streak_days = _compute_streak_days(all_heartbeat_events, now_local.date())
 
-        return LearningTimeStats(
+        return LearningTimeStatsResponse(
             today_seconds=today_seconds,
             week_seconds=week_seconds,
             month_seconds=month_seconds,

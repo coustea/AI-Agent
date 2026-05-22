@@ -1,47 +1,49 @@
-"""记忆系统唯一公共入口。"""
+"""记忆系统统一门面。"""
 
 from __future__ import annotations
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from typing import Any
+
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.memory.compression import SessionCompressor
-from app.memory.context import MemoryContextBuilder
-from app.memory.long_term import LongTermMemoryExtractor
-from app.memory.profile import ProfileBuilder
 from app.memory.store import MemoryStore
+from app.memory.types import (
+    CHAT_BUDGET,
+    DEFAULT_SESSION_TITLE,
+    LTM_BUDGET,
+    MSG_LIMIT,
+    SUMMARY_BUDGET,
+    ModuleName,
+    estimate_token_count,
+    should_include_session_summary,
+    truncate_text,
+)
+from app.memory.profile import render_profile_markdown
 from app.memory.workflow import MemoryWorkflow
 
 logger = get_logger(__name__)
 
 
 class MemoryService:
-    """记忆系统门面：前端/API/Agent 只依赖这个类。"""
+    """统一入口：所有记忆相关操作通过此门面调用。"""
 
-    def __init__(self, *, module: str = "mentor") -> None:
+    def __init__(self, *, module: str = ModuleName.MENTOR) -> None:
         self.module = module
         self.store = MemoryStore()
-        self.profile = ProfileBuilder(module=module, store=self.store)
-        self.compressor = SessionCompressor(module=module, store=self.store)
-        self.long_term = LongTermMemoryExtractor(module=module, store=self.store)
-        self.context = MemoryContextBuilder(module=module, store=self.store)
-        self.workflow = MemoryWorkflow(
-            module=module,
-            store=self.store,
-            compressor=self.compressor,
-            long_term=self.long_term,
-            profile=self.profile,
-        )
+        self.workflow = MemoryWorkflow(module=module, store=self.store)
         self.llm = get_llm()
 
-    async def create_session(self, *, user_id: int, title: str = "新对话"):
+    # ── 会话 ──
+
+    async def create_session(self, *, user_id: int, title: str = DEFAULT_SESSION_TITLE) -> Any:
         return await self.store.create_session(user_id=user_id, module=self.module, title=title)
 
-    async def get_session(self, *, session_id: str):
+    async def get_session(self, session_id: str) -> Any:
         return await self.store.get_session(session_id)
 
-    async def list_sessions(self, *, user_id: int, limit: int = 20):
+    async def list_sessions(self, *, user_id: int, limit: int = 20) -> list[Any]:
         return await self.store.list_sessions(user_id=user_id, module=self.module, limit=limit)
 
     async def archive_session(self, *, user_id: int, session_id: str) -> bool:
@@ -59,6 +61,8 @@ class MemoryService:
 
 只输出标题，不要解释。"""
         try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
             response = await self.llm.ainvoke(
                 [SystemMessage(content="你是一个会话标题生成助手。"), HumanMessage(content=prompt)],
                 temperature=0.3,
@@ -74,6 +78,8 @@ class MemoryService:
             logger.warning("[MemoryService] 生成会话标题失败 user=%s session=%s err=%s", user_id, session_id, exc)
             return None
 
+    # ── 消息 ──
+
     async def save_message(
         self,
         *,
@@ -81,9 +87,9 @@ class MemoryService:
         session_id: str,
         role: str,
         content: str,
-        attachments: list[dict] | None = None,
-        tool_calls: list[dict] | None = None,
-        knowledge_graph: dict | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
+        knowledge_graph: dict[str, Any] | None = None,
     ) -> int:
         return await self.store.save_message(
             user_id=user_id,
@@ -96,21 +102,11 @@ class MemoryService:
             knowledge_graph=knowledge_graph,
         )
 
-    async def list_messages(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        limit: int = 50,
-        only_unexpired: bool = True,
-    ):
-        return await self.store.list_messages(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module,
-            limit=limit,
-            only_unexpired=only_unexpired,
-        )
+    async def list_messages(self, *, user_id: int, session_id: str, limit: int | None = None, only_unexpired: bool = True) -> list[Any]:
+        return await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=limit, only_unexpired=only_unexpired)
+
+    async def count_messages(self, *, user_id: int, session_id: str) -> int:
+        return await self.store.count_messages(user_id=user_id, session_id=session_id, module=self.module)
 
     async def delete_short_term_messages(self, *, user_id: int, session_id: str) -> int:
         return await self.store.delete_session_messages(user_id=user_id, session_id=session_id, module=self.module)
@@ -118,55 +114,88 @@ class MemoryService:
     async def reset_session_counters(self, *, user_id: int, session_id: str) -> None:
         await self.store.reset_session_token_count(session_id)
 
-    async def get_session_summaries(self, *, user_id: int, session_id: str, limit: int = 3):
+    # ── 概要 ──
+
+    async def list_summaries(self, *, user_id: int, session_id: str, limit: int = 3) -> list[Any]:
         return await self.store.list_summaries(user_id=user_id, session_id=session_id, module=self.module, limit=limit)
 
-    async def compress_session(self, *, user_id: int, session_id: str, keep_recent: int = 10) -> bool:
-        return await self.compressor.maybe_compress(
-            user_id=user_id,
-            session_id=session_id,
-            keep_recent=keep_recent,
-            force=True,
-            reason="manual",
-        ) is not None
+    # ── 画像 ──
 
-    async def get_profile(self, *, user_id: int):
+    async def get_profile(self, *, user_id: int) -> Any:
         return await self.store.get_profile(user_id=user_id, module=self.module)
 
-    async def get_or_create_profile(self, *, user_id: int):
+    async def get_or_create_profile(self, *, user_id: int) -> Any:
         return await self.store.get_or_create_profile(user_id=user_id, module=self.module)
 
-    async def list_profile_history(self, *, user_id: int, limit: int = 20):
-        return await self.store.list_profile_history(user_id=user_id, module=self.module, limit=limit)
-
-    async def get_onboarding(self, *, user_id: int) -> dict:
-        return await self.profile.get_onboarding(user_id)
-
-    async def upsert_profile(self, *, user_id: int, session_id: str | None = None, onboarding: dict | None = None, reason: str = "manual"):
-        return await self.profile.upsert(user_id=user_id, session_id=session_id, onboarding=onboarding, reason=reason)
-
-    async def get_long_term_memory(self, *, user_id: int):
-        return await self.store.get_long_term_memory(user_id=user_id, module=self.module)
-
-    async def get_or_create_long_term_memory(self, *, user_id: int):
-        return await self.store.get_or_create_long_term_memory(user_id=user_id, module=self.module)
-
-    async def update_long_term_memory(self, *, user_id: int, session_id: str, user_message: str, assistant_reply: str) -> bool:
-        return await self.long_term.maybe_update(
+    async def upsert_profile(
+        self,
+        *,
+        user_id: int,
+        session_id: str | None = None,
+        onboarding: dict[str, Any] | None = None,
+        reason: str = "manual",
+    ) -> Any:
+        return await self.workflow.profile_builder.upsert(
             user_id=user_id,
             session_id=session_id,
-            user_message=user_message,
-            assistant_reply=assistant_reply,
+            onboarding=onboarding,
+            reason=reason,
         )
 
+    async def list_profile_history(self, *, user_id: int, limit: int = 20) -> list[Any]:
+        return await self.store.list_profile_history(user_id=user_id, module=self.module, limit=limit)
+
+    async def get_onboarding(self, *, user_id: int) -> dict[str, Any]:
+        result = await self.workflow.profile_builder.get_onboarding(user_id)
+        student = result.get("student_profile") or {}
+        goals = student.get("learning_goal")
+        return {
+            "grade": student.get("grade") or "",
+            "school": student.get("school") or "",
+            "subjects": student.get("courses", []),
+            "goals": [goals] if isinstance(goals, str) and goals else [],
+            "learning_style": student.get("cognitive_style") or "visual",
+            "school_level": student.get("school_level"),
+            "profile_initialized": result.get("profile_initialized", False),
+        }
+
+    # ── 长期记忆 ──
+
+    async def get_long_term_memory(self, *, user_id: int) -> Any:
+        return await self.store.get_long_term_memory(user_id=user_id, module=self.module)
+
+    async def get_or_create_long_term_memory(self, *, user_id: int) -> Any:
+        return await self.store.get_or_create_long_term_memory(user_id=user_id, module=self.module)
+
+    # ── 上下文构建（兼容 TutorContextService 协议）──
+
     async def build_profile_context(self, user_id: int) -> str:
-        return await self.context.build_profile_context(user_id)
+        profile = await self.store.get_profile(user_id=user_id, module=self.module)
+        if not profile:
+            return "暂无画像信息（新用户），请直接开始对话。"
+        if profile.profile_markdown and profile.profile_markdown.strip():
+            return profile.profile_markdown
+        if profile.profile_json:
+            return render_profile_markdown(profile.profile_json)
+        return "暂无画像信息。"
 
     async def build_memory_context(self, user_id: int) -> str:
-        return await self.context.build_memory_context(user_id)
+        memory = await self.store.get_long_term_memory(user_id=user_id, module=self.module)
+        if not memory or not memory.memory_markdown:
+            return "暂无长期记忆。"
+        return truncate_text(memory.memory_markdown, LTM_BUDGET)
 
     def build_file_context(self, image_urls: list[str], file_urls: list[str]) -> str:
-        return self.context.build_file_context(image_urls, file_urls)
+        if not image_urls and not file_urls:
+            return "本次对话无上传文件。"
+        lines: list[str] = []
+        if image_urls:
+            lines.append(f"图片附件（{len(image_urls)}个）：")
+            lines.extend(f"  - {url.split('/')[-1]}" for url in image_urls)
+        if file_urls:
+            lines.append(f"文档附件（{len(file_urls)}个）：")
+            lines.extend(f"  - {url.split('/')[-1]}" for url in file_urls)
+        return "\n".join(lines)
 
     async def build_recent_chat_context(
         self,
@@ -176,20 +205,84 @@ class MemoryService:
         user_message: str,
         image_urls: list[str] | None = None,
         file_urls: list[str] | None = None,
-    ):
-        return await self.context.build_recent_chat_context(
+    ) -> tuple[list[AnyMessage], str]:
+        raw_messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=MSG_LIMIT)
+        selected = self._select_recent_messages(raw_messages, user_message=user_message)
+        messages: list[AnyMessage] = []
+        for message in selected:
+            if message.role == "user":
+                messages.append(HumanMessage(content=message.content))
+            elif message.role == "assistant":
+                messages.append(AIMessage(content=message.content))
+        content = user_message
+        if image_urls:
+            content += f"\n[Attached Images: {', '.join(image_urls)}]"
+        if file_urls:
+            content += f"\n[Attached Files: {', '.join(file_urls)}]"
+        messages.append(HumanMessage(content=content))
+
+        recent_ctx = self._render_recent_chat(selected)
+        if should_include_session_summary(user_message):
+            summary_ctx = await self._build_session_summary_context(user_id, session_id)
+            if summary_ctx != "暂无会话概要。":
+                recent_ctx = f"# 会话概要\n{truncate_text(summary_ctx, SUMMARY_BUDGET)}\n\n# 最近对话\n{recent_ctx}"
+            cross_ctx = await self._build_cross_session_context(user_id, session_id)
+            if cross_ctx:
+                recent_ctx = f"{cross_ctx}\n\n{recent_ctx}"
+        return messages, recent_ctx
+
+    async def _build_session_summary_context(self, user_id: int, session_id: str) -> str:
+        summaries = await self.store.list_summaries(user_id=user_id, session_id=session_id, module=self.module, limit=2)
+        if not summaries:
+            return "暂无会话概要。"
+        return "\n\n---\n\n".join(summary.summary_markdown for summary in summaries if summary.summary_markdown)
+
+    async def _build_cross_session_context(self, user_id: int, current_session_id: str, char_budget: int = 800) -> str:
+        summaries = await self.store.list_cross_session_summaries(
             user_id=user_id,
-            session_id=session_id,
-            user_message=user_message,
-            image_urls=image_urls,
-            file_urls=file_urls,
+            module=self.module,
+            exclude_session_id=current_session_id,
+            limit=5,
         )
+        chunks: list[str] = []
+        for summary in summaries:
+            if summary.summary_markdown and summary.summary_markdown.strip():
+                first_line = summary.summary_markdown.strip().split("\n")[0]
+                chunks.append(f"- {first_line}")
+        return truncate_text("# 其他会话概要\n" + "\n".join(chunks), char_budget) if chunks else ""
 
-    async def build_context_preview(self, *, user_id: int, session_id: str, recent_limit: int = 10) -> str:
-        return await self.context.build_context_preview(user_id=user_id, session_id=session_id, recent_limit=recent_limit)
+    @staticmethod
+    def _select_recent_messages(messages: list[Any], *, user_message: str, char_budget: int = CHAT_BUDGET) -> list[Any]:
+        dialogue = [
+            message
+            for message in messages
+            if getattr(message, "role", None) in {"user", "assistant"} and (getattr(message, "content", "") or "").strip()
+        ]
+        if dialogue and getattr(dialogue[-1], "role", None) == "user" and (getattr(dialogue[-1], "content", "") or "").strip() == (user_message or "").strip():
+            dialogue = dialogue[:-1]
+        selected: list[Any] = []
+        used_chars = 0
+        for message in reversed(dialogue):
+            line = f"- {'用户' if getattr(message, 'role', '') == 'user' else '助手'}: {(getattr(message, 'content', '') or '').strip()}"
+            next_size = len(line) + 1
+            if selected and used_chars + next_size > char_budget:
+                continue
+            if not selected and next_size > char_budget:
+                selected.append(message)
+                break
+            selected.append(message)
+            used_chars += next_size
+        return list(reversed(selected))
 
-    async def build_tutor_context(self, *, user_id: int, session_id: str, recent_limit: int = 10) -> str:
-        return await self.context.build_tutor_context(user_id=user_id, session_id=session_id, recent_limit=recent_limit)
+    @staticmethod
+    def _render_recent_chat(messages: list[Any], char_budget: int = CHAT_BUDGET) -> str:
+        context = "\n".join(
+            f"- {'用户' if getattr(m, 'role', '') == 'user' else '助手'}: {truncate_text((getattr(m, 'content', '') or '').strip(), char_budget)}"
+            for m in messages
+        )
+        return truncate_text(context, char_budget) if context else "最近 7 天暂无历史对话。"
+
+    # ── 工作流 ──
 
     async def after_turn(
         self,
@@ -200,10 +293,57 @@ class MemoryService:
         assistant_reply: str,
         enable_long_term_memory: bool = True,
     ) -> None:
-        await self.workflow.after_turn(
+        delta = estimate_token_count(user_message) + estimate_token_count(assistant_reply)
+        try:
+            await self.store.add_session_token_count(session_id=session_id, user_id=user_id, module=self.module, delta=delta)
+        except Exception as exc:
+            logger.error("[MemoryService] token 计数更新失败 user=%s session=%s err=%s", user_id, session_id, exc)
+
+        await self.workflow.post_turn(
             user_id=user_id,
             session_id=session_id,
             user_message=user_message,
             assistant_reply=assistant_reply,
-            enable_long_term_memory=enable_long_term_memory,
         )
+
+    async def post_turn(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        assistant_reply: str,
+        turn_count: int = 0,
+    ) -> dict[str, bool]:
+        return await self.workflow.post_turn(
+            user_id=user_id,
+            session_id=session_id,
+            user_message=user_message,
+            assistant_reply=assistant_reply,
+            turn_count=turn_count,
+        )
+
+    async def build_context(self, *, user_id: int, session_id: str, user_message: str = "") -> dict[str, Any]:
+        return await self.workflow.build_context(user_id=user_id, session_id=session_id, user_message=user_message)
+
+    async def on_logout(self, *, user_id: int, session_id: str | None = None) -> None:
+        await self.workflow.on_logout(user_id=user_id, session_id=session_id)
+
+    async def build_context_preview(self, *, user_id: int, session_id: str, recent_limit: int = 10) -> str:
+        profile_ctx = await self.build_profile_context(user_id)
+        memory_ctx = await self.build_memory_context(user_id)
+        messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=recent_limit)
+        recent_lines = [
+            f"- {'用户' if m.role == 'user' else '助手'}: {truncate_text(m.content, 200)}"
+            for m in messages
+            if m.role in {"user", "assistant"} and m.content.strip()
+        ]
+        return f"# 用户画像\n{profile_ctx}\n\n# 用户长期记忆\n{memory_ctx}\n\n# 最近对话\n{chr(10).join(recent_lines) or '暂无最近对话。'}"
+
+    async def build_tutor_context(self, *, user_id: int, session_id: str, recent_limit: int = 10) -> str:
+        return await self.build_context_preview(user_id=user_id, session_id=session_id, recent_limit=recent_limit)
+
+    # ── Token 计数 ──
+
+    async def add_session_token_count(self, *, session_id: str, user_id: int, delta: int) -> int:
+        return await self.store.add_session_token_count(session_id=session_id, user_id=user_id, module=self.module, delta=delta)

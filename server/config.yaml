@@ -89,3 +89,7 @@ neo4j:
   user: "neo4j"
   password: ""
   database: "neo4j"
+  # 知识图谱生成参数
+  max_nodes: 18
+  relation_depth: 2
+  include_orphan_points: true

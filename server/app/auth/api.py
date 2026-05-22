@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -26,8 +25,7 @@ async def create_user(
 ):
     result = await auth_usecases.register(session, data)
     if not result:
-        body = HttpResponse.error(code=400, message="用户名已存在")
-        return JSONResponse(status_code=400, content=body.model_dump())
+        return HttpResponse.error(code=400, message="用户名已存在")
     return HttpResponse.success(data=result)
 
 
@@ -38,8 +36,7 @@ async def login(
 ):
     result = await auth_usecases.login(session, data)
     if not result:
-        body = HttpResponse.error(code=401, message="用户名或密码错误")
-        return JSONResponse(status_code=401, content=body.model_dump())
+        return HttpResponse.error(code=401, message="用户名或密码错误")
     return HttpResponse.success(data=result)
 
 
@@ -85,24 +82,18 @@ async def upload_avatar(
     # 验证文件类型
     allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     if file.content_type not in allowed_types:
-        return JSONResponse(
-            status_code=400,
-            content=HttpResponse.error(
-                code=400,
-                message="不支持的图片格式，仅支持 jpg, png, gif, webp"
-            ).model_dump()
+        return HttpResponse.error(
+            code=400,
+            message="不支持的图片格式，仅支持 jpg, png, gif, webp",
         )
 
     # 验证文件大小（2MB）
     content = await file.read()
     max_size = 2 * 1024 * 1024
     if len(content) > max_size:
-        return JSONResponse(
-            status_code=400,
-            content=HttpResponse.error(
-                code=400,
-                message=f"文件大小超过限制（最大 {max_size // (1024 * 1024)}MB）"
-            ).model_dump()
+        return HttpResponse.error(
+            code=400,
+            message=f"文件大小超过限制（最大 {max_size // (1024 * 1024)}MB）",
         )
 
     # 确保目录存在
@@ -134,8 +125,5 @@ async def get_avatar(filename: str):
 
     file_path = AVATAR_DIR / filename
     if not file_path.exists():
-        return JSONResponse(
-            status_code=404,
-            content=HttpResponse.error(code=404, message="头像不存在").model_dump()
-        )
+        return HttpResponse.error(code=404, message="头像不存在")
     return FileResponse(file_path)

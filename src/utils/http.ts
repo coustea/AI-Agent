@@ -1,32 +1,31 @@
 import axios from 'axios'
 
-interface ValidationErrorDetail {
-  loc?: string[]
-  msg?: string
-  [key: string]: unknown
+/** 后端统一响应信封 */
+export interface ApiResponse<T = unknown> {
+  code: number
+  message: string
+  data: T
 }
 
-interface ErrorResponseData {
-  message?: string
-  detail?: string | ValidationErrorDetail[]
-}
-
+/** 从错误中提取可读消息，统一处理 HttpResponse.error 和 HTTPException 两种格式 */
 export function getErrorMessage(error: unknown, fallback = '请求失败，请稍后重试'): string {
-  const err = error as { response?: { data?: ErrorResponseData }; message?: string }
+  const err = error as { response?: { data?: { message?: string; detail?: string | unknown[] } }; message?: string }
   const data = err?.response?.data
   if (!data) return err?.message || fallback
 
+  // HttpResponse.error 格式: { code, message, data }
   if (typeof data.message === 'string' && data.message) {
     return data.message
   }
 
+  // HTTPException 格式: { detail: string | array }
   if (typeof data.detail === 'string' && data.detail) {
     return data.detail
   }
 
   if (Array.isArray(data.detail) && data.detail.length > 0) {
     return data.detail
-      .map((item: ValidationErrorDetail) => {
+      .map((item: { loc?: string[]; msg?: string }) => {
         const field = Array.isArray(item?.loc) ? item.loc.slice(1).join('.') : ''
         const message = item?.msg || String(item)
         return field ? `${field}: ${message}` : message
@@ -53,7 +52,19 @@ http.interceptors.request.use((config) => {
 
 // 响应拦截器：统一处理错误
 http.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const body = response.data as ApiResponse
+    // 业务错误码非 200 时，统一 reject，调用方只需 catch 即可
+    if (body && typeof body.code === 'number' && body.code !== 200) {
+      return Promise.reject({
+        response: {
+          data: { message: body.message, code: body.code },
+          status: body.code,
+        },
+      })
+    }
+    return response
+  },
   (error) => {
     const status = error.response?.status
     const url = error.config?.url || ''

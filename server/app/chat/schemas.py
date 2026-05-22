@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Literal, Optional, TypedDict, Union
+from typing import Annotated, Any, Literal, Optional, Union
+from typing_extensions import TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from langchain_core.messages import AnyMessage
@@ -16,21 +17,6 @@ from langgraph.graph.message import add_messages
 # ===================================================================
 # API 层数据模型（Pydantic BaseModel）
 # ===================================================================
-
-class MentorChatRequest(BaseModel):
-    """聊天请求模型。
-
-    前端发送的聊天请求参数。
-    """
-    message: str  # 用户消息内容
-    session_id: Optional[str] = None  # 会话ID，为空则使用默认会话
-    image_urls: Optional[list[str]] = None  # 图片URL列表
-    file_urls: Optional[list[str]] = None  # 文件URL列表
-    need_knowledge_graph: Optional[bool] = False  # 是否生成知识图谱
-    generate_video: Optional[bool] = False  # 是否生成视频
-    enable_search: Optional[bool] = False  # 是否启用联网搜索
-    enable_long_term_memory: Optional[bool] = False  # 是否启用长期记忆读写
-
 
 class AttachmentInfo(BaseModel):
     """单条附件信息。
@@ -42,26 +28,14 @@ class AttachmentInfo(BaseModel):
     name: str  # 附件文件名
 
 
-class ToolCallRecord(BaseModel):
-    """一次工具调用的完整记录（API 层）。
-
-    记录工具名称、参数、结果和状态。
-    """
-    tool: str  # 工具名称
-    args: dict | str  # 工具参数（字典或字符串）
-    result: str | dict  # 工具返回结果
-    status: str  # 调用状态: "success" | "error"
-
-
 class ChatMessageItem(BaseModel):
     """返回给前端的消息条目。
 
-    包含角色、内容、附件、工具调用记录、知识图谱等。
+    包含角色、内容、附件、知识图谱等。
     """
     role: str  # 消息角色: "user" | "assistant" | "tool"
     content: str  # 消息文本内容
     attachments: Optional[list[AttachmentInfo]] = None  # 附件列表
-    tool_calls: Optional[list[ToolCallRecord]] = None  # 工具调用记录
     knowledge_graph: Optional[dict[str, Any]] = None  # 知识图谱数据
     created_at: Optional[datetime] = None  # 创建时间
 
@@ -81,16 +55,30 @@ class UploadResponse(BaseModel):
 # Agent 内部状态类型（TypedDict，total=False 兼容 LangGraph 增量更新）
 # ===================================================================
 
-class ToolCallDetail(TypedDict, total=False):
-    """工具调用记录（Agent 内部状态）。
+class TutorAgentContext(BaseModel):
+    """Agent 初始化上下文 — 由 service 层构造后传入 TutorAgent。
 
-    用于 Agent 内部追踪工具调用过程。
+    包含用户身份、系统提示词、各类上下文和功能开关。
     """
-    tool: str  # 工具名称
-    args: dict[str, Any] | str  # 工具参数
-    result: str  # 工具结果
-    status: str  # 调用状态
-    error: str  # 错误信息
+
+    user_id: int
+    session_id: str
+    system_prompt: str
+    profile_context: str
+    long_term_memory_context: str
+    session_summary_context: str
+    recent_chat_context: str
+    file_context: str
+    attachment_analysis_context: str
+    attachment_analysis: dict[str, Any] = {}
+    image_urls: list[str] = []
+    file_urls: list[str] = []
+    enable_search: bool = False
+    need_knowledge_graph: bool = False
+    generate_video: bool = False
+    resource_mode: str = "none"
+
+
 
 
 class TutorState(TypedDict, total=False):
@@ -106,17 +94,15 @@ class TutorState(TypedDict, total=False):
     image_urls: Optional[list[str]]  # 图片URL列表
     file_urls: Optional[list[str]]  # 文件URL列表
     need_knowledge_graph: bool  # 是否生成知识图谱
-    generate_video: bool  # 是否生成视频
-    request_generate_video: bool  # 请求生成视频标志
     enable_search: bool  # 是否启用搜索
     enable_long_term_memory: bool  # 是否启用长期记忆读写
     knowledge_graph: Optional[dict[str, Any]]  # 生成的知识图谱数据
     knowledge_graph_error: Optional[str]  # 知识图谱生成错误信息
 
     # ---- 路由与执行模式 ----
-    route: str  # 路由结果: "direct" | "search" | "attachment_needed" | "direct_graph" | "search_graph" | "attachment_graph" | "graph_only"
-    execution_mode: str  # 执行模式: "direct" | "search" | "attachment" | "search_graph" | "attachment_graph" | "graph_only"
-    summary_type: str  # 总结类型: "brief"（图谱简要总结） | None（详细回答）
+    route: str  # 路由结果
+    execution_mode: str  # 执行模式
+    summary_type: str  # 总结类型
     search_result: str  # 搜索节点返回的搜索结果
 
     # ---- 上下文信息 ----
@@ -133,17 +119,9 @@ class TutorState(TypedDict, total=False):
     # ---- 对话消息 ----
     messages: Annotated[list[AnyMessage], add_messages]  # 消息列表（支持增量追加）
 
-    # ---- 终止与调试信息 ----
+    # ---- 终止信息 ----
     answer_text: str  # 最终回答文本
-    last_guard_decision: str  # 最近守卫决策: "need_knowledge_graph" | "generate_video" | "end"
-    guard_reason: str  # 守卫决策原因
     termination_reason: str  # 终止原因
-    image_generation_status: str  # 图片生成状态
-    video_generation_status: str  # 视频生成状态
-    image_generation_prompt: str  # 图片生成提示词
-    video_generation_prompt: str  # 视频生成提示词
-    image_generation_plan: dict[str, Any]  # 图片生成计划
-    video_generation_plan: dict[str, Any]  # 视频生成计划
 
 
 # ===================================================================

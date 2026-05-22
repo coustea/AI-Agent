@@ -1,14 +1,6 @@
-# -*- coding: utf-8 -*-
-"""AvatarAgent schemas — 请求/响应数据模型"""
+"""Avatar schemas — re-exported from request.py and response.py for backward compatibility."""
 
-from pydantic import BaseModel
+from app.avatar.request import AvatarGenerateRequest
+from app.avatar.response import AvatarBridgeResponse
 
-
-class StopRequest(BaseModel):
-    """Stop request body (reserved). user_id comes from JWT."""
-
-
-class SwitchSessionRequest(BaseModel):
-    """Switch session request."""
-
-    session_id: str
+__all__ = ["AvatarGenerateRequest", "AvatarBridgeResponse"]
