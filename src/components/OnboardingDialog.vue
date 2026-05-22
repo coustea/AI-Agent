@@ -474,7 +474,7 @@ watch(() => onboardingForm.school, (newVal) => {
 const loadStatus = async () => {
   try {
     const res = await getProfileOnboarding();
-    const profile = res.data.data.student_profile;
+    const profile = res.data?.data?.student_profile ?? {};
     if (profile.major) { onboardingForm.major = profile.major; }
     if (profile.courses) onboardingForm.courses = profile.courses;
     if (profile.education_level) onboardingForm.education_level = profile.education_level;

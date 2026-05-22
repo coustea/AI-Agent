@@ -8,8 +8,11 @@ from pydantic import BaseModel, Field
 class OnboardingUpdate(BaseModel):
     """Onboarding data update request."""
 
-    grade: str = Field(..., min_length=1, max_length=50)
-    school: str = Field(default="", max_length=200)
-    subjects: list[str] = Field(default_factory=list)
-    goals: list[str] = Field(default_factory=list)
-    learning_style: str = Field(default="visual", max_length=50)
+    education_level: str | None = None
+    grade: str | None = Field(default=None, max_length=50)
+    major: str | None = None
+    courses: list[str] = Field(default_factory=list)
+    learning_goal: str | None = None
+    school: str | None = Field(default=None, max_length=200)
+    school_level: str | None = None
+    preferred_language: str | None = None

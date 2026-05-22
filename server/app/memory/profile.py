@@ -181,8 +181,6 @@ class ProfileBuilder:
 
         if onboarding is not None:
             normalized = normalize_onboarding(onboarding)
-            if not is_onboarding_complete(normalized):
-                raise ValueError("首次登录必填字段不完整")
             profile_json = self._build_onboarding_profile(normalized, old_json)
             updated_reason = "基于首次登录学习资料生成画像"
         else:

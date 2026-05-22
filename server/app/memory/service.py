@@ -146,18 +146,7 @@ class MemoryService:
         return await self.store.list_profile_history(user_id=user_id, module=self.module, limit=limit)
 
     async def get_onboarding(self, *, user_id: int) -> dict[str, Any]:
-        result = await self.workflow.profile_builder.get_onboarding(user_id)
-        student = result.get("student_profile") or {}
-        goals = student.get("learning_goal")
-        return {
-            "grade": student.get("grade") or "",
-            "school": student.get("school") or "",
-            "subjects": student.get("courses", []),
-            "goals": [goals] if isinstance(goals, str) and goals else [],
-            "learning_style": student.get("cognitive_style") or "visual",
-            "school_level": student.get("school_level"),
-            "profile_initialized": result.get("profile_initialized", False),
-        }
+        return await self.workflow.profile_builder.get_onboarding(user_id)
 
     # ── 长期记忆 ──
 
