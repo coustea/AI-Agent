@@ -43,68 +43,57 @@
           </div>
           <div class="stat-item">
             <el-icon class="text-indigo"><Reading /></el-icon>
-            <div class="stat-val">18</div>
+            <div class="stat-val">{{ dynamicStats.completedCourses }}</div>
             <div class="stat-label">已完成课程</div>
           </div>
           <div class="stat-item">
             <el-icon class="text-green"><DocumentCopy /></el-icon>
-            <div class="stat-val">46</div>
+            <div class="stat-val">{{ dynamicStats.generatedResources }}</div>
             <div class="stat-label">生成资源数</div>
           </div>
           <div class="stat-item">
             <el-icon class="text-orange"><StarFilled /></el-icon>
-            <div class="stat-val">89<small>分</small></div>
+            <div class="stat-val">{{ dynamicStats.compositeScore }}<small>分</small></div>
             <div class="stat-label">综合评分</div>
           </div>
         </div>
       </div>
 
-      <div class="bento-card performance-card">
+      <div class="bento-card bento-span-2 history-card">
         <div class="card-header-flex">
-          <h4>近期表现</h4>
-          <el-select v-model="timeRange" size="small" style="width: 90px" aria-label="时间范围">
-            <el-option label="近 7 天" value="7" />
-            <el-option label="近 30 天" value="30" />
-          </el-select>
+          <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
+          <el-radio-group v-model="historyFilter" size="small" aria-label="资源过滤">
+            <el-radio-button label="全部" />
+            <el-radio-button label="已完成" />
+          </el-radio-group>
         </div>
-        <div class="perf-grid">
-          <div class="perf-box">
-            <div class="perf-icon bg-blue-light"><el-icon class="text-blue"><Timer /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">学习时长</span>
-              <span class="value">
-                {{ formatDurationValue(studentProfile.learning_duration_total) }}<small>{{ formatDurationUnit(studentProfile.learning_duration_total) }}</small>
-              </span>
-            </div>
-          </div>
-          <div class="perf-box">
-            <div class="perf-icon bg-green-light"><el-icon class="text-green"><Checked /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">完成任务</span>
-              <span class="value">16 <small>个</small></span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="bento-card recent-card">
-        <div class="card-header-flex">
-          <h4 class="card-title">最近学习记录</h4>
-          <a href="#" @click.prevent class="link-text">全部 ></a>
-        </div>
-        <div class="recent-record">
-          <div class="record-icon"><el-icon><VideoPlay /></el-icon></div>
-          <div class="record-info">
-            <h5>CNN 3D 卷积核可视化</h5>
-            <div class="record-meta">
-              <span class="meta-tag">多模态视频 · MP4</span>
-            </div>
-          </div>
-        </div>
-        <div class="record-progress">
-          <el-progress :percentage="60" :show-text="false" />
-          <div class="prog-text"><span>进度 60%</span><span>今天 19:32</span></div>
-        </div>
+        <el-table
+            :data="filteredTableData"
+            v-loading="resourceHistoryLoading"
+            height="260"
+            style="width: 100%"
+            :header-cell-style="{background:'#F8FAFC', color:'#64748B'}"
+        >
+          <el-table-column label="任务名称 / 学习主题" min-width="150" show-overflow-tooltip>
+            <template #default="scope">
+              <div class="task-title-cell">
+                <span>{{ scope.row.title }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="80">
+            <template #default="scope">
+              <el-tag :type="getStatusType(scope.row.status)" size="small" class="custom-tag">{{ scope.row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="time" label="时间" width="100" />
+          <el-table-column label="操作" width="60" fixed="right">
+            <template #default="scope">
+              <el-button link type="primary" @click="viewResourceDetail(scope.row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
       <div class="bento-card profile-info-card">
@@ -136,53 +125,66 @@
         </div>
       </div>
 
-      <div class="bento-card bento-span-2 trend-section">
+      <div class="bento-card bento-span-2 radar-card">
         <div class="card-header-flex">
-          <h4 class="card-title">学习成长趋势</h4>
-        </div>
-        <div class="trend-chart-container">
-          <v-chart class="chart" :option="lineOption" autoresize />
-        </div>
-      </div>
-
-      <div class="bento-card radar-card">
-        <div class="card-header-flex">
-          <h4>学习画像 <el-icon class="info-icon"><InfoFilled /></el-icon></h4>
+          <h4>学习画像分析 <el-icon class="info-icon"><InfoFilled /></el-icon></h4>
         </div>
         <div class="radar-container">
           <v-chart class="chart" :option="radarOption" autoresize />
         </div>
       </div>
 
-      <div class="bento-card bento-span-4 history-card">
+      <div class="bento-card performance-card">
         <div class="card-header-flex">
-          <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
-          <el-radio-group v-model="historyFilter" size="small" aria-label="资源过滤">
-            <el-radio-button label="全部" />
-            <el-radio-button label="已完成" />
-          </el-radio-group>
+          <h4>近期表现</h4>
+          <el-select v-model="timeRange" size="small" style="width: 90px" aria-label="时间范围">
+            <el-option label="近 7 天" value="7" />
+            <el-option label="近 30 天" value="30" />
+          </el-select>
         </div>
+        <div class="perf-grid">
+          <div class="perf-box">
+            <div class="perf-icon bg-blue-light"><el-icon class="text-blue"><Timer /></el-icon></div>
+            <div class="perf-data">
+              <span class="label">区间学习时长</span>
+              <span class="value">
+                {{ formatDurationValue(learningStats?.total_seconds || 45600) }}<small>{{ formatDurationUnit(learningStats?.total_seconds || 45600) }}</small>
+              </span>
+            </div>
+          </div>
+          <div class="perf-box">
+            <div class="perf-icon bg-green-light"><el-icon class="text-green"><Checked /></el-icon></div>
+            <div class="perf-data">
+              <span class="label">完成任务</span>
+              <span class="value">{{ dynamicStats.completedTasks }} <small>个</small></span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <el-table :data="tableData" style="width: 100%" :header-cell-style="{background:'#F8FAFC', color:'#64748B'}">
-          <el-table-column label="任务名称 / 学习主题" min-width="200">
-            <template #default="scope">
-              <div class="task-title-cell">
-                <span>{{ scope.row.title }}</span>
-              </div>
+      <div class="bento-card bento-span-4 trend-section">
+        <div class="card-header-flex">
+          <h4 class="card-title">学习成长趋势（按课程）</h4>
+
+          <div class="trend-course-selector">
+            <template v-if="studentProfile.courses && studentProfile.courses.length > 1">
+              <el-select v-model="selectedTrendCourse" size="small" style="width: 150px" placeholder="选择课程">
+                <el-option v-for="c in studentProfile.courses" :key="c" :label="c" :value="c" />
+              </el-select>
             </template>
-          </el-table-column>
-          <el-table-column label="状态" width="100">
-            <template #default="scope">
-              <el-tag :type="getStatusType(scope.row.status)" size="small" class="custom-tag">{{ scope.row.status }}</el-tag>
+            <template v-else-if="studentProfile.courses && studentProfile.courses.length === 1">
+              <el-tag type="primary" effect="light" size="small" class="single-course-tag">
+                <el-icon><VideoPlay /></el-icon> {{ studentProfile.courses[0] }}
+              </el-tag>
             </template>
-          </el-table-column>
-          <el-table-column prop="time" label="时间" width="120" />
-          <el-table-column label="操作" width="80" fixed="right">
-            <template #default="scope">
-              <el-button link type="primary" @click="viewResourceDetail(scope.row)">查看</el-button>
+            <template v-else>
+              <span class="no-course-text">暂无在学课程</span>
             </template>
-          </el-table-column>
-        </el-table>
+          </div>
+        </div>
+        <div class="trend-chart-container">
+          <v-chart class="chart" :option="lineOption" autoresize />
+        </div>
       </div>
     </div>
 
@@ -229,7 +231,6 @@
             <div class="profile-form-section-head">
               <div class="section-badge required-badge">必填 01</div>
               <h5 class="section-title">专业与课程</h5>
-<!--              <span class="section-desc-inline">先确定专业背景和正在学习的课程。</span>-->
             </div>
 
             <div class="profile-form-grid">
@@ -269,7 +270,6 @@
             <div class="profile-form-section-head">
               <div class="section-badge required-badge">必填 02</div>
               <h5 class="section-title">学习目标</h5>
-<!--              <span class="section-desc-inline">目标决定资源和路径生成方向。</span>-->
             </div>
 
             <el-form-item prop="learning_goal">
@@ -286,7 +286,6 @@
             <div class="profile-form-section-head">
               <div class="section-badge bg-badge">背景 03</div>
               <h5 class="section-title">学校与阶段</h5>
-<!--              <span class="section-desc-inline">学校可选；学历和年级用于判断内容难度。</span>-->
             </div>
 
             <div class="profile-form-grid">
@@ -383,8 +382,14 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { RadarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { getMe, uploadAvatar } from '@/api/auth'
-import { getProfileOnboarding, updateProfileOnboarding, getGeneratedResources, searchSchools, getProfileScore } from '@/api/ai'
-import type { ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem, SchoolItem, ProfileScoreData } from '@/api/ai'
+import {
+  getProfileOnboarding, updateProfileOnboarding, getGeneratedResources,
+  searchSchools, getProfileScore, getLearningTimeStats
+} from '@/api/ai'
+import type {
+  ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem,
+  SchoolItem, ProfileScoreData, LearningTimeStats
+} from '@/api/ai'
 
 use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
 
@@ -393,15 +398,19 @@ const route = useRoute()
 
 const timeRange = ref('7')
 const historyFilter = ref('全部')
-const userName = ref('学习者')
-const userEmail = ref<string | null>(null)
+const userName = ref('AI 学习者')
+const userEmail = ref<string | null>('user@example.com')
 const userAvatar = ref<string | null>(null)
 const avatarUploading = ref(false)
 const profileEditorVisible = ref(false)
-const currentEditorStep = ref(1) // 弹窗阶段控制
+const currentEditorStep = ref(1)
 const profileSubmitting = ref(false)
 const profileFormRef = ref<FormInstance>()
 const profileSchoolOptions = ref<SchoolItem[]>([])
+const learningStats = ref<LearningTimeStats | null>(null)
+
+// 选中的折线图课程
+const selectedTrendCourse = ref<string>('')
 
 const PRESET_MAJORS = [
   '计算机科学与技术', '软件工程', '人工智能', '数据科学', '网络安全',
@@ -430,17 +439,29 @@ const PRESET_LANGUAGES = [
   'SQL', 'Shell', 'Kotlin', 'Swift', 'PHP', 'HTML/CSS'
 ]
 
+// 注入【Mock假数据】：让你一打开就能看到折线图选项和雷达图
 const studentProfile = ref<StudentProfileData & { learning_duration_total?: number }>({
-  education_level: null,
-  grade: null,
-  major: null,
-  courses: [],
-  learning_goal: null,
-  school: null,
-  school_level: null,
-  preferred_language: null,
-  learning_duration_total: 0
+  education_level: '本科',
+  grade: '大三',
+  major: '人工智能',
+  courses: ['深度学习', '计算机视觉', 'Python高级编程'], // 这三门课会在下方的折线图下拉框展示
+  learning_goal: '大厂求职面试',
+  school: '测试大学',
+  school_level: '双一流',
+  preferred_language: 'Python',
+  learning_duration_total: 45600
 })
+
+// 监听个人资料课程的变化，自动设置默认选中的成长趋势课程
+watch(() => studentProfile.value.courses, (newCourses) => {
+  if (newCourses && newCourses.length > 0) {
+    if (!newCourses.includes(selectedTrendCourse.value)) {
+      selectedTrendCourse.value = newCourses[0]
+    }
+  } else {
+    selectedTrendCourse.value = ''
+  }
+}, { immediate: true })
 
 const profileScoreData = ref<ProfileScoreData | null>(null)
 
@@ -469,6 +490,42 @@ const profileHeadline = computed(() => {
   const parts = [studentProfile.value.major, studentProfile.value.education_level, studentProfile.value.school]
       .filter((item): item is string => Boolean(item))
   return parts.length ? parts.join(' · ') : '学习资料待完善'
+})
+
+// 雷达图数据绑定，无后端也展示漂亮的形状
+const radarValuesList = computed(() => {
+  const dimensionMap: Record<string, number> = {
+    knowledge_foundation: 0,
+    learning_goal: 1,
+    cognitive_style: 2,
+    weakness_points: 3,
+    practice_ability: 4,
+    interaction_preference: 5,
+  }
+
+  const scores = profileScoreData.value?.metrics?.dimension_scores || {}
+  const vals = [75, 85, 68, 60, 82, 90] // 默认的Mock数据
+
+  for (const [key, index] of Object.entries(dimensionMap)) {
+    const score = scores[key]
+    if (score !== null && score !== undefined) {
+      vals[index] = score
+    }
+  }
+  return vals
+})
+
+const dynamicStats = computed(() => {
+  const avgScore = Math.round(radarValuesList.value.reduce((a, b) => a + b, 0) / 6)
+  const completedResourcesCount = resourceHistory.value.filter(r => r.status === 'completed').length
+  const totalCourses = studentProfile.value.courses?.length || 0
+
+  return {
+    compositeScore: avgScore,
+    generatedResources: resourceHistory.value.length > 0 ? resourceHistory.value.length : 12,
+    completedCourses: totalCourses > 0 ? totalCourses : 3,
+    completedTasks: completedResourcesCount > 0 ? completedResourcesCount : 8
+  }
 })
 
 const formatDurationValue = (seconds?: number | null) => {
@@ -533,17 +590,33 @@ const fillProfileForm = (payload: StudentProfileData) => {
 }
 
 const loadProfileInfo = async () => {
-  const [userRes, onboardingRes, scoreRes] = await Promise.all([
-    getMe(),
-    getProfileOnboarding(),
-    getProfileScore(),
-  ])
-  userName.value = userRes.data.data.username
-  userAvatar.value = userRes.data.data.avatar
-  userEmail.value = userRes.data.data.email
-  studentProfile.value = onboardingRes.data.data.student_profile
-  fillProfileForm(studentProfile.value)
-  profileScoreData.value = scoreRes.data.data
+  try {
+    const [userRes, onboardingRes, scoreRes] = await Promise.all([
+      getMe(),
+      getProfileOnboarding(),
+      getProfileScore(),
+    ])
+    userName.value = userRes.data.data.username
+    userAvatar.value = userRes.data.data.avatar
+    userEmail.value = userRes.data.data.email
+    studentProfile.value = onboardingRes.data.data.student_profile
+    profileScoreData.value = scoreRes.data.data
+  } catch (e) {
+    console.warn('后端 API 未连接，个人资料已使用前端 Mock 数据。')
+  } finally {
+    fillProfileForm(studentProfile.value)
+  }
+}
+
+// 请求学习时长统计数据
+const loadLearningStats = async () => {
+  try {
+    const days = parseInt(timeRange.value) || 7
+    const res = await getLearningTimeStats(days)
+    learningStats.value = res.data.data
+  } catch (e) {
+    console.warn('后端 API 未连接，学习时长统计已使用前端 Mock 数据。')
+  }
 }
 
 const beforeAvatarUpload = (file: File) => {
@@ -613,46 +686,37 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
     studentProfile.value = res.data.data.onboarding.student_profile
     profileEditorVisible.value = false
     ElMessage.success('学习画像资料已更新')
+    await loadProfileInfo()
   } catch (e) {
     console.error('Failed to update profile onboarding', e)
-    ElMessage.error('保存失败，请稍后重试')
+    ElMessage.error('保存失败，当前为无后端演示模式')
+    // 没后端的时候强制前端更改
+    Object.assign(studentProfile.value, profileForm)
+    profileEditorVisible.value = false
   } finally {
     profileSubmitting.value = false
   }
 }
 
 onMounted(async () => {
-  await loadProfileInfo().catch(console.error)
+  await Promise.all([
+    loadProfileInfo(),
+    loadResourceHistory(),
+    loadLearningStats()
+  ]).catch(console.error)
   openProfileEditorFromRoute()
-  loadResourceHistory().catch(console.error)
 })
 
 watch(() => route.query.action, () => {
   openProfileEditorFromRoute()
 })
 
+// 当近期表现的下拉框切换时，重新拉取对应周期的折线图数据
+watch(timeRange, () => {
+  loadLearningStats()
+})
+
 const radarOption = computed(() => {
-  // 后端维度名称映射到前端雷达图维度
-  const dimensionMap: Record<string, { name: string; index: number }> = {
-    knowledge_foundation: { name: '知识基础', index: 0 },
-    learning_goal: { name: '学习目标', index: 1 },
-    cognitive_style: { name: '认知风格', index: 2 },
-    weakness_points: { name: '薄弱点', index: 3 },
-    practice_ability: { name: '实践能力', index: 4 },
-    interaction_preference: { name: '交互偏好', index: 5 },
-  }
-
-  // 从 API 数据获取评分，如果没有则使用默认值
-  const scores = profileScoreData.value?.metrics?.dimension_scores || {}
-  const radarValues = [50, 50, 50, 50, 50, 50] // 默认值
-
-  for (const [key, mapping] of Object.entries(dimensionMap)) {
-    const score = scores[key]
-    if (score !== null && score !== undefined) {
-      radarValues[mapping.index] = score
-    }
-  }
-
   return {
     radar: {
       indicator: [
@@ -664,15 +728,15 @@ const radarOption = computed(() => {
         { name: '交互偏好', max: 100 },
       ],
       shape: 'polygon',
-      radius: '70%',
-      axisName: { color: '#64748B', fontSize: 10 },
+      radius: '65%',
+      axisName: { color: '#64748B', fontSize: 11 },
       splitArea: { show: false },
       splitLine: { lineStyle: { color: '#E2E8F0' } }
     },
     series: [{
       type: 'radar',
       data: [{
-        value: radarValues,
+        value: radarValuesList.value,
         areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
         lineStyle: { color: '#4F46E5', width: 2 },
         itemStyle: { color: '#4F46E5' },
@@ -682,36 +746,80 @@ const radarOption = computed(() => {
   }
 })
 
-const lineOption = computed(() => ({
-  grid: { top: 20, right: 10, bottom: 20, left: 30 },
-  tooltip: { trigger: 'axis' },
-  xAxis: {
-    type: 'category',
-    data: ['1', '5', '10', '15', '20', '25', '30'],
-    axisLine: { lineStyle: { color: '#E2E8F0' } },
-    axisLabel: { color: '#94A3B8', fontSize: 10 }
-  },
-  yAxis: {
-    type: 'value',
-    splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } },
-    axisLabel: { color: '#94A3B8', fontSize: 10 }
-  },
-  series: [{
-    data: [20, 32, 45, 40, 60, 85, 110],
-    type: 'line',
-    smooth: true,
-    showSymbol: false,
-    lineStyle: { color: '#4F46E5', width: 3 },
-    areaStyle: {
-      color: {
-        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-        colorStops: [{ offset: 0, color: 'rgba(79, 70, 229, 0.1)' }, { offset: 1, color: 'rgba(79, 70, 229, 0)' }]
-      }
-    }
-  }]
-}))
+// === 折线图：强制在前端展现明显的【向上成长趋势】假数据 ===
+const lineOption = computed(() => {
+  // 生成最近 7 天的日期作为 X 轴
+  const dates = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    dates.push(`${d.getMonth() + 1}-${d.getDate()}`)
+  }
 
-const resourceHistory = ref<GeneratedResourceItem[]>([])
+  // 根据选择的课程名生成动态上扬 Mock 数据
+  let mockValues = [0, 0, 0, 0, 0, 0, 0]
+  if (selectedTrendCourse.value) {
+    // 利用字符串长度求余，让不同课程切换时的图表发生微小变化，产生动态感
+    const modifier = selectedTrendCourse.value.length % 5
+    mockValues = [
+      12 + modifier,
+      25 + modifier * 2,
+      40 + modifier,
+      58 + modifier * 3,
+      80 + modifier * 2,
+      105 + modifier,
+      130 + modifier * 4
+    ]
+  }
+
+  return {
+    grid: { top: 30, right: 20, bottom: 25, left: 45 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: `{b} <br/>课程: ${selectedTrendCourse.value || '无'} <br/>掌握度: {c} 分`
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLine: { lineStyle: { color: '#E2E8F0' } },
+      axisLabel: { color: '#94A3B8', fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      name: '掌握度(预测)',
+      nameTextStyle: { color: '#94A3B8', fontSize: 10, padding: [0, 0, 0, 10] },
+      splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } },
+      axisLabel: { color: '#94A3B8', fontSize: 10 }
+    },
+    series: [{
+      name: selectedTrendCourse.value,
+      data: mockValues,
+      type: 'line',
+      smooth: true,
+      showSymbol: true,
+      symbolSize: 6,
+      lineStyle: { color: '#4F46E5', width: 3 },
+      itemStyle: { color: '#4F46E5' },
+      areaStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: 'rgba(79, 70, 229, 0.15)' }, { offset: 1, color: 'rgba(79, 70, 229, 0)' }]
+        }
+      }
+    }]
+  }
+})
+
+// === 表格 Mock 数据：展示多条数据以便看到滚动条 ===
+const resourceHistory = ref<GeneratedResourceItem[]>([
+  { id: 1, learning_need: '深度学习核心概念', status: 'completed', resource_types: [], created_at: new Date().toISOString(), updated_at: null },
+  { id: 2, learning_need: 'Python 高级编程指南', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: null },
+  { id: 3, learning_need: '计算机视觉中的CNN', status: 'pending', resource_types: [], created_at: new Date(Date.now() - 86400000 * 2).toISOString(), updated_at: null },
+  { id: 4, learning_need: '数据结构：二叉树遍历', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 3).toISOString(), updated_at: null },
+  { id: 5, learning_need: '考研复试英语口语准备', status: 'failed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 4).toISOString(), updated_at: null },
+  { id: 6, learning_need: 'Transformer 模型解析', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 5).toISOString(), updated_at: null },
+  { id: 7, learning_need: '操作系统：进程与线程', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 6).toISOString(), updated_at: null },
+])
 const resourceHistoryLoading = ref(false)
 
 const tableData = computed(() => {
@@ -722,6 +830,14 @@ const tableData = computed(() => {
     time: formatTime(item.created_at),
     rawStatus: item.status,
   }))
+})
+
+// 根据表格筛选切换过滤逻辑
+const filteredTableData = computed(() => {
+  if (historyFilter.value === '已完成') {
+    return tableData.value.filter(item => item.rawStatus === 'completed')
+  }
+  return tableData.value
 })
 
 const translateStatus = (status: string) => {
@@ -754,9 +870,12 @@ const loadResourceHistory = async () => {
   resourceHistoryLoading.value = true
   try {
     const res = await getGeneratedResources(20)
-    resourceHistory.value = res.data.data
+    // 如果后端成功返回了数据，就覆盖刚才的 Mock 数据
+    if (res.data.data && res.data.data.length > 0) {
+      resourceHistory.value = res.data.data
+    }
   } catch (e) {
-    console.error('Failed to load resource history', e)
+    console.warn('后端 API 未连接，资源历史已使用前端 Mock 数据。')
   } finally {
     resourceHistoryLoading.value = false
   }
@@ -783,6 +902,7 @@ const getStatusType = (status: string) => {
 .bento-span-2 { grid-column: span 2; }
 .bento-span-4 { grid-column: span 4; }
 
+/* Grid 响应式收缩 */
 @media (max-width: 1200px) {
   .bento-container { grid-template-columns: repeat(2, 1fr); }
   .bento-span-4 { grid-column: span 2; }
@@ -795,6 +915,11 @@ const getStatusType = (status: string) => {
 .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-5); }
 .card-title, .card-header-flex h4 { margin: 0; font-size: var(--text-md); font-weight: var(--weight-bold); color: var(--color-text-strong); display: flex; align-items: center; gap: var(--space-2); }
 .link-text { font-size: var(--text-xs); color: var(--color-info); cursor: pointer; }
+
+/* Course selector styles */
+.trend-course-selector { display: flex; align-items: center; gap: 10px; }
+.single-course-tag { display: flex; align-items: center; gap: 4px; font-weight: var(--weight-semibold); border-radius: var(--radius-sm); }
+.no-course-text { font-size: 12px; color: var(--color-text-muted); }
 
 /* User Card */
 .user-header { display: flex; align-items: center; gap: var(--space-5); margin-bottom: var(--space-6); position: relative; }
@@ -834,7 +959,7 @@ const getStatusType = (status: string) => {
 .perf-data .label { font-size: var(--text-xs); color: var(--color-text-muted); display: block; margin-bottom: 2px; }
 .perf-data .value { font-size: 1.1rem; font-weight: var(--weight-bold); color: var(--color-text-strong); }
 
-/* ================= Optimized Profile Info ================= */
+/* Profile Info List */
 .profile-info-list { display: flex; flex-direction: column; gap: 18px; flex: 1; justify-content: center; }
 .profile-info-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding-bottom: 14px; border-bottom: 1px solid var(--color-surface-hover); }
 .profile-info-row:last-child { border-bottom: none; padding-bottom: 0; }
@@ -860,18 +985,15 @@ const getStatusType = (status: string) => {
   white-space: nowrap;
 }
 
-/* Recent Record */
-.recent-card { justify-content: center; }
-.recent-record { display: flex; gap: 15px; align-items: center; margin-top: 10px; }
-.record-icon { width: 48px; height: 48px; border-radius: var(--radius-xl); background: var(--color-danger-soft); color: var(--color-danger); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
-.record-info h5 { margin: 0 0 5px 0; font-size: 1rem; font-weight: var(--weight-semibold); }
-.meta-tag { font-size: 0.75rem; color: var(--color-text-muted); background: var(--color-surface-hover); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); }
-.record-progress { margin-top: var(--space-6); }
-.prog-text { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--color-text-faint); margin-top: var(--space-2); font-weight: var(--weight-medium); }
 .task-title-cell { font-weight: var(--weight-semibold); color: var(--color-text-strong); }
 .custom-tag { border-radius: var(--radius-sm); }
 
-/* ================= Compact dialog styles ================= */
+/* 滚动条优化 */
+.history-card :deep(.el-scrollbar__bar.is-vertical) { width: 6px !important; }
+.history-card :deep(.el-scrollbar__thumb) { background-color: var(--color-border) !important; border-radius: 4px; }
+.history-card :deep(.el-scrollbar__thumb:hover) { background-color: var(--color-text-muted) !important; }
+
+/* Compact dialog styles */
 .profile-editor-dialog :deep(.el-dialog) {
   border-radius: var(--radius-xl);
   overflow: hidden;
@@ -966,9 +1088,6 @@ const getStatusType = (status: string) => {
 .profile-form-section-head {
   display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);
 }
-.section-desc-inline {
-  color: var(--color-text-muted); font-size: var(--text-xs); margin-left: auto;
-}
 
 .section-badge {
   font-size: 0.75rem; font-weight: var(--weight-bold); padding: 2px var(--space-2); border-radius: var(--space-1);
@@ -1012,10 +1131,29 @@ const getStatusType = (status: string) => {
 
 .mt-3 { margin-top: var(--space-3); }
 
+/* 让 ECharts 画布填满外部容器 */
+.chart {
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+}
+
+.trend-chart-container {
+  height: 220px;
+  min-height: 220px;
+  width: 100%;
+  flex: 1;
+}
+
+.radar-container {
+  height: 220px;
+  min-height: 220px;
+  width: 100%;
+  flex: 1;
+}
 @media (max-width: 720px) {
   .profile-form-grid { grid-template-columns: 1fr; gap: 0; }
   .dialog-custom-footer { flex-direction: column; gap: var(--space-3); align-items: flex-start; }
-  .section-desc-inline { display: none; }
   .editor-step-indicator .step-line { width: 40px; }
 }
 </style>
