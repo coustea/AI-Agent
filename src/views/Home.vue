@@ -217,7 +217,7 @@ const primaryActions = ref([
     tone: 'tone-blue'
   },
   {
-    title: '继续学习路径',
+    title: '开始路径规划',
     badge: 'LEARNING PATH',
     description: '把资源和薄弱点整理成可执行的阶段目标',
     icon: Connection,
