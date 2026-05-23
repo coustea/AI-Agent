@@ -87,7 +87,7 @@ neo4j:
   enabled: false
   uri: "neo4j://127.0.0.1:7687"
   user: "neo4j"
-  password: ""
+  password: "12345678"
   database: "neo4j"
   # 知识图谱生成参数
   max_nodes: 18
