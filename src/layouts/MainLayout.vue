@@ -444,13 +444,14 @@ const handleCommand = async (command: string) => {
 .user-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
-  background: var(--color-border);
-  color: var(--color-text-muted);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.1rem;
+  overflow: hidden;
 }
 
 .user-info {

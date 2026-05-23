@@ -110,11 +110,21 @@
             <strong>{{ studentProfile.major || '未填写' }}</strong>
           </div>
 
-          <div class="profile-info-row course-display-row">
+          <div class="profile-info-row course-display-row" style="align-items: center;">
             <span><el-icon><VideoPlay /></el-icon> 正在学习</span>
-            <div v-if="studentProfile.courses && studentProfile.courses.length > 0" class="course-tags-display">
-              <span v-for="c in studentProfile.courses" :key="c" class="c-tag">{{ c }}</span>
-            </div>
+            <el-select
+              v-if="studentProfile.courses && studentProfile.courses.length > 0"
+              :model-value="studentProfile.courses[0]"
+              size="small"
+              style="width: 150px; margin-left: auto;"
+            >
+              <el-option
+                v-for="c in studentProfile.courses"
+                :key="c"
+                :label="c"
+                :value="c"
+              />
+            </el-select>
             <strong v-else>未填写</strong>
           </div>
 
@@ -129,8 +139,13 @@
         <div class="card-header-flex">
           <h4>学习画像分析 <el-icon class="info-icon"><InfoFilled /></el-icon></h4>
         </div>
-        <div class="radar-container">
-          <v-chart class="chart" :option="radarOption" autoresize />
+        <div style="display: flex; gap: 16px; width: 100%; height: 220px;">
+          <div class="radar-container" style="flex: 1; min-height: 0;">
+            <v-chart class="chart" :option="radarOption" autoresize />
+          </div>
+          <div class="pie-container" style="flex: 1; min-height: 0; width: 100%;">
+            <v-chart class="chart" :option="pieOption" autoresize />
+          </div>
         </div>
       </div>
 
@@ -379,8 +394,8 @@ import type { FormInstance, FormRules } from 'element-plus'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { RadarChart, LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { RadarChart, LineChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { getMe, uploadAvatar } from '@/api/auth'
 import {
   getProfileOnboarding, updateProfileOnboarding, getGeneratedResources,
@@ -391,7 +406,7 @@ import type {
   SchoolItem, ProfileScoreData, LearningTimeStats
 } from '@/api/ai'
 
-use([CanvasRenderer, RadarChart, LineChart, GridComponent, TooltipComponent])
+use([CanvasRenderer, RadarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 
 const router = useRouter()
 const route = useRoute()
@@ -720,12 +735,12 @@ const radarOption = computed(() => {
   return {
     radar: {
       indicator: [
-        { name: '知识基础', max: 100 },
-        { name: '学习目标', max: 100 },
-        { name: '认知风格', max: 100 },
-        { name: '薄弱点', max: 100 },
-        { name: '实践能力', max: 100 },
-        { name: '交互偏好', max: 100 },
+        { name: `知识基础 ${radarValuesList.value[0]}`, max: 100 },
+        { name: `学习目标 ${radarValuesList.value[1]}`, max: 100 },
+        { name: `认知风格 ${radarValuesList.value[2]}`, max: 100 },
+        { name: `薄弱点 ${radarValuesList.value[3]}`, max: 100 },
+        { name: `实践能力 ${radarValuesList.value[4]}`, max: 100 },
+        { name: `交互偏好 ${radarValuesList.value[5]}`, max: 100 },
       ],
       shape: 'polygon',
       radius: '65%',
@@ -743,6 +758,47 @@ const radarOption = computed(() => {
         symbol: 'none'
       }]
     }]
+  }
+})
+
+const pieOption = computed(() => {
+  return {
+    tooltip: { trigger: 'item' },
+    legend: {
+      orient: 'vertical',
+      right: '5%',
+      top: 'middle',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: { color: '#64748B', fontSize: 11 }
+    },
+    series: [
+      {
+        name: '能力占比',
+        type: 'pie',
+        radius: ['45%', '70%'],
+        center: ['35%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 4,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: { show: false, position: 'center' },
+        emphasis: {
+          label: { show: true, fontSize: '13', fontWeight: 'bold' }
+        },
+        labelLine: { show: false },
+        data: [
+          { value: radarValuesList.value[0], name: '知识基础', itemStyle: { color: '#4F46E5' } },
+          { value: radarValuesList.value[1], name: '学习目标', itemStyle: { color: '#10B981' } },
+          { value: radarValuesList.value[2], name: '认知风格', itemStyle: { color: '#3B82F6' } },
+          { value: radarValuesList.value[3], name: '薄弱点', itemStyle: { color: '#F59E0B' } },
+          { value: radarValuesList.value[4], name: '实践能力', itemStyle: { color: '#8B5CF6' } },
+          { value: radarValuesList.value[5], name: '交互偏好', itemStyle: { color: '#EC4899' } }
+        ]
+      }
+    ]
   }
 })
 
@@ -854,15 +910,21 @@ const formatTime = (time: string | null) => {
   if (!time) return ''
   const date = new Date(time)
   const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  const timeFormatter = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  const monthDayFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' })
-  const rtf = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' })
+  
+  if (now.getFullYear() > date.getFullYear()) {
+    return '去年'
+  }
+  
+  const isToday = date.toDateString() === now.toDateString()
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const isYesterday = date.toDateString() === yesterday.toDateString()
 
-  if (days === 0) return `今天 ${timeFormatter.format(date)}`
-  else if (days === 1) return `昨天 ${timeFormatter.format(date)}`
-  else if (days < 7) return rtf.format(-days, 'day')
+  const timeFormatter = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const monthDayFormatter = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit' })
+
+  if (isToday) return timeFormatter.format(date)
+  if (isYesterday) return '昨天'
   return monthDayFormatter.format(date)
 }
 
@@ -898,7 +960,7 @@ const getStatusType = (status: string) => {
   padding: var(--space-8); background-color: var(--color-bg); min-height: 100%; font-family: var(--font-sans);
 }
 .bento-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-6); }
-.bento-card { background: var(--color-surface); border-radius: var(--radius-2xl); padding: var(--space-6); border: 1px solid var(--color-border); display: flex; flex-direction: column; }
+.bento-card { background: var(--color-surface); border-radius: 8px; padding: var(--space-6); border: 1px solid var(--color-border); display: flex; flex-direction: column; }
 .bento-span-2 { grid-column: span 2; }
 .bento-span-4 { grid-column: span 4; }
 
@@ -990,8 +1052,8 @@ const getStatusType = (status: string) => {
 
 /* 滚动条优化 */
 .history-card :deep(.el-scrollbar__bar.is-vertical) { width: 6px !important; }
-.history-card :deep(.el-scrollbar__thumb) { background-color: var(--color-border) !important; border-radius: 4px; }
-.history-card :deep(.el-scrollbar__thumb:hover) { background-color: var(--color-text-muted) !important; }
+.history-card :deep(.el-scrollbar__thumb) { background-color: #CBD5E1 !important; border-radius: 4px; }
+.history-card :deep(.el-scrollbar__thumb:hover) { background-color: #94A3B8 !important; }
 
 /* Compact dialog styles */
 .profile-editor-dialog :deep(.el-dialog) {

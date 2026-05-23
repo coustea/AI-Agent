@@ -9,11 +9,13 @@ import Tutor from '../views/Tutor.vue'
 import Evaluation from '../views/Evaluation.vue'
 import Profile from "@/views/Profile.vue";
 import ResourceDetail from "@/views/ResourceDetail.vue";
+import OnboardingPreview from "@/views/OnboardingPreview.vue";
 
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'Login', component: Login },
   { path: '/register', name: 'Register', component: Register },
+  { path: '/onboarding', name: 'OnboardingPreview', component: OnboardingPreview },
   {
     path: '/',
     component: MainLayout,
