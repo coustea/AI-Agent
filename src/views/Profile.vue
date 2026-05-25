@@ -110,21 +110,35 @@
             <strong>{{ studentProfile.major || '未填写' }}</strong>
           </div>
 
-          <div class="profile-info-row course-display-row" style="align-items: center;">
+          <div class="profile-info-row course-display-row">
             <span><el-icon><VideoPlay /></el-icon> 正在学习</span>
-            <el-select
-              v-if="studentProfile.courses && studentProfile.courses.length > 0"
-              :model-value="studentProfile.courses[0]"
-              size="small"
-              style="width: 150px; margin-left: auto;"
-            >
-              <el-option
-                v-for="c in studentProfile.courses"
-                :key="c"
-                :label="c"
-                :value="c"
-              />
-            </el-select>
+            <div v-if="studentProfile.courses && studentProfile.courses.length > 0" class="course-display-wrapper">
+              <strong class="course-single-title" :title="studentProfile.courses[0]">{{ studentProfile.courses[0] }}</strong>
+              <el-popover
+                v-if="studentProfile.courses.length > 1"
+                placement="top"
+                :width="220"
+                trigger="hover"
+                popper-class="course-popover"
+              >
+                <template #reference>
+                  <el-button link type="primary" class="view-all-courses-btn">
+                    (共{{ studentProfile.courses.length }}门)
+                  </el-button>
+                </template>
+                <div class="all-courses-popover-content">
+                  <div class="popover-title">
+                    <el-icon><VideoPlay /></el-icon> 正在学习的全部课程
+                  </div>
+                  <div class="popover-course-list">
+                    <div v-for="(c, idx) in studentProfile.courses" :key="c" class="popover-course-item">
+                      <span class="course-number">{{ idx + 1 }}.</span>
+                      <span class="course-name">{{ c }}</span>
+                    </div>
+                  </div>
+                </div>
+              </el-popover>
+            </div>
             <strong v-else>未填写</strong>
           </div>
 
@@ -1002,22 +1016,35 @@ const getStatusType = (status: string) => {
 .profile-info-row strong { color: var(--color-text); font-size: 0.88rem; line-height: 1.5; text-align: right; font-weight: var(--weight-bold); overflow-wrap: anywhere; }
 
 /* Course Tag display styles */
-.course-display-row { align-items: flex-start !important; }
-.course-tags-display {
+.course-display-row { align-items: center !important; }
+.course-display-wrapper {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
+  margin-left: auto;
   justify-content: flex-end;
   max-width: 65%;
 }
-.c-tag {
-  background-color: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: 0.75rem !important;
-  padding: 3px var(--space-2);
-  border-radius: var(--radius-sm);
+.course-single-title {
+  color: var(--color-text);
+  font-size: 0.88rem;
   font-weight: var(--weight-bold);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.view-all-courses-btn {
+  font-size: 0.75rem !important;
+  color: var(--color-primary) !important;
+  padding: 0 !important;
+  margin-left: 2px !important;
+  height: auto !important;
+  font-weight: var(--weight-semibold);
+}
+.view-all-courses-btn:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
 .task-title-cell { font-weight: var(--weight-semibold); color: var(--color-text-strong); }
@@ -1190,5 +1217,55 @@ const getStatusType = (status: string) => {
   .profile-form-grid { grid-template-columns: 1fr; gap: 0; }
   .dialog-custom-footer { flex-direction: column; gap: var(--space-3); align-items: flex-start; }
   .editor-step-indicator .step-line { width: 40px; }
+}
+</style>
+
+<style>
+/* Global styles for teleported popover */
+.course-popover {
+  padding: 12px !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-lg) !important;
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-surface) !important;
+}
+.all-courses-popover-content .popover-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 6px;
+}
+.all-courses-popover-content .popover-course-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.all-courses-popover-content .popover-course-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  padding: 6px 8px;
+  border-radius: 4px;
+  background-color: var(--color-surface-hover);
+  transition: all var(--transition-fast);
+}
+.all-courses-popover-content .popover-course-item:hover {
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.all-courses-popover-content .course-number {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+.all-courses-popover-content .course-name {
+  font-weight: 600;
 }
 </style>

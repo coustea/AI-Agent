@@ -25,27 +25,11 @@
               </div>
             </div>
           </div>
-          <div class="header-right">
-            <el-dropdown trigger="click" @command="handleHeaderCommand">
-              <el-button link class="more-btn">
-                <el-icon><MoreFilled /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu class="premium-dropdown">
-                  <el-dropdown-item command="skip">
-                    <el-icon><Clock /></el-icon> 稍后完善
-                  </el-dropdown-item>
-                  <el-dropdown-item command="never" divided>
-                    <el-icon><Close /></el-icon> 不再弹出
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <div class="header-right"></div>
         </div>
       </header>
 
-      <main class="chat-messages" ref="messagesRef">
+      <main class="chat-messages" :class="{ 'is-expanded-view': isAllStepsFinished }" ref="messagesRef">
         <transition-group name="msg-list">
           <div v-for="msg in messages" :key="msg.id" class="message-row" :class="msg.role">
             <div class="avatar" v-if="msg.role === 'bot'">
@@ -70,7 +54,7 @@
         </transition-group>
       </main>
 
-      <footer class="chat-footer">
+      <footer class="chat-footer" :class="{ 'is-collapsed-panel': isAllStepsFinished }">
         <transition name="panel-slide" mode="out-in">
           <div v-if="currentQuestion === 'major' && !isTyping && !isStreaming" class="action-panel" key="major">
             <div class="panel-header">
@@ -78,21 +62,21 @@
             </div>
             <div class="chips-container stagger-animation">
               <div
-                v-for="(major, idx) in PRESET_MAJORS"
-                :key="major"
-                class="ai-chip"
-                :style="{ animationDelay: `${idx * 0.03}s` }"
-                @click="submitMajor(major)"
+                  v-for="(major, idx) in PRESET_MAJORS"
+                  :key="major"
+                  class="ai-chip"
+                  :style="{ animationDelay: `${idx * 0.03}s` }"
+                  @click="submitMajor(major)"
               >
                 {{ major }}
               </div>
             </div>
             <div class="ai-input-wrap mt-3 slide-up-anim" style="animation-delay: 0.2s">
               <el-input
-                v-model="customInputs.major"
-                placeholder="直接输入其他专业..."
-                @keyup.enter="submitMajor(customInputs.major)"
-                class="pill-input"
+                  v-model="customInputs.major"
+                  placeholder="直接输入其他专业..."
+                  @keyup.enter="submitMajor(customInputs.major)"
+                  class="pill-input"
               >
                 <template #suffix>
                   <el-button @click="submitMajor(customInputs.major)" class="inside-action-btn" circle>
@@ -100,6 +84,18 @@
                   </el-button>
                 </template>
               </el-input>
+            </div>
+
+            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
+              <div class="action-bar-left">
+                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
+                  <el-icon><Clock /></el-icon>稍后完善
+                </el-button>
+                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
+                  <el-icon><Close /></el-icon>不再弹出
+                </el-button>
+              </div>
+              <div class="action-bar-right"></div>
             </div>
           </div>
 
@@ -112,30 +108,30 @@
             </div>
             <div class="chips-container stagger-animation">
               <div
-                v-for="(course, idx) in PRESET_COURSES"
-                :key="course"
-                class="ai-chip"
-                :class="{ active: onboardingForm.courses.includes(course) }"
-                :style="{ animationDelay: `${idx * 0.03}s` }"
-                @click="toggleCourse(course)"
+                  v-for="(course, idx) in PRESET_COURSES"
+                  :key="course"
+                  class="ai-chip"
+                  :class="{ active: onboardingForm.courses.includes(course) }"
+                  :style="{ animationDelay: `${idx * 0.03}s` }"
+                  @click="toggleCourse(course)"
               >
                 {{ course }}
               </div>
               <div
-                v-for="customCourse in customAddedCourses"
-                :key="customCourse"
-                class="ai-chip active pop-in"
-                @click="toggleCourse(customCourse)"
+                  v-for="customCourse in customAddedCourses"
+                  :key="customCourse"
+                  class="ai-chip active pop-in"
+                  @click="toggleCourse(customCourse)"
               >
                 {{ customCourse }}
               </div>
             </div>
             <div class="ai-input-wrap mt-3 slide-up-anim" style="animation-delay: 0.2s">
               <el-input
-                v-model="customInputs.course"
-                placeholder="直接输入其他课程..."
-                @keyup.enter="addCustomCourse"
-                class="pill-input"
+                  v-model="customInputs.course"
+                  placeholder="直接输入其他课程..."
+                  @keyup.enter="addCustomCourse"
+                  class="pill-input"
               >
                 <template #suffix>
                   <el-button @click="addCustomCourse" class="inside-action-btn ghost-circle" circle>
@@ -144,10 +140,21 @@
                 </template>
               </el-input>
             </div>
-            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.3s">
-              <el-button type="primary" class="primary-send-btn w-full" @click="submitCourses">
-                确认并继续 <el-icon class="ml-1"><Position/></el-icon>
-              </el-button>
+
+            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.3s">
+              <div class="action-bar-left">
+                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
+                  <el-icon><Clock /></el-icon>稍后完善
+                </el-button>
+                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
+                  <el-icon><Close /></el-icon>不再弹出
+                </el-button>
+              </div>
+              <div class="action-bar-right">
+                <el-button type="primary" class="primary-send-btn" @click="submitCourses">
+                  确认并继续 <el-icon class="ml-1"><Position/></el-icon>
+                </el-button>
+              </div>
             </div>
           </div>
 
@@ -174,10 +181,21 @@
                 </template>
               </el-autocomplete>
             </div>
-            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.2s">
-              <el-button type="primary" class="primary-send-btn w-full" @click="submitSchool">
-                确认发送 <el-icon class="ml-1"><Position/></el-icon>
-              </el-button>
+
+            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.2s">
+              <div class="action-bar-left">
+                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
+                  <el-icon><Clock /></el-icon>稍后完善
+                </el-button>
+                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
+                  <el-icon><Close /></el-icon>不再弹出
+                </el-button>
+              </div>
+              <div class="action-bar-right">
+                <el-button type="primary" class="primary-send-btn" @click="submitSchool">
+                  确认发送 <el-icon class="ml-1"><Position/></el-icon>
+                </el-button>
+              </div>
             </div>
           </div>
 
@@ -190,15 +208,26 @@
                 <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
               </el-select>
             </div>
-            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.2s">
+            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
               <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option placeholder="请选择当前年级" class="glass-select w-full" placement="top-start">
                 <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
               </el-select>
             </div>
-            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.3s">
-              <el-button type="primary" class="primary-send-btn w-full" @click="submitGrade">
-                确认发送 <el-icon class="ml-1"><Position/></el-icon>
-              </el-button>
+
+            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
+              <div class="action-bar-left">
+                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
+                  <el-icon><Clock /></el-icon>稍后完善
+                </el-button>
+                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
+                  <el-icon><Close /></el-icon>不再弹出
+                </el-button>
+              </div>
+              <div class="action-bar-right">
+                <el-button type="primary" class="primary-send-btn" @click="submitGrade">
+                  确认发送 <el-icon class="ml-1"><Position/></el-icon>
+                </el-button>
+              </div>
             </div>
           </div>
 
@@ -211,19 +240,30 @@
                 <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
               </el-select>
             </div>
-            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.2s">
+            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
               <el-select v-model="onboardingForm.preferred_language" filterable allow-create default-first-option clearable placeholder="常用编程语言 (选填)" class="glass-select w-full" placement="top-start">
                 <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
               </el-select>
             </div>
-            <div class="btn-row mt-4 slide-up-anim" style="animation-delay: 0.3s">
-              <el-button type="primary" class="primary-send-btn finish-btn w-full" :loading="submitting" @click="submitGoal">
-                <span class="finish-text">完成配置，生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
-              </el-button>
+
+            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
+              <div class="action-bar-left">
+                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
+                  <el-icon><Clock /></el-icon>稍后完善
+                </el-button>
+                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
+                  <el-icon><Close /></el-icon>不再弹出
+                </el-button>
+              </div>
+              <div class="action-bar-right">
+                <el-button type="primary" class="primary-send-btn finish-btn" :loading="submitting" @click="submitGoal">
+                  <span class="finish-text">生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
+                </el-button>
+              </div>
             </div>
           </div>
 
-          <div v-else class="action-panel empty-panel" key="empty">
+          <div class="action-panel empty-panel" key="empty" v-else>
             <div v-if="isTyping || isStreaming" class="status-pulse">
               <div class="pulse-ring"></div>
               <span>AI 规划师正在思考与输出...</span>
@@ -239,7 +279,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Service, Position, Search, MoreFilled, Clock, Close, Check, Plus } from '@element-plus/icons-vue'
+import { User, Service, Position, Search, Clock, Close, Check, Plus } from '@element-plus/icons-vue'
 
 import { getProfileOnboarding, updateProfileOnboarding, searchSchools } from '@/api/ai'
 import type { ProfileOnboardingUpdate, SchoolItem } from '@/api/ai'
@@ -262,6 +302,7 @@ const messages = ref<Message[]>([])
 const isTyping = ref(false)
 const isStreaming = ref(false)
 const currentQuestion = ref('major')
+const isFinishedState = ref(false)
 const messagesRef = ref<HTMLElement | null>(null)
 const submitting = ref(false)
 const onboardingForm = reactive<ProfileOnboardingUpdate>({
@@ -277,7 +318,12 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-const PRESET_MAJORS = ['计算机科学', '软件工程', '人工智能', '数据科学', '网络安全', '电子信息', '其他']
+const isAllStepsFinished = computed(() => {
+  return isFinishedState.value
+})
+
+// 优化：删除了原本列表末尾的 '其他' 选项
+const PRESET_MAJORS = ['计算机科学', '软件工程', '人工智能', '数据科学', '网络安全', '电子信息']
 const PRESET_COURSES = ['数据结构', '操作系统', '计算机网络', '数据库原理', '算法', '机器学习']
 const PRESET_GOALS = [
   '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
@@ -305,6 +351,7 @@ watch(visible, (newVal) => {
     onboardingForm.courses = [];
     customInputs.major = '';
     customInputs.course = '';
+    isFinishedState.value = false;
     loadStatus().then(() => {
       startChat();
     });
@@ -313,7 +360,7 @@ watch(visible, (newVal) => {
 
 onMounted(() => { if (visible.value) { loadStatus().then(() => startChat()) } })
 
-const scrollToBottom = async () => {
+const scrollOnNewMessage = async () => {
   await nextTick()
   if (messagesRef.value) {
     messagesRef.value.scrollTo({
@@ -323,7 +370,7 @@ const scrollToBottom = async () => {
   }
 }
 
-const streamMessageContent = (msgObj: Message, fullText: string, speed = 25): Promise<void> => {
+const streamMessageContent = (msgObj: Message, fullText: string, speed = 20): Promise<void> => {
   return new Promise((resolve) => {
     isStreaming.value = true
     let index = 0
@@ -344,40 +391,38 @@ const streamMessageContent = (msgObj: Message, fullText: string, speed = 25): Pr
         }
         tag += '>'
         msgObj.content += tag
-        index++ // 核心修复：跳过 '>' 字符本身，防止进入下次循环当成文本输出
+        index++
       } else {
         msgObj.content += char
         index++
       }
-
-      scrollToBottom()
     }, speed)
   })
 }
 
-const addBotMessage = async (content: string, delay = 600) => {
+const addBotMessage = async (content: string, delay = 500) => {
   isTyping.value = true
-  scrollToBottom()
   await new Promise(resolve => setTimeout(resolve, delay))
   isTyping.value = false
 
   const msgObj: Message = reactive({ id: Date.now(), role: 'bot', content: '' })
   messages.value.push(msgObj)
-  scrollToBottom()
 
+  await scrollOnNewMessage()
   await streamMessageContent(msgObj, content)
 }
 
-const addUserMessage = (content: string) => {
+const addUserMessage = async (content: string) => {
   messages.value.push({ id: Date.now(), role: 'user', content })
-  scrollToBottom()
+  await scrollOnNewMessage()
 }
 
 const startChat = async () => {
   messages.value = []
   currentQuestion.value = ''
-  await addBotMessage('👋 欢迎来到学枢！我是你的专属 AI 学习规划师。', 500)
-  await addBotMessage('为了给你生成最精准的个性化学习资源，我们需要构建一下你的专属画像。首先，能告诉我你目前<b>主修什么专业</b>吗？', 800)
+  isFinishedState.value = false
+  await addBotMessage('👋 欢迎来到学枢！我是你的专属 AI 学习规划师。', 400)
+  await addBotMessage('为了给你生成最精准的个性化学习资源，我们需要构建一下你的专属画像。首先，能告诉我你目前<b>主修什么专业</b>吗？', 600)
   currentQuestion.value = 'major'
 }
 
@@ -385,10 +430,10 @@ const submitMajor = async (majorVal: string) => {
   const val = majorVal.trim()
   if (!val) { ElMessage.warning('请输入专业名称'); return }
   onboardingForm.major = val
-  addUserMessage(val)
+  await addUserMessage(val)
   currentQuestion.value = ''
 
-  await addBotMessage(`太棒了！针对 <b>${val}</b> 专业，你目前主要在学<b>哪些核心课程</b>呢？（可多选）`, 600)
+  await addBotMessage(`太棒了！针对 <b>${val}</b> 专业，你目前主要在学<b>哪些核心课程</b>呢？（可多选）`, 500)
   currentQuestion.value = 'courses'
 }
 
@@ -416,10 +461,10 @@ const submitCourses = async () => {
   if (onboardingForm.courses.length === 0) {
     ElMessage.warning('请至少选择或添加一门课程'); return
   }
-  addUserMessage(onboardingForm.courses.join('、'))
+  await addUserMessage(onboardingForm.courses.join('、'))
   currentQuestion.value = ''
 
-  await addBotMessage('了解了！为了匹配合适的学习难度，请问你是<b>哪个院校</b>的同学呢？', 600)
+  await addBotMessage('了解了！为了匹配合适的学习难度，请问你是<b>哪个院校</b>的同学呢？', 500)
   currentQuestion.value = 'school'
 }
 
@@ -429,10 +474,10 @@ const submitSchool = async () => {
   }
   let text = onboardingForm.school
   if (onboardingForm.school_level) text += ` <span style="opacity:0.6;font-size:0.9em">(${onboardingForm.school_level})</span>`
-  addUserMessage(text)
+  await addUserMessage(text)
   currentQuestion.value = ''
 
-  await addBotMessage('收到！你的<b>学历层次</b>和<b>当前年级</b>是？', 600)
+  await addBotMessage('收到！你的<b>学历层次</b>和<b>当前年级</b>是？', 500)
   currentQuestion.value = 'grade'
 }
 
@@ -440,10 +485,10 @@ const submitGrade = async () => {
   if (!onboardingForm.education_level) { ElMessage.warning('请选择学历层次'); return }
   if (!onboardingForm.grade) { ElMessage.warning('请选择年级'); return }
 
-  addUserMessage(`${onboardingForm.education_level} - ${onboardingForm.grade}`)
+  await addUserMessage(`${onboardingForm.education_level} - ${onboardingForm.grade}`)
   currentQuestion.value = ''
 
-  await addBotMessage('最后两个小问题！你当前的<b>主要学习目标</b>是什么？有比较常用的编程语言吗？', 600)
+  await addBotMessage('最后两个小问题！你当前的<b>主要学习目标</b>是什么？有比较常用的编程语言吗？', 500)
   currentQuestion.value = 'goal'
 }
 
@@ -452,10 +497,12 @@ const submitGoal = async () => {
 
   let text = onboardingForm.learning_goal
   if (onboardingForm.preferred_language) text += ` <span style="opacity:0.6;font-size:0.9em">(语言: ${onboardingForm.preferred_language})</span>`
-  addUserMessage(text)
-  currentQuestion.value = ''
 
-  await addBotMessage('🎉 感谢配合！正在为你进行 AI 运算并生成专属学习画像...', 600)
+  await addUserMessage(text)
+  currentQuestion.value = ''
+  isFinishedState.value = true
+
+  await addBotMessage('🎉 感谢配合！正在为你进行 AI 运算并生成专属学习画像...', 400)
   submitForm()
 }
 
@@ -515,10 +562,11 @@ const submitForm = async () => {
       if (route.query.onboarding) {
         router.replace({ path: route.path, query: {} })
       }
-    }, 1000);
+    }, 1200);
   } catch (e) {
     ElMessage.error('保存失败，请重试');
     submitting.value = false;
+    isFinishedState.value = false;
   }
 }
 
@@ -593,7 +641,7 @@ const handleHeaderCommand = (cmd: string) => {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
   border-radius: var(--radius-pill);
-  background: #000000;
+  background: var(--color-primary, #4F46E5);
   color: var(--color-surface);
   display: flex;
   align-items: center;
@@ -636,12 +684,7 @@ const handleHeaderCommand = (cmd: string) => {
   font-weight: var(--weight-medium);
 }
 
-.more-btn {
-  font-size: 18px;
-  color: #86868b;
-  transition: color var(--transition-slow);
-}
-.more-btn:hover { color: #1d1d1f; }
+.header-right { width: 24px; height: 10px; }
 
 /* Messages Area */
 .chat-messages {
@@ -652,6 +695,11 @@ const handleHeaderCommand = (cmd: string) => {
   flex-direction: column;
   gap: var(--space-6);
   background: var(--color-surface);
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-messages.is-expanded-view {
+  flex: 1 0 auto;
 }
 
 .msg-list-enter-active,
@@ -689,13 +737,13 @@ const handleHeaderCommand = (cmd: string) => {
 }
 
 .bot .avatar {
-  background: #f5f5f7;
-  color: #1d1d1f;
-  border: 1px solid #e5e5ea;
+  background: var(--color-primary-soft, #EEF2FF);
+  color: var(--color-primary, #4F46E5);
+  border: 1px solid var(--color-primary-border, #C7D2FE);
 }
 
 .user .avatar {
-  background: #000000;
+  background: var(--color-primary, #4F46E5);
   color: var(--color-surface);
 }
 
@@ -716,18 +764,19 @@ const handleHeaderCommand = (cmd: string) => {
 }
 
 .bot .bubble :deep(b) {
-  color: #1d1d1f;
+  color: var(--color-primary, #4F46E5);
   font-weight: var(--weight-semibold);
 }
 
 .user .bubble {
-  background: #000000;
+  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
   color: var(--color-surface);
   border-radius: 18px 18px 4px 18px;
   font-weight: var(--weight-medium);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
 .user .bubble :deep(span) {
-  color: rgba(255, 255, 255, 0.7) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
 }
 
 /* Typing Indicator */
@@ -744,7 +793,7 @@ const handleHeaderCommand = (cmd: string) => {
   width: 5px;
   height: 5px;
   border-radius: var(--radius-pill);
-  background-color: #86868b;
+  background-color: var(--color-primary, #4F46E5);
   animation: bounce 1.4s infinite ease-in-out both;
 }
 .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
@@ -752,18 +801,28 @@ const handleHeaderCommand = (cmd: string) => {
 
 @keyframes bounce {
   0%, 80%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-4px); background-color: #1d1d1f; }
+  40% { transform: translateY(-4px); background-color: var(--color-primary-hover, #4338CA); }
 }
 
 /* Footer / Action Area */
 .chat-footer {
   background: var(--color-surface);
   border-top: 1px solid #e5e5ea;
-  padding: var(--space-5) var(--space-6) 28px;
-  min-height: 150px;
+  padding: var(--space-5) var(--space-6) 24px;
+  min-height: 160px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-footer.is-collapsed-panel {
+  min-height: 0;
+  height: 0;
+  padding: 0;
+  border-top-color: transparent;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .action-panel {
@@ -787,8 +846,8 @@ const handleHeaderCommand = (cmd: string) => {
 
 .selected-count {
   font-size: var(--text-xs);
-  color: #1d1d1f;
-  background: #f5f5f7;
+  color: var(--color-primary, #4F46E5);
+  background: var(--color-primary-soft, #EEF2FF);
   padding: 2px var(--space-2);
   border-radius: var(--radius-lg);
   font-weight: var(--weight-medium);
@@ -815,16 +874,17 @@ const handleHeaderCommand = (cmd: string) => {
 }
 
 .ai-chip:hover {
-  background: #f5f5f7;
-  border-color: #d1d1d6;
+  background: var(--color-primary-soft, #EEF2FF);
+  border-color: var(--color-primary-border, #C7D2FE);
+  color: var(--color-primary, #4F46E5);
 }
 
-/* 这里是修复缺失样式的关键：直接硬编码黑底白字 */
 .ai-chip.active {
-  background: #000000 !important;
+  background: var(--color-primary, #4F46E5) !important;
   color: var(--color-surface) !important;
-  border-color: #000000 !important;
+  border-color: var(--color-primary, #4F46E5) !important;
   font-weight: var(--weight-medium);
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
 }
 
 .stagger-animation .ai-chip {
@@ -851,13 +911,60 @@ const handleHeaderCommand = (cmd: string) => {
 
 .pill-input :deep(.el-input__wrapper.is-focus) {
   background: var(--color-surface) !important;
-  border-color: #000000 !important;
-  box-shadow: 0 0 0 1px #000000 !important;
+  border-color: var(--color-primary, #4F46E5) !important;
+  box-shadow: 0 0 0 1px var(--color-primary, #4F46E5) !important;
 }
 
-/* Buttons */
+/* Buttons & Action Bar */
+.footer-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.action-bar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.action-bar-right {
+  display: flex;
+  justify-content: flex-end;
+  flex: 1;
+}
+
+.outline-action-btn {
+  font-size: 13px !important;
+  height: 32px !important;
+  padding: 0 14px !important;
+  border-color: #d1d1d6 !important;
+  color: #515154 !important;
+  background: var(--color-surface) !important;
+  font-weight: var(--weight-medium) !important;
+  transition: all var(--transition-base) !important;
+}
+
+.outline-action-btn:hover, .outline-action-btn:focus {
+  border-color: var(--color-primary-border, #C7D2FE) !important;
+  background: var(--color-primary-soft, #EEF2FF) !important;
+  color: var(--color-primary, #4F46E5) !important;
+}
+
+.outline-action-btn.danger-outline:hover {
+  border-color: #fca5a5 !important;
+  background: #fef2f2 !important;
+  color: #ef4444 !important;
+}
+
+.outline-action-btn .el-icon {
+  margin-right: 3px;
+  font-size: 14px;
+}
+
 .inside-action-btn {
-  background: #000000 !important;
+  background: var(--color-primary, #4F46E5) !important;
   color: var(--color-surface) !important;
   border: none !important;
   width: 30px !important;
@@ -871,7 +978,7 @@ const handleHeaderCommand = (cmd: string) => {
 
 .inside-action-btn:hover {
   transform: scale(1.05);
-  background: #333333 !important;
+  background: var(--color-primary-hover, #4338CA) !important;
 }
 
 .ghost-circle {
@@ -879,22 +986,29 @@ const handleHeaderCommand = (cmd: string) => {
   color: #1d1d1f !important;
 }
 .ghost-circle:hover {
-  background: #e5e5ea !important;
+  background: var(--color-primary-soft, #EEF2FF) !important;
+  color: var(--color-primary, #4F46E5) !important;
 }
 
-/* 彻底修复主按钮不可见的样式 */
 .primary-send-btn {
-  background: #000000 !important;
+  background: var(--color-primary, #4F46E5) !important;
   color: var(--color-surface) !important;
   border: none !important;
   border-radius: var(--radius-lg) !important;
   font-weight: var(--weight-medium) !important;
-  padding: var(--space-3) 28px !important;
-  height: 44px !important;
+  padding: 0 var(--space-5) !important;
+  height: 36px !important;
+  font-size: 13.5px !important;
   transition: all var(--transition-base) !important;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.12) !important;
 }
 .primary-send-btn:hover {
-  background: #333333 !important;
+  background: var(--color-primary-hover, #4338CA) !important;
+  box-shadow: 0 6px 14px rgba(79, 70, 229, 0.22) !important;
+}
+
+.finish-btn {
+  padding: 0 var(--space-6) !important;
 }
 
 /* Forms */
@@ -912,11 +1026,11 @@ const handleHeaderCommand = (cmd: string) => {
 .glass-select :deep(.el-input__wrapper.is-focus),
 .glass-select :deep(.el-select__wrapper.is-focused) {
   background: var(--color-surface) !important;
-  box-shadow: 0 0 0 1px #000000 !important;
+  box-shadow: 0 0 0 1px var(--color-primary, #4F46E5) !important;
 }
 
 .school-tag {
-  margin-left: var(--space-2); font-size: var(--text-xs); color: #1d1d1f; background: #e5e5ea;
+  margin-left: var(--space-2); font-size: var(--text-xs); color: var(--color-primary, #4F46E5); background: var(--color-primary-soft, #EEF2FF);
   padding: 2px var(--space-2); border-radius: var(--radius-sm); font-weight: var(--weight-medium);
 }
 .autocomplete-item { display: flex; align-items: center; justify-content: space-between; }
@@ -943,10 +1057,10 @@ const handleHeaderCommand = (cmd: string) => {
 
 /* Empty status pulse */
 .empty-panel { align-items: center; justify-content: center; height: 60px; }
-.status-pulse { display: flex; align-items: center; gap: var(--space-2); color: #86868b; font-size: 13px; font-weight: var(--weight-medium); }
+.status-pulse { display: flex; align-items: center; gap: var(--space-2); color: var(--color-primary, #4F46E5); font-size: 13px; font-weight: var(--weight-medium); }
 .pulse-ring {
   width: 12px; height: 12px; border-radius: var(--radius-pill);
-  background: #86868b;
+  background: var(--color-primary, #4F46E5);
   animation: pulseShadow 2s infinite;
 }
 @keyframes pulseShadow {
