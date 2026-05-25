@@ -106,8 +106,13 @@ streamingMarkdown.renderer.rules.fence = (tokens, idx, options, _env, self) => {
   const code = token.content || ''
   const highlightedCode = renderHighlightedCode(code, language)
   const languageClass = language ? `language-${escapeHtml(language)} ` : ''
+  const displayLang = language || 'text'
 
-  return `<pre><code class="${languageClass}hljs">${highlightedCode}</code></pre>`
+  return `<div class="code-block-wrapper">
+  <span class="code-block-lang">${escapeHtml(displayLang)}</span>
+  <button class="code-block-copy-btn">复制</button>
+  <pre><code class="${languageClass}hljs">${highlightedCode}</code></pre>
+</div>`
 }
 
 function isCopiedCodeStart(lines: string[], index: number): boolean {

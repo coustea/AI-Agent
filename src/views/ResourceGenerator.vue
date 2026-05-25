@@ -332,186 +332,78 @@
       </div>
 
       <div v-else-if="currentPhase === 'generating'" class="phase-view generating-view" key="generating">
-        <div class="generation-workbench">
-          <section class="compact-hero-bar" aria-live="polite">
-            <div class="hero-bar-left">
-              <el-tag class="hero-kicker" effect="plain" round>
-                <span class="ping-dot"></span>
-                STREAMING
-              </el-tag>
-              <div class="hero-bar-text">
-                <h2 class="hero-bar-title">多智能体协同生成中</h2>
-                <p class="hero-bar-message">{{ currentMessage || '系统正在建立 SSE 流，准备展示实时动作。' }}</p>
+  <div class="generation-workbench">
+    <section class="dag-hero-bar" aria-live="polite">
+      <div class="dag-hero-left">
+        <el-tag class="dag-hero-kicker" effect="plain" round>
+          <span class="ping-dot"></span> STREAMING
+        </el-tag>
+        <h2 class="dag-hero-title">{{ dagHeroMessage }}</h2>
+      </div>
+      <div class="dag-hero-right">
+        <span class="dag-progress-summary">{{ dagCompletedCount }}/{{ dagTotalCount }} 完成</span>
+      </div>
+    </section>
+
+    <el-alert v-if="generationError" class="generation-error" type="error" :closable="false" show-icon :title="generationError" />
+
+    <main class="dag-canvas-card">
+      <div class="dag-canvas">
+        <svg class="dag-lines" :viewBox="`0 0 ${dagCanvasWidthV2} ${dagCanvasHeightV2}`" preserveAspectRatio="xMidYMid meet">
+          <line v-for="edge in dagEdges" :key="`${edge.from}-${edge.to}`"
+            :x1="dagNodePositionsV2[edge.from]?.x" :y1="dagNodePositionsV2[edge.from]?.y"
+            :x2="dagNodePositionsV2[edge.to]?.x" :y2="dagNodePositionsV2[edge.to]?.y"
+            :class="['dag-edge', edge.statusClass]" />
+        </svg>
+        <div v-for="node in dagNodesV2" :key="node.id"
+          class="dag-node" :class="[`dag-${node.status}`, { 'dag-expanded': dagExpandedNodes[node.id], 'dag-sys': node.isSystem }]"
+          :style="dagNodeStyle(node)" @click="toggleDagNodeExpand(node.id)">
+          <div class="dag-node-compact">
+            <div class="dag-node-head">
+              <span class="dag-node-icon">{{ node.icon }}</span>
+              <span class="dag-node-name">{{ node.label }}</span>
+              <span v-if="node.status === 'success'" class="dag-node-check">✓</span>
+              <span v-if="node.status === 'failed'" class="dag-node-x">✗</span>
+            </div>
+            <div v-if="node.status === 'running'" class="dag-node-running">
+              <p class="dag-node-msg">{{ node.currentMessage }}</p>
+              <div class="dag-bar"><div class="dag-bar-fill" :style="{ width: `${node.progress}%` }"></div></div>
+              <span class="dag-bar-text">{{ node.progress }}%</span>
+            </div>
+            <div v-if="node.status === 'waiting'" class="dag-node-info">等待中</div>
+            <div v-if="node.status === 'success'" class="dag-node-info dag-info-ok">已完成</div>
+            <div v-if="node.status === 'failed'" class="dag-node-info dag-info-err">生成失败</div>
+          </div>
+          <transition name="dag-expand">
+            <div v-if="dagExpandedNodes[node.id]" class="dag-node-expanded">
+              <div v-for="(step, i) in node.stepHistory" :key="i"
+                class="dag-step" :class="{ 'dag-step-cur': i === node.stepHistory.length - 1 && node.status === 'running' }">
+                <span class="dag-step-mk">{{ i < node.stepHistory.length - 1 ? '✓' : (node.status === 'running' ? '→' : node.status === 'success' ? '✓' : '✗') }}</span>
+                <span class="dag-step-txt">{{ step }}</span>
               </div>
             </div>
-            <div class="hero-bar-right">
-              <div class="progress-info-v2">
-                <div class="pi-item"><span>阶段</span><b>{{ currentStageLabel }}</b></div>
-                <div class="pi-item"><span>资源</span><b>{{ completedResourceCount }}/{{ expectedResourceCount }}</b></div>
-              </div>
-              <div class="mini-progress">
-                <el-progress type="dashboard" :percentage="totalProgress" :width="54" :stroke-width="5" color="#0369A1" :show-text="false" />
-                <span class="mini-progress-text">{{ totalProgress }}%</span>
-              </div>
-            </div>
-          </section>
-
-          <el-alert
-            v-if="generationError"
-            class="generation-error"
-            type="error"
-            :closable="false"
-            show-icon
-            :title="generationError"
-          />
-
-          <div class="generation-focus-grid">
-            <main class="flow-canvas-card" aria-label="多智能体流程动画">
-              <header class="flow-card-header">
-                <div>
-                  <span class="layer-index">MULTI-AGENT FLOW</span>
-                  <h3>多智能体实时协同流水线</h3>
-                </div>
-                <el-tag effect="plain">{{ Object.keys(activeAgents).length }} 个 Agent 已被调度</el-tag>
-              </header>
-
-              <div class="flow-canvas">
-                <div class="flow-canvas-inner">
-                  <svg class="flow-lines" viewBox="0 0 1000 680" preserveAspectRatio="none" aria-hidden="true">
-                    <line
-                      v-for="edge in flowConnections"
-                      :key="`${edge.from}-${edge.to}`"
-                      :x1="edge.x1"
-                      :y1="edge.y1"
-                      :x2="edge.x2"
-                      :y2="edge.y2"
-                      :class="['flow-edge', edge.status, { active: edge.active }]"
-                    />
-                  </svg>
-                  <button
-                    v-for="node in flowNodes"
-                    :key="node.id"
-                    type="button"
-                    class="flow-node"
-                    :class="[`is-${node.status}`, { focused: focusedAgent?.id === node.id }]"
-                    :style="{ left: `${node.x}%`, top: `${node.y}%` }"
-                    @click="focusFlowNode(node.id)"
-                  >
-                    <div class="node-head">
-                      <span class="node-icon"><el-icon><component :is="node.icon" /></el-icon></span>
-                      <div class="node-title-group">
-                        <span class="node-label">{{ node.label }}</span>
-                        <small>{{ getNodeStatusText(node.id, node.status) }}</small>
-                      </div>
-                    </div>
-
-                    <transition name="log-fade" mode="out-in">
-                      <div
-                        :key="getLatestNodeBubble(node.id)?.id || `${node.id}-${node.status}`"
-                        class="node-live-log"
-                      >
-                        <div class="node-live-log-meta">
-                          <span>{{ getFlowLogTypeLabel(getLatestNodeBubble(node.id)?.event_type) }}</span>
-                          <em v-if="getLatestNodeBubble(node.id)?.timestamp">{{ formatEventTime(getLatestNodeBubble(node.id)?.timestamp || '') }}</em>
-                          <em v-else>{{ getStatusLabel(node.status) }}</em>
-                        </div>
-                        <p>{{ getNodeProcessMessage(node.id, node.status) }}</p>
-                      </div>
-                    </transition>
-
-                    <div v-if="node.status === 'running'" class="node-progress" aria-hidden="true">
-                      <span></span>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              <div class="workflow-stage-strip">
-                <button
-                  v-for="stage in workflowStages"
-                  :key="stage.key"
-                  type="button"
-                  class="stage-chip"
-                  :class="`is-${stage.status}`"
-                  @click="focusStage(stage.key)"
-                >
-                  <span></span>{{ stage.label }}
-                </button>
-              </div>
-            </main>
-          </div>
-
-          <div class="bottom-panels">
-            <section class="compact-resource-panel">
-              <div class="panel-header-minimal">
-                <div class="phm-left">
-                  <el-icon><Collection /></el-icon>
-                  <span>已生成资源</span>
-                  <el-tag size="small" effect="plain" round v-if="generatedResources.length">{{ generatedResources.length }} 项</el-tag>
-                </div>
-              </div>
-              <div v-if="generatedResources.length" class="generated-resource-row">
-                <article
-                  v-for="resource in sortedGeneratedResources"
-                  :key="resource.id || resource.type"
-                  class="mini-resource-card"
-                  :class="getResourceToneClass(resource.type)"
-                  @click="previewGeneratedResource(resource)"
-                >
-                  <div class="mrc-icon">
-                    <el-icon><component :is="getAgentMeta(resource.type).icon" /></el-icon>
-                  </div>
-                  <div class="mrc-info">
-                    <h4>{{ resource.title || getResourceTypeLabel(resource.type) }}</h4>
-                    <span>{{ getResourceStageLabel(resource.type) }}</span>
-                  </div>
-                </article>
-              </div>
-              <div v-else class="side-empty minimal">
-                <span class="loading-dots">等待资源生成中...</span>
-              </div>
-            </section>
-
-            <section class="live-event-timeline">
-              <div class="let-header">
-                <div class="let-title-group">
-                  <span class="let-ping"></span>
-                  <span class="let-title">实时事件流</span>
-                </div>
-                <span class="let-count" v-if="flowEventBubbles.length">{{ flowEventBubbles.length }} 条事件</span>
-              </div>
-              <div class="let-body" v-if="flowEventBubbles.length">
-                <transition-group name="event-slide" tag="div" class="let-list">
-                  <div
-                    v-for="evt in [...flowEventBubbles].reverse().slice(0, 12)"
-                    :key="evt.id"
-                    class="let-row"
-                    :class="`evt-${evt.status}`"
-                  >
-                    <div class="let-dot-col">
-                      <span class="let-dot"></span>
-                      <span class="let-line" v-if="true"></span>
-                    </div>
-                    <div class="let-content">
-                      <div class="let-top">
-                        <span class="let-agent">{{ getAgentMeta(evt.nodeId).name }}</span>
-                        <el-tag size="small" :type="evt.status === 'success' ? 'success' : evt.status === 'failed' ? 'danger' : evt.status === 'running' ? '' : 'info'" effect="plain" class="let-type-tag">
-                          {{ getFlowLogTypeLabel(evt.event_type) }}
-                        </el-tag>
-                        <time class="let-time">{{ formatEventTime(evt.timestamp) }}</time>
-                      </div>
-                      <p class="let-msg">{{ stringifyCompact(evt.message, 100) }}</p>
-                    </div>
-                  </div>
-                </transition-group>
-              </div>
-              <div v-else class="let-empty">
-                <span class="loading-dots">等待智能体事件...</span>
-              </div>
-            </section>
-          </div>
+          </transition>
         </div>
       </div>
+    </main>
+
+    <section class="dag-res-row">
+      <div class="dag-res-hdr">
+        <el-icon><Collection /></el-icon>
+        <span>已生成资源</span>
+        <el-tag size="small" effect="plain" round v-if="generatedResources.length">{{ generatedResources.length }} 项</el-tag>
+      </div>
+      <div v-if="generatedResources.length" class="dag-res-cards">
+        <article v-for="resource in sortedGeneratedResources" :key="resource.id || resource.type"
+          class="dag-res-card" :class="getResourceToneClass(resource.type)" @click="previewGeneratedResource(resource)">
+          <span class="dag-rc-icon">{{ getDagNodeIcon(resource.type) }}</span>
+          <span class="dag-rc-title">{{ resource.title || getResourceTypeLabel(resource.type) }}</span>
+        </article>
+      </div>
+      <div v-else class="dag-res-empty"><span class="loading-dots">等待资源生成中...</span></div>
+    </section>
+  </div>
+</div>
 
       <div v-else-if="currentPhase === 'result'" class="phase-view results-view result-dashboard-view" key="result">
         <header class="result-hero-compact">
@@ -579,74 +471,6 @@
 
     </transition>
 
-    <el-drawer
-      v-model="agentDetailVisible"
-      title="Agent 执行详情"
-      direction="rtl"
-      size="420px"
-      class="agent-detail-drawer"
-      @close="closeAgentDetail"
-    >
-      <div v-if="focusedAgent" class="drawer-agent-detail">
-        <div class="drawer-agent-header">
-          <div class="drawer-agent-icon">
-            <el-icon><component :is="getAgentMeta(focusedAgent.id).icon" /></el-icon>
-          </div>
-          <div>
-            <h3>{{ focusedAgent.agent_role || getAgentMeta(focusedAgent.id).name }}</h3>
-            <p>{{ getRuntimeStatusLabel(focusedAgent.status) }} · {{ focusedAgent.layer_name || '多智能体工作流' }}</p>
-          </div>
-        </div>
-
-        <section class="drawer-section">
-          <h4>当前阶段</h4>
-          <p>{{ focusedAgent.layer_name || '多智能体工作流' }}</p>
-        </section>
-
-        <section class="drawer-section">
-          <h4>当前动作</h4>
-          <p>{{ focusedAgent.current_action || focusedAgent.step_label || focusedAgent.message || '暂无当前动作' }}</p>
-        </section>
-
-        <section class="drawer-section">
-          <h4>当前状态消息</h4>
-          <p>{{ focusedAgent.message || '暂无状态消息' }}</p>
-        </section>
-
-        <section class="drawer-section" v-if="focusedAgent.current_step || focusedAgent.total_steps">
-          <h4>步骤进度</h4>
-          <div class="drawer-progress-row">
-            <span>{{ focusedAgent.current_step || 0 }} / {{ focusedAgent.total_steps || '-' }}</span>
-            <el-progress :percentage="getAgentProgress(focusedAgent.status)" :stroke-width="8" :show-text="false" />
-          </div>
-        </section>
-
-        <section class="drawer-section">
-          <h4>时间信息</h4>
-          <div class="drawer-kv-list">
-            <div><span>开始时间</span><b>{{ focusedAgent.startedAt ? formatEventTime(focusedAgent.startedAt) : '-' }}</b></div>
-            <div><span>最近更新时间</span><b>{{ focusedAgent.updated_at ? formatEventTime(focusedAgent.updated_at) : '-' }}</b></div>
-            <div><span>耗时</span><b>{{ formatElapsedMs(focusedAgent.elapsedMs || 0) }}</b></div>
-          </div>
-        </section>
-
-        <section class="drawer-section" v-if="focusedAgent.recentLogs?.length">
-          <h4>最近执行日志</h4>
-          <div class="drawer-log-list">
-            <div
-              v-for="log in focusedAgent.recentLogs"
-              :key="log.id"
-              class="drawer-log-item"
-            >
-              <span>{{ formatEventTime(log.time) }} | {{ getRuntimeStatusLabel(log.status) }}</span>
-              <p>{{ log.message }}</p>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <el-empty v-else description="请选择一个 Agent 查看详情" />
-    </el-drawer>
 
     <el-dialog v-model="previewVisible" :title="previewData?.title || '资源预览'" width="78%" top="6vh" destroy-on-close class="elegant-dialog">
       <div v-if="previewData" class="preview-dialog-body">
@@ -684,80 +508,14 @@ import { generateResources, type ResourceAgentId, type LearningScenario, type Re
 
 defineOptions({ name: 'ResourceGenerator' })
 
-type WorkflowStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
-
 // Use ResourceGenerateEvent from api/resource.ts - local type not needed
 
-type AgentRuntimeStatus = 'waiting' | 'running' | 'success' | 'failed' | 'skipped'
-
-type AgentLogItem = {
-  id: string
-  time: string
-  eventType: string
-  stage?: string
-  status: AgentRuntimeStatus
-  message: string
-  action?: string
-  stepLabel?: string
-  currentStep?: number
-  totalSteps?: number
-}
-
-type AgentRuntimeState = {
-  id: string
-  agent_role?: string
-  status: AgentRuntimeStatus
-  layer?: number
-  layer_name?: string
-  resource_type?: string
-  message?: string
-  action?: string
-  current_action?: string
-  current_step?: number
-  total_steps?: number
-  step_label?: string
-  task_description?: string
-  planning_reason?: string
-  depends_on?: string[]
-  upstream_agents?: string[]
-  has_profile?: boolean
-  input_params?: Record<string, any>
-  output_requirements?: Record<string, any>
-  personalized_constraints?: string[]
-  resource_id?: string
-  title?: string
-  summary?: string
-  progress?: number | null
-  updated_at?: string
-  startedAt?: string
-  finishedAt?: string
-  displayOrder?: number
-  resourceGeneratedAt?: string
-  elapsedMs: number
-  recentLogs: AgentLogItem[]
-  resourceGenerated?: boolean
-}
 
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
   displayOrder?: number
 }
 
-type FlowEventBubble = {
-  id: string
-  nodeId: string
-  event_type: string
-  agent?: string | null
-  status: WorkflowStatus
-  message: string
-  timestamp: string
-}
-
-type WorkflowStage = {
-  key: string
-  label: string
-  status: WorkflowStatus
-}
 
 // ===================== 场景默认配置 =====================
 type QuizQuestionType = 'single' | 'multiple' | 'judge' | 'fill'
@@ -867,9 +625,6 @@ const goToPersonalize = () => {
 }
 
 // ===================== 3. 工作流与生成逻辑 =====================
-const totalProgress = ref(0)
-const currentMessage = ref('')
-const activeAgents = reactive<Record<string, AgentRuntimeState>>({})
 const generatedResources = ref<GeneratedResourceItem[]>([])
 const reviewResult = ref<any | null>(null)
 const finalBundle = ref<any | null>(null)
@@ -877,206 +632,180 @@ const profileSummary = ref<Record<string, any> | null>(null)
 const isGenerating = ref(false)
 const generationError = ref<string | null>(null)
 const streamController = ref<AbortController | null>(null)
-const focusedAgentId = ref<string | null>(null)
-const agentDetailVisible = ref(false)
-const flowEventBubbles = ref<FlowEventBubble[]>([])
-const agentDisplayCounter = ref(0)
 const resourceDisplayCounter = ref(0)
 const USE_FIXED_RESULT_PAGE = false
 
-const createWorkflowStages = (): WorkflowStage[] => [
-  { key: 'planning', label: '多智能体调度', status: 'pending' },
-  { key: 'generating', label: '全链路并发生成', status: 'pending' },
-  { key: 'reviewing', label: '资源审查', status: 'pending' },
-  { key: 'assembling', label: '资源组装', status: 'pending' },
-  { key: 'completed', label: '生成完成', status: 'pending' },
-]
+// ===================== DAG layout =====================
 
-const workflowStages = reactive<WorkflowStage[]>(createWorkflowStages())
+const RESOURCE_TYPE_ORDER = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading', 'ppt', 'video']
 
-const focusedAgent = computed(() => {
-  if (focusedAgentId.value && activeAgents[focusedAgentId.value]) {
-    return activeAgents[focusedAgentId.value]
-  }
-  if (focusedAgentId.value) {
-    const node = flowNodes.value.find(item => item.id === focusedAgentId.value)
-    if (node) {
-      return {
-        id: node.id,
-        agent_role: node.label,
-        status: node.status === 'pending' ? 'waiting' : node.status,
-        current_action: getNodeCurrentStage(node.id, node.status),
-        message: getNodeCurrentStage(node.id, node.status),
-        layer_name: '多智能体流程节点',
-        updated_at: new Date().toISOString(),
-        elapsedMs: 0,
-        recentLogs: [],
-      } as AgentRuntimeState
-    }
-  }
-  const running = Object.values(activeAgents).find(agent => agent.status === 'running')
-  if (running) return running
-  const latest = Object.values(activeAgents)
-    .filter(agent => agent.updated_at)
-    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0]
-  return latest || null
-})
+// ===================== New DAG Generating Phase State =====================
 
-const currentStageLabel = computed(() => {
-  const running = workflowStages.find(stage => stage.status === 'running')
-  const latestSuccess = [...workflowStages].reverse().find(stage => stage.status === 'success')
-  return running?.label || latestSuccess?.label || '等待任务创建'
-})
-
-
-const completedResourceCount = computed(() => generatedResources.value.length)
-const expectedResourceCount = computed(() => Math.max(Object.keys(activeAgents).length, enabledAgentIds.value.length))
-
-const DEFAULT_RESOURCE_SEQUENCE = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading', 'ppt', 'video']
-
-// 每个 agent 属于哪个「阶段层」及在流图中的 x 坐标（固定）
-const PHASE_LAYOUT: { x: number; agents: string[] }[] = [
-  { x: 28, agents: ['content', 'mindmap'] },
-  { x: 52, agents: ['knowledge_graph', 'code', 'quiz'] },
-  { x: 72, agents: ['reading', 'ppt'] },
-]
-
-const flowAgentMeta: Record<string, { label: string; icon: any }> = {
-  content: { label: '课程讲解', icon: Document },
-  mindmap: { label: '思维导图', icon: Share },
-  knowledge_graph: { label: '知识图谱', icon: Share },
-  code: { label: '代码案例', icon: Cpu },
-  quiz: { label: '练习题', icon: Edit },
-  reading: { label: '拓展阅读', icon: Collection },
-  ppt: { label: 'PPT生成', icon: DataBoard },
+const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
+  planning: { label: '规划', icon: '🎯' },
+  content: { label: '课程讲解', icon: '📝' },
+  mindmap: { label: '思维导图', icon: '🧠' },
+  knowledge_graph: { label: '知识图谱', icon: '🔗' },
+  quiz: { label: '练习题', icon: '📋' },
+  code: { label: '代码案例', icon: '💻' },
+  reading: { label: '拓展阅读', icon: '📚' },
+  ppt: { label: '演示文稿', icon: '📊' },
+  review: { label: '质量审查', icon: '🔍' },
+  bundle: { label: '打包', icon: '📦' },
 }
 
-// 动态只保留已启用 agent 所在的 phase
-const flowAgentPhases = computed(() =>
-  PHASE_LAYOUT.map(p => ({
-    x: p.x,
-    agents: p.agents.filter(id => enabledAgentIds.value.includes(id as ResourceAgentId)),
-  })).filter(p => p.agents.length > 0)
-)
+interface DagNodeState {
+  id: string
+  label: string
+  icon: string
+  status: 'waiting' | 'running' | 'success' | 'failed'
+  progress: number
+  currentMessage: string
+  stepHistory: string[]
+  isSystem: boolean
+}
 
-const fixedFlowNodes = [
-  { id: 'master', label: '多智能体调度', x: 8, y: 50, icon: Cpu },
-]
+const dagNodeStates = ref<Record<string, DagNodeState>>({})
+const dagExpandedNodes = ref<Record<string, boolean>>({})
 
-// 所有可能的有向边（含 reviewer / assembler）
-const ALL_FLOW_EDGES: [string, string][] = [
-  ['master', 'content'],
-  ['master', 'mindmap'],
-  ['content', 'knowledge_graph'],
-  ['mindmap', 'knowledge_graph'],
-  ['content', 'code'],
-  ['content', 'quiz'],
-  ['knowledge_graph', 'reading'],
-  ['code', 'reading'],
-  ['quiz', 'reading'],
-  ['knowledge_graph', 'ppt'],
-  ['mindmap', 'ppt'],
-  ['content', 'reviewer'],
-  ['mindmap', 'reviewer'],
-  ['knowledge_graph', 'reviewer'],
-  ['code', 'reviewer'],
-  ['reading', 'reviewer'],
-  ['ppt', 'reviewer'],
-  ['quiz', 'reviewer'],
-  ['reviewer', 'assembler'],
-]
-
-// 动态过滤：只保留两端节点均在本次启用列表（或 master/reviewer/assembler）中的边
-const systemNodes = new Set(['master', 'reviewer', 'assembler'])
-const activeFlowEdges = computed(() => {
-  const enabled = new Set([...enabledAgentIds.value, ...systemNodes])
-  return ALL_FLOW_EDGES.filter(([from, to]) => enabled.has(from) && enabled.has(to))
+// Which agents are selected in personalize phase
+const dagSelectedAgentIds = computed(() => {
+  return enabledAgentIds.value.filter(id => !['master', 'reviewer', 'assembler'].includes(id))
 })
 
-const getDistributedY = (index: number, total: number) => {
-  if (total <= 1) return 50
-  const start = total === 2 ? 34 : 24
-  const end = total === 2 ? 66 : 76
-  return start + ((end - start) * index) / (total - 1)
-}
+// DAG Nodes (dynamic based on selected agents)
+const dagNodesV2 = computed<DagNodeState[]>(() => {
+  const selected = dagSelectedAgentIds.value
+  const nodes: DagNodeState[] = []
 
-const getDefaultResourceIndex = (agentId: string) => {
-  const index = DEFAULT_RESOURCE_SEQUENCE.indexOf(agentId)
-  return index >= 0 ? index : DEFAULT_RESOURCE_SEQUENCE.length
-}
-
-const hasRuntimeActivity = (agentId: string) => {
-  const runtime = activeAgents[agentId]
-  return Boolean(
-    runtime?.displayOrder
-    || runtime?.startedAt
-    || runtime?.resourceGeneratedAt
-    || (runtime && runtime.status !== 'waiting')
-  )
-}
-
-const sortAgentIdsByRuntime = (agentIds: string[]) => [...agentIds].sort((a, b) => {
-  const aActive = hasRuntimeActivity(a) ? 0 : 1
-  const bActive = hasRuntimeActivity(b) ? 0 : 1
-  if (aActive !== bActive) return aActive - bActive
-
-  const aRuntime = activeAgents[a]
-  const bRuntime = activeAgents[b]
-  const aOrder = aRuntime?.displayOrder ?? Number.POSITIVE_INFINITY
-  const bOrder = bRuntime?.displayOrder ?? Number.POSITIVE_INFINITY
-  if (aOrder !== bOrder) return aOrder - bOrder
-
-  return getDefaultResourceIndex(a) - getDefaultResourceIndex(b)
-})
-
-const flowNodeDefinitions = computed(() => {
-  const nodes = [...fixedFlowNodes]
-  flowAgentPhases.value.forEach((phase) => {
-    const sortedAgents = sortAgentIdsByRuntime(phase.agents)
-    sortedAgents.forEach((agentId, index) => {
-      const meta = flowAgentMeta[agentId]
-      if (!meta) return
-      nodes.push({
-        id: agentId,
-        label: meta.label,
-        x: phase.x,
-        y: getDistributedY(index, sortedAgents.length),
-        icon: meta.icon,
-      })
-    })
+  // Planning
+  nodes.push(dagNodeStates.value['planning'] || {
+    id: 'planning', label: '规划', icon: '🎯',
+    status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
-  nodes.push(
-    { id: 'reviewer', label: '资源审查', x: 86, y: 38, icon: CircleCheckFilled },
-    { id: 'assembler', label: '资源组装', x: 94, y: 66, icon: Position },
-  )
+
+  // Selected sub-agents
+  for (const agentId of selected) {
+    const display = AGENT_DISPLAY[agentId]
+    if (!display) continue
+    nodes.push(dagNodeStates.value[agentId] || {
+      id: agentId, label: display.label, icon: display.icon,
+      status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: false,
+    })
+  }
+
+  // Review
+  nodes.push(dagNodeStates.value['review'] || {
+    id: 'review', label: '质量审查', icon: '🔍',
+    status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
+  })
+
+  // Bundle
+  nodes.push(dagNodeStates.value['bundle'] || {
+    id: 'bundle', label: '打包', icon: '📦',
+    status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
+  })
+
   return nodes
 })
 
-const flowNodes = computed(() => flowNodeDefinitions.value.map(node => ({
-  ...node,
-  status: getFlowNodeStatus(node.id),
-})))
+// DAG node positions (4-layer layout)
+const dagCanvasWidthV2 = 960
+const dagCanvasHeightV2 = 520
+const dagLayerY: [number, number, number, number] = [60, 200, 340, 460]
 
-const flowConnections = computed(() => activeFlowEdges.value.map(([from, to]) => {
-  const source = flowNodes.value.find(node => node.id === from)
-  const target = flowNodes.value.find(node => node.id === to)
-  const sourceStatus = source?.status || 'pending'
-  const targetStatus = target?.status || 'pending'
-  return {
-    from,
-    to,
-    x1: `${source?.x || 0}%`,
-    y1: `${source?.y || 0}%`,
-    x2: `${target?.x || 0}%`,
-    y2: `${target?.y || 0}%`,
-    status: targetStatus,
-    active: sourceStatus === 'running' || targetStatus === 'running' || (sourceStatus === 'success' && targetStatus !== 'pending'),
+const dagNodePositionsV2 = computed<Record<string, { x: number; y: number }>>(() => {
+  const positions: Record<string, { x: number; y: number }> = {}
+  const selected = dagSelectedAgentIds.value
+  const cx = dagCanvasWidthV2 / 2
+
+  // Layer 0: Planning
+  positions['planning'] = { x: cx, y: dagLayerY[0] }
+
+  // Layer 1: Sub-agents (evenly distributed)
+  if (selected.length > 0) {
+    const spacing = dagCanvasWidthV2 / (selected.length + 1)
+    selected.forEach((id, i) => {
+      positions[id] = { x: spacing * (i + 1), y: dagLayerY[1] }
+    })
   }
-}))
 
-const getLatestNodeBubble = (nodeId: string) => {
-  const logs = getNodeBubbles(nodeId, 1)
-  return logs[logs.length - 1] || null
+  // Layer 2: Review
+  positions['review'] = { x: cx, y: dagLayerY[2] }
+
+  // Layer 3: Bundle
+  positions['bundle'] = { x: cx, y: dagLayerY[3] }
+
+  return positions
+})
+
+// DAG edges
+const dagEdges = computed<{ from: string; to: string; statusClass: string }[]>(() => {
+  const edges: { from: string; to: string; statusClass: string }[] = []
+  const selected = dagSelectedAgentIds.value
+  const states = dagNodeStates.value
+
+  for (const agentId of selected) {
+    // Planning → Agent
+    const fromDone = states['planning']?.status === 'success'
+    edges.push({
+      from: 'planning', to: agentId,
+      statusClass: fromDone ? (states[agentId]?.status === 'success' ? 'completed' : 'active') : 'pending',
+    })
+
+    // Agent → Review
+    const agentDone = states[agentId]?.status === 'success'
+    edges.push({
+      from: agentId, to: 'review',
+      statusClass: agentDone ? (states['review']?.status === 'success' ? 'completed' : 'active') : 'pending',
+    })
+  }
+
+  // Review → Bundle
+  const reviewDone = states['review']?.status === 'success'
+  edges.push({
+    from: 'review', to: 'bundle',
+    statusClass: reviewDone ? (states['bundle']?.status === 'success' ? 'completed' : 'active') : 'pending',
+  })
+
+  return edges
+})
+
+// Hero message and progress summary
+const dagHeroMessage = computed(() => {
+  const running = Object.values(dagNodeStates.value).find(n => n.status === 'running')
+  if (running) return running.currentMessage || `${running.label}处理中...`
+  const allDone = Object.values(dagNodeStates.value).every(n => n.status === 'success')
+  if (allDone) return '所有资源生成完成'
+  return '多智能体协同生成中'
+})
+
+const dagTotalCount = computed(() => dagNodesV2.value.length)
+const dagCompletedCount = computed(() => dagNodesV2.value.filter(n => n.status === 'success').length)
+
+// Node style function
+function dagNodeStyle(node: DagNodeState): Record<string, string> {
+  const pos = dagNodePositionsV2.value[node.id]
+  if (!pos) return {}
+  const expanded = dagExpandedNodes.value[node.id]
+  const width = expanded ? 220 : 160
+  const height = expanded ? (80 + node.stepHistory.length * 24) : (node.status === 'running' ? 90 : 56)
+  return {
+    left: `${pos.x - width / 2}px`,
+    top: `${pos.y - height / 2}px`,
+    width: `${width}px`,
+    minHeight: `${height}px`,
+  }
+}
+
+// Toggle expand function
+function toggleDagNodeExpand(nodeId: string) {
+  dagExpandedNodes.value[nodeId] = !dagExpandedNodes.value[nodeId]
+}
+
+// Helper functions
+function getDagNodeIcon(type: string): string {
+  return AGENT_DISPLAY[type]?.icon || '📄'
 }
 
 
@@ -1117,20 +846,6 @@ const getResourceUsageHint = (type: string) => {
     video: '可作为后续视频或动画讲解的脚本基础。',
   }
   return hintMap[type] || '建议结合本次学习目标使用该资源。'
-}
-
-const getResourceStageLabel = (type: string) => {
-  const stageMap: Record<string, string> = {
-    content: '概念理解',
-    mindmap: '结构梳理',
-    knowledge_graph: '图谱探索',
-    code: '实践验证',
-    quiz: '检测巩固',
-    reading: '拓展提升',
-    ppt: '总结展示',
-    video: '讲解呈现',
-  }
-  return stageMap[type] || '资源学习'
 }
 
 const getDefaultResourceFormat = (type: string) => {
@@ -1193,7 +908,9 @@ const sortedGeneratedResources = computed(() => {
     const aOrder = typeof a.displayOrder === 'number' ? a.displayOrder : -1
     const bOrder = typeof b.displayOrder === 'number' ? b.displayOrder : -1
     if (aOrder !== bOrder) return bOrder - aOrder
-    return getDefaultResourceIndex(a.type) - getDefaultResourceIndex(b.type)
+    const aIdx = RESOURCE_TYPE_ORDER.indexOf(a.type)
+    const bIdx = RESOURCE_TYPE_ORDER.indexOf(b.type)
+    return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx)
   })
 })
 
@@ -1221,6 +938,8 @@ const previewGeneratedResource = (resource: any) => {
 }
 
 const startGeneration = async () => {
+  dagNodeStates.value = {}
+  dagExpandedNodes.value = {}
   if (USE_FIXED_RESULT_PAGE) {
     applyFixedResultPage()
     return
@@ -1228,7 +947,6 @@ const startGeneration = async () => {
   currentPhase.value = 'generating'
   resetGenerationState()
   isGenerating.value = true
-  currentMessage.value = '正在将配置参数发送至后端资源生成工作流…'
 
   const requestAgentConfigs = {
     content: agentConfigs.content,
@@ -1252,15 +970,12 @@ const startGeneration = async () => {
     () => {
       if (!generationError.value && currentPhase.value === 'generating') {
         isGenerating.value = false
-        setWorkflowStageStatus('completed', 'success')
-        totalProgress.value = 100
         currentPhase.value = 'result'
       }
     },
     (err: any) => {
       generationError.value = err.message || '生成中断，请稍后重试'
       isGenerating.value = false
-      markWorkflowFailed()
       ElMessage.error(generationError.value || '生成中断，请稍后重试')
     }
   )
@@ -1269,10 +984,10 @@ const startGeneration = async () => {
 const applyFixedResultPage = () => {
   const now = new Date().toISOString()
   resetGenerationState()
-  totalProgress.value = 100
   currentPhase.value = 'result'
-  currentMessage.value = '固定结果页模式已加载（仅用于页面调试）'
-  setWorkflowStageStatus('completed', 'success')
+  dagNodeStates.value['planning'] = { id: 'planning', label: '规划', icon: '🎯', status: 'success', progress: 100, currentMessage: '已完成', stepHistory: [], isSystem: true }
+  dagNodeStates.value['review'] = { id: 'review', label: '质量审查', icon: '🔍', status: 'success', progress: 100, currentMessage: '已完成', stepHistory: [], isSystem: true }
+  dagNodeStates.value['bundle'] = { id: 'bundle', label: '打包', icon: '📦', status: 'success', progress: 100, currentMessage: '已完成', stepHistory: [], isSystem: true }
 
   naturalInput.value = '复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题'
 
@@ -1377,198 +1092,147 @@ const applyFixedResultPage = () => {
 }
 
 const resetGenerationState = () => {
-  totalProgress.value = 0
-  currentMessage.value = ''
-  Object.keys(activeAgents).forEach(key => delete activeAgents[key])
   generatedResources.value = []
   reviewResult.value = null
   finalBundle.value = null
   profileSummary.value = null
   generationError.value = null
-  focusedAgentId.value = null
-  agentDetailVisible.value = false
-  flowEventBubbles.value = []
-  agentDisplayCounter.value = 0
   resourceDisplayCounter.value = 0
   isGenerating.value = false
-  workflowStages.splice(0, workflowStages.length, ...createWorkflowStages())
-}
-
-const normalizeRuntimeStatus = (status?: string, fallback: AgentRuntimeStatus = 'waiting'): AgentRuntimeStatus => {
-  if (status === 'running' || status === 'success' || status === 'failed' || status === 'skipped') return status
-  if (status === 'pending') return 'waiting'
-  return fallback
-}
-
-const ensureAgentRuntime = (agentId: string) => {
-  const previous = activeAgents[agentId]
-  if (previous) return previous
-  const runtime: AgentRuntimeState = {
-    id: agentId,
-    status: 'waiting',
-    current_action: '',
-    current_step: undefined,
-    total_steps: undefined,
-    elapsedMs: 0,
-    recentLogs: [],
-  }
-  activeAgents[agentId] = runtime
-  return runtime
-}
-
-const markAgentRuntimeVisible = (runtime: AgentRuntimeState, time: string) => {
-  if (typeof runtime.displayOrder !== 'number') {
-    agentDisplayCounter.value += 1
-    runtime.displayOrder = agentDisplayCounter.value
-  }
-  if (!runtime.startedAt) runtime.startedAt = time
-}
-
-const calculateElapsedMs = (start?: string, end?: string) => {
-  if (!start || !end) return 0
-  const startMs = new Date(start).getTime()
-  const endMs = new Date(end).getTime()
-  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return 0
-  return Math.max(0, endMs - startMs)
-}
-
-const appendEventToAgentRuntime = (event: ResourceGenerateEvent) => {
-  const agentId = resolveEventAgentId(event)
-  if (!agentId) return
-  const runtime = ensureAgentRuntime(agentId)
-  const time = event.timestamp || new Date().toISOString()
-  const status = normalizeRuntimeStatus(event.status, runtime.status)
-  const logItem: AgentLogItem = {
-    id: `${Date.now()}-${Math.random()}`,
-    time,
-    eventType: event.event_type,
-    stage: event.stage,
-    status,
-    message: event.message || runtime.message || '',
-    action: event.payload?.action,
-    stepLabel: event.payload?.step_label,
-    currentStep: event.payload?.current_step,
-    totalSteps: event.payload?.total_steps,
-  }
-  runtime.status = status
-  runtime.layer_name = (event.payload?.layer_name as string | undefined) || runtime.layer_name
-  runtime.layer = event.payload?.layer ?? runtime.layer
-  runtime.agent_role = (event.payload?.agent_role as string | undefined) || runtime.agent_role
-  runtime.current_action = (event.payload?.action as string | undefined) || runtime.current_action || ''
-  runtime.step_label = (event.payload?.step_label as string | undefined) || runtime.step_label
-  runtime.message = event.message || runtime.message
-  runtime.current_step = event.payload?.current_step ?? runtime.current_step
-  runtime.total_steps = event.payload?.total_steps ?? runtime.total_steps
-  runtime.updated_at = time
-  if (status !== 'waiting') markAgentRuntimeVisible(runtime, time)
-  if (status === 'success' || status === 'failed' || status === 'skipped') runtime.finishedAt = time
-  runtime.elapsedMs = calculateElapsedMs(runtime.startedAt, runtime.finishedAt || runtime.updated_at)
-  runtime.recentLogs.unshift(logItem)
-  runtime.recentLogs = runtime.recentLogs.slice(0, 8)
-}
-
-const resolveEventAgentId = (event: ResourceGenerateEvent): string | undefined => {
-  if (event.agent) return event.agent
-  const payloadAgent = event.payload?.agent_id
-  return typeof payloadAgent === 'string' ? payloadAgent : undefined
+  // Reset DAG state
+  dagNodeStates.value = {}
+  dagExpandedNodes.value = {}
 }
 
 const handleSseEvent = (event: ResourceGenerateEvent) => {
   if (!event?.event_type) return
 
-  if (event.progress !== null && event.progress !== undefined) {
-    totalProgress.value = Math.max(0, Math.min(100, event.progress))
-  }
-  currentMessage.value = event.message || currentMessage.value
+  // --- Update DAG node state from SSE events ---
+  // Backend event type mapping:
+  //   PlanningAgent → emit_agent("planning") → event_type="agent", agent="planning"
+  //   SubAgents    → emit_agent_action()     → event_type="agent_step"
+  //   SubAgents    → emit_agent()            → event_type="agent"
+  //   ReviewAgent  → emit_agent("review")    → event_type="agent", agent="review"
+  //   Bundle       → emit_bundle()           → event_type="bundle"
+  //   Workflow     → emit_workflow()         → event_type="workflow"
+  //   Resource     → emit_resource()         → event_type="resource"
 
-  if (event.event_type === 'workflow') {
-    setWorkflowStageStatus(event.stage, event.status)
-    if (event.payload?.profile_summary) {
-      profileSummary.value = event.payload.profile_summary
-    }
-  }
+  const systemNodeIds = new Set(['planning', 'review', 'bundle'])
+  const agentId = event.agent || ''
 
-  if (event.event_type === 'planning') {
-    setWorkflowStageStatus('planning', event.status)
-    if (event.status === 'success') {
-      // planningHistory reference removed
-      ;(event.payload?.agents || []).forEach((agent: any) => {
-        if (!agent.agent_id) return
-        const runtime = ensureAgentRuntime(agent.agent_id)
-        runtime.layer = event.payload.layer
-        runtime.layer_name = event.payload.layer_name
-        runtime.agent_role = agent.agent_role || getAgentMeta(agent.agent_id).name
-        runtime.task_description = agent.task_description
-        runtime.planning_reason = agent.planning_reason
-        runtime.depends_on = agent.depends_on || []
-        runtime.resource_type = agent.resource_type
-        runtime.input_params = agent.input_params || {}
-        runtime.output_requirements = agent.output_requirements || {}
-        runtime.personalized_constraints = agent.personalized_constraints || []
-        runtime.updated_at = event.timestamp
-      })
-    }
-  }
-
-  if ((event.event_type === 'agent_step' || event.event_type === 'agent') && resolveEventAgentId(event)) {
-    appendEventToAgentRuntime(event)
-    const agentId = resolveEventAgentId(event)!
-    if (normalizeRuntimeStatus(event.status) === 'running') {
-      focusedAgentId.value = agentId
-    }
-  }
-
-  if (event.event_type === 'resource') {
-    const resource = event.payload?.resource
-    if (resource) {
-      const eventTime = event.timestamp || new Date().toISOString()
-      upsertResource(resource, eventTime)
-      const agentId = (resource.type as string) || resolveEventAgentId(event)
-      if (agentId) {
-        const runtime = ensureAgentRuntime(agentId)
-        markAgentRuntimeVisible(runtime, eventTime)
-        runtime.resourceGenerated = true
-        runtime.resourceGeneratedAt = eventTime
-        runtime.updated_at = eventTime
-        runtime.message = `${runtime.agent_role || getAgentMeta(agentId).name}资源已生成`
-        if (runtime.status === 'waiting') runtime.status = 'success'
-        if (!runtime.finishedAt) runtime.finishedAt = eventTime
-        runtime.elapsedMs = calculateElapsedMs(runtime.startedAt, runtime.finishedAt)
+  // Helper: ensure a dagNodeState exists
+  function ensureDagNode(id: string): DagNodeState {
+    if (!dagNodeStates.value[id]) {
+      const display = AGENT_DISPLAY[id]
+      dagNodeStates.value[id] = {
+        id, label: display?.label || id, icon: display?.icon || '📄',
+        status: 'waiting', progress: 0, currentMessage: '', stepHistory: [],
+        isSystem: systemNodeIds.has(id),
       }
     }
+    return dagNodeStates.value[id]
   }
 
-  if (event.event_type === 'review') {
-    setWorkflowStageStatus('reviewing', event.status)
-    if (event.payload?.review_result) {
-      reviewResult.value = event.payload.review_result
+  // agent_step: sub-agent is running a step
+  if (event.event_type === 'agent_step') {
+    const node = ensureDagNode(agentId)
+    node.status = 'running'
+    node.progress = event.progress ?? node.progress
+    node.currentMessage = event.message || node.currentMessage
+    if (event.message) node.stepHistory.push(event.message)
+  }
+
+  // agent: status update (running/success/failed) for any agent including planning & review
+  if (event.event_type === 'agent') {
+    const node = ensureDagNode(agentId)
+    node.status = event.status === 'skipped' ? 'failed' : (event.status as 'running' | 'success' | 'failed')
+    if (event.status === 'success') {
+      node.progress = 100
+      node.currentMessage = event.message || '已完成'
+    } else if (event.status === 'failed') {
+      node.currentMessage = event.message || '生成失败'
+    } else if (event.status === 'running') {
+      node.currentMessage = event.message || node.currentMessage
+      if (event.progress) node.progress = event.progress
     }
+    if (event.message && node.status !== 'success') node.stepHistory.push(event.message)
   }
 
+  // bundle event
   if (event.event_type === 'bundle') {
-    setWorkflowStageStatus('assembling', event.status)
+    const node = ensureDagNode('bundle')
+    node.status = event.status === 'pending' ? 'waiting' : (event.status as 'running' | 'success' | 'failed')
+    node.currentMessage = event.message || node.currentMessage
+    if (event.message) node.stepHistory.push(event.message)
+    if (event.progress) node.progress = event.progress
+    if (event.status === 'success') node.progress = 100
     if (event.payload?.bundle) {
       finalBundle.value = event.payload.bundle
     }
   }
 
+  // workflow event
+  if (event.event_type === 'workflow') {
+    if (event.payload?.profile_summary) {
+      profileSummary.value = event.payload.profile_summary
+    }
+  }
+
+  // resource event: a sub-agent completed its output
+  if (event.event_type === 'resource') {
+    const resource = event.payload?.resource
+    if (resource) {
+      const eventTime = event.timestamp || new Date().toISOString()
+      upsertResource(resource, eventTime)
+      // Mark the agent node as success
+      const resAgentId = (resource.type as string) || agentId
+      if (resAgentId) {
+        const node = ensureDagNode(resAgentId)
+        node.status = 'success'
+        node.progress = 100
+        node.currentMessage = '资源已生成'
+      }
+    }
+  }
+
+  // review event (from emit_review, which has event_type="review")
+  if (event.event_type === 'review') {
+    const node = ensureDagNode('review')
+    node.status = event.status === 'pending' ? 'waiting' : (event.status as 'running' | 'success' | 'failed')
+    node.currentMessage = event.message || node.currentMessage
+    if (event.message) node.stepHistory.push(event.message)
+    if (event.progress) node.progress = event.progress
+    if (event.payload?.review_result) {
+      reviewResult.value = event.payload.review_result
+    }
+    if (event.status === 'success') node.progress = 100
+  }
+
+  // done event
   if (event.event_type === 'done') {
     finalBundle.value = event.payload?.bundle || finalBundle.value
-    setWorkflowStageStatus('completed', 'success')
-    totalProgress.value = 100
+    // Mark all system nodes as success
+    ensureDagNode('planning').status = 'success'
+    ensureDagNode('planning').progress = 100
+    ensureDagNode('review').status = 'success'
+    ensureDagNode('review').progress = 100
+    ensureDagNode('bundle').status = 'success'
+    ensureDagNode('bundle').progress = 100
     isGenerating.value = false
     closeSseConnection()
     currentPhase.value = 'result'
   }
 
+  // error event
   if (event.event_type === 'error') {
     generationError.value = event.message
     isGenerating.value = false
-    markWorkflowFailed(event.stage)
+    // Mark all running nodes as failed
+    Object.values(dagNodeStates.value).forEach(node => {
+      if (node.status === 'running') node.status = 'failed'
+    })
     closeSseConnection()
   }
-
-  pushFlowEventBubble(event)
 }
 
 const upsertResource = (resource: any, timestamp?: string) => {
@@ -1601,108 +1265,6 @@ const closeSseConnection = () => {
   streamController.value = null
 }
 
-const setWorkflowStageStatus = (stage: string, status: WorkflowStatus) => {
-  const target = workflowStages.find(item => item.key === stage)
-  if (target) target.status = status
-}
-
-const markWorkflowFailed = (stage?: string) => {
-  const target = workflowStages.find(item => item.key === stage)
-  if (target) {
-    target.status = 'failed'
-    return
-  }
-  const running = workflowStages.find(item => item.status === 'running')
-  if (running) {
-    running.status = 'failed'
-    return
-  }
-  const latestActive = [...workflowStages].reverse().find(item => item.status !== 'pending')
-  if (latestActive) latestActive.status = 'failed'
-}
-
-const resolveEventNodeId = (event: ResourceGenerateEvent): string => {
-  if (event.event_type === 'planning') return 'master'
-  if (event.event_type === 'review') return 'reviewer'
-  if (event.event_type === 'bundle') return 'assembler'
-  if (event.event_type === 'resource' && event.agent) return event.agent
-  if (event.event_type === 'agent_step' && event.agent) return event.agent
-  if (event.event_type === 'agent' && event.agent) return event.agent
-  if (event.stage === 'created') return 'master'
-  if (event.stage === 'profile') return 'master'
-  if (event.stage === 'completed') return 'assembler'
-  return 'master'
-}
-
-const pushFlowEventBubble = (event: ResourceGenerateEvent) => {
-  const nodeId = resolveEventNodeId(event)
-  const bubble: FlowEventBubble = {
-    id: `${event.event_id || event.timestamp}-${nodeId}`,
-    nodeId,
-    event_type: event.event_type,
-    agent: event.agent,
-    status: event.status,
-    message: event.message,
-    timestamp: event.timestamp,
-  }
-
-  flowEventBubbles.value = [...flowEventBubbles.value, bubble].slice(-80)
-}
-
-const getNodeBubbles = (nodeId: string, limit = 2) => {
-  return flowEventBubbles.value.filter(item => item.nodeId === nodeId).slice(-limit)
-}
-
-const getNodeStatusText = (nodeId: string, status: WorkflowStatus) => {
-  const agent = activeAgents[nodeId]
-  if (agent?.status === 'running') {
-    return agent.step_label || agent.current_action || agent.message || '运行中'
-  }
-  return getStatusLabel(status)
-}
-
-const getNodeCurrentStage = (nodeId: string, status: WorkflowStatus) => {
-  const agent = activeAgents[nodeId]
-  if (agent?.current_action) return agent.current_action
-  if (agent?.step_label) return agent.step_label
-  if (agent?.message) return agent.message
-
-  const bubbles = getNodeBubbles(nodeId)
-  const latestBubble = bubbles[bubbles.length - 1]
-  if (latestBubble?.message) return latestBubble.message
-
-  if (status === 'success') return '已完成当前阶段'
-  if (status === 'running') return '正在执行当前任务'
-  if (status === 'failed') return '执行失败，请查看日志'
-  if (status === 'skipped') return '已跳过当前任务'
-  return '等待上游任务完成'
-}
-
-const formatFlowLogMessage = (log: FlowEventBubble) => {
-  return stringifyCompact(log.message || getStatusLabel(log.status) || '正在处理任务', 72)
-}
-
-const getNodeProcessMessage = (nodeId: string, status: WorkflowStatus) => {
-  const latestBubble = getLatestNodeBubble(nodeId)
-  if (latestBubble) return formatFlowLogMessage(latestBubble)
-  return stringifyCompact(getNodeCurrentStage(nodeId, status), 72)
-}
-
-const getFlowLogTypeLabel = (type?: string) => {
-  const labels: Record<string, string> = {
-    workflow: '流程',
-    planning: '规划',
-    agent_step: '执行步骤',
-    agent: 'Agent',
-    resource: '资源',
-    review: '审查',
-    bundle: '组装',
-    error: '异常',
-    done: '完成',
-  }
-  return labels[type || ''] || type || '事件'
-}
-
 const stringifyCompact = (value: any, maxLength = 80): string => {
   if (value === null || value === undefined || value === '') return ''
   if (Array.isArray(value)) return value.map(item => stringifyCompact(item, 24)).filter(Boolean).join('、')
@@ -1724,91 +1286,6 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
   const suffix = matched[1] || ''
   const prefix = raw.replace(suffixPattern, '').trim()
   return prefix ? `${prefix}\n- ${suffix}` : suffix
-}
-
-const getStatusLabel = (status: WorkflowStatus) => {
-  const labels: Record<WorkflowStatus, string> = {
-    pending: '等待',
-    running: '运行中',
-    success: '完成',
-    failed: '失败',
-    skipped: '跳过',
-  }
-  return labels[status]
-}
-
-const getRuntimeStatusLabel = (status: AgentRuntimeStatus) => {
-  const labels: Record<AgentRuntimeStatus, string> = {
-    waiting: '等待',
-    running: '运行中',
-    success: '完成',
-    failed: '失败',
-    skipped: '跳过',
-  }
-  return labels[status]
-}
-
-const getAgentProgress = (status: WorkflowStatus | AgentRuntimeStatus) => {
-  if (status === 'waiting') return 0
-  if (status === 'success') return 100
-  if (status === 'running') return 58
-  if (status === 'failed') return 100
-  return 0
-}
-
-const formatElapsedMs = (elapsedMs: number) => {
-  if (!elapsedMs || elapsedMs <= 0) return '0s'
-  return `${Math.floor(elapsedMs / 1000)}s`
-}
-
-const getFlowNodeStatus = (nodeId: string): WorkflowStatus => {
-  if (nodeId === 'master') return getStageStatus('planning')
-  if (nodeId === 'reviewer') {
-    if (reviewResult.value) return 'success'
-    return getStageStatus('reviewing')
-  }
-  if (nodeId === 'assembler') {
-    if (finalBundle.value) return 'success'
-    return getStageStatus('assembling')
-  }
-  const status = activeAgents[nodeId]?.status
-  if (!status || status === 'waiting') return 'pending'
-  return status
-}
-
-const getStageStatus = (stage: string): WorkflowStatus => {
-  return workflowStages.find(item => item.key === stage)?.status || 'pending'
-}
-
-const focusFlowNode = (nodeId: string) => {
-  focusedAgentId.value = nodeId
-  agentDetailVisible.value = true
-}
-
-const closeAgentDetail = () => {
-  agentDetailVisible.value = false
-}
-
-const focusStage = (stage: string) => {
-  const layerMap: Record<string, number> = {
-    layer_0: 0,
-    layer_1: 1,
-    layer_2: 2,
-  }
-  const layer = layerMap[stage]
-  if (layer === undefined) return
-  const agent = Object.values(activeAgents).find(item => item.layer === layer && item.status === 'running')
-    || Object.values(activeAgents).find(item => item.layer === layer)
-  if (agent) focusedAgentId.value = agent.id
-}
-
-const formatEventTime = (timestamp: string) => {
-  if (!timestamp) return ''
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(timestamp))
 }
 
 onMounted(() => {
@@ -2007,151 +1484,141 @@ const handlePreview = (data: any) => {
 /* ================= Phase 3: Generating View ================= */
 .generating-view { background: var(--color-bg); overflow-y: auto; }
 .generation-workbench { width: 100%; max-width: 1760px; margin: 0 auto; padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-5); color: var(--color-text); }
-.workbench-hero { background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-2xl); padding: var(--space-6) var(--space-8); display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--space-8); align-items: center; box-shadow: var(--shadow-sm), var(--shadow-xs); transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-.workbench-kicker { margin-bottom: var(--space-3); color: #0369A1 !important; border-color: #BAE6FD !important; background: #F0F9FF !important; font-weight: var(--weight-extrabold); letter-spacing: 0.05em; }
-.workbench-hero h2 { margin: 0 0 var(--space-2); font-size: 2rem; line-height: 1.2; font-weight: var(--weight-extrabold); color: var(--color-text); text-wrap: balance; }
-.workbench-hero p { margin: 0; max-width: 760px; color: var(--color-text-muted); line-height: 1.65; }
-.progress-panel { grid-column: 1 / -1; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-.progress-number { font-size: 2.1rem; font-weight: var(--weight-extrabold); color: #0369A1; font-variant-numeric: tabular-nums; }
-.current-message { color: var(--color-text-secondary); line-height: 1.5; word-break: break-word; }
 .generation-error { border-radius: var(--radius-xl); }
-.workbench-grid { display: grid; grid-template-columns: 260px minmax(0, 1fr) 340px; gap: var(--space-5); align-items: start; }
-.workflow-timeline-panel, .side-card, .agent-layer-section, .workbench-collapse, .review-summary-card, .result-resource-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-md); }
-.workflow-timeline-panel { padding: var(--space-5); position: sticky; top: 20px; }
-.panel-title { font-size: 0.92rem; font-weight: var(--weight-extrabold); color: var(--color-text); margin-bottom: var(--space-4); }
-.workflow-stage-list { display: flex; flex-direction: column; gap: var(--space-3); }
-.workflow-stage-item { min-height: 42px; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; color: var(--color-text-muted); }
-.stage-dot { width: 10px; height: 10px; border-radius: var(--radius-pill); background: var(--color-border-hover); box-shadow: 0 0 0 4px var(--color-surface-hover); }
-.workflow-stage-item.is-running .stage-dot { background: var(--color-info); box-shadow: 0 0 0 4px #DBEAFE; }
-.workflow-stage-item.is-success .stage-dot { background: var(--tone-emerald); box-shadow: 0 0 0 4px #D1FAE5; }
-.workflow-stage-item.is-failed .stage-dot { background: var(--color-danger); box-shadow: 0 0 0 4px #FEE2E2; }
-.workflow-stage-item.is-skipped .stage-dot { background: var(--tone-amber); box-shadow: 0 0 0 4px #FEF3C7; }
-.stage-label { min-width: 0; font-weight: var(--weight-bold); color: var(--color-text-strong); }
-.agent-live-panel { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
-.agent-layer-section { padding: var(--space-6); }
-.layer-header { display: flex; justify-content: space-between; gap: var(--space-5); align-items: flex-start; margin-bottom: var(--space-5); }
-.layer-index { display: inline-flex; color: #0369A1; font-size: 0.78rem; font-weight: var(--weight-extrabold); letter-spacing: 0.04em; margin-bottom: var(--space-1); }
-.layer-header h3 { margin: 0 0 var(--space-1); font-size: 1.2rem; font-weight: var(--weight-extrabold); color: var(--color-text); }
-.layer-header p { margin: 0; color: var(--color-text-muted); line-height: 1.5; }
-.agent-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); }
-.runtime-agent-card { border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-xl); background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; box-shadow: var(--shadow-sm), var(--shadow-xs); transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-.runtime-agent-card.is-running { border-color: #93C5FD; box-shadow: var(--shadow-lg); }
-.runtime-agent-card.is-success { border-color: #A7F3D0; }
-.runtime-agent-card.is-failed { border-color: #FCA5A5; }
-.agent-card-header, .agent-title-wrap { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
-.agent-title-wrap { justify-content: flex-start; flex: 1; }
-.agent-icon { width: 42px; height: 42px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; background: rgba(15, 23, 42, 0.03); border: 1px solid rgba(15, 23, 42, 0.04); }
-.agent-icon.text-blue { color: var(--color-info); }
-.agent-icon.text-orange { color: #EA580C; }
-.agent-icon.text-purple { color: #7C3AED; }
-.agent-icon.text-red { color: var(--color-danger); }
-.agent-icon.text-emerald { color: var(--tone-emerald); }
-.agent-icon.text-indigo { color: var(--color-primary); }
-.agent-title-wrap h4 { margin: 0 0 var(--space-1); color: var(--color-text); font-size: 1rem; font-weight: var(--weight-extrabold); overflow-wrap: anywhere; }
-.agent-title-wrap span { color: var(--color-text-muted); font-size: 0.82rem; }
-.agent-current-action { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); }
-.agent-current-action strong { color: var(--color-text); line-height: 1.45; overflow-wrap: anywhere; }
-.agent-current-action span, .agent-info-block p, .output-preview p, .planning-card p, .live-resource-card p, .result-resource-card p { color: var(--color-text-muted); line-height: 1.58; margin: 0; overflow-wrap: anywhere; }
-.agent-info-block { display: flex; flex-direction: column; gap: var(--space-3); }
-.agent-info-block b { display: inline-flex; margin-right: 8px; color: #0369A1; }
-.tag-field, .kv-grid, .output-preview { display: flex; flex-direction: column; gap: var(--space-2); }
-.field-label { font-size: 0.76rem; color: var(--color-text-muted); font-weight: var(--weight-extrabold); text-transform: uppercase; letter-spacing: 0.03em; }
-.tag-row { display: flex; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
-.kv-row { display: grid; grid-template-columns: minmax(72px, 0.7fr) minmax(0, 1.3fr); gap: var(--space-3); align-items: start; padding: 8px 0; border-bottom: 1px solid rgba(15, 23, 42, 0.04); }
-.kv-row span { color: var(--color-text-muted); font-size: 0.82rem; overflow-wrap: anywhere; }
-.kv-row b { color: var(--color-text-strong); font-size: 0.82rem; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
-.output-preview { background: var(--color-bg); border-radius: var(--radius-lg); padding: var(--space-3); }
-.output-preview strong { color: var(--color-text); overflow-wrap: anywhere; }
-.agent-progress { margin-top: auto; }
-.empty-layer-state, .side-empty { border: 1px dashed var(--color-border-hover); border-radius: var(--radius-xl); color: var(--color-text-faint); background: var(--color-bg); padding: var(--space-6); text-align: center; line-height: 1.5; }
-.resource-side-panel { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; position: sticky; top: 20px; }
-.side-card { padding: var(--space-5); }
-.profile-summary-grid { display: flex; flex-direction: column; gap: var(--space-3); }
-.profile-summary-item { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: var(--space-3); padding-bottom: 10px; border-bottom: 1px solid rgba(15, 23, 42, 0.04); }
-.profile-summary-item span { color: var(--color-text-muted); font-size: 0.82rem; }
-.profile-summary-item b { color: var(--color-text-strong); font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
-.live-resource-list { display: flex; flex-direction: column; gap: var(--space-3); }
-.live-resource-card { border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); background: var(--color-surface); }
-.live-resource-card h4 { margin: var(--space-2) 0 0; color: var(--color-text); font-size: 0.98rem; line-height: 1.35; overflow-wrap: anywhere; }
-.resource-meta-line { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--color-text-muted); font-size: 0.78rem; }
-.workbench-collapse { padding: var(--space-1) var(--space-5); }
-.planning-history-list { display: grid; gap: var(--space-3); }
-.planning-card { border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-4); }
-.planning-card h4 { margin: 0 0 var(--space-2); color: var(--color-text); }
-.planning-agent-list { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
-.planning-agent-item { background: var(--color-bg); border-radius: var(--radius-lg); padding: var(--space-3); display: grid; gap: var(--space-1); }
-.planning-agent-item strong { color: #0369A1; }
-.planning-agent-item span { color: var(--color-text-strong); line-height: 1.5; overflow-wrap: anywhere; }
-.planning-agent-item em { color: var(--color-text-muted); font-style: normal; line-height: 1.5; overflow-wrap: anywhere; }
-.event-log-list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 360px; overflow-y: auto; }
-.event-log-row { display: grid; grid-template-columns: 78px 86px 80px 72px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: 10px 0; border-bottom: 1px solid var(--color-surface-hover); }
-.event-log-row span, .event-log-row b { color: var(--color-text-muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.event-log-row p { margin: 0; color: var(--color-text-strong); line-height: 1.45; overflow-wrap: anywhere; }
+.generation-workbench { flex: 1 0 auto !important; min-height: min-content !important; }
 
-.progress-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
-.progress-metrics span { min-width: 0; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); color: var(--color-text-strong); line-height: 1.35; overflow-wrap: anywhere; }
-.progress-metrics b { display: block; color: var(--color-text-faint); font-size: 0.72rem; margin-bottom: var(--space-1); }
-.generation-focus-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: stretch; }
-.flow-canvas-card, .resource-summary-card, .result-group-section { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-md); }
-.flow-canvas-card { padding: var(--space-6); min-width: 0; }
-.flow-card-header, .result-group-header { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; }
-.flow-card-header h3, .result-group-header h3 { margin: var(--space-1) 0 0; color: var(--color-text); font-size: 1.18rem; font-weight: var(--weight-extrabold); }
-.flow-canvas { position: relative; height: 720px; margin-top: var(--space-5); overflow: auto; border-radius: var(--radius-2xl); background: var(--color-bg); border: 1px solid rgba(226, 232, 240, 0.6); }
-.flow-canvas-inner { position: relative; min-width: 1320px; height: 680px; }
-.flow-lines { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
-.flow-edge { stroke: var(--color-border-hover); stroke-width: 2.4; stroke-linecap: round; opacity: 0.72; }
-.flow-edge.success { stroke: var(--color-success); opacity: 0.92; }
-.flow-edge.failed { stroke: var(--color-danger); opacity: 0.9; }
-.flow-edge.running, .flow-edge.active { stroke: var(--color-primary); stroke-dasharray: 10 10; animation: flowDash 1.2s linear infinite; opacity: 1; }
-@keyframes flowDash { to { stroke-dashoffset: -20; } }
-.flow-node { position: absolute; z-index: 5; transform: translate(-50%, -50%); width: 186px; min-height: 112px; border: 1px solid rgba(203, 213, 225, 0.6); border-radius: var(--radius-xl); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: var(--space-2); cursor: pointer; color: var(--color-text-secondary); box-shadow: var(--shadow-sm); padding: var(--space-3); text-align: left; transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base); }
-.flow-node:hover, .flow-node.focused { transform: translate(-50%, -50%) translateY(-3px); border-color: var(--color-info); box-shadow: var(--shadow-lg); }
-.node-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.flow-node .node-icon { width: 34px; height: 34px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; background: var(--color-surface-hover); color: var(--color-text-muted); flex: 0 0 auto; }
-.node-title-group { min-width: 0; flex: 1; }
-.flow-node .node-label { display: block; font-weight: var(--weight-extrabold); color: var(--color-text-strong); font-size: 0.9rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flow-node small { display: block; margin-top: 2px; color: var(--color-text-faint); font-weight: var(--weight-bold); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-live-log { border: 1px solid var(--color-border); background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-bg) 100%); border-radius: var(--radius-lg); padding: 9px 10px; min-height: 64px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8); }
-.node-live-log-meta { display: flex; justify-content: space-between; gap: var(--space-2); align-items: center; margin-bottom: var(--space-1); }
-.node-live-log-meta span { color: var(--color-info); font-size: 0.66rem; font-weight: var(--weight-extrabold); letter-spacing: 0.05em; }
-.node-live-log-meta em { color: var(--color-text-faint); font-size: 0.66rem; font-style: normal; font-variant-numeric: tabular-nums; }
-.node-live-log p { margin: 0; color: var(--color-text-secondary); font-size: 0.72rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.log-fade-enter-active, .log-fade-leave-active { transition: opacity var(--transition-base), transform var(--transition-base); }
-.log-fade-enter-from { opacity: 0; transform: translateY(6px); }
-.log-fade-leave-to { opacity: 0; transform: translateY(-6px); }
-.node-progress { position: relative; height: 3px; margin-top: auto; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-border); }
-.node-progress span { position: absolute; inset: 0 auto 0 0; width: 45%; border-radius: inherit; background: var(--color-info); animation: nodeProgressMove 1.35s ease-in-out infinite; }
-.flow-node.is-running { border-color: #A5B4FC; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08), var(--shadow-md); animation: nodePulse 2s ease-in-out infinite; }
-.flow-node.is-running .node-icon { background: #DBEAFE; color: var(--color-info); }
-.flow-node.is-running .node-live-log { border-color: #BFDBFE; background: var(--color-info-soft); }
-.flow-node.is-success { border-color: #86EFAC; }
-.flow-node.is-success .node-icon { background: #DCFCE7; color: #16A34A; }
-.flow-node.is-failed { border-color: #FCA5A5; }
-.flow-node.is-failed .node-icon { background: #FEE2E2; color: var(--color-danger); }
-.flow-node.is-skipped { opacity: 0.68; }
-@keyframes nodePulse { 50% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.06), 0 10px 26px rgba(15, 23, 42, 0.08); } }
-@keyframes nodeProgressMove { 0% { transform: translateX(-120%); } 100% { transform: translateX(260%); } }
-.workflow-stage-strip { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
-.stage-chip { border: 1px solid var(--color-border); background: var(--color-surface); border-radius: var(--radius-pill); padding: var(--space-2) var(--space-3); color: var(--color-text-muted); font-weight: var(--weight-bold); display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
-.stage-chip span { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--color-border-hover); }
-.stage-chip.is-running { color: #1D4ED8; border-color: #BFDBFE; background: var(--color-info-soft); }
-.stage-chip.is-running span { background: var(--color-info); }
-.stage-chip.is-success { color: #047857; border-color: #A7F3D0; background: var(--color-success-soft); }
-.stage-chip.is-success span { background: var(--color-success); }
-.stage-chip.is-failed { color: #B91C1C; border-color: #FCA5A5; background: var(--color-danger-soft); }
-.stage-chip.is-failed span { background: var(--color-danger); }
-.resource-summary-card { padding: var(--space-6); }
-.interactive-resources-panel {
-  min-height: 0;
-  height: auto;
-  padding-top: var(--space-1);
-  padding-bottom: var(--space-1);
+/* ================= DAG Canvas ================= */
+.dag-canvas-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-md); padding: var(--space-6); }
+.dag-canvas { position: relative; overflow: auto; border-radius: var(--radius-2xl); background: var(--color-bg); border: 1px solid rgba(226, 232, 240, 0.6); min-height: 480px; }
+
+/* DAG SVG lines */
+.dag-lines { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
+.dag-edge { stroke: var(--color-border-hover); stroke-width: 2; stroke-linecap: round; opacity: 0.5; }
+.dag-edge.dashed { stroke-dasharray: 6 4; opacity: 0.4; }
+.dag-edge.flowing { stroke: var(--color-info); stroke-width: 2.5; stroke-dasharray: 8 6; animation: dagFlowDash 1s linear infinite; opacity: 1; }
+.dag-edge.completed { stroke: var(--color-success); stroke-width: 2; opacity: 0.7; }
+@keyframes dagFlowDash { to { stroke-dashoffset: -14; } }
+
+/* DAG Node base */
+.dag-node {
+  position: absolute;
+  z-index: 5;
+  width: 160px;
+  border: 2px solid rgba(203, 213, 225, 0.6);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
 }
-.resource-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-3); }
-.resource-status-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; border: 1px solid var(--color-border); background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-3); }
-.resource-status-item h4 { margin: 0 0 var(--space-1); color: var(--color-text); font-size: 0.96rem; line-height: 1.35; overflow-wrap: anywhere; }
-.resource-status-item p { margin: 0; color: var(--color-text-muted); line-height: 1.5; overflow-wrap: anywhere; }
-.side-empty.compact { padding: var(--space-3); }
+.dag-node:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* DAG Node head */
+.dag-node-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.dag-node-emoji { font-size: 1.25rem; line-height: 1; flex-shrink: 0; }
+.dag-node-label { font-weight: var(--weight-extrabold); font-size: 0.9rem; color: var(--color-text-strong); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dag-node-check { color: var(--color-success); font-weight: var(--weight-extrabold); font-size: 0.9rem; margin-left: auto; flex-shrink: 0; }
+.dag-node-x { color: var(--color-danger); font-weight: var(--weight-extrabold); font-size: 0.9rem; margin-left: auto; flex-shrink: 0; }
+
+/* Node status-specific text */
+.dag-node-status-text { font-size: 0.78rem; color: var(--color-text-faint); font-weight: var(--weight-semibold); }
+.dag-node-failed-text { color: var(--color-danger); }
+
+/* Running state */
+.dag-node-running { display: flex; flex-direction: column; gap: var(--space-1); }
+.dag-node-step-msg { margin: 0; font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dag-node-progress-bar { height: 4px; background: var(--color-border); border-radius: var(--radius-pill); overflow: hidden; }
+.dag-node-progress-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--color-info), var(--color-primary)); transition: width 0.3s ease; }
+.dag-node-progress-text { font-size: 0.7rem; color: var(--color-info); font-weight: var(--weight-extrabold); font-variant-numeric: tabular-nums; }
+
+/* Node visual states */
+.dag-node.is-waiting { border-color: rgba(203, 213, 225, 0.6); }
+.dag-node.is-waiting .dag-node-emoji { opacity: 0.5; }
+.dag-node.is-waiting .dag-node-label { color: var(--color-text-faint); }
+
+.dag-node.is-running {
+  border-color: #7C9CF5;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08), var(--shadow-md);
+  animation: dagNodePulse 2s ease-in-out infinite;
+}
+.dag-node.is-running .dag-node-emoji { opacity: 1; }
+.dag-node.is-running .dag-node-label { color: var(--color-text); }
+@keyframes dagNodePulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08), var(--shadow-md); }
+  50% { box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.12), 0 8px 24px rgba(15, 23, 42, 0.08); }
+}
+
+.dag-node.is-success { border-color: #86EFAC; }
+.dag-node.is-success .dag-node-emoji { opacity: 1; }
+.dag-node.is-success .dag-node-label { color: var(--color-text); }
+
+.dag-node.is-failed { border-color: #FCA5A5; }
+.dag-node.is-failed .dag-node-emoji { opacity: 1; }
+.dag-node.is-failed .dag-node-label { color: var(--color-text); }
+
+/* Expanded node: step history */
+.dag-node.expanded {
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+}
+.dag-node-steps {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.dag-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.dag-step-marker { flex-shrink: 0; font-size: 0.7rem; }
+.dag-step-item.is-done .dag-step-marker { color: var(--color-success); }
+.dag-step-item.is-current .dag-step-marker { color: var(--color-info); }
+.dag-step-text { color: var(--color-text-secondary); word-break: break-word; }
+.dag-step-item.is-done .dag-step-text { color: var(--color-text-faint); }
+.dag-step-item.is-current .dag-step-text { color: var(--color-text); font-weight: var(--weight-semibold); }
+
+/* Expand transition */
+.dag-expand-enter-active, .dag-expand-leave-active { transition: all 0.25s ease; overflow: hidden; }
+.dag-expand-enter-from, .dag-expand-leave-to { opacity: 0; max-height: 0; margin-top: 0; padding-top: 0; }
+.dag-expand-enter-to, .dag-expand-leave-from { opacity: 1; max-height: 200px; }
+
+/* Resource panel below DAG */
+.compact-resource-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-xl); padding: var(--space-5); box-shadow: var(--shadow-sm); }
+.panel-header-minimal { display: flex; justify-content: space-between; margin-bottom: var(--space-4); }
+.phm-left { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-extrabold); font-size: 1.05rem; color: var(--color-text); }
+.phm-left .el-tag { margin-left: var(--space-1); }
+.generated-resource-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); }
+.mini-resource-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg); cursor: pointer; transition: all var(--transition-base); }
+.mini-resource-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); background: var(--color-surface); border-color: var(--color-border-hover); }
+.mrc-icon { width: 36px; height: 36px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; background: rgba(15, 23, 42, 0.03); }
+.mrc-info { display: flex; flex-direction: column; min-width: 0; }
+.mrc-info h4 { margin: 0; font-size: 0.9rem; font-weight: var(--weight-bold); color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrc-info span { font-size: 0.75rem; color: var(--color-text-muted); }
+.side-empty.minimal { display: flex; align-items: center; justify-content: center; height: 100px; color: var(--color-text-faint); font-size: 0.9rem; font-weight: var(--weight-semibold); }
+
+.interactive-resources-panel { min-height: 0; height: auto; padding-top: var(--space-1); padding-bottom: var(--space-1); }
 
 /* ================= Phase 4: Premium Results View ================= */
 .results-view {
@@ -2559,11 +2026,8 @@ const handlePreview = (data: any) => {
 .side-empty.compact { padding: var(--space-3); }
 
 @media (max-width: 1200px) {
-  .workbench-grid { grid-template-columns: 240px minmax(0, 1fr); }
   .resource-side-panel { grid-column: 1 / -1; position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .generation-focus-grid { grid-template-columns: 1fr; }
   .agent-configs-grid { grid-template-columns: repeat(2, 1fr); }
-  .workbench-hero { grid-template-columns: 1fr; }
   .bento-stats-row { grid-template-columns: repeat(2, 1fr); }
   .bento-resource-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .bento-res-card { grid-column: span 2 !important; }
@@ -2571,6 +2035,8 @@ const handlePreview = (data: any) => {
   .results-body-bento { padding: var(--space-6) var(--space-8); }
   .generated-resource-card { grid-column: span 4; }
   .interactive-resources-panel { min-height: 0; height: auto; }
+  .dag-canvas { min-height: 380px; }
+  .dag-node { width: 140px; }
 }
 @media (max-width: 768px) {
   .elegant-generator-layout { height: auto; min-height: calc(100vh - 64px); }
@@ -2589,22 +2055,22 @@ const handlePreview = (data: any) => {
   .agent-configs-grid { grid-template-columns: 1fr; }
   .scenario-selector-v2 { grid-template-columns: 1fr; }
   .generation-workbench { padding: var(--space-4); }
-  .workbench-grid, .resource-side-panel { grid-template-columns: 1fr; }
-  .progress-metrics { grid-template-columns: 1fr; }
-  .flow-canvas { height: 720px; }
-  .flow-node { width: 176px; min-height: 112px; font-size: 0.82rem; }
+  .resource-side-panel { grid-template-columns: 1fr; }
   .resource-status-item { grid-template-columns: 1fr; }
   .generated-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .generated-resource-card { grid-column: span 1; grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
   .interactive-resources-panel { min-height: 0; }
   .resource-card-action { grid-column: 1 / -1; width: 100%; }
-  .workflow-timeline-panel, .resource-side-panel { position: static; }
-  .event-log-row { grid-template-columns: 1fr; gap: var(--space-1); }
+  .resource-side-panel { position: static; }
   .results-body-bento { padding: var(--space-4); }
   .result-hero-minimal { padding: var(--space-5); }
   .bento-stats-row { grid-template-columns: 1fr; }
   .bento-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bento-res-card { grid-column: span 1 !important; }
+  .compact-hero-bar { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+  .dag-canvas { min-height: 360px; }
+  .dag-node { width: 120px; padding: var(--space-2) var(--space-3); }
+  .dag-node-label { font-size: 0.78rem; }
 }
 @media (max-width: 520px) {
   .sequence-track { display: flex; overflow-x: auto; padding-bottom: var(--space-1); }
@@ -2686,171 +2152,6 @@ p, .card-summary, .s-desc, .greeting-subtitle {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-/* ================= 极致明亮模式：生成中 (Streaming) 面板重塑 ================= */
-.workbench-hero {
-  background: var(--color-surface);
-  border: 1px solid rgba(15, 23, 42, 0.05);
-  border-radius: var(--radius-2xl);
-  padding: var(--space-8) var(--space-10);
-  grid-template-columns: minmax(0, 1fr) 420px;
-  gap: var(--space-10);
-  align-items: center;
-  box-shadow: var(--shadow-sm);
-}
-
-.workbench-kicker {
-  background: rgba(59, 130, 246, 0.08) !important;
-  color: var(--color-info) !important;
-  border: none !important;
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.05em;
-  padding: var(--space-1) var(--space-3);
-}
-.workbench-hero h2 {
-  font-size: 2.2rem;
-  letter-spacing: -0.03em;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text);
-  margin-top: var(--space-4);
-}
-
-.progress-panel {
-  background: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-  box-shadow: none !important;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.progress-number {
-  font-size: 3.8rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text);
-  letter-spacing: -0.04em;
-  line-height: 1;
-  font-family: var(--font-sans);
-}
-
-:deep(.progress-panel .el-progress-bar__outer) {
-  background-color: rgba(15, 23, 42, 0.04) !important;
-  border-radius: var(--radius-lg);
-  height: 8px !important;
-}
-:deep(.progress-panel .el-progress-bar__inner) {
-  background: linear-gradient(90deg, var(--color-info) 0%, var(--color-primary) 100%);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  position: relative;
-  overflow: hidden;
-}
-:deep(.progress-panel .el-progress-bar__inner::after) {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-  animation: shimmer 1.5s infinite;
-}
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.progress-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
-  margin-top: var(--space-2);
-}
-.progress-metrics span {
-  background: var(--color-bg);
-  border: 1px solid rgba(15, 23, 42, 0.03);
-  border-radius: var(--radius-xl);
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  color: var(--color-text);
-  font-weight: var(--weight-bold);
-  font-size: 0.95rem;
-  transition: all var(--transition-slow);
-}
-.progress-metrics span:hover {
-  transform: translateY(-2px);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-md);
-}
-.progress-metrics b {
-  color: var(--color-text-muted);
-  font-size: 0.72rem;
-  font-weight: var(--weight-bold);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  margin-bottom: 2px;
-}
-
-/* ================= 极致明亮模式：修复卡片撑破容器问题 ================= */
-.generation-workbench {
-  flex: 1 0 auto !important;
-  min-height: min-content !important;
-}
-
-.resource-summary-card {
-  flex-shrink: 0 !important;
-  height: max-content !important;
-  padding-bottom: var(--space-8) !important;
-}
-
-.generated-resource-card {
-  height: auto !important;
-}
-
-/* ================= 极致明亮模式：面板标题区（已生成资源）重塑 ================= */
-.interactive-resources-panel .panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-5);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid rgba(15, 23, 42, 0.04);
-}
-
-.interactive-resources-panel .panel-title > span {
-  font-size: 1.15rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text);
-  letter-spacing: -0.01em;
-  position: relative;
-  padding-left: var(--space-3);
-  display: flex;
-  align-items: center;
-}
-
-.interactive-resources-panel .panel-title > span::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 16px;
-  border-radius: var(--radius-sm);
-  background: var(--color-info);
-}
-
-.interactive-resources-panel .panel-title .el-tag {
-  background: var(--color-bg) !important;
-  border: 1px solid rgba(15, 23, 42, 0.05) !important;
-  color: var(--color-text-muted) !important;
-  font-weight: var(--weight-bold);
-  font-size: 0.75rem;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-pill);
-  height: auto;
-  box-shadow: var(--shadow-xs);
-}
-
 /* ================= 极简明亮模式：生成中顶部面板 ================= */
 .compact-hero-bar { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-xl); padding: var(--space-4) var(--space-6); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); transition: all var(--transition-slow); }
 .hero-bar-left { display: flex; align-items: center; gap: var(--space-5); }
@@ -2860,63 +2161,286 @@ p, .card-summary, .s-desc, .greeting-subtitle {
 .hero-bar-title { margin: 0 0 var(--space-1); font-size: 1.25rem; font-weight: var(--weight-extrabold); color: var(--color-text); }
 .hero-bar-message { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; }
 .hero-bar-right { display: flex; align-items: center; gap: var(--space-6); }
-.progress-info-v2 { display: flex; gap: var(--space-5); text-align: right; }
-.pi-item { display: flex; flex-direction: column; }
-.pi-item span { font-size: 0.8rem; color: var(--color-text-faint); margin-bottom: 2px; }
-.pi-item b { font-size: 1rem; color: var(--color-text); }
 .mini-progress { position: relative; display: flex; justify-content: center; align-items: center; }
 .mini-progress-text { position: absolute; font-size: 0.75rem; font-weight: var(--weight-extrabold); color: #0369A1; }
 
-/* ================= 极简明亮模式：生成中底部面板重塑 ================= */
-.bottom-panels { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
-.compact-resource-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-xl); padding: var(--space-5); box-shadow: var(--shadow-sm); }
-.panel-header-minimal { display: flex; justify-content: space-between; margin-bottom: var(--space-4); }
-.phm-left { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-extrabold); font-size: 1.05rem; color: var(--color-text); }
-.phm-left .el-tag { margin-left: var(--space-1); }
-.generated-resource-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); }
-.mini-resource-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg); cursor: pointer; transition: all var(--transition-base); }
-.mini-resource-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); background: var(--color-surface); border-color: var(--color-border-hover); }
-.mrc-icon { width: 36px; height: 36px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; background: rgba(15, 23, 42, 0.03); }
-.mrc-info { display: flex; flex-direction: column; min-width: 0; }
-.mrc-info h4 { margin: 0; font-size: 0.9rem; font-weight: var(--weight-bold); color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mrc-info span { font-size: 0.75rem; color: var(--color-text-muted); }
+/* DAG Generating Phase */
+.dag-hero-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #0c4a6e 0%, #164e63 100%);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.dag-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dag-hero-kicker {
+  color: #7dd3fc !important;
+  border-color: rgba(125, 211, 252, 0.3) !important;
+  background: rgba(125, 211, 252, 0.08) !important;
+}
+.dag-hero-title {
+  color: #f0f9ff;
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0;
+}
+.dag-hero-right {
+  display: flex;
+  align-items: center;
+}
+.dag-progress-summary {
+  color: #7dd3fc;
+  font-size: 13px;
+  font-weight: 600;
+}
 
-.live-event-timeline { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-xl); padding: var(--space-5); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; height: 320px; }
-.let-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
-.let-title-group { display: flex; align-items: center; gap: var(--space-3); }
-.let-title { font-weight: var(--weight-extrabold); font-size: 1.05rem; color: var(--color-text); }
-.let-ping { width: 8px; height: 8px; background: var(--color-success); border-radius: 50%; position: relative; }
-.let-ping::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--color-success); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
-@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
-.let-count { font-size: 0.75rem; color: var(--color-text-muted); background: var(--color-surface-hover); padding: 2px var(--space-2); border-radius: var(--radius-pill); }
-.let-body { flex: 1; overflow-y: auto; padding-right: var(--space-1); }
-.let-body::-webkit-scrollbar { width: 4px; }
-.let-body::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-md); }
-.let-list { display: flex; flex-direction: column; }
-.let-row { display: flex; gap: var(--space-3); padding-bottom: var(--space-4); position: relative; }
-.let-dot-col { display: flex; flex-direction: column; align-items: center; padding-top: var(--space-1); }
-.let-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-border-hover); border: 2px solid var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-hover); z-index: 1; }
-.let-line { flex: 1; width: 1px; background: var(--color-border); margin: var(--space-1) 0 -16px; }
-.let-row:last-child .let-line { display: none; }
-.let-row.evt-running .let-dot { background: var(--color-info); box-shadow: 0 0 0 1px var(--color-info); }
-.let-row.evt-success .let-dot { background: var(--color-success); box-shadow: 0 0 0 1px var(--color-success); }
-.let-row.evt-failed .let-dot { background: var(--color-danger); box-shadow: 0 0 0 1px var(--color-danger); }
-.let-content { flex: 1; min-width: 0; }
-.let-top { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
-.let-agent { font-size: 0.85rem; font-weight: var(--weight-bold); color: var(--color-text-strong); }
-.let-type-tag { font-weight: var(--weight-bold); font-size: 0.7rem; height: 18px; padding: 0 6px; line-height: 16px; }
-.let-time { font-size: 0.75rem; color: var(--color-text-faint); font-variant-numeric: tabular-nums; margin-left: auto; }
-.let-msg { margin: 0; font-size: 0.8rem; color: var(--color-text-secondary); line-height: 1.5; word-break: break-all; }
-.let-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--color-text-faint); font-size: 0.9rem; }
+.dag-canvas-card {
+  background: #0f172a;
+  border-radius: 12px;
+  border: 1px solid #1e293b;
+  padding: 20px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.dag-canvas {
+  position: relative;
+  width: 960px;
+  max-width: 100%;
+  margin: 0 auto;
+  height: 520px;
+}
 
-.event-slide-enter-active, .event-slide-leave-active { transition: all var(--transition-slow); }
-.event-slide-enter-from { opacity: 0; transform: translateX(-10px); }
-.event-slide-leave-to { opacity: 0; transform: scale(0.95); }
+/* SVG edges */
+.dag-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.dag-edge {
+  stroke-width: 2;
+  transition: stroke 0.3s, stroke-dasharray 0.3s;
+}
+.dag-edge.pending {
+  stroke: #334155;
+  stroke-dasharray: 6 4;
+}
+.dag-edge.active {
+  stroke: #38bdf8;
+  stroke-dasharray: none;
+  animation: dag-edge-flow 1.5s linear infinite;
+}
+.dag-edge.completed {
+  stroke: #22c55e;
+  stroke-dasharray: none;
+}
+@keyframes dag-edge-flow {
+  from { stroke-dashoffset: 10; }
+  to { stroke-dashoffset: 0; }
+}
 
-.side-empty.minimal { display: flex; align-items: center; justify-content: center; height: 100px; color: var(--color-text-faint); font-size: 0.9rem; font-weight: var(--weight-semibold); }
+/* DAG nodes */
+.dag-node {
+  position: absolute;
+  background: #1e293b;
+  border: 2px solid #334155;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+.dag-node:hover {
+  border-color: #475569;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.dag-node.dag-waiting {
+  border-color: #334155;
+  opacity: 0.6;
+}
+.dag-node.dag-running {
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+  animation: dag-pulse 2s ease-in-out infinite;
+}
+.dag-node.dag-success {
+  border-color: #22c55e;
+  opacity: 0.9;
+}
+.dag-node.dag-failed {
+  border-color: #ef4444;
+  opacity: 0.9;
+}
+.dag-node.dag-system {
+  background: #1a2332;
+}
+@keyframes dag-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(56, 189, 248, 0.15); }
+  50% { box-shadow: 0 0 20px rgba(56, 189, 248, 0.35); }
+}
 
-@media (max-width: 1024px) {
-  .bottom-panels { grid-template-columns: 1fr; }
-  .compact-hero-bar { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+.dag-node-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dag-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dag-node-icon {
+  font-size: 16px;
+}
+.dag-node-name {
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dag-node-check {
+  color: #22c55e;
+  font-weight: bold;
+  margin-left: auto;
+}
+.dag-node-x {
+  color: #ef4444;
+  font-weight: bold;
+  margin-left: auto;
+}
+
+.dag-node-running-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dag-node-message {
+  color: #94a3b8;
+  font-size: 11px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dag-node-progress-bar {
+  height: 4px;
+  background: #334155;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dag-node-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+.dag-node-progress-text {
+  color: #7dd3fc;
+  font-size: 10px;
+}
+.dag-node-waiting-info,
+.dag-node-success-info,
+.dag-node-failed-info {
+  color: #64748b;
+  font-size: 11px;
+}
+.dag-node-success-info {
+  color: #4ade80;
+}
+.dag-node-failed-info {
+  color: #f87171;
+}
+
+/* Expanded step history */
+.dag-node-expanded {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #334155;
+}
+.dag-step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 11px;
+  color: #94a3b8;
+}
+.dag-step-row.dag-step-current {
+  color: #38bdf8;
+}
+.dag-step-marker {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+.dag-step-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dag-expand-enter-active,
+.dag-expand-leave-active {
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+.dag-expand-enter-from,
+.dag-expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+/* Resource row */
+.dag-resource-row {
+  background: #0f172a;
+  border-radius: 12px;
+  border: 1px solid #1e293b;
+  padding: 12px 16px;
+}
+.dag-resource-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.dag-resource-cards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dag-resource-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.dag-resource-card:hover {
+  border-color: #475569;
+  background: #263348;
+}
+.dag-rc-icon {
+  font-size: 14px;
+}
+.dag-rc-title {
+  color: #e2e8f0;
+  font-size: 12px;
+}
+.dag-resource-empty {
+  color: #64748b;
+  font-size: 13px;
 }
 </style>

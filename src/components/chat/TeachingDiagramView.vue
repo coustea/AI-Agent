@@ -1,6 +1,6 @@
 <template>
   <article class="insight-canvas" :class="{ compact: props.compact }">
-    <header class="canvas-header">
+    <header class="canvas-header animate-block">
       <div>
         <p class="canvas-kicker">{{ diagramTypeLabel(props.diagram.type) }}</p>
         <h3>{{ props.diagram.title }}</h3>
@@ -8,13 +8,13 @@
       <p class="focus-question">{{ props.diagram.focus_question }}</p>
     </header>
 
-    <section class="takeaway">
-      <span>先记住</span>
+    <section class="takeaway animate-block" style="animation-delay: 0.1s;">
+      <span>🎯 先记住</span>
       <strong>{{ props.diagram.takeaway }}</strong>
     </section>
 
     <section v-if="contrastPayload" class="contrast-board">
-      <div class="contrast-card left">
+      <div class="contrast-card left animate-card" style="animation-delay: 0.2s;">
         <h4>{{ contrastPayload.left.label }}</h4>
         <p>{{ contrastPayload.left.definition }}</p>
         <ul>
@@ -22,11 +22,11 @@
         </ul>
         <small>例：{{ contrastPayload.left.example }}</small>
       </div>
-      <div class="decision-axis">
+      <div class="decision-axis animate-block" style="animation-delay: 0.3s;">
         <span>判断线索</span>
         <p>{{ contrastPayload.decision_rule }}</p>
       </div>
-      <div class="contrast-card right">
+      <div class="contrast-card right animate-card" style="animation-delay: 0.4s;">
         <h4>{{ contrastPayload.right.label }}</h4>
         <p>{{ contrastPayload.right.definition }}</p>
         <ul>
@@ -34,15 +34,15 @@
         </ul>
         <small>例：{{ contrastPayload.right.example }}</small>
       </div>
-      <p class="board-result">{{ contrastPayload.scenario_conclusion }}</p>
+      <p class="board-result animate-block" style="animation-delay: 0.5s;">{{ contrastPayload.scenario_conclusion }}</p>
     </section>
 
     <section v-else-if="journeyPayload" class="journey-board">
-      <div class="journey-goal">目标：{{ journeyPayload.goal }}</div>
+      <div class="journey-goal animate-block" style="animation-delay: 0.2s;">目标：{{ journeyPayload.goal }}</div>
       <ol>
         <li v-for="(step, index) in journeyPayload.steps" :key="`${index}-${step.title}`">
-          <span class="step-index">{{ index + 1 }}</span>
-          <div class="step-card">
+          <span class="step-index animate-block" :style="{ animationDelay: `${0.25 + index * 0.1}s` }">{{ index + 1 }}</span>
+          <div class="step-card animate-card" :style="{ animationDelay: `${0.3 + index * 0.1}s` }">
             <h4>{{ step.title }}</h4>
             <p>{{ step.action }}</p>
             <small>{{ step.rationale }} -> {{ step.output }}</small>
@@ -50,26 +50,26 @@
           </div>
         </li>
       </ol>
-      <p class="board-result">{{ journeyPayload.result }}</p>
+      <p class="board-result animate-block" :style="{ animationDelay: `${0.4 + journeyPayload.steps.length * 0.1}s` }">{{ journeyPayload.result }}</p>
     </section>
 
     <section v-else-if="anatomyPayload" class="anatomy-board">
-      <div class="subject-core">{{ anatomyPayload.subject }}</div>
+      <div class="subject-core animate-block" style="animation-delay: 0.2s;">{{ anatomyPayload.subject }}</div>
       <div class="part-grid">
-        <article v-for="part in anatomyPayload.parts" :key="part.name">
+        <article v-for="(part, index) in anatomyPayload.parts" :key="part.name" class="animate-card" :style="{ animationDelay: `${0.3 + index * 0.1}s` }">
           <h4>{{ part.name }}</h4>
           <strong>{{ part.responsibility }}</strong>
           <p>{{ part.detail }}</p>
           <small v-if="part.interaction_cue">{{ part.interaction_cue }}</small>
         </article>
       </div>
-      <p class="board-result">{{ anatomyPayload.interaction_summary }}</p>
+      <p class="board-result animate-block" :style="{ animationDelay: `${0.4 + anatomyPayload.parts.length * 0.1}s` }">{{ anatomyPayload.interaction_summary }}</p>
     </section>
 
     <section v-else-if="simulationPayload" class="simulation-board">
-      <p class="initial-state">{{ simulationPayload.scenario }}：{{ simulationPayload.initial_state }}</p>
+      <p class="initial-state animate-block" style="animation-delay: 0.2s;">{{ simulationPayload.scenario }}：{{ simulationPayload.initial_state }}</p>
       <div class="frame-track">
-        <article v-for="frame in simulationPayload.frames" :key="frame.stage">
+        <article v-for="(frame, index) in simulationPayload.frames" :key="frame.stage" class="animate-card" :style="{ animationDelay: `${0.3 + index * 0.1}s` }">
           <h4>{{ frame.stage }}</h4>
           <p>{{ frame.state }}</p>
           <strong>{{ frame.changed }}</strong>
@@ -77,20 +77,20 @@
           <em>观察：{{ frame.learner_focus }}</em>
         </article>
       </div>
-      <p class="board-result">{{ simulationPayload.result }}</p>
+      <p class="board-result animate-block" :style="{ animationDelay: `${0.4 + simulationPayload.frames.length * 0.1}s` }">{{ simulationPayload.result }}</p>
     </section>
 
-    <footer v-if="!props.compact" class="canvas-footer">
+    <footer v-if="!props.compact" class="canvas-footer animate-block" style="animation-delay: 0.8s;">
       <div>
-        <span>为什么成立</span>
+        <span>💡 为什么成立</span>
         <p>{{ props.diagram.why_it_works }}</p>
       </div>
       <div v-if="props.diagram.pitfall" class="pitfall">
-        <span>容易踩坑</span>
+        <span>⚠️ 容易踩坑</span>
         <p>{{ props.diagram.pitfall }}</p>
       </div>
       <div class="try-it">
-        <span>现在试试</span>
+        <span>🚀 现在试试</span>
         <p>{{ props.diagram.try_it }}</p>
       </div>
     </footer>
@@ -157,21 +157,33 @@ function diagramTypeLabel(type: TeachingDiagram['type']): string {
 </script>
 
 <style scoped>
+@keyframes slideUpFade {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-block {
+  animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-card {
+  animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .insight-canvas {
-  --canvas-ink: #16263d;
-  --canvas-muted: #5c718c;
-  --canvas-line: #d9e4ee;
-  --canvas-accent: #087f76;
-  --canvas-warm: #f47a52;
+  --canvas-ink: #1e293b;
+  --canvas-muted: #64748b;
+  --canvas-line: #f1f5f9;
+  --canvas-accent: #0284c7;
+  --canvas-warm: #ea580c;
   display: grid;
   gap: 18px;
   padding: clamp(18px, 3vw, 30px);
   color: var(--canvas-ink);
-  background:
-    radial-gradient(circle at 92% 8%, rgba(244, 122, 82, 0.14), transparent 28%),
-    linear-gradient(135deg, #fffdf9, #f1f8f7);
-  border: 1px solid var(--canvas-line);
+  background: #ffffff;
   border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .canvas-header {
@@ -184,7 +196,7 @@ function diagramTypeLabel(type: TeachingDiagram['type']): string {
 .canvas-kicker {
   margin: 0 0 7px;
   color: var(--canvas-accent);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: .16em;
 }
@@ -195,33 +207,44 @@ h3, h4, p {
 
 h3 {
   font-size: clamp(20px, 3vw, 26px);
-  letter-spacing: -.04em;
+  letter-spacing: -.03em;
+  color: #0f172a;
 }
 
 .focus-question {
   max-width: 45%;
   padding: 10px 14px;
   color: var(--canvas-muted);
-  background: rgba(255,255,255,.7);
+  background: #f8fafc;
+  border: 1px solid var(--canvas-line);
   border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .takeaway {
   display: flex;
   gap: 14px;
   align-items: center;
-  padding: 13px 16px;
-  background: #12333b;
-  color: #f7fbf9;
+  padding: 14px 18px;
+  background: #f0f9ff;
+  color: #0f172a;
+  border: 1px solid #e0f2fe;
   border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.04);
 }
 
 .takeaway span, .canvas-footer span {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: .09em;
-  color: #78d5c7;
+  letter-spacing: .05em;
+  color: var(--canvas-accent);
+}
+
+.takeaway strong {
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .contrast-board {
@@ -232,32 +255,45 @@ h3 {
 }
 
 .contrast-card, .part-grid article, .frame-track article, .step-card {
-  padding: 15px;
-  background: rgba(255,255,255,.76);
+  padding: 18px;
+  background: #ffffff;
   border: 1px solid var(--canvas-line);
   border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.contrast-card:hover, .part-grid article:hover, .frame-track article:hover, .step-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
 }
 
 .contrast-card h4, .part-grid h4, .step-card h4, .frame-track h4 {
   margin-bottom: 8px;
   font-size: 16px;
+  color: #0f172a;
 }
 
 .contrast-card p, .part-grid p, .step-card p, .frame-track p {
   color: var(--canvas-muted);
-  line-height: 1.5;
+  line-height: 1.6;
+  font-size: 14px;
 }
 
 .contrast-card ul {
   margin: 12px 0;
   padding-left: 18px;
-  color: var(--canvas-ink);
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .contrast-card small, .part-grid small, .step-card small, .frame-track small {
   display: block;
-  margin-top: 9px;
+  margin-top: 12px;
   color: var(--canvas-accent);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .decision-axis {
@@ -266,40 +302,48 @@ h3 {
 
 .decision-axis span {
   display: inline-block;
-  margin-bottom: 8px;
-  padding: 5px 10px;
-  color: var(--canvas-accent);
-  background: #dff4ef;
+  margin-bottom: 10px;
+  padding: 6px 12px;
+  color: #ffffff;
+  background: var(--canvas-accent);
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
 }
 
 .decision-axis p {
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
+  color: #475569;
 }
 
 .board-result {
   grid-column: 1 / -1;
-  padding: 12px 15px;
-  color: #914728;
-  background: #fff0e7;
-  border-radius: 13px;
+  padding: 14px 18px;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1px solid var(--canvas-line);
+  border-radius: 14px;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .journey-goal, .initial-state, .subject-core {
-  padding: 11px 15px;
-  color: var(--canvas-accent);
-  font-weight: 650;
-  background: #e8f5f1;
-  border-radius: 13px;
+  padding: 14px 18px;
+  color: #0f172a;
+  font-weight: 600;
+  background: #f0f9ff;
+  border: 1px solid #e0f2fe;
+  border-radius: 14px;
+  font-size: 15px;
 }
 
 .journey-board ol {
   display: flex;
-  gap: 10px;
-  margin: 14px 0;
+  gap: 12px;
+  margin: 18px 0;
   padding: 0;
   list-style: none;
 }
@@ -312,65 +356,73 @@ h3 {
 .step-index {
   display: inline-grid;
   place-items: center;
-  width: 27px;
-  height: 27px;
-  margin: 0 0 -10px 13px;
+  width: 28px;
+  height: 28px;
+  margin: 0 0 -12px 14px;
   position: relative;
   z-index: 1;
   color: #fff;
   background: var(--canvas-accent);
   border-radius: 99px;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 4px 8px rgba(2, 132, 199, 0.3);
 }
 
 .step-card {
-  min-height: 122px;
+  min-height: 130px;
 }
 
 .step-card em, .frame-track em {
   display: block;
-  margin-top: 9px;
-  color: #a45233;
-  font-size: 12px;
+  margin-top: 12px;
+  color: var(--canvas-warm);
+  font-size: 13px;
   font-style: normal;
+  font-weight: 500;
 }
 
 .part-grid, .frame-track {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 10px;
-  margin: 14px 0;
+  gap: 12px;
+  margin: 18px 0;
 }
 
 .part-grid strong, .frame-track strong {
   display: block;
-  margin-bottom: 7px;
+  margin-bottom: 8px;
   color: var(--canvas-accent);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .canvas-footer {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding-top: 3px;
+  gap: 12px;
+  padding-top: 6px;
 }
 
 .canvas-footer div {
-  min-height: 84px;
-  padding: 13px 14px;
-  background: rgba(255,255,255,.64);
-  border-radius: 14px;
+  min-height: 90px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid var(--canvas-line);
+  border-radius: 16px;
+  transition: background 0.3s ease;
 }
 
-.canvas-footer span {
-  color: var(--canvas-accent);
+.canvas-footer div:hover {
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.03);
 }
 
 .canvas-footer p {
-  margin-top: 7px;
+  margin-top: 8px;
   color: var(--canvas-muted);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .canvas-footer .pitfall span {
@@ -378,10 +430,11 @@ h3 {
 }
 
 .compact {
-  gap: 12px;
-  padding: 15px;
+  gap: 14px;
+  padding: 16px;
   border: 0;
   border-radius: 0;
+  box-shadow: none;
 }
 
 .compact .canvas-header {
@@ -398,6 +451,7 @@ h3 {
 
 .compact .journey-board ol {
   overflow-x: auto;
+  padding-bottom: 12px;
 }
 
 @media (max-width: 640px) {
@@ -422,6 +476,7 @@ h3 {
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
+    transition: none !important;
   }
 }
 </style>
