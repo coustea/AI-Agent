@@ -9,9 +9,8 @@ import { ref } from 'vue'
 import OnboardingDialog from '@/components/OnboardingDialog.vue'
 
 const visible = ref(true)
-
+//预览样式使用的vue（最终需要删除）
 const handleSuccess = () => {
-  // 预览模式下关闭后自动重新打开，方便重复调试样式
   setTimeout(() => {
     visible.value = true
   }, 500)
