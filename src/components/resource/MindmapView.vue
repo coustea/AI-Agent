@@ -25,12 +25,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
-
-import { Markmap } from 'markmap-view'
-
-import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
-
 import { Transformer } from 'markmap-lib'
+import { Markmap } from 'markmap-view'
+import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -38,7 +35,11 @@ const props = defineProps<{
 }>()
 
 const markmapRef = ref<HTMLElement | null>(null)
+let markmapInstance: Markmap | null = null
 
+const transformer = new Transformer()
+
+// 提取 Markdown 内容
 const markdownContent = computed<string>(() => {
   if (!props.resultData) return ''
   if (typeof props.resultData === 'string') return props.resultData
@@ -82,22 +83,7 @@ const markdownContent = computed<string>(() => {
   return ''
 })
 
-let markmapInstance: Markmap | null = null
-
-const transformer = new Transformer()
-
-watch(markdownContent, (content) => {
-  renderMarkmap(content)
-}, { immediate: true })
-
-onMounted(() => {
-  if (markdownContent.value) {
-    renderMarkmap(markdownContent.value)
-  }
-})
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
-
+// 渲染 markmap
 const renderMarkmap = async (content: string) => {
   if (!content.trim() || !markmapRef.value) return
 
@@ -154,6 +140,16 @@ const renderMarkmap = async (content: string) => {
     }
   }
 }
+
+watch(markdownContent, (content) => {
+  renderMarkmap(content)
+}, { immediate: true })
+
+onMounted(() => {
+  if (markdownContent.value) {
+    renderMarkmap(markdownContent.value)
+  }
+})
 </script>
 
 <style scoped>

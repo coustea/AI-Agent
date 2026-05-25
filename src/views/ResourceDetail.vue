@@ -107,55 +107,54 @@
       </main>
     </template>
 
+    <el-dialog
+        v-model="previewVisible"
+        :title="previewTitle"
+        width="78%"
+        top="6vh"
+        destroy-on-close
+        class="resource-preview-dialog"
+    >
+      <div v-if="previewItem" class="preview-dialog-body">
+        <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem" />
+        <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem" />
+        <MarkdownView v-else-if="previewItem.type === 'diagram'" :result-data="previewItem" />
+        <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
+        <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem" />
+        <PptView v-else-if="previewItem.type === 'ppt'" :result-data="previewItem" />
+        <MarkdownView v-else :result-data="previewItem" />
+      </div>
+    </el-dialog>
+  </div>
+</template>
+
 <script setup lang="ts">
-import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, VideoPlay, Monitor, Share, Download } from '@element-plus/icons-vue'
-
 import { computed, ref, onMounted } from 'vue'
-
-import { ElMessage } from 'element-plus'
-
 import { useRoute, useRouter } from 'vue-router'
-
-import CodeView from '@/components/resource/CodeView.vue'
-
-import MarkdownView from '@/components/resource/MarkdownView.vue'
-
+import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, VideoPlay, Monitor, Share, Download } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { getGeneratedResourceDetail } from '@/api/ai'
+import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
 import MindmapView from '@/components/resource/MindmapView.vue'
-
+import MarkdownView from '@/components/resource/MarkdownView.vue'
+import QuizView from '@/components/resource/QuizView.vue'
+import CodeView from '@/components/resource/CodeView.vue'
+import ReadingView from '@/components/resource/ReadingView.vue'
 import PptView from '@/components/resource/PptView.vue'
 
-import QuizView from '@/components/resource/QuizView.vue'
-
-import ReadingView from '@/components/resource/ReadingView.vue'
-
-import { getGeneratedResourceDetail } from '@/api/ai'
-
-import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
-
 const route = useRoute()
-
 const router = useRouter()
 
 const loading = ref(true)
-
 const error = ref(false)
-
 const resource = ref<GeneratedResourceBundle | null>(null)
-
 const previewVisible = ref(false)
-
 const previewItem = ref<ResourceItemDetail | null>(null)
 
 const previewTitle = computed(() => {
   if (!previewItem.value) return '资源预览'
   return previewItem.value.title || `${getAgentTypeName(previewItem.value.type)}资源`
 })
-
-onMounted(() => {
-  loadResource()
-})
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const loadResource = async () => {
   const resourceId = Number(route.params.id)
@@ -247,6 +246,7 @@ const openResourcePreview = (item: ResourceItemDetail) => {
   previewVisible.value = true
 }
 
+// === 核心：导出资源到本地并支持选择路径的逻辑 ===
 const exportToLocal = async (item: ResourceItemDetail) => {
   if (!hasPreviewContent(item)) {
     ElMessage.warning('暂无可导出的内容')
@@ -345,6 +345,10 @@ const formatTime = (time: string | null) => {
   }
   return `${date.getMonth() + 1}月${date.getDate()}日`
 }
+
+onMounted(() => {
+  loadResource()
+})
 </script>
 
 <style scoped>

@@ -38,8 +38,85 @@
                   <span class="score-unit">综合评分</span>
                 </div>
               </template>
+            </el-progress>
+            <el-tag :type="scoreTagType" effect="dark" round>{{ scoreLabel }}</el-tag>
+          </section>
+        </el-col>
+
+        <el-col :xs="24" :lg="16">
+          <section class="metrics-grid">
+            <el-card v-for="metric in displayMetrics" :key="metric.label" shadow="never" class="metric-card">
+              <template #header>
+                <div class="metric-header">
+                  <span>{{ metric.label }}</span>
+                  <el-icon><DataAnalysis /></el-icon>
+                </div>
+              </template>
+              <div class="metric-body">
+                <strong>{{ metric.value }}</strong>
+                <span>{{ trendLabel(metric.trend) }}</span>
+              </div>
+            </el-card>
+          </section>
+        </el-col>
+      </el-row>
+
+      <section class="eval-sections">
+        <div class="section-box">
+          <div class="section-header">
+            <h3 class="section-title"><el-icon><Calendar /></el-icon> 近期学习记录</h3>
+            <el-tag size="small" type="info">{{ summary?.event_count || 0 }} 条信号</el-tag>
+          </div>
+
+          <el-empty v-if="!recentEvents.length" description="暂无学习记录" />
+          <el-table v-else :data="recentEvents" style="width: 100%" border>
+            <el-table-column prop="created_at" label="时间" width="170">
+              <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column prop="event_type" label="类型" width="140">
+              <template #default="{ row }">{{ eventLabel(row.event_type) }}</template>
+            </el-table-column>
+            <el-table-column label="主题">
+              <template #default="{ row }">{{ row.topic || row.course || '未标注' }}</template>
+            </el-table-column>
+            <el-table-column prop="score" label="得分" width="100">
+              <template #default="{ row }">
+                <span class="score-cell" :class="{ weak: row.score !== null && row.score < 65 }">
+                  {{ row.score ?? '-' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="feedback" label="反馈" min-width="180" show-overflow-tooltip />
+          </el-table>
+        </div>
+
+        <div class="insight-grid">
+          <section class="section-box highlight">
+            <h3 class="section-title"><el-icon><Medal /></el-icon> 优化建议</h3>
+            <div class="ai-report">
+              <p v-for="item in recommendations" :key="item">{{ item }}</p>
+            </div>
+          </section>
+
+          <section class="section-box">
+            <h3 class="section-title"><el-icon><TrendCharts /></el-icon> 关注重点</h3>
+            <div class="tag-group">
+              <el-tag v-for="topic in weakTopics" :key="topic" type="warning">{{ topic }}</el-tag>
+              <el-tag v-if="!weakTopics.length" type="info">等待更多测评数据</el-tag>
+            </div>
+            <div class="tag-group mt-4">
+              <el-tag v-for="resource in preferredResources" :key="resource" type="success">{{ resource }}</el-tag>
+              <el-tag v-if="!preferredResources.length" type="info">偏好尚未稳定</el-tag>
+            </div>
+          </section>
+        </div>
+      </section>
+    </template>
+  </div>
+</template>
 
 <script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
 import {
   Calendar,
   DataAnalysis,
@@ -47,16 +124,31 @@ import {
   RefreshRight,
   TrendCharts,
 } from '@element-plus/icons-vue'
-
-import { computed, onMounted, ref } from 'vue'
-
 import { getEvaluationSummary, type EvaluationSummary, type LearningEventItem } from '@/api/ai'
 
 const loading = ref(false)
-
 const error = ref('')
-
 const summary = ref<EvaluationSummary | null>(null)
+
+const scoreColors = [
+  { color: '#f56c6c', percentage: 40 },
+  { color: '#e6a23c', percentage: 65 },
+  { color: '#5cb87a', percentage: 80 },
+  { color: '#1989fa', percentage: 100 },
+]
+
+const loadSummary = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const res = await getEvaluationSummary()
+    summary.value = res.data.data
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '评估数据加载失败'
+  } finally {
+    loading.value = false
+  }
+}
 
 const score = computed(() => {
   if (!summary.value) return 0
@@ -86,36 +178,9 @@ const displayMetrics = computed(() => summary.value?.metrics ?? [
 ])
 
 const recentEvents = computed<LearningEventItem[]>(() => summary.value?.recent_events ?? [])
-
 const weakTopics = computed(() => summary.value?.weak_topics ?? [])
-
 const preferredResources = computed(() => summary.value?.preferred_resources ?? [])
-
 const recommendations = computed(() => summary.value?.recommendations ?? ['完成一次练习或资源学习后，这里会生成更具体的建议。'])
-
-const scoreColors = [
-  { color: '#f56c6c', percentage: 40 },
-  { color: '#e6a23c', percentage: 65 },
-  { color: '#5cb87a', percentage: 80 },
-  { color: '#1989fa', percentage: 100 },
-]
-
-onMounted(loadSummary)
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
-
-const loadSummary = async () => {
-  loading.value = true
-  error.value = ''
-  try {
-    const res = await getEvaluationSummary()
-    summary.value = res.data.data
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '评估数据加载失败'
-  } finally {
-    loading.value = false
-  }
-}
 
 const trendLabel = (trend: string) => {
   if (trend === 'up') return '提升中'
@@ -145,6 +210,8 @@ const formatDate = (value: string) => {
     minute: '2-digit',
   })
 }
+
+onMounted(loadSummary)
 </script>
 
 <style scoped>

@@ -7,6 +7,7 @@
 export interface TextMessageParams {
     text: string
     need_diagram?: boolean
+    session_id?: string
     history?: Array<{ role: string; content: string }>
     image_urls?: string[]
     file_urls?: string[]
@@ -15,6 +16,14 @@ export interface TextMessageParams {
     generate_video?: boolean
     enable_long_term_memory?: boolean
     speech_rate?: number
+}
+
+export interface DigitalHumanCapabilities {
+    session_id?: string
+    history?: Array<{ role: string; content: string }>
+    enable_search?: boolean
+    generate_video?: boolean
+    enable_long_term_memory?: boolean
 }
 
 export interface StreamExtend {
@@ -33,7 +42,6 @@ export interface DigitalHumanCallbacks {
     onAvatarReady?: (ready: boolean) => void
     onVadStateChange?: (listening: boolean) => void
     onSpeechDetectedChange?: (detected: boolean) => void
-    onDiagramDebug?: (data: { source?: string; need_diagram?: boolean; diagram_generated?: boolean; phase?: string }) => void
     onHistoryCleared?: (data: { session_id: string; deleted_count: number }) => void
 }
 
@@ -252,8 +260,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             }
         } else if (type === 'diagram') {
             callbacks?.onDiagram?.(data.data)
-        } else if (type === 'diagram_debug') {
-            callbacks?.onDiagramDebug?.(data.data || {})
         } else if (type === 'avatar_stopped') {
             isSpeaking.value = false
         } else if (type === 'vad_state') {
@@ -444,15 +450,14 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         const msg: Record<string, unknown> = { type: 'text_input', text: params.text }
         if (typeof params.need_diagram === 'boolean') msg.need_diagram = params.need_diagram
+        if (params.session_id) msg.session_id = params.session_id
         if (params.history?.length) msg.history = params.history
         if (params.image_urls?.length) msg.image_urls = params.image_urls
         if (params.file_urls?.length) msg.file_urls = params.file_urls
         if (params.attachments?.length) msg.attachments = params.attachments
         if (typeof params.enable_search === 'boolean') msg.enable_search = params.enable_search
         if (typeof params.generate_video === 'boolean') msg.generate_video = params.generate_video
-        if (typeof params.enable_long_term_memory === 'boolean') {
-            msg.enable_long_term_memory = params.enable_long_term_memory
-        }
+        if (typeof params.enable_long_term_memory === 'boolean') msg.enable_long_term_memory = params.enable_long_term_memory
         if (typeof params.speech_rate === 'number') msg.speech_rate = params.speech_rate
 
         ws.send(JSON.stringify(msg))
@@ -468,14 +473,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // Voice Activity Detection (VAD) + mic capture
     // ==========================================
 
-    async function startVad(
-        needDiagram = false,
-        capabilities?: {
-            enable_search?: boolean
-            generate_video?: boolean
-            enable_long_term_memory?: boolean
-        },
-    ): Promise<void> {
+    async function startVad(needDiagram = false, capabilities: DigitalHumanCapabilities = {}): Promise<void> {
         if (vadActive) return
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             error.value = '数字人未连接，无法开启语音输入'

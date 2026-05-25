@@ -14,12 +14,9 @@
 </template>
 
 <script setup lang="ts">
-import 'md-editor-v3/lib/preview.css'
-
 import { computed } from 'vue'
-
 import { MdPreview } from 'md-editor-v3'
-
+import 'md-editor-v3/lib/preview.css'
 import { normalizeStreamingMarkdown } from '@/utils/markdown'
 
 const props = withDefaults(defineProps<{
@@ -32,10 +29,7 @@ const props = withDefaults(defineProps<{
 })
 
 const previewId = computed(() => props.id || `md-preview-${Math.random().toString(36).slice(2)}`)
-
 const normalizedContent = computed(() => normalizeStreamingMarkdown(props.content, props.isStreaming))
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>

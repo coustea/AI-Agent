@@ -18,24 +18,196 @@
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
+          </el-input>
+          <el-button 
+            type="primary" 
+            size="large" 
+            class="generate-btn"
+            :loading="isGenerating"
+            @click="generatePath"
+          >
+            生成路径
+          </el-button>
+        </div>
+      </div>
+      <!-- 装饰性背景图或图形 -->
+      <div class="hero-bg-decoration"></div>
+    </section>
+
+    <!-- 骨架屏：生成中 -->
+    <div v-if="isGenerating" class="loading-state">
+      <el-skeleton :rows="3" animated class="skeleton-header" />
+      <div class="skeleton-grid">
+        <el-skeleton-item variant="image" class="skeleton-card" />
+        <el-skeleton-item variant="image" class="skeleton-card" />
+        <el-skeleton-item variant="image" class="skeleton-card" />
+      </div>
+      <p class="loading-text">正在检索高校标准大纲并构建专属技能树...</p>
+    </div>
+
+    <!-- 技能树展示区 -->
+    <div v-else-if="coursePath" class="path-display-section">
+      <div class="path-header">
+        <div class="path-title-group">
+          <h2>{{ coursePath.course_name }} <span class="path-badge">专属学习地图</span></h2>
+          <p class="path-meta">
+            包含 {{ coursePath.total_nodes }} 个核心知识点 · 预计学习时长 {{ coursePath.estimated_hours }} 小时
+          </p>
+        </div>
+        <div class="path-actions">
+          <el-button plain @click="resetPath">重新规划</el-button>
+        </div>
+      </div>
+
+      <!-- 阶段时间线布局 -->
+      <div class="skill-tree-layout">
+        <div 
+          v-for="(phase, index) in coursePath.phases" 
+          :key="index"
+          class="phase-block"
+        >
+          <!-- 阶段标识 -->
+          <div class="phase-indicator">
+            <div class="phase-number">{{ Number(index) + 1 }}</div>
+            <div v-if="index !== coursePath.phases.length - 1" class="phase-line"></div>
+          </div>
+
+          <!-- 阶段内容 -->
+          <div class="phase-content">
+            <h3 class="phase-title">{{ phase.title }}</h3>
+            <p class="phase-desc">{{ phase.description }}</p>
+
+            <!-- 节点卡片网格 -->
+            <div class="nodes-grid">
+              <div 
+                v-for="node in phase.nodes" 
+                :key="node.id"
+                class="node-card"
+                :class="`status-${node.status}`"
+              >
+                <div class="node-header">
+                  <span class="node-title">{{ node.topic_name }}</span>
+                  <el-tag 
+                    :type="getStatusTagType(node.status)" 
+                    size="small" 
+                    effect="light"
+                    class="status-tag"
+                  >
+                    {{ getStatusText(node.status) }}
+                  </el-tag>
+                </div>
+                
+                <div class="node-body">
+                  <p class="node-summary">{{ node.summary }}</p>
+                </div>
+
+                <div class="node-footer">
+                  <el-button 
+                    v-if="node.status === 'available'"
+                    type="primary" 
+                    class="action-btn"
+                    @click="openResourceConfig(node)"
+                  >
+                    配置并生成资源
+                    <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+                  </el-button>
+                  <el-button 
+                    v-else-if="node.status === 'completed'"
+                    type="success" 
+                    plain 
+                    class="action-btn"
+                    @click="viewResource(node)"
+                  >
+                    复习资源
+                  </el-button>
+                  <el-button 
+                    v-else
+                    disabled 
+                    class="action-btn"
+                  >
+                    需完成前置节点
+                    <el-icon class="el-icon--right"><Lock /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 空状态 -->
+    <div v-else class="empty-state">
+      <el-empty description="输入你想学的课程，开启你的专属学习之旅吧！">
+        <template #image>
+          <!-- 这里可以使用一个更好看的插画，为了演示使用默认 -->
+        </template>
+      </el-empty>
+    </div>
+
+    <!-- 微观资源配置抽屉 (Mock) -->
+    <el-drawer
+      v-model="drawerVisible"
+      :title="`正在为「${selectedNode?.topic_name}」配置资源`"
+      direction="rtl"
+      size="40%"
+    >
+      <div class="drawer-content">
+        <el-alert
+          title="你已进入“微观单点突破”模式"
+          type="info"
+          description="系统已自动提取该节点在宏观图谱中的上下文。你可以进一步微调多智能体生成策略。"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 20px;"
+        />
+        
+        <div class="config-form">
+          <div class="config-item">
+            <h4>生成深度</h4>
+            <el-radio-group v-model="configMock.depth">
+              <el-radio-button label="浅尝辄止" />
+              <el-radio-button label="标准掌握" />
+              <el-radio-button label="极客探索" />
+            </el-radio-group>
+          </div>
+          
+          <div class="config-item">
+            <h4>倾向资源类型</h4>
+            <el-checkbox-group v-model="configMock.types">
+              <el-checkbox label="核心概念文档" />
+              <el-checkbox label="思维导图" />
+              <el-checkbox label="代码沙箱实操" />
+              <el-checkbox label="测验题库" />
+            </el-checkbox-group>
+          </div>
+        </div>
+        
+      </div>
+      <template #footer>
+        <div style="flex: auto">
+          <el-button @click="drawerVisible = false">取消</el-button>
+          <el-button type="primary" @click="startGeneration" :loading="isResourceGenerating">
+            呼叫智能体团队开始生成
+          </el-button>
+        </div>
+      </template>
+    </el-drawer>
+  </div>
+</template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { Search, Lock, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
-import { ref } from 'vue'
-
-import { Search, Lock, ArrowRight } from '@element-plus/icons-vue'
-
+// ---- 状态与数据 ----
 const courseGoal = ref('')
-
 const isGenerating = ref(false)
-
 const coursePath = ref<any>(null)
 
 const drawerVisible = ref(false)
-
 const selectedNode = ref<any>(null)
-
 const isResourceGenerating = ref(false)
 
 const configMock = ref({
@@ -43,8 +215,7 @@ const configMock = ref({
   types: ['核心概念文档', '思维导图', '代码沙箱实操', '测验题库']
 })
 
-declare function withDefaults<T, D>(props: T, defaults: D): T;
-
+// ---- 模拟数据生成 ----
 const mockGeneratePath = () => {
   return new Promise((resolve) => {
     setTimeout(() => {
@@ -85,6 +256,7 @@ const mockGeneratePath = () => {
   })
 }
 
+// ---- 方法 ----
 const generatePath = async () => {
   if (!courseGoal.value.trim()) {
     ElMessage.warning('请输入你想学习的课程名称')

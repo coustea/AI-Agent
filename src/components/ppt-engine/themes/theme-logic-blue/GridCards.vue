@@ -11,13 +11,11 @@
 </template>
 
 <script setup lang="ts">
-import type { GridCardsData } from '../../../types/ppt';
+import type { GridCardsData } from '../../types/ppt';
 
 defineProps<{
   data: GridCardsData
 }>();
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>

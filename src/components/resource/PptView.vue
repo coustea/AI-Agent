@@ -19,11 +19,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-
 import { type ResourceArtifactLike, parseJsonObject } from './resourceViewUtils'
-
 import PptPlayer from '../ppt-engine/PptPlayer.vue'
-
 import type { PPTDocument } from '../ppt-engine/types/ppt'
 
 const props = defineProps<{
@@ -31,8 +28,11 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
+// extract and parse the JSON string or object
 const pptDocument = computed<PPTDocument | null>(() => {
-  let content = props.resultData?.content || props.resultData
+  let content = (typeof props.resultData === 'object' && props.resultData !== null)
+    ? (props.resultData as Record<string, any>).content || props.resultData
+    : props.resultData
   if (typeof content === 'string') {
     // maybe wrapped in markdown ```json
     const match = content.match(/```json\s*([\s\S]*?)\s*```/)
@@ -42,8 +42,6 @@ const pptDocument = computed<PPTDocument | null>(() => {
   }
   return parseJsonObject(content) as PPTDocument | null
 })
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>

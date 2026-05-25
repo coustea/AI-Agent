@@ -24,8 +24,8 @@ export function getErrorMessage(error: unknown, fallback = '请求失败，请�
   }
 
   if (Array.isArray(data.detail) && data.detail.length > 0) {
-    return data.detail
-      .map((item: { loc?: string[]; msg?: string }) => {
+    return (data.detail as any[])
+      .map((item) => {
         const field = Array.isArray(item?.loc) ? item.loc.slice(1).join('.') : ''
         const message = item?.msg || String(item)
         return field ? `${field}: ${message}` : message

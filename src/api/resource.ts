@@ -15,7 +15,7 @@ function parseSseFrames(raw: string): { frames: string[]; rest: string } {
   return { frames: parts, rest }
 }
 
-export type ResourceAgentId = 'content' | 'mindmap' | 'knowledge_graph' | 'quiz' | 'reading' | 'code'
+export type ResourceAgentId = 'content' | 'mindmap' | 'knowledge_graph' | 'quiz' | 'reading' | 'code' | 'ppt' | 'video'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study'
 

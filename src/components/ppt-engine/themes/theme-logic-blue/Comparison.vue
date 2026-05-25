@@ -34,13 +34,11 @@
 </template>
 
 <script setup lang="ts">
-import type { ComparisonData } from '../../../types/ppt';
+import type { ComparisonData } from '../../types/ppt';
 
 defineProps<{
   data: ComparisonData
 }>();
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>

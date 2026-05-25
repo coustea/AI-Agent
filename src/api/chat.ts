@@ -11,11 +11,23 @@ export interface AttachmentInfo {
   name: string
 }
 
+export interface TeachingDiagram {
+  type: 'contrast' | 'journey' | 'anatomy' | 'simulation'
+  title: string
+  focus_question: string
+  takeaway: string
+  why_it_works: string
+  pitfall?: string | null
+  try_it: string
+  personalization_note?: string | null
+  payload: any
+}
+
 export interface ChatMessageItem {
   role: string
   content: string
   attachments: AttachmentInfo[] | null
-  knowledge_graph: Record<string, unknown> | null
+  teaching_diagram: TeachingDiagram | null
   created_at: string | null
 }
 
@@ -38,7 +50,7 @@ export interface StreamChatParams {
   session_id?: string
   image_urls?: string[]
   file_urls?: string[]
-  need_knowledge_graph?: boolean
+  need_teaching_diagram?: boolean
   generate_video?: boolean
   enable_search?: boolean
   enable_long_term_memory?: boolean
@@ -48,7 +60,7 @@ export interface StreamChatHistoryItem {
   role: 'user' | 'assistant' | 'ai' | 'system'
   content: string
   attachments?: AttachmentInfo[] | null
-  knowledge_graph?: Record<string, unknown> | null
+  teaching_diagram?: TeachingDiagram | null
 }
 
 export interface StreamChatEvent {
@@ -147,8 +159,8 @@ export function streamChat(
   if (params.file_urls && params.file_urls.length > 0) {
     formData.append('file_urls', params.file_urls.join(','))
   }
-  if (params.need_knowledge_graph != null) {
-    formData.append('need_knowledge_graph', String(Boolean(params.need_knowledge_graph)))
+  if (params.need_teaching_diagram != null) {
+    formData.append('need_teaching_diagram', String(Boolean(params.need_teaching_diagram)))
   }
   if (params.generate_video != null) {
     formData.append('generate_video', String(Boolean(params.generate_video)))

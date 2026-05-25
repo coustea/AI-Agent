@@ -17,13 +17,11 @@
 </template>
 
 <script setup lang="ts">
-import type { CoverData } from '../../../types/ppt';
+import type { CoverData } from '../../types/ppt';
 
 defineProps<{
   data: CoverData
 }>();
-
-declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>

@@ -44,8 +44,51 @@
               <template #placeholder>
                 <div class="image-placeholder"><el-icon class="is-loading"><Loading /></el-icon></div>
               </template>
+            </el-image>
+            <div v-else class="image-placeholder empty">
+              <el-icon><Picture /></el-icon>
+              <span>图像资源待渲染</span>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="agentId === 'video'" class="video-card-body">
+          <div class="video-preview-placeholder">
+            <div class="video-overlay">
+              <el-icon class="play-icon"><VideoPlay /></el-icon>
+            </div>
+            <el-icon class="video-bg-icon"><VideoCamera /></el-icon>
+            <div class="video-badge">视频脚本已就绪</div>
+          </div>
+        </div>
+        <pre v-else class="fallback-json"><code>{{ JSON.stringify(resultData || {}, null, 2) }}</code></pre>
+      </div>
+    </div>
+
+    <section class="res-usage-row">
+      <div>
+        <b>使用建议</b>
+        <span>{{ usageHint }}</span>
+      </div>
+    </section>
+
+    <footer class="res-footer">
+      <button class="card-btn-primary" @click="handlePreview">查看详情</button>
+      <button class="card-btn-secondary" @click="handleDownload">下载资源</button>
+    </footer>
+  </article>
+</template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { Picture, VideoCamera, VideoPlay, Loading } from '@element-plus/icons-vue'
+import { recordLearningEvent } from '@/api/ai'
+import MindmapView from '@/components/resource/MindmapView.vue'
+import MarkdownView from '@/components/resource/MarkdownView.vue'
+import QuizView from '@/components/resource/QuizView.vue'
+import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
+import CodeView from '@/components/resource/CodeView.vue'
+import ReadingView from '@/components/resource/ReadingView.vue'
+import PptView from '@/components/resource/PptView.vue'
 import {
   getFileCategory,
   getFileName,
@@ -53,26 +96,6 @@ import {
   getMarkdownContent,
   normalizeReadingArtifact,
 } from '@/components/resource/resourceViewUtils'
-
-import { computed } from 'vue'
-
-import { DataBoard, Picture, VideoCamera, VideoPlay, Loading } from '@element-plus/icons-vue'
-
-import CodeView from '@/components/resource/CodeView.vue'
-
-import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
-
-import MarkdownView from '@/components/resource/MarkdownView.vue'
-
-import MindmapView from '@/components/resource/MindmapView.vue'
-
-import PptView from '@/components/resource/PptView.vue'
-
-import QuizView from '@/components/resource/QuizView.vue'
-
-import ReadingView from '@/components/resource/ReadingView.vue'
-
-import { recordLearningEvent } from '@/api/ai'
 
 const props = defineProps<{
   agentId: string
@@ -82,33 +105,21 @@ const props = defineProps<{
   resultData?: any
 }>()
 
-const emit = defineEmits(['preview'])
-
+const stepOrder = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading']
 const stepNumber = computed(() => {
   const idx = stepOrder.indexOf(props.agentId)
   return idx !== -1 ? idx + 1 : null
 })
 
+const emit = defineEmits(['preview'])
+
 const fileUrl = computed(() => getFileUrl(props.resultData))
-
 const fileCategory = computed(() => getFileCategory(fileUrl.value))
-
 const isMarkdownAgent = computed(() => ['content', 'reading', 'code'].includes(props.agentId))
 
 const imageUrl = computed(() => {
   if (props.agentId !== 'image' || !props.resultData) return ''
   return props.resultData.image_url || props.resultData.url || ''
-})
-
-const pptSlideCount = computed<number>(() => {
-  if (props.agentId !== 'ppt' || !props.resultData) return 0
-  const count = props.resultData.slide_count
-  return typeof count === 'number' ? count : parseInt(String(count)) || 0
-})
-
-const pptSlideTitles = computed(() => {
-  if (props.agentId !== 'ppt' || !props.resultData) return []
-  return Array.isArray(props.resultData.slide_titles) ? props.resultData.slide_titles : []
 })
 
 const pptFileName = computed(() => {
@@ -200,9 +211,7 @@ const toneClass = computed(() => {
   return toneMap[props.agentId] || 'tone-blue'
 })
 
-const stepOrder = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading']
 
-declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const handlePreview = () => {
   recordLearningEvent({

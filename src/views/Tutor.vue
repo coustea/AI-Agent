@@ -418,7 +418,6 @@
         <div class="preview-content">
           <TeachingDiagramView :diagram="teachingDiagramPreviewData" />
         </div>
-        
         <div class="preview-footer">
           <el-button type="primary" plain @click="copyTeachingDiagramJson(teachingDiagramPreviewData)">复制图解 JSON</el-button>
           <el-button @click="teachingDiagramPreviewVisible = false">关闭</el-button>
@@ -830,14 +829,14 @@ const digitalHumanStatusText = computed(() => {
 const teachingDiagramPreviewVisible = ref(false)
 const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
 
-const previewTeachingDiagram = (graph: TeachingDiagram) => {
-  teachingDiagramPreviewData.value = graph
+const previewTeachingDiagram = (diagram: TeachingDiagram) => {
+  teachingDiagramPreviewData.value = diagram
   teachingDiagramPreviewVisible.value = true
 }
 
-const copyTeachingDiagramJson = async (graph: TeachingDiagram) => {
-  if (graph) {
-    await copyToClipboard(JSON.stringify(graph, null, 2))
+const copyTeachingDiagramJson = async (diagram: TeachingDiagram) => {
+  if (diagram) {
+    await copyToClipboard(JSON.stringify(diagram, null, 2))
     ElMessage.success({ message: '图解说明 JSON 已复制', plain: true })
   }
 }
@@ -1388,6 +1387,8 @@ const removeAttachment = (idx: number) => {
 }
 
 const getAvatarCapabilities = () => ({
+  session_id: currentSessionId.value,
+  history: buildStreamHistory().map(item => ({ role: item.role, content: item.content })),
   enable_search: enableWebSearch.value,
   generate_video: generateVideo.value,
   enable_long_term_memory: false,
@@ -1413,6 +1414,20 @@ const handleVideoToggle = () => {
   }
 }
 
+const ensureCurrentSession = async () => {
+  if (currentSessionId.value) return true
+  try {
+    const res = await createSession()
+    const session = res.data.data
+    currentSessionId.value = session.id
+    sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
+    return true
+  } catch {
+    ElMessage.error({ message: '创建会话失败，请重试', plain: true })
+    return false
+  }
+}
+
 const handleVoiceToggle = async () => {
   if (chatMode.value === 'digital_human') {
     if (isVadListening.value) {
@@ -1421,6 +1436,7 @@ const handleVoiceToggle = async () => {
       hasSpeechDetected.value = true
       startAsrProcessing(8000)
     } else {
+      if (!await ensureCurrentSession()) return
       await startVad(needTeachingDiagram.value, getAvatarCapabilities())
       isRecording.value = isVadListening.value
       clearAsrProcessing()
@@ -1437,6 +1453,7 @@ const handleVoiceToggle = async () => {
 
 const handleVoiceChatToggle = async () => {
   if (!isVoiceChatting.value) {
+    if (!await ensureCurrentSession()) return
     isVoiceChatting.value = true
     chatMode.value = 'digital_human'
     await connectAvatar()
@@ -1484,15 +1501,7 @@ const handleSend = async () => {
     return
   }
 
-  if (!currentSessionId.value) {
-    try {
-      const res = await createSession()
-      const session = res.data.data
-      currentSessionId.value = session.id
-      sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
-    } catch {
-    }
-  }
+  if (!await ensureCurrentSession()) return
 
   if (currentSessionId.value && text) {
     const session = sessions.value.find(s => s.id === currentSessionId.value)
@@ -1604,13 +1613,10 @@ const handleSend = async () => {
     }
     sendAvatarText({
       text: text || '请分析附件',
-      history: streamHistory.map(item => ({ role: item.role, content: item.content })),
       need_diagram: shouldGenerateTeachingDiagram,
       image_urls: imageUrls.length > 0 ? imageUrls : undefined,
       file_urls: fileUrls.length > 0 ? fileUrls : undefined,
-      enable_search: enableWebSearch.value,
-      generate_video: generateVideo.value,
-      enable_long_term_memory: false,
+      ...getAvatarCapabilities(),
       speech_rate: avatarSpeechRate.value,
     })
     return
@@ -1796,7 +1802,6 @@ onBeforeUnmount(() => {
 .search-status-text {
   animation: pulse-text 1.5s infinite ease-in-out;
 }
-
 .tutor-dashboard {
   display: flex;
   flex-direction: column;
@@ -2080,7 +2085,7 @@ onBeforeUnmount(() => {
   width: min(100%, 680px);
   max-width: 100%;
   background: var(--color-surface);
-  border: 1px solid #d9e8e6;
+  border: 1px solid var(--color-surface-hover);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
@@ -2096,11 +2101,11 @@ onBeforeUnmount(() => {
   top: 0; left: -150%; width: 50%; height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
   transform: skewX(-20deg);
-  animation: kg-shimmer 2.5s infinite ease-in-out;
+  animation: diagram-shimmer 2.5s infinite ease-in-out;
   pointer-events: none;
 }
 
-@keyframes kg-shimmer {
+@keyframes diagram-shimmer {
   100% { left: 150%; }
 }
 
@@ -2123,35 +2128,31 @@ onBeforeUnmount(() => {
 }
 
 .diagram-draft-grid {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-2);
+  border-radius: var(--radius-md);
 }
 
 .diagram-draft-grid span {
-  flex: 1;
-  height: 48px;
-  padding: 14px;
-  color: transparent;
-  background: #e7f2f0;
+  padding: var(--space-3);
   border-radius: var(--radius-md);
-  animation: pulse-bg 1.5s infinite alternate;
-}
-
-.diagram-draft-grid span:nth-child(2) { animation-delay: .25s; }
-.diagram-draft-grid span:nth-child(3) { animation-delay: .5s; }
-
-@keyframes pulse-bg {
-  0% { opacity: 0.4; }
-  100% { opacity: 1; }
+  background: rgba(20, 184, 166, 0.08);
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-size: 0.84rem;
 }
 
 .msg-teaching-diagram {
   margin-top: var(--space-3);
-  background: #f1f8f7;
-  border: 1px solid #d9e8e6;
-  border-radius: 24px;
-  overflow: hidden;
-  width: min(100%, 760px);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(5, 150, 105, 0.08), transparent 30%),
+    var(--color-surface);
+  border: 1px solid var(--color-surface-hover);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  width: min(100%, 680px);
   max-width: 100%;
   cursor: pointer;
   transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
@@ -2160,15 +2161,8 @@ onBeforeUnmount(() => {
 
 .msg-teaching-diagram:hover {
   transform: translateY(-2px);
-  border-color: #b2dcd4;
+  border-color: var(--color-surface-hover);
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
-}
-
-.direct-graph-text {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  padding: var(--space-3) 0;
-  line-height: 1.5;
 }
 
 /* 预览对话框样式 */
@@ -2186,7 +2180,18 @@ onBeforeUnmount(() => {
 }
 
 .preview-content {
-  width: 100%;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    var(--color-bg);
+  background-size: 28px 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
 }
 
 .preview-footer {
