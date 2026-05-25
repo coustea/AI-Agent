@@ -82,20 +82,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, nextTick, watch } from 'vue'
-import { Timer, Warning, EditPen } from '@element-plus/icons-vue'
-import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
+
+import { computed, onMounted, nextTick, watch } from 'vue'
+
 import { ElMessage } from 'element-plus'
-import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
+
+import { Timer, Warning, EditPen } from '@element-plus/icons-vue'
+
+import hljs from 'highlight.js'
+
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
   compact?: boolean
 }>()
 
-// 提取并解包数据
 const parsedData = computed(() => {
   if (!props.resultData) return null
   
@@ -129,7 +134,6 @@ const parsedData = computed(() => {
   return null
 })
 
-// 决定显示 Markdown 还是纯代码
 const displayMarkdown = computed(() => {
   const data = parsedData.value
   if (!data) return ''
@@ -165,6 +169,14 @@ const hasComplexity = computed(() => {
   const c = parsedData.value?.complexity
   return !!(c?.time || c?.space)
 })
+
+watch(parsedData, performHighlight)
+
+watch(pureCode, performHighlight)
+
+onMounted(performHighlight)
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const performHighlight = async () => {
   await nextTick()
@@ -214,10 +226,6 @@ const handleMessageClick = (e: MouseEvent) => {
     }
   }
 }
-
-onMounted(performHighlight)
-watch(parsedData, performHighlight)
-watch(pureCode, performHighlight)
 </script>
 
 <style scoped>

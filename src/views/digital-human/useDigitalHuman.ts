@@ -7,9 +7,13 @@
 export interface TextMessageParams {
     text: string
     need_diagram?: boolean
+    history?: Array<{ role: string; content: string }>
     image_urls?: string[]
     file_urls?: string[]
     attachments?: Array<{ url: string; type: string }>
+    enable_search?: boolean
+    generate_video?: boolean
+    enable_long_term_memory?: boolean
     speech_rate?: number
 }
 
@@ -440,9 +444,15 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         const msg: Record<string, unknown> = { type: 'text_input', text: params.text }
         if (typeof params.need_diagram === 'boolean') msg.need_diagram = params.need_diagram
+        if (params.history?.length) msg.history = params.history
         if (params.image_urls?.length) msg.image_urls = params.image_urls
         if (params.file_urls?.length) msg.file_urls = params.file_urls
         if (params.attachments?.length) msg.attachments = params.attachments
+        if (typeof params.enable_search === 'boolean') msg.enable_search = params.enable_search
+        if (typeof params.generate_video === 'boolean') msg.generate_video = params.generate_video
+        if (typeof params.enable_long_term_memory === 'boolean') {
+            msg.enable_long_term_memory = params.enable_long_term_memory
+        }
         if (typeof params.speech_rate === 'number') msg.speech_rate = params.speech_rate
 
         ws.send(JSON.stringify(msg))
@@ -458,7 +468,14 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // Voice Activity Detection (VAD) + mic capture
     // ==========================================
 
-    async function startVad(needDiagram = false): Promise<void> {
+    async function startVad(
+        needDiagram = false,
+        capabilities?: {
+            enable_search?: boolean
+            generate_video?: boolean
+            enable_long_term_memory?: boolean
+        },
+    ): Promise<void> {
         if (vadActive) return
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             error.value = '数字人未连接，无法开启语音输入'
@@ -469,7 +486,11 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         try {
             // Tell backend to prepare VAD/ASR queue and carry diagram preference atomically.
             backendVadReady = false
-            ws.send(JSON.stringify({ type: 'start_vad', need_diagram: !!needDiagram }))
+            ws.send(JSON.stringify({
+                type: 'start_vad',
+                need_diagram: !!needDiagram,
+                ...capabilities,
+            }))
 
             audioStream = await navigator.mediaDevices.getUserMedia({
                 audio: {

@@ -45,16 +45,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
+
+import { computed } from 'vue'
+
 import { GraphChart } from 'echarts/charts'
+
 import { LegendComponent, TooltipComponent } from 'echarts/components'
 
-use([CanvasRenderer, GraphChart, TooltipComponent, LegendComponent])
+import { use } from 'echarts/core'
 
-type LayoutMode = 'force' | 'radial' | 'hierarchy'
+import VChart from 'vue-echarts'
+
+type GraphEdge = {
+  source: string
+  target: string
+  relation_type?: string
+  label?: string
+}
 
 type GraphNode = {
   id: string
@@ -68,13 +76,6 @@ type GraphNode = {
   level?: number
 }
 
-type GraphEdge = {
-  source: string
-  target: string
-  relation_type?: string
-  label?: string
-}
-
 type GraphPayload = {
   topic: string
   summary: string
@@ -86,23 +87,12 @@ type GraphPayload = {
   neo4j?: { stored?: boolean; graph_id?: string; reason?: string; error?: string }
 }
 
+type LayoutMode = 'force' | 'radial' | 'hierarchy'
+
 const props = defineProps<{
   resultData?: any
   compact?: boolean
 }>()
-
-const unwrapPayload = (input: any): any => {
-  if (!input) return {}
-  if (typeof input === 'string') {
-    try {
-      return JSON.parse(input)
-    } catch {
-      return {}
-    }
-  }
-  if (input.content != null) return unwrapPayload(input.content)
-  return input
-}
 
 const graph = computed<GraphPayload>(() => {
   const raw = unwrapPayload(props.resultData)
@@ -120,37 +110,6 @@ const graph = computed<GraphPayload>(() => {
     neo4j: raw.neo4j || props.resultData?.metadata?.neo4j || {},
   }
 })
-
-const normalizeLayoutMode = (value: unknown): LayoutMode => {
-  if (value === 'radial' || value === 'hierarchy') return value
-  return 'force'
-}
-
-const nodeLabel = (node: GraphNode | undefined) => node?.label || node?.name || node?.id || ''
-
-const categories = [
-  { name: '核心', itemStyle: { color: '#2563eb' } },
-  { name: '重要', itemStyle: { color: '#059669' } },
-  { name: '补充', itemStyle: { color: '#64748b' } },
-  { name: '薄弱', itemStyle: { color: '#d97706' } },
-]
-
-const categoryName = (node: GraphNode) => {
-  if (node.is_weak || node.category === 'weak') return '薄弱'
-  if (node.category === 'core' || node.importance === 'core') return '核心'
-  if (node.category === 'supplementary' || node.importance === 'supplementary') return '补充'
-  return '重要'
-}
-
-const relationLabel = (edge: GraphEdge) => {
-  const map: Record<string, string> = {
-    prerequisite: '前置',
-    extends: '扩展',
-    includes: '包含',
-    related: '相关',
-  }
-  return edge.label || map[String(edge.relation_type || 'related')] || '相关'
-}
 
 const nodeById = computed(() => {
   const map = new Map<string, GraphNode>()
@@ -184,18 +143,6 @@ const levelGroups = computed(() => {
   })
   return groups
 })
-
-const hierarchyPosition = (node: GraphNode, index: number) => {
-  const level = Math.max(0, Number(node.level ?? 0))
-  const group = levelGroups.value.get(level) || [node]
-  const offset = group.findIndex((item) => item.id === node.id)
-  const column = offset >= 0 ? offset : index
-  const spread = 180
-  return {
-    x: (column - (group.length - 1) / 2) * spread,
-    y: level * 150,
-  }
-}
 
 const chartNodes = computed(() =>
   graph.value.nodes.map((node, index) => {
@@ -385,6 +332,66 @@ const neo4jText = computed(() => {
   if (meta.reason || meta.error) return 'JSON 渲染'
   return ''
 })
+
+use([CanvasRenderer, GraphChart, TooltipComponent, LegendComponent])
+
+const categories = [
+  { name: '核心', itemStyle: { color: '#2563eb' } },
+  { name: '重要', itemStyle: { color: '#059669' } },
+  { name: '补充', itemStyle: { color: '#64748b' } },
+  { name: '薄弱', itemStyle: { color: '#d97706' } },
+]
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
+
+const unwrapPayload = (input: any): any => {
+  if (!input) return {}
+  if (typeof input === 'string') {
+    try {
+      return JSON.parse(input)
+    } catch {
+      return {}
+    }
+  }
+  if (input.content != null) return unwrapPayload(input.content)
+  return input
+}
+
+const normalizeLayoutMode = (value: unknown): LayoutMode => {
+  if (value === 'radial' || value === 'hierarchy') return value
+  return 'force'
+}
+
+const nodeLabel = (node: GraphNode | undefined) => node?.label || node?.name || node?.id || ''
+
+const categoryName = (node: GraphNode) => {
+  if (node.is_weak || node.category === 'weak') return '薄弱'
+  if (node.category === 'core' || node.importance === 'core') return '核心'
+  if (node.category === 'supplementary' || node.importance === 'supplementary') return '补充'
+  return '重要'
+}
+
+const relationLabel = (edge: GraphEdge) => {
+  const map: Record<string, string> = {
+    prerequisite: '前置',
+    extends: '扩展',
+    includes: '包含',
+    related: '相关',
+  }
+  return edge.label || map[String(edge.relation_type || 'related')] || '相关'
+}
+
+const hierarchyPosition = (node: GraphNode, index: number) => {
+  const level = Math.max(0, Number(node.level ?? 0))
+  const group = levelGroups.value.get(level) || [node]
+  const offset = group.findIndex((item) => item.id === node.id)
+  const column = offset >= 0 ? offset : index
+  const spread = 180
+  return {
+    x: (column - (group.length - 1) / 2) * spread,
+    y: level * 150,
+  }
+}
 </script>
 
 <style scoped>

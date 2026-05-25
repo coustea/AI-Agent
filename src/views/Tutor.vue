@@ -177,9 +177,8 @@
                   msg.id === streamingMsgId ? streamDisplayText : msg.content,
                   msg.id === streamingMsgId ? isAIThinking : false,
                   msg.searchStage,
-                  msg.knowledgeGraphGenerating,
-                  msg.knowledgeGraph,
-                  msg.illustrations,
+                  msg.teachingDiagramGenerating,
+                  msg.teachingDiagram,
                   msg.attachments
                 ]"
                 :class="['message-row', msg.role]"
@@ -204,7 +203,7 @@
                       <span class="diagram-spinner"></span>
                       <span class="search-status-text">{{ msg.searchMessage }}</span>
                     </div>
-                    <div v-else-if="isStreamingMessage(msg) && !getDisplayContent(msg) && !msg.knowledgeGraphGenerating" class="thinking-loader">
+                    <div v-else-if="isStreamingMessage(msg) && !getDisplayContent(msg) && !msg.teachingDiagramGenerating" class="thinking-loader">
                       <span class="dot"></span>
                       <span class="dot"></span>
                       <span class="dot"></span>
@@ -214,8 +213,8 @@
                         :content="getDisplayContent(msg)"
                         :is-streaming="isStreamingMessage(msg)"
                     />
-                    <div v-else-if="msg.knowledgeGraphGenerating || msg.knowledgeGraph" class="direct-graph-text" style="color: var(--color-text-secondary); font-size: 0.95rem;">
-                      根据您的需求，直接为您生成了知识图谱 👇
+                    <div v-else-if="msg.teachingDiagramGenerating || msg.teachingDiagram" class="direct-graph-text">
+                      正在把这道问题组织成一张可理解、可复习的图解说明。
                     </div>
                   </template>
                 </div>
@@ -228,40 +227,21 @@
                   </a>
                 </div>
 
-                <div v-if="msg.illustrations && msg.illustrations.length > 0" class="msg-illustrations">
-                  <img
-                      v-for="(img, idx) in msg.illustrations"
-                      :key="`${msg.id}-ill-${idx}`"
-                      :src="img"
-                      alt="AI 图解"
-                      class="illustration-image"
-                  />
-                </div>
-
-                <div v-if="msg.knowledgeGraphGenerating" class="knowledge-graph-generating-premium">
+                <div v-if="msg.teachingDiagramGenerating" class="teaching-diagram-generating">
                   <div class="kg-gen-header">
                     <span class="diagram-spinner"></span>
-                    <span class="kg-gen-title">知识图谱构建中</span>
-                    <span class="kg-gen-subtitle">正在深层分析节点关联与脉络...</span>
+                    <span class="kg-gen-title">图解说明设计中</span>
+                    <span class="kg-gen-subtitle">正在挑选最合适的讲解视角和关键步骤...</span>
                   </div>
-                  <div class="kg-gen-skeleton-area">
-                    <div class="skel-node main"></div>
-                    <div class="skel-edge e1"></div>
-                    <div class="skel-node sub n1"></div>
-                    <div class="skel-edge e2"></div>
-                    <div class="skel-node sub n2"></div>
-                    <div class="skel-edge e3"></div>
-                    <div class="skel-node sub n3"></div>
+                  <div class="diagram-draft-grid">
+                    <span>关键结论</span>
+                    <span>理解路径</span>
+                    <span>快速自测</span>
                   </div>
                 </div>
 
-                <div v-if="msg.knowledgeGraph" class="msg-knowledge-graph" @click="previewKnowledgeGraph(msg.knowledgeGraph)">
-                  <div class="diagram-header">
-                    <span class="diagram-title">{{ msg.knowledgeGraph.topic || '知识图谱' }}</span>
-                    <span class="diagram-type-tag">Graph</span>
-                  </div>
-                  <div class="diagram-summary" v-if="msg.knowledgeGraph.summary">{{ msg.knowledgeGraph.summary }}</div>
-                  <KnowledgeGraphView :result-data="msg.knowledgeGraph" compact />
+                <div v-if="msg.teachingDiagram" class="msg-teaching-diagram" @click="previewTeachingDiagram(msg.teachingDiagram)">
+                  <TeachingDiagramView :diagram="msg.teachingDiagram" compact />
                 </div>
               </div>
             </div>
@@ -308,8 +288,8 @@
                     </button>
                   </el-tooltip>
 
-                  <el-tooltip content="生成图解" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-purple': needKnowledgeGraph }" @click="handleKnowledgeGraphToggle">
+                  <el-tooltip content="生成图解说明" placement="top" :show-after="500">
+                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle">
                       <el-icon><DataLine /></el-icon>
                     </button>
                   </el-tooltip>
@@ -425,28 +405,23 @@
       </transition>
     </div>
 
-    <!-- 知识图谱预览对话框 -->
+    <!-- 教学图解预览 -->
     <el-dialog
-        v-model="knowledgeGraphPreviewVisible"
-        :title="knowledgeGraphPreviewData?.topic || '知识图谱预览'"
-        width="85%"
+        v-model="teachingDiagramPreviewVisible"
+        :title="teachingDiagramPreviewData?.title || '图解说明'"
+        width="min(1080px, 92vw)"
         top="5vh"
         destroy-on-close
         class="diagram-preview-dialog"
     >
-      <div class="diagram-preview-body" v-if="knowledgeGraphPreviewData">
-        <div class="preview-header-meta">
-          <span class="preview-type-tag">Knowledge Graph</span>
-          <p class="preview-summary">{{ knowledgeGraphPreviewData.summary }}</p>
-        </div>
-        
+      <div class="diagram-preview-body" v-if="teachingDiagramPreviewData">
         <div class="preview-content">
-          <KnowledgeGraphView :result-data="knowledgeGraphPreviewData" />
+          <TeachingDiagramView :diagram="teachingDiagramPreviewData" />
         </div>
         
         <div class="preview-footer">
-          <el-button type="primary" plain @click="copyKnowledgeGraphJson(knowledgeGraphPreviewData)">复制图谱 JSON</el-button>
-          <el-button @click="knowledgeGraphPreviewVisible = false">关闭</el-button>
+          <el-button type="primary" plain @click="copyTeachingDiagramJson(teachingDiagramPreviewData)">复制图解 JSON</el-button>
+          <el-button @click="teachingDiagramPreviewVisible = false">关闭</el-button>
         </div>
       </div>
     </el-dialog>
@@ -465,6 +440,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { getErrorMessage } from '@/utils/http'
 import TutorMessageContent from '@/components/TutorMessageContent.vue'
+import TeachingDiagramView from '@/components/chat/TeachingDiagramView.vue'
 
 import { triggerGlobalProfileRefresh } from '@/composables/useGlobalProfile'
 import {
@@ -477,12 +453,12 @@ import {
   getChatHistory,
   type ChatSession,
   type StreamChatHistoryItem,
+  type TeachingDiagram,
 } from '@/api/chat'
 import { getMe } from '@/api/auth'
 import { useLearningTracker } from '@/composables/useLearningTracker'
 import { useDigitalHuman } from '@/views/digital-human/useDigitalHuman'
 import DigitalHumanCanvas from '@/views/digital-human/DigitalHumanCanvas.vue'
-import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
 
 defineOptions({ name: 'Tutor' })
 
@@ -498,31 +474,23 @@ interface Attachment {
   type: string;
   name: string
 }
-interface KnowledgeGraphData {
-  topic: string
-  summary: string
-  nodes: Record<string, unknown>[]
-  edges: Record<string, unknown>[]
-  neo4j?: Record<string, unknown>
-}
-
 interface ChatMsg {
   id: number
   role: 'user' | 'ai'
   content: string
   time: string
   attachments?: Attachment[] | null
-  illustrations?: string[]
-  knowledgeGraph?: KnowledgeGraphData | null
-  knowledgeGraphGenerating?: boolean
+  teachingDiagram?: TeachingDiagram | null
+  teachingDiagramGenerating?: boolean
   searchStage?: string
   searchMessage?: string
 }
 
-const normalizeKnowledgeGraphData = (graph: Record<string, unknown> | null | undefined): KnowledgeGraphData | null => {
-  if (!graph || typeof graph !== 'object') return null
-  if (!Array.isArray(graph.nodes)) return null
-  return graph as unknown as KnowledgeGraphData
+const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): TeachingDiagram | null => {
+  if (!diagram || typeof diagram !== 'object') return null
+  if (!['contrast', 'journey', 'anatomy', 'simulation'].includes(diagram.type)) return null
+  if (!diagram.title || !diagram.payload || typeof diagram.payload !== 'object') return null
+  return diagram
 }
 
 const buildStreamHistory = (): StreamChatHistoryItem[] => {
@@ -533,7 +501,7 @@ const buildStreamHistory = (): StreamChatHistoryItem[] => {
       role: msg.role === 'ai' ? 'assistant' : 'user',
       content: msg.content,
       attachments: msg.attachments || null,
-      knowledge_graph: (msg.knowledgeGraph as Record<string, unknown> | null) || null,
+      teaching_diagram: msg.teachingDiagram || null,
     }))
 }
 
@@ -549,7 +517,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
 const enableWebSearch = ref(false)
-const needKnowledgeGraph = ref(false)
+const needTeachingDiagram = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
 
@@ -557,10 +525,6 @@ const isRecording = ref(false)
 const isVoiceChatting = ref(false)
 const lastAsrText = ref('')
 const hasSpeechDetected = ref(false)
-const debugNeedKnowledgeGraphEnabled = ref(false)
-const debugKnowledgeGraphReceivedAt = ref(0)
-const debugBackendNeedKnowledgeGraph = ref<boolean | null>(null)
-const debugBackendKnowledgeGraphGenerated = ref<boolean | null>(null)
 const lastAsrCommittedText = ref('')
 let lastAsrCommitAt = 0
 
@@ -602,8 +566,6 @@ const {
   },
   onDiagram: (diagram) => {
     if (!diagram) return
-    debugKnowledgeGraphReceivedAt.value = Date.now()
-    debugBackendKnowledgeGraphGenerated.value = true
     const aiMsg = (
       (streamingMsgId.value !== null
         ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
@@ -611,18 +573,9 @@ const {
       || [...messages.value].reverse().find(m => m.role === 'ai')
     )
     if (!aiMsg) return
-    aiMsg.knowledgeGraph = normalizeKnowledgeGraphData(diagram as Record<string, unknown>)
-    aiMsg.knowledgeGraphGenerating = false
+    aiMsg.teachingDiagram = normalizeTeachingDiagram(diagram as TeachingDiagram)
+    aiMsg.teachingDiagramGenerating = false
     scrollToBottom()
-  },
-  onDiagramDebug: (data) => {
-    if (!data) return
-    if (typeof data.need_diagram === 'boolean') {
-      debugBackendNeedKnowledgeGraph.value = data.need_diagram
-    }
-    if (data.phase === 'end' && typeof data.diagram_generated === 'boolean') {
-      debugBackendKnowledgeGraphGenerated.value = data.diagram_generated
-    }
   },
   onAssistantComplete: () => {
     clearAvatarThinkingTimeout()
@@ -633,8 +586,8 @@ const {
       commitStreamTextToMessage(streamingMsgId.value)
     }
     const lastAiMsg = [...messages.value].reverse().find(m => m.role === 'ai')
-    if (lastAiMsg && lastAiMsg.knowledgeGraphGenerating && !lastAiMsg.knowledgeGraph) {
-      lastAiMsg.knowledgeGraphGenerating = false
+    if (lastAiMsg && lastAiMsg.teachingDiagramGenerating && !lastAiMsg.teachingDiagram) {
+      lastAiMsg.teachingDiagramGenerating = false
     }
     isAIThinking.value = false
     streamingMsgId.value = null
@@ -643,15 +596,14 @@ const {
     if (isVoiceChatting.value && chatMode.value === 'digital_human' && isAvatarConnected.value) {
       window.setTimeout(async () => {
         if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
-        await startVad(needKnowledgeGraph.value)
+        await startVad(needTeachingDiagram.value, getAvatarCapabilities())
         isRecording.value = isVadListening.value
       }, 350)
     }
   },
   onAsrResult: (text) => {
     if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
-      setAvatarNeedDiagram(needKnowledgeGraph.value)
-      debugNeedKnowledgeGraphEnabled.value = needKnowledgeGraph.value
+      setAvatarNeedDiagram(needTeachingDiagram.value)
     }
     const normalized = text.replace(/\s+/g, ' ').trim()
     lastAsrText.value = normalized
@@ -675,11 +627,11 @@ const {
         messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
         streamingMsgId.value = aiMsgId
       }
-      if (needKnowledgeGraph.value) {
+      if (needTeachingDiagram.value) {
         const aiMsg = streamingMsgId.value !== null
           ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
           : null
-        if (aiMsg) aiMsg.knowledgeGraphGenerating = true
+        if (aiMsg) aiMsg.teachingDiagramGenerating = true
       }
       isAIThinking.value = true
       scrollToBottom()
@@ -703,7 +655,7 @@ const {
   onError: (msg) => {
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
-    stopKnowledgeGraphGeneratingForCurrentAi()
+    stopTeachingDiagramGeneratingForCurrentAi()
     if (streamingMsgId.value !== null) {
       flushPendingStreamText(true)
       commitStreamTextToMessage(streamingMsgId.value)
@@ -775,7 +727,7 @@ const clearAvatarThinkingTimeout = () => {
   }
 }
 
-const stopKnowledgeGraphGeneratingForCurrentAi = () => {
+const stopTeachingDiagramGeneratingForCurrentAi = () => {
   const target = (
     (streamingMsgId.value !== null
       ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
@@ -783,7 +735,7 @@ const stopKnowledgeGraphGeneratingForCurrentAi = () => {
     || [...messages.value].reverse().find(m => m.role === 'ai')
   )
   if (target) {
-    target.knowledgeGraphGenerating = false
+    target.teachingDiagramGenerating = false
   }
 }
 
@@ -810,7 +762,7 @@ const startAvatarThinkingTimeout = () => {
     if (chatMode.value !== 'digital_human') return
     if (!isAIThinking.value) return
     isAIThinking.value = false
-    stopKnowledgeGraphGeneratingForCurrentAi()
+    stopTeachingDiagramGeneratingForCurrentAi()
     streamingMsgId.value = null
     ElMessage.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
   }, 30000)
@@ -875,18 +827,18 @@ const digitalHumanStatusText = computed(() => {
   return '倾听就绪'
 })
 
-const knowledgeGraphPreviewVisible = ref(false)
-const knowledgeGraphPreviewData = ref<KnowledgeGraphData | null>(null)
+const teachingDiagramPreviewVisible = ref(false)
+const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
 
-const previewKnowledgeGraph = (graph: KnowledgeGraphData) => {
-  knowledgeGraphPreviewData.value = graph
-  knowledgeGraphPreviewVisible.value = true
+const previewTeachingDiagram = (graph: TeachingDiagram) => {
+  teachingDiagramPreviewData.value = graph
+  teachingDiagramPreviewVisible.value = true
 }
 
-const copyKnowledgeGraphJson = async (graph: KnowledgeGraphData) => {
+const copyTeachingDiagramJson = async (graph: TeachingDiagram) => {
   if (graph) {
     await copyToClipboard(JSON.stringify(graph, null, 2))
-    ElMessage.success({ message: '知识图谱 JSON 已复制', plain: true })
+    ElMessage.success({ message: '图解说明 JSON 已复制', plain: true })
   }
 }
 
@@ -938,12 +890,6 @@ const formatRelativeTime = (dateStr: string) => {
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days}天前`
   return new Date(dateStr).toLocaleDateString()
-}
-
-const resolveIllustrationUrl = (path: string) => {
-  if (!path) return ''
-  if (/^https?:\/\//.test(path) || path.startsWith('/')) return path
-  return path
 }
 
 const scrollToBottom = () => {
@@ -1391,8 +1337,7 @@ const switchSession = async (sessionId: string) => {
       content: msg.content,
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
-      illustrations: [],
-      knowledgeGraph: normalizeKnowledgeGraphData(msg.knowledge_graph),
+      teachingDiagram: normalizeTeachingDiagram(msg.teaching_diagram),
     }))
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = mapped.filter((item, idx) => {
@@ -1442,12 +1387,18 @@ const removeAttachment = (idx: number) => {
   pendingFiles.value.splice(idx, 1)
 }
 
-const handleKnowledgeGraphToggle = () => {
+const getAvatarCapabilities = () => ({
+  enable_search: enableWebSearch.value,
+  generate_video: generateVideo.value,
+  enable_long_term_memory: false,
+})
+
+const handleTeachingDiagramToggle = () => {
   hasToggledMedia.value = true
-  if (needKnowledgeGraph.value) {
-    needKnowledgeGraph.value = false
+  if (needTeachingDiagram.value) {
+    needTeachingDiagram.value = false
   } else {
-    needKnowledgeGraph.value = true
+    needTeachingDiagram.value = true
     generateVideo.value = false
   }
 }
@@ -1458,7 +1409,7 @@ const handleVideoToggle = () => {
     generateVideo.value = false
   } else {
     generateVideo.value = true
-    needKnowledgeGraph.value = false
+    needTeachingDiagram.value = false
   }
 }
 
@@ -1470,7 +1421,7 @@ const handleVoiceToggle = async () => {
       hasSpeechDetected.value = true
       startAsrProcessing(8000)
     } else {
-      await startVad(needKnowledgeGraph.value)
+      await startVad(needTeachingDiagram.value, getAvatarCapabilities())
       isRecording.value = isVadListening.value
       clearAsrProcessing()
     }
@@ -1495,7 +1446,7 @@ const handleVoiceChatToggle = async () => {
         setPlayerContainer(container)
       }
     })
-    await startVad(needKnowledgeGraph.value)
+    await startVad(needTeachingDiagram.value, getAvatarCapabilities())
     isRecording.value = isVadListening.value
     ElMessage.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
@@ -1526,7 +1477,7 @@ const handleSend = async () => {
   const text = userInput.value.trim()
   const hasFiles = pendingFiles.value.length > 0
   if ((!text && !hasFiles) || isAIThinking.value) return
-  const shouldGenerateKnowledgeGraph = needKnowledgeGraph.value
+  const shouldGenerateTeachingDiagram = needTeachingDiagram.value
 
   if (chatMode.value === 'digital_human' && !isAvatarConnected.value) {
     ElMessage.warning({ message: '数字人连接已断开，请先点击“重新连接”后再发送', plain: true })
@@ -1649,13 +1600,17 @@ const handleSend = async () => {
     startAvatarThinkingTimeout()
     const aiMsg = messages.value.find(m => m.id === aiMsgId)
     if (aiMsg) {
-      aiMsg.knowledgeGraphGenerating = shouldGenerateKnowledgeGraph
+      aiMsg.teachingDiagramGenerating = shouldGenerateTeachingDiagram
     }
     sendAvatarText({
       text: text || '请分析附件',
-      need_diagram: shouldGenerateKnowledgeGraph,
+      history: streamHistory.map(item => ({ role: item.role, content: item.content })),
+      need_diagram: shouldGenerateTeachingDiagram,
       image_urls: imageUrls.length > 0 ? imageUrls : undefined,
       file_urls: fileUrls.length > 0 ? fileUrls : undefined,
+      enable_search: enableWebSearch.value,
+      generate_video: generateVideo.value,
+      enable_long_term_memory: false,
       speech_rate: avatarSpeechRate.value,
     })
     return
@@ -1667,7 +1622,7 @@ const handleSend = async () => {
         session_id: currentSessionId.value,
         image_urls: imageUrls.length > 0 ? imageUrls : undefined,
         file_urls: fileUrls.length > 0 ? fileUrls : undefined,
-        need_knowledge_graph: shouldGenerateKnowledgeGraph,
+        need_teaching_diagram: shouldGenerateTeachingDiagram,
         generate_video: generateVideo.value,
         enable_search: enableWebSearch.value,
       },
@@ -1679,7 +1634,7 @@ const handleSend = async () => {
         const finishedSessionId = currentSessionId.value
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
-          aiMsg.knowledgeGraphGenerating = false
+          aiMsg.teachingDiagramGenerating = false
         }
         if (pendingRenderQueueStart >= pendingRenderQueue.length) {
           stopStreamFlushLoop()
@@ -1696,12 +1651,12 @@ const handleSend = async () => {
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
-          aiMsg.knowledgeGraphGenerating = false
+          aiMsg.teachingDiagramGenerating = false
           if (!aiMsg.content) {
             aiMsg.content = `Generate failed: ${err.message}`
           }
         }
-        stopKnowledgeGraphGeneratingForCurrentAi()
+        stopTeachingDiagramGeneratingForCurrentAi()
         isAIThinking.value = false
         streamingMsgId.value = null
         streamingMsgRef.value = null
@@ -1724,35 +1679,35 @@ const handleSend = async () => {
             aiMsg.searchMessage = undefined
             return
           }
-          if (payload?.stage === 'knowledge_graph_generate') {
-            aiMsg.knowledgeGraphGenerating = true
+          if (payload?.stage === 'teaching_diagram_generate') {
+            aiMsg.teachingDiagramGenerating = true
             scrollToBottom()
             return
           }
           return
         }
 
-        if (evt.event === 'illustration') {
-          const payload = evt.data as { path?: string }
-          const imagePath = resolveIllustrationUrl(payload?.path || '')
-          if (!imagePath) return
+        if (evt.event === 'diagram') {
+          const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (!aiMsg) return
-          if (!aiMsg.illustrations) aiMsg.illustrations = []
-          if (!aiMsg.illustrations.includes(imagePath)) {
-            aiMsg.illustrations.push(imagePath)
-          }
+          if (!aiMsg || !diagram) return
+          aiMsg.teachingDiagram = diagram
+          aiMsg.teachingDiagramGenerating = false
+          scrollToBottom()
           return
         }
 
         if (evt.event === 'done') {
-          const payload = evt.data as { resources?: { knowledge_graph?: KnowledgeGraphData | null } }
-          const graph = payload?.resources?.knowledge_graph
+          const payload = evt.data as {
+            teaching_diagram?: TeachingDiagram | null
+            resources?: { teaching_diagram?: TeachingDiagram | null }
+          }
+          const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg) return
-          aiMsg.knowledgeGraphGenerating = false
-          if (!graph) return
-          aiMsg.knowledgeGraph = graph
+          aiMsg.teachingDiagramGenerating = false
+          if (!diagram) return
+          aiMsg.teachingDiagram = diagram
           scrollToBottom()
         }
       },
@@ -1763,7 +1718,7 @@ watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
     sessionSidebarCollapsed.value = true
     await connectAvatar()
-    setAvatarNeedDiagram(needKnowledgeGraph.value)
+    setAvatarNeedDiagram(needTeachingDiagram.value)
     nextTick(() => {
       const container = canvasRef.value?.getContainer()
       if (container) {
@@ -1776,8 +1731,7 @@ watch(chatMode, async (newMode) => {
   }
 })
 
-watch(needKnowledgeGraph, (enabled) => {
-  debugNeedKnowledgeGraphEnabled.value = enabled
+watch(needTeachingDiagram, (enabled) => {
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     setAvatarNeedDiagram(enabled)
   }
@@ -1815,9 +1769,9 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style>
+<style scoped>
 /* 覆盖 ElPopover 的默认内边距 */
-.el-popover.custom-plus-popover {
+:global(.el-popover.custom-plus-popover) {
   padding: 0 !important;
   border-radius: var(--radius-xl) !important;
   border: none !important;
@@ -1842,9 +1796,6 @@ onBeforeUnmount(() => {
 .search-status-text {
   animation: pulse-text 1.5s infinite ease-in-out;
 }
-</style>
-
-<style scoped>
 
 .tutor-dashboard {
   display: flex;
@@ -2107,34 +2058,6 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.msg-illustrations {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.illustration-image {
-  width: min(480px, 100%);
-  border-radius: 10px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-}
-
-.knowledge-graph-generating {
-  width: min(560px, 100%);
-  margin-top: var(--space-3);
-  padding: 10px var(--space-3);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-secondary);
-  background: var(--color-bg);
-  border: 1px dashed var(--color-border-hover);
-  border-radius: 10px;
-  font-size: 0.85rem;
-}
-
 .diagram-spinner {
   width: 14px;
   height: 14px;
@@ -2151,13 +2074,13 @@ onBeforeUnmount(() => {
   }
 }
 
-.knowledge-graph-generating-premium {
+.teaching-diagram-generating {
   margin-top: var(--space-3);
   padding: var(--space-4);
   width: min(100%, 680px);
   max-width: 100%;
   background: var(--color-surface);
-  border: 1px solid var(--color-surface-hover);
+  border: 1px solid #d9e8e6;
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
@@ -2167,7 +2090,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
 }
 
-.knowledge-graph-generating-premium::after {
+.teaching-diagram-generating::after {
   content: '';
   position: absolute;
   top: 0; left: -150%; width: 50%; height: 100%;
@@ -2199,95 +2122,52 @@ onBeforeUnmount(() => {
   animation: pulse-text 2s infinite;
 }
 
-.kg-gen-skeleton-area {
-  position: relative;
-  height: 120px;
-  background: rgba(0, 0, 0, 0.015);
-  border-radius: var(--radius-md);
+.diagram-draft-grid {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  gap: var(--space-2);
 }
 
-.skel-node {
-  position: absolute;
-  border-radius: 50%;
-  background: var(--color-border);
+.diagram-draft-grid span {
+  flex: 1;
+  height: 48px;
+  padding: 14px;
+  color: transparent;
+  background: #e7f2f0;
+  border-radius: var(--radius-md);
   animation: pulse-bg 1.5s infinite alternate;
 }
 
-.skel-node.main { width: 44px; height: 44px; background: var(--color-primary-light-5); z-index: 2; }
-.skel-node.sub { width: 28px; height: 28px; background: var(--color-border-hover); z-index: 2; }
-.skel-node.sub.n1 { transform: translate(-80px, -30px); animation-delay: 0.3s; }
-.skel-node.sub.n2 { transform: translate(70px, -40px); animation-delay: 0.6s; }
-.skel-node.sub.n3 { transform: translate(20px, 40px); animation-delay: 0.9s; }
-
-.skel-edge {
-  position: absolute;
-  background: var(--color-border);
-  height: 2px;
-  transform-origin: 0 50%;
-  animation: pulse-bg 1.5s infinite alternate 0.2s;
-  z-index: 1;
-}
-
-.skel-edge.e1 { width: 85px; transform: translate(-20px, 0) rotate(160deg); }
-.skel-edge.e2 { width: 80px; transform: translate(20px, 0) rotate(-30deg); }
-.skel-edge.e3 { width: 50px; transform: translate(0, 20px) rotate(60deg); }
+.diagram-draft-grid span:nth-child(2) { animation-delay: .25s; }
+.diagram-draft-grid span:nth-child(3) { animation-delay: .5s; }
 
 @keyframes pulse-bg {
   0% { opacity: 0.4; }
   100% { opacity: 1; }
 }
 
-.msg-knowledge-graph {
+.msg-teaching-diagram {
   margin-top: var(--space-3);
-  background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.08), transparent 36%),
-    linear-gradient(315deg, rgba(5, 150, 105, 0.08), transparent 30%),
-    var(--color-surface);
-  border: 1px solid var(--color-surface-hover);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  width: min(100%, 680px);
+  background: #f1f8f7;
+  border: 1px solid #d9e8e6;
+  border-radius: 24px;
+  overflow: hidden;
+  width: min(100%, 760px);
   max-width: 100%;
   cursor: pointer;
   transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
 }
 
-.msg-knowledge-graph:hover {
+.msg-teaching-diagram:hover {
   transform: translateY(-2px);
-  border-color: var(--color-surface-hover);
+  border-color: #b2dcd4;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
 }
 
-.diagram-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
-.diagram-title {
-  font-size: 0.95rem;
-  font-weight: var(--weight-semibold);
-  color: var(--color-text);
-}
-
-.diagram-type-tag {
-  font-size: 0.7rem;
-  padding: 2px var(--space-2);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-radius: 4px;
-  font-weight: var(--weight-medium);
-}
-
-.diagram-summary {
+.direct-graph-text {
   font-size: 0.85rem;
   color: var(--color-text-muted);
-  margin-bottom: var(--space-3);
+  padding: var(--space-3) 0;
   line-height: 1.5;
 }
 
@@ -2305,48 +2185,8 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 
-.preview-header-meta {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.preview-type-tag {
-  align-self: flex-start;
-  font-size: 0.75rem;
-  padding: var(--space-1) var(--space-3);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-radius: var(--radius-sm);
-  font-weight: var(--weight-semibold);
-  text-transform: uppercase;
-}
-
-.preview-summary {
-  font-size: 1rem;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
-}
-
 .preview-content {
-  background:
-    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    var(--color-bg);
-  background-size: 28px 28px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 300px;
-}
-
-.preview-image {
-  max-width: 100%;
-  max-height: 60vh;
-  object-fit: contain;
+  width: 100%;
 }
 
 .preview-footer {
@@ -3023,13 +2863,6 @@ onBeforeUnmount(() => {
 }
 .minimal-icon-btn.is-active-blue:hover {
   background: rgba(59, 130, 246, 0.1);
-}
-
-.minimal-icon-btn.is-active-purple {
-  color: #8b5cf6;
-}
-.minimal-icon-btn.is-active-purple:hover {
-  background: rgba(139, 92, 246, 0.1);
 }
 
 .minimal-icon-btn.is-active-teal {

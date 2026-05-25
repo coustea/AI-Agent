@@ -6,9 +6,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+
 import OnboardingDialog from '@/components/OnboardingDialog.vue'
 
 const visible = ref(true)
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const handleSuccess = () => {
   // 预览模式下关闭后自动重新打开，方便重复调试样式

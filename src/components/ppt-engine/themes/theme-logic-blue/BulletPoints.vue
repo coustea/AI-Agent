@@ -25,6 +25,8 @@ import type { BulletPointsData } from '../../../types/ppt';
 defineProps<{
   data: BulletPointsData
 }>();
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>

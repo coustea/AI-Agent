@@ -100,41 +100,28 @@
             </div>
           </div>
         </template>
-      </article>
-      
-      <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
-        <el-button type="primary" link class="more-btn-hud">
-          查看全部题目 / VIEW_ALL ({{ questions.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-        </el-button>
-      </div>
-    </div>
-    
-    <div v-else class="quiz-empty-hud">
-      <div class="empty-frame">
-        <div class="empty-icon">NULL</div>
-        <p>暂无测验数据 / NO_QUIZ_DATA</p>
-      </div>
-    </div>
-  </div>
-</template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Select, ArrowRight, Close } from '@element-plus/icons-vue'
+
 import { normalizeQuizQuestions, type ResourceArtifactLike } from './resourceViewUtils'
+
+import { Select, ArrowRight, Close } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
   compact?: boolean
 }>()
 
+const userAnswers = ref<Record<number, any>>({})
+
+const showAnswers = ref<Record<number, boolean>>({})
+
 const questions = computed<Record<string, any>[]>(() => normalizeQuizQuestions(props.resultData))
 
 const visibleQuestions = computed(() => props.compact ? questions.value.slice(0, 2) : questions.value)
 
-// --- 交互与作答状态 ---
-const userAnswers = ref<Record<number, any>>({})
-const showAnswers = ref<Record<number, boolean>>({})
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const isChoiceType = (q: any) => {
   const type = (q.type || q.question_type)?.toLowerCase() || ''

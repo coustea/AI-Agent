@@ -67,68 +67,24 @@
                 <small>USERNAME</small>
               </span>
             </template>
-            <el-input
-                v-model="form.username"
-                placeholder="请输入用户名"
-                :prefix-icon="User"
-                size="large"
-                clearable
-            />
-          </el-form-item>
-
-          <el-form-item prop="password">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span> 密码</span>
-                <small>PASSWORD</small>
-              </span>
-            </template>
-            <el-input
-                v-model="form.password"
-                type="password"
-                placeholder="请输入密码"
-                :prefix-icon="Lock"
-                show-password
-                size="large"
-            />
-          </el-form-item>
-
-          <div class="form-actions">
-            <el-button
-                type="primary"
-                class="auth-btn"
-                :loading="isLoading"
-                @click="handleLogin(loginFormRef)"
-            >
-              登 录 空 间 <el-icon class="ml-2"><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-
-          <div class="form-footer">
-            <span>还没有账户？</span>
-            <el-link type="primary" :underline="false" @click="router.push('/register')">立即注册</el-link>
-          </div>
-        </el-form>
-
-        <div class="system-tag">
-          <el-icon><Connection /></el-icon>
-          <span>SECURE_CONNECTION</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { User, Lock, ArrowRight, Connection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { login } from '@/api/auth'
+
+import { reactive, ref } from 'vue'
+
+import { User, Lock, ArrowRight, Connection } from '@element-plus/icons-vue'
+
+import { useRouter } from 'vue-router'
+
 import { getErrorMessage } from '@/utils/http'
 
+import { login } from '@/api/auth'
+
 const router = useRouter()
+
 const isLoading = ref(false)
+
 const loginFormRef = ref()
 
 const form = reactive({
@@ -146,6 +102,8 @@ const rules = {
     { min: 6, max: 50, message: '密码长度需为 6-50 个字符', trigger: 'blur' },
   ]
 }
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const handleLogin = async (formEl: any) => {
   if (!formEl) return

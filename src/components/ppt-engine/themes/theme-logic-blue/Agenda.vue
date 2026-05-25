@@ -22,6 +22,8 @@ import type { AgendaData } from '../../../types/ppt';
 defineProps<{
   data: AgendaData
 }>();
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>

@@ -23,8 +23,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+
 import { getMarkdownContent, type ResourceArtifactLike } from './resourceViewUtils'
+
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -32,6 +34,8 @@ const props = defineProps<{
 }>()
 
 const content = computed(() => getMarkdownContent(props.resultData))
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 </script>
 
 <style scoped>
@@ -306,4 +310,3 @@ const content = computed(() => getMarkdownContent(props.resultData))
   letter-spacing: 1px;
 }
 </style>
-

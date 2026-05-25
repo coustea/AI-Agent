@@ -71,8 +71,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { User, ArrowRight, Reading } from '@element-plus/icons-vue'
+
 import { normalizeReadingArtifact, type ResourceArtifactLike } from './resourceViewUtils'
+
+import { User, ArrowRight, Reading } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -90,6 +92,8 @@ const resources = computed<any[]>(() => {
 const visibleResources = computed(() => {
   return props.compact ? resources.value.slice(0, 3) : resources.value
 })
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const getRecommendReason = (resource: Record<string, any>) => {
   return resource.recommend_reason || resource.reason || resource.relevance || ''

@@ -19,43 +19,10 @@
         </div>
       </div>
     </template>
-    
-    <!-- 正常预览模式，动态计算缩放比例，增加翻页动画 -->
-    <template v-else>
-      <div class="ppt-viewer" :style="{ transform: `scale(${scale})` }">
-        <transition-group name="slide-fade">
-          <div 
-            v-for="(slide, index) in documentData.slides" 
-            :key="`${slide.layout}-${index}`"
-            v-show="currentIndex === index"
-            class="slide-wrapper"
-            :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : {}"
-          >
-            <component 
-              :is="getLayoutComponent(documentData.config.template_id, slide.layout)"
-              :data="slide.data"
-              v-if="getLayoutComponent(documentData.config.template_id, slide.layout)"
-            />
-            <div v-else class="fallback-slide">
-              <h3>缺少布局组件</h3>
-              <p>主题 {{ documentData.config.template_id }} 未实现 {{ slide.layout }} 布局</p>
-            </div>
-          </div>
-        </transition-group>
-      </div>
-      
-      <!-- 播放器控制条 -->
-      <div class="controls">
-        <button @click="prevSlide" :disabled="currentIndex === 0" class="control-btn">上一页</button>
-        <span class="page-indicator">{{ currentIndex + 1 }} / {{ documentData.slides.length }}</span>
-        <button @click="nextSlide" :disabled="currentIndex === documentData.slides.length - 1" class="control-btn">下一页</button>
-      </div>
-    </template>
-  </div>
-</template>
 
 <script setup lang="ts">
 import { ref, defineAsyncComponent, onMounted, onUnmounted } from 'vue';
+
 import type { PPTDocument } from './types/ppt';
 
 const props = defineProps<{
@@ -64,17 +31,33 @@ const props = defineProps<{
 }>();
 
 const currentIndex = ref(0);
+
 const containerRef = ref<HTMLElement | null>(null);
+
 const scale = ref(1);
 
-// 将 layout 名称转为 PascalCase (如 'grid_cards' -> 'GridCards')
+const themeModules = import.meta.glob('./themes/**/*.vue');
+
+onMounted(() => {
+  calculateScale();
+  window.addEventListener('resize', calculateScale);
+  
+  // 监听键盘左右键翻页
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') nextSlide();
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
+  });
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', calculateScale);
+});
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
+
 const toComponentName = (str: string) => {
   return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
 };
-
-// 使用 Vite 的 import.meta.glob 批量注册组件
-// 注意：由于我们在组合式 API 中使用，确保它能解析当前目录的 themes 文件夹
-const themeModules = import.meta.glob('./themes/**/*.vue');
 
 const getLayoutComponent = (theme: string, layout: string) => {
   const componentName = toComponentName(layout);
@@ -110,21 +93,6 @@ const calculateScale = () => {
   // 保持 16:9 比例缩放
   scale.value = Math.min(scaleX, scaleY);
 };
-
-onMounted(() => {
-  calculateScale();
-  window.addEventListener('resize', calculateScale);
-  
-  // 监听键盘左右键翻页
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' || e.key === 'PageDown') nextSlide();
-    if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
-  });
-});
-
-onUnmounted(() => {
-  window.removeEventListener('resize', calculateScale);
-});
 </script>
 
 <style scoped>

@@ -9,6 +9,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
+
 import { renderStreamingMarkdownHtml } from '@/utils/markdown'
 
 const props = defineProps<{
@@ -17,17 +18,8 @@ const props = defineProps<{
 }>()
 
 const streamingHtml = ref('')
+
 let renderTimer: ReturnType<typeof setTimeout> | null = null
-
-const shouldRenderMarkdownNow = (text: string): boolean => {
-  if (!text) return true
-  return /(\n\n|\r\n\r\n|\n[-*]\s|\n\d+\.\s|\n#{1,6}\s|[。！？.!?]\s*$|`{3,}\s*$)/.test(text)
-}
-
-const commitStreamingHtml = () => {
-  renderTimer = null
-  streamingHtml.value = renderStreamingMarkdownHtml(props.content || '')
-}
 
 watch(
   () => props.content,
@@ -73,6 +65,18 @@ onBeforeUnmount(() => {
     renderTimer = null
   }
 })
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
+
+const shouldRenderMarkdownNow = (text: string): boolean => {
+  if (!text) return true
+  return /(\n\n|\r\n\r\n|\n[-*]\s|\n\d+\.\s|\n#{1,6}\s|[。！？.!?]\s*$|`{3,}\s*$)/.test(text)
+}
+
+const commitStreamingHtml = () => {
+  renderTimer = null
+  streamingHtml.value = renderStreamingMarkdownHtml(props.content || '')
+}
 </script>
 
 <style scoped>

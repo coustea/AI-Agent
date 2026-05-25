@@ -81,380 +81,73 @@
                 <span>{{ scope.row.title }}</span>
               </div>
             </template>
-          </el-table-column>
-          <el-table-column label="状态" width="80">
-            <template #default="scope">
-              <el-tag :type="getStatusType(scope.row.status)" size="small" class="custom-tag">{{ scope.row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="time" label="时间" width="100" />
-          <el-table-column label="操作" width="60" fixed="right">
-            <template #default="scope">
-              <el-button link type="primary" @click="viewResourceDetail(scope.row)">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-
-      <div class="bento-card profile-info-card">
-        <div class="card-header-flex">
-          <h4 class="card-title">学习画像资料</h4>
-        </div>
-        <div class="profile-info-list">
-          <div class="profile-info-row">
-            <span><el-icon><Reading /></el-icon> 学历层次</span>
-            <strong>{{ studentProfile.education_level || '未填写' }}</strong>
-          </div>
-          <div class="profile-info-row">
-            <span><el-icon><UserFilled /></el-icon> 专业</span>
-            <strong>{{ studentProfile.major || '未填写' }}</strong>
-          </div>
-
-          <div class="profile-info-row course-display-row" style="align-items: center;">
-            <span><el-icon><VideoPlay /></el-icon> 正在学习</span>
-            <el-select
-              v-if="studentProfile.courses && studentProfile.courses.length > 0"
-              :model-value="studentProfile.courses[0]"
-              size="small"
-              style="width: 150px; margin-left: auto;"
-            >
-              <el-option
-                v-for="c in studentProfile.courses"
-                :key="c"
-                :label="c"
-                :value="c"
-              />
-            </el-select>
-            <strong v-else>未填写</strong>
-          </div>
-
-          <div class="profile-info-row">
-            <span><el-icon><Cpu /></el-icon> 常用语言</span>
-            <strong>{{ studentProfile.preferred_language || '未填写' }}</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="bento-card bento-span-2 radar-card">
-        <div class="card-header-flex">
-          <h4>学习画像分析 <el-icon class="info-icon"><InfoFilled /></el-icon></h4>
-        </div>
-        <div style="display: flex; gap: 16px; width: 100%; height: 220px;">
-          <div class="radar-container" style="flex: 1; min-height: 0;">
-            <v-chart class="chart" :option="radarOption" autoresize />
-          </div>
-          <div class="pie-container" style="flex: 1; min-height: 0; width: 100%;">
-            <v-chart class="chart" :option="pieOption" autoresize />
-          </div>
-        </div>
-      </div>
-
-      <div class="bento-card performance-card">
-        <div class="card-header-flex">
-          <h4>近期表现</h4>
-          <el-select v-model="timeRange" size="small" style="width: 90px" aria-label="时间范围">
-            <el-option label="近 7 天" value="7" />
-            <el-option label="近 30 天" value="30" />
-          </el-select>
-        </div>
-        <div class="perf-grid">
-          <div class="perf-box">
-            <div class="perf-icon bg-blue-light"><el-icon class="text-blue"><Timer /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">区间学习时长</span>
-              <span class="value">
-                {{ formatDurationValue(learningStats?.total_seconds || 45600) }}<small>{{ formatDurationUnit(learningStats?.total_seconds || 45600) }}</small>
-              </span>
-            </div>
-          </div>
-          <div class="perf-box">
-            <div class="perf-icon bg-green-light"><el-icon class="text-green"><Checked /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">完成任务</span>
-              <span class="value">{{ dynamicStats.completedTasks }} <small>个</small></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="bento-card bento-span-4 trend-section">
-        <div class="card-header-flex">
-          <h4 class="card-title">学习成长趋势（按课程）</h4>
-
-          <div class="trend-course-selector">
-            <template v-if="studentProfile.courses && studentProfile.courses.length > 1">
-              <el-select v-model="selectedTrendCourse" size="small" style="width: 150px" placeholder="选择课程">
-                <el-option v-for="c in studentProfile.courses" :key="c" :label="c" :value="c" />
-              </el-select>
-            </template>
-            <template v-else-if="studentProfile.courses && studentProfile.courses.length === 1">
-              <el-tag type="primary" effect="light" size="small" class="single-course-tag">
-                <el-icon><VideoPlay /></el-icon> {{ studentProfile.courses[0] }}
-              </el-tag>
-            </template>
-            <template v-else>
-              <span class="no-course-text">暂无在学课程</span>
-            </template>
-          </div>
-        </div>
-        <div class="trend-chart-container">
-          <v-chart class="chart" :option="lineOption" autoresize />
-        </div>
-      </div>
-    </div>
-
-    <el-dialog
-        v-model="profileEditorVisible"
-        width="660px"
-        :close-on-click-modal="false"
-        class="profile-editor-dialog compact-dialog"
-        :show-close="true"
-        align-center
-    >
-      <template #header>
-        <div class="dialog-custom-header">
-          <h2 class="dialog-title">编辑学习画像资料</h2>
-          <p class="dialog-subtitle">完善你的基础信息，帮助系统生成更贴合你的学习资源与学习路径</p>
-
-          <div class="editor-step-indicator">
-            <div class="step-item" :class="{ 'is-active': currentEditorStep >= 1 }">
-              <div class="step-icon">
-                <el-icon v-if="currentEditorStep === 2"><Check /></el-icon>
-                <span v-else>1</span>
-              </div>
-              <div class="step-text">专业与目标</div>
-            </div>
-            <div class="step-line" :class="{ 'is-active': currentEditorStep === 2 }"></div>
-            <div class="step-item" :class="{ 'is-active': currentEditorStep === 2 }">
-              <div class="step-icon">2</div>
-              <div class="step-text">学校与阶段</div>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <el-form
-          ref="profileFormRef"
-          :model="profileForm"
-          :rules="profileRules"
-          label-position="top"
-          class="custom-profile-form"
-          hide-required-asterisk
-      >
-        <div v-show="currentEditorStep === 1" class="editor-step-content">
-          <div class="profile-form-section">
-            <div class="profile-form-section-head">
-              <div class="section-badge required-badge">必填 01</div>
-              <h5 class="section-title">专业与课程</h5>
-            </div>
-
-            <div class="profile-form-grid">
-              <el-form-item prop="major">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 专业</span></template>
-                <el-autocomplete
-                    v-model="profileForm.major"
-                    :fetch-suggestions="querySearchMajor"
-                    placeholder="可以直接输入或选择"
-                    clearable
-                    class="w-full"
-                >
-                  <template #default="{ item }">
-                    <span>{{ item.value }}</span>
-                  </template>
-                </el-autocomplete>
-              </el-form-item>
-
-              <el-form-item prop="courses">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 正在学习的课程</span></template>
-                <el-select
-                    v-model="profileForm.courses"
-                    multiple
-                    filterable
-                    allow-create
-                    default-first-option
-                    placeholder="输入课程名后【按回车】即可添加"
-                    class="w-full"
-                >
-                  <el-option v-for="course in PRESET_COURSES" :key="course" :label="course" :value="course" />
-                </el-select>
-              </el-form-item>
-            </div>
-          </div>
-
-          <div class="profile-form-section mt-3">
-            <div class="profile-form-section-head">
-              <div class="section-badge required-badge">必填 02</div>
-              <h5 class="section-title">学习目标</h5>
-            </div>
-
-            <el-form-item prop="learning_goal">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 当前学习目标</span></template>
-              <el-select v-model="profileForm.learning_goal" filterable allow-create default-first-option clearable placeholder="请选择目标，列表没有可直接输入后【按回车】">
-                <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
-              </el-select>
-            </el-form-item>
-          </div>
-        </div>
-
-        <div v-show="currentEditorStep === 2" class="editor-step-content">
-          <div class="profile-form-section">
-            <div class="profile-form-section-head">
-              <div class="section-badge bg-badge">背景 03</div>
-              <h5 class="section-title">学校与阶段</h5>
-            </div>
-
-            <div class="profile-form-grid">
-              <el-form-item prop="school">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 院校</span></template>
-                <el-autocomplete
-                    v-model="profileForm.school"
-                    :fetch-suggestions="querySearchSchool"
-                    placeholder="可以直接输入或搜索"
-                    clearable
-                    class="w-full"
-                    @select="handleSchoolSelect"
-                >
-                  <template #prefix><el-icon><Search /></el-icon></template>
-                  <template #default="{ item }">
-                    <span>{{ item.value }}</span>
-                    <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
-                  </template>
-                </el-autocomplete>
-              </el-form-item>
-
-              <el-form-item prop="school_level">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 院校层次</span></template>
-                <el-select v-model="profileForm.school_level" placeholder="请选择或从院校自动带出" filterable allow-create default-first-option>
-                  <el-option v-for="level in PRESET_SCHOOL_LEVELS" :key="level" :label="level" :value="level" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item prop="education_level">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 学历层次</span></template>
-                <el-select v-model="profileForm.education_level" placeholder="请选择学历层次" filterable>
-                  <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item prop="grade">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 年级</span></template>
-                <el-select v-model="profileForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级">
-                  <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item prop="preferred_language">
-                <template #label><span class="custom-label">常用编程语言（选填）</span></template>
-                <el-select v-model="profileForm.preferred_language" filterable allow-create default-first-option clearable placeholder="请选择常用语言">
-                  <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
-                </el-select>
-              </el-form-item>
-            </div>
-          </div>
-        </div>
-      </el-form>
-
-      <template #footer>
-        <div class="dialog-custom-footer">
-          <div class="footer-hint">
-            <el-icon><InfoFilled /></el-icon>
-            <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得精准推荐</span>
-          </div>
-          <div class="footer-actions">
-            <template v-if="currentEditorStep === 1">
-              <el-button class="step-btn" @click="nextEditorStep(profileFormRef)">
-                下一步 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-              </el-button>
-              <el-button type="primary" class="save-btn" @click="profileEditorVisible = false">取消</el-button>
-            </template>
-            <template v-else>
-              <el-button class="step-btn" @click="currentEditorStep = 1">
-                <el-icon class="el-icon--left"><ArrowLeft /></el-icon> 上一步
-              </el-button>
-              <el-button type="primary" class="save-btn" :loading="profileSubmitting" @click="submitProfile(profileFormRef)">
-                保存资料
-              </el-button>
-            </template>
-          </div>
-        </div>
-      </template>
-    </el-dialog>
-  </div>
-</template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import {
   UserFilled, CircleCheckFilled, Edit, Clock, Reading, DocumentCopy, StarFilled,
   InfoFilled, Timer, Checked, VideoPlay, Cpu, Search, Check, ArrowRight, ArrowLeft
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
+
 import { CanvasRenderer } from 'echarts/renderers'
-import { RadarChart, LineChart, PieChart } from 'echarts/charts'
+
+import { ElMessage } from 'element-plus'
+
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
-import { getMe, uploadAvatar } from '@/api/auth'
+
+import { RadarChart, LineChart, PieChart } from 'echarts/charts'
+
+import { reactive, ref, computed, onMounted, watch } from 'vue'
+
+import { use } from 'echarts/core'
+
+import { useRoute, useRouter } from 'vue-router'
+
+import VChart from 'vue-echarts'
+
 import {
   getProfileOnboarding, updateProfileOnboarding, getGeneratedResources,
   searchSchools, getProfileScore, getLearningTimeStats
 } from '@/api/ai'
+
+import { getMe, uploadAvatar } from '@/api/auth'
+
 import type {
   ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem,
   SchoolItem, ProfileScoreData, LearningTimeStats
 } from '@/api/ai'
 
-use([CanvasRenderer, RadarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
+import type { FormInstance, FormRules } from 'element-plus'
 
 const router = useRouter()
+
 const route = useRoute()
 
 const timeRange = ref('7')
+
 const historyFilter = ref('全部')
+
 const userName = ref('AI 学习者')
+
 const userEmail = ref<string | null>('user@example.com')
+
 const userAvatar = ref<string | null>(null)
+
 const avatarUploading = ref(false)
+
 const profileEditorVisible = ref(false)
+
 const currentEditorStep = ref(1)
+
 const profileSubmitting = ref(false)
+
 const profileFormRef = ref<FormInstance>()
+
 const profileSchoolOptions = ref<SchoolItem[]>([])
+
 const learningStats = ref<LearningTimeStats | null>(null)
 
-// 选中的折线图课程
 const selectedTrendCourse = ref<string>('')
 
-const PRESET_MAJORS = [
-  '计算机科学与技术', '软件工程', '人工智能', '数据科学', '网络安全',
-  '信息安全', '物联网工程', '通信工程', '电子信息工程', '数字媒体技术'
-]
-const PRESET_COURSES = [
-  '数据结构', '算法分析', '操作系统', '计算机网络', '数据库系统',
-  '计算机组成原理', '编译原理', '离散数学', '线性代数', '概率统计',
-  '软件工程', 'Web开发', '机器学习', '深度学习', '计算机视觉', 'NLP',
-  '分布式系统', '云计算', '嵌入式开发', '移动端开发'
-]
-const PRESET_GOALS = [
-  '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
-  '系统学习进阶', '零基础快速入门', '竞赛夺奖(ACM/蓝桥)', '个人兴趣拓展', '行业证书考取'
-]
-const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
-const PRESET_SCHOOL_LEVELS = ['985', '211', '双一流', '普通本科', '高职高专', '海外高校', '其他']
-const PRESET_GRADES = [
-  '大一', '大二', '大三', '大四',
-  '研一', '研二', '研三',
-  '博一', '博二', '博三',
-  '高职一年级', '高职二年级', '高职三年级'
-]
-const PRESET_LANGUAGES = [
-  'Python', 'Java', 'C/C++', 'Go', 'Rust', 'JavaScript', 'TypeScript',
-  'SQL', 'Shell', 'Kotlin', 'Swift', 'PHP', 'HTML/CSS'
-]
-
-// 注入【Mock假数据】：让你一打开就能看到折线图选项和雷达图
 const studentProfile = ref<StudentProfileData & { learning_duration_total?: number }>({
   education_level: '本科',
   grade: '大三',
@@ -466,17 +159,6 @@ const studentProfile = ref<StudentProfileData & { learning_duration_total?: numb
   preferred_language: 'Python',
   learning_duration_total: 45600
 })
-
-// 监听个人资料课程的变化，自动设置默认选中的成长趋势课程
-watch(() => studentProfile.value.courses, (newCourses) => {
-  if (newCourses && newCourses.length > 0) {
-    if (!newCourses.includes(selectedTrendCourse.value)) {
-      selectedTrendCourse.value = newCourses[0]
-    }
-  } else {
-    selectedTrendCourse.value = ''
-  }
-}, { immediate: true })
 
 const profileScoreData = ref<ProfileScoreData | null>(null)
 
@@ -491,15 +173,17 @@ const profileForm = reactive<ProfileOnboardingUpdate>({
   preferred_language: '',
 })
 
-const profileRules: FormRules<ProfileOnboardingUpdate> = {
-  school: [{ required: true, message: '请选择或填写院校', trigger: 'change' }],
-  school_level: [{ required: true, message: '请选择院校层次', trigger: 'change' }],
-  education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
-  grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
-  major: [{ required: true, message: '请填写或选择专业', trigger: 'change' }],
-  courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
-  learning_goal: [{ required: true, message: '请选择或输入当前学习目标', trigger: 'change' }],
-}
+const resourceHistory = ref<GeneratedResourceItem[]>([
+  { id: 1, learning_need: '深度学习核心概念', status: 'completed', resource_types: [], created_at: new Date().toISOString(), updated_at: null },
+  { id: 2, learning_need: 'Python 高级编程指南', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: null },
+  { id: 3, learning_need: '计算机视觉中的CNN', status: 'pending', resource_types: [], created_at: new Date(Date.now() - 86400000 * 2).toISOString(), updated_at: null },
+  { id: 4, learning_need: '数据结构：二叉树遍历', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 3).toISOString(), updated_at: null },
+  { id: 5, learning_need: '考研复试英语口语准备', status: 'failed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 4).toISOString(), updated_at: null },
+  { id: 6, learning_need: 'Transformer 模型解析', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 5).toISOString(), updated_at: null },
+  { id: 7, learning_need: '操作系统：进程与线程', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 6).toISOString(), updated_at: null },
+])
+
+const resourceHistoryLoading = ref(false)
 
 const profileHeadline = computed(() => {
   const parts = [studentProfile.value.major, studentProfile.value.education_level, studentProfile.value.school]
@@ -507,7 +191,6 @@ const profileHeadline = computed(() => {
   return parts.length ? parts.join(' · ') : '学习资料待完善'
 })
 
-// 雷达图数据绑定，无后端也展示漂亮的形状
 const radarValuesList = computed(() => {
   const dimensionMap: Record<string, number> = {
     knowledge_foundation: 0,
@@ -542,6 +225,240 @@ const dynamicStats = computed(() => {
     completedTasks: completedResourcesCount > 0 ? completedResourcesCount : 8
   }
 })
+
+const radarOption = computed(() => {
+  return {
+    radar: {
+      indicator: [
+        { name: `知识基础 ${radarValuesList.value[0]}`, max: 100 },
+        { name: `学习目标 ${radarValuesList.value[1]}`, max: 100 },
+        { name: `认知风格 ${radarValuesList.value[2]}`, max: 100 },
+        { name: `薄弱点 ${radarValuesList.value[3]}`, max: 100 },
+        { name: `实践能力 ${radarValuesList.value[4]}`, max: 100 },
+        { name: `交互偏好 ${radarValuesList.value[5]}`, max: 100 },
+      ],
+      shape: 'polygon',
+      radius: '65%',
+      axisName: { color: '#64748B', fontSize: 11 },
+      splitArea: { show: false },
+      splitLine: { lineStyle: { color: '#E2E8F0' } }
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: radarValuesList.value,
+        areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
+        lineStyle: { color: '#4F46E5', width: 2 },
+        itemStyle: { color: '#4F46E5' },
+        symbol: 'none'
+      }]
+    }]
+  }
+})
+
+const pieOption = computed(() => {
+  return {
+    tooltip: { trigger: 'item' },
+    legend: {
+      orient: 'vertical',
+      right: '5%',
+      top: 'middle',
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: { color: '#64748B', fontSize: 11 }
+    },
+    series: [
+      {
+        name: '能力占比',
+        type: 'pie',
+        radius: ['45%', '70%'],
+        center: ['35%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 4,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: { show: false, position: 'center' },
+        emphasis: {
+          label: { show: true, fontSize: '13', fontWeight: 'bold' }
+        },
+        labelLine: { show: false },
+        data: [
+          { value: radarValuesList.value[0], name: '知识基础', itemStyle: { color: '#4F46E5' } },
+          { value: radarValuesList.value[1], name: '学习目标', itemStyle: { color: '#10B981' } },
+          { value: radarValuesList.value[2], name: '认知风格', itemStyle: { color: '#3B82F6' } },
+          { value: radarValuesList.value[3], name: '薄弱点', itemStyle: { color: '#F59E0B' } },
+          { value: radarValuesList.value[4], name: '实践能力', itemStyle: { color: '#8B5CF6' } },
+          { value: radarValuesList.value[5], name: '交互偏好', itemStyle: { color: '#EC4899' } }
+        ]
+      }
+    ]
+  }
+})
+
+const lineOption = computed(() => {
+  // 生成最近 7 天的日期作为 X 轴
+  const dates = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    dates.push(`${d.getMonth() + 1}-${d.getDate()}`)
+  }
+
+  // 根据选择的课程名生成动态上扬 Mock 数据
+  let mockValues = [0, 0, 0, 0, 0, 0, 0]
+  if (selectedTrendCourse.value) {
+    // 利用字符串长度求余，让不同课程切换时的图表发生微小变化，产生动态感
+    const modifier = selectedTrendCourse.value.length % 5
+    mockValues = [
+      12 + modifier,
+      25 + modifier * 2,
+      40 + modifier,
+      58 + modifier * 3,
+      80 + modifier * 2,
+      105 + modifier,
+      130 + modifier * 4
+    ]
+  }
+
+  return {
+    grid: { top: 30, right: 20, bottom: 25, left: 45 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: `{b} <br/>课程: ${selectedTrendCourse.value || '无'} <br/>掌握度: {c} 分`
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLine: { lineStyle: { color: '#E2E8F0' } },
+      axisLabel: { color: '#94A3B8', fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      name: '掌握度(预测)',
+      nameTextStyle: { color: '#94A3B8', fontSize: 10, padding: [0, 0, 0, 10] },
+      splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } },
+      axisLabel: { color: '#94A3B8', fontSize: 10 }
+    },
+    series: [{
+      name: selectedTrendCourse.value,
+      data: mockValues,
+      type: 'line',
+      smooth: true,
+      showSymbol: true,
+      symbolSize: 6,
+      lineStyle: { color: '#4F46E5', width: 3 },
+      itemStyle: { color: '#4F46E5' },
+      areaStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: 'rgba(79, 70, 229, 0.15)' }, { offset: 1, color: 'rgba(79, 70, 229, 0)' }]
+        }
+      }
+    }]
+  }
+})
+
+const tableData = computed(() => {
+  return resourceHistory.value.map(item => ({
+    id: item.id,
+    title: item.learning_need || '学习资源',
+    status: translateStatus(item.status),
+    time: formatTime(item.created_at),
+    rawStatus: item.status,
+  }))
+})
+
+const filteredTableData = computed(() => {
+  if (historyFilter.value === '已完成') {
+    return tableData.value.filter(item => item.rawStatus === 'completed')
+  }
+  return tableData.value
+})
+
+use([CanvasRenderer, RadarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
+
+const PRESET_MAJORS = [
+  '计算机科学与技术', '软件工程', '人工智能', '数据科学', '网络安全',
+  '信息安全', '物联网工程', '通信工程', '电子信息工程', '数字媒体技术'
+]
+
+const PRESET_COURSES = [
+  '数据结构', '算法分析', '操作系统', '计算机网络', '数据库系统',
+  '计算机组成原理', '编译原理', '离散数学', '线性代数', '概率统计',
+  '软件工程', 'Web开发', '机器学习', '深度学习', '计算机视觉', 'NLP',
+  '分布式系统', '云计算', '嵌入式开发', '移动端开发'
+]
+
+const PRESET_GOALS = [
+  '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
+  '系统学习进阶', '零基础快速入门', '竞赛夺奖(ACM/蓝桥)', '个人兴趣拓展', '行业证书考取'
+]
+
+const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
+
+const PRESET_SCHOOL_LEVELS = ['985', '211', '双一流', '普通本科', '高职高专', '海外高校', '其他']
+
+const PRESET_GRADES = [
+  '大一', '大二', '大三', '大四',
+  '研一', '研二', '研三',
+  '博一', '博二', '博三',
+  '高职一年级', '高职二年级', '高职三年级'
+]
+
+const PRESET_LANGUAGES = [
+  'Python', 'Java', 'C/C++', 'Go', 'Rust', 'JavaScript', 'TypeScript',
+  'SQL', 'Shell', 'Kotlin', 'Swift', 'PHP', 'HTML/CSS'
+]
+
+const profileRules: FormRules<ProfileOnboardingUpdate> = {
+  school: [{ required: true, message: '请选择或填写院校', trigger: 'change' }],
+  school_level: [{ required: true, message: '请选择院校层次', trigger: 'change' }],
+  education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
+  grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
+  major: [{ required: true, message: '请填写或选择专业', trigger: 'change' }],
+  courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
+  learning_goal: [{ required: true, message: '请选择或输入当前学习目标', trigger: 'change' }],
+}
+
+watch(() => studentProfile.value.courses, (newCourses) => {
+  if (newCourses && newCourses.length > 0) {
+    if (!newCourses.includes(selectedTrendCourse.value)) {
+      selectedTrendCourse.value = newCourses[0]
+    }
+  } else {
+    selectedTrendCourse.value = ''
+  }
+}, { immediate: true })
+
+watch(() => profileForm.school, (newVal) => {
+  if (!newVal) {
+    profileForm.school_level = '';
+    return;
+  }
+  const matched = profileSchoolOptions.value.find((s: any) => s.name === newVal);
+  profileForm.school_level = matched ? (matched.level || '') : '';
+})
+
+watch(() => route.query.action, () => {
+  openProfileEditorFromRoute()
+})
+
+watch(timeRange, () => {
+  loadLearningStats()
+})
+
+onMounted(async () => {
+  await Promise.all([
+    loadProfileInfo(),
+    loadResourceHistory(),
+    loadLearningStats()
+  ]).catch(console.error)
+  openProfileEditorFromRoute()
+})
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
 
 const formatDurationValue = (seconds?: number | null) => {
   if (!seconds) return '0';
@@ -584,15 +501,6 @@ const handleSchoolSelect = (item: any) => {
   profileForm.school_level = item.level || '';
 }
 
-watch(() => profileForm.school, (newVal) => {
-  if (!newVal) {
-    profileForm.school_level = '';
-    return;
-  }
-  const matched = profileSchoolOptions.value.find((s: any) => s.name === newVal);
-  profileForm.school_level = matched ? (matched.level || '') : '';
-})
-
 const fillProfileForm = (payload: StudentProfileData) => {
   profileForm.education_level = payload.education_level || ''
   profileForm.grade = payload.grade || ''
@@ -623,7 +531,6 @@ const loadProfileInfo = async () => {
   }
 }
 
-// 请求学习时长统计数据
 const loadLearningStats = async () => {
   try {
     const days = parseInt(timeRange.value) || 7
@@ -712,189 +619,6 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
     profileSubmitting.value = false
   }
 }
-
-onMounted(async () => {
-  await Promise.all([
-    loadProfileInfo(),
-    loadResourceHistory(),
-    loadLearningStats()
-  ]).catch(console.error)
-  openProfileEditorFromRoute()
-})
-
-watch(() => route.query.action, () => {
-  openProfileEditorFromRoute()
-})
-
-// 当近期表现的下拉框切换时，重新拉取对应周期的折线图数据
-watch(timeRange, () => {
-  loadLearningStats()
-})
-
-const radarOption = computed(() => {
-  return {
-    radar: {
-      indicator: [
-        { name: `知识基础 ${radarValuesList.value[0]}`, max: 100 },
-        { name: `学习目标 ${radarValuesList.value[1]}`, max: 100 },
-        { name: `认知风格 ${radarValuesList.value[2]}`, max: 100 },
-        { name: `薄弱点 ${radarValuesList.value[3]}`, max: 100 },
-        { name: `实践能力 ${radarValuesList.value[4]}`, max: 100 },
-        { name: `交互偏好 ${radarValuesList.value[5]}`, max: 100 },
-      ],
-      shape: 'polygon',
-      radius: '65%',
-      axisName: { color: '#64748B', fontSize: 11 },
-      splitArea: { show: false },
-      splitLine: { lineStyle: { color: '#E2E8F0' } }
-    },
-    series: [{
-      type: 'radar',
-      data: [{
-        value: radarValuesList.value,
-        areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
-        lineStyle: { color: '#4F46E5', width: 2 },
-        itemStyle: { color: '#4F46E5' },
-        symbol: 'none'
-      }]
-    }]
-  }
-})
-
-const pieOption = computed(() => {
-  return {
-    tooltip: { trigger: 'item' },
-    legend: {
-      orient: 'vertical',
-      right: '5%',
-      top: 'middle',
-      itemWidth: 12,
-      itemHeight: 12,
-      textStyle: { color: '#64748B', fontSize: 11 }
-    },
-    series: [
-      {
-        name: '能力占比',
-        type: 'pie',
-        radius: ['45%', '70%'],
-        center: ['35%', '50%'],
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 4,
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        label: { show: false, position: 'center' },
-        emphasis: {
-          label: { show: true, fontSize: '13', fontWeight: 'bold' }
-        },
-        labelLine: { show: false },
-        data: [
-          { value: radarValuesList.value[0], name: '知识基础', itemStyle: { color: '#4F46E5' } },
-          { value: radarValuesList.value[1], name: '学习目标', itemStyle: { color: '#10B981' } },
-          { value: radarValuesList.value[2], name: '认知风格', itemStyle: { color: '#3B82F6' } },
-          { value: radarValuesList.value[3], name: '薄弱点', itemStyle: { color: '#F59E0B' } },
-          { value: radarValuesList.value[4], name: '实践能力', itemStyle: { color: '#8B5CF6' } },
-          { value: radarValuesList.value[5], name: '交互偏好', itemStyle: { color: '#EC4899' } }
-        ]
-      }
-    ]
-  }
-})
-
-// === 折线图：强制在前端展现明显的【向上成长趋势】假数据 ===
-const lineOption = computed(() => {
-  // 生成最近 7 天的日期作为 X 轴
-  const dates = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    dates.push(`${d.getMonth() + 1}-${d.getDate()}`)
-  }
-
-  // 根据选择的课程名生成动态上扬 Mock 数据
-  let mockValues = [0, 0, 0, 0, 0, 0, 0]
-  if (selectedTrendCourse.value) {
-    // 利用字符串长度求余，让不同课程切换时的图表发生微小变化，产生动态感
-    const modifier = selectedTrendCourse.value.length % 5
-    mockValues = [
-      12 + modifier,
-      25 + modifier * 2,
-      40 + modifier,
-      58 + modifier * 3,
-      80 + modifier * 2,
-      105 + modifier,
-      130 + modifier * 4
-    ]
-  }
-
-  return {
-    grid: { top: 30, right: 20, bottom: 25, left: 45 },
-    tooltip: {
-      trigger: 'axis',
-      formatter: `{b} <br/>课程: ${selectedTrendCourse.value || '无'} <br/>掌握度: {c} 分`
-    },
-    xAxis: {
-      type: 'category',
-      data: dates,
-      axisLine: { lineStyle: { color: '#E2E8F0' } },
-      axisLabel: { color: '#94A3B8', fontSize: 11 }
-    },
-    yAxis: {
-      type: 'value',
-      name: '掌握度(预测)',
-      nameTextStyle: { color: '#94A3B8', fontSize: 10, padding: [0, 0, 0, 10] },
-      splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } },
-      axisLabel: { color: '#94A3B8', fontSize: 10 }
-    },
-    series: [{
-      name: selectedTrendCourse.value,
-      data: mockValues,
-      type: 'line',
-      smooth: true,
-      showSymbol: true,
-      symbolSize: 6,
-      lineStyle: { color: '#4F46E5', width: 3 },
-      itemStyle: { color: '#4F46E5' },
-      areaStyle: {
-        color: {
-          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [{ offset: 0, color: 'rgba(79, 70, 229, 0.15)' }, { offset: 1, color: 'rgba(79, 70, 229, 0)' }]
-        }
-      }
-    }]
-  }
-})
-
-// === 表格 Mock 数据：展示多条数据以便看到滚动条 ===
-const resourceHistory = ref<GeneratedResourceItem[]>([
-  { id: 1, learning_need: '深度学习核心概念', status: 'completed', resource_types: [], created_at: new Date().toISOString(), updated_at: null },
-  { id: 2, learning_need: 'Python 高级编程指南', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: null },
-  { id: 3, learning_need: '计算机视觉中的CNN', status: 'pending', resource_types: [], created_at: new Date(Date.now() - 86400000 * 2).toISOString(), updated_at: null },
-  { id: 4, learning_need: '数据结构：二叉树遍历', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 3).toISOString(), updated_at: null },
-  { id: 5, learning_need: '考研复试英语口语准备', status: 'failed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 4).toISOString(), updated_at: null },
-  { id: 6, learning_need: 'Transformer 模型解析', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 5).toISOString(), updated_at: null },
-  { id: 7, learning_need: '操作系统：进程与线程', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 6).toISOString(), updated_at: null },
-])
-const resourceHistoryLoading = ref(false)
-
-const tableData = computed(() => {
-  return resourceHistory.value.map(item => ({
-    id: item.id,
-    title: item.learning_need || '学习资源',
-    status: translateStatus(item.status),
-    time: formatTime(item.created_at),
-    rawStatus: item.status,
-  }))
-})
-
-// 根据表格筛选切换过滤逻辑
-const filteredTableData = computed(() => {
-  if (historyFilter.value === '已完成') {
-    return tableData.value.filter(item => item.rawStatus === 'completed')
-  }
-  return tableData.value
-})
 
 const translateStatus = (status: string) => {
   const map: Record<string, string> = {

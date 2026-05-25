@@ -54,84 +54,28 @@
                 <small>USERNAME</small>
               </span>
             </template>
-            <el-input v-model="form.username" placeholder="定义您的标识" :prefix-icon="User" size="large" clearable />
-          </el-form-item>
-
-          <el-form-item prop="password">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span>原始密码（必填）</span>
-                <small>PASSWORD</small>
-              </span>
-            </template>
-            <el-input v-model="form.password" type="password" placeholder="设置访问密码" :prefix-icon="Lock" show-password size="large" />
-          </el-form-item>
-
-          <el-form-item prop="confirmPassword">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span>确认密码（必填）</span>
-                <small>CONFIRM</small>
-              </span>
-            </template>
-            <el-input v-model="form.confirmPassword" type="password" placeholder="再次确认密码" :prefix-icon="Lock" show-password size="large" />
-          </el-form-item>
-
-          <el-form-item prop="email">
-            <template #label>
-              <span class="field-label">
-                <span><span style="margin-right: var(--space-1)">*</span>电子邮箱（选填）</span>
-                <small>EMAIL</small>
-              </span>
-            </template>
-            <el-input v-model="form.email" placeholder="输入您的 Email" :prefix-icon="Message" size="large" clearable />
-          </el-form-item>
-
-          <div class="action-zone">
-            <el-button
-                type="primary"
-                class="connect-btn emerald-btn"
-                :loading="isDeploying"
-                @click="handleRegister(registerFormRef)"
-            >
-              完 成 注 册
-              <el-icon class="el-icon--right"><Check /></el-icon>
-            </el-button>
-
-            <div v-if="showLog" class="terminal-log">
-              > 校验数据格式... [OK]<br/>
-              > 分配用户空间... [OK]<br/>
-              > 画像系统初始化就绪。
-            </div>
-          </div>
-
-          <div class="form-nav">
-            <span>已经拥有账号？</span>
-            <el-link type="primary" :underline="false" @click="router.push('/login')">立即前往登录</el-link>
-          </div>
-        </el-form>
-
-        <div class="system-tag">
-          <el-icon><Connection /></el-icon>
-          <span>SECURE_CONNECTION</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { User, Message, Lock, Check, Connection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { register } from '@/api/auth'
+
+import { reactive, ref } from 'vue'
+
+import { User, Message, Lock, Check, Connection } from '@element-plus/icons-vue'
+
+import { useRouter } from 'vue-router'
+
 import { getErrorMessage } from '@/utils/http'
+
+import { register } from '@/api/auth'
+
 import type { FormInstance } from 'element-plus'
 
 const router = useRouter()
+
 const isDeploying = ref(false)
+
 const showLog = ref(false)
+
 const registerFormRef = ref()
 
 const form = reactive({
@@ -140,14 +84,6 @@ const form = reactive({
   password: '',
   confirmPassword: ''
 })
-
-const validateConfirmPassword = (_rule: any, value: string, callback: Function) => {
-  if (value !== form.password) {
-    callback(new Error('两次输入的密码不一致'))
-  } else {
-    callback()
-  }
-}
 
 const rules = {
   username: [
@@ -165,6 +101,16 @@ const rules = {
     { required: true, message: '请确认密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' },
   ],
+}
+
+declare function withDefaults<T, D>(props: T, defaults: D): T;
+
+const validateConfirmPassword = (_rule: any, value: string, callback: Function) => {
+  if (value !== form.password) {
+    callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
 }
 
 const handleRegister = async (formEl: FormInstance | undefined) => {
