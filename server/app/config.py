@@ -94,6 +94,15 @@ CHAT_BUDGET = get("memory.chat_budget", 700)
 LTM_BUDGET = get("memory.ltm_budget", 1600)
 SUMMARY_BUDGET = get("memory.summary_budget", 900)
 
+# ============ Chat 附件与保护机制 ============
+MAX_FILE_CONTENT_CHARS = get("chat.max_file_content_chars", 15000)
+MAX_ANALYZE_FILE_COUNT = get("chat.max_analyze_file_count", 8)
+MAX_ANALYZE_TOTAL_CHARS = get("chat.max_analyze_total_chars", 40000)
+MAX_PDF_PAGES_TO_READ = get("chat.max_pdf_pages", 80)
+MAX_DOCX_PARAGRAPHS_TO_READ = get("chat.max_docx_paragraphs", 1200)
+MAX_IMAGE_ANALYZE_COUNT = get("chat.max_analyze_images", 8)
+MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
+
 # ============ Neo4j Knowledge Graph ============
 NEO4J_ENABLED = get("neo4j.enabled", False)
 NEO4J_URI = get("neo4j.uri", "")

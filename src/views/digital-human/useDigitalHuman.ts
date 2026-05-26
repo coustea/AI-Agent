@@ -9,9 +9,7 @@ export interface TextMessageParams {
     need_diagram?: boolean
     session_id?: string
     history?: Array<{ role: string; content: string }>
-    image_urls?: string[]
-    file_urls?: string[]
-    attachments?: Array<{ url: string; type: string }>
+    attachments?: string[]
     enable_search?: boolean
     generate_video?: boolean
     enable_long_term_memory?: boolean
@@ -452,8 +450,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         if (typeof params.need_diagram === 'boolean') msg.need_diagram = params.need_diagram
         if (params.session_id) msg.session_id = params.session_id
         if (params.history?.length) msg.history = params.history
-        if (params.image_urls?.length) msg.image_urls = params.image_urls
-        if (params.file_urls?.length) msg.file_urls = params.file_urls
         if (params.attachments?.length) msg.attachments = params.attachments
         if (typeof params.enable_search === 'boolean') msg.enable_search = params.enable_search
         if (typeof params.generate_video === 'boolean') msg.generate_video = params.generate_video

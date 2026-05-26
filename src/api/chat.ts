@@ -48,8 +48,7 @@ export interface StreamChatParams {
   message?: string
   history?: StreamChatHistoryItem[]
   session_id?: string
-  image_urls?: string[]
-  file_urls?: string[]
+  attachments?: string[]
   need_teaching_diagram?: boolean
   generate_video?: boolean
   enable_search?: boolean
@@ -153,11 +152,8 @@ export function streamChat(
   if (params.session_id) {
     formData.append('session_id', params.session_id)
   }
-  if (params.image_urls && params.image_urls.length > 0) {
-    formData.append('image_urls', params.image_urls.join(','))
-  }
-  if (params.file_urls && params.file_urls.length > 0) {
-    formData.append('file_urls', params.file_urls.join(','))
+  if (params.attachments && params.attachments.length > 0) {
+    formData.append('attachments', params.attachments.join(','))
   }
   if (params.need_teaching_diagram != null) {
     formData.append('need_teaching_diagram', String(Boolean(params.need_teaching_diagram)))

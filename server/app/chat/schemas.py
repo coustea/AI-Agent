@@ -36,7 +36,7 @@ class ChatMessageItem(BaseModel):
     role: str  # 消息角色: "user" | "assistant" | "tool"
     content: str  # 消息文本内容
     attachments: Optional[list[AttachmentInfo]] = None  # 附件列表
-    knowledge_graph: Optional[dict[str, Any]] = None  # 知识图谱数据
+    teaching_diagram: Optional[dict[str, Any]] = None  # 教学图解数据
     created_at: Optional[datetime] = None  # 创建时间
 
 
@@ -64,17 +64,16 @@ class TutorAgentContext(BaseModel):
     user_id: int
     session_id: str
     system_prompt: str
-    profile_context: str
-    long_term_memory_context: str
     session_summary_context: str
     recent_chat_context: str
     file_context: str
     attachment_analysis_context: str
-    attachment_analysis: dict[str, Any] = {}
-    image_urls: list[str] = []
-    file_urls: list[str] = []
+    attachment_analysis: dict[str, Any] = Field(default_factory=dict)
+    attachments: list[str] = Field(default_factory=list)
     enable_search: bool = False
-    need_knowledge_graph: bool = False
+    need_teaching_diagram: bool = False
+    diagram_mode: Literal["requested", "off"] = "off"
+    preferred_diagram_type: Optional["TeachingDiagramType"] = None
     generate_video: bool = False
     resource_mode: str = "none"
 
@@ -91,13 +90,13 @@ class TutorState(TypedDict, total=False):
     # ---- 用户身份与附件 ----
     user_id: int  # 用户ID
     session_id: str  # 会话ID
-    image_urls: Optional[list[str]]  # 图片URL列表
-    file_urls: Optional[list[str]]  # 文件URL列表
-    need_knowledge_graph: bool  # 是否生成知识图谱
+    attachments: Optional[list[str]]  # 附件URL列表
+    need_teaching_diagram: bool  # 是否生成教学图解
     enable_search: bool  # 是否启用搜索
     enable_long_term_memory: bool  # 是否启用长期记忆读写
-    knowledge_graph: Optional[dict[str, Any]]  # 生成的知识图谱数据
-    knowledge_graph_error: Optional[str]  # 知识图谱生成错误信息
+    teaching_diagram: Optional[dict[str, Any]]  # 生成的教学图解数据
+    teaching_diagram_error: Optional[str]  # 教学图解生成错误信息
+    diagram_type: Optional["TeachingDiagramType"]  # 教学图解类型
 
     # ---- 路由与执行模式 ----
     route: str  # 路由结果
@@ -106,8 +105,6 @@ class TutorState(TypedDict, total=False):
     search_result: str  # 搜索节点返回的搜索结果
 
     # ---- 上下文信息 ----
-    profile_context: str  # 用户画像上下文
-    fact_context: str  # 长期记忆上下文
     recent_chat_context: str  # 近期对话上下文
     file_context: str  # 文件上下文
     attachment_analysis_context: str  # 附件分析上下文
@@ -125,49 +122,97 @@ class TutorState(TypedDict, total=False):
 
 
 # ===================================================================
-# 知识图谱 Schema
+# 教学图解 Schema
 # ===================================================================
 
-class ChatKnowledgeGraphNode(BaseModel):
-    """聊天知识图谱节点。"""
+TeachingDiagramType = Literal["contrast", "journey", "anatomy", "simulation"]
+
+
+class TeachingDiagramModel(BaseModel):
+    """教学图解模型基类。"""
+
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1, max_length=40)
-    label: str = Field(min_length=1, max_length=24)
-    description: str = Field(default="", max_length=120)
-    category: Literal["core", "important", "supplementary", "weak"] = "important"
+
+class ContrastSide(TeachingDiagramModel):
+    label: str = Field(min_length=1, max_length=30)
+    definition: str = Field(min_length=1, max_length=160)
+    signals: list[str] = Field(min_length=1, max_length=4)
+    example: str = Field(min_length=1, max_length=160)
 
 
-class ChatKnowledgeGraphEdge(BaseModel):
-    """聊天知识图谱关系。"""
-    model_config = ConfigDict(extra="forbid")
-
-    source: str = Field(min_length=1, max_length=40)
-    target: str = Field(min_length=1, max_length=40)
-    relation_type: str = Field(default="related", max_length=20)
-    label: str = Field(default="相关", max_length=16)
+class ContrastPayload(TeachingDiagramModel):
+    decision_rule: str = Field(min_length=1, max_length=240)
+    left: ContrastSide
+    right: ContrastSide
+    scenario_conclusion: str = Field(min_length=1, max_length=240)
 
 
-class ChatKnowledgeGraph(BaseModel):
-    """聊天 Agent 输出的结构化知识图谱。"""
-    model_config = ConfigDict(extra="forbid")
+class JourneyStep(TeachingDiagramModel):
+    title: str = Field(min_length=1, max_length=40)
+    action: str = Field(min_length=1, max_length=180)
+    rationale: str = Field(min_length=1, max_length=180)
+    output: str = Field(min_length=1, max_length=180)
+    warning: Optional[str] = Field(default=None, max_length=160)
 
-    topic: str = Field(default="", max_length=40)
-    summary: str = Field(default="", max_length=160)
-    nodes: list[ChatKnowledgeGraphNode] = Field(min_length=1, max_length=24)
-    edges: list[ChatKnowledgeGraphEdge] = Field(default_factory=list, max_length=48)
-    focus_areas: list[str] = Field(default_factory=list, max_length=8)
+
+class JourneyPayload(TeachingDiagramModel):
+    goal: str = Field(min_length=1, max_length=200)
+    steps: list[JourneyStep] = Field(min_length=3, max_length=6)
+    result: str = Field(min_length=1, max_length=240)
+
+
+class AnatomyPart(TeachingDiagramModel):
+    name: str = Field(min_length=1, max_length=40)
+    responsibility: str = Field(min_length=1, max_length=180)
+    detail: str = Field(min_length=1, max_length=220)
+    interaction_cue: Optional[str] = Field(default=None, max_length=160)
+
+
+class AnatomyPayload(TeachingDiagramModel):
+    subject: str = Field(min_length=1, max_length=80)
+    parts: list[AnatomyPart] = Field(min_length=3, max_length=7)
+    interaction_summary: str = Field(min_length=1, max_length=240)
+
+
+class SimulationFrame(TeachingDiagramModel):
+    stage: str = Field(min_length=1, max_length=40)
+    state: str = Field(min_length=1, max_length=200)
+    changed: str = Field(min_length=1, max_length=200)
+    reason: str = Field(min_length=1, max_length=200)
+    learner_focus: str = Field(min_length=1, max_length=160)
+
+
+class SimulationPayload(TeachingDiagramModel):
+    scenario: str = Field(min_length=1, max_length=200)
+    initial_state: str = Field(min_length=1, max_length=200)
+    frames: list[SimulationFrame] = Field(min_length=2, max_length=6)
+    result: str = Field(min_length=1, max_length=240)
+
+
+class InsightCanvas(TeachingDiagramModel):
+    """一次答疑对应的一张结构化教学图板。"""
+
+    type: TeachingDiagramType
+    title: str = Field(min_length=1, max_length=80)
+    focus_question: str = Field(min_length=1, max_length=240)
+    takeaway: str = Field(min_length=1, max_length=240)
+    why_it_works: str = Field(min_length=1, max_length=400)
+    pitfall: Optional[str] = Field(default=None, max_length=240)
+    try_it: str = Field(min_length=1, max_length=240)
+    personalization_note: Optional[str] = Field(default=None, max_length=240)
+    payload: Union[ContrastPayload, JourneyPayload, AnatomyPayload, SimulationPayload]
 
     @model_validator(mode="after")
-    def validate_edges(self) -> "ChatKnowledgeGraph":
-        node_ids = {node.id for node in self.nodes}
-        invalid_edges = [
-            edge
-            for edge in self.edges
-            if edge.source not in node_ids or edge.target not in node_ids
-        ]
-        if invalid_edges:
-            raise ValueError("knowledge graph edge source/target must reference existing node ids")
+    def validate_payload_type(self) -> "InsightCanvas":
+        expected_type = {
+            "contrast": ContrastPayload,
+            "journey": JourneyPayload,
+            "anatomy": AnatomyPayload,
+            "simulation": SimulationPayload,
+        }[self.type]
+        if not isinstance(self.payload, expected_type):
+            raise ValueError("teaching diagram payload must match diagram type")
         return self
 
 

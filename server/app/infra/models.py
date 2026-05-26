@@ -110,6 +110,8 @@ class ChatSession(SQLModel, table=True):
     )
     # 会话概要触发计数器
     summary_token_count: int = Field(default=0)  # 累计 token 数，达到阈值触发会话概要生成
+    # 附件预分析结果持久化（按消息ID索引）
+    attachment_analyses: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
 
 class ChatMessage(SQLModel, table=True):
@@ -127,7 +129,7 @@ class ChatMessage(SQLModel, table=True):
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
-    knowledge_graph: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 知识图谱数据
+    teaching_diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 教学图解数据
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
@@ -329,7 +331,7 @@ class GeneratedResourceItem(SQLModel, table=True):
     resource_id: int = Field(index=True, foreign_key="generated_resources.id")
     user_id: int = Field(index=True)
 
-    # Agent 类型（content/mindmap/knowledge_graph/quiz/code/reading）
+    # Agent 类型（content/mindmap/quiz/code/reading/ppt）
     agent_type: str = Field(max_length=50, index=True)
 
     # 内容格式（markdown/json/text/code）
@@ -407,6 +409,39 @@ class LearningEvent(SQLModel, table=True):
 # Path — 课程级学习路径规划 (Course Path)
 # ---------------------------------------------------------------------------
 
+class CoursePathGenerationTask(SQLModel, table=True):
+    """路径规划任务表 — 保存慢速规划过程的真实进度快照。"""
+    __tablename__ = "course_path_generation_tasks"
+    __table_args__ = (
+        Index("ix_path_generation_tasks_user_module_status", "user_id", "module", "status"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    module: str = Field(default="mentor", index=True)
+    goal: str = Field(sa_column=Column(Text))
+    topic: str = Field(default="", sa_column=Column(Text))
+    current_knowledge: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    preferences: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+
+    status: str = Field(default="pending", max_length=30, index=True)
+    progress: int = Field(default=0, ge=0, le=100)
+    latest_message: str = Field(default="规划任务已创建，等待开始", sa_column=Column(Text))
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+    generated_path_id: int | None = Field(default=None, foreign_key="course_paths.id", index=True)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+
+
 class CoursePath(SQLModel, table=True):
     """课程级学习路径表 — 记录用户在特定目标下的学习路线图。"""
     __tablename__ = "course_paths"
@@ -434,6 +469,9 @@ class CoursePath(SQLModel, table=True):
     # 版本与状态
     version: int = Field(default=1)
     status: str = Field(default="active", max_length=30, index=True)  # active, completed, archived
+
+    # 宏观阶段框架 (来自大模型生成的 Stages)
+    stages_json: list[dict] | None = Field(default=None, sa_column=Column(JSONB))
 
     # 规划原因/依据 (来自大模型)
     adjustment_rationale: list[str] | None = Field(default=None, sa_column=Column(JSONB))
@@ -467,6 +505,7 @@ class CoursePathNode(SQLModel, table=True):
 
     # 节点状态
     status: str = Field(default="locked", max_length=20)  # locked, available, in_progress, completed
+    resource_status: str = Field(default="not_started", max_length=20)  # not_started, generating, ready, failed
     progress: int = Field(default=0, ge=0, le=100)
     priority: int = Field(default=50, ge=0, le=100)
 
@@ -529,6 +568,7 @@ REGISTERED_MODELS = (
     GeneratedResource,
     GeneratedResourceItem,
     LearningEvent,
+    CoursePathGenerationTask,
     CoursePath,
     CoursePathNode,
     CoursePathResourceBinding,

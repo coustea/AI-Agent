@@ -1575,8 +1575,7 @@ const handleSend = async () => {
   }
   uploadingFile.value = false
 
-  const imageUrls = uploadedAttachments.filter(f => f.type === 'image').map(f => f.url)
-  const fileUrls = uploadedAttachments.filter(f => f.type === 'document').map(f => f.url)
+  const attachmentUrls = uploadedAttachments.map(f => f.url)
   const userMsg = messages.value.find(m => m.id === userMsgId)
   if (userMsg) {
     userMsg.attachments = uploadedAttachments.length > 0 ? uploadedAttachments : null
@@ -1600,8 +1599,7 @@ const handleSend = async () => {
     sendAvatarText({
       text: text || '请分析附件',
       need_diagram: shouldGenerateTeachingDiagram,
-      image_urls: imageUrls.length > 0 ? imageUrls : undefined,
-      file_urls: fileUrls.length > 0 ? fileUrls : undefined,
+      attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
       ...getAvatarCapabilities(),
       speech_rate: avatarSpeechRate.value,
     })

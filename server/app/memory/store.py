@@ -88,6 +88,20 @@ class MemoryStore:
             await session.commit()
             return True
 
+    async def update_attachment_analyses(self, *, session_id: str, user_id: int, analyses: dict[str, Any]) -> bool:
+        """更新会话的附件预分析结果。"""
+        async with await self._get_session() as session:
+            chat_session = (
+                await session.exec(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
+            ).first()
+            if not chat_session:
+                return False
+            chat_session.attachment_analyses = analyses
+            chat_session.updated_at = now()
+            session.add(chat_session)
+            await session.commit()
+            return True
+
     async def get_session_token_count(self, session_id: str) -> int:
         session = await self.get_session(session_id)
         return session.summary_token_count if session else 0
@@ -129,8 +143,8 @@ class MemoryStore:
         content: str,
         attachments: list[dict[str, Any]] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
-        knowledge_graph: dict[str, Any] | None = None,
-    ) -> int:
+        teaching_diagram: dict[str, Any] | None = None,
+    ) -> None:
         async with await self._get_session() as session:
             chat_session = (await session.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
             if chat_session:
@@ -149,11 +163,10 @@ class MemoryStore:
                     content=content,
                     attachments=attachments,
                     tool_calls=tool_calls,
-                    knowledge_graph=knowledge_graph,
+                    teaching_diagram=teaching_diagram,
                 )
             )
             await session.commit()
-        return await self.count_messages(user_id=user_id, session_id=session_id, module=module)
 
     async def list_messages(
         self,

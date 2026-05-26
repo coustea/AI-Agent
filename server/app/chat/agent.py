@@ -1,35 +1,21 @@
 # -*- coding: utf-8 -*-
-"""TutorAgent: 轻量级教育场景编排器。
+"""TutorAgent: context-initialized intelligent tutoring orchestrator.
 
-当前工作流：
-    START -> classify
-      ├─ direct → direct_answer → END（无图谱）
-      ├─ direct+graph → direct_answer → knowledge_graph_generate → END
-      ├─ search → search_node → spark_summary → END（无图谱）
-      ├─ search+graph → search_node → knowledge_graph_generate → spark_summary(brief) → END
-      ├─ attachment → attachment_answer → END（无图谱）
-      ├─ attachment+graph → attachment_answer → knowledge_graph_generate → END
-      ├─ attachment+search → search_node → spark_summary → END（无图谱）
-      ├─ attachment+search+graph → search_node → knowledge_graph_generate → spark_summary(brief) → END
-      └─ graph_only → knowledge_graph_generate → spark_summary(brief) → END
-
-优先级：附件分析 → 搜索 → 知识图谱
-图谱生成必须用户显式请求（前端按钮或文字明确要求），不自动触发。
-涉及图谱时：先生成图谱，再简要总结；无图谱时：详细回答。
+Each route first produces a complete written explanation. When requested, a
+pure teaching-diagram node then produces an InsightCanvas artifact for the UI.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
+import re
+import time
 from typing import Any
 
 from app.chat.request import ChatHistoryMessage
-from app.chat.schemas import ChatKnowledgeGraph, TutorAgentContext, TutorState
-from app.utils.context import runtime_context as chat_runtime_context
+from app.chat.schemas import InsightCanvas, TutorAgentContext, TutorState
+from app.infra.context import runtime_context as chat_runtime_context
 from app.chat.runtime import prepare_tutor_state
-from app.resource.utils.graph_utils import normalize_render_graph
-from app.resource.graph_store import get_graph_store
 from app.chat.utils import (
     classify_route,
     extract_question,
@@ -44,31 +30,15 @@ from app.config import LANGGRAPH_DEBUG
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
-from app.utils.search import duckduckgo_search, serp_search, tavily_search
+from app.chat.tools.search import duckduckgo_search, serp_search, tavily_search
 
+from langchain_core.callbacks.manager import adispatch_custom_event
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field
 
 logger = get_logger(__name__)
 
-
-async def store_knowledge_graph(
-    *,
-    user_id: int,
-    session_id: str,
-    graph: dict[str, Any],
-) -> dict[str, Any]:
-    try:
-        return await get_graph_store().upsert_graph(
-            user_id=user_id,
-            resource_id=session_id or "chat",
-            agent_id="chat",
-            graph=graph,
-        )
-    except Exception as exc:
-        logger.exception("[TutorAgent] 聊天知识图谱 Neo4j 存储失败")
-        return {"stored": False, "error": str(exc)}
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -83,7 +53,7 @@ GRAPH_NODE_NAMES = {
     "search_node",
     "spark_summary",
     "attachment_answer",
-    "knowledge_graph_generate",
+    "teaching_diagram_generate",
 }
 # 回答节点名称集合（会发送 token 事件）
 ANSWER_NODE_NAMES = {"direct_answer", "spark_summary", "attachment_answer"}
@@ -92,6 +62,60 @@ ANSWER_NODE_NAMES = {"direct_answer", "spark_summary", "attachment_answer"}
 def _get_prompt(name: str) -> str:
     """获取聊天模块的 prompt 文本。"""
     return registry.get(f"chat/{name}")
+
+
+def _explicit_diagram_requested(user_message: str) -> bool:
+    """Only activate the diagram artifact for an explicit request in this turn."""
+    normalized = re.sub(r"\s+", "", (user_message or "").lower())
+    if not normalized:
+        return False
+    if re.search(r"(?:不要|不需要|无需|别|取消|关闭).{0,8}(?:图解|画图|流程图|示意图|结构图|可视化)", normalized):
+        return False
+    patterns = (
+        r"图解(?:说明|解释|展示|一下)?",
+        r"(?:请|帮我|能否|可以)?(?:用图|画图)(?:说明|解释|展示|梳理)?",
+        r"(?:画|生成|提供)(?:一张|一个)?(?:流程图|示意图|结构图|时序图)",
+        r"(?:可视化)(?:说明|解释|展示|呈现)",
+        r"(?:diagram|visuali[sz]e|visualization)",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def _search_requested(user_message: str) -> bool:
+    """Route only explicit fresh-information requests through web search."""
+    normalized = re.sub(r"\s+", "", (user_message or "").lower())
+    if not normalized:
+        return False
+    patterns = (
+        r"(?:联网|上网)(?:搜索|查询|检索|查)",
+        r"(?:搜索|检索|查一下|帮我查|查询)(?:一下)?(?:最新|今天|近期|当前|版本|新闻|资料)?",
+        r"(?:最新|今天|今日|近期发布|最近更新|当前版本|实时|新闻)",
+        r"(?:报错|异常堆栈|traceback|error|版本兼容|升级到|release)",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def _answer_generation_policy(user_message: str) -> str:
+    """Select prompt-level answer scope without imposing output truncation."""
+    normalized = re.sub(r"\s+", "", (user_message or "").lower())
+    is_learning_statement = bool(
+        re.search(r"(?:我)?(?:最近|目前|现在|正在)?(?:在)?(?:学习|复习|了解|看)(?:一下)?", normalized)
+    )
+    asks_for_explanation = bool(
+        re.search(r"(?:什么|为何|为什么|怎么|如何|解释|讲解|介绍|梳理|区别|对比|举例|详细|展开|请问|？|\?)", normalized)
+    )
+    if is_learning_statement and not asks_for_explanation:
+        return (
+            "本轮学生只是在陈述学习方向，尚未提出具体问题。"
+            "请用简短回应确认主题价值，列出至多 3 个可继续提问的切入点，并邀请学生选择；"
+            "不要直接展开完整课程讲义。"
+        )
+    if re.search(r"(?:详细|系统|深入|展开|完整|从头|全面|结合例题|结合代码)", normalized):
+        return "学生明确需要深入讲解；在紧扣问题的前提下分层展开，并避免无关扩写。"
+    return (
+        "本轮采用默认答复深度：先直接回答核心问题，再用必要的要点或一个例子说明；"
+        "若学生未要求深入，不要扩写成完整课程章节。"
+    )
 
 
 def _graph_stream_kwargs() -> dict[str, Any]:
@@ -136,12 +160,6 @@ def _stream_chunk_text(chunk: Any) -> str:
     return ""
 
 
-class Intent(BaseModel):
-    """用户意图分类。"""
-    search: bool = Field(description="是否需要使用联网搜索工具获取最新信息或文档")
-    graph: bool = Field(description="用户是否显式要求生成知识图谱（前端按钮或文字明确请求）")
-
-
 class TutorAgent:
     """智能辅导 Agent — 轻量级编排器。
 
@@ -162,8 +180,8 @@ class TutorAgent:
 
         # 图与工具
         self.graph = None
+        self.memory_tools = []
         self._init_lock = asyncio.Lock()
-        self._background_tasks: set[asyncio.Task] = set()
 
         logger.info("[TutorAgent] 初始化完成")
 
@@ -171,53 +189,58 @@ class TutorAgent:
     # 内部辅助方法
     # ------------------------------------------------------------------
 
-    async def _invoke_with_retry(
+    async def _stream_answer_with_retry(
         self,
         messages: list[Any],
         *,
         node_name: str,
+        config: RunnableConfig,
         fallback_text: str = "抱歉，我暂时无法回答这个问题，请稍后重试。",
         retry_prompt: str = "请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。",
-    ) -> str:
-        """调用 LLM 并在无效回复时重试。
+        tools: list[Any] | None = None,
+    ) -> AIMessage:
+        """Stream text chunks immediately; retry only before any visible output."""
+        llm = self.llm.bind_tools(tools) if tools else self.llm
 
-        Args:
-            messages: 初始消息列表。
-            node_name: 节点名称，用于日志。
-            fallback_text: 最终失败时的回退文本。
-            retry_prompt: 重试时的提示词。
-
-        Returns:
-            LLM 返回的文本内容。
-        """
-        try:
-            response = await self.llm.ainvoke(
-                messages,
-                temperature=1.0,
-            )
-            text = normalize_message_content(getattr(response, "content", response))
-        except Exception as exc:
-            logger.warning("[TutorAgent] %s Spark MAX 调用失败 err=%s", node_name, exc)
-            text = ""
-
-        # 无效回复重试
-        if is_unusable_reply_text(text):
-            logger.warning("[TutorAgent] %s 重试 原因=无效回复", node_name)
-            retry_messages = messages + [HumanMessage(content=retry_prompt)]
+        async def generate(input_messages: list[Any]) -> AIMessage | None:
+            final_chunk = None
             try:
-                retry_response = await self.llm.ainvoke(
-                    retry_messages,
-                    temperature=1.0,
-                )
-                text = normalize_message_content(getattr(retry_response, "content", retry_response))
+                async for chunk in llm.astream(
+                    input_messages,
+                    temperature=0.3,
+                ):
+                    if final_chunk is None:
+                        final_chunk = chunk
+                    else:
+                        final_chunk += chunk
+                        
+                    text = _stream_chunk_text(chunk)
+                    if text:
+                        await adispatch_custom_event(
+                            "answer_token",
+                            {"node": node_name, "text": text},
+                            config=config,
+                        )
+                return final_chunk
             except Exception as exc:
-                logger.warning("[TutorAgent] %s 重试调用失败 err=%s", node_name, exc)
-                text = ""
+                logger.warning("[TutorAgent] %s 流式调用失败 err=%s", node_name, exc)
+            return None
 
-        if is_unusable_reply_text(text):
-            text = fallback_text
+        result = await generate(messages)
+        if result and (result.content or getattr(result, "tool_calls", [])):
+            return result
 
-        return text
+        logger.warning("[TutorAgent] %s 重试 原因=未产生有效流式内容", node_name)
+        result = await generate(messages + [HumanMessage(content=retry_prompt)])
+        if result and (result.content or getattr(result, "tool_calls", [])):
+            return result
+
+        await adispatch_custom_event(
+            "answer_token",
+            {"node": node_name, "text": fallback_text},
+            config=config,
+        )
+        return AIMessage(content=fallback_text)
 
     # ------------------------------------------------------------------
     # 图构建
@@ -235,6 +258,12 @@ class TutorAgent:
             if self.graph is not None:
                 return
 
+            from langgraph.prebuilt import ToolNode
+            from app.chat.tools.memory import build_memory_tools
+            
+            self.memory_tools = build_memory_tools(self.context.user_id)
+            memory_tool_node = ToolNode(self.memory_tools)
+
             # 创建状态图
             graph = StateGraph(TutorState)
             # 添加节点
@@ -243,7 +272,8 @@ class TutorAgent:
             graph.add_node("search_node", self._search_node)
             graph.add_node("spark_summary", self._spark_summary_node)
             graph.add_node("attachment_answer", self._attachment_answer_node)
-            graph.add_node("knowledge_graph_generate", self._knowledge_graph_generate_node)
+            graph.add_node("teaching_diagram_generate", self._teaching_diagram_generate_node)
+            graph.add_node("memory_tools", memory_tool_node)
 
             # 添加边
             graph.add_edge(START, "classify")
@@ -252,51 +282,46 @@ class TutorAgent:
                 classify_route,
                 {
                     "direct": "direct_answer",
-                    "direct_graph": "direct_answer",
                     "search": "search_node",
-                    "search_graph": "search_node",
                     "attachment_needed": "attachment_answer",
-                    "attachment_graph": "attachment_answer",
-                    "graph_only": "knowledge_graph_generate",
                 },
             )
-            # direct_answer 后：有图谱 → knowledge_graph_generate，无图谱 → END
             graph.add_conditional_edges(
                 "direct_answer",
                 self._route_after_answer,
                 {
-                    "kg": "knowledge_graph_generate",
+                    "tools": "memory_tools",
+                    "diagram": "teaching_diagram_generate",
                     "end": END,
                 },
             )
-            # search_node 后：有图谱 → knowledge_graph_generate，无图谱 → spark_summary
+            graph.add_edge("search_node", "spark_summary")
             graph.add_conditional_edges(
-                "search_node",
-                self._route_after_search,
+                "spark_summary",
+                self._route_after_answer,
                 {
-                    "kg": "knowledge_graph_generate",
-                    "summary": "spark_summary",
+                    "diagram": "teaching_diagram_generate",
+                    "end": END,
                 },
             )
-            # attachment_answer 后：有图谱 → knowledge_graph_generate，无图谱 → END
             graph.add_conditional_edges(
                 "attachment_answer",
                 self._route_after_answer,
                 {
-                    "kg": "knowledge_graph_generate",
+                    "diagram": "teaching_diagram_generate",
                     "end": END,
                 },
             )
-            # knowledge_graph_generate 后：需要简要总结 → spark_summary，否则 → END
             graph.add_conditional_edges(
-                "knowledge_graph_generate",
-                self._route_after_kg,
+                "memory_tools",
+                self._route_after_tools,
                 {
-                    "brief_summary": "spark_summary",
-                    "end": END,
+                    "direct_answer": "direct_answer",
+                    "spark_summary": "spark_summary",
+                    "attachment_answer": "attachment_answer",
                 },
             )
-            graph.add_edge("spark_summary", END)
+            graph.add_edge("teaching_diagram_generate", END)
 
             self.graph = graph.compile()
 
@@ -306,30 +331,21 @@ class TutorAgent:
 
     @staticmethod
     def _route_after_answer(state: dict) -> str:
-        """direct_answer / attachment_answer 后的路由：有图谱需求 → kg，否则结束。"""
-        route = state.get("route", "")
-        if "graph" in route:
-            return "kg"
-        return "end"
+        """Run a diagram only after a complete text answer has been produced, or route to tools."""
+        messages = state.get("messages", [])
+        if messages and hasattr(messages[-1], "tool_calls") and getattr(messages[-1], "tool_calls", []):
+            return "tools"
+        return "diagram" if state.get("need_teaching_diagram", False) else "end"
 
     @staticmethod
-    def _route_after_search(state: dict) -> str:
-        """search_node 后的路由：有图谱需求 → kg，否则 → spark_summary。"""
+    def _route_after_tools(state: dict) -> str:
+        """返回调用记忆工具之前的节点。"""
         route = state.get("route", "")
-        if "graph" in route:
-            return "kg"
-        return "summary"
-
-    @staticmethod
-    def _route_after_kg(state: dict) -> str:
-        """knowledge_graph_generate 后的路由：需要简要总结 → spark_summary，否则结束。
-
-        search+graph 和 graph_only 路径需要 spark_summary 简要总结。
-        direct+graph 和 attachment+graph 路径前面已有详细回答，直接结束。
-        """
-        if state.get("summary_type") == "brief":
-            return "brief_summary"
-        return "end"
+        if route == "search":
+            return "spark_summary"
+        elif route == "attachment_needed":
+            return "attachment_answer"
+        return "direct_answer"
 
     # ------------------------------------------------------------------
     # 节点: classify
@@ -339,92 +355,45 @@ class TutorAgent:
         """分类节点：根据用户意图和显式请求决定路由。
 
         路由规则：
-        - 图谱必须用户显式请求（前端按钮 need_knowledge_graph 或文字明确要求）
-        - 优先级：附件分析 → 搜索 → 知识图谱
-        - 有图谱时：search+graph 走 search→kg→summary(brief)，
-          graph_only 走 kg→summary(brief)，其他有图谱路径先回答再生成图谱
+        - 图解必须用户显式请求（前端按钮或文字明确要求）
+        - 附件或搜索仅改变回答路径，回答完成后再按需生成图解
         """
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         messages = state.get("messages") or []
-        file_urls = state.get("file_urls") or []
-        image_urls = state.get("image_urls") or []
-        messages = state.get("messages") or []
+        attachments = state.get("attachments") or []
         enable_search = bool(state.get("enable_search", False))
-        need_knowledge_graph = bool(state.get("need_knowledge_graph", False))
+        need_teaching_diagram = bool(state.get("need_teaching_diagram", False))
         user_message = extract_question(messages)
-        recent_chat_context = str(state.get("recent_chat_context", "")).strip()
 
-        has_attachments = bool(file_urls or image_urls)
+        has_attachments = bool(attachments)
 
         with node_timer("classify", user=user_id, session=session_id):
-            # 动态意图分类（仅判断 search 和 graph）
-            intent_graph = False
-            try:
-                classify_prompt = _get_prompt("intent_classify")
-                prompt_content = f"用户最新问题：\n{user_message}\n\n近期对话上下文：\n{recent_chat_context}"
-                intent = await self.llm.ainvoke_json(
-                    Intent,
-                    [
-                        SystemMessage(content=classify_prompt),
-                        HumanMessage(content=prompt_content),
-                    ],
-                    temperature=0.1,
-                )
-                if intent.search:
-                    enable_search = True
-                if intent.graph:
-                    intent_graph = True
-            except Exception as exc:
-                logger.warning("[TutorAgent] 意图分类失败，降级为默认参数 err=%s", exc)
+            enable_search = enable_search or _search_requested(user_message)
 
-            # 图谱需求：前端显式按钮 或 文字明确要求（二者取其一即可）
-            need_kg = need_knowledge_graph or intent_graph
+            # 图解不能由概率分类结果擅自开启，只接受 UI 开关或本轮显式文字请求。
+            need_diagram = need_teaching_diagram or _explicit_diagram_requested(user_message)
 
             # 构造 state_updates
             state_updates: dict[str, Any] = {}
-            current_need_kg = state.get("need_knowledge_graph")
-            if current_need_kg is not None and need_kg != current_need_kg:
-                state_updates["need_knowledge_graph"] = need_kg
+            if need_diagram != need_teaching_diagram:
+                state_updates["need_teaching_diagram"] = need_diagram
 
-            # 路由决策
-            if need_kg:
-                # --- 有图谱需求的路径 ---
-                if enable_search:
-                    # search+graph: search → kg → spark_summary(brief)
-                    route = "search_graph"
-                    execution_mode = "search_graph"
-                    summary_type = "brief"
-                elif has_attachments:
-                    # attachment+graph: attachment_answer → kg → END（前面已有详细回答）
-                    route = "attachment_graph"
-                    execution_mode = "attachment_graph"
-                    summary_type = None
-                else:
-                    # graph_only: kg → spark_summary(brief)
-                    route = "graph_only"
-                    execution_mode = "graph_only"
-                    summary_type = "brief"
+            if enable_search:
+                route = "search"
+                execution_mode = "attachment_search" if has_attachments else "search"
+            elif has_attachments:
+                route = "attachment_needed"
+                execution_mode = "attachment"
             else:
-                # --- 无图谱需求的路径 ---
-                if enable_search:
-                    route = "search"
-                    execution_mode = "attachment_search" if has_attachments else "search"
-                    summary_type = None
-                elif has_attachments:
-                    route = "attachment_needed"
-                    execution_mode = "attachment"
-                    summary_type = None
-                else:
-                    route = "direct"
-                    execution_mode = "direct"
-                    summary_type = None
+                route = "direct"
+                execution_mode = "direct"
 
             logger.debug(
-                "[TutorAgent] 路由分类 route=%s execution_mode=%s need_kg=%s question=%s",
+                "[TutorAgent] 路由分类 route=%s execution_mode=%s need_diagram=%s question=%s",
                 route,
                 execution_mode,
-                need_kg,
+                need_diagram,
                 truncate(user_message, 120),
             )
 
@@ -432,8 +401,6 @@ class TutorAgent:
                 "route": route,
                 "execution_mode": execution_mode,
             })
-            if summary_type:
-                state_updates["summary_type"] = summary_type
             if enable_search != bool(state.get("enable_search", False)):
                 state_updates["enable_search"] = True
 
@@ -443,7 +410,11 @@ class TutorAgent:
     # 节点: direct_answer
     # ------------------------------------------------------------------
 
-    async def _direct_answer_node(self, state: TutorState) -> dict[str, Any]:
+    async def _direct_answer_node(
+        self,
+        state: TutorState,
+        config: RunnableConfig,
+    ) -> dict[str, Any]:
         """直接回答路径：Spark MAX 直接回答，不调用工具。
 
         Args:
@@ -461,18 +432,26 @@ class TutorAgent:
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
 
-            full_messages = build_messages(system_prompt, list(messages))
-            text = await self._invoke_with_retry(full_messages, node_name="direct_answer")
+            depth_instruction = _answer_generation_policy(question)
+            scoped_prompt = f"{system_prompt}\n\n# 本轮答复深度\n{depth_instruction}"
+            full_messages = build_messages(scoped_prompt, list(messages))
+            result = await self._stream_answer_with_retry(
+                full_messages,
+                node_name="direct_answer",
+                config=config,
+                tools=self.memory_tools,
+            )
 
-            response_msg = AIMessage(content=text)
-            logger.debug("[TutorAgent] direct_answer 完成 preview=%s", truncate(text, 220))
+            state_updates: dict[str, Any] = {"messages": [result]}
+            if not getattr(result, "tool_calls", []):
+                state_updates["answer_text"] = result.content
+                state_updates["termination_reason"] = "direct_answer_done"
+                
+            return state_updates
 
-            return {
-                "messages": [response_msg],
-                "answer_text": text,
-                "termination_reason": "direct_answer_done",
-            }
-
+    # ------------------------------------------------------------------
+    # 节点: search_node
+    # ------------------------------------------------------------------
 
     async def _search_node(self, state: TutorState) -> dict[str, Any]:
         """搜索节点：Spark MAX 使用搜索工具查找信息。
@@ -523,8 +502,8 @@ class TutorAgent:
 
             # 如果有工具调用，执行它们
             tool_calls = getattr(response, "tool_calls", [])
+            tool_results = []
             if tool_calls:
-                tool_results = []
                 for tool_call in tool_calls:
                     tool_name = tool_call.get("name", "")
                     tool_args = tool_call.get("args", {})
@@ -537,12 +516,39 @@ class TutorAgent:
                             result = await serp_search.ainvoke(tool_args)
                         else:
                             result = ""
-                        tool_results.append(f"【{tool_name}】\n{result}")
+                        if result:
+                            tool_results.append(f"【{tool_name}】\n{result}")
                     except Exception as exc:
                         logger.warning("[TutorAgent] 搜索工具 %s 失败: %s", tool_name, exc)
                         tool_results.append(f"【{tool_name}】搜索失败")
 
-                search_result = search_result + "\n\n" + "\n\n".join(tool_results)
+            # 兜底机制：如果模型没有生成工具调用，或者工具调用均无有效返回，则主动执行核心搜索兜底
+            if not tool_results:
+                logger.info("[TutorAgent] 搜索节点未触发工具调用或无结果，启动自动兜底搜索")
+                # 优先使用 tavily_search
+                tavily_result = ""
+                try:
+                    tavily_result = await tavily_search.ainvoke({"query": question})
+                except Exception as exc:
+                    logger.warning("[TutorAgent] 自动兜底 Tavily 搜索失败: %s", exc)
+
+                # 如果 tavily_search 不可用或失败，则 fallback 到 duckduckgo_search
+                if not tavily_result or "Tavily 搜索不可用" in tavily_result or "Tavily 搜索失败" in tavily_result:
+                    logger.info("[TutorAgent] Tavily 不可用或失败，使用 DuckDuckGo 搜索兜底")
+                    try:
+                        ddg_result = await duckduckgo_search.ainvoke({"query": question})
+                        if ddg_result and "DuckDuckGo 搜索失败" not in ddg_result:
+                            tool_results.append(f"【duckduckgo_search (自动兜底)】\n{ddg_result}")
+                        else:
+                            tool_results.append("【自动搜索兜底】无可用搜索结果。")
+                    except Exception as exc:
+                        logger.warning("[TutorAgent] 自动兜底 DuckDuckGo 搜索失败: %s", exc)
+                        tool_results.append("【自动搜索兜底】所有搜索引擎调用均失败。")
+                else:
+                    tool_results.append(f"【tavily_search (自动兜底)】\n{tavily_result}")
+
+            # 合并搜索结果
+            search_result = search_result + "\n\n" + "\n\n".join(tool_results)
 
             logger.debug("[TutorAgent] search_node 完成 preview=%s", truncate(search_result, 220))
 
@@ -552,70 +558,66 @@ class TutorAgent:
             }
 
 
-    async def _spark_summary_node(self, state: TutorState) -> dict[str, Any]:
-        """Spark 总结节点：基于参考资料生成教学回答。
+    # ------------------------------------------------------------------
+    # 节点: spark_summary
+    # ------------------------------------------------------------------
 
-        支持两种模式：
-        - detailed（默认）：基于搜索结果详细回答
-        - brief：基于知识图谱数据简要总结（1-3句话）
-        """
+    async def _spark_summary_node(
+        self,
+        state: TutorState,
+        config: RunnableConfig,
+    ) -> dict[str, Any]:
+        """Spark 总结节点：基于搜索资料生成完整教学回答。"""
         messages = state.get("messages") or []
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         search_result = state.get("search_result", "")
         system_prompt = state.get("system_prompt", "")
         question = extract_question(messages)
-        summary_type = state.get("summary_type")
 
         with node_timer("spark_summary", user=user_id, session=session_id):
-            logger.debug("[TutorAgent] Spark 总结 question=%s summary_type=%s", truncate(question, 180), summary_type)
-
-            # 构建参考资料
-            reference = search_result
-            if not reference and state.get("knowledge_graph"):
-                reference = json.dumps(state["knowledge_graph"], ensure_ascii=False, default=str)
-
-            if summary_type == "brief":
-                prompt = (
-                    f"用户问题：{question}\n\n"
-                    f"参考资料（知识图谱数据）：\n{reference}\n\n"
-                    "请基于以上知识图谱数据，用 1-3 句话简要总结核心概念和关键关系，"
-                    "帮助用户快速理解图谱内容。不要重复罗列所有节点，只提炼最重要的信息。"
-                )
-                fallback_text = "知识图谱已生成，请查看上方可视化展示。"
-                retry_prompt = "请用 1-3 句话简要总结知识图谱的核心内容。"
-            else:
-                prompt = (
-                    f"用户问题：{question}\n\n"
-                    f"参考资料：\n{reference}\n\n"
-                    "请结合参考资料直接回答用户问题。语言自然、清晰、有教学价值。注意：绝对不要在回答中提及「根据参考资料」、「搜索结果表明」等任何揭示你进行了检索的词语，要表现得就如同你原本就知道这些知识一样。"
-                )
-                fallback_text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
-                retry_prompt = "请基于搜索结果重新回答，给出完整、可读、适合教学场景的中文回答。"
+            logger.debug("[TutorAgent] Spark 总结 question=%s", truncate(question, 180))
+            prompt = (
+                f"用户问题：{question}\n\n"
+                f"参考资料：\n{search_result}\n\n"
+                "请结合参考资料完整回答用户问题。语言自然、清晰、有教学价值。"
+                "不要在回答中提及检索过程或内部工作流。"
+            )
+            fallback_text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
+            retry_prompt = "请基于已有资料重新回答，给出完整、可读、适合教学场景的中文回答。"
+            depth_instruction = _answer_generation_policy(question)
 
             full_messages = [
-                SystemMessage(content=system_prompt),
+                SystemMessage(content=f"{system_prompt}\n\n# 本轮答复深度\n{depth_instruction}"),
                 HumanMessage(content=prompt),
             ]
 
-            text = await self._invoke_with_retry(
+            result = await self._stream_answer_with_retry(
                 full_messages,
                 node_name="spark_summary",
+                config=config,
                 fallback_text=fallback_text,
                 retry_prompt=retry_prompt,
+                tools=self.memory_tools,
             )
 
-            response_msg = AIMessage(content=text)
-            logger.debug("[TutorAgent] spark_summary 完成 preview=%s", truncate(text, 220))
-
-            return {
-                "messages": [response_msg],
-                "answer_text": text,
-                "termination_reason": "spark_summary_done",
-            }
+            state_updates: dict[str, Any] = {"messages": [result]}
+            if not getattr(result, "tool_calls", []):
+                state_updates["answer_text"] = result.content
+                state_updates["termination_reason"] = "spark_summary_done"
+                
+            return state_updates
 
 
-    async def _attachment_answer_node(self, state: TutorState) -> dict[str, Any]:
+    # ------------------------------------------------------------------
+    # 节点: attachment_answer
+    # ------------------------------------------------------------------
+
+    async def _attachment_answer_node(
+        self,
+        state: TutorState,
+        config: RunnableConfig,
+    ) -> dict[str, Any]:
         """附件理解路径：Spark MAX 基于附件预分析结果回答。
 
         Args:
@@ -626,8 +628,7 @@ class TutorAgent:
         """
         user_id = state.get("user_id")
         session_id = state.get("session_id")
-        file_urls = state.get("file_urls") or []
-        image_urls = state.get("image_urls") or []
+        attachments = state.get("attachments") or []
         messages = list(state.get("messages") or [])
         question = extract_question(messages)
         pre_analysis = state.get("attachment_analysis") or {}
@@ -637,14 +638,12 @@ class TutorAgent:
             "attachment_answer",
             user=user_id,
             session=session_id,
-            image_count=len(image_urls),
-            file_count=len(file_urls),
+            attachment_count=len(attachments),
         ):
             logger.info(
-                "[TutorAgent] 附件回答 route=attachment_answer question=%s images=%s files=%s",
+                "[TutorAgent] 附件回答 route=attachment_answer question=%s attachments=%s",
                 truncate(question, 180),
-                len(image_urls),
-                len(file_urls),
+                len(attachments),
             )
 
             # 获取附件分析上下文
@@ -667,99 +666,66 @@ class TutorAgent:
                 "回答要清晰、分点、适合教学场景。"
             )
 
-            full_messages = build_messages(system_prompt, [HumanMessage(content=answer_prompt)])
+            depth_instruction = _answer_generation_policy(question)
+            scoped_prompt = f"{system_prompt}\n\n# 本轮答复深度\n{depth_instruction}"
+            full_messages = build_messages(scoped_prompt, [HumanMessage(content=answer_prompt)])
 
-            text = await self._invoke_with_retry(full_messages, node_name="attachment_answer")
+            result = await self._stream_answer_with_retry(
+                full_messages,
+                node_name="attachment_answer",
+                config=config,
+                tools=self.memory_tools,
+            )
 
-            response_msg = AIMessage(content=text)
-            logger.debug("[TutorAgent] attachment_answer 完成 preview=%s", truncate(text, 220))
-
-            return {
-                "messages": [response_msg],
-                "answer_text": text,
-                "attachment_analysis_result": {
+            state_updates: dict[str, Any] = {"messages": [result]}
+            if not getattr(result, "tool_calls", []):
+                state_updates["answer_text"] = result.content
+                state_updates["attachment_analysis_result"] = {
                     "mode": "upload_preanalysis",
                     "analysis_context": full_context,
-                },
-                "termination_reason": "attachment_answer_done",
-            }
+                }
+                state_updates["termination_reason"] = "attachment_answer_done"
+                
+            return state_updates
 
-    async def _knowledge_graph_generate_node(self, state: TutorState) -> TutorState:
-        """知识图谱生成节点；失败时仅跳过图谱。
-
-        支持两种输入：
-        - 有 answer_text（direct/attachment 路径）：基于回答生成图谱
-        - 有 search_result（search+graph 路径）：基于搜索结果生成图谱
-        - 仅有 question（graph_only 路径）：直接基于问题生成图谱
-        """
+    async def _teaching_diagram_generate_node(self, state: TutorState) -> TutorState:
+        """Generate one teaching board after the written answer, without I/O."""
+        if not state.get("need_teaching_diagram", False):
+            return state
         user_id = int(state.get("user_id") or 0)
         session_id = str(state.get("session_id") or "")
-        with node_timer("knowledge_graph_generate", user=user_id, session=session_id):
+        with node_timer("teaching_diagram_generate", user=user_id, session=session_id):
             try:
                 question = extract_question(state.get("messages") or [])
-
-                # 收集可用上下文：优先 answer_text，其次 search_result
-                answer = ""
-                for key in ("final_answer", "answer_text", "answer", "response"):
-                    value = state.get(key)  # type: ignore[literal-required]
-                    if value:
-                        answer = normalize_message_content(value)
-                        break
-                if not answer:
-                    final_ai = next(
-                        (
-                            msg
-                            for msg in reversed(state.get("messages") or [])
-                            if isinstance(msg, AIMessage)
-                        ),
-                        None,
-                    )
-                    answer = normalize_message_content(final_ai.content if final_ai else "")
-
-                # search+graph 路径：搜索结果作为补充上下文
-                search_result = state.get("search_result", "")
-                if search_result and not answer:
-                    answer = f"搜索参考资料：\n{search_result}"
-                elif search_result and answer:
-                    answer = f"{answer}\n\n搜索参考资料：\n{search_result}"
-
-                if not question:
-                    state["knowledge_graph"] = None
-                    state["knowledge_graph_error"] = "缺少问题，跳过知识图谱生成"
+                answer = normalize_message_content(state.get("answer_text", "")).strip()
+                if not question or not answer:
+                    state["teaching_diagram"] = None
+                    state["teaching_diagram_error"] = "缺少问题或文字回答，跳过图解说明生成"
                     return state
 
-                if not answer:
-                    answer = "用户要求直接生成图谱，无大模型文本回答。请直接基于上述问题构建知识图谱。"
-
-                state["knowledge_graph"] = await self._generate_knowledge_graph(
+                diagram = await self._generate_teaching_diagram(
                     question=question,
                     answer=answer,
                     state=state,
                 )
+                state["teaching_diagram"] = diagram.model_dump(mode="json")
+                state["diagram_type"] = diagram.type
+                state["teaching_diagram_error"] = None
                 return state
             except Exception as exc:
-                logger.exception("[TutorAgent] 知识图谱节点失败")
-                state["knowledge_graph"] = None
-                state["knowledge_graph_error"] = str(exc)
+                logger.exception("[TutorAgent] 教学图解节点失败")
+                state["teaching_diagram"] = None
+                state["teaching_diagram_error"] = str(exc)
                 return state
 
-    async def _generate_knowledge_graph(
+    async def _generate_teaching_diagram(
         self,
         *,
         question: str,
         answer: str,
         state: TutorState,
-    ) -> dict[str, Any] | None:
-        """调用 LLM 生成知识图谱 JSON 并持久化到 Neo4j。
-
-        Args:
-            question: 用户问题。
-            answer: 大模型回答或搜索结果文本。
-            state: 当前 LangGraph 状态，用于提取上下文和用户信息。
-
-        Returns:
-            归一化后的图谱数据字典，失败时返回 None。
-        """
+    ) -> InsightCanvas:
+        """Generate a validated learner-facing board using injected context only."""
         profile_context = str(state.get("profile_context", "")).strip()
         fact_context = str(state.get("fact_context", "")).strip()
         recent_chat_context = str(state.get("recent_chat_context", "")).strip()
@@ -773,63 +739,20 @@ class TutorAgent:
             context_parts.append(f"近期对话上下文：\n{recent_chat_context}")
         if attachment_context:
             context_parts.append(f"附件预分析上下文：\n{attachment_context}")
+        preferred = state.get("diagram_type") or "由你选择最适合的类型"
 
         prompt = (
             f"学生问题：\n{question}\n\n"
             f"最终回答：\n{answer}\n\n"
             f"上下文：\n{chr(10).join(context_parts) if context_parts else '无额外上下文。'}\n\n"
-            "请生成适合 Neo4j 与前端关系图渲染的知识图谱 JSON。"
-            "节点必须是原子知识点，优先 6 到 14 个节点；"
-            "关系只能使用 prerequisite、extends、includes、related；"
-            "不要输出 Mermaid，不要输出 Markdown。"
+            f"偏好图板类型：{preferred}\n\n"
+            "请生成一张能辅助学生理解答案的 InsightCanvas 图板 JSON。"
         )
-        payload = await self.llm.ainvoke_json(
-            ChatKnowledgeGraph,
-            [
-                SystemMessage(content=_get_prompt("knowledge_graph")),
-                HumanMessage(content=prompt),
-            ],
+        return await self.llm.ainvoke_json(
+            InsightCanvas,
+            [SystemMessage(content=_get_prompt("teaching_diagram")), HumanMessage(content=prompt)],
             temperature=0.1,
         )
-
-        graph = normalize_render_graph(
-            payload.model_dump(mode="json"),
-            layout_mode="force",
-            relation_depth=2,
-        )
-
-        graph["neo4j"] = await store_knowledge_graph(
-            user_id=int(state.get("user_id") or 0),
-            session_id=str(state.get("session_id") or "chat"),
-            graph=graph,
-        )
-        return graph
-
-    # ------------------------------------------------------------------
-    # 后台任务
-    # ------------------------------------------------------------------
-
-    def _spawn_background(self, coro: Any, *, task_name: str) -> None:
-        """安全启动后台任务。
-
-        Args:
-            coro: 协程对象。
-            task_name: 任务名称。
-        """
-        task = asyncio.create_task(coro, name=task_name)
-        self._background_tasks.add(task)
-
-        def _done_callback(done_task: asyncio.Task) -> None:
-            """任务完成回调，清理任务集合并记录异常。"""
-            self._background_tasks.discard(done_task)
-            if done_task.cancelled():
-                return
-            try:
-                done_task.result()
-            except Exception:
-                logger.exception("[TutorAgent] 后台任务异常 task=%s", task_name)
-
-        task.add_done_callback(_done_callback)
 
     # ------------------------------------------------------------------
     # 主入口：SSE 流式对话
@@ -856,15 +779,10 @@ class TutorAgent:
                 current_message = item.content.strip()
                 break
 
-        resource_requested = bool(context.resource_mode and context.resource_mode != "none") or context.generate_video
-        if resource_requested:
-            logger.info("[TutorAgent] 当前版本仅生成文字回答，已忽略多模态资源请求")
-
         logger.info(
-            "[TutorAgent] 对话开始 message=%s attachments(images=%s,files=%s) enable_search=%s",
+            "[TutorAgent] 对话开始 message=%s attachments=%s enable_search=%s",
             truncate(current_message, 180),
-            len(context.image_urls),
-            len(context.file_urls),
+            len(context.attachments),
             context.enable_search,
         )
 
@@ -876,6 +794,8 @@ class TutorAgent:
         runtime_state: dict[str, Any] = dict(initial_state)
         graph_error_text = ""
         active_node = ""
+        started_at = time.monotonic()
+        first_token_ms: int | None = None
 
         try:
             # 在上下文中运行图
@@ -895,12 +815,12 @@ class TutorAgent:
                                     "message": "正在检索和组织答案，请稍候...",
                                 },
                             )
-                        elif name == "knowledge_graph_generate":
+                        elif name == "teaching_diagram_generate":
                             yield stream_event(
                                 "status",
                                 {
                                     "stage": name,
-                                    "message": "正在生成知识图谱...",
+                                    "message": "正在生成图解说明...",
                                 },
                             )
 
@@ -915,15 +835,17 @@ class TutorAgent:
                                 else:
                                     runtime_state[key] = value
 
-                    # LLM 实时流式输出：前端收到每个 chunk 后逐步追加显示。
-                    if kind == "on_chat_model_stream":
-                        metadata = event.get("metadata") or {}
-                        node_name = metadata.get("langgraph_node") or active_node
-                        if node_name in ANSWER_NODE_NAMES:
-                            chunk_text = _stream_chunk_text(event.get("data", {}).get("chunk"))
-                            if chunk_text:
-                                full_reply += chunk_text
-                                yield stream_event("token", chunk_text)
+                    # 回答节点发出的稳定自定义流事件，避免完整生成后才一次性返回。
+                    if kind == "on_custom_event" and name == "answer_token":
+                        payload = event.get("data", {})
+                        node_name = payload.get("node") if isinstance(payload, dict) else active_node
+                        chunk_text = payload.get("text", "") if isinstance(payload, dict) else ""
+                        if node_name in ANSWER_NODE_NAMES and chunk_text:
+                            if first_token_ms is None:
+                                first_token_ms = int((time.monotonic() - started_at) * 1000)
+                                logger.info("[TutorAgent] 首个 token 已发送 first_token_ms=%s", first_token_ms)
+                            full_reply += chunk_text
+                            yield stream_event("token", chunk_text)
 
                     # 兼容未产生流式 chunk 的模型/路径，避免前端空白。
                     if kind == "on_chain_end" and name in ANSWER_NODE_NAMES and not full_reply:
@@ -945,8 +867,10 @@ class TutorAgent:
             graph_error_text = f"服务器出错: {exc}"
 
         logger.info(
-            "[TutorAgent] 请求结束 termination_reason=%s",
+            "[TutorAgent] 请求结束 termination_reason=%s first_token_ms=%s total_ms=%s",
             runtime_state.get("termination_reason", ""),
+            first_token_ms,
+            int((time.monotonic() - started_at) * 1000),
         )
 
         # 发送错误事件
@@ -970,6 +894,10 @@ class TutorAgent:
             yield stream_event("done", {"session_id": context.session_id, "error": True})
             return
 
+        teaching_diagram = runtime_state.get("teaching_diagram")
+        if isinstance(teaching_diagram, dict):
+            yield stream_event("diagram", teaching_diagram)
+
         # 发送完成事件
         yield stream_event(
             "done",
@@ -978,9 +906,7 @@ class TutorAgent:
                 "full_response": full_reply,
                 "resource_mode": "none",
                 "resource": None,
-                "resources": {
-                    "knowledge_graph": runtime_state.get("knowledge_graph"),
-                    "video": None,
-                },
+                "teaching_diagram": teaching_diagram,
+                "resources": {"teaching_diagram": teaching_diagram, "video": None},
             },
         )

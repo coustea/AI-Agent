@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -14,14 +15,19 @@ from app.auth.security import get_current_user
 from app.infra.models import User
 from app.chat.request import ChatHistoryMessage
 from app.chat.service import get_chat_usecases
-from app.memory import MemoryService, OnboardingResponse, OnboardingUpdate
-from app.utils.response import HttpResponse
+from app.memory import OnboardingResponse, OnboardingUpdate
+from app.infra.response import HttpResponse
+
+if TYPE_CHECKING:
+    from app.memory import MemoryService
 
 # 路由器实例
 router = APIRouter()
 
-# 模块级 MemoryService 单例，避免每次请求重复创建 store/service 实例
-_memory_service = MemoryService()
+
+def _get_memory_service() -> "MemoryService":
+    """获取与 ChatUseCases 共享的 MemoryService 单例。"""
+    return get_chat_usecases()._memory_service
 
 
 @router.post("/chat/stream")
@@ -29,9 +35,8 @@ async def mentor_chat_stream(
     message: str | None = Form(default=None),
     history: str | None = Form(default=None),
     session_id: str | None = Form(default=None),
-    image_urls: str | None = Form(default=None),
-    file_urls: str | None = Form(default=None),
-    need_knowledge_graph: bool = Form(default=False),
+    attachments: str | None = Form(default=None),
+    need_teaching_diagram: bool = Form(default=False),
     generate_video: bool = Form(default=False),
     enable_search: bool = Form(default=False),
     enable_long_term_memory: bool = Form(default=False),
@@ -39,15 +44,14 @@ async def mentor_chat_stream(
 ):
     """SSE 流式对话主入口。
 
-    附件由前端先上传到 /chat/upload，再通过 image_urls/file_urls 传入。
+    附件由前端先上传到 /chat/upload，再通过 attachments 传入。
 
     Args:
         message: 兼容字段；为空时使用 history 最后一条用户消息。
         history: JSON 编码的历史消息列表。
         session_id: 可选的会话ID。
-        image_urls: 图片URL字符串（逗号分隔）。
-        file_urls: 文件URL字符串（逗号分隔）。
-        need_knowledge_graph: 是否生成知识图谱。
+        attachments: 附件URL字符串（逗号分隔）。
+        need_teaching_diagram: 是否生成图解说明。
         generate_video: 是否生成视频。
         enable_search: 是否启用联网搜索。
         enable_long_term_memory: 是否启用长期记忆读写。
@@ -58,13 +62,7 @@ async def mentor_chat_stream(
     """
     uc = get_chat_usecases()
 
-    # 解析逗号分隔的URL字符串
-    parsed_image_urls: list[str] = []
-    parsed_file_urls: list[str] = []
-    if image_urls:
-        parsed_image_urls = [u.strip() for u in image_urls.split(",") if u.strip()]
-    if file_urls:
-        parsed_file_urls = [u.strip() for u in file_urls.split(",") if u.strip()]
+    parsed_attachments = [u.strip() for u in attachments.split(",") if u.strip()] if attachments else []
 
     parsed_history: list[ChatHistoryMessage] | None = None
     if history:
@@ -85,9 +83,8 @@ async def mentor_chat_stream(
             user_message=message,
             history=parsed_history,
             session_id=effective_session,
-            image_urls=parsed_image_urls or None,
-            file_urls=parsed_file_urls or None,
-            need_knowledge_graph=need_knowledge_graph,
+            attachments=parsed_attachments or None,
+            need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
             enable_search=enable_search,
             enable_long_term_memory=enable_long_term_memory,
@@ -231,7 +228,7 @@ async def get_chat_file(
     Returns:
         文件响应。
     """
-    from app.utils.paths import CHAT_DIR
+    from app.infra.paths import CHAT_DIR
 
     # 权限校验：只允许所有者访问
     if current_user.id != owner_id:
@@ -357,7 +354,7 @@ async def chat_history(
 @router.get("/profile")
 async def get_profile(current_user: User = Depends(get_current_user)):
     """获取当前用户画像。"""
-    memory = _memory_service
+    memory = _get_memory_service()
     profile = await memory.get_or_create_profile(user_id=current_user.id)
     return HttpResponse.success(data={
         "user_id": profile.user_id,
@@ -374,7 +371,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
 @router.get("/profile/score")
 async def get_profile_score(current_user: User = Depends(get_current_user)):
     """获取当前用户画像评分。"""
-    memory = _memory_service
+    memory = _get_memory_service()
     profile = await memory.get_or_create_profile(user_id=current_user.id)
     score_json = profile.profile_score_json or {}
     return HttpResponse.success(data={
@@ -401,7 +398,7 @@ async def get_profile_onboarding(
     current_user: User = Depends(get_current_user),
 ):
     """获取首次登录状态。"""
-    memory = _memory_service
+    memory = _get_memory_service()
     data = await memory.get_onboarding(user_id=current_user.id)
     return HttpResponse.success(data=OnboardingResponse(**data).model_dump())
 
@@ -412,7 +409,7 @@ async def update_profile_onboarding(
     current_user: User = Depends(get_current_user),
 ):
     """更新首次登录数据。"""
-    memory = _memory_service
+    memory = _get_memory_service()
     student_profile = payload.model_dump()
     student_profile["school_level"] = await _resolve_school_level(student_profile.get("school"))
     try:
@@ -446,7 +443,7 @@ async def get_profile_history(
     current_user: User = Depends(get_current_user),
 ):
     """获取画像历史。"""
-    memory = _memory_service
+    memory = _get_memory_service()
     history = await memory.list_profile_history(user_id=current_user.id, limit=limit)
     return HttpResponse.success(data=[
         {

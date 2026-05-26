@@ -82,6 +82,23 @@ memory:
   ltm_budget: 1600
   summary_budget: 900
 
+# Chat 附件与保护机制
+chat:
+  # 单个文件最大读取字符数，超过则截断
+  max_file_content_chars: 15000
+  # 单次文档分析最大文件数量
+  max_analyze_file_count: 8
+  # 单次文档分析总字符数上限
+  max_analyze_total_chars: 40000
+  # PDF 最大读取页数
+  max_pdf_pages: 80
+  # DOCX 最大读取段落数
+  max_docx_paragraphs: 1200
+  # 单次分析最大图片数量
+  max_analyze_images: 8
+  # 单次上传最大文件数量
+  max_upload_files: 12
+
 # Neo4j 知识图谱存储
 neo4j:
   enabled: false
