@@ -2,7 +2,8 @@
 Resource HTTP routes.
 
 API 端点：
-- POST /generate - 生成资源包（SSE 流式）
+- POST /generate/task - 创建后台资源生成任务（独立入口）
+- GET /generate/task/{id}/status - 查询数据库中的真实执行快照
 - GET /agents - 查询可用 Agent 列表
 - GET /resources - 查询资源列表
 - GET /resources/{id} - 查询资源详情
@@ -12,8 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
@@ -21,54 +21,68 @@ from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.resource.schemas import ResourceGenerationRequest
-from app.resource.service import ResourceUsecases, ResourceStreamService, get_stream_service
+from app.resource.service import ResourceUsecases, bg_gen_task
+from app.memory.service import MemoryService
 from app.utils.response import HttpResponse
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.post("/generate")
-async def generate_resources(
+@router.post("/generate/task")
+async def gen_task(
     req: ResourceGenerationRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """生成资源包（SSE 流式）。
-
-    请求体：ResourceGenerationRequest
-    - learning_need: 用户自然语言学习需求
-    - selected_agents: list[AgentSelection]
-    - agent_configs: AgentConfigs
-    - output_options: OutputOptions
-    """
+    """启动独立资源生成后台任务。"""
     logger.info(
-        "[ResourceAPI] 收到生成请求: user_id=%s selected_agents=%s",
+        "[ResourceAPI] 收到后台生成请求: user_id=%s selected_agents=%s",
         current_user.id,
         req.enabled_agent_ids(),
     )
-
-    stream_service = await get_stream_service(session)
-    return StreamingResponse(
-        stream_service.stream_bundle(
-            user_id=current_user.id,
-            request=req,
-        ),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    usecases = ResourceUsecases(session)
+    result = await usecases.start_resource_task(
+        user_id=current_user.id,
+        request=req,
+        source="standalone",
     )
+    resource_id = result["resource_id"]
+
+    memory_service = MemoryService(module="mentor")
+    profile_record = await memory_service.get_profile(user_id=current_user.id)
+    profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
+
+    background_tasks.add_task(
+        bg_gen_task,
+        user_id=current_user.id,
+        request=req,
+        profile=profile_dict,
+        resource_id=resource_id,
+    )
+
+    return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"})
+
+
+@router.get("/generate/task/{resource_id}/status")
+async def get_generation_status(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """查询后台生成任务的状态。"""
+    usecases = ResourceUsecases(session)
+    status_data = await usecases.get_generation_status(user_id=current_user.id, resource_id=resource_id)
+    if status_data is None:
+        return HttpResponse.error(code=404, message="资源不存在或无权限")
+
+    return HttpResponse.success(data=status_data)
 
 
 @router.get("/agents")
 async def list_agents():
-    """查询可用 Agent 列表。
-
-    返回活跃 Agent：content, mindmap, knowledge_graph, quiz, reading, code
-    """
+    """查询可用 Agent 列表。"""
     logger.info("[ResourceAPI] 查询可用 Agent 列表")
     from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER
 
@@ -84,7 +98,6 @@ async def list_agents():
         })
 
     return HttpResponse.success(data=agents)
-
 
 
 @router.get("/resources")
@@ -134,20 +147,7 @@ async def get_resource(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """查询资源详情。
-
-    返回 ResourceBundle 结构：
-    - id: 资源包 ID
-    - task_id: 任务 ID
-    - title: 资源包标题
-    - learning_need: 学习需求
-    - resources: 资源列表
-    - study_path: 学习路径
-    - review_result: 审查结果
-    - status: 状态
-    - created_at: 创建时间
-    - updated_at: 更新时间
-    """
+    """查询资源详情。"""
     logger.info("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
 
     usecases = ResourceUsecases(session)
