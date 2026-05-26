@@ -11,6 +11,7 @@ import asyncio
 import json
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any, AsyncGenerator
 
 from pydantic import BaseModel, Field
@@ -34,6 +35,9 @@ class ResourceGenerateEvent(BaseModel):
     timestamp: str = Field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
 
 
+EventSink = Callable[[ResourceGenerateEvent], Awaitable[None]]
+
+
 class AgentEventEmitter:
     """
     Agent 事件发射器。
@@ -41,9 +45,15 @@ class AgentEventEmitter:
     收集生成过程中的事件，支持 SSE 格式流式输出。
     """
 
-    def __init__(self, resource_id: int = 0, task_id: str | None = None):
+    def __init__(
+        self,
+        resource_id: int = 0,
+        task_id: str | None = None,
+        event_sink: EventSink | None = None,
+    ):
         self.resource_id = resource_id
         self.task_id = task_id or (str(resource_id) if resource_id else "")
+        self._event_sink = event_sink
         self._queue: asyncio.Queue[ResourceGenerateEvent | None] = asyncio.Queue()
         self._started = False
         self._finished = False
@@ -79,6 +89,12 @@ class AgentEventEmitter:
         """将事件放入队列。"""
         self._queue.put_nowait(event)
 
+    async def _publish(self, event: ResourceGenerateEvent) -> None:
+        """发布事件，并等待数据库快照已反映这一真实状态。"""
+        self._enqueue(event)
+        if self._event_sink:
+            await self._event_sink(event)
+
     # ------------------------------------------------------------------
     # 事件发送方法
     # ------------------------------------------------------------------
@@ -94,7 +110,7 @@ class AgentEventEmitter:
         agent: str | None = "coordinator",
     ) -> None:
         """发送工作流事件。"""
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type="workflow",
             stage=stage,
             agent=agent,
@@ -118,7 +134,7 @@ class AgentEventEmitter:
         task_id: str | None = None,
     ) -> None:
         """发送通用标准事件。"""
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type=event_type,
             stage=stage,
             agent=agent,
@@ -143,6 +159,7 @@ class AgentEventEmitter:
         layer_name: str = "",
         agent_role: str = "",
         resource_type: str = "",
+        progress: int = 0,
     ) -> None:
         """发送 Agent 动作事件。"""
         event = self._make_event(
@@ -150,6 +167,7 @@ class AgentEventEmitter:
             stage=f"layer_{layer}",
             agent=agent_name,
             message=detail or current_action or action,
+            progress=progress,
             payload={
                 "action": action,
                 "detail": detail,
@@ -163,7 +181,7 @@ class AgentEventEmitter:
                 "resource_type": resource_type,
             },
         )
-        self._enqueue(event)
+        await self._publish(event)
 
     async def emit_agent(
         self,
@@ -179,7 +197,7 @@ class AgentEventEmitter:
     ) -> None:
         """发送 Agent 状态事件。"""
         resolved_agent = agent_name or agent or ""
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type="agent",
             stage=stage,
             agent=resolved_agent,
@@ -218,7 +236,7 @@ class AgentEventEmitter:
                 "summary_data": summary_data or {},
                 "metadata": metadata or {},
             }
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type="resource",
             agent=resolved_agent,
             status="success",
@@ -243,7 +261,7 @@ class AgentEventEmitter:
         payload: dict | None = None,
     ) -> None:
         """发送审核事件。"""
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type="review",
             stage="reviewing",
             message=message,
@@ -263,7 +281,7 @@ class AgentEventEmitter:
             item_count = len(bundle_payload)
         elif isinstance(bundle_payload, dict) and isinstance(bundle_payload.get("resources"), list):
             item_count = len(bundle_payload["resources"])
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type="bundle",
             stage="assembling",
             agent="assembler",
@@ -275,7 +293,7 @@ class AgentEventEmitter:
 
     async def emit_error(self, message: str) -> None:
         """发送错误事件。"""
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type="error",
             status="failed",
             message=message,
@@ -290,7 +308,7 @@ class AgentEventEmitter:
     ) -> None:
         """发送完成事件。"""
         bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
-        self._enqueue(self._make_event(
+        await self._publish(self._make_event(
             event_type="done",
             stage="completed",
             status="success",
