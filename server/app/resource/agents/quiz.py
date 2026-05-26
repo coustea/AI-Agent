@@ -57,11 +57,20 @@ class QuizAgent:
         self.llm = get_llm()
 
     async def run(self, state: WorkerState) -> WorkerResult:
-        await self.emitter.emit_agent("quiz", status="running", message="正在生成习题")
+        await self.emitter.emit_agent("quiz", status="running", message="正在准备习题", progress=0)
+        await self.emitter.emit_agent_action(
+            "quiz", "analyze", detail="正在分析考点分布",
+            current_step=1, total_steps=4, step_label="分析考点", progress=10,
+        )
 
         prompt = registry.get("resource/quiz")
         input_text = self._build_input(state)
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
+
+        await self.emitter.emit_agent_action(
+            "quiz", "generate", detail="正在出题",
+            current_step=2, total_steps=4, step_label="出题", progress=30,
+        )
 
         # 尝试结构化输出
         try:
@@ -76,6 +85,12 @@ class QuizAgent:
             content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
         except Exception as exc:
             logger.warning("[QuizAgent] 结构化输出失败，尝试 JSON 文本解析: %s", exc)
+
+            await self.emitter.emit_agent_action(
+                "quiz", "fallback", detail="正在重新整理习题格式",
+                current_step=3, total_steps=4, step_label="格式整理", progress=55,
+            )
+
             response = await self.llm.ainvoke(full_prompt, temperature=0.3)
             raw = response.content if hasattr(response, "content") else str(response)
             quiz_data = self._salvage_quiz_payload(raw)
@@ -85,8 +100,13 @@ class QuizAgent:
                 validated = QuizPayload.model_validate(quiz_data)
                 quiz_data = validated.model_dump(mode="json")
             except Exception:
-                pass  # 验证失败，兜底使用原始 dict
+                pass
             content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
+
+        await self.emitter.emit_agent_action(
+            "quiz", "analyze_answers", detail="正在编写答案解析",
+            current_step=3, total_steps=4, step_label="编写解析", progress=75,
+        )
 
         # 统计难度分布
         questions = quiz_data.get("questions", [])
@@ -101,7 +121,11 @@ class QuizAgent:
             "exam_style": state.agent_config.get("exam_style", "school"),
         }
 
-        await self.emitter.emit_agent("quiz", status="success", message=f"已生成 {len(questions)} 道习题")
+        await self.emitter.emit_agent_action(
+            "quiz", "done", detail=f"已生成 {len(questions)} 道习题",
+            current_step=4, total_steps=4, step_label="生成完成", progress=100,
+        )
+        await self.emitter.emit_agent("quiz", status="success", message=f"已生成 {len(questions)} 道习题", progress=100)
         return WorkerResult(
             success=True,
             content=content,
@@ -125,8 +149,8 @@ class QuizAgent:
         if profile_text:
             parts.append(f"## 学习者画像摘要\n{profile_text}")
 
-        if state.knowledge_graph:
-            parts.append(f"## 知识图谱\n{state.knowledge_graph.model_dump_json(indent=2)}")
+        if state.blueprint:
+            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
 
         if state.instruction:
             lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]

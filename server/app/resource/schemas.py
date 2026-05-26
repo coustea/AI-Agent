@@ -18,17 +18,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # ======================================================================
 
 AGENT_META: dict[str, dict[str, str]] = {
-    "knowledge_graph": {"name": "知识图谱", "icon": "Graph", "description": "知识点关系图谱"},
     "content": {"name": "课程内容", "icon": "Document", "description": "专业课程讲解文档"},
     "mindmap": {"name": "思维导图", "icon": "Mindmap", "description": "知识结构思维导图"},
     "quiz": {"name": "练习题", "icon": "Quiz", "description": "练习习题"},
     "code": {"name": "代码示例", "icon": "Code", "description": "代码实操案例"},
     "reading": {"name": "拓展阅读", "icon": "Reading", "description": "拓展阅读推荐"},
+    "ppt": {"name": "PPT文稿", "icon": "DataBoard", "description": "PPT文稿生成"},
 }
 
 # 默认 Agent 顺序和默认启用列表
-AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "knowledge_graph", "quiz", "code", "reading"]
-AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "knowledge_graph", "quiz", "reading"]
+AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt"]
+AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "reading", "ppt"]
 
 
 # ======================================================================
@@ -41,12 +41,12 @@ LearningScenario = Literal["exam_prep", "daily_review", "project_practice", "sel
 class ResourceAgentId(str, Enum):
     """资源 Agent ID。"""
 
-    KNOWLEDGE_GRAPH = "knowledge_graph"
     CONTENT = "content"
     MINDMAP = "mindmap"
     QUIZ = "quiz"
     READING = "reading"
     CODE = "code"
+    PPT = "ppt"
 
 
 DEFAULT_SELECTED_AGENT_IDS: list[ResourceAgentId] = [
@@ -74,25 +74,15 @@ class ContentConfig(BaseModel):
 class MindmapConfig(BaseModel):
     """思维导图 Agent 配置。"""
     map_type: Literal["knowledge_tree", "exam_map", "comparison_map"] = "knowledge_tree"
-    max_depth: int = Field(default=4, ge=2, le=6)
+    max_depth: int = Field(default=3, ge=2, le=5)
     highlight_weak: bool = True
     expand_weak_points: bool = False
     include_prerequisites: bool = False
 
 
-class KnowledgeGraphConfig(BaseModel):
-    """知识图谱 Agent 配置。"""
-    layout_mode: Literal["force", "radial", "hierarchy"] = "force"
-    max_nodes: int = Field(default=18, ge=3, le=50)
-    relation_depth: int = Field(default=2, ge=1, le=4)
-    highlight_mode: Literal["weak_points", "key_points", "all"] = "key_points"
-    store_neo4j: bool = True
-    include_orphan_points: bool = True
-
-
 class QuizConfig(BaseModel):
     """习题 Agent 配置。"""
-    question_count: int = Field(default=5, ge=1, le=50)
+    question_count: int = Field(default=5, ge=1, le=20)
     difficulty_mode: Literal["basic", "adaptive", "exam"] = "basic"
     weak_point_weight: float = Field(default=50, ge=0.0, le=100.0)
     exam_style: Literal["school", "考研", "考证", "interview"] = "school"
@@ -114,7 +104,7 @@ class CodeConfig(BaseModel):
 class ReadingConfig(BaseModel):
     """阅读推荐 Agent 配置。"""
     reading_depth: Literal["course_extended", "engineering", "frontier"] = "course_extended"
-    max_items: int = Field(default=5, ge=1, le=20)
+    max_items: int = Field(default=5, ge=1, le=10)
     resource_quality: Literal["classic", "latest", "balanced"] = "balanced"
     include_practice: bool = True
     language_preference: Literal["chinese", "english", "both"] = "chinese"
@@ -125,6 +115,14 @@ class ReadingConfig(BaseModel):
         if value == "bilingual":
             return "both"
         return value
+
+
+class PptConfig(BaseModel):
+    """PPT Agent 配置。"""
+    template_id: Literal["theme-logic-blue"] = "theme-logic-blue"
+    page_count: int = Field(default=6, ge=3, le=20)
+    difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
+    output_format: Literal["preview"] = "preview"
 
 
 class OutputOptions(BaseModel):
@@ -138,10 +136,10 @@ class AgentConfigs(BaseModel):
 
     content: ContentConfig = Field(default_factory=ContentConfig)
     mindmap: MindmapConfig = Field(default_factory=MindmapConfig)
-    knowledge_graph: KnowledgeGraphConfig = Field(default_factory=KnowledgeGraphConfig)
     quiz: QuizConfig = Field(default_factory=QuizConfig)
     code: CodeConfig = Field(default_factory=CodeConfig)
     reading: ReadingConfig = Field(default_factory=ReadingConfig)
+    ppt: PptConfig = Field(default_factory=PptConfig)
 
     def get(self, agent_id: str, default: Any = None) -> dict[str, Any]:
         value = getattr(self, agent_id, None)
@@ -203,34 +201,23 @@ class ResourceGenerationRequest(BaseModel):
 
 
 # ======================================================================
-# 知识图谱 & 执行计划模型（Planning Agent 输出）
+# 教学蓝图 & 执行计划模型（Planning Agent 输出）
 # ======================================================================
 
-class KnowledgePoint(BaseModel):
-    """知识图谱中的知识点。"""
-    id: str = Field(description="知识点唯一标识，如 kp1, kp2")
-    name: str = Field(description="知识点名称")
-    description: str = Field(default="", description="简要描述")
-    difficulty: Literal["basic", "intermediate", "advanced"] = "intermediate"
-    importance: Literal["core", "important", "supplementary"] = "important"
-    is_weak: bool = Field(default=False, description="是否为学生薄弱点")
-    prerequisites: list[str] = Field(default_factory=list, description="前置知识点 ID")
+class LearningBlueprint(BaseModel):
+    """Planning Agent 生成的内部教学蓝图，供多个资源 Agent 共享。
 
-
-class KnowledgeRelation(BaseModel):
-    """知识点之间的关系。"""
-    source: str = Field(description="起始知识点 ID")
-    target: str = Field(description="目标知识点 ID")
-    relation_type: Literal["prerequisite", "extends", "related", "includes"] = "related"
-
-
-class KnowledgeGraph(BaseModel):
-    """Planning Agent 生成的结构化知识图谱。"""
+    不作为 GeneratedResourceItem 保存，不返回给前端，不写入 Neo4j。
+    """
     topic: str = Field(description="学习主题")
-    summary: str = Field(default="", description="主题概要")
-    points: list[KnowledgePoint] = Field(default_factory=list)
-    relations: list[KnowledgeRelation] = Field(default_factory=list)
-    focus_areas: list[str] = Field(default_factory=list, description="重点关注领域")
+    learner_goal: str = Field(default="", description="本轮学习目标")
+    prerequisite_concepts: list[str] = Field(default_factory=list, description="前置概念")
+    core_concepts: list[str] = Field(default_factory=list, description="核心概念")
+    difficult_points: list[str] = Field(default_factory=list, description="难点与易错点")
+    concept_relations: list[str] = Field(default_factory=list, description="概念间关系")
+    example_scenarios: list[str] = Field(default_factory=list, description="推荐案例或场景")
+    practice_targets: list[str] = Field(default_factory=list, description="练习目标")
+    resource_guidance: dict[str, str] = Field(default_factory=dict, description="各类资源的生成侧重点")
 
 
 class AgentInstruction(BaseModel):
@@ -244,7 +231,7 @@ class AgentInstruction(BaseModel):
 
 class ExecutionPlan(BaseModel):
     """Planning Agent 的完整输出。"""
-    knowledge_graph: KnowledgeGraph
+    blueprint: LearningBlueprint
     agent_instructions: list[AgentInstruction] = Field(default_factory=list)
     personalization_summary: str = Field(default="", description="个性化分析总结")
 
@@ -255,14 +242,13 @@ class ExecutionPlan(BaseModel):
 
 class WorkerState(BaseModel):
     """Agent 运行时需要的所有输入，扁平结构。"""
-    # 请求信息
     resource_id: int | None = None
     learning_need: str = ""
     learning_scenario: str = "self_study"
     agent_name: str = ""
     agent_config: dict[str, Any] = Field(default_factory=dict)
     # Planning Agent 的产出（所有 Agent 共享）
-    knowledge_graph: KnowledgeGraph | None = None
+    blueprint: LearningBlueprint | None = None
     # Planning Agent 为该 Agent 定制的指令
     instruction: AgentInstruction | None = None
     # 用户画像
@@ -313,6 +299,7 @@ class ReviewResult(BaseModel):
     issues: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     failed_agents: list[str] = Field(default_factory=list)
+    study_path: list[StudyPathStep] = Field(default_factory=list)
 
 
 class ResourceBundle(BaseModel):
@@ -372,10 +359,9 @@ class ResourceResponse(BaseModel):
 
 
 # ======================================================================
-# Re-exports from request.py / response.py for backward compatibility
+# Re-exports from response.py
 # ======================================================================
 
-from app.resource.request import ResourceGenerateRequest  # noqa: E402
 from app.resource.response import (  # noqa: E402
     ResourceDetailResponse,
     ResourceListResponse,
@@ -388,11 +374,8 @@ __all__ = [
     "AGENT_DEFAULT_ENABLED",
     # Request models
     "ResourceGenerationRequest",
-    "ResourceGenerateRequest",
-    # Knowledge graph & planning
-    "KnowledgePoint",
-    "KnowledgeRelation",
-    "KnowledgeGraph",
+    # Learning blueprint & planning
+    "LearningBlueprint",
     "AgentInstruction",
     "ExecutionPlan",
     # Internal state

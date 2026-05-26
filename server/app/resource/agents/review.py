@@ -13,8 +13,9 @@ from app.infra.logging import get_logger
 from app.prompts import registry
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import (
-    KnowledgeGraph,
+    LearningBlueprint,
     ReviewResult,
+    StudyPathStep,
     WorkerResult,
 )
 from app.resource.utils import format_learner_profile_for_prompt
@@ -30,6 +31,7 @@ class _ReviewOutput(BaseModel):
     personalization_score: int = Field(default=100, ge=0, le=100)
     issues: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
+    study_path: list[StudyPathStep] = Field(default_factory=list)
 
 
 class ReviewAgent:
@@ -42,14 +44,23 @@ class ReviewAgent:
     async def run(
         self,
         results: dict[str, WorkerResult],
-        knowledge_graph: KnowledgeGraph,
+        blueprint: LearningBlueprint,
         profile: dict[str, Any],
         learning_need: str,
     ) -> ReviewResult:
-        await self.emitter.emit_agent("review", status="running", message="正在审查资源质量")
+        await self.emitter.emit_agent("review", status="running", message="正在审查资源质量", progress=0)
+        await self.emitter.emit_agent_action(
+            "review", "check", detail="正在检查内容完整性",
+            current_step=1, total_steps=3, step_label="完整性检查", progress=20,
+        )
 
         prompt = registry.get("resource/review")
-        input_text = self._build_input(results, knowledge_graph, profile, learning_need)
+        input_text = self._build_input(results, blueprint, profile, learning_need)
+
+        await self.emitter.emit_agent_action(
+            "review", "evaluate", detail="正在评估个性化匹配度",
+            current_step=2, total_steps=3, step_label="匹配度评估", progress=55,
+        )
 
         output = await self.llm.ainvoke_json(
             _ReviewOutput,
@@ -64,22 +75,29 @@ class ReviewAgent:
             personalization_score=output.personalization_score,
             issues=output.issues,
             suggestions=output.suggestions,
+            study_path=output.study_path,
         )
 
-        await self.emitter.emit_agent("review", status="success", message="审查完成")
+        await self.emitter.emit_agent_action(
+            "review", "done", detail="质量审查完成",
+            current_step=3, total_steps=3, step_label="审查完成", progress=100,
+        )
+        review_status = "success" if review.passed else "failed"
+        review_message = "质量审查完成" if review.passed else "质量审查未通过，已保留可用资源"
+        await self.emitter.emit_agent("review", status=review_status, message=review_message, progress=100)
         return review
 
     def _build_input(
         self,
         results: dict[str, WorkerResult],
-        knowledge_graph: KnowledgeGraph,
+        blueprint: LearningBlueprint,
         profile: dict[str, Any],
         learning_need: str,
     ) -> str:
         parts = [f"## 学习需求\n{learning_need}"]
 
-        # 知识图谱
-        parts.append(f"## 知识图谱\n{knowledge_graph.model_dump_json(indent=2)}")
+        # 教学蓝图
+        parts.append(f"## 教学蓝图\n{blueprint.model_dump_json(indent=2)}")
 
         # 各资源摘要
         parts.append("## 已生成的资源")

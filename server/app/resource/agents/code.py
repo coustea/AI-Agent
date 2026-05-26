@@ -35,13 +35,22 @@ class CodeAgent:
         self.llm = get_llm()
 
     async def run(self, state: WorkerState) -> WorkerResult:
-        await self.emitter.emit_agent("code", status="running", message="正在生成代码示例")
+        await self.emitter.emit_agent("code", status="running", message="正在准备代码案例", progress=0)
+        await self.emitter.emit_agent_action(
+            "code", "design", detail="正在设计代码示例",
+            current_step=1, total_steps=3, step_label="设计示例", progress=15,
+        )
 
         prompt = registry.get("resource/code")
         input_text = self._build_input(state)
         full_prompt = f"{prompt}\n\n{input_text}\n\n请以 JSON 格式输出，包含 code 和 explanation 字段。"
 
         lang = state.agent_config.get("programming_language", "python")
+
+        await self.emitter.emit_agent_action(
+            "code", "generate", detail="正在编写代码与注释",
+            current_step=2, total_steps=3, step_label="编写代码", progress=45,
+        )
 
         # 尝试结构化 JSON 输出
         try:
@@ -71,7 +80,11 @@ class CodeAgent:
         difficulty = state.agent_config.get("difficulty", "beginner")
         include_test = state.agent_config.get("include_test", True)
 
-        await self.emitter.emit_agent("code", status="success", message=f"{lang} 代码示例生成完成")
+        await self.emitter.emit_agent_action(
+            "code", "done", detail=f"{lang} 代码案例生成完成",
+            current_step=3, total_steps=3, step_label="生成完成", progress=100,
+        )
+        await self.emitter.emit_agent("code", status="success", message=f"{lang} 代码案例生成完成", progress=100)
         return WorkerResult(
             success=True,
             content=content,
@@ -100,8 +113,8 @@ class CodeAgent:
         if profile_text:
             parts.append(f"## 学习者画像摘要\n{profile_text}")
 
-        if state.knowledge_graph:
-            parts.append(f"## 知识图谱\n{state.knowledge_graph.model_dump_json(indent=2)}")
+        if state.blueprint:
+            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
 
         if state.instruction:
             lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]

@@ -14,13 +14,12 @@ from app.resource.agents import AGENT_CLASSES, PlanningAgent, ReviewAgent
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import (
     ExecutionPlan,
-    KnowledgeGraph,
+    LearningBlueprint,
     ResourceGenerationRequest,
     ReviewResult,
     WorkerResult,
     WorkerState,
 )
-from app.resource.utils import load_user_profile
 
 logger = get_logger(__name__)
 
@@ -32,16 +31,17 @@ class ResourceGenerationWorkflow:
         self.emitter = emitter
         self.resource_service = resource_service
 
-    async def run(self, user_id: int, request: ResourceGenerationRequest) -> dict[str, Any]:
+    async def run(self, user_id: int, request: ResourceGenerationRequest, profile: dict[str, Any], resource_id: int | None = None) -> dict[str, Any]:
         """执行资源生成并返回前端资源包。"""
-        resource_record = await self.resource_service.create_resource(user_id=user_id, request=request)
-        resource_id = int(getattr(resource_record, "id", 0) or 0)
+        if resource_id is None:
+            resource_record = await self.resource_service.create_resource(user_id=user_id, request=request)
+            resource_id = int(getattr(resource_record, "id", 0) or 0)
+
         self.emitter.resource_id = resource_id
 
-        await self.emitter.emit_workflow("created", "资源生成任务已创建", progress=0)
+        await self.emitter.emit_workflow("created", "资源生成任务已创建", progress=2)
 
         try:
-            profile = await self._load_profile(user_id)
             enabled_agents = self._enabled_agents(request)
             if not enabled_agents:
                 await self.resource_service.update_resource_status(resource_id=resource_id, status="failed")
@@ -51,17 +51,28 @@ class ResourceGenerationWorkflow:
 
             plan = await self._run_planning(request=request, profile=profile, enabled_agents=enabled_agents)
             results = await self._run_resource_agents(
+                user_id=user_id,
                 resource_id=resource_id,
                 enabled_agents=enabled_agents,
                 request=request,
                 profile=profile,
                 plan=plan,
             )
+            failed_results = {
+                agent_id: result
+                for agent_id, result in results.items()
+                if not result.success
+            }
+            review_results = await self.resource_service.results_for_review(
+                user_id,
+                resource_id,
+                failed_results,
+            )
             review_result = await self._run_review(
                 request=request,
                 profile=profile,
                 plan=plan,
-                results=results,
+                results=review_results,
             )
 
             await self.resource_service.save_generation_results(
@@ -105,7 +116,7 @@ class ResourceGenerationWorkflow:
                 profile=profile,
                 enabled_agents=enabled_agents,
             )
-            await self.emitter.emit_workflow("planning_done", "知识图谱生成完成", progress=15)
+            await self.emitter.emit_workflow("planning_done", "资源规划完成", progress=15, status="success")
             return plan
         except Exception as exc:
             error = str(exc)
@@ -113,21 +124,22 @@ class ResourceGenerationWorkflow:
             await self._emit_agent_failure("planning", error)
             await self.emitter.emit_workflow(
                 "planning_fallback",
-                "规划智能体失败，使用基础知识图谱继续生成",
+                "规划智能体失败，使用基础教学蓝图继续生成",
                 progress=15,
             )
             return ExecutionPlan(
-                knowledge_graph=KnowledgeGraph(
+                blueprint=LearningBlueprint(
                     topic=request.learning_need,
-                    summary="PlanningAgent 失败，工作流使用学习需求生成基础知识图谱继续执行。",
+                    learner_goal="PlanningAgent 失败，工作流使用学习需求生成基础教学蓝图继续执行。",
                 ),
                 agent_instructions=[],
-                personalization_summary=f"PlanningAgent 失败，已使用基础知识图谱继续生成: {error}",
+                personalization_summary=f"PlanningAgent 失败，已使用基础教学蓝图继续生成: {error}",
             )
 
     async def _run_resource_agents(
         self,
         *,
+        user_id: int,
         resource_id: int,
         enabled_agents: list[str],
         request: ResourceGenerationRequest,
@@ -146,14 +158,19 @@ class ResourceGenerationWorkflow:
                     learning_scenario=request.learning_scenario,
                     agent_name=agent_id,
                     agent_config=request.agent_configs.get(agent_id, {}),
-                    knowledge_graph=plan.knowledge_graph,
+                    blueprint=plan.blueprint,
                     instruction=instruction_map.get(agent_id),
                     profile=profile,
                 )
                 agent = AGENT_CLASSES[agent_id](self.emitter)
                 result = await agent.run(state)
                 results[agent_id] = result
-                if result.success:
+                if result.success and result.content:
+                    await self.resource_service.save_worker_result(
+                        user_id=user_id,
+                        resource_id=resource_id,
+                        result=result,
+                    )
                     await self.emitter.emit_resource(
                         agent_id=agent_id,
                         title=result.title,
@@ -163,6 +180,13 @@ class ResourceGenerationWorkflow:
                         summary_data=result.summary_data,
                         metadata=result.metadata,
                     )
+                elif result.success:
+                    results[agent_id] = WorkerResult(
+                        success=False,
+                        error="Agent 未返回可保存内容",
+                        metadata={"agent_id": agent_id},
+                    )
+                    await self._emit_agent_failure(agent_id, "Agent 未返回可保存内容")
                 else:
                     logger.warning("[ResourceGenerationWorkflow] Agent %s 执行失败: %s", agent_id, result.error)
                     await self._emit_agent_failure(agent_id, result.error or "Agent 返回失败")
@@ -200,7 +224,7 @@ class ResourceGenerationWorkflow:
         try:
             return await reviewer.run(
                 results=results,
-                knowledge_graph=plan.knowledge_graph,
+                blueprint=plan.blueprint,
                 profile=profile,
                 learning_need=request.learning_need,
             )
@@ -230,10 +254,3 @@ class ResourceGenerationWorkflow:
             for selection in request.selected_agents
             if selection.enabled and selection.agent_id.value in AGENT_CLASSES
         ]
-
-    async def _load_profile(self, user_id: int) -> dict[str, Any]:
-        try:
-            return await load_user_profile(user_id)
-        except Exception as exc:
-            logger.warning("[ResourceGenerationWorkflow] 学习者画像加载失败: %s", exc)
-            return {}

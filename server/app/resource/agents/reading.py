@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import re
 
+from pydantic import BaseModel, Field
+
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
@@ -19,6 +21,31 @@ from app.resource.utils import format_learner_profile_for_prompt
 logger = get_logger(__name__)
 
 
+class ReadingResourceItem(BaseModel):
+    id: int = Field(description="资源唯一ID")
+    type: str = Field(description="资源类型，如 book, paper, article, documentation, practice_project")
+    title: str = Field(description="资源标题")
+    authors: list[str] = Field(default_factory=list, description="作者或发布机构")
+    source: str = Field(default="", description="来源网站或出版方")
+    url: str = Field(default="", description="资源链接")
+    difficulty: str = Field(default="medium", description="难度：basic, medium, advanced")
+    recommend_reason: str = Field(description="推荐理由")
+    description: str = Field(default="", description="资源简介")
+
+
+class LearningPathStep(BaseModel):
+    step: int = Field(description="步骤序号")
+    resource_id: int = Field(description="引用的资源ID")
+    action: str = Field(description="学习动作或目标")
+
+
+class ReadingPayload(BaseModel):
+    summary: str = Field(description="本组阅读资源综述")
+    resources: list[ReadingResourceItem] = Field(default_factory=list, description="推荐的资源列表")
+    learning_path: list[LearningPathStep] = Field(default_factory=list, description="推荐的学习路径")
+
+
+
 class ReadingAgent:
     """阅读推荐 Agent — 推荐拓展阅读资源。"""
 
@@ -27,7 +54,11 @@ class ReadingAgent:
         self.llm = get_llm()
 
     async def run(self, state: WorkerState) -> WorkerResult:
-        await self.emitter.emit_agent("reading", status="running", message="正在生成阅读推荐")
+        await self.emitter.emit_agent("reading", status="running", message="正在准备拓展阅读", progress=0)
+        await self.emitter.emit_agent_action(
+            "reading", "search", detail="正在搜索相关资料",
+            current_step=1, total_steps=3, step_label="搜索资料", progress=15,
+        )
 
         prompt = registry.get("resource/reading")
         input_text = self._build_input(state)
@@ -37,31 +68,44 @@ class ReadingAgent:
         if search_context:
             input_text += f"\n\n## 已验证的真实资源\n{search_context}"
 
+        await self.emitter.emit_agent_action(
+            "reading", "filter", detail="正在筛选优质文献",
+            current_step=2, total_steps=3, step_label="筛选文献", progress=45,
+        )
+
         full_prompt = f"{prompt}\n\n{input_text}"
 
         try:
+            result = await self.llm.ainvoke_json(
+                ReadingPayload,
+                full_prompt,
+                temperature=0.3,
+                function_name="generate_reading_resources",
+                function_description="生成拓展阅读资源及学习路径",
+            )
+            reading_data = result.model_dump(mode="json")
+            content = json.dumps(reading_data, ensure_ascii=False, indent=2)
+        except Exception as exc:
+            logger.warning("[ReadingAgent] 结构化输出失败，尝试 JSON 文本解析: %s", exc)
             response = await self.llm.ainvoke(full_prompt, temperature=0.3)
             raw = response.content if hasattr(response, "content") else str(response)
             content = self._extract_json(raw)
-        except Exception as exc:
-            logger.warning("[ReadingAgent] LLM 生成失败: %s", exc)
-            return WorkerResult(
-                success=False,
-                error=f"阅读推荐生成失败: {exc}",
-            )
-
-        if not content:
-            return WorkerResult(
-                success=False,
-                error="阅读推荐 JSON 解析失败",
-            )
+            if not content:
+                return WorkerResult(
+                    success=False,
+                    error=f"阅读推荐 JSON 解析失败: {exc}",
+                )
 
         summary_data = {
             "reading_depth": state.agent_config.get("reading_depth", "course_extended"),
             "language_preference": state.agent_config.get("language_preference", "chinese"),
         }
 
-        await self.emitter.emit_agent("reading", status="success", message="阅读推荐生成完成")
+        await self.emitter.emit_agent_action(
+            "reading", "done", detail="拓展阅读推荐完成",
+            current_step=3, total_steps=3, step_label="推荐完成", progress=100,
+        )
+        await self.emitter.emit_agent("reading", status="success", message="拓展阅读推荐完成", progress=100)
         return WorkerResult(
             success=True,
             content=content,
@@ -82,8 +126,8 @@ class ReadingAgent:
         if profile_text:
             parts.append(f"## 学习者画像摘要\n{profile_text}")
 
-        if state.knowledge_graph:
-            parts.append(f"## 知识图谱\n{state.knowledge_graph.model_dump_json(indent=2)}")
+        if state.blueprint:
+            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
 
         if state.instruction:
             lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]

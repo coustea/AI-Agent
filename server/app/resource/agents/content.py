@@ -15,26 +15,45 @@ logger = get_logger(__name__)
 
 
 class ContentAgent:
-    """基于知识图谱生成课程讲解文档。"""
+    """基于教学蓝图生成课程讲解文档。"""
 
     def __init__(self, emitter: AgentEventEmitter):
         self.emitter = emitter
         self.llm = get_llm()
 
     async def run(self, state: WorkerState) -> WorkerResult:
-        await self.emitter.emit_agent("content", status="running", message="正在生成课程内容")
+        await self.emitter.emit_agent("content", status="running", message="正在准备课程讲解", progress=0)
+        await self.emitter.emit_agent_action(
+            "content", "prepare", detail="正在梳理核心概念",
+            current_step=1, total_steps=4, step_label="梳理概念", progress=15,
+        )
 
         prompt = registry.get("resource/content")
         input_text = self._build_input(state)
+
+        await self.emitter.emit_agent_action(
+            "content", "generate", detail="正在编写知识讲解",
+            current_step=2, total_steps=4, step_label="编写讲解", progress=35,
+        )
 
         response = await self.llm.ainvoke(
             f"{prompt}\n\n{input_text}",
             temperature=0.3,
         )
+
+        await self.emitter.emit_agent_action(
+            "content", "refine", detail="正在补充易错点解析",
+            current_step=3, total_steps=4, step_label="补充解析", progress=70,
+        )
+
         content = response.content if hasattr(response, "content") else str(response)
         content = self._clean_content(content)
 
-        await self.emitter.emit_agent("content", status="success", message="课程内容生成完成")
+        await self.emitter.emit_agent_action(
+            "content", "done", detail="讲解文档生成完成",
+            current_step=4, total_steps=4, step_label="生成完成", progress=100,
+        )
+        await self.emitter.emit_agent("content", status="success", message="课程讲解生成完成", progress=100)
         return WorkerResult(
             success=True,
             content=content,
@@ -53,8 +72,8 @@ class ContentAgent:
         if profile_text:
             parts.append(f"## 学习者画像摘要\n{profile_text}")
 
-        if state.knowledge_graph:
-            parts.append(f"## 知识图谱\n{state.knowledge_graph.model_dump_json(indent=2)}")
+        if state.blueprint:
+            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
 
         if state.instruction:
             lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]

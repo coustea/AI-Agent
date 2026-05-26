@@ -15,17 +15,26 @@ logger = get_logger(__name__)
 
 
 class MindmapAgent:
-    """基于知识图谱生成 Markmap 思维导图。"""
+    """基于教学蓝图生成 Markmap 思维导图。"""
 
     def __init__(self, emitter: AgentEventEmitter):
         self.emitter = emitter
         self.llm = get_llm()
 
     async def run(self, state: WorkerState) -> WorkerResult:
-        await self.emitter.emit_agent("mindmap", status="running", message="正在生成思维导图")
+        await self.emitter.emit_agent("mindmap", status="running", message="正在准备思维导图", progress=0)
+        await self.emitter.emit_agent_action(
+            "mindmap", "extract", detail="正在提取知识要点",
+            current_step=1, total_steps=3, step_label="提取要点", progress=15,
+        )
 
         prompt = registry.get("resource/mindmap")
         input_text = self._build_input(state)
+
+        await self.emitter.emit_agent_action(
+            "mindmap", "generate", detail="正在构建思维导图结构",
+            current_step=2, total_steps=3, step_label="构建结构", progress=45,
+        )
 
         response = await self.llm.ainvoke(
             f"{prompt}\n\n{input_text}",
@@ -53,7 +62,11 @@ class MindmapAgent:
             "map_type": state.agent_config.get("map_type", "knowledge_tree"),
         }
 
-        await self.emitter.emit_agent("mindmap", status="success", message="思维导图生成完成")
+        await self.emitter.emit_agent_action(
+            "mindmap", "done", detail="思维导图生成完成",
+            current_step=3, total_steps=3, step_label="生成完成", progress=100,
+        )
+        await self.emitter.emit_agent("mindmap", status="success", message="思维导图生成完成", progress=100)
         return WorkerResult(
             success=True,
             content=markdown,
@@ -77,8 +90,8 @@ class MindmapAgent:
         if profile_text:
             parts.append(f"## 学习者画像摘要\n{profile_text}")
 
-        if state.knowledge_graph:
-            parts.append(f"## 知识图谱\n{state.knowledge_graph.model_dump_json(indent=2)}")
+        if state.blueprint:
+            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
 
         if state.instruction:
             lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]
