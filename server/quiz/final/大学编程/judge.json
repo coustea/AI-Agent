@@ -1,0 +1,794 @@
+[
+  {
+    "id": "coding_mcq_0026",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Git automatically adds new files to the repository and starts tracking them.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "B",
+    "analysis": "A. True: This option suggests that Git automatically tracks new files, which is incorrect. Git requires explicit commands to start tracking new files.\n  B. False: This option correctly states that Git does not automatically track new files. Users must manually add files to be tracked using specific commands.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0116",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: XML elements cannot be empty",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "A",
+    "analysis": "Option A: False - This option suggests that XML elements can indeed be empty, which is correct. XML allows elements to be self-closing, meaning they can have no content.\n  Option B: True - This option implies that XML elements must always contain content, which is incorrect. XML syntax permits elements to be empty.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0160",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: True or false: by default, the Pandas dropna() method returns a new DataFrame, and will not change the original.```\ndropna()\n```",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: The `dropna()` method in Pandas, by default, returns a new DataFrame with missing values removed. It does not modify the original DataFrame unless specified otherwise by setting the `inplace` parameter to `True`.\n  B. False: This option suggests that the `dropna()` method modifies the original DataFrame by default, which is incorrect. The method's default behavior is non-destructive, meaning it does not alter the original DataFrame unless explicitly instructed to do so.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0287",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: XML's goal is to replace HTML",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "A",
+    "analysis": "A. False: XML is not designed to replace HTML. XML is a flexible markup language used to store and transport data, while HTML is specifically designed for displaying data on web pages. They serve different purposes and can complement each other.\n  B. True: This option incorrectly suggests that XML's goal is to replace HTML. However, XML and HTML are used for different functions; XML is not intended to replace HTML but to work alongside it for data handling.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0321",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: XML preserves white spaces",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that XML does not preserve white spaces, which is incorrect. XML is designed to maintain the white spaces in the text content as they are part of the data.\n  B. True: This option correctly states that XML preserves white spaces. XML treats white spaces as significant, meaning they are retained in the document's content unless explicitly altered by processing.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0363",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: True or False: Generics can not be assigned default values.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "B",
+    "analysis": "A. True: This option suggests that generics cannot have default values. This is incorrect because generics can indeed have default values, depending on the language and context.\n  B. False: This option correctly states that generics can be assigned default values. In languages like C#, you can specify default values for generic parameters using constraints or default keyword.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0411",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: The if statement is used to execute some code only if a specified condition is true",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: This option correctly states that an \"if statement\" executes code only if the specified condition is true. This is the fundamental behavior of an \"if statement\" in programming.\n  B. False: This option incorrectly suggests that an \"if statement\" does not execute code based on a true condition, which contradicts the basic functionality of an \"if statement.\"",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0478",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: One of the best practices for securing serverless architecture is to secure data at transit and the rest.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True - This option is correct because securing data both in transit and at rest is a fundamental security practice in serverless architectures. It ensures data confidentiality and integrity by encrypting data as it moves across networks and when it is stored.\n  B. False - This option is incorrect because it suggests that securing data in transit and at rest is not a best practice, which contradicts standard security protocols for protecting sensitive information in serverless environments.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0537",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Typically, library header files in C (e.g. stdio.h) contain not only declaration of functions and macro definitions but they contain definition of user defined data types (e.g. struct, union etc), typedefs and definition of global variables as well. So if we include the same header file more than once in a C program, it would result in compile issue because re-definition of many of the constructs of the header file would happen. So it means the following program will give compile error.  \n\n\n#include “stdio.h”\n#include “stdio.h”\n#include “stdio.h”\n\nint main()\n{\n printf(“Whether this statement would be printed?”)\n return 0;\n}\n\n``````C",
+    "options": {
+      "A": "TRUE",
+      "B": "FALSE"
+    },
+    "answer": "B",
+    "analysis": "A. TRUE: This option suggests that including the same header file multiple times will cause a compile error. This is incorrect because standard library headers are designed to prevent such issues.\n  B. FALSE: This option suggests that including the same header file multiple times will not cause a compile error. This is correct because standard headers use include guards or `#pragma once` to prevent re-definition.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0630",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Based on application's network requests, AWS Web Application Firewall can block network traffic.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that AWS WAF cannot block network traffic based on network requests, which is incorrect. AWS WAF is specifically designed to filter and monitor HTTP and HTTPS requests to web applications.\n  B. True: This option correctly states that AWS WAF can block network traffic. AWS WAF allows users to create rules that can block, allow, or monitor web requests based on conditions such as IP addresses, HTTP headers, or specific strings in requests.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0695",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: The LIKE operator is case sensitive.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: This option suggests that the LIKE operator is case sensitive, meaning it treats 'A' and 'a' as different characters. In many SQL implementations, LIKE is indeed case sensitive unless otherwise specified.\n  B. False: This option implies that LIKE is not case sensitive, meaning it treats 'A' and 'a' as the same character. However, this is not the default behavior in most SQL databases.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0735",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Economies of scale continually reduce AWS Cloud pricing.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: AWS benefits from economies of scale as it grows, allowing it to lower costs and pass savings to customers. This is a key principle of cloud computing.\n  B. False: This option ignores the impact of economies of scale, which is a fundamental reason for AWS's ability to reduce prices over time.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0795",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Asynchronous code does not need to wait for the execution of other code blocks.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: Asynchronous code is designed to execute independently of other code blocks, allowing multiple operations to occur simultaneously without waiting for each other to finish.\n  B. False: This option incorrectly suggests that asynchronous code must wait for other code blocks to complete, which contradicts the fundamental characteristic of asynchronous execution.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0933",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Block elements are normally displayed without starting a new line.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "A",
+    "analysis": "A. False: This option is correct because block elements, by default, start on a new line and take up the full width available, causing subsequent elements to also start on a new line.\n  B. True: This option is incorrect because it contradicts the default behavior of block elements, which do start on a new line.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_0984",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: The value of a string variable can be surrounded by single quotes.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: In many programming languages, such as Python and JavaScript, strings can be enclosed in either single or double quotes. This flexibility allows for easy inclusion of quotes within strings.\n  B. False: This option would imply that single quotes cannot be used to define string values, which is incorrect for many languages that support both single and double quotes for string literals.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_1043",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: The .container class provides a full width container, spanning the entire width of the screen",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "A",
+    "analysis": "A. False: The .container class typically creates a fixed-width container that is responsive and centered, but it does not span the full width of the screen. It adjusts its width based on the screen size but maintains margins on the sides.\n  B. True: This option suggests that the .container class creates a full-width container, which is incorrect. A full-width container would be created by a class like .container-fluid, not .container.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_1402",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: SVG can be animated and interacted with JavaScript.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that SVG cannot be animated or interacted with using JavaScript, which is incorrect. SVG is designed to be manipulated with JavaScript, allowing for dynamic and interactive graphics.\n  B. True: This option correctly states that SVG can be animated and interacted with using JavaScript. SVG elements can be targeted and modified through JavaScript to create animations and respond to user interactions.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_1419",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: SVG graphics do not lose any quality if they are zoomed or resized.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that SVG graphics lose quality when resized. However, SVGs are vector-based, meaning they use mathematical equations to represent images, allowing them to scale without losing quality.\n  B. True: This option correctly states that SVG graphics do not lose quality when zoomed or resized. SVGs are designed to be resolution-independent, maintaining clarity at any size.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_1450",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: The NOT NULL constraint enforces a column to not accept NULL values.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: This option correctly states that the NOT NULL constraint is used to ensure that a column cannot have NULL values. It enforces data integrity by requiring that every row in the column contains a valid, non-NULL value.\n  B. False: This option incorrectly suggests that the NOT NULL constraint does not prevent NULL values. This contradicts the fundamental purpose of the NOT NULL constraint, which is to disallow NULL entries in a column.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_1704",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: AWS Elastic Beanstalk is a service that manages web infrastructure.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that AWS Elastic Beanstalk does not manage web infrastructure. However, this is incorrect because Elastic Beanstalk is specifically designed to simplify the deployment and management of web applications and services.\n  B. True: This option correctly identifies that AWS Elastic Beanstalk is a service that manages web infrastructure by automating the deployment, scaling, and monitoring of applications.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_1730",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: AWS Artifact is a service that provides access to AWS security and complicance reports.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: AWS Artifact is indeed a service provided by AWS that offers access to security and compliance reports, such as Service Organization Control (SOC) reports and Payment Card Industry (PCI) reports.\n  B. False: This option is incorrect because AWS Artifact does provide access to these reports, which are essential for customers needing to meet compliance requirements.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2243",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: In C#, it is possible to inherit fields and methods from one class to another.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: In C#, inheritance allows a class (derived class) to inherit fields and methods from another class (base class). This is a fundamental feature of object-oriented programming in C#.\n  B. False: This option is incorrect because it denies the possibility of inheritance, which is a core principle of C# and object-oriented programming.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2298",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Git is the same as GitHub.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "A",
+    "analysis": "A. False: This option is correct because Git and GitHub are fundamentally different. Git is a version control system that tracks changes in source code during software development. GitHub, on the other hand, is a web-based platform that hosts Git repositories and provides additional features like collaboration tools, issue tracking, and more.\n  B. True: This option is incorrect because it suggests that Git and GitHub are the same, which is not the case. Git is the underlying technology for version control, while GitHub is a service built on top of Git to facilitate collaboration and project management.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2344",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: A min- Heap is a complete binary tree.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: A min-heap is indeed a complete binary tree. By definition, a min-heap is a binary tree where each node is smaller than or equal to its children, and it is complete, meaning all levels are fully filled except possibly the last, which is filled from left to right.\n  B. False: This option is incorrect because it contradicts the definition of a min-heap. A min-heap must be a complete binary tree to maintain its properties and allow efficient operations like insertion and deletion.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2553",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: With Step Functions you can see the execution history of a function.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that Step Functions do not allow viewing execution history, which is incorrect. Step Functions are designed to provide detailed execution history for each state machine execution.\n  B. True: This option correctly states that Step Functions allow users to view the execution history, which includes details about each step's input, output, and any errors encountered.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2599",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: The OR operator displays a record if ANY conditions listed are true. The AND operator displays a record if ALL of the conditions listed are true",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that the description of the OR and AND operators is incorrect. However, the description provided is accurate.\n  B. True: This option correctly identifies that the description of the OR and AND operators is accurate. The OR operator requires any condition to be true, while the AND operator requires all conditions to be true.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2640",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Polygons are made of straight lines, and the shape is open.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "A",
+    "analysis": "A. False: This option suggests that polygons are not open shapes. Polygons are indeed made of straight lines, but they are closed shapes, not open.\n  B. True: This option incorrectly suggests that polygons are open shapes. While polygons are made of straight lines, they must be closed to be considered polygons.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2664",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: True or False: 'keyof' can be used with index signatures to extract the index type.",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that 'keyof' cannot be used with index signatures. However, 'keyof' can indeed be applied to types with index signatures to extract the type of the keys.\n  B. True: This option correctly states that 'keyof' can be used with index signatures. In TypeScript, 'keyof' applied to an index signature type will yield the type of the index, such as 'string' or 'number'.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2774",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: A CI/CD pipeline automates software deployment procedures and standardizes quality checks.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: This option correctly states that a CI/CD pipeline automates the software deployment process and standardizes quality checks. CI/CD stands for Continuous Integration and Continuous Deployment/Delivery, which are practices that streamline and automate the integration and deployment of code changes, ensuring consistent quality through automated testing and validation.\n  B. False: This option incorrectly suggests that a CI/CD pipeline does not automate deployment procedures or standardize quality checks. This contradicts the fundamental purpose of CI/CD, which is to enhance efficiency and reliability in software development through automation and standardization.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2793",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Bootstrap 3 is mobile-first.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: Bootstrap 3 is indeed mobile-first. This means its design and grid system prioritize mobile devices, using CSS media queries to adapt to larger screens.\n  B. False: This option is incorrect because Bootstrap 3 was specifically developed to be mobile-first, focusing on mobile devices before desktops.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_2809",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: In a nested loop,the outer loop must be terminated before the inner loop.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "B",
+    "analysis": "A. True: This option suggests that the outer loop must finish its entire execution before the inner loop can complete. This is incorrect because in a nested loop, the inner loop completes its cycle for each iteration of the outer loop.\n  B. False: This option correctly indicates that the outer loop does not need to terminate before the inner loop. Instead, the inner loop runs to completion for each iteration of the outer loop.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_3102",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: The following statement is valid. log(n!) = [Tex]\\\\theta [/Tex](n log n).",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: This option suggests that log(n!) grows at the same rate as n log n. Using Stirling's approximation, which states that n! is approximately sqrt(2πn) * (n/e)^n, we find that log(n!) is approximately n log n - n + 0.5 log n + log(sqrt(2π)). The dominant term here is n log n, which confirms the theta relationship.\n  B. False: This option implies that log(n!) does not grow at the same rate as n log n. However, as shown through Stirling's approximation, the dominant term in log(n!) is indeed n log n, making this option incorrect.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_3145",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: XML attribute values must always be enclosed in quotes",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "B",
+    "analysis": "A. False: This option suggests that XML attribute values do not need to be enclosed in quotes. However, this contradicts the XML specification, which requires quotes around attribute values for valid syntax.\n  B. True: This option correctly states that XML attribute values must be enclosed in quotes. This is a fundamental rule in XML syntax to ensure proper parsing and interpretation of the document.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_3230",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: DNS stands for \"Data Name System\".",
+    "options": {
+      "A": "False",
+      "B": "True"
+    },
+    "answer": "A",
+    "analysis": "Option A: False - This option suggests that \"Data Name System\" is not the correct expansion of DNS. This is accurate because DNS actually stands for \"Domain Name System\".\n  Option B: True - This option incorrectly asserts that \"Data Name System\" is the correct expansion of DNS, which is not the case.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_3257",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: With AWS EC2 you only pay for the compute time that you use.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "A",
+    "analysis": "A. True: This option correctly reflects AWS EC2's billing model, where users are charged based on the actual compute time they use. This is known as \"pay-as-you-go\" pricing.\n  B. False: This option is incorrect because it suggests that users might be charged for more than just the compute time, which contradicts AWS's pricing model for EC2.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "coding_mcq_3307",
+    "source": "Coding-MCQ",
+    "subject": "大学编程",
+    "subject_en": "college_programming",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Question: Dynamic programming is particularly useful for solving problems that have exponential time complexity.",
+    "options": {
+      "A": "True",
+      "B": "False"
+    },
+    "answer": "B",
+    "analysis": "A. True: This option suggests that dynamic programming is useful for problems with exponential time complexity. While dynamic programming can address such problems, it is not specifically designed for them; rather, it is used to optimize problems with overlapping subproblems and optimal substructure.\n  B. False: This option correctly identifies that dynamic programming is not inherently aimed at solving problems with exponential time complexity. Instead, it is used to transform exponential problems into polynomial time by breaking them into simpler subproblems.",
+    "knowledge_points": [],
+    "tags": [
+      "programming"
+    ],
+    "language": "en",
+    "split": "train"
+  }
+]

@@ -1,0 +1,202 @@
+[
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0001",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "调用一次深度优先遍历可以访问到图中的所有顶点。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0002",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "分块查找的平均查找长度不仅与索引表的长度有关，而且与块的\n长度有关。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0003",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "冒泡排序在初始关键字序列为逆序的情况下执行的交换次数最\n多。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0004",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "满二叉树一定是完全二叉树，完全二叉树不一定是满二叉树。\n（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0005",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设一棵二叉树的先序序列和后序序列，则能够唯一确定出该二叉\n树的形状。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0006",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "层次遍历初始堆可以得到一个有序的序列。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0007",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设一棵树T 可以转化成二叉树BT，则二叉树BT 中一定没有右子\n树。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0008",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "线性表的顺序存储结构比链式存储结构更好。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0009",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "中序遍历二叉排序树可以得到一个有序的序列。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_j0010",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "快速排序是排序算法中平均性能最好的一种排序。（  ）",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  }
+]

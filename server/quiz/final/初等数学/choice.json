@@ -1,0 +1,5690 @@
+[
+  {
+    "id": "cmmlu_elementary_mathematics_dev_0000",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "",
+    "options": {
+      "A": "Question",
+      "B": "A",
+      "C": "B",
+      "D": "C"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_dev_0001",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "0",
+    "options": {
+      "A": "下列算式中，结果与 不相等的是",
+      "B": "0.2÷0.5 ",
+      "C": "4÷10",
+      "D": "16÷40 "
+    },
+    "answer": "20÷500 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_dev_0002",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "1",
+    "options": {
+      "A": "集合A={1，2,3, 4}的真⼦集个数为",
+      "B": "14",
+      "C": "10",
+      "D": "11"
+    },
+    "answer": "15",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_dev_0003",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "2",
+    "options": {
+      "A": "当X=[ ]时，5X-9=51",
+      "B": "60",
+      "C": "8.4",
+      "D": "12"
+    },
+    "answer": "1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_dev_0004",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "3",
+    "options": {
+      "A": "下⾯的数与0最接近的⼀个数是",
+      "B": "-1",
+      "C": "-5",
+      "D": "+5"
+    },
+    "answer": "+2",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_dev_0005",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "4",
+    "options": {
+      "A": "做⼀个圆柱形通⻛管要⽤多少铁⽪是求",
+      "B": "表⾯积",
+      "C": "底⾯积 ",
+      "D": "体积 "
+    },
+    "answer": "侧⾯积 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0000",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "",
+    "options": {
+      "A": "Question",
+      "B": "A",
+      "C": "B",
+      "D": "C"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0001",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "0",
+    "options": {
+      "A": "在某校班际篮球联赛中，每场⽐赛都要分出胜负，每队胜⼀场得3分，负⼀场得1分，如果某班要在第⼀轮的28场⽐赛中⾄少得43分，那么这个班⾄少要胜多少场",
+      "B": "6",
+      "C": "5",
+      "D": "7"
+    },
+    "answer": "8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0002",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "1",
+    "options": {
+      "A": "三洋电视机⼚为了能清楚地表示出上半年⽉产量的多少与增减变化的情况，应绘制",
+      "B": "不确定",
+      "C": "扇形统计图",
+      "D": "条形统计图 "
+    },
+    "answer": "折线统计图 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0003",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "2",
+    "options": {
+      "A": "明明今年⼏岁? 爸爸今年39岁。您的年龄⽐我的2倍多11岁",
+      "B": "13",
+      "C": "15",
+      "D": "12"
+    },
+    "answer": "14",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0004",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "3",
+    "options": {
+      "A": "$\\frac{2}{5}$的分⺟增加15，要使分数⼤⼩不变，分⼦应扩⼤",
+      "B": "6倍",
+      "C": "15倍",
+      "D": "3倍"
+    },
+    "answer": "4倍",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0005",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "4",
+    "options": {
+      "A": "⽤⼀块⻓28.26厘⽶、宽15.7厘⽶的⻓⽅形铁⽪，应该配上直径（ ）厘⽶的圆形铁⽪就可以做成⼀个容积最⼤的容器",
+      "B": "2.5",
+      "C": "5",
+      "D": "9"
+    },
+    "answer": "4.5",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0006",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "5",
+    "options": {
+      "A": "我国股市交易中，每买、卖一次都要交7.5%的各种费用，某投资者以每股10元的价格买入上海某股1000股，当该股涨到12元时，他全部卖出后盈利为",
+      "B": "1910元",
+      "C": "1925元",
+      "D": "2000元"
+    },
+    "answer": "1835元",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0007",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "6",
+    "options": {
+      "A": "某公司今年4⽉的营业额为2500万元，按计划第⼆季度的总营业额要达到9100万元，设该公司5、6 两⽉的营业额的⽉平均增⻓率为 x，根据题意列⽅程，则下列⽅程正确的是",
+      "B": "$2500(1+x)^{2}=9100$",
+      "C": "$2500(1+x)+2500(1+x)^{2}=9100$",
+      "D": "$2500+2500(1+x)+2500(1+x)^{2}=9100$"
+    },
+    "answer": "$2500(1+x\\%)^{2}=9100$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0008",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "7",
+    "options": {
+      "A": "⼀个商⼈把⼀件连⾐裙标价为640元，经⼯商⼈员核价，降⾄60元出售，仍可获利20%，如按原标价出售则⼀条裙⼦可获暴利（ ）元",
+      "B": "610",
+      "C": "600",
+      "D": "590"
+    },
+    "answer": "620",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0009",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "8",
+    "options": {
+      "A": "⼀元⼆次⽅程$x^{2}-8x=48$可表示成 $(x-a)^{2}=48+b$形式，其中a，b为整数，求a+b之值为",
+      "B": "-20",
+      "C": "12",
+      "D": "-12"
+    },
+    "answer": "20",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0010",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "9",
+    "options": {
+      "A": "－3.782",
+      "B": "不是分数，是有理数",
+      "C": "是分数，不是有理数 ",
+      "D": "是负数，也是分数 "
+    },
+    "answer": "是负数，不是分数",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0011",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "10",
+    "options": {
+      "A": "已知圆的半径为$\\sqrt{2}cm$，圆心到直线l的距离为1.4cm，则直线与圆的公共点数为",
+      "B": "2个",
+      "C": "1个 ",
+      "D": "0个"
+    },
+    "answer": "不确定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0012",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "11",
+    "options": {
+      "A": "在边⻓为a的正⽅形内部，以⼀个顶点为圆⼼，a为半径画弧经过与圆⼼相邻的两个顶点，那么阴影部分的⾯积为",
+      "B": "$a-\\frac{1}{2}\\pi a^{2}$",
+      "C": "$\\pi a^{2}-a$",
+      "D": "$\\frac{1}{4}\\pi a^{2}$"
+    },
+    "answer": "$a-\\pi a^{2}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0013",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "12",
+    "options": {
+      "A": "某⼯⼚的⼀个⽣产⼩组，⽣产⼀批零件，当每个⼯⼈在⾃⼰原岗位⼯作时，9⼩时可完成这项⽣产任务。如果交换⼯⼈A和B的⼯作岗位，其它⼯⼈⽣产效率不变时，可提前⼀⼩时完成这项⽣产任务；如果交换⼯⼈C和D的⼯作岗位，其它⼯⼈⽣产效率不变时，也可以提前⼀⼩时完成这项⽣产任务。问： 如果同时交换A与B，C与D的⼯作岗位，其它⼯⼈⽣产效率不变，可以提前⼏分割完成这项⽣产任务",
+      "B": "108",
+      "C": "111",
+      "D": "110"
+    },
+    "answer": "105",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0014",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "13",
+    "options": {
+      "A": "下列元素中属于集合{x|x=2k k是⾃然数}的是",
+      "B": "-2",
+      "C": "10",
+      "D": "7"
+    },
+    "answer": "3",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0015",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "14",
+    "options": {
+      "A": "横坐标、纵坐标都是整数的点叫做整点，函数$y=\\frac{6x+3}{2x-1}$的图象上整点的个数是",
+      "B": "5个",
+      "C": "6个",
+      "D": "3个"
+    },
+    "answer": "4个",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0016",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "15",
+    "options": {
+      "A": "王先⽣到银⾏存了⼀笔三年期的定期存款，年利率是4.25%．若到期后取出得到本息（本⾦+利息）33825元．设王先⽣存⼊的本⾦为x元，则下⾯所列⽅程正确的是",
+      "B": "3×4.25%x=33825 ",
+      "C": "3(x+4.25x)=33825 ",
+      "D": "x+3×4.25%x=33825 "
+    },
+    "answer": "x+4.25%x=33825 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0017",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "16",
+    "options": {
+      "A": "等腰三⻆形的⼀个内⻆是50°，则另外两个⻆的度数分别是",
+      "B": "65°，65°或50°，80°",
+      "C": "50°,80°",
+      "D": "50°,50°"
+    },
+    "answer": "65°，65° ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0018",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "17",
+    "options": {
+      "A": "如果a：b=c：d，那么不成⽴的等式有",
+      "B": "a：d=c：b",
+      "C": "b：a=d：c",
+      "D": "a: c=b: d "
+    },
+    "answer": "ad=bc",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0019",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "18",
+    "options": {
+      "A": "如果m是任意实数，则点P（m-4，m+1）⼀定不在",
+      "B": "第⼀象限",
+      "C": "第⼆象限 ",
+      "D": "第四象限 "
+    },
+    "answer": "第三象限 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0020",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "19",
+    "options": {
+      "A": "⼀件上⾐打⼋折出售 就是按照原价的",
+      "B": "百分之80",
+      "C": "百分之120 ",
+      "D": "百分之100"
+    },
+    "answer": "百分之20 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0021",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "20",
+    "options": {
+      "A": "在菱形ABCD中，对角线AC=4，$\\angle BAD=120^{\\circ }$，则菱形ABCD的周长为",
+      "B": "16",
+      "C": "20",
+      "D": "15"
+    },
+    "answer": "18",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0022",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "21",
+    "options": {
+      "A": "某集合有5个元素，它的⼦集数为",
+      "B": "24",
+      "C": "27",
+      "D": "25"
+    },
+    "answer": "26",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0023",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "22",
+    "options": {
+      "A": "福源鞋店进了25双⼉童鞋，每双进价20.2元，售货员阿姨以每双25元的价格售出，全部卖完这些鞋⼀共能赚多少钱",
+      "B": "135",
+      "C": "100",
+      "D": "120"
+    },
+    "answer": "125",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0024",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "23",
+    "options": {
+      "A": "若多项式$x^{2}+mx+4$可以用完全平方公式分解因式，则m的值可以是",
+      "B": "4",
+      "C": "4或-4",
+      "D": "-4"
+    },
+    "answer": "2或-2",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0025",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "24",
+    "options": {
+      "A": "已知∠A=65°，则∠A的补⻆等于",
+      "B": "95°",
+      "C": "135°",
+      "D": "105°"
+    },
+    "answer": "115°",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0026",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "25",
+    "options": {
+      "A": "⽤性质描述法表示第⼀象限的所有点的集合",
+      "B": "{(x,y)|x<0.y<0} ",
+      "C": "{(x,y)|x>0,Y<0}",
+      "D": "{(x,y)|x>0,y>0}"
+    },
+    "answer": "{(x,y)|x<0,y>0}",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0027",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "26",
+    "options": {
+      "A": "某市⼀⽉份的平均⽓温是﹣2℃，⼆⽉份的平均⽓温⽐⼀⽉份的升⾼了5℃，该市⼆⽉份的平均⽓温是",
+      "B": "7℃ ",
+      "C": "﹣5℃ ",
+      "D": "5℃"
+    },
+    "answer": "3℃ ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0028",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "27",
+    "options": {
+      "A": "宝康⻝品⼚运回⼀批煤，原计划每天烧0.72吨，可以烧14天/改进炉灶后，世界每天少烧0.16吨，这批煤实际烧了多少天",
+      "B": "16",
+      "C": "20",
+      "D": "14"
+    },
+    "answer": "18",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0029",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "28",
+    "options": {
+      "A": "已知关于x的分式⽅程$\\frac{x}{x-1}-2=\\frac{k}{1-x}$的解为正数，则k的取值范围为 ",
+      "B": "k＞-2 ",
+      "C": "k＞-2且k≠-1",
+      "D": "-2＜k＜0"
+    },
+    "answer": "k＜2且k≠1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0030",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "29",
+    "options": {
+      "A": "化简$\\sqrt{3}-\\sqrt{3}(1-\\sqrt{3})$的结果是",
+      "B": "3",
+      "C": "-3",
+      "D": "$\\sqrt{3}$"
+    },
+    "answer": "$-\\sqrt{3}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0031",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "30",
+    "options": {
+      "A": "已知a、b均a >b,则下列结论不正确的是 ",
+      "B": "3a>3b",
+      "C": "a+3>b+3",
+      "D": "a-3>b-3"
+    },
+    "answer": "-3a>-3b",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0032",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "31",
+    "options": {
+      "A": "下⾯的物体中，⽆论从什么⽅向观察，看到的图形都是圆形的是",
+      "B": "旗袍",
+      "C": "⾜球",
+      "D": "⽛膏"
+    },
+    "answer": "易拉罐",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0033",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "32",
+    "options": {
+      "A": "计算3.2*9.9的简便算法是",
+      "B": "3.2*10-3.2*0.1",
+      "C": "3.2*9*0.9",
+      "D": "3.2*20-0.1"
+    },
+    "answer": "3.2*10/3.2",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0034",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "33",
+    "options": {
+      "A": "[3.4+3.6]*[4.5+4.5]=",
+      "B": "16",
+      "C": "36",
+      "D": "42"
+    },
+    "answer": "63",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0035",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "34",
+    "options": {
+      "A": "农村常搭建横截⾯为半圆形的全封闭塑料薄膜蔬菜⼤棚。如果不考虑塑料薄膜埋在⼟⾥的部分，那么搭建⼀个长32m，宽4米的蔬菜⼤棚需要⽤塑料薄膜的⾯积是",
+      "B": "$72\\pi $",
+      "C": "$68\\pi $",
+      "D": "$64\\pi $"
+    },
+    "answer": "$69\\pi $",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0036",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "35",
+    "options": {
+      "A": "已知A在双曲线$y=-\\frac{2}{x}$上，点B在直线y=x-4，且A，B关于y轴对称，设A的坐标为(m, n)，则$\\frac{m}{n}+\\frac{n}{m}$的值是",
+      "B": "-10",
+      "C": "6",
+      "D": "4"
+    },
+    "answer": "-8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0037",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "36",
+    "options": {
+      "A": "在-2，-1，0，1这四个数中，最⼩的数是",
+      "B": "0",
+      "C": "-2",
+      "D": "-1"
+    },
+    "answer": "1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0038",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "37",
+    "options": {
+      "A": "在直⻆坐标系中，已知A（3，3），在x轴、y轴上确定⼀点P，使△AOP为等腰三⻆形，则符合条件的点P共有",
+      "B": "6个 ",
+      "C": "8个 ",
+      "D": "10个 "
+    },
+    "answer": "4个",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0039",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "38",
+    "options": {
+      "A": "⼩慧去花店购买鲜花，若买5⽀玫瑰和3⽀百合，则她所带的钱还剩下10元；若买3⽀玫瑰和5⽀百合，则她所带的钱还缺4元.若只买8⽀玫瑰，则她所带的钱还剩下",
+      "B": "31元",
+      "C": "30元",
+      "D": "19元 "
+    },
+    "answer": "25元 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0040",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "39",
+    "options": {
+      "A": "已知实数x、y满⾜$\\sqrt{2x+y-1}+|x-2|=0$则x+y=",
+      "B": "7",
+      "C": "0",
+      "D": "3"
+    },
+    "answer": "10",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0041",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "40",
+    "options": {
+      "A": "⼀根绳⼦剪成两段，第⼀段⻓4/9⽶，第⼆段占全⻓的4/9。，那么",
+      "B": "⽆法确定 ",
+      "C": "两段⼀样⻓ ",
+      "D": "第⼆段⻓ "
+    },
+    "answer": "第⼀段⻓",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0042",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "41",
+    "options": {
+      "A": "已知一个多边形内角和是外角和的四倍，则这个多边形是",
+      "B": "十边形",
+      "C": "九边形",
+      "D": "十二边形"
+    },
+    "answer": "八边形",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0043",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "42",
+    "options": {
+      "A": "光速为$3\\times10^{8}$米每秒，太阳与地球之间的距离为$1.5\\times10^{11}$米，则太阳光到地球需要（）秒",
+      "B": "$5\\times10^{3}$",
+      "C": "$5\\times10^{4}$",
+      "D": "$5\\times10^{2}$"
+    },
+    "answer": "$2\\times10^{2}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0044",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "43",
+    "options": {
+      "A": "在平⾯直⻆坐标系中，若点M（1，3）与点N（x，3）之间的距离是5，则x的值是 ",
+      "B": "不确定",
+      "C": "6或－4",
+      "D": "6或4"
+    },
+    "answer": "6",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0045",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "44",
+    "options": {
+      "A": "把20克糖溶解在80克开⽔中，这时糖⽔中含糖",
+      "B": "$\\frac{1}{5}$",
+      "C": "20%",
+      "D": "20克 "
+    },
+    "answer": "$\\frac{1}{4}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0046",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "45",
+    "options": {
+      "A": "⼀块正⽅形钢板上截去3cm宽的⻓⽅形钢条，剩下的⾯积是$54cm^{2}$，则原来这块钢板的⾯积是",
+      "B": "$81cm^{2}$",
+      "C": "$72cm^{2}$",
+      "D": "$54cm^{2}$"
+    },
+    "answer": "$90cm^{2}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0047",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "46",
+    "options": {
+      "A": "⽅程$x^{2}+2x-8=0$的解集⽤列举法表示为",
+      "B": "{2,-4}",
+      "C": "{4,-2} ",
+      "D": "-4 ,2 "
+    },
+    "answer": "4,-2 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0048",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "47",
+    "options": {
+      "A": "王⽼师准备⽤80元钱为年级获奖运动员买奖品，他先花48.6元买了9本笔记本，并准备⽤余下的钱买⼀些钢笔，钢笔每枝3.2元。王⽼师还可以买⼏枝钢笔",
+      "B": "9",
+      "C": "10",
+      "D": "8"
+    },
+    "answer": "11",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0049",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "48",
+    "options": {
+      "A": "互为反序的两个⾃然数的积是92565，求这两个互为反序的⾃然数",
+      "B": "155和551",
+      "C": "135和531",
+      "D": "167和761"
+    },
+    "answer": "165和651 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0050",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "49",
+    "options": {
+      "A": "下列计算正确的是",
+      "B": "$-\\sqrt{0.36}=-0.6$",
+      "C": "$\\sqrt{36}=\\pm 6$",
+      "D": "$\\sqrt{(-3)^{2}}=-2$"
+    },
+    "answer": "$\\sqrt[3]{-5}=\\sqrt[3]{5}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0051",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "50",
+    "options": {
+      "A": " 1/3的相反数是",
+      "B": "1/3",
+      "C": "3",
+      "D": "-1/3"
+    },
+    "answer": "-3",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0052",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "51",
+    "options": {
+      "A": "已知实数满足$(x^{2}-x)^{2}-4(x^{2}-x)-12=0$，则代数式$x^{2}-x+1$的值为",
+      "B": "6",
+      "C": "4",
+      "D": "7"
+    },
+    "answer": "11",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0053",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "52",
+    "options": {
+      "A": "⼀个圆柱和⼀个圆锥的底⾯积相等，体积也相等。如果圆柱的⾼是6厘⽶，圆锥的⾼是（ ）厘⽶",
+      "B": "18",
+      "C": "6",
+      "D": "2"
+    },
+    "answer": "36",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0054",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "53",
+    "options": {
+      "A": "若关于x的⼀元⼆次⽅程$ax^{2}+bx+5=0 (a\\neq 0)$ 的解是x=1，则2015-a-b的值是",
+      "B": "2021",
+      "C": "2020",
+      "D": "2023"
+    },
+    "answer": "2022",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0055",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "54",
+    "options": {
+      "A": "下列各式中，等号不成⽴的是",
+      "B": "-|8=-|-8|",
+      "C": "-|-8|=8",
+      "D": "|-8|=|8|"
+    },
+    "answer": "|-8|=8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0056",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "55",
+    "options": {
+      "A": "4.803保留两位⼩数，约等于",
+      "B": "4.81",
+      "C": "4.80",
+      "D": "5.0"
+    },
+    "answer": "4.8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0057",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "56",
+    "options": {
+      "A": "已知：$x=-6,y=-\\frac{1}{6}$，n为自然数，则$x^{4n}y^{4n+2}$的值是",
+      "B": "$\\frac{1}{36}$",
+      "C": "$-\\frac{1}{12}$",
+      "D": "$-\\frac{1}{36}$"
+    },
+    "answer": "$\\frac{1}{12}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0058",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "57",
+    "options": {
+      "A": "锐⻆△ABC的三条⾼AD、BE、CF交于H，在A、B、C、D、E、F、H七个点中.能组成四点共圆的组数是",
+      "B": "6组",
+      "C": "5组",
+      "D": "7组"
+    },
+    "answer": "4组",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0059",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "58",
+    "options": {
+      "A": "若(2,k)是双曲线$y=\\frac{1}{x}$上的一点，则函数y=(k-1)x的图像经过",
+      "B": "一、三象限",
+      "C": "三、四象限",
+      "D": "二、四象限"
+    },
+    "answer": "一、二象限",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0060",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "59",
+    "options": {
+      "A": "x=1 是关于 x 的⽅程 2x-a=0 的解，则 a 的值是",
+      "B": "-2",
+      "C": "1",
+      "D": "2"
+    },
+    "answer": "-1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0061",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "60",
+    "options": {
+      "A": "当1999≤x≤2000时，函数$y=x^{2}+x+12$的函数值中是整数值的个数是",
+      "B": "4000",
+      "C": "3998",
+      "D": "3999"
+    },
+    "answer": "4001",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0062",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "61",
+    "options": {
+      "A": "下列运⽤等式性质进⾏的变形，正确的是",
+      "B": "若2x=3y，则x/2 = y/3 ",
+      "C": "如果am=bm，那么a=b ",
+      "D": "若10x=5，则x=2"
+    },
+    "answer": "如果 a/m=b/m，那么a=b ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0063",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "62",
+    "options": {
+      "A": "16汽修（2）班总⼈数是50，其中喜欢蓝球的有21⼈，喜欢⽻⽑球的有19⼈，既不喜欢篮球⼜不喜欢⽻⽑球的有15⼈，那么既喜欢篮球⼜喜欢⽻⽑球的有⼏⼈",
+      "B": "5⼈",
+      "C": "7⼈",
+      "D": "6⼈"
+    },
+    "answer": "4⼈",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0064",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "63",
+    "options": {
+      "A": "若(x+t)(x+1)的积中不含有x的一次项，则t为",
+      "B": "1",
+      "C": "-1",
+      "D": "0"
+    },
+    "answer": "$\\pm 1$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0065",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "64",
+    "options": {
+      "A": "已知$\\frac{a}{|a|}+\\frac{b}{|b|}$，则$\\frac{ab}{|ab|}$的值为",
+      "B": "0",
+      "C": "不确定",
+      "D": "-1"
+    },
+    "answer": "1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0066",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "65",
+    "options": {
+      "A": "⼀元⼆次⽅程(x+1)(x–1)=2x+3的根的情况是",
+      "B": "有两个不相等的实数根 ",
+      "C": "有两个相等的实数根 ",
+      "D": "没有实数根 "
+    },
+    "answer": "只有⼀个实数根 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0067",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "66",
+    "options": {
+      "A": "在$\\triangle ABC$和$\\triangle A'B'C'$中，已知$\\angle A=\\angle A'$，AB=A'B'，添加下列条件中的⼀个，不能使$\\triangle ABC\\cong \\triangle A'B'C'$⼀定成⽴的是",
+      "B": "BC=B'C'",
+      "C": "AC=A'C'",
+      "D": "$\\angle C=\\angle C'$"
+    },
+    "answer": "$\\angle B=\\angle B'$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0068",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "67",
+    "options": {
+      "A": "“五⼀”假⽇期间，某省银联⽹络交易总⾦额接近161亿元，其中161亿⽤科学记数法表示为",
+      "B": "$1.61\\times 10^{12}$",
+      "C": "$1.61\\times 10^{10}$",
+      "D": "$1.61\\times 10^{9}$"
+    },
+    "answer": "$1.61\\times 10^{11}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0069",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "68",
+    "options": {
+      "A": "下列多项式在实数范围内能因式分解的是",
+      "B": "$x^{2}+x+1$",
+      "C": "$x^{2}-y$",
+      "D": "$x^{2}-2x+1$"
+    },
+    "answer": "$x^{2}+y$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0070",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "69",
+    "options": {
+      "A": "下列说法中，正确的是",
+      "B": "-9的平⽅根是-3",
+      "C": "9的⽴⽅根是3 ",
+      "D": "$\\sqrt{25}$的算术平⽅根是5"
+    },
+    "answer": "6是36的算术平⽅根",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0071",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "70",
+    "options": {
+      "A": "下列说法不正确的是",
+      "B": "一组邻边相等的矩形是正方形",
+      "C": "对角线相等的菱形是正方形",
+      "D": "对角线互相垂直的矩形是正方形"
+    },
+    "answer": "有一个角是直角的平行四边形是正方形",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0072",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "71",
+    "options": {
+      "A": "下列各式中，积最⼩的算式是",
+      "B": "16.5*0.24",
+      "C": "1.65*24.8",
+      "D": "16.5*0.024 "
+    },
+    "answer": "16.5*24.8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0073",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "72",
+    "options": {
+      "A": "如果$x^{2}+2xy+y^{2}-2x-2y+1=0$,则x+y=",
+      "B": "0",
+      "C": "1",
+      "D": "-1"
+    },
+    "answer": "$\\pm 1$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0074",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "73",
+    "options": {
+      "A": "⼀个整数精确到万位是30万，这个数精确前可能是",
+      "B": " 309111 ",
+      "C": "294999",
+      "D": " 295786 "
+    },
+    "answer": "305997",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0075",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "74",
+    "options": {
+      "A": "养禽场养鹅600只，养鸭的只数⽐鹅多50%，养禽场养鸭多少只？",
+      "B": "800",
+      "C": "600",
+      "D": "900"
+    },
+    "answer": "700",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0076",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "75",
+    "options": {
+      "A": "已知关于x的⽅程2x+4=m-x的解为负数，则m的取值范围是",
+      "B": "$m\\lt 4$",
+      "C": "$m\\gt \\frac{3}{4}$",
+      "D": "$m\\lt \\frac{3}{4}$"
+    },
+    "answer": "$m\\gt 4$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0077",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "76",
+    "options": {
+      "A": "已知⼀个实数的两个不同平⽅根是a＋3和2a－3，则该实数是",
+      "B": "10",
+      "C": "15",
+      "D": "12"
+    },
+    "answer": "9",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0078",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "77",
+    "options": {
+      "A": "⽼王 a 岁，⼩李（ a -18）岁，过 c 年后，他们相差（ ）岁",
+      "B": "c-18",
+      "C": "18",
+      "D": "c"
+    },
+    "answer": "c+18",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0079",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "78",
+    "options": {
+      "A": "如果两个有理数的商等于0，则",
+      "B": "被除数不为0除数为0",
+      "C": "两个数中有一个为0",
+      "D": "被除数为0除数不为0"
+    },
+    "answer": "两个数都为0",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0080",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "79",
+    "options": {
+      "A": "一个长方形的长宽高分别是3x+6，4x，3x，则它的体积为",
+      "B": "$36x^{2}+72x$",
+      "C": "$15x^{3}+18x^{2}$",
+      "D": "$36x^{3}+72x^{2}$"
+    },
+    "answer": "$21x^{3}+42x^{2}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0081",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "80",
+    "options": {
+      "A": "等底等⾼的⻓⽅体 正⽅体 圆柱的体积相⽐较 ",
+      "B": "圆柱体积⼤ ",
+      "C": "正⽅体体积⼤ ",
+      "D": "⼀样⼤ "
+    },
+    "answer": "⻓⽅体体积⼤ ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0082",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "81",
+    "options": {
+      "A": "⼀件商品先涨价10%，后再降价10%，现价和原价相⽐",
+      "B": "现价⾼",
+      "C": "原价⾼",
+      "D": "⼀样⾼"
+    },
+    "answer": "⽆法判断",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0083",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "82",
+    "options": {
+      "A": "有6个棱⻓分别是3cm，4cm，5cm，的相同的⻓⽅体，把它们的某些⾯染上红⾊，使得有的⻓⽅体只有⼀个⾯是红⾊的，有的⻓⽅体恰有两个⾯是红⾊的，有的⻓⽅体恰有三个⾯是红⾊的，有的⻓⽅体恰有四个⾯是红⾊的，有的⻓⽅体恰有五个⾯是红⾊的，还有⼀个⻓⽅体六个⾯都是红⾊的，染⾊后把所有 的⻓⽅体分割成棱⻓为1cm的⼩正⽅体，分割完毕后，恰有⼀⾯是红⾊的⼩正⽅体最多有⼏个",
+      "B": "199",
+      "C": "177",
+      "D": "166"
+    },
+    "answer": "188",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0084",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "83",
+    "options": {
+      "A": "下列计算正确的是",
+      "B": "$3\\sqrt{2}-\\sqrt{2}=2\\sqrt{2}$",
+      "C": "2a+3a=6a",
+      "D": "$(-3a)^{2}=6a^{2}$"
+    },
+    "answer": "$(x-y)^{2}=x^{2}-y^{2}$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0085",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "84",
+    "options": {
+      "A": "有⼀块梯形菜地，上底⻓4.5⽶，下底⻓7.5⽶，⾼10⽶，平均每平⽅⽶能收6棵⽩菜，这块地共可以收多少棵⽩菜",
+      "B": "300",
+      "C": "500",
+      "D": "720"
+    },
+    "answer": "360",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0086",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "85",
+    "options": {
+      "A": "⼀个圆柱的侧⾯积是12.56dm2，⾼是0.5dm，它的底⾯直径是（ ）dm",
+      "B": "8",
+      "C": "4",
+      "D": "16"
+    },
+    "answer": "12",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0087",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "86",
+    "options": {
+      "A": "和三⻆形三个顶点的距离相等的点是",
+      "B": "三边中线的交点",
+      "C": "三边上⾼所在直线的交点 ",
+      "D": "三条⻆平分线的交点"
+    },
+    "answer": "三边的垂直平分线的交点 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0088",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "87",
+    "options": {
+      "A": "骰⼦是⼀个质量均匀的⼩正⽅体，它的六个⾯上分别刻有1~6个点，⼩明仔细观察骰⼦，发现任意相对两⾯的点数和都相等。这枚骰⼦向上的⼀⾯的点数是5，它的对⾯ 的点数是",
+      "B": "1",
+      "C": "3",
+      "D": "6"
+    },
+    "answer": "2",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0089",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "88",
+    "options": {
+      "A": "mn为相反数，下列错误的是",
+      "B": "$\\frac{m}{n}=-1$",
+      "C": "$|m|=|n|$",
+      "D": "$mn=-m^{2}$"
+    },
+    "answer": "$2m+2n=0$",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0090",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "89",
+    "options": {
+      "A": "⼀张纸围成⼀个圆柱形，它的⾼是3.14分⽶，底⾯直径1分⽶，这张纸⼀定是",
+      "B": "⻓⽅形 ",
+      "C": "圆形 ",
+      "D": "圆锥形 "
+    },
+    "answer": "正⽅形",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0091",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "90",
+    "options": {
+      "A": "买1.5千克藕和4千克南⽠应付多钱？藕4.2元/千克。南⽠1.4元/千克。",
+      "B": "11",
+      "C": "11.9",
+      "D": "12"
+    },
+    "answer": "11.7",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0092",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "91",
+    "options": {
+      "A": "内⻆的度数为整数的正 边形的个数是",
+      "B": "24",
+      "C": "22",
+      "D": "18"
+    },
+    "answer": "20",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0093",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "92",
+    "options": {
+      "A": "下列说法正确的是",
+      "B": "$-\\frac{x+y}{3}-2x$不是整式",
+      "C": "$5a^{2}b^{2}$的次数是5",
+      "D": "x是单项式"
+    },
+    "answer": "$4xy^{3}+3x^{2}y$的次数是7",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0094",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "93",
+    "options": {
+      "A": "化简$\\frac{x^{2}}{x-1}+\\frac{x}{1-x}$的结果是",
+      "B": "x+1",
+      "C": "-x",
+      "D": "x"
+    },
+    "answer": "x-1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0095",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "94",
+    "options": {
+      "A": "下⾯说法中正确的是",
+      "B": "0是最⼩的有理数",
+      "C": "0是整数，但不是正数，也不是负数",
+      "D": "0是最⼩的正数"
+    },
+    "answer": "0是最⼩的整数",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0096",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "95",
+    "options": {
+      "A": "若$x=1-\\frac{1}{m}$是方程mx-2m+2=0的根，则x-m的值为",
+      "B": "0",
+      "C": "-1",
+      "D": "2"
+    },
+    "answer": "1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0097",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "96",
+    "options": {
+      "A": "⽐例尺⼀定，图上距离与实际距离",
+      "B": "成正⽐例",
+      "C": "成反⽐例",
+      "D": "不成⽐例"
+    },
+    "answer": "不确定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0098",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "97",
+    "options": {
+      "A": "某学校计划⽤34件同样的奖品全部⽤于奖励在“经典诵读”活动中表现突出的班级，⼀等奖奖励6件，⼆等奖奖励4件，则分配⼀、⼆等奖个数的⽅案有 ",
+      "B": "1种",
+      "C": "4种",
+      "D": "3种"
+    },
+    "answer": "2种",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0099",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "98",
+    "options": {
+      "A": "下列各式中[ ]是⽅程",
+      "B": "X",
+      "C": "4.7+5.2=9.9 ",
+      "D": "3X+6"
+    },
+    "answer": "3X+6=27",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0100",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "99",
+    "options": {
+      "A": "下列现象是数学中的平移的是",
+      "B": "DVD⽚在光驱中运⾏ ",
+      "C": "电梯由⼀楼升到顶楼 ",
+      "D": "秋天的树叶从树上随⻛飘落 "
+    },
+    "answer": "“神⾈”六号宇宙⻜船绕地球运动 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0101",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "100",
+    "options": {
+      "A": "已知a+b=2000+2001，a-b=2001−2000.则$s^{4}$-b^{4}等于",
+      "B": "2003",
+      "C": "2001",
+      "D": "2000"
+    },
+    "answer": "2002",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0102",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "101",
+    "options": {
+      "A": "已知⼀个⻆的补⻆是这个⻆余⻆的8.5倍，这个⻆的⼤⼩为",
+      "B": "65°",
+      "C": "68°",
+      "D": "72°"
+    },
+    "answer": "78°",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0103",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "102",
+    "options": {
+      "A": "某商场五⼀期间举⾏优惠销售活动，采取“满⼀百元送⼆⼗元，并且连环赠送”的酬宾⽅式，即顾客每消费满100元（100元可以是现⾦，也可以是购物券，或⼆者合计）就送20元购物券，满200元就送40元购 物券，依次类推，现有⼀位顾客第⼀次就⽤了16000元购物，并⽤所得购物券继续购物，那么他购回的 商品⼤约相当于它们原价的",
+      "B": "90%",
+      "C": "75%",
+      "D": "80%"
+    },
+    "answer": "85%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0104",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "103",
+    "options": {
+      "A": "⽤性质描述法表示全体偶数",
+      "B": "{x|x=2k+1} ",
+      "C": "{x|x=2K,K是正整数} ",
+      "D": "{x|x=2k} "
+    },
+    "answer": "{x|x=2k， K是⾃然数} ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0105",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "104",
+    "options": {
+      "A": "⼩华玩某种游戏，每局可随意玩若⼲次，每次得分是8，a（⾃然数），0这三个数中的⼀个，每局各次得分的总和叫做这⼀局的总积分，⼩华曾得到过这样的总积分：103，104，105，106，107，108， 109，110，⼜知道他不可能得到“83分”这个总积分。问：a是多少",
+      "B": "12",
+      "C": "13",
+      "D": "14"
+    },
+    "answer": "11",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0106",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "105",
+    "options": {
+      "A": "下列判断中，错误的是",
+      "B": "⼀个负数的绝对值⼀定是正数",
+      "C": "⼀个正数的绝对值⼀定是正数",
+      "D": "任何数的绝对值都是正数"
+    },
+    "answer": "任何数的绝对值都不是负数",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0107",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "106",
+    "options": {
+      "A": "如果把学校的位置记作0m，从学校出发向东⾛300m有⼀个书店，书店的位置记作+300m，从书店出发向⻄⾛600m有⼀个报亭，报亭的位置记作（ ）m ",
+      "B": " +900 ",
+      "C": "-600",
+      "D": "-300"
+    },
+    "answer": "-900",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0108",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "107",
+    "options": {
+      "A": "在数轴上，0左边的数",
+      "B": "是负数",
+      "C": "是正数",
+      "D": "既不是正数，也不是负数 "
+    },
+    "answer": "既是正数，也是负数",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0109",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "108",
+    "options": {
+      "A": "抛物线$y=(x-2)^{2}+3$的顶点坐标为",
+      "B": "(-2,3)",
+      "C": "(-2,-3)",
+      "D": "(2,-3)"
+    },
+    "answer": "(2,3)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0110",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "109",
+    "options": {
+      "A": "⼀个正⽅体的⽔晶砖，体积为$100cm^{2}$它的棱⻓⼤约在",
+      "B": "7cm~8cm之间",
+      "C": "4cm~5cm之间",
+      "D": "5cm~6cm之间"
+    },
+    "answer": "6cm~7cm之间",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0111",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "110",
+    "options": {
+      "A": "下列对象不能组成集合的是",
+      "B": "直线y=2x-1上所有的点 ",
+      "C": "本班数学成绩较好的同学 ",
+      "D": "不等式x+2>0的解集全体 "
+    },
+    "answer": "不⼩于0的所有偶数 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0112",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "111",
+    "options": {
+      "A": "⼀根体积为120⽴⽅分⽶的圆柱体⽊料，要把它削成最⼤的圆锥，需要削去（ ）⽴⽅分⽶的⽊料",
+      "B": "80",
+      "C": "100",
+      "D": "40"
+    },
+    "answer": "60",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0113",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "112",
+    "options": {
+      "A": "现代互联⽹技术的⼴泛应⽤，催⽣了快递⾏业的⾼速发展.某家快递公司的分拣⼯⼩李和⼩江在分拣同⼀类物件时，⼩李分拣120个物件所⽤的时间与⼩江分拣 90 个物件所⽤的时间相同，已知⼩李每⼩时⽐ ⼩江多分拣20个物件.若设⼩江每⼩时分拣x个物件，则可列⽅程为",
+      "B": "120/(x+20)=90/x ",
+      "C": "120/x=90/(x-20) ",
+      "D": "120/x=90/(x+20) "
+    },
+    "answer": "120/(x-20)=90/x",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0114",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "113",
+    "options": {
+      "A": "下列计算中，正确的是",
+      "B": "$a^{3}+a^{3}=a^{6}$",
+      "C": "$a^{2}\\cdot a^{4}=a^{8}$",
+      "D": "$(a^{2})^{3}=a^{5}$"
+    },
+    "answer": "$a^{4}/a^{3}=a $",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0115",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "114",
+    "options": {
+      "A": "已知“甲⽐⼄多50%°则下⾯叙述中正确的是",
+      "B": "甲与⼄的⽐是3：2 ",
+      "C": "⼄是甲的3倍 ",
+      "D": "甲与⼄的⽐是2：3 "
+    },
+    "answer": "⼄⽐甲少50% ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0116",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "115",
+    "options": {
+      "A": "在平⾯直⻆坐标系中，抛物线y=(x+5)(x-3) 经过变换后得到抛物线y=(x+3)(x-5)，则这个变换可以是",
+      "B": "向左平移8个单位 ",
+      "C": "向右平移2个单位",
+      "D": "向左平移2个单位"
+    },
+    "answer": "向右平移8个单位 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0117",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "116",
+    "options": {
+      "A": "在平⾯直⻆坐标系xOy中，点A(a, b)(a＞0, b＞0)在双曲线$y=\\frac{k_{1}}{x}$上，点A关于x轴的对称点B在双曲线上$y=\\frac{k_{2}}{x}$，则k1+k2的值为 0",
+      "B": "-1",
+      "C": "1",
+      "D": "2"
+    },
+    "answer": "0",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0118",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "117",
+    "options": {
+      "A": "在60后⾯添上百分号，这个数就",
+      "B": "⼤⼩不变 ",
+      "C": "扩⼤100倍 ",
+      "D": "缩⼩10倍 "
+    },
+    "answer": "缩⼩为原来的1% ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0119",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "118",
+    "options": {
+      "A": "⼀个菱形的边⻓是⽅程$x^{2}-8x+15=0$的⼀个根，其中⼀条对⻆线⻓为8，则该菱形的⾯积为",
+      "B": "24或40",
+      "C": "24",
+      "D": "48"
+    },
+    "answer": "48或80",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0120",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "119",
+    "options": {
+      "A": "(-2,6)关于x轴对称点的坐标为",
+      "B": "(2,-6)",
+      "C": "(2,6) ",
+      "D": "(-2,-6) "
+    },
+    "answer": "(-2,6)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0121",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "120",
+    "options": {
+      "A": "在4.3的末尾添上一个零后，小数的计数单位是",
+      "B": "百分位",
+      "C": "0.01 ",
+      "D": "0.1 "
+    },
+    "answer": "十分位 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0122",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "121",
+    "options": {
+      "A": "一个三角形的底边和高都增加10%，那么，新三角形的面积比原三角形的面积",
+      "B": "增加20%",
+      "C": "增加10%",
+      "D": "增加21%"
+    },
+    "answer": "增加100%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0123",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "122",
+    "options": {
+      "A": "一件工作，甲做1/3小时完成，乙做0.4小时完成，两人合作()小时完成",
+      "B": "0.7",
+      "C": "不能计算",
+      "D": "15/11/2023"
+    },
+    "answer": "11/02/2023",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0124",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "123",
+    "options": {
+      "A": "0.375的计数单位是",
+      "B": "0.01",
+      "C": "无法确定",
+      "D": "0.1"
+    },
+    "answer": "0.001",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0125",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "124",
+    "options": {
+      "A": "已知A=1+1/2+1/3+1/4+...+1/11+1/12，则A的整数部分是",
+      "B": "3",
+      "C": "1",
+      "D": "2"
+    },
+    "answer": "4",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0126",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "125",
+    "options": {
+      "A": "“太白酒”酒瓶上的商标纸上标有酒精度58%，这里的58%是指",
+      "B": "酒精的体积是整瓶酒的质量的58%",
+      "C": "酒精的质量是整瓶酒的质量的58%",
+      "D": "酒精的质量是整瓶酒的体积的58%"
+    },
+    "answer": "酒精的体积是整瓶酒的体积的58%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0127",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "126",
+    "options": {
+      "A": "把20升的纯牛奶喝掉2升，用水添至和原来一样多，则牛奶浓度为",
+      "B": "95%",
+      "C": "85%",
+      "D": "90%"
+    },
+    "answer": "10%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0128",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "127",
+    "options": {
+      "A": "在100千克的水中加10千克食盐，盐水的浓度是",
+      "B": "10/100-10*100%",
+      "C": "10/100+10*100%",
+      "D": "90%"
+    },
+    "answer": "10%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0129",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "128",
+    "options": {
+      "A": "甲轮滚动2周的距离，乙轮要滚动3周，甲轮与乙轮的直径比是",
+      "B": "3：2 ",
+      "C": "9：4 ",
+      "D": "9：1 "
+    },
+    "answer": "2：3",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0130",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "129",
+    "options": {
+      "A": "算式603-[124*3+137-(69+68)]的正确答案是",
+      "B": "231",
+      "C": "233",
+      "D": "230"
+    },
+    "answer": "232",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0131",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "130",
+    "options": {
+      "A": "如果一个三角形的两个内角度数的和等于第三个内角的度数，那么这个三角形是",
+      "B": "锐角三角形",
+      "C": "无法判断",
+      "D": "直角三角形"
+    },
+    "answer": "钝角三角形",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0132",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "131",
+    "options": {
+      "A": "1.9965四舍五入到千分位是",
+      "B": "1.99 ",
+      "C": "1.996",
+      "D": "1.997"
+    },
+    "answer": "2.00",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0133",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "132",
+    "options": {
+      "A": "30比()少1/5",
+      "B": "25",
+      "C": "36",
+      "D": "37.5"
+    },
+    "answer": "28",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0134",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "133",
+    "options": {
+      "A": "14/42的分子减少7，要使这个分数的大小不变，分母应该减少",
+      "B": "28",
+      "C": "7",
+      "D": "14"
+    },
+    "answer": "21",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0135",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "134",
+    "options": {
+      "A": "在估算8.8*6.92时，误差最小的是",
+      "B": "8*7",
+      "C": "9*6",
+      "D": "9*7"
+    },
+    "answer": "8*6",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0136",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "135",
+    "options": {
+      "A": "有一堆糖，吃了3/4，还剩1.2千克，这堆糖原来有",
+      "B": "1.2*(1—3/4)",
+      "C": "1.2/(1-3/4)",
+      "D": "1.2*(3/4)"
+    },
+    "answer": "1.2/(3/4)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0137",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "136",
+    "options": {
+      "A": "甲乙两书架，把甲书架上的书的1/4放到乙书架上，这时，两书架上的书正好相等，原来甲书架上的书比乙书架上多",
+      "B": "75%",
+      "C": "100%",
+      "D": "50%"
+    },
+    "answer": "25%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0138",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "137",
+    "options": {
+      "A": "100增加1/10后，又减少了1/10，结果是",
+      "B": "100",
+      "C": "110",
+      "D": "90"
+    },
+    "answer": "99",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0139",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "138",
+    "options": {
+      "A": "一艘轮船从甲港开往乙港，逆流用了15小时，返回时顺流速度加快了1/4，这艘轮船返回时用了",
+      "B": "19小时",
+      "C": "10小时",
+      "D": "12小时"
+    },
+    "answer": "20小时",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0140",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "139",
+    "options": {
+      "A": "甲数的305与乙数的40%相等，那么甲数()乙数",
+      "B": "等于",
+      "C": "小于",
+      "D": "大于"
+    },
+    "answer": "不一定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0141",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "140",
+    "options": {
+      "A": "已知3个数的和是470，第一个数比第二个数多160，第三个数比第一个数少180，这三个数的最大公因数是",
+      "B": "10",
+      "C": "20",
+      "D": "12"
+    },
+    "answer": "2",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0142",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "141",
+    "options": {
+      "A": "一段绳子，第一次用去全长的2/5，第二次用去全长的1/4，剩下的比第二次用去的长20米，这根绳子原来有",
+      "B": "150米",
+      "C": "180米",
+      "D": "200米"
+    },
+    "answer": "60米",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0143",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "142",
+    "options": {
+      "A": "在一个棱长为1分米的正方体的8个角上，各锯下一个棱长为1厘米的正方体，现在它的表面积和原来比",
+      "B": "不变",
+      "C": "增加",
+      "D": "减少 "
+    },
+    "answer": "无法确定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0144",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "143",
+    "options": {
+      "A": "用()可以估算7.9804*3.025的积大约是多少",
+      "B": "7*4",
+      "C": "8*4",
+      "D": "7*3"
+    },
+    "answer": "8*3",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0145",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "144",
+    "options": {
+      "A": "自然数中，能被2整除的数都是",
+      "B": "偶数",
+      "C": "奇数",
+      "D": "质数"
+    },
+    "answer": "合数",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0146",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "145",
+    "options": {
+      "A": "修路队修一段路，第一周修了全的1/6，第二周修了全长的1/4，第一周比第二周少修20千米，这段路全长有",
+      "B": "240",
+      "C": "120",
+      "D": "48"
+    },
+    "answer": "80",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0147",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "146",
+    "options": {
+      "A": "如果0<a<1，b=1/(a*a*a)，c=1/(a+a+a)，那么b和c的值相比",
+      "B": "值可能相等",
+      "C": "c的值大",
+      "D": "不确定"
+    },
+    "answer": "b的值大",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0148",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "147",
+    "options": {
+      "A": "如果a-6=8，那么(a*2)—(6*2)=",
+      "B": "8",
+      "C": "32",
+      "D": "4"
+    },
+    "answer": "16",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0149",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "148",
+    "options": {
+      "A": "把分数a的分子扩大到原来的11倍，分母扩大到原来的13倍，得到的一个新分数b，把分数a的分子扩大到原来的8倍，分母扩大到原来的9倍，得到一个新分数c。那么b和c比较",
+      "B": "b>c",
+      "C": "比不清楚",
+      "D": "b<c"
+    },
+    "answer": "b=c",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0150",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "149",
+    "options": {
+      "A": "一根绳子长5米，第一次用去1/5，第二次用去1/5米，还剩下",
+      "B": "4米",
+      "C": "12/5米",
+      "D": "3米"
+    },
+    "answer": "2/5米",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0151",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "150",
+    "options": {
+      "A": "某专业户去年每公顷产粮食9400千克，比前年增产二成，前年每公顷产粮食()千克",
+      "B": "9400*(1-20%)",
+      "C": "9400/(1-20%)",
+      "D": "9400*(1+20%)"
+    },
+    "answer": "9400/(1+20%)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0152",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "151",
+    "options": {
+      "A": "甲数比乙数少甲数的1/4，也就是乙数是甲数的",
+      "B": "1/4",
+      "C": "1.25",
+      "D": "4倍"
+    },
+    "answer": "0.25",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0153",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "152",
+    "options": {
+      "A": "小圆直径为a厘米，大圆的半径为a厘米，则小圆面积与大圆面积的比是",
+      "B": "2:1",
+      "C": "1:4",
+      "D": "3.14"
+    },
+    "answer": "4:1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0154",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "153",
+    "options": {
+      "A": "10千克的盐溶解在100千克的水中，盐的重量占盐水重量的",
+      "B": "1/10",
+      "C": "1/12",
+      "D": "1/9"
+    },
+    "answer": "1/11",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0155",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "154",
+    "options": {
+      "A": "甲、乙、丙三个不为0的自然数，满足条件甲*5/4=乙*3/4=丙*3/2，则甲、乙、丙三个数从大到小的排列顺序是",
+      "B": "丙>乙>甲",
+      "C": "丙>甲>乙",
+      "D": "乙>甲>丙"
+    },
+    "answer": "甲>乙>丙",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0156",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "155",
+    "options": {
+      "A": "爸爸去年买了一种股票，该股票去年跌了20%，今年应上涨()才能保持原值",
+      "B": "30%",
+      "C": "40%",
+      "D": "20%"
+    },
+    "answer": "25%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0157",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "156",
+    "options": {
+      "A": "一个大于0的数除以真分数，商()被除数",
+      "B": "小于或等于",
+      "C": "小于",
+      "D": "大于"
+    },
+    "answer": "等于",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0158",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "157",
+    "options": {
+      "A": "一个分数的分子减少它的4/5，要使分数的大小不变，分母应",
+      "B": "除以5",
+      "C": "除以4/5",
+      "D": "乘以5"
+    },
+    "answer": "减去4/5",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0159",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "158",
+    "options": {
+      "A": "今年的柑橘产量比去年成长一成半，今年产量是去年的",
+      "B": "85%",
+      "C": "115%",
+      "D": "105%"
+    },
+    "answer": "15%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0160",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "159",
+    "options": {
+      "A": "已知a是一个真分数，b是一个假分数，在下列算式中答案一定大于1的算式是",
+      "B": "a+b",
+      "C": "a*b",
+      "D": "a/b"
+    },
+    "answer": "a-b",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0161",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "160",
+    "options": {
+      "A": "()统计图既表示数量的多少，又表示数量之间的增减变化",
+      "B": "扇形",
+      "C": "折线 ",
+      "D": "百分比"
+    },
+    "answer": "条列",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0162",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "161",
+    "options": {
+      "A": "一个因数扩大到原来的10倍，另一个因数缩小的原来的1/20，它们的积",
+      "B": "缩小到原来的1/2",
+      "C": "缩小到原来的1/10",
+      "D": "扩大到原来的10倍"
+    },
+    "answer": "扩大到原来的2倍",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0163",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "162",
+    "options": {
+      "A": "在70克的水中放入10克糖，配成糖水，含糖率为",
+      "B": "12.50%",
+      "C": "1.25%",
+      "D": "87.55"
+    },
+    "answer": "14.30%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0164",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "163",
+    "options": {
+      "A": "已知除数是132，商是0.001，余数是0.1，被除数是",
+      "B": "0.133",
+      "C": "1.33",
+      "D": "0.232"
+    },
+    "answer": "1.3",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0165",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "164",
+    "options": {
+      "A": "刘叔叔看病花了280元，报销时，个人要负担四成，能报销多少元钱，算式是",
+      "B": "280÷40%",
+      "C": "80*(1-40%)",
+      "D": "280/(1-40%)"
+    },
+    "answer": "280*40%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0166",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "165",
+    "options": {
+      "A": "甲三角形与乙三角形的底边长的比是2：1，高的比是1：2，那么甲三角形与乙三角形面积的比是",
+      "B": "2：1",
+      "C": "1：2",
+      "D": "3：2 "
+    },
+    "answer": "1：1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0167",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "166",
+    "options": {
+      "A": "修路队修一段路，第一天修了全程的2/5，第二天修了240米，完成了全部修路任务，第一天修了多少米，正确的算式是",
+      "B": "240/(1-2/5)",
+      "C": "240/(1-2/5)*(2/5)",
+      "D": "240/(1+2/5)"
+    },
+    "answer": "240*(1+2/5)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0168",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "167",
+    "options": {
+      "A": "一段绳子，第一次剪去全长的1/5，第二次剪去全长的1/2，还剩30米，这根绳子全长",
+      "B": "90",
+      "C": "100",
+      "D": "80"
+    },
+    "answer": "160",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0169",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "168",
+    "options": {
+      "A": "修路队修一段路，第一天修了全程的1/4，第二天修了全程的1/5，已知第一天与第二天一共修了1800米，这段路的全长是()米",
+      "B": "1800/(1/4+1/5)",
+      "C": "1800/(1/4—1/5)",
+      "D": "1800*(1/4+1/5)"
+    },
+    "answer": "1800/(1—1/4—1/5)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0170",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "169",
+    "options": {
+      "A": "一辆汽车从甲地开往乙地，已经行驶了160千米，余下的占全长的3/8，甲乙两地相距",
+      "B": "160(1+3)*8",
+      "C": "160/(1-3/8)",
+      "D": "160*(1-3/8)"
+    },
+    "answer": "160/(1+3/8)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0171",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "170",
+    "options": {
+      "A": "小圆的直径为a厘米，大圆的半径为a厘米，则小圆面积是大圆面积的",
+      "B": "25%",
+      "C": "20%",
+      "D": "80%"
+    },
+    "answer": "50%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0172",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "171",
+    "options": {
+      "A": "一座粮食仓库的容积为约1500",
+      "B": "平方米",
+      "C": "立方米",
+      "D": "升"
+    },
+    "answer": "米",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0173",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "172",
+    "options": {
+      "A": "同学们参加合唱队，男生人数的1/3等于女生人数的3/8，女生有128，参加合唱队的男生比女生多",
+      "B": "18",
+      "C": "16",
+      "D": "24"
+    },
+    "answer": "12",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0174",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "173",
+    "options": {
+      "A": "一个两位数，个位上的数字和十位上的数字都是合数，并且是互质数，这个数最大是",
+      "B": "96",
+      "C": "98",
+      "D": "94"
+    },
+    "answer": "99",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0175",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "174",
+    "options": {
+      "A": "如果甲数的2/3等于乙数的3/5，那么甲数：乙数等于",
+      "B": "10：9 ",
+      "C": "15：6",
+      "D": "6：15"
+    },
+    "answer": "9：10 ",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0176",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "175",
+    "options": {
+      "A": "甲数是7777776/7777777，乙数是9999998/9999999，那么甲乙两数的关系是",
+      "B": "甲<乙",
+      "C": "甲>乙",
+      "D": "不确定"
+    },
+    "answer": "甲=乙",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0177",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "176",
+    "options": {
+      "A": "绘制统计图时，要能清楚地表示数量增减变化的情况，应选用",
+      "B": "AB",
+      "C": "扇形统计图",
+      "D": "折线统计图"
+    },
+    "answer": "条形统计图",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0178",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "177",
+    "options": {
+      "A": "40-[12+(10-3)*4]的得数是",
+      "B": "0",
+      "C": "2",
+      "D": "10"
+    },
+    "answer": "1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0179",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "178",
+    "options": {
+      "A": "商店运来一批水果，第一天卖出总量的1/6是240千克，第二天卖出总量的2/5，商店里还有()千克水水果",
+      "B": "624",
+      "C": "720",
+      "D": "864"
+    },
+    "answer": "780",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0180",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "179",
+    "options": {
+      "A": "1-1*(0/1)+1/1的的数是",
+      "B": "2",
+      "C": "3",
+      "D": "0"
+    },
+    "answer": "1",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0181",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "180",
+    "options": {
+      "A": "有两堆砂石，第一堆比第二堆中60%，那么第二堆比第一堆轻",
+      "B": "37.50%",
+      "C": "40%",
+      "D": "60.50%"
+    },
+    "answer": "62.50%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0182",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "181",
+    "options": {
+      "A": "有两根同样长的绳子，从第一根中先用去1/3，再用去1/3米，从第二根中先用去1/3米，再用去余下长度的1/3，仍都有剩余。第一根所剩部分与第二根所剩部分相比较",
+      "B": "两根剩的同样长",
+      "C": "第二根剩的长",
+      "D": "无法确定"
+    },
+    "answer": "第一根剩的长",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0183",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "182",
+    "options": {
+      "A": "已知a+b=4，c+b=3，b=1/2，那么c比1少",
+      "B": "1/4",
+      "C": "1",
+      "D": "1/3"
+    },
+    "answer": "3/4",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0184",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "183",
+    "options": {
+      "A": "甲乙两袋米，由甲袋倒出1/10到乙袋后，两袋米的重量相等，原来甲戴米比乙袋多",
+      "B": "10%",
+      "C": "25%",
+      "D": "80%"
+    },
+    "answer": "20%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0185",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "184",
+    "options": {
+      "A": "文具店今天卖出120支圆珠笔，比昨天多卖出1/5，昨天卖出()支圆珠笔",
+      "B": "120/(1—1/5)",
+      "C": "120*(1—1/5)",
+      "D": "120/(1+1/5)"
+    },
+    "answer": "120*1+1/5)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0186",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "185",
+    "options": {
+      "A": "一个数的3/14是5，那这个数的3/7是",
+      "B": "10",
+      "C": "7",
+      "D": "9"
+    },
+    "answer": "8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0187",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "186",
+    "options": {
+      "A": "把0.8亿改写成用“万”作单位的数是",
+      "B": "80000万",
+      "C": "8000万",
+      "D": "80000000万"
+    },
+    "answer": "0.8万",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0188",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "187",
+    "options": {
+      "A": "有一堆煤，增加1/7后，又减少1/7，这堆煤的重量",
+      "B": "与原来重量相等",
+      "C": "比原来多",
+      "D": "不确定"
+    },
+    "answer": "比原来少",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0189",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "188",
+    "options": {
+      "A": "一个正方体的棱长扩大2倍，表面积就扩大",
+      "B": "8倍",
+      "C": "2倍",
+      "D": "4倍"
+    },
+    "answer": "12倍",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0190",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "189",
+    "options": {
+      "A": "一本故事书共有240页，如果第一天看了全部的1/8，第二天看了全部的1/6，第三天应该从第()页开始看",
+      "B": "75",
+      "C": "76",
+      "D": "70"
+    },
+    "answer": "71",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0191",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "190",
+    "options": {
+      "A": "A、B两只青蛙进行跳跃比赛，A每次跳10厘米，B每次跳15厘米，他们每秒都只跳1次，且一起从起点开始向同一方向跳跃。在比赛途中，每隔12厘米有一陷阱，当它们中第一只掉进陷阱时，另一只距离它最近的陷阱有()厘米",
+      "B": "6",
+      "C": "2",
+      "D": "4"
+    },
+    "answer": "无法确定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0192",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "191",
+    "options": {
+      "A": "修一段路，已经修了它的5/6，剩下没修的比已经修了的少",
+      "B": "80%",
+      "C": "66.70%",
+      "D": "16.70%"
+    },
+    "answer": "20%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0193",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "192",
+    "options": {
+      "A": "一个两位数，各位数字的和的5倍比原数打6，则这个两位数是",
+      "B": "74",
+      "C": "24或69",
+      "D": "24"
+    },
+    "answer": "69",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0194",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "193",
+    "options": {
+      "A": "30以内的质数加上2还是质数的有()个",
+      "B": "4",
+      "C": "7",
+      "D": "6"
+    },
+    "answer": "5",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0195",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "194",
+    "options": {
+      "A": "下列算式()的积与5.555*6.666的结果最接近",
+      "B": "5*7",
+      "C": "6*6",
+      "D": "6*7"
+    },
+    "answer": "5*6",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0196",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "195",
+    "options": {
+      "A": "一本故事书共有240页，如果第一天看了全部的1/8，第二天看了剩下的1/6，第三天应该从第()页开始看",
+      "B": "70",
+      "C": "66",
+      "D": "141"
+    },
+    "answer": "71",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0197",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "196",
+    "options": {
+      "A": "24/36的分子减少16，要使这个分数的大小不变，分母应该变成",
+      "B": "2",
+      "C": "6",
+      "D": "24"
+    },
+    "answer": "12",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0198",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "197",
+    "options": {
+      "A": "一次打靶，命中了100发，没命中是25发，命中率是",
+      "B": "80%",
+      "C": "75%",
+      "D": "25%"
+    },
+    "answer": "50%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0199",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "198",
+    "options": {
+      "A": "5米长的铁丝平均分成8份，每份是1米的",
+      "B": "5/8 ",
+      "C": "1/8 ",
+      "D": "5/8米"
+    },
+    "answer": "8/5",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0200",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "199",
+    "options": {
+      "A": "钝角三角形的内角和()锐角三角形的内角和",
+      "B": "小于",
+      "C": "无法确定",
+      "D": "大于"
+    },
+    "answer": "等于",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0201",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "200",
+    "options": {
+      "A": "数a分解质因数是a=2*2*3，数b分解质因数是b=2*2*5，数a和数b的最大公因数是解质因数是a=2*2*3，数b分解质因数是b=2*2*5，数a和数b的最大公因数是",
+      "B": "4",
+      "C": "6",
+      "D": "2"
+    },
+    "answer": "60",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0202",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "201",
+    "options": {
+      "A": "下列图形中，对称轴只有一条的是",
+      "B": "等腰三角形",
+      "C": "圆",
+      "D": "等边三角形"
+    },
+    "answer": "长方形",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0203",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "202",
+    "options": {
+      "A": "一根木料用去全长的40%，还剩5.4米，这根木料原来的长是多少米，列式是",
+      "B": "5.4/40%",
+      "C": "5.4/(1+40%)",
+      "D": "5.4/(1-40%)"
+    },
+    "answer": "5.4*40%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0204",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "203",
+    "options": {
+      "A": "下列选项中的数是序数的是",
+      "B": "第2节课",
+      "C": "5支铅笔",
+      "D": "2栋楼房"
+    },
+    "answer": "6只鸡",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0205",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "204",
+    "options": {
+      "A": "要使x/8是最简真分数，8/x是假分数，x应该是",
+      "B": "9",
+      "C": "7",
+      "D": "6"
+    },
+    "answer": "8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0206",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "205",
+    "options": {
+      "A": "在一个减法算式里，被减数、减数与差的和是120，且差是减数的3倍，差是",
+      "B": "45",
+      "C": "40",
+      "D": "20"
+    },
+    "answer": "60",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0207",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "206",
+    "options": {
+      "A": "一种商品先涨价20%，又降价20%，这种商品现在的价格是原价的",
+      "B": "80%",
+      "C": "88%",
+      "D": "不变"
+    },
+    "answer": "96%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0208",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "207",
+    "options": {
+      "A": "两个自然数的倒数和是11/24，这两个自然数是",
+      "B": "2和9",
+      "C": "5和6",
+      "D": "1和10"
+    },
+    "answer": "3和8",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0209",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "208",
+    "options": {
+      "A": "甲每秒跑3米，乙每秒跑2米，丙每秒跑4米，三人沿600米的环形跑道从同一点同时同向跑步，经过()秒三人又同时从出发点出发",
+      "B": "300",
+      "C": "12",
+      "D": "无法确定"
+    },
+    "answer": "600",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0210",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "209",
+    "options": {
+      "A": "某地区的电话号码是一个八位数，已知其前四位数是一个固定数6869，那么该地区最多可安装()部电话",
+      "B": "9999",
+      "C": "6869",
+      "D": "10001"
+    },
+    "answer": "10000",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0211",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "210",
+    "options": {
+      "A": "一个数增加15%后得到一个新数，再从新数中减少15%，结果比原数相比",
+      "B": "结果比原数小",
+      "C": "结果比原数大",
+      "D": "不确定"
+    },
+    "answer": "结果与原数相等",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0212",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "211",
+    "options": {
+      "A": "小丽和贝贝在玩游戏，小丽报的数a在25至50之间，贝贝报的数b在10至20之间，那么a+b的结果在()之间",
+      "B": "45至60",
+      "C": "35至70",
+      "D": "15至30"
+    },
+    "answer": "5至40",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0213",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "212",
+    "options": {
+      "A": "下列说法正确的是",
+      "B": "如果甲数比乙数多1/4，乙数就比甲数少1/4",
+      "C": "(a+b)/c=a+b/c",
+      "D": "4/7*6表示求6个4/7的和"
+    },
+    "answer": "(a+b)*c=a+b*c",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0214",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "213",
+    "options": {
+      "A": "6/39的分子减去4，要使分数大小不变，分母应减去",
+      "B": "6",
+      "C": "13",
+      "D": "2"
+    },
+    "answer": "26",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0215",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "214",
+    "options": {
+      "A": "计算(8.2+6.21+6.21)*3.5，下面几种计算方法中最简便的方法是",
+      "B": "6.21*(2+1+1)*3.5",
+      "C": "6.21*(2+1+1*3.5)",
+      "D": "8.2*3.5+6.21*3.5+6.21*3.5"
+    },
+    "answer": "(8.2+6.21*2)*3.5",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0216",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "215",
+    "options": {
+      "A": "小华养了98只蚕，全部成活，成活率是",
+      "B": "100%",
+      "C": "不确定",
+      "D": "80%"
+    },
+    "answer": "98%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0217",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "216",
+    "options": {
+      "A": "65*4+4*35=(65+35)*4，应用的是",
+      "B": "加法结合率",
+      "C": "乘法分配律",
+      "D": "加法交换律"
+    },
+    "answer": "乘法交换律",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0218",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "217",
+    "options": {
+      "A": "一个三角形，三个内角度数比是2：5：2，这个三角形是",
+      "B": "直角三角形",
+      "C": "等边三角形",
+      "D": "锐角三角形"
+    },
+    "answer": "钝角三角形",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0219",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "218",
+    "options": {
+      "A": "一堆煤重2500吨，烧锅炉每天要用120吨，每天需用",
+      "B": "48%",
+      "C": "12%",
+      "D": "4.80%"
+    },
+    "answer": "2.40%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0220",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "219",
+    "options": {
+      "A": "有两块面积相等的白铁皮和黑铁皮，白铁皮用去了4/5，黑铁皮用去4/5平方米，剩下的白铁皮比黑铁皮面积小，原来这两块铁皮的面积",
+      "B": "正好都是1平方米",
+      "C": "小于1平方米",
+      "D": "都大于1平方米"
+    },
+    "answer": "无法确定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0221",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "220",
+    "options": {
+      "A": "某商店清仓处理一批袜子，按六五折出售，则售价是原价的",
+      "B": "1/35",
+      "C": "30%",
+      "D": "1/65"
+    },
+    "answer": "65%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0222",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "221",
+    "options": {
+      "A": "a和b都是整数，且a*b=36，则a和b的和最大可能是",
+      "B": "20",
+      "C": "13",
+      "D": "12"
+    },
+    "answer": "37",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0223",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "222",
+    "options": {
+      "A": "一袋糖的5/7比他的2/3多1.6千克，这代糖重",
+      "B": "1.6*(5/7+2/3)",
+      "C": "1.6/(5/7+2/3)",
+      "D": "1.6*(5/7—2/3)"
+    },
+    "answer": "1.6/(5/7—2/3)",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0224",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "223",
+    "options": {
+      "A": "甲数的3/4相当于乙数的2/5，甲数()乙数",
+      "B": "等于",
+      "C": "不确定",
+      "D": "大于"
+    },
+    "answer": "小于",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0225",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "224",
+    "options": {
+      "A": "已知300/13商为23余数为1，那么3除以0.13商23时，余数是",
+      "B": "0.01",
+      "C": "1",
+      "D": "0.05"
+    },
+    "answer": "500",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0226",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "225",
+    "options": {
+      "A": "甲数的2/3等于乙数的3/4，则甲数（）乙数",
+      "B": "小于",
+      "C": "大于",
+      "D": "等于"
+    },
+    "answer": "无法确定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0227",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "226",
+    "options": {
+      "A": "某厂计划加工200套服装，实际多加工50套，实际比计划超产",
+      "B": "255",
+      "C": "80%",
+      "D": "335"
+    },
+    "answer": "20%",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0228",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "227",
+    "options": {
+      "A": "检查4.2-2.65=1.65对不对，可以用()验算",
+      "B": "2.65+1.65",
+      "C": "2.65—1.65",
+      "D": "4.2-1.65"
+    },
+    "answer": "4.2+1.65",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0229",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "228",
+    "options": {
+      "A": "大小两个正方形的边长比是5：3，这大小两个正方形的面积比是",
+      "B": "10：6 ",
+      "C": "20：12",
+      "D": "25：9 "
+    },
+    "answer": "5：3",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_elementary_mathematics_test_0230",
+    "source": "CMMLU",
+    "subject": "初等数学",
+    "subject_en": "elementary_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "229",
+    "options": {
+      "A": "0.04*0.04是",
+      "B": "0.0016",
+      "C": "0.00016",
+      "D": "0.16"
+    },
+    "answer": "0.016",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "elementary_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  }
+]

@@ -1,0 +1,1095 @@
+[
+  {
+    "id": "compiler_pdf_0001",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在使用高级语言编程时，首先可通过编译程序发现源程序的全部____错误和部分语义错误。",
+    "options": {
+      "A": "语法",
+      "B": "语义",
+      "C": "语用",
+      "D": "运行"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "编译器概述"
+    ],
+    "tags": [
+      "compiler",
+      "编译器概述"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0002",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "编译过程中，语法分析器的任务是____。（1）分析单词是怎样构成的；（2）分析单词串是如何构成语句和说明的；（3）分析语句和说明是如何构成程序的；（4）分析程序的结构",
+    "options": {
+      "A": "(2)(3)",
+      "B": "(2)(3)(4)",
+      "C": "(1)(2)(3)",
+      "D": "(1)(2)(3)(4)"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "语法分析"
+    ],
+    "tags": [
+      "compiler",
+      "语法分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0003",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "编译程序中的语法分析器接受以____为单位的输入，并产生有关信息供以后各阶段使用。",
+    "options": {
+      "A": "表达式",
+      "B": "产生式",
+      "C": "单词",
+      "D": "语句"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "语法分析"
+    ],
+    "tags": [
+      "compiler",
+      "语法分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0004",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "算符优先分析法每次都是对____进行归约。",
+    "options": {
+      "A": "直接短语",
+      "B": "句柄",
+      "C": "素短语",
+      "D": "最左素短语"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "算符优先分析"
+    ],
+    "tags": [
+      "compiler",
+      "算符优先分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0005",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "过程调用时，参数的传递方法通常有____。（1）传值；（2）传地址；（3）传结果；（4）传名",
+    "options": {
+      "A": "(1)(2)",
+      "B": "(1)(2)(3)",
+      "C": "(1)(2)(4)",
+      "D": "(1)(2)(3)(4)"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "运行时环境"
+    ],
+    "tags": [
+      "compiler",
+      "运行时环境"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0006",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在编译方法中，动态存储分配的含义是____。",
+    "options": {
+      "A": "在运行阶段对源程序中的量进行分配",
+      "B": "在编译阶段对源程序中的量进行分配",
+      "C": "在编译阶段对源程序中的量进行分配，在运行时这些量的地址可以根据需要改变",
+      "D": "以上都不对"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "运行时存储组织"
+    ],
+    "tags": [
+      "compiler",
+      "运行时存储组织"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0007",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "算符文法是指____的文法。①没有形如U→…VW的规则（U,V,W∈VN）；②VT中任意两个符号之间至多存在一种算符优先关系；③没有相同右部的规则；④没有形如U→ε的规则",
+    "options": {
+      "A": "①",
+      "B": "①和②",
+      "C": "①、②和③",
+      "D": "①、②、③和④"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "算符优先文法"
+    ],
+    "tags": [
+      "compiler",
+      "算符优先文法"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0008",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "编译程序绝大多数时间花在____上。",
+    "options": {
+      "A": "出错处理",
+      "B": "词法分析",
+      "C": "目标代码生成",
+      "D": "管理表格"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "编译器概述"
+    ],
+    "tags": [
+      "compiler",
+      "编译器概述"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0009",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下述语句类中，____在编译阶段通常不产生可执行代码。",
+    "options": {
+      "A": "变量说明语句",
+      "B": "流程控制语句",
+      "C": "输入输出语句",
+      "D": "赋值语句"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "语义分析"
+    ],
+    "tags": [
+      "compiler",
+      "语义分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0010",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "词法分析器的输入是____。",
+    "options": {
+      "A": "单词符号串",
+      "B": "源程序",
+      "C": "语法单位",
+      "D": "目标程序"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "词法分析"
+    ],
+    "tags": [
+      "compiler",
+      "词法分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0011",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在编译程序采用的优化方法中，____是在循环语句范围内进行的。①合并已知常量；②删除多余运算；③删除归纳变量；④运算强度削弱；⑤代码外提",
+    "options": {
+      "A": "①④",
+      "B": "①⑤",
+      "C": "①④⑤",
+      "D": "③④⑤"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "代码优化"
+    ],
+    "tags": [
+      "compiler",
+      "代码优化"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0012",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "程序的基本块是指____。",
+    "options": {
+      "A": "不含无条件转移语句的程序段",
+      "B": "不含条件转移语句的程序段",
+      "C": "不含停机的语句程序段",
+      "D": "仅含有一个入口语句和一个出口语句的顺序程序段"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "代码优化"
+    ],
+    "tags": [
+      "compiler",
+      "代码优化"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0013",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文法G描述的语言L(G)是指____。",
+    "options": {
+      "A": "L(G)={l|S→α, α∈Vt*}",
+      "B": "L(G)={α|S⇒α, α∈Vt*}",
+      "C": "L(G)={l|S→α, α∈(Vt∪Vn)*}",
+      "D": "L(G)={α|S→α, α∈(Vt∪Vn)*}"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "文法与语言"
+    ],
+    "tags": [
+      "compiler",
+      "文法与语言"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0014",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果文法G是无二义的，则它的任何句子α____。",
+    "options": {
+      "A": "最左推导和最右推导对应的语法树必定相同",
+      "B": "最左推导和最右推导对应的语法树可能不同",
+      "C": "最左推导和最右推导必定相同",
+      "D": "可能存在两个不同的最左推导，但它们对应的语法树相同"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "文法与语言"
+    ],
+    "tags": [
+      "compiler",
+      "文法与语言"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0015",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "产生正规语言的文法为____。",
+    "options": {
+      "A": "0型",
+      "B": "1型",
+      "C": "2型",
+      "D": "3型"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "文法与语言"
+    ],
+    "tags": [
+      "compiler",
+      "文法与语言"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0016",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若a为终结符，则A→αa为____项目。",
+    "options": {
+      "A": "归约",
+      "B": "移进",
+      "C": "接受",
+      "D": "待约"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "LR分析"
+    ],
+    "tags": [
+      "compiler",
+      "LR分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0017",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "就文法的描述能力来说，有____。",
+    "options": {
+      "A": "SLR(1)⊂LR(0)",
+      "B": "LR(1)⊂LR(0)",
+      "C": "SLR(1)⊂LR(1)",
+      "D": "无二义文法⊂LR(1)"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "LR分析"
+    ],
+    "tags": [
+      "compiler",
+      "LR分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0018",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个____指明了在分析过程中的某时刻所能看到产生式多大一部分。",
+    "options": {
+      "A": "活前缀",
+      "B": "前缀",
+      "C": "项目",
+      "D": "项目集"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "LR分析"
+    ],
+    "tags": [
+      "compiler",
+      "LR分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0019",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "四元式之间的联系是通过____实现的。",
+    "options": {
+      "A": "指示器",
+      "B": "临时变量",
+      "C": "符号表",
+      "D": "程序变量"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "中间代码生成"
+    ],
+    "tags": [
+      "compiler",
+      "中间代码生成"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0020",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "终结符具有____属性。",
+    "options": {
+      "A": "传递",
+      "B": "继承",
+      "C": "抽象",
+      "D": "综合"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "语法制导翻译"
+    ],
+    "tags": [
+      "compiler",
+      "语法制导翻译"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0021",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列____优化方法不是针对循环优化进行的。",
+    "options": {
+      "A": "强度削弱",
+      "B": "删除归纳变量",
+      "C": "删除多余运算",
+      "D": "代码外提"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "代码优化"
+    ],
+    "tags": [
+      "compiler",
+      "代码优化"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0022",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对一个基本块来说，____是正确的。",
+    "options": {
+      "A": "只有一个入口语句和一个出口语句",
+      "B": "有一个入口语句和多个出口语句",
+      "C": "有多个入口语句和一个出口语句",
+      "D": "有多个入口语句和多个出口语句"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "代码优化"
+    ],
+    "tags": [
+      "compiler",
+      "代码优化"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0023",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文法G: E→E+T|T, T→T*P|P, P→(E)|i, 则句型P+T+i的句柄和最左素短语为____。",
+    "options": {
+      "A": "P+T和i",
+      "B": "P和P+T",
+      "C": "i和P+T+i",
+      "D": "P和T"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "算符优先分析"
+    ],
+    "tags": [
+      "compiler",
+      "算符优先分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0024",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文法G: E→E*i|T, T→T+i|i, 句子1+2*8+6按该文法G归约，其值为____。",
+    "options": {
+      "A": "23",
+      "B": "42",
+      "C": "30",
+      "D": "17"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "语法分析"
+    ],
+    "tags": [
+      "compiler",
+      "语法分析"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0025",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "表达式(!A∨B)∧(C∨D)的逆波兰表示为____。",
+    "options": {
+      "A": "!AB∨∧CD∨",
+      "B": "AB∨CD∨∧",
+      "C": "AB∨!CD∨∧",
+      "D": "A!B∨∧CD∨"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "中间代码生成"
+    ],
+    "tags": [
+      "compiler",
+      "中间代码生成"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "compiler_pdf_0026",
+    "source": "Compiler-PDF-Extraction",
+    "subject": "编译原理",
+    "subject_en": "compiler",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "a=a+b*c*(d-e)/f的逆波兰记号表示是____。",
+    "options": {
+      "A": "aabc*+Tde/f=",
+      "B": "aabcdeT*f/+",
+      "C": "aabcde/*f/+",
+      "D": "以上都不对"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "中间代码生成"
+    ],
+    "tags": [
+      "compiler",
+      "中间代码生成"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0001",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "生成能被5整除的正整数的文法 G【Z是C__。",
+    "options": {
+      "A": "G[Z]:Z→AC,A→BA|",
+      "B": "G[Z]:Z→AC,A→BAle,B→0)12|9.C→015",
+      "C": "G[Z]:Z→DA0A5,A→BA|e,B→0/D,D→12⋯..9",
+      "D": "G[Z]:Z→AC|C,A→BAB,B→012.9,C→0j5"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0002",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "编译程序中的语法分析器接受以（_C_）为单位的输入，并产生有关信息\n供以后各阶段使用。",
+    "options": {
+      "D": "语句",
+      "C": "单词",
+      "A": "表达式",
+      "B": "产生式 D）进行归约。"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0003",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "算符优先分析法每次都是对（",
+    "options": {
+      "A": "直接短语",
+      "B": "句柄",
+      "C": "素短语",
+      "D": "最左素短语"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0004",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "过程调用时，参数的传递方法通常有（C低\n（1）传值;（2））传地址;（3）传结果;（4）传名",
+    "options": {
+      "D": "(1)(2)(3)(4)",
+      "A": "(1)(2)",
+      "B": "(1)(2)3)",
+      "C": "(1)(2)(4)"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0005",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在编译方法中，动态存储分配的含义是（_A ）。",
+    "options": {
+      "A": "在运行阶段对源程序中的量进行分配",
+      "B": "在编译阶段对源程序中的量进行分配",
+      "C": "在编译阶段对源程序中的量进行分配，在运行时这些量的地址可以根据需 要改变",
+      "D": "以上都不对"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0006",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "a= a+b*cT（de）/f的逆波兰记号表示是（)。",
+    "options": {
+      "A": "aabc*+Tdef/=",
+      "B": "aabcdef/f/=",
+      "C": "aabcde/*f/+=",
+      "D": "以上都不对。"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0007",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "算符文法是指_A__的文法。\n①没有形如 U→⋯VW的规则（U，V，WeVN）\n②VT中任意两个符号之间至多存在一种算符优先关系\n③没有相同右部的规则\n④没有形如 U→的规则",
+    "options": {
+      "A": "①",
+      "B": "①和②",
+      "C": "①、②和③",
+      "D": "①、②、③和④"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0008",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下述语句类中，_A___在编译阶段通常不产生可执行代码。",
+    "options": {
+      "B": "流程控制语句",
+      "A": "变量说明语句",
+      "D": "赋值语句",
+      "C": "输入输出语句0"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0009",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "词法分析器的输入是 B_。",
+    "options": {
+      "A": "单词符号串",
+      "B": "源程序",
+      "C": "语法单位",
+      "D": "目标程序"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0010",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在编译程序采用的优化方法中，D是在循环语句范围内进行的。\n④运算强度削弱\n①合并已知常量 ②删除多余运算 ③删除归纳变量\n⑤代码外提",
+    "options": {
+      "A": "①④",
+      "B": "①⑤",
+      "C": "①④⑤",
+      "D": "③④⑤"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0011",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "程序的基本块是指_D___。",
+    "options": {
+      "A": "不含无条件转移语句的程序段",
+      "B": "不含条件转移语句的程序段",
+      "C": "不含停机的语句程序段",
+      "D": "仅含有一个入口语句和一个出口语句的顺序程序段"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0012",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文法G描述的语言 L（G是指A_。",
+    "options": {
+      "B": "L(G)={α|S=a,αEVF*} AL(G)={l|S→a,α∈ Vr*}",
+      "C": "L(G)={/S→aaE(VrUV*)}",
+      "D": "L(G)={aS→aαVrUV*)}"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0013",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果文法G是无二义的，则它的任何句子α_A_。",
+    "options": {
+      "A": "最左推导和最右推导对应的语法树必定相同",
+      "B": "最左推导和最右推导对应的语法树可能不同",
+      "C": "最左推导和最右推导必定相同 D 可能存在两个不同的最左推导，但它们对应的语法树相同"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0014",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "产生正规语言的文法为_D。",
+    "options": {
+      "C": "2型",
+      "B": "1型",
+      "D": "3型",
+      "A": "0型"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0015",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "有文法G∶E→E*IT\nT→T+i\n句子1+2*8+6按该文法G归约，其值为_B。\nA 23",
+    "options": {
+      "B": "42",
+      "C": "30",
+      "D": "17"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0016",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若a为终结符，则A→αa为B项目\nD待约",
+    "options": {
+      "C": "接受",
+      "A": "归约",
+      "B": "移进"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_c0017",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "就文法的描述能力来说，有C。",
+    "options": {
+      "A": "SLR(1)CLR(0)",
+      "B": "LR(1) CLR(0) ]",
+      "C": "SLR(1)CLR(1)",
+      "D": "无二义文法二LR（1）"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "WHU-Exam_compiler_principles_c0001",
+    "source": "WHU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "𝜀\n.\n𝑎\n.\n𝑎\n.\n𝑎\n.\n𝑎\n.\n𝑏\n.\n𝜀\n.\n𝜀\n.\n𝜀\n.\n𝜀\n.\n𝜀\n.\n𝜀\n.\n𝑏\n(1) 试写出NFA 𝑁接受字符串“𝑏𝑎𝑏𝑏𝑎𝑏’’ 的过程；\n(2) 设用子集构造法求出的与NFA 𝑁等价的DFA 𝑀有4 个状态𝐴，𝐵，𝐶和𝐷，\n其中𝐴“ 𝜀-closurept0uq，状态转换函数Dtransp𝐴, 𝑎q “ 𝐵，Dtransp𝐴, 𝑏q “ 𝐶\n试求与状态𝐴，𝐵，𝐶和𝐷所对应的NFA 𝑁的状态集，并画出DFA 𝑀\n的状态转换图；\n(3) 求DFA 𝑀的最小状态自动机；\n(4) 试用自然语言描述NFA 𝑁所接受的语言；\n(5) 求正则表达式𝑟，使得𝐿p𝑟q “ 𝐿p𝑁q.\n二、设Json 语言的文法𝐺p𝑆q 定义如下：\n(25 分, 每小题5 分)\n𝑆\nÑ\nt 𝐼u\n𝐼\nÑ\n𝐼, 𝐼| 𝐶\n𝐶\nÑ\n𝑖∶𝐸\n𝐸\nÑ\n𝑖| 𝑆\n其中: ‘t’，‘u’，‘,’，‘∶’ 和‘𝑖’ 为终结符，‘𝑆’，‘𝐼’，‘𝐶’ 和‘𝐸’ 是非终结符，𝑆\n是文法开始符号.\n(1) 试写出语句“t𝑖∶𝑖, 𝑖∶𝑖u’’ 的一个最左推导；\n(2) 试消除文法𝐺p𝑆q 中的左递归；\n(3) 试对消除左递归后的文法所有非终结符求First 集和Follow 集；\n(4) 试对消除左递归后的文法构造LL(1) 分析表，从而说明消除左递归后的文\n法不是LL(1) 文法；\n1\n\n(5) 试利用你的分析表写出语句“t𝑖∶𝑖u’’ 的一个正确的分析过程.\n三、设文法𝐺p𝑆q 如题二所示：\n(10 分, 5+5)\n(1) 试对语句“t𝑖∶𝑖, 𝑖∶𝑖, 𝑖∶𝑖u’’ 画出两颗不同的语法树，从而说明该文法为\n二义文法；\n(2) 试设计一个与文法𝐺p𝑆q 等价的无二义的文法，使得列表链接运算(𝐼, 𝐼)\n为左结合运算.\n四、设题二文法𝐺p𝑆q 的拓广文法𝐺p𝑆1q 如下所示：\n(20 分, 5+5+5+5)\n𝑆1\nÑ\n𝑆\n(0)\n𝑆\nÑ\nt 𝐼u\n(1)\n𝐼\nÑ\n𝐼, 𝐼\n(2)\n𝐼\nÑ\n𝐶\n(3)\n𝐶\nÑ\n𝑖∶𝐸\n(4)\n𝐸\nÑ\n𝑖\n(5)\n|\n𝑆\n(6)\n文法𝐺p𝑆1q 的识别活前缀LR(0) 项目自动机如下图所示(注意每个状态仅列出\n了核心项目)：\n.\n𝐼0:\n𝑆1 Ñ ‚𝑆\n.\nstart\n.\n𝐼1:\n𝑆Ñ t‚𝐼u\n.\n𝐼2:\n𝐼Ñ 𝐶‚\n.\n𝐼3:\n𝐼Ñ 𝐼‚,𝐼\n𝑆Ñ t𝐼‚u\n.\n𝐼4:\n𝑆1 Ñ 𝑆‚\n.\n𝐼5:\n𝐶Ñ 𝑖‚∶𝐸\n.\n𝐼6:\n𝐼Ñ 𝐼,‚𝐼\n.\n𝐼7:\n𝑆Ñ t𝐼u‚\n.\n𝐼8:\n𝐼Ñ 𝐼‚,𝐼\n𝐼Ñ 𝐼,𝐼‚\n.\n𝐼9:\n𝐶Ñ 𝑖∶‚𝐸\n.\n𝐼10:\n𝐸Ñ 𝑖‚\n.\n𝐼11:\n𝐶Ñ 𝑖∶𝐸‚\n.\n𝐼12:\n𝐸Ñ 𝑆‚\n.\nt\n.\nS\n.\n𝐶\n.\n𝑖\n.\n𝐼\n.\nu\n.\n,\n.\n∶\n.\n𝐶\n.\n𝑖\n.\n𝐼\n.\n𝑖\n.\nt\n.\n𝐸\n.\n𝑆\n.\n,\n(1) 试求状态𝐼1 所对应的LR(0) 项目集；\n(2) 试求状态𝐼1 所接受的所有的仅以终结符组成的活前缀对应的正则表达式；\n(3) 试构造该文法的SLR 分析表，并使得运算的结合次序与题三所规定的一\n致；\n2\n\n(4) 试利用你的分析表写出语句“t𝑖∶𝑖u’’ 的分析过程.\n五、Json 是一种轻量级的数据交换格式. 易于人阅读和编写, 同时也易于机器解析\n和生成. 由于其格式简单，且易于XML 相互转化，因此常用于移动设备，以\n减少网络流量. 现需对题四的Json 文法设计一个Json 到XML 转换的语法制\n导语义定义. 其转换规则如下：对每个𝐶成份中的𝑖转换为XML 的嵌套标签，\n𝐸转换为所嵌套的内容. 如：“",
+    "options": {
+      "A": "B,",
+      "C": "{",
+      "D": "E}’’ 转换为“<A> B </A> <C> <D> E </D> </C>”. 为 此对每个非终结符设计属性xml，其取值为字符串，终结符𝑖具有属性lexval, 为𝑖所对应的词形. (10pt, 5+5) (1) 完成文法𝐺p𝑆1q 所生成Json 语句按上述规则转换XML 语言的语法制导 语义定义； (2) 试写出下述Json 语句所对应的XML 语言. { \"glossary \": { \"title \": \"example glossary\", \"GlossDiv \": { \"title \": \"S\", \"GlossList \": { \"GlossEntry \": { \"ID\": \"SGML\", \"Abbrev \": \"ISO 8879:1986\" , \"GlossDef \": { \"para\": \"A meta -markup language .\" }, \"GlossSee \": \"markup\" } } } } } 3 六、设有如下Pascal 程序片段： (5 分) repeat x := x + 1; if not a > b or c > d then break; else x := x + 2; until e > f and not (g > h and i > k); 其对应的三地址码如下所示 L0: t0 := x + 1 | x := t1 x := t0 | [ ] (e > f) goto L__ [ ] (a > b) goto L__ | [ ] (g > h) goto L__ [ ] (c > d) goto L__ | [ ] (i > k) goto L__ t1 := x + 2 | L1: 试为其中空白“__’’ 填上正确的标号编号，并为空白“[ ]” 填上if 或 ifnot. 七、设有如下GCC 程序： (5 分) #include <stdio.h> void foo(char dest[20], char src[20]) { int i; for (i = 0; i < sizeof(src) && src[i] != ’\\0’; i++) dest[i] = src[i]; for ( ; i < sizeof(src); i++) dest[i] = ’\\0’; return; } int main(void) { char s[20] = \"happy 2016\"; char t[20]; foo(t, s); printf(\"%s, %d\\n\", t, sizeof(t)); return 0; } 该程序在X86 下用GCC 能正确编译，但运行时输出如下乱码： happ⍰⍰⍰⍰, 20 试分析原因. 4"
+    },
+    "answer": "",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  }
+]

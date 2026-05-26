@@ -1,0 +1,3122 @@
+[
+  {
+    "id": "cmmlu_logic_dev_0000",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "",
+    "options": {
+      "A": "Question",
+      "B": "A",
+      "C": "B",
+      "D": "C"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_logic_dev_0001",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "0",
+    "options": {
+      "A": "下列选项哪一个指的是必定有真假的语确的字符串。",
+      "B": "推论",
+      "C": "陈述",
+      "D": "语句"
+    },
+    "answer": "命题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_logic_dev_0002",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "1",
+    "options": {
+      "A": "亚里士多德的论证评价标准不包括",
+      "B": "分析标准",
+      "C": "逻辑标准",
+      "D": "修辞标准"
+    },
+    "answer": "论辩标准",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_logic_dev_0003",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "2",
+    "options": {
+      "A": "论证的三重功能不包括",
+      "B": "证成",
+      "C": "推论",
+      "D": "说服"
+    },
+    "answer": "反驳",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_logic_dev_0004",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "3",
+    "options": {
+      "A": "论证评价的基本标准不包括",
+      "B": "修辞标准",
+      "C": "形式逻辑标准",
+      "D": "谬误标准"
+    },
+    "answer": "论辩标准",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_logic_dev_0005",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "4",
+    "options": {
+      "A": "支持谬误的情形不包括",
+      "B": "合成谬误",
+      "C": "演绎无效",
+      "D": "分解谬误"
+    },
+    "answer": "偷换论题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_logic_test_0000",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "",
+    "options": {
+      "A": "Question",
+      "B": "A",
+      "C": "B",
+      "D": "C"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0001",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "0",
+    "options": {
+      "A": "不相干结论谬误的情形不包括",
+      "B": "转移论题",
+      "C": "偷换论题",
+      "D": "法庭悖论"
+    },
+    "answer": "稻草人谬误",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0002",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "1",
+    "options": {
+      "A": "被马克思称之为古代最伟大的思想家的是",
+      "B": "马丁·路德",
+      "C": "柏拉图",
+      "D": "奥古斯丁"
+    },
+    "answer": "亚里士多德",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0003",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "2",
+    "options": {
+      "A": "同时肯定“所有的人都会犯错误”与“有的人不会犯错误”这两个命题会违反",
+      "B": "同一律",
+      "C": "排中律",
+      "D": "矛盾律"
+    },
+    "answer": "充足理由律",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0004",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "3",
+    "options": {
+      "A": "英国的一项实验发现，把母狗和他们的幼小子女分开后，将这些子女混入一群同类的成年狗和幼狗中去，然后再把母狗放入狗群。母狗很快就和自己的子女会合到一起。研究表明，狗身上的体味是它们互相辨认的依据。而幼狗无法区分自己母亲和其它母狗身上的味道。因此每个母狗都能分辨出自己子女的体味 上述论证采用了下列那种论述方法?",
+      "B": "说明某一特殊情况，以论证一个规律",
+      "C": "在对某种现象的两种可供选择的解释中，通过排除其中的一种，来确定另一种",
+      "D": "通过对发生现象的客观描述，支持关于某个可能发生现象的假说"
+    },
+    "answer": "运用类比的方法，根据两组对象有某些类似的特征，得出它们具有另一个相同特征",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0005",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "4",
+    "options": {
+      "A": "一阶逻辑即是指",
+      "B": "图式逻辑",
+      "C": "谓词逻辑",
+      "D": "数值逻辑"
+    },
+    "answer": "概率逻辑",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0006",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "5",
+    "options": {
+      "A": "甲说乙胖，乙说丙胖，丙和丁都说自己不胖。 如果四人陈述只有一人错，那么谁一定胖?",
+      "B": "仅丙",
+      "C": "仅甲",
+      "D": "仅乙和丙"
+    },
+    "answer": "仅乙",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0007",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "6",
+    "options": {
+      "A": "以下属于周延词项的是",
+      "B": "SAP谓项",
+      "C": "SAP主项",
+      "D": "SIP主项"
+    },
+    "answer": "SOP主项",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0008",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "7",
+    "options": {
+      "A": "允许我们从所有情形推导出特殊情形的是",
+      "B": "存在例示规则",
+      "C": "真值表",
+      "D": "全称例示规则"
+    },
+    "answer": "全称命题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0009",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "8",
+    "options": {
+      "A": "析取命题又称为",
+      "B": "选言命题",
+      "C": "全称命题",
+      "D": "否定命题"
+    },
+    "answer": "肯定命题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0010",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "9",
+    "options": {
+      "A": "在下列语句中，在集合意义下使用语词“人”的是",
+      "B": "人是有思维能力的",
+      "C": "人是世间万物中第一个可宝贵的",
+      "D": "人贵有自知之明"
+    },
+    "answer": "人非圣贤，孰能无过",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0011",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "10",
+    "options": {
+      "A": "有时不清楚一个语篇到底是论证还是解释，我们称之为",
+      "B": "解释论证",
+      "C": "两可情形",
+      "D": "识别论证"
+    },
+    "answer": "论证解释",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0012",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "11",
+    "options": {
+      "A": "在具体进行例示时，必须注意不要混合使用或用完证明中有用的",
+      "B": "数字",
+      "C": "字母",
+      "D": "量词"
+    },
+    "answer": "联词",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0013",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "12",
+    "options": {
+      "A": "标志词“如果”后面的命题被称为",
+      "B": "结论",
+      "C": "前提",
+      "D": "条件"
+    },
+    "answer": "前件",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0014",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "13",
+    "options": {
+      "A": "在三段论中，如果前提中有一个是否定命题，那么结论必定是",
+      "B": "真命题",
+      "C": "假命题",
+      "D": "肯定命题"
+    },
+    "answer": "否定命题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0015",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "14",
+    "options": {
+      "A": "在文恩图中，用来标记特称命题的是。",
+      "B": "阴影",
+      "C": "星号",
+      "D": "数字"
+    },
+    "answer": "圆圈",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0016",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "15",
+    "options": {
+      "A": "有些教授留长发，因此，有些留长发的人是科学家。 为使上述推理成立，需要补充以下哪项作为前提?",
+      "B": "所有科学家都是教授",
+      "C": "所有教授都是科学家",
+      "D": "有些科学家不是教授"
+    },
+    "answer": "有些教授是科学家",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0017",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "16",
+    "options": {
+      "A": "在世界范围内禁止生产各种破坏臭氧层的化学物质可能仅仅是一种幻想，大量这样的化学物质已经生产出来，并且以成千上万台冰箱的冷却剂的形式而存在。当这些化学物质到达大气层中的臭氧层时，其作用不可能停止。因此，没有任何方式可以阻止这类化学物质进一步破坏臭氧层。以下哪项如果为真，则能最严重地削弱以上论证?",
+      "B": "当冰箱的使用寿命结束时，冰箱里的冷却剂可完全回收并且重新利用",
+      "C": "不会破坏臭氧层的替代品还未开发出来，并且替代品可能比冰箱目前使用的冷却剂昂贵",
+      "D": "即使人们放弃使用冷藏设备，已经存在的冰箱里的冷却剂也是对大气臭氧层的一个威胁"
+    },
+    "answer": "不可能精确地测量冰箱里冷却剂这种破坏臭氧层的化学物质的量是多少",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0018",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "17",
+    "options": {
+      "A": "金岳霖的著作不包括",
+      "B": "《中国哲学史》",
+      "C": "《知识论》",
+      "D": "《逻辑》"
+    },
+    "answer": "《论道》",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0019",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "18",
+    "options": {
+      "A": "古代逻辑的发源地包括",
+      "B": "古印度",
+      "C": "以上都对",
+      "D": "中国"
+    },
+    "answer": "古希腊",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0020",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "19",
+    "options": {
+      "A": "“问:铁为什么能压延?答:因为铁有压延的特性。”属于",
+      "B": "直接循环论证",
+      "C": "相干谬误",
+      "D": "支持谬误"
+    },
+    "answer": "间接循环论证",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0021",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "20",
+    "options": {
+      "A": "所有的语句都包含",
+      "B": "逻辑要素",
+      "C": "语法要素",
+      "D": "词汇要素"
+    },
+    "answer": "语义要素和逻辑要素",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0022",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "21",
+    "options": {
+      "A": "一个优秀的领导人是不会脱离群众的。所以，如果一个领导人脱离群众，他就不是一个能够得到大多数群众拥护的人。 以下哪项与上面的议论方式最相似?",
+      "B": "许多领导人是脱离群众的人",
+      "C": "这道题在5分钟内答不完。要是谁在5分钟内答完，他就不是一个死记硬背的学员。",
+      "D": "所有孩子都喜欢与他人进行游戏活动。如果幼儿园多安排一些孩子之间的游戏活动，那么一定会受到家长的好评"
+    },
+    "answer": "所有电脑都需要安装相应的软件才能运行某种程序。因此，如果电脑没有安装相应的软件，则这个程序就不会运行",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0023",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "22",
+    "options": {
+      "A": "“所有S是P”与“所有S不是P”之间具有",
+      "B": "反对关系",
+      "C": "下反对关系",
+      "D": "差等关系"
+    },
+    "answer": "矛盾关系",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0024",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "23",
+    "options": {
+      "A": "如果论证的所有前提同时为真是不可能的，那么这个论证的前提就是",
+      "B": "不可接受的",
+      "C": "一致的",
+      "D": "可接受的"
+    },
+    "answer": "不一致的",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0025",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "24",
+    "options": {
+      "A": "以“所有A都不是B，所有C是B。”为前提进行三段论推理，其结论为",
+      "B": "所有A不是C",
+      "C": "有些A是C",
+      "D": "有的C是A"
+    },
+    "answer": "有的B是A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0026",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "25",
+    "options": {
+      "A": "以下不属于不相干结论谬误的是",
+      "B": "偷换论题",
+      "C": "稻草人谬误",
+      "D": "转移话题"
+    },
+    "answer": "法庭悖论",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0027",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "26",
+    "options": {
+      "A": "一个从已确定断言产生出新断言的过程叫做。",
+      "B": "结论",
+      "C": "辩论",
+      "D": "推论"
+    },
+    "answer": "论断",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0028",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "27",
+    "options": {
+      "A": "亚里士多德提出的论证评价三标准不包含",
+      "B": "分析标准",
+      "C": "修辞标准",
+      "D": "论辩标准"
+    },
+    "answer": "逻辑标准",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0029",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "28",
+    "options": {
+      "A": "“出席会议的人有大学毕业的”与“出席会议的人有不是大学毕业的”",
+      "B": "可同真，不可同假",
+      "C": "不可同真，可同假",
+      "D": "不可同真，不可同假"
+    },
+    "answer": "可同真，可同假",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0030",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "29",
+    "options": {
+      "A": "以下属于必然真命题的是",
+      "B": "女人是人",
+      "C": "中国人是中国人",
+      "D": "儿童是人"
+    },
+    "answer": "中国人不是中国人",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0031",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "30",
+    "options": {
+      "A": "论证的功能包括说服和",
+      "B": "证成和推论",
+      "C": "反驳和归谬",
+      "D": "推论和归谬"
+    },
+    "answer": "证成和反驳",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0032",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "31",
+    "options": {
+      "A": "逻辑主义的代表人物是",
+      "B": "哥德尔",
+      "C": "布劳威尔",
+      "D": "希尔伯特"
+    },
+    "answer": "罗素",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0033",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "32",
+    "options": {
+      "A": "通过改变命题的质或量从而推导出新命题的论证的是",
+      "B": "质量论证",
+      "C": "对当关系论证",
+      "D": "三段论论证"
+    },
+    "answer": "直言命题运算论证",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0034",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "33",
+    "options": {
+      "A": "在“如果原始人的石斧就是资本，那原始人就是资本家了。”中，",
+      "B": "论据是“原始人的石斧是资本”",
+      "C": "论据是“原始人是资本家”",
+      "D": "论题是“原始人的石斧不是资本”"
+    },
+    "answer": "论题是“原始人是资本家”",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0035",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "34",
+    "options": {
+      "A": "包括一个或一个以上较短命题作为其自身的一部分的命题称为",
+      "B": "否定命题",
+      "C": "分析命题",
+      "D": "复合命题"
+    },
+    "answer": "全称命题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0036",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "35",
+    "options": {
+      "A": "语言学的维度不包括",
+      "B": "语气",
+      "C": "语法",
+      "D": "语义"
+    },
+    "answer": "语用",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0037",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "36",
+    "options": {
+      "A": "并行结构又称为()，是指由两个或两个以上前提分别独立支持统一结论的结构。",
+      "B": "同一结构",
+      "C": "简单结构",
+      "D": "序列结构"
+    },
+    "answer": "收敛结构",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0038",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "37",
+    "options": {
+      "A": "逻辑系统的四大定理不包括",
+      "B": "可靠性定理",
+      "C": "有效性定理",
+      "D": "一致性定理"
+    },
+    "answer": "不完全性定理",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0039",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "38",
+    "options": {
+      "A": "在具体进行例示时，必须注意不要混合使用或用完证明中有用的",
+      "B": "数字",
+      "C": "字母",
+      "D": "量词"
+    },
+    "answer": "联词",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0040",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "39",
+    "options": {
+      "A": "在上次考试中，老师出了一道非常古怪的难题，有86%的考生不及格。这次考试之前，王见明预测说：“格据上次考试情况，这次考试不一定会出那种难题了。”胡思明说：“这就是说这次考试肯定不出那种难题了。太好了!”王见明说：“我不是那个意思。” 下面哪句话与王见明说的意思相似?",
+      "B": "这次考试老师必定不出那种难题了",
+      "C": "这次考试老师不可能出那种难题了",
+      "D": "这次考试老师可能不出那种难题了"
+    },
+    "answer": "这次考试老师不可能不出那种难题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0041",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "40",
+    "options": {
+      "A": "“一个老虎的食量比一个人的大，那么所有老虎的食量也比所有人的食量大。”犯的逻辑谬误是",
+      "B": "归纳不强谬误",
+      "C": "演绎无效谬误",
+      "D": "分解谬误"
+    },
+    "answer": "合成谬误",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0042",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "41",
+    "options": {
+      "A": "又可称为串行结构或线性结构的是",
+      "B": "并行结构",
+      "C": "中间结构",
+      "D": "序列结构"
+    },
+    "answer": "发散结构",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0043",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "42",
+    "options": {
+      "A": "“有些壁画是三幅一联画”中的“有些”是",
+      "B": "谓项",
+      "C": "联项",
+      "D": "量词"
+    },
+    "answer": "主项",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0044",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "43",
+    "options": {
+      "A": "“张平买了双便宜的旅游鞋，不到半个月就坏了；不久他的朋友买了件便宜的皮夹克，结果发现是仿羊皮的。张平由此得出结论“便宜无好货”。此推理",
+      "B": "正确地使用了求同法",
+      "C": "犯了轻率概括的错误",
+      "D": "正确地使用了共变法"
+    },
+    "answer": "是一个正确的三段论推理",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0045",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "44",
+    "options": {
+      "A": "张竞说：只有正式代表才可以发言。 刘强说：不对吧!李贵也是正式代表但他并发言 刘强的回答是把张竞的话错误的理解为以下哪项?",
+      "B": "李贵要发言",
+      "C": "所有发言的人都是正式代表",
+      "D": "没有正式代表发言"
+    },
+    "answer": "所有正式代表都发言了",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0046",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "45",
+    "options": {
+      "A": "一个论证是好的，必须满足",
+      "B": "前提与结论必须是相干的",
+      "C": "所有前提都必须是真的",
+      "D": "以上都对"
+    },
+    "answer": "所有前提加起来必须给结论提供足够支持",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0047",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "46",
+    "options": {
+      "A": "只有一个前提和一个结论的结构是",
+      "B": "收敛结构",
+      "C": "简单结构",
+      "D": "序列结构"
+    },
+    "answer": "发散结构",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0048",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "47",
+    "options": {
+      "A": "在逻辑方阵中，两个命题是蕴涵关系，当且仅当，它们同时满足的条件是",
+      "B": "以上都对",
+      "C": "它们是从存在观点来考虑的",
+      "D": "它们具有相同主项和相同谓项"
+    },
+    "answer": "它们有不同的量和相同的质",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0049",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "48",
+    "options": {
+      "A": "构造真值表，基于的逻辑算子规则不包括",
+      "B": "命题",
+      "C": "合取",
+      "D": "否定"
+    },
+    "answer": "等值",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0050",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "49",
+    "options": {
+      "A": "从“小王去北京可能乘飞机，也可能乘火车或汽车”和“他不乘汽车”可知",
+      "B": "他乘飞机",
+      "C": "他乘飞机或者火车",
+      "D": "他乘火车"
+    },
+    "answer": "他不乘飞机或者火车",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0051",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "50",
+    "options": {
+      "A": "下列语句作为划分，正确的是",
+      "B": "这个班的学生，除了七名女学生外，其余都是男生",
+      "C": "一年可以分为春、夏、秋、冬四季",
+      "D": "战争分为常规战争和世界大战"
+    },
+    "answer": "概念分为普遍概念、单独概念和正概念",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0052",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "51",
+    "options": {
+      "A": "“鬼是不存在的，因为没有人证明过鬼存在。”陷入了什么样的论证谬误？",
+      "B": "诉诸权威",
+      "C": "以上均不是",
+      "D": "诉诸无知"
+    },
+    "answer": "诉诸公众",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0053",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "52",
+    "options": {
+      "A": "在“知识分子是国家的宝贵财富”和“大学教师是知识分子”这两个判断中，“知识分子”这个概念",
+      "B": "前者是集合概念，后者是非集合概念",
+      "C": "都是集合概念",
+      "D": "都是非集合概念"
+    },
+    "answer": "前者是非集合概念，后者是集合概念",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0054",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "53",
+    "options": {
+      "A": "根据传统逻辑学标准，论证评价的逻辑标准的类型包括演绎逻辑标准和",
+      "B": "辩证逻辑标准",
+      "C": "解释逻辑标准",
+      "D": "归纳逻辑标准"
+    },
+    "answer": "以上都不对",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0055",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "54",
+    "options": {
+      "A": "“所有的广东人是中国人”中“所有”是",
+      "B": "主项",
+      "C": "联项",
+      "D": "谓项"
+    },
+    "answer": "量词",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0056",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "55",
+    "options": {
+      "A": "防疫站的统计数据显示给狗注射疫苗可以减少狂犬病发生的危险性，但是医疗保险业对此进行的统计研究则得出了相反的结论。即被注射了狂犬疫苗的狗咬伤的人比那些被没注射狂犬疫苗的狗咬伤的人更有可能得狂犬病。 下列哪项正确，最能解释题干的明显矛盾?",
+      "B": "被狗咬了的人会立即到防疫站寻求帮助，但是却不一定及时跟自己的保险公司联系",
+      "C": "人们往往是在自己的宠物狗已经表现出明显的狂犬病特征后才去给自己的狗注射狂犬疫苗，而且他们都是居住在狂犬病发病率最高的地方",
+      "D": "大多数咬人的狗都没有注射狂犬疫苗"
+    },
+    "answer": "被狗咬过的每个人都必须接受狂犬疫苗的注射",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0057",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "56",
+    "options": {
+      "A": "非单调逻辑的提出者是",
+      "B": "纽特",
+      "C": "约翰逊",
+      "D": "布莱尔"
+    },
+    "answer": "图尔敏",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0058",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "57",
+    "options": {
+      "A": "真值表可以用来判定",
+      "B": "等值",
+      "C": "蕴涵与有效性",
+      "D": "重言式与矛盾式"
+    },
+    "answer": "以上都对",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0059",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "58",
+    "options": {
+      "A": "“有效性对于真实的论证评价来说既不是充分的也不是必要的。”出自",
+      "B": "图尔敏",
+      "C": "布莱尔",
+      "D": "以上均不是"
+    },
+    "answer": "约翰逊",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0060",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "59",
+    "options": {
+      "A": "直言命题SE`P通过换质法得到的命题是",
+      "B": "SOP",
+      "C": "SEP",
+      "D": "SAP"
+    },
+    "answer": "SIP",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0061",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "60",
+    "options": {
+      "A": "在亚里士多德的逻辑中，被认为是肯定或否定主项具有谓项性质的语句的是",
+      "B": "推论",
+      "C": "论证",
+      "D": "命题"
+    },
+    "answer": "修辞",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0062",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "61",
+    "options": {
+      "A": "一个论证是可靠的，必须满足两个条件，一是所有前提都是真的，二是",
+      "B": "论证形式是有效的",
+      "C": "以上都不对",
+      "D": "部分结论是真的"
+    },
+    "answer": "所有结论都是真的",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0063",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "62",
+    "options": {
+      "A": "以下不能用来检验复合命题论证的有效性的是",
+      "B": "真值表",
+      "C": "基本论证形式",
+      "D": "文恩图"
+    },
+    "answer": "形式演绎",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0064",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "63",
+    "options": {
+      "A": "在论证过程中，通过把某种极端的观点强加给对方来丑化对方是违背了()这一语言明确性原则。",
+      "B": "断章取义",
+      "C": "平均数",
+      "D": "稻草人"
+    },
+    "answer": "非黑即白",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0065",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "64",
+    "options": {
+      "A": "三段论的五条规则可以被分为几类?",
+      "B": "3",
+      "C": "2",
+      "D": "5"
+    },
+    "answer": "4",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0066",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "65",
+    "options": {
+      "A": "“生产关系是人们在生产中结成的人与人之间的关系”，这个定义的种差是",
+      "B": "人与人之间的关系",
+      "C": "在生产中结成的关系",
+      "D": "人们在生产中结成的人与人之间的"
+    },
+    "answer": "人们在生产中结成的",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0067",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "66",
+    "options": {
+      "A": "“一方对立场的抨击必须与另一方却是已提出的立场有关”。这是批判性讨论规则中的",
+      "B": "举证规则",
+      "C": "自由规则",
+      "D": "立场规则"
+    },
+    "answer": "责任规则",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0068",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "67",
+    "options": {
+      "A": "直言命题的类型不包括",
+      "B": "全称逆否命题",
+      "C": "特称肯定命题",
+      "D": "全称肯定命题"
+    },
+    "answer": "特称否定命题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0069",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "68",
+    "options": {
+      "A": "某公司为了扩大其网上商店的销售收入，采取了各种各样的广告宣传和促销手段，但是效果并不明显。该公司重金聘请了专业人士进行市场分析，专业人士认为开通了网上银行的人群才是真正潜在的网上商店的顾客群。于是该公司决定于商业银行合作，在新开通网上银行业务的人群中开展宣传和促销活动。但是三个月后，效果并不理想。 以下哪项为真，最能解释上述结果?",
+      "B": "开通网上银行在中国还是一件新鲜事，一般来说，消费对此的态度比较谨慎",
+      "C": "一般来说，刚刚开通网上银行的人需要经过一段时间后才有可能进行网上消费",
+      "D": "网上金融服务在知识分子中已经比较普及，他们更希望网上商店能够提供一些特色服务"
+    },
+    "answer": "最近网上银行用户被盗的案件频发，开通网上银行的人因此有所减少",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0070",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "69",
+    "options": {
+      "A": "斯多葛学派的代表人物不包括",
+      "B": "芝诺",
+      "C": "泰勒斯",
+      "D": "塞内卡"
+    },
+    "answer": "奥勒留",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0071",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "70",
+    "options": {
+      "A": "根据论证的前提与结论的支持关系，谬误可以分为",
+      "B": "前提谬误",
+      "C": "支持谬误",
+      "D": "以上都对"
+    },
+    "answer": "相干谬误",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0072",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "71",
+    "options": {
+      "A": "以下不属于弥尔五法的是",
+      "B": "比较法",
+      "C": "求异法",
+      "D": "求同法"
+    },
+    "answer": "契合法",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0073",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "72",
+    "options": {
+      "A": "以下不属于前提标识词的是",
+      "B": "因为",
+      "C": "鉴于",
+      "D": "因此"
+    },
+    "answer": "由于",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0074",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "73",
+    "options": {
+      "A": "诉诸情感论证的类型不包括",
+      "B": "诉诸公众论证",
+      "C": "诉诸怜悯论证",
+      "D": "不适当权威论证"
+    },
+    "answer": "诉诸威力论证",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0075",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "74",
+    "options": {
+      "A": "欧拉图表示的两个对象类之间的关系不包括",
+      "B": "交叉关系",
+      "C": "全同关系",
+      "D": "种属关系"
+    },
+    "answer": "同一关系",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0076",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "75",
+    "options": {
+      "A": "逻辑主义的代表人物是",
+      "B": "布劳威尔",
+      "C": "罗素",
+      "D": "哥德尔"
+    },
+    "answer": "希尔伯特",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0077",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "76",
+    "options": {
+      "A": "请选择恰当的判断反驳“吸烟有利健康”",
+      "B": "有人吸烟不利健康",
+      "C": "有人不吸烟有利健康",
+      "D": "所有人吸烟都不利健康"
+    },
+    "answer": "健康的人一般不吸烟",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0078",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "77",
+    "options": {
+      "A": "“如果A，那么B”可转换为其等值判断",
+      "B": "如果非A，那么B",
+      "C": "如果非A，那么非B",
+      "D": "如果B，那么A"
+    },
+    "answer": "如果非B，那么非A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0079",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "78",
+    "options": {
+      "A": "被誉为古印度的医学百科全书的是",
+      "B": "《阇罗迦本集》",
+      "C": "《吠陀经》",
+      "D": "《摩诃婆罗多》"
+    },
+    "answer": "《薄伽梵歌》",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0080",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "79",
+    "options": {
+      "A": "“好人有好报，三是好人，所以三有好报”属于",
+      "B": "演绎推理",
+      "C": "回溯推理",
+      "D": "似真推理"
+    },
+    "answer": "归纳推理",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0081",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "80",
+    "options": {
+      "A": "彭平是一个计算机编程专家，姚欣是一位数学家。其实，所有的计算机编程专家都是数学家。我们知道，今天国内大多数综合性大学都在培养着计算机编程专家。据此，我们可以认为：",
+      "B": "彭平由综合性大学所培养的",
+      "C": "大多数计算机编程专家是由综合性大学所培养的",
+      "D": "有些数学家是计算机编程专家"
+    },
+    "answer": "姚欣并不是毕业于综合性大学",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0082",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "81",
+    "options": {
+      "A": "用真值表检验重言式与矛盾式需要针对所讨论的命题建立一个",
+      "B": "矛盾式",
+      "C": "重言式",
+      "D": "真值行"
+    },
+    "answer": "真值列",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0083",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "82",
+    "options": {
+      "A": "前提是自我欺骗性语句，即",
+      "B": "前提虚假谬误",
+      "C": "以上都不对",
+      "D": "预期理由谬误"
+    },
+    "answer": "前提自相矛盾谬误",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0084",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "83",
+    "options": {
+      "A": "当命题断言了主项或谓项所指称的类的每一成员时，我们就说这个词项是",
+      "B": "不周延的",
+      "C": "假的",
+      "D": "周延的"
+    },
+    "answer": "真的",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0085",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "84",
+    "options": {
+      "A": "根据演绎有效性原则，论证无效的一个重要标志是",
+      "B": "部分前提假而结论假",
+      "C": "部分前提真而结论假",
+      "D": "所有前提假而结论假"
+    },
+    "answer": "所有前提真而结论假",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0086",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "85",
+    "options": {
+      "A": "根据演绎有效性原则，论证无效的一个重要标志是",
+      "B": "部分前提假而结论假",
+      "C": "所有前提假而结论假",
+      "D": "所有前提真而结论假"
+    },
+    "answer": "部分前提真而结论假",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0087",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "86",
+    "options": {
+      "A": "“所有的逻辑学家都是哲学家，所有美学家都是逻辑学家，因此，所有美学家都是哲学家”，这个三段论中，结论标识词是",
+      "B": "都是",
+      "C": "哲学家",
+      "D": "所有"
+    },
+    "answer": "因此",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0088",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "87",
+    "options": {
+      "A": "以下不属于前提标识词的是",
+      "B": "因为",
+      "C": "鉴于",
+      "D": "由于"
+    },
+    "answer": "所以",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0089",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "88",
+    "options": {
+      "A": "三段论“有些结构主义者是形式主义者；所有形式主义者都不是实质主义者；因此，有些实质主义者不是结构主义者。”的式是",
+      "B": "IOE",
+      "C": "EOI",
+      "D": "EIO"
+    },
+    "answer": "IEO",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0090",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "89",
+    "options": {
+      "A": "在归纳逻辑中，所有前提真而结论",
+      "B": "可能真",
+      "C": "必然假",
+      "D": "必然真"
+    },
+    "answer": "可能假",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0091",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "90",
+    "options": {
+      "A": "由于近期的干旱和高温，导致海湾盐度增加，引起了许多鱼的死亡。虾虽然可以适应高盐度，但盐度高也给养虾场带来了不幸。以下哪项如果为真，能够提供解释以上现象的原因?",
+      "B": "幼虾吃的有机物在盐度高的环境下几乎难以存活",
+      "C": "持续的干旱会使海湾的水位下降，这已经引起了有关机构的注意",
+      "D": "水温升高会使虾更快速是繁殖"
+    },
+    "answer": "鱼多的海湾往往虾也多，虾少的海湾鱼也不多",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0092",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "91",
+    "options": {
+      "A": "以下不属于共同的论证评价标准的是",
+      "B": "分析标准",
+      "C": "论辩标准",
+      "D": "逻辑标准"
+    },
+    "answer": "修辞标准",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0093",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "92",
+    "options": {
+      "A": "诉诸权威谬误的通常表现形式包括",
+      "B": "不相干权威",
+      "C": "以上都对",
+      "D": "有问题的权威"
+    },
+    "answer": "滥用权威",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0094",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "93",
+    "options": {
+      "A": "再归纳逻辑中，所有前提真而结论",
+      "B": "可能真",
+      "C": "以上都不对",
+      "D": "必然假"
+    },
+    "answer": "必然真",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0095",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "94",
+    "options": {
+      "A": "论证的功能包括证成和",
+      "B": "反驳",
+      "C": "辩论",
+      "D": "推论"
+    },
+    "answer": "归谬",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0096",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "95",
+    "options": {
+      "A": "如果有的a是b；有的a不是b，并且有的b是a ，有的b不是a；那么，a与b这两个概念具有()关系。",
+      "B": "交叉",
+      "C": "真包含于",
+      "D": "全异"
+    },
+    "answer": "全同",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0097",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "96",
+    "options": {
+      "A": "小王说：如果明天不下大雨，我一定去看足球比赛 以下哪项为真，可以证明小王没有说真话?a天没下大雨，小王没去看足球赛；b天下大雨，小王去看了足球赛；c天下大雨，小王没去看足球赛",
+      "B": "ab",
+      "C": "a",
+      "D": "b"
+    },
+    "answer": "c",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0098",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "97",
+    "options": {
+      "A": "如果A、B两个判断不能同假，但却可以同真，则它们之间的关系是",
+      "B": "下反对关系",
+      "C": "矛盾关系",
+      "D": "差等关系"
+    },
+    "answer": "反对关系",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0099",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "98",
+    "options": {
+      "A": "一个结果的数值概率等于相对那个结果可获得的结果数()可能结果的总数。",
+      "B": "乘",
+      "C": "除",
+      "D": "减"
+    },
+    "answer": "加",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0100",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "99",
+    "options": {
+      "A": "如果一个证明的论据还要依靠论题来证明，那么该证明所犯的逻辑错误是",
+      "B": "推不出",
+      "C": "预期理由",
+      "D": "循环论证"
+    },
+    "answer": "论据虚假",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0101",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "100",
+    "options": {
+      "A": "通过改变命题的质或量从而推导出新命题的论证是",
+      "B": "直言命题运算论证",
+      "C": "质量论证",
+      "D": "三段论论证"
+    },
+    "answer": "对当关系论证",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0102",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "101",
+    "options": {
+      "A": "构造真值表，基于的逻辑算子规则不包括",
+      "B": "等值",
+      "C": "命题",
+      "D": "否定"
+    },
+    "answer": "合取",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0103",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "102",
+    "options": {
+      "A": "要检验一个命题是否是矛盾式，即以该命题作为前提进行推导，看看能否推导出",
+      "B": "结论",
+      "C": "命题",
+      "D": "矛盾"
+    },
+    "answer": "前提",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0104",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "103",
+    "options": {
+      "A": "论证识别的核心内容是",
+      "B": "目标听众的识别",
+      "C": "前提与结论的识别",
+      "D": "论证者的识别"
+    },
+    "answer": "论证目的识别",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0105",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "104",
+    "options": {
+      "A": "前提或结论中至少有一个条件命题的论证的是",
+      "B": "结论论证",
+      "C": "命题论证",
+      "D": "条件论证"
+    },
+    "answer": "前提论证",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0106",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "105",
+    "options": {
+      "A": "如果论证的所有前提同时为真是不可能的，那么这个论证的前提就是",
+      "B": "不可接受",
+      "C": "不一致",
+      "D": "可接受"
+    },
+    "answer": "一致",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0107",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "106",
+    "options": {
+      "A": "一个命题为真是另一个命题为真的充分条件的命题是",
+      "B": "直言命题",
+      "C": "条件命题",
+      "D": "假言命题"
+    },
+    "answer": "充分命题",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0108",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "107",
+    "options": {
+      "A": "以下哪篇文章不包含在《工具论》之中？",
+      "B": "《理想国》",
+      "C": "《解释篇》",
+      "D": "《论辩篇》"
+    },
+    "answer": "《范畴篇》",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0109",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "108",
+    "options": {
+      "A": "复合命题的逻辑联结词包括",
+      "B": "合取和析取",
+      "C": "蕴涵和等值",
+      "D": "否定"
+    },
+    "answer": "以上都对",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0110",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "109",
+    "options": {
+      "A": "是指相对于证据，两个事实或事件至少有一个为真的概率。",
+      "B": "析取律",
+      "C": "肯定律",
+      "D": "合取律"
+    },
+    "answer": "否定律",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0111",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "110",
+    "options": {
+      "A": "以下不属于逻辑系统四大定理的是",
+      "B": "一致性定理",
+      "C": "不完全性定理",
+      "D": "可靠性定理"
+    },
+    "answer": "有效性定理",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0112",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "111",
+    "options": {
+      "A": "“所有的逻辑学家都是哲学家，所有美学家都是逻辑学家，因此，所有美学家都是哲学家”，这个三段论中，大项是",
+      "B": "以上都不对",
+      "C": "逻辑学家",
+      "D": "美学家"
+    },
+    "answer": "哲学家",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0113",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "112",
+    "options": {
+      "A": "违背规则“所有前提都必须是真的”的谬误包括",
+      "B": "以上都对",
+      "C": "前提虚假谬误",
+      "D": "不一致谬误"
+    },
+    "answer": "预期理由谬误",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0114",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "113",
+    "options": {
+      "A": "在“育才中学有外籍教师任教”这一判断中，",
+      "B": "主项周延",
+      "C": "主项.谓项都不周延",
+      "D": "主项.谓项都周延"
+    },
+    "answer": "谓项周延",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0115",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "114",
+    "options": {
+      "A": "三段论的式共有多少个。",
+      "B": "512",
+      "C": "128",
+      "D": "64"
+    },
+    "answer": "256",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0116",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "115",
+    "options": {
+      "A": "所有的语句都包括",
+      "B": "逻辑要素",
+      "C": "语法要素",
+      "D": "词汇要素"
+    },
+    "answer": "语义要素和逻辑要素",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0117",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "116",
+    "options": {
+      "A": "非形式逻辑标准的一个论证是好的，当且仅当()成立。",
+      "B": "以上均是",
+      "C": "所有前提均可接受",
+      "D": "前提与结论相干"
+    },
+    "answer": "前提对结论提供了足够支持",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0118",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "117",
+    "options": {
+      "A": "命题“有些音乐家是有创造力之人;所有作曲家都是音乐家;因此，有些作曲家是有创造力之人。”的中项是",
+      "B": "作曲家",
+      "C": "以上都不是",
+      "D": "有创造力之人"
+    },
+    "answer": "音乐家",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0119",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "118",
+    "options": {
+      "A": "通常用来表达联结词“析取”的是",
+      "B": "而且",
+      "C": "或者",
+      "D": "并非"
+    },
+    "answer": "并且",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0120",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "119",
+    "options": {
+      "A": "《数学与猜想》的作者是",
+      "B": "罗素",
+      "C": "周北海",
+      "D": "金岳霖"
+    },
+    "answer": "波利亚",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0121",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "120",
+    "options": {
+      "A": "一组不一致的前提()推导出不一致的结论。",
+      "B": "可能",
+      "C": "不会",
+      "D": "必然"
+    },
+    "answer": "不确定",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0122",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "121",
+    "options": {
+      "A": "违背规则“前提与结论必须是相干”的谬误不包括",
+      "B": "合成谬误",
+      "C": "人身攻击谬误",
+      "D": "稻草人谬误"
+    },
+    "answer": "非黑即白谬误",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_logic_test_0123",
+    "source": "CMMLU",
+    "subject": "逻辑学",
+    "subject_en": "logic",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "122",
+    "options": {
+      "A": "锐进软件股份有限公司是一个由四个子公司，即甲、乙、丙、丁组成的总公司。在总公司的利润方案下，每个字公司承担的利润份额与每年该子公司员工占锐进软件股份有限公司总员工数的份额相等。但是去年该公司的财务报告却显示，甲公司在员工数量增加的同时向总公司上缴利润的比例却下降了。 如果上述陈述为真，财务报告还能够说明下列哪项?",
+      "B": "甲公司员工增长的比例比前一年小",
+      "C": "甲公司员工增长的比例至少比其他三个子公司中的一个小",
+      "D": "在四个子公司中，甲的员工数量最少"
+    },
+    "answer": "乙、丙、丁公司员工增长的比例都超过了甲公司员工增长的比例",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "logic"
+    ],
+    "language": "zh",
+    "split": "test"
+  }
+]
