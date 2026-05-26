@@ -10,7 +10,7 @@ from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import evaluation_service
 from app.infra.database import get_session
 from app.infra.models import User
-from app.utils.response import HttpResponse
+from app.infra.response import HttpResponse
 
 router = APIRouter()
 

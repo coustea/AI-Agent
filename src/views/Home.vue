@@ -170,7 +170,7 @@ import {
   User
 } from '@element-plus/icons-vue'
 
-import { getProfileOnboarding, getGeneratedResources, getPathPlan } from '@/api/ai'
+import { getProfileOnboarding, getGeneratedResources, getActiveCoursePath } from '@/api/ai'
 
 const router = useRouter()
 
@@ -247,7 +247,7 @@ const loadDashboardData = async () => {
     const [profileRes, resourcesRes, pathRes] = await Promise.allSettled([
       getProfileOnboarding(),
       getGeneratedResources(8),
-      getPathPlan()
+      getActiveCoursePath()
     ])
 
     let hasProfile = false
@@ -303,15 +303,16 @@ const loadDashboardData = async () => {
     // 3. 学习路径解析
     if (pathRes.status === 'fulfilled' && pathRes.value.data?.data) {
       const plan = pathRes.value.data.data
-      const currentStage = plan.stages?.find((s: any) => s.status === 'processing') || plan.stages?.[0]
+      const currentStage = plan.stages?.find((s: any) => s.stage_id === plan.current_stage_id) || plan.stages?.[0]
 
-      if (currentStage && plan.summary) {
+      if (currentStage) {
         hasPath = true
+        const stageNodes = plan.nodes?.filter((n: any) => n.stage_id === currentStage.stage_id) || []
         recommendedGoal.value = {
-          topic: plan.summary.current_stage || '日常学习',
-          confidence: `完成度 ${plan.summary.overall_progress || 0}%`,
-          title: plan.insights?.next_action || currentStage.title,
-          steps: currentStage.nodes?.slice(0, 3).map((n: any) => n.title) || []
+          topic: currentStage.title || '日常学习',
+          confidence: `完成度 ${plan.overall_progress || 0}%`,
+          title: plan.goal || currentStage.title,
+          steps: stageNodes.slice(0, 3).map((n: any) => n.title) || []
         }
       }
     }

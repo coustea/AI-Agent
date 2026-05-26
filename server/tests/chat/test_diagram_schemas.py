@@ -17,7 +17,7 @@ from app.chat.schemas import (
     SequenceDiagram,
     StateDiagram,
 )
-from app.chat.utils import load_prompts
+from app.prompts import registry
 
 
 def test_diagram_model_map_exports_all_supported_types() -> None:
@@ -43,21 +43,14 @@ def test_diagram_model_map_exports_all_supported_types() -> None:
     }
 
 
-def test_diagram_prompts_require_json_output() -> None:
-    prompts = load_prompts(Path(__file__).resolve().parents[2] / "app" / "chat")
+def test_teaching_diagram_prompt_requires_structured_json_output() -> None:
+    prompt = registry.get("chat/teaching_diagram")
 
-    decision_prompt = prompts["diagram_decision_system"]
-    generation_prompt = prompts["diagram_generation_system"]
-
-    assert "JSON" in decision_prompt
-    assert "json" in decision_prompt.lower()
-    assert "Mermaid" in generation_prompt
-    assert "JSON" not in generation_prompt
-    assert "json" not in generation_prompt.lower()
-    assert "只输出 Mermaid 源码" in generation_prompt
-    assert "不是 demo" in generation_prompt
-    assert "8 到 18" in generation_prompt
-    assert "覆盖用户问题中的主要概念、关系、步骤或边界条件" in generation_prompt
+    assert "JSON" in prompt
+    assert "InsightCanvas" in prompt
+    assert "不要输出 Mermaid" in prompt
+    assert "focus_question" in prompt
+    assert "try_it" in prompt
 
 
 def test_diagram_render_schema_accepts_mermaid_text_only() -> None:

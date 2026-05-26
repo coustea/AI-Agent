@@ -132,6 +132,13 @@ OPENAI_MODEL=gpt-4o-mini
 OPENAI_API_BASE=https://your-endpoint
 ```
 
+## Vue 3 Frontend Code Style
+
+All `.vue` files must follow the conventions in `docs/vue-code-style.md`. Key rules:
+- Use `<script setup lang="ts">` only, no Options API
+- Strict internal ordering: imports → defineProps/defineEmits → composables → ref/reactive → computed → constants → watch → lifecycle hooks → functions
+- Must use `<style scoped>`, respect `prefers-reduced-motion`
+
 ## Key Conventions
 
 - All API responses use `HttpResponse` envelope (`{code, message, data}`)

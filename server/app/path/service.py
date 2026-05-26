@@ -1,19 +1,22 @@
+from datetime import datetime, timezone
 from typing import Any, Sequence
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from fastapi import BackgroundTasks
-
 from app.infra.logging import get_logger
 from app.memory.service import MemoryService
-from app.infra.models import CoursePath, CoursePathNode, CoursePathResourceBinding
+from app.infra.models import CoursePath, CoursePathGenerationTask, CoursePathNode, CoursePathResourceBinding
 from app.path.agents.planner import PathPlannerAgent
 from app.path.schemas import (
     CoursePathNodeDTO,
     CoursePathResponse,
     GeneratePathRequest,
+    PathGenerationTaskResponse,
 )
+from app.resource.schemas import AgentConfigs, AgentSelection, OutputOptions, ResourceGenerationRequest
 
 logger = get_logger(__name__)
+
+ACTIVE_GENERATION_STATUSES = ("pending", "preparing", "planning", "validating")
 
 
 class CoursePathService:
@@ -32,17 +35,148 @@ class CoursePathService:
         """
         logger.info(f"Generating new course path for user_id={user_id}, topic={request.topic}")
 
-        # 1. 获取用户画像
-        profile = await self.memory_layer.get_or_create_profile(user_id)
-        profile_dict = profile.profile_json if profile and profile.profile_json else {}
-
-        # 2. 调用规划智能体
+        profile_dict = await self._get_profile_dict(user_id)
         plan = await self.agent.generate_plan(request, profile_dict)
+        db_path, db_nodes = await self._persist_generated_path(user_id, request, plan)
+        return self._build_path_response(db_path, db_nodes)
 
-        # 3. 如果存在之前的活跃路径，先归档它
+    async def start_generation_task(
+        self,
+        *,
+        user_id: int,
+        request: GeneratePathRequest,
+    ) -> dict[str, Any]:
+        """创建路径生成任务；同模块的进行中任务会被复用，避免重复规划。"""
+        statement = (
+            select(CoursePathGenerationTask)
+            .where(
+                CoursePathGenerationTask.user_id == user_id,
+                CoursePathGenerationTask.module == request.module,
+                col(CoursePathGenerationTask.status).in_(ACTIVE_GENERATION_STATUSES),
+            )
+            .order_by(col(CoursePathGenerationTask.created_at).desc())
+        )
+        existing = (await self.session.exec(statement)).first()
+        if existing is not None:
+            return {
+                "task": self._build_task_response(existing),
+                "should_schedule": False,
+            }
+
+        task = CoursePathGenerationTask(
+            user_id=user_id,
+            module=request.module,
+            goal=request.goal,
+            topic=request.topic,
+            current_knowledge=request.current_knowledge,
+            preferences=request.preferences,
+        )
+        self.session.add(task)
+        await self.session.flush()
+        await self.session.commit()
+        await self.session.refresh(task)
+        return {
+            "task": self._build_task_response(task),
+            "should_schedule": True,
+        }
+
+    async def get_generation_task(self, *, user_id: int, task_id: int) -> PathGenerationTaskResponse | None:
+        statement = select(CoursePathGenerationTask).where(
+            CoursePathGenerationTask.id == task_id,
+            CoursePathGenerationTask.user_id == user_id,
+        )
+        task = (await self.session.exec(statement)).first()
+        return self._build_task_response(task) if task is not None else None
+
+    async def get_active_generation_task(
+        self,
+        *,
+        user_id: int,
+        module: str = "mentor",
+    ) -> PathGenerationTaskResponse | None:
+        statement = (
+            select(CoursePathGenerationTask)
+            .where(
+                CoursePathGenerationTask.user_id == user_id,
+                CoursePathGenerationTask.module == module,
+                col(CoursePathGenerationTask.status).in_(ACTIVE_GENERATION_STATUSES),
+            )
+            .order_by(col(CoursePathGenerationTask.created_at).desc())
+        )
+        task = (await self.session.exec(statement)).first()
+        return self._build_task_response(task) if task is not None else None
+
+    async def execute_generation_task(self, task_id: int) -> None:
+        """在后台执行路径规划，并在每个真实边界持久化进度。"""
+        task = await self.session.get(CoursePathGenerationTask, task_id)
+        if task is None or task.status not in ACTIVE_GENERATION_STATUSES:
+            return
+
+        try:
+            await self._set_task_progress(task, "preparing", 15, "正在读取学习画像与目标上下文")
+            profile_dict = await self._get_profile_dict(task.user_id)
+            request = GeneratePathRequest(
+                goal=task.goal,
+                topic=task.topic,
+                module=task.module,
+                current_knowledge=task.current_knowledge or [],
+                preferences=task.preferences or {},
+            )
+            await self._set_task_progress(task, "planning", 30, "路径规划智能体正在编排学习节点")
+            plan = await self.agent.generate_plan(request, profile_dict)
+            await self._set_task_progress(task, "validating", 80, "正在校验依赖关系并保存学习地图")
+            db_path, _ = await self._persist_generated_path(user_id=task.user_id, request=request, plan=plan, commit=False)
+            task.generated_path_id = db_path.id
+            task.status = "completed"
+            task.progress = 100
+            task.latest_message = "专属学习路径已生成"
+            task.error_message = None
+            task.completed_at = datetime.now(timezone.utc)
+            task.updated_at = task.completed_at
+            await self.session.commit()
+        except Exception as exc:
+            await self.session.rollback()
+            failed_task = await self.session.get(CoursePathGenerationTask, task_id)
+            if failed_task is not None:
+                failed_task.status = "failed"
+                failed_task.latest_message = "路径规划失败，请稍后重试"
+                failed_task.error_message = str(exc)
+                failed_task.completed_at = datetime.now(timezone.utc)
+                failed_task.updated_at = failed_task.completed_at
+                await self.session.commit()
+            logger.exception("后台路径规划任务异常 task_id=%s", task_id)
+
+    async def _get_profile_dict(self, user_id: int) -> dict[str, Any]:
+        profile = await self.memory_layer.get_or_create_profile(user_id)
+        return profile.profile_json if profile and profile.profile_json else {}
+
+    async def _set_task_progress(
+        self,
+        task: CoursePathGenerationTask,
+        status: str,
+        progress: int,
+        latest_message: str,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        task.status = status
+        task.progress = progress
+        task.latest_message = latest_message
+        task.updated_at = now
+        if task.started_at is None:
+            task.started_at = now
+        await self.session.commit()
+
+    async def _persist_generated_path(
+        self,
+        user_id: int,
+        request: GeneratePathRequest,
+        plan: Any,
+        *,
+        commit: bool = True,
+    ) -> tuple[CoursePath, list[CoursePathNode]]:
+        """持久化已验证路径；后台任务在最终提交前同时完成任务状态更新。"""
         await self._archive_active_paths(user_id, request.module)
 
-        # 4. 持久化新路径到数据库
         db_path = CoursePath(
             user_id=user_id,
             module=request.module,
@@ -50,6 +184,7 @@ class CoursePathService:
             goal=request.goal,
             eta_days=plan.eta_days,
             confidence=plan.confidence,
+            current_stage_id=plan.stages[0].stage_id if plan.stages else None,
             stages_json=[s.model_dump() for s in plan.stages],
             adjustment_rationale=plan.adjustment_rationale,
             status="active"
@@ -57,7 +192,6 @@ class CoursePathService:
         self.session.add(db_path)
         await self.session.flush()
 
-        # 5. 持久化节点 — resource_status 初始为 not_started
         db_nodes = []
         for agent_node in plan.nodes:
             db_node = CoursePathNode(
@@ -78,23 +212,28 @@ class CoursePathService:
 
             if not agent_node.prerequisites:
                 db_node.status = "available"
+                if db_path.current_node_id is None:
+                    db_path.current_node_id = agent_node.node_id
+                    db_path.current_stage_id = agent_node.stage_id
 
             db_nodes.append(db_node)
             self.session.add(db_node)
 
-        await self.session.commit()
-        await self.session.refresh(db_path)
-
-        return self._build_path_response(db_path, db_nodes)
+        if commit:
+            await self.session.commit()
+            await self.session.refresh(db_path)
+        else:
+            await self.session.flush()
+        return db_path, db_nodes
 
     async def generate_node_resources(
         self,
         *,
         user_id: int,
         node_id: int,
-        selected_agents: list,
-        agent_configs: Any,
-        output_options: Any,
+        selected_agents: list[AgentSelection],
+        agent_configs: AgentConfigs,
+        output_options: OutputOptions,
     ) -> dict[str, Any]:
         """为路径节点生成学习资源。
 
@@ -105,12 +244,16 @@ class CoursePathService:
         4. 从节点内容构造 learning_need
         5. 调用统一 start_resource_task
         """
-        from app.resource.schemas import AgentSelection, AgentConfigs, OutputOptions, ResourceGenerationRequest
         from app.resource.service import ResourceUsecases
 
         # 1 & 2: 验证节点存在且属于当前用户
-        node = await self.session.get(CoursePathNode, node_id)
-        if node is None or node.user_id != user_id:
+        node_stmt = (
+            select(CoursePathNode)
+            .where(CoursePathNode.id == node_id, CoursePathNode.user_id == user_id)
+            .with_for_update()
+        )
+        node = (await self.session.exec(node_stmt)).first()
+        if node is None:
             raise ValueError("节点不存在或不属于当前用户")
 
         if node.status == "locked":
@@ -120,7 +263,7 @@ class CoursePathService:
         binding_stmt = select(CoursePathResourceBinding).where(
             CoursePathResourceBinding.node_id == node_id,
             CoursePathResourceBinding.user_id == user_id,
-        )
+        ).order_by(col(CoursePathResourceBinding.created_at).desc())
         existing_binding = (await self.session.exec(binding_stmt)).first()
 
         if existing_binding and node.resource_status in ("generating", "ready"):
@@ -128,6 +271,7 @@ class CoursePathService:
                 "resource_id": existing_binding.resource_id,
                 "node_id": node_id,
                 "status": node.resource_status,
+                "should_schedule": False,
             }
 
         # 4: 从节点内容构造 learning_need
@@ -138,10 +282,10 @@ class CoursePathService:
         # 5: 构造 ResourceGenerationRequest
         request = ResourceGenerationRequest(
             learning_need=learning_need,
-            learning_scenario="self_study",
+            learning_scenario="path_learning",
             selected_agents=selected_agents,
-            agent_configs=agent_configs if agent_configs else AgentConfigs(),
-            output_options=output_options if output_options else OutputOptions(),
+            agent_configs=agent_configs,
+            output_options=output_options,
         )
 
         # Use unified start_resource_task
@@ -162,9 +306,68 @@ class CoursePathService:
             "resource_id": result["resource_id"],
             "node_id": node_id,
             "status": "generating",
+            "should_schedule": True,
             "request": request,
             "profile": profile_dict,
         }
+
+    async def start_node(self, *, user_id: int, node_id: int) -> CoursePathResponse:
+        """Start a ready learning node and make the active position explicit."""
+        node = await self._get_owned_node_for_update(user_id=user_id, node_id=node_id)
+        if node.status == "locked":
+            raise ValueError("前置节点尚未完成，不能开始学习")
+        if node.status == "completed":
+            return await self._response_for_node_path(node)
+        if node.resource_status != "ready":
+            raise ValueError("学习资源尚未生成完成")
+
+        node.status = "in_progress"
+        node.started_at = node.started_at or datetime.now(timezone.utc)
+        path = await self._get_path_for_update(node.path_id)
+        path.current_node_id = node.node_id
+        path.current_stage_id = node.stage_id
+        await self.session.commit()
+        return await self._response_for_path(path)
+
+    async def complete_node(self, *, user_id: int, node_id: int) -> CoursePathResponse:
+        """Complete a learning node and unlock successors whose dependencies are done."""
+        node = await self._get_owned_node_for_update(user_id=user_id, node_id=node_id)
+        path = await self._get_path_for_update(node.path_id)
+        nodes = list(await self._get_nodes_for_path(path.id))
+
+        if node.status == "locked":
+            raise ValueError("前置节点尚未完成，不能标记完成")
+        if node.status not in ("in_progress", "completed"):
+            raise ValueError("请先开始学习该节点")
+
+        if node.status != "completed":
+            node.status = "completed"
+            node.progress = 100
+            node.completed_at = datetime.now(timezone.utc)
+
+        completed_ids = {item.node_id for item in nodes if item.status == "completed"}
+        completed_ids.add(node.node_id)
+        for item in nodes:
+            if item.status == "locked" and set(item.prerequisites or []).issubset(completed_ids):
+                item.status = "available"
+
+        completed_count = sum(1 for item in nodes if item.status == "completed")
+        path.overall_progress = round(completed_count * 100 / len(nodes)) if nodes else 0
+        next_node = next(
+            (item for item in nodes if item.status == "in_progress"),
+            next((item for item in nodes if item.status == "available"), None),
+        )
+        if completed_count == len(nodes) and nodes:
+            path.overall_progress = 100
+            path.current_node_id = None
+            path.current_stage_id = None
+        elif next_node:
+            path.current_node_id = next_node.node_id
+            path.current_stage_id = next_node.stage_id
+
+        await self.session.commit()
+        resource_map = await self._get_node_resource_ids([item.id for item in nodes if item.id is not None])
+        return self._build_path_response(path, nodes, resource_map)
 
     def _build_node_learning_need(self, node: CoursePathNode, path: CoursePath | None) -> str:
         """从节点和路径信息组装 learning_need 文本。"""
@@ -198,6 +401,33 @@ class CoursePathService:
 
         return self._build_path_response(db_path, nodes, resource_map)
 
+    async def _get_owned_node_for_update(self, *, user_id: int, node_id: int) -> CoursePathNode:
+        statement = (
+            select(CoursePathNode)
+            .where(CoursePathNode.id == node_id, CoursePathNode.user_id == user_id)
+            .with_for_update()
+        )
+        node = (await self.session.exec(statement)).first()
+        if node is None:
+            raise ValueError("节点不存在或不属于当前用户")
+        return node
+
+    async def _get_path_for_update(self, path_id: int) -> CoursePath:
+        statement = select(CoursePath).where(CoursePath.id == path_id).with_for_update()
+        path = (await self.session.exec(statement)).first()
+        if path is None:
+            raise ValueError("学习路径不存在")
+        return path
+
+    async def _response_for_node_path(self, node: CoursePathNode) -> CoursePathResponse:
+        path = await self._get_path_for_update(node.path_id)
+        return await self._response_for_path(path)
+
+    async def _response_for_path(self, path: CoursePath) -> CoursePathResponse:
+        nodes = await self._get_nodes_for_path(path.id)
+        resource_map = await self._get_node_resource_ids([node.id for node in nodes if node.id is not None])
+        return self._build_path_response(path, nodes, resource_map)
+
     async def _archive_active_paths(self, user_id: int, module: str) -> None:
         """将用户已有的活跃路径状态设为 archived。"""
         statement = select(CoursePath).where(
@@ -225,13 +455,13 @@ class CoursePathService:
 
         stmt = select(CoursePathResourceBinding).where(
             col(CoursePathResourceBinding.node_id).in_(node_ids),
-        )
+        ).order_by(col(CoursePathResourceBinding.created_at).desc())
         result = await self.session.exec(stmt)
         bindings = result.all()
 
         resource_map: dict[int, int | None] = {}
         for binding in bindings:
-            resource_map[binding.node_id] = binding.resource_id
+            resource_map.setdefault(binding.node_id, binding.resource_id)
         return resource_map
 
     def _build_path_response(
@@ -279,3 +509,23 @@ class CoursePathService:
             nodes=node_dtos,
             created_at=path.created_at.isoformat() if path.created_at else ""
         )
+
+    def _build_task_response(self, task: CoursePathGenerationTask) -> PathGenerationTaskResponse:
+        return PathGenerationTaskResponse(
+            task_id=int(task.id or 0),
+            module=task.module,
+            goal=task.goal,
+            status=task.status,
+            progress=task.progress,
+            latest_message=task.latest_message,
+            error_message=task.error_message,
+            generated_path_id=task.generated_path_id,
+        )
+
+
+async def bg_generate_path_task(task_id: int) -> None:
+    """使用独立会话执行慢速路径规划，API 请求无需等待模型完成。"""
+    from app.infra.database import session_scope
+
+    async with session_scope() as session:
+        await CoursePathService(session).execute_generation_task(task_id)

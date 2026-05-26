@@ -23,7 +23,7 @@ from app.infra.models import User
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceUsecases, bg_gen_task
 from app.memory.service import MemoryService
-from app.utils.response import HttpResponse
+from app.infra.response import HttpResponse
 
 router = APIRouter()
 logger = get_logger(__name__)

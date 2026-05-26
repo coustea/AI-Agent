@@ -38,7 +38,7 @@ from pydantic import ValidationError
 from app.config import get
 from app.infra.errors import ServiceError
 from app.infra.logging import get_logger
-from app.utils.json import parse_first_json_object
+from app.infra.json import parse_first_json_object
 
 logger = get_logger(__name__)
 
@@ -192,7 +192,8 @@ class Llm:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            async for chunk in runnable.astream(input_data):
+            # Force provider streaming even when the reusable base model defaults to non-streaming invokes.
+            async for chunk in runnable.astream(input_data, stream=True):
                 yield chunk
         finally:
             if sem:
@@ -271,6 +272,24 @@ class Llm:
                 return schema.model_validate(parsed)
             except Exception as e:
                 errors.append(f"fallback={type(e).__name__}: {e}")
+
+            # 方式3: 纯文本生成 + JSON 解析（兼容不支持 function calling 的 API）
+            try:
+                schema_hint = json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
+                json_prompt = (
+                    f"{input_data}\n\n"
+                    f"请严格按照以下 JSON Schema 输出，不要输出任何其他内容：\n"
+                    f"```json\n{schema_hint}\n```\n"
+                    f"直接输出 JSON 对象，不要用 Markdown 围栏包裹。"
+                )
+                resp = await model.ainvoke(json_prompt)
+                content = getattr(resp, "content", "") or ""
+                parsed = parse_first_json_object(content)
+                if not parsed:
+                    raise ValueError("无法从 LLM 输出中解析出 JSON 对象")
+                return schema.model_validate(parsed)
+            except Exception as e:
+                errors.append(f"text_fallback={type(e).__name__}: {e}")
                 raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
         finally:

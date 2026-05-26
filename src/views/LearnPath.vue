@@ -98,6 +98,23 @@
                 
                 <div class="node-body">
                   <p class="node-summary">{{ node.recommendation_reason || node.mastery_target }}</p>
+                  <div v-if="node.resource_status === 'generating' && getNodeTaskStatus(node)" class="task-progress">
+                    <div class="task-progress-head">
+                      <span>{{ getNodeTaskStatus(node)?.progress.latest_message || '资源团队正在工作' }}</span>
+                      <strong>{{ getNodeProgress(node) }}%</strong>
+                    </div>
+                    <el-progress :percentage="getNodeProgress(node)" :show-text="false" />
+                    <div class="agent-progress-list">
+                      <span
+                        v-for="(snapshot, agentId) in getNodeTaskStatus(node)?.progress.agents"
+                        :key="agentId"
+                        class="agent-chip"
+                        :class="`agent-${snapshot.status}`"
+                      >
+                        {{ getAgentLabel(agentId) }} · {{ getAgentStatusText(snapshot.status) }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="node-footer">
@@ -122,12 +139,12 @@
                   >
                     AI资源生成中...
                   </el-button>
-                  <!-- Available + ready: show "开始学习" -->
+                  <!-- Available + ready: begin the persisted learning node -->
                   <el-button
                     v-else-if="node.status === 'available' && node.resource_status === 'ready'"
                     type="primary"
                     class="action-btn"
-                    @click="viewResource(node)"
+                    @click="handleStartLearning(node)"
                   >
                     开始学习
                     <el-icon class="el-icon--right"><ArrowRight /></el-icon>
@@ -141,7 +158,17 @@
                   >
                     重新生成
                   </el-button>
-                  <!-- Completed: show "复习资源" -->
+                  <div v-else-if="node.status === 'in_progress'" class="active-actions">
+                    <el-button class="action-btn" @click="viewResource(node)">继续学习</el-button>
+                    <el-button
+                      type="success"
+                      class="action-btn"
+                      :loading="completingNodeId === node.id"
+                      @click="handleCompleteNode(node)"
+                    >
+                      完成本节点
+                    </el-button>
+                  </div>
                   <el-button
                     v-else-if="node.status === 'completed'"
                     type="success"
@@ -186,18 +213,27 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Lock, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getActiveCoursePath, generateCoursePath, generatePathNodeResources, type CoursePathResponse, type CoursePathNodeDTO, type PathNodeResourceRequest } from '@/api/ai'
+import {
+  completeCoursePathNode,
+  generateCoursePath,
+  generatePathNodeResources,
+  getActiveCoursePath,
+  startCoursePathNode,
+  type CoursePathNodeDTO,
+  type CoursePathResponse,
+  type PathNodeResourceRequest,
+} from '@/api/ai'
+import { pollResourceStatus, type ResourceTaskStatus } from '@/api/resource'
 
 const router = useRouter()
 
-// ---- 状态与数据 ----
 const courseGoal = ref('')
 const isGenerating = ref(false)
 const generatingNodeId = ref<number | null>(null)
+const completingNodeId = ref<number | null>(null)
 const coursePath = ref<CoursePathResponse | null>(null)
-let pollTimer: number | null = null
+const nodeTaskStatuses = ref<Record<number, ResourceTaskStatus>>({})
 
-// ---- 计算属性 ----
 const groupedStages = computed(() => {
   if (!coursePath.value) return []
   
@@ -213,7 +249,16 @@ const needsPolling = computed(() => {
   return coursePath.value.nodes.some(n => n.resource_status === 'generating')
 })
 
-// ---- 生命周期 ----
+let pollTimer: number | null = null
+const agentLabels: Record<string, string> = {
+  content: '讲解',
+  mindmap: '图解',
+  quiz: '练习',
+  reading: '阅读',
+  code: '实操',
+  ppt: '课件',
+}
+
 onMounted(() => {
   fetchActivePath()
 })
@@ -222,14 +267,12 @@ onUnmounted(() => {
   stopPolling()
 })
 
-// ---- 方法 ----
-const fetchActivePath = async (silent = false) => {
+async function fetchActivePath(silent = false) {
   try {
     const res = await getActiveCoursePath()
     if (res.data.data) {
       coursePath.value = res.data.data
-      
-      // 如果有生成中的节点，则开启轮询
+      await refreshTaskStatuses()
       if (needsPolling.value) {
         startPolling()
       } else {
@@ -243,7 +286,7 @@ const fetchActivePath = async (silent = false) => {
   }
 }
 
-const handleGeneratePath = async () => {
+async function handleGeneratePath() {
   if (!courseGoal.value.trim()) {
     ElMessage.warning('请输入你想学习的课程名称')
     return
@@ -254,7 +297,8 @@ const handleGeneratePath = async () => {
   stopPolling()
   
   try {
-    const res = await generateCoursePath(courseGoal.value)
+    const goal = courseGoal.value.trim()
+    const res = await generateCoursePath({ goal, topic: goal, module: 'mentor' })
     coursePath.value = res.data.data
     ElMessage.success('专属学习路径已生成！')
     
@@ -269,68 +313,109 @@ const handleGeneratePath = async () => {
   }
 }
 
-const resetPath = () => {
+function resetPath() {
   courseGoal.value = ''
   coursePath.value = null
+  nodeTaskStatuses.value = {}
   stopPolling()
 }
 
-// ---- 轮询机制 ----
-const startPolling = () => {
+function startPolling() {
   if (pollTimer) return
   pollTimer = window.setInterval(async () => {
     await fetchActivePath(true)
   }, 3000)
 }
 
-const stopPolling = () => {
+function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
   }
 }
 
-// ---- UI 辅助 ----
-const getStatusTagType = (status: string) => {
+function getStatusTagType(status: string) {
   const map: Record<string, string> = {
     'completed': 'success',
     'available': 'primary',
+    'in_progress': 'warning',
     'locked': 'info'
   }
   return map[status] || 'info'
 }
 
-const getStatusText = (status: string) => {
+function getStatusText(status: string) {
   const map: Record<string, string> = {
     'completed': '已掌握',
     'available': '已解锁 / 去学习',
+    'in_progress': '学习中',
     'locked': '未解锁'
   }
   return map[status] || '未知'
 }
 
-const handleGenerateResources = async (node: CoursePathNodeDTO) => {
+function getNodeTaskStatus(node: CoursePathNodeDTO) {
+  return node.resource_id ? nodeTaskStatuses.value[node.resource_id] : undefined
+}
+
+function getNodeProgress(node: CoursePathNodeDTO) {
+  return Math.round(getNodeTaskStatus(node)?.progress.progress || 0)
+}
+
+function getAgentLabel(agentId: string) {
+  return agentLabels[agentId] || agentId
+}
+
+function getAgentStatusText(status: string) {
+  const labels: Record<string, string> = {
+    waiting: '等待',
+    running: '生成中',
+    success: '完成',
+    failed: '失败',
+    skipped: '跳过',
+  }
+  return labels[status] || status
+}
+
+async function refreshTaskStatuses() {
+  const generatingNodes = coursePath.value?.nodes.filter(
+    node => node.resource_status === 'generating' && node.resource_id,
+  ) || []
+  await Promise.all(generatingNodes.map(async (node) => {
+    if (!node.resource_id) return
+    try {
+      nodeTaskStatuses.value[node.resource_id] = await pollResourceStatus(node.resource_id)
+    } catch {
+      // Path polling remains the source of truth when one progress snapshot fails.
+    }
+  }))
+}
+
+async function handleGenerateResources(node: CoursePathNodeDTO) {
   if (generatingNodeId.value) return
   generatingNodeId.value = node.id
   try {
     const defaultPayload: PathNodeResourceRequest = {
-      learning_scenario: 'path_learning',
       selected_agents: [
         { agent_id: 'content', enabled: true, priority: 0 },
         { agent_id: 'mindmap', enabled: true, priority: 1 },
         { agent_id: 'quiz', enabled: true, priority: 2 },
-        { agent_id: 'ppt', enabled: true, priority: 3 },
+        { agent_id: 'reading', enabled: true, priority: 3 },
+        { agent_id: 'ppt', enabled: true, priority: 4 },
       ],
       agent_configs: {},
       output_options: { output_format: 'json' },
     }
-    await generatePathNodeResources(node.id, defaultPayload)
+    const res = await generatePathNodeResources(node.id, defaultPayload)
     ElMessage.success(`已开始生成「${node.title}」的学习资料`)
-    // Update local node status to trigger polling
     if (coursePath.value) {
       const found = coursePath.value.nodes.find(n => n.id === node.id)
-      if (found) found.resource_status = 'generating'
+      if (found) {
+        found.resource_status = res.data.data.status
+        found.resource_id = res.data.data.resource_id
+      }
     }
+    await refreshTaskStatuses()
     startPolling()
   } catch (error: any) {
     ElMessage.error(error?.message || '生成资料失败，请重试')
@@ -339,7 +424,30 @@ const handleGenerateResources = async (node: CoursePathNodeDTO) => {
   }
 }
 
-const viewResource = (node: CoursePathNodeDTO) => {
+async function handleStartLearning(node: CoursePathNodeDTO) {
+  try {
+    const res = await startCoursePathNode(node.id)
+    coursePath.value = res.data.data
+    viewResource(coursePath.value.nodes.find(item => item.id === node.id) || node)
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '暂时无法开始学习')
+  }
+}
+
+async function handleCompleteNode(node: CoursePathNodeDTO) {
+  completingNodeId.value = node.id
+  try {
+    const res = await completeCoursePathNode(node.id)
+    coursePath.value = res.data.data
+    ElMessage.success(`「${node.title}」已完成，下一学习节点已更新`)
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '完成节点失败，请重试')
+  } finally {
+    completingNodeId.value = null
+  }
+}
+
+function viewResource(node: CoursePathNodeDTO) {
   if (node.resource_id) {
     router.push({ name: 'ResourceDetail', params: { id: node.resource_id } })
   } else {
@@ -617,6 +725,56 @@ const viewResource = (node: CoursePathNodeDTO) => {
   margin: 0;
 }
 
+.task-progress {
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #eef6ff;
+}
+
+.task-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.task-progress-head strong {
+  color: var(--primary-color);
+}
+
+.agent-progress-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.agent-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+}
+
+.agent-running {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.agent-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.agent-failed {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
 .node-footer {
   margin-top: auto;
 }
@@ -624,6 +782,15 @@ const viewResource = (node: CoursePathNodeDTO) => {
 .action-btn {
   width: 100%;
   border-radius: 8px;
+}
+
+.active-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.active-actions .action-btn + .action-btn {
+  margin-left: 0;
 }
 
 /* 空状态 */

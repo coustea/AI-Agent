@@ -1,7 +1,8 @@
 ﻿# -*- coding: utf-8 -*-
-"""AvatarBridgeManager 与 RealtimeBridge 模块。
+"""Digital-human realtime bridge for the shared TutorAgent chat pipeline.
 
-Avatar Bridge 管理 per-user WebSocket 连接、AvatarController 与 AvatarAgent。
+The bridge owns WebSocket, ASR and avatar playback concerns only. Tutoring
+decisions run through ``app.chat.service`` and its stateless ``TutorAgent``.
 """
 
 import asyncio
@@ -18,7 +19,7 @@ logger = get_logger(__name__)
 
 
 class RealtimeBridge:
-    """per-user WebSocket 连接，管理 AvatarController 与 AvatarAgent。"""
+    """Connect digital-human I/O to the shared stateless tutoring service."""
 
     def __init__(self, user_id: int):
         self.user_id = user_id
@@ -41,6 +42,11 @@ class RealtimeBridge:
         self._last_asr_at: float = 0.0
         self._speech_rate: float = 1.0
         self._need_diagram_default: bool = False
+        self._enable_search_default: bool = False
+        self._generate_video_default: bool = False
+        self._enable_long_term_memory_default: bool = False
+        self._history_default: Optional[list[dict]] = None
+        self._turn_lock = asyncio.Lock()
 
     @staticmethod
     def _repair_text_encoding(text: str) -> str:
@@ -123,17 +129,6 @@ class RealtimeBridge:
         self.frontend_ws = ws
         # Avoid reusing stale session id across different module pipelines.
         self.session_id = ""
-        # Handshake debug marker: helps verify frontend is connected to the expected backend build.
-        await self._send_to_frontend({
-            "type": "diagram_debug",
-            "data": {
-                "phase": "connected",
-                "version": "diagram_dbg_v4",
-                "need_diagram": self._need_diagram_default,
-                "diagram_generated": False,
-            },
-        })
-
         # 确保 AvatarController 已初始化
         try:
             await self._ensure_avatar_controller()
@@ -217,6 +212,7 @@ class RealtimeBridge:
         elif msg_type == "start_vad":
             if "need_diagram" in data:
                 self._handle_set_need_diagram(data)
+            self._handle_capability_flags(data)
             await self._handle_start_vad()
         elif msg_type == "stop_vad":
             await self._handle_stop_vad()
@@ -239,6 +235,19 @@ class RealtimeBridge:
     def _handle_set_need_diagram(self, data: dict):
         """Handle default need_diagram flag for ASR-driven turns."""
         self._need_diagram_default = bool(data.get("need_diagram", False))
+
+    def _handle_capability_flags(self, data: dict):
+        """Keep text-mode tutoring capabilities active for ASR-driven turns."""
+        if isinstance(data.get("session_id"), str) and data["session_id"].strip():
+            self.session_id = data["session_id"].strip()
+        if isinstance(data.get("history"), list):
+            self._history_default = data["history"]
+        if "enable_search" in data:
+            self._enable_search_default = bool(data.get("enable_search"))
+        if "generate_video" in data:
+            self._generate_video_default = bool(data.get("generate_video"))
+        if "enable_long_term_memory" in data:
+            self._enable_long_term_memory_default = bool(data.get("enable_long_term_memory"))
 
     @staticmethod
     def _normalize_url_list(value) -> list[str]:
@@ -317,7 +326,7 @@ class RealtimeBridge:
             await self.current_audio_queue.put(None)
 
     async def _handle_text_input(self, data: dict):
-        """Handle text input and run avatar agent."""
+        """Handle text input and dispatch it to the shared tutor pipeline."""
         text = data.get("text", "")
         if not text:
             return
@@ -328,12 +337,18 @@ class RealtimeBridge:
         image_urls, file_urls = self._extract_attachment_urls(data)
         need_diagram = bool(data.get("need_diagram", False))
         self._need_diagram_default = need_diagram
+        self._handle_capability_flags(data)
+        raw_history = data.get("history")
+        history = raw_history if isinstance(raw_history, list) else None
         await self._handle_user_text(
             text,
-            source="text",
             image_urls=image_urls,
             file_urls=file_urls,
             need_diagram=need_diagram,
+            enable_search=self._enable_search_default,
+            generate_video=self._generate_video_default,
+            enable_long_term_memory=self._enable_long_term_memory_default,
+            history=history,
         )
 
     async def _handle_stop_speaking(self):
@@ -507,8 +522,11 @@ class RealtimeBridge:
                         asyncio.create_task(
                             self._handle_user_text(
                                 normalized,
-                                source="text",
                                 need_diagram=self._need_diagram_default,
+                                enable_search=self._enable_search_default,
+                                generate_video=self._generate_video_default,
+                                enable_long_term_memory=self._enable_long_term_memory_default,
+                                history=self._history_default,
                             )
                         )
             else:
@@ -629,12 +647,39 @@ class RealtimeBridge:
     async def _handle_user_text(
         self,
         user_text: str,
-        source: str = "text",
         image_urls: Optional[list[str]] = None,
         file_urls: Optional[list[str]] = None,
         need_diagram: bool = False,
+        enable_search: bool = False,
+        generate_video: bool = False,
+        enable_long_term_memory: bool = False,
+        history: Optional[list[dict]] = None,
     ):
-        """Core pipeline: user text -> agent -> frontend + avatar."""
+        """Serialize turns so one frontend response stream maps to one answer."""
+        async with self._turn_lock:
+            await self._run_user_text_turn(
+                user_text=user_text,
+                image_urls=image_urls,
+                file_urls=file_urls,
+                need_diagram=need_diagram,
+                enable_search=enable_search,
+                generate_video=generate_video,
+                enable_long_term_memory=enable_long_term_memory,
+                history=history,
+            )
+
+    async def _run_user_text_turn(
+        self,
+        user_text: str,
+        image_urls: Optional[list[str]] = None,
+        file_urls: Optional[list[str]] = None,
+        need_diagram: bool = False,
+        enable_search: bool = False,
+        generate_video: bool = False,
+        enable_long_term_memory: bool = False,
+        history: Optional[list[dict]] = None,
+    ):
+        """Run one completed turn through chat service and avatar playback."""
         from app.chat.service import get_chat_usecases, CHAT_MODULE_NAME
         from app.chat.request import ChatHistoryMessage
         from app.memory import MemoryService
@@ -644,55 +689,53 @@ class RealtimeBridge:
         # Keep memory module aligned with text AI pipeline to avoid
         # cross-module session permission errors.
         memory_layer = MemoryService(module=CHAT_MODULE_NAME)
-        attachments_payload = None
-        if image_urls or file_urls:
-            attachments_payload = json.dumps(
-                {"image_urls": image_urls, "file_urls": file_urls},
-                ensure_ascii=False,
-            )
-
         if not self.session_id:
             # 创建新会话
             session = await memory_layer.create_session(user_id=self.user_id)
             self.session_id = session.id
 
-        # 1. 保存用户消息
-        await memory_layer.save_message(
-            user_id=self.user_id,
-            session_id=self.session_id,
-            role="user",
-            content=user_text,
-            attachments=attachments_payload,
-        )
-
-        # 2. Reuse the same streaming mode as text AI for avatar dialogue.
+        # Use the same service-owned persistence and TutorAgent path as text chat.
         chat_uc = get_chat_usecases()
+        normalized_history: list[ChatHistoryMessage] = []
+        for item in history or []:
+            try:
+                normalized_history.append(ChatHistoryMessage(**item))
+            except Exception:
+                logger.debug("[Bridge] ignored malformed history item=%s", item)
+        if not normalized_history:
+            stored_messages = await memory_layer.list_messages(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                only_unexpired=False,
+            )
+            normalized_history = [
+                ChatHistoryMessage(role=message.role, content=message.content)
+                for message in stored_messages
+                if message.role in {"user", "assistant"} and str(message.content).strip()
+            ]
+        if not normalized_history or normalized_history[-1].role != "user":
+            normalized_history.append(ChatHistoryMessage(role="user", content=user_text))
         full_response = ""
         event_count = 0
         stream_failed = False
         fail_reason = ""
         last_diagram_payload = None
-        if self.frontend_ws:
-            await self._send_to_frontend({
-                "type": "diagram_debug",
-                "data": {
-                    "source": source,
-                    "need_diagram": bool(need_diagram),
-                    "phase": "start",
-                },
-            })
+        diagram_forwarded = False
         try:
             async def _consume_stream_events():
-                nonlocal event_count, full_response
+                nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
                 async for event in chat_uc.stream_chat_events(
                     user_id=self.user_id,
                     user_message=user_text,
-                    history=[ChatHistoryMessage(role="user", content=user_text)],
+                    history=normalized_history,
                     session_id=self.session_id,
                     image_urls=image_urls,
                     file_urls=file_urls,
-                    need_diagram=need_diagram,
-                    persist=False,
+                    need_teaching_diagram=need_diagram,
+                    enable_search=enable_search,
+                    generate_video=generate_video,
+                    enable_long_term_memory=enable_long_term_memory,
+                    persist=True,
                 ):
                     event_count += 1
                     if not self.frontend_ws:
@@ -727,8 +770,9 @@ class RealtimeBridge:
 
                     elif event_type == "diagram":
                         last_diagram_payload = payload
-                        if self.frontend_ws:
+                        if self.frontend_ws and not diagram_forwarded:
                             await self._send_to_frontend({"type": "diagram", "data": payload})
+                            diagram_forwarded = True
 
                     elif event_type == "complete":
                         if not full_response and isinstance(payload, dict):
@@ -738,10 +782,12 @@ class RealtimeBridge:
                             if full_response and self.frontend_ws:
                                 await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
                         if isinstance(payload, dict):
-                            diagram_payload = payload.get("diagram")
-                            if diagram_payload and self.frontend_ws:
+                            diagram_payload = payload.get("teaching_diagram") or payload.get("diagram")
+                            if diagram_payload:
                                 last_diagram_payload = diagram_payload
+                            if diagram_payload and self.frontend_ws and not diagram_forwarded:
                                 await self._send_to_frontend({"type": "diagram", "data": diagram_payload})
+                                diagram_forwarded = True
                     elif event_type == "done":
                         if isinstance(payload, dict):
                             maybe_text = self._repair_text_encoding(
@@ -754,12 +800,14 @@ class RealtimeBridge:
                             resources = payload.get("resources")
                             diagram_payload = None
                             if isinstance(resources, dict):
-                                diagram_payload = resources.get("diagram")
+                                diagram_payload = resources.get("teaching_diagram") or resources.get("diagram")
                             if not diagram_payload:
-                                diagram_payload = payload.get("diagram")
-                            if diagram_payload and self.frontend_ws:
+                                diagram_payload = payload.get("teaching_diagram") or payload.get("diagram")
+                            if diagram_payload:
                                 last_diagram_payload = diagram_payload
+                            if diagram_payload and self.frontend_ws and not diagram_forwarded:
                                 await self._send_to_frontend({"type": "diagram", "data": diagram_payload})
+                                diagram_forwarded = True
 
             # Do not enforce a fixed timeout here.
             # Long answers + diagram generation can legitimately exceed 60~120s.
@@ -789,17 +837,8 @@ class RealtimeBridge:
 
             # Always send completion marker when frontend socket is still alive.
             if self.frontend_ws:
-                if last_diagram_payload is not None:
+                if last_diagram_payload is not None and not diagram_forwarded:
                     await self._send_to_frontend({"type": "diagram", "data": last_diagram_payload})
-                await self._send_to_frontend({
-                    "type": "diagram_debug",
-                    "data": {
-                        "source": source,
-                        "need_diagram": bool(need_diagram),
-                        "diagram_generated": bool(last_diagram_payload),
-                        "phase": "end",
-                    },
-                })
                 await self._send_to_frontend({"type": "assistant_complete"})
 
             # 4. 触发数字人播报
@@ -815,37 +854,6 @@ class RealtimeBridge:
                         speech_rate=self._speech_rate,
                     )
                 )
-
-            # 4. 
-            if full_response:
-                await memory_layer.save_message(
-                    user_id=self.user_id,
-                    session_id=self.session_id,
-                    role="assistant",
-                    content=full_response,
-                )
-
-            # 5. 后处理：记忆更新 + 画像融合
-            if self.frontend_ws:
-                asyncio.create_task(self._post_avatar_pipeline(user_text, full_response))
-
-    async def _post_avatar_pipeline(self, user_msg: str, assistant_msg: str):
-        """Run async memory/profile post-processing."""
-        from app.memory import MemoryService
-        from app.chat.service import CHAT_MODULE_NAME
-
-        if not self.session_id:
-            return
-
-        try:
-            await MemoryService(module=CHAT_MODULE_NAME).after_turn(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                user_message=user_msg,
-                assistant_reply=assistant_msg,
-            )
-        except Exception as e:
-            logger.error("[Bridge] 后处理失败: %s", e)
 
     async def _send_to_frontend(self, data: dict):
         """Send message to frontend websocket."""
@@ -940,6 +948,3 @@ class AvatarBridgeManager:
 
 # 全局单例
 avatar_bridge_manager = AvatarBridgeManager()
-
-
-

@@ -118,7 +118,6 @@
       <div v-if="previewItem" class="preview-dialog-body">
         <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem" />
         <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem" />
-        <MarkdownView v-else-if="previewItem.type === 'diagram'" :result-data="previewItem" />
         <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
         <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem" />
         <PptView v-else-if="previewItem.type === 'ppt'" :result-data="previewItem" />
@@ -131,16 +130,16 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, VideoPlay, Monitor, Share, Download } from '@element-plus/icons-vue'
+import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, DataBoard, Share, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getGeneratedResourceDetail } from '@/api/ai'
-import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
 import MindmapView from '@/components/resource/MindmapView.vue'
 import MarkdownView from '@/components/resource/MarkdownView.vue'
 import QuizView from '@/components/resource/QuizView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
 import PptView from '@/components/resource/PptView.vue'
+import { getGeneratedResourceDetail } from '@/api/ai'
+import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
 
 const route = useRoute()
 const router = useRouter()
@@ -154,6 +153,10 @@ const previewItem = ref<ResourceItemDetail | null>(null)
 const previewTitle = computed(() => {
   if (!previewItem.value) return '资源预览'
   return previewItem.value.title || `${getAgentTypeName(previewItem.value.type)}资源`
+})
+
+onMounted(() => {
+  loadResource()
 })
 
 const loadResource = async () => {
@@ -210,11 +213,10 @@ const getAgentMeta = (type: string) => {
   const map: Record<string, { icon: any, color: string }> = {
     content: { icon: Document, color: 'tone-blue' },
     mindmap: { icon: Share, color: 'tone-purple' },
-    diagram: { icon: Monitor, color: 'tone-amber' },
     quiz: { icon: Edit, color: 'tone-emerald' },
     code: { icon: Cpu, color: 'tone-rose' },
     reading: { icon: Collection, color: 'tone-indigo' },
-    video: { icon: VideoPlay, color: 'tone-slate' }
+    ppt: { icon: DataBoard, color: 'tone-amber' }
   }
   return map[type] || { icon: Document, color: 'tone-slate' }
 }
@@ -226,8 +228,6 @@ const getAgentTypeName = (type: string) => {
     quiz: '测验题',
     code: '代码示例',
     reading: '阅读材料',
-    diagram: '图解',
-    video: '视频',
     ppt: 'PPT',
   }
   return map[type] || type
@@ -346,9 +346,6 @@ const formatTime = (time: string | null) => {
   return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
-onMounted(() => {
-  loadResource()
-})
 </script>
 
 <style scoped>

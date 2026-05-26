@@ -8,19 +8,12 @@ from typing import Any, Final
 
 from pydantic import BaseModel, Field
 
-from app.config import (
-    CHAT_BUDGET as _CFG_CHAT_BUDGET,
-    LTM_BUDGET as _CFG_LTM_BUDGET,
-    MSG_LIMIT as _CFG_MSG_LIMIT,
-    SUMMARY_BUDGET as _CFG_SUMMARY_BUDGET,
-)
-
+from pydantic import BaseModel, Field
 
 class ModuleName:
     MENTOR: Final[str] = "mentor"
     RESOURCE: Final[str] = "resource"
     AVATAR: Final[str] = "avatar"
-
 
 DIALOGUE_ROLES: Final[frozenset[str]] = frozenset({"user", "assistant"})
 MESSAGE_EXPIRE_DAYS: Final[int] = 7
@@ -32,12 +25,6 @@ SUMMARY_MESSAGE_THRESHOLD: Final[int] = 30
 SUMMARY_KEEP_RECENT: Final[int] = 10
 PROFILE_MIN_COVERAGE: Final[int] = 60
 MEMORY_UPDATE_COOLDOWN_SECONDS: Final[float] = 300.0
-
-MSG_LIMIT: int = _CFG_MSG_LIMIT
-CHAT_BUDGET: int = _CFG_CHAT_BUDGET
-LTM_BUDGET: int = _CFG_LTM_BUDGET
-SUMMARY_BUDGET: int = _CFG_SUMMARY_BUDGET
-PROFILE_BUDGET: int = 2000
 
 # 长期记忆周期触发阈值（每 N 轮 LLM 判断一次）
 LTM_PERIODIC_THRESHOLD: Final[int] = 10

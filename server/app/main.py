@@ -16,7 +16,7 @@ from app.path.api import router as path_router
 from app.resource.api import router as resource_router
 from app.avatar.api import router as avatar_router
 from app.infra.database import init_db
-from app.utils.response import HttpResponse
+from app.infra.response import HttpResponse
 
 
 @asynccontextmanager

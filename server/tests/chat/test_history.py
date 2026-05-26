@@ -24,10 +24,10 @@ class FakeMessage:
     created_at: datetime
     attachments: list[dict] | None = None
     tool_calls: list[dict] | None = None
-    diagram: dict | None = None
+    teaching_diagram: dict | None = None
 
 
-class FakeMemoryLayer:
+class FakeMemoryService:
     calls: list[dict] = []
 
     def __init__(self, *, module: str) -> None:
@@ -43,6 +43,7 @@ class FakeMemoryLayer:
                 role="assistant",
                 content="历史回答",
                 created_at=datetime(2026, 4, 1, 8, 0),
+                teaching_diagram={"type": "journey", "title": "握手过程"},
             )
         ]
 
@@ -50,11 +51,12 @@ class FakeMemoryLayer:
 def test_chat_history_does_not_filter_out_expired_short_term_messages(monkeypatch):
     from app.chat import service
 
-    FakeMemoryLayer.calls = []
-    monkeypatch.setattr(service, "MemoryLayer", FakeMemoryLayer)
+    FakeMemoryService.calls = []
+    monkeypatch.setattr(service, "MemoryService", FakeMemoryService)
 
-    store = service.ConversationStore()
+    store = service.ConversationStore(memory_service=FakeMemoryService(module="mentor"))
     items = asyncio.run(store.get_history(user_id=7, session_id="s-1"))
 
     assert items[0].content == "历史回答"
-    assert FakeMemoryLayer.calls[0]["only_unexpired"] is False
+    assert items[0].teaching_diagram == {"type": "journey", "title": "握手过程"}
+    assert FakeMemoryService.calls[0]["only_unexpired"] is False

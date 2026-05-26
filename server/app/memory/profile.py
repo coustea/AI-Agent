@@ -243,10 +243,19 @@ class ProfileBuilder:
             dims = make_default_profile_json()["dimensions"]
         courses_text = "、".join(onboarding.get("courses", []))
         lang_text = f"，常用编程语言为 {onboarding['preferred_language']}" if onboarding.get("preferred_language") else ""
+
+        # 提取学校及层次信息并写入画像的知识基础维度
+        school = onboarding.get("school")
+        school_level = onboarding.get("school_level")
+        school_info = ""
+        if school:
+            level_suffix = f"（{school_level}）" if school_level else ""
+            school_info = f"就读于 {school}{level_suffix}，"
+
         dims["knowledge_foundation"] = {
             "name": "知识基础",
             "confidence": 0.85,
-            "summary": f"{onboarding.get('education_level')} {onboarding.get('major')} 学生，正在学习 {courses_text}{lang_text}。",
+            "summary": f"{school_info}{onboarding.get('education_level')} {onboarding.get('major')} 学生，正在学习 {courses_text}{lang_text}。",
             "evidence": ["来自首次登录学习资料"],
             "updated_at": _now_iso(),
         }
@@ -275,10 +284,34 @@ class ProfileBuilder:
             }
         profile["student_profile"] = onboarding
         profile["dimensions"] = dims
-        profile["recommended_strategy"] = [
+
+        # 动态设计推荐辅导策略
+        strategy = [
             f"优先围绕 {courses_text} 生成学习资源",
             f"资源难度参考 {onboarding.get('education_level')} / {onboarding.get('grade')} 阶段",
         ]
+
+        # 判断是否为顶尖高校（好学校）并定制辅导策略
+        is_top_school = False
+        if school_level:
+            top_tags = {"985", "211", "双一流", "一流大学", "一流学科"}
+            if any(tag in str(school_level) for tag in top_tags):
+                is_top_school = True
+
+        if is_top_school:
+            strategy.append(
+                f"该生就读于顶尖高校（{school}），基础与基本素养优良。辅导策略上应提供深度底层原理解析（如源码剖析、高并发高性能挑战），多设计启发式与边界条件的探讨，提高辅导难度，避免浅显描述。"
+            )
+        else:
+            if school:
+                level_desc = f"（{school_level}）" if school_level else ""
+                strategy.append(
+                    f"该生就读于普通院校（{school}{level_desc}），辅导时应注重夯实核心基础，多提供直观生动的比喻、实际应用场景及循序渐进的代码推演引导。"
+                )
+            else:
+                strategy.append("根据院校基础与认知偏好，采取常规引导式、循序渐进的辅导难度。")
+
+        profile["recommended_strategy"] = strategy
         profile["last_update_reason"] = "基于首次登录学习资料生成画像"
         profile["overall_confidence"] = _avg_confidence(profile)
         return profile

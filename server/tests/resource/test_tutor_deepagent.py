@@ -1,423 +1,325 @@
+"""Tests for TutorAgent internal nodes and chat_stream.
+
+The TutorAgent has been refactored to use LangGraph orchestration.
+These tests verify the key node methods, constants, and schemas.
+"""
+
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock
 
-from langchain_core.messages import AIMessage, HumanMessage
-from pydantic import BaseModel
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-
-class FakeResponse:
-    def __init__(self, content):
-        self.content = content
+from app.chat.request import ChatHistoryMessage
+from app.chat.schemas import TutorAgentContext
 
 
-class FakeLlmManager:
-    def __init__(self, outputs):
-        self.outputs = list(outputs)
-        self.calls = []
-
-    async def ainvoke_structured(self, model_type, schema, messages, **kwargs):
-        self.calls.append(
-            {
-                "model_type": model_type,
-                "schema": schema,
-                "messages": messages,
-                "structured_kwargs": kwargs,
-            }
-        )
-        payload = self.outputs.pop(0)
-        if isinstance(payload, Exception):
-            raise payload
-        if isinstance(payload, BaseModel):
-            return payload
-        return schema.model_validate(payload)
-
-    async def ainvoke(self, model_type, messages, *, model_kwargs=None, **_kwargs):
-        self.calls.append(
-            {
-                "model_type": model_type,
-                "messages": messages,
-                "model_kwargs": model_kwargs or {},
-            }
-        )
-        payload = self.outputs.pop(0)
-        if isinstance(payload, Exception):
-            raise payload
-        if isinstance(payload, str):
-            return FakeResponse(payload)
-        if isinstance(payload, BaseModel):
-            return FakeResponse(payload.model_dump_json(by_alias=True, ensure_ascii=False))
-        return FakeResponse(json.dumps(payload, ensure_ascii=False))
+def _make_context(**overrides: Any) -> TutorAgentContext:
+    """Create a minimal TutorAgentContext with sensible defaults."""
+    defaults = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "system_prompt": "system",
+        "profile_context": "profile",
+        "long_term_memory_context": "memory",
+        "session_summary_context": "summary",
+        "recent_chat_context": "recent",
+        "file_context": "files",
+        "attachment_analysis_context": "",
+    }
+    defaults.update(overrides)
+    return TutorAgentContext(**defaults)
 
 
-class FakeCtxService:
-    async def save_message(self, **_kwargs):
-        return None
-
-    async def build_profile_context(self, _user_id):
-        return ""
-
-    async def build_long_term_memory_context(self, _user_id):
-        return ""
-
-    async def build_recent_chat_context(
-        self,
-        *,
-        user_id,
-        session_id,
-        user_message,
-        image_urls,
-        file_urls,
-    ):
-        return [HumanMessage(content=user_message)], ""
-
-    @staticmethod
-    def build_file_context(_image_urls, _file_urls):
-        return ""
-
-    async def post_turn_pipeline(self, **_kwargs):
-        return None
-
-
-def test_diagram_generate_node_skips_when_disabled():
+def test_tutor_agent_init_stores_context():
+    """TutorAgent.__init__ stores the provided context and creates llm."""
     from app.chat.agent import TutorAgent
 
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager([])
+    context = _make_context()
+    agent = TutorAgent(context)
+
+    assert agent.context is context
+    assert agent.context.user_id == 7
+    assert agent.context.session_id == "session-1"
+
+
+def test_classify_node_routes_attachment_with_search(monkeypatch):
+    """_classify_node routes attachment+search to search path."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context())
 
     state = {
-        "need_diagram": False,
-        "messages": [HumanMessage(content="TCP 三次握手是什么？")],
-        "answer_text": "TCP 三次握手用于建立可靠连接。",
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="结合附件和最新资料解释 Transformer")],
+        "file_urls": ["/uploads/transformer.pdf"],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": False,
+        "resource_mode": "none",
     }
 
-    result = asyncio.run(tutor._diagram_generate_node(state))
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
 
-    assert result["diagram"] is None
-    assert tutor.llm_manager.calls == []
+    assert result["route"] == "search"
+    assert result["execution_mode"] == "search"
 
 
-def test_diagram_generate_node_generates_sequence_when_requested():
+def test_classify_node_routes_direct_when_no_search_no_attachments(monkeypatch):
+    """_classify_node routes to direct when no search and no attachments."""
     from app.chat.agent import TutorAgent
-    from app.chat.schemas import DiagramDecision
 
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager(
-        [
-            DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
-            "sequenceDiagram\n    participant client as 客户端\n    participant server as 服务器\n    client->>server: SYN",
+    agent = TutorAgent(_make_context(enable_search=False))
+
+    state = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="什么是 TCP 三次握手？")],
+        "file_urls": [],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": False,
+        "resource_mode": "none",
+    }
+
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
+
+    assert result["route"] == "direct"
+    assert result["execution_mode"] == "direct"
+
+
+def test_classify_node_routes_search_for_fresh_information_request(monkeypatch):
+    """_classify_node routes fresh-information requests to search deterministically."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context(enable_search=False))
+
+    state = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="最新AI新闻有哪些？")],
+        "file_urls": [],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": False,
+        "resource_mode": "none",
+    }
+
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
+
+    assert result["route"] == "search"
+    assert result["execution_mode"] == "search"
+
+
+def test_classify_node_does_not_enable_diagram_for_concept_question():
+    """A concept question must not gain a diagram without an explicit request."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context())
+    state = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="文件管理的核心机制是什么？")],
+        "file_urls": [],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": False,
+        "resource_mode": "none",
+    }
+
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
+
+    assert "need_teaching_diagram" not in result
+
+
+def test_classify_node_enables_diagram_for_explicit_user_request():
+    """Explicit visualization wording activates a teaching diagram."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context())
+    state = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="请用图解说明文件管理流程")],
+        "file_urls": [],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": False,
+        "resource_mode": "none",
+    }
+
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
+
+    assert result["need_teaching_diagram"] is True
+
+
+def test_classify_node_keeps_frontend_diagram_selection_enabled():
+    """The UI switch remains an authoritative explicit request."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context())
+    state = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="文件管理是什么？")],
+        "file_urls": [],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": True,
+        "resource_mode": "none",
+    }
+
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
+
+    assert "need_teaching_diagram" not in result
+
+
+def test_teaching_diagram_generate_node_exists():
+    """Verify _teaching_diagram_generate_node method exists on TutorAgent."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context())
+    assert hasattr(agent, "_teaching_diagram_generate_node")
+    assert callable(getattr(agent, "_teaching_diagram_generate_node"))
+
+
+def test_graph_node_names_include_all_current_nodes():
+    """Verify GRAPH_NODE_NAMES includes all nodes in the current workflow."""
+    from app.chat.agent import GRAPH_NODE_NAMES
+
+    expected = {"classify", "direct_answer", "search_node", "spark_summary", "attachment_answer", "teaching_diagram_generate"}
+    assert GRAPH_NODE_NAMES == expected
+
+
+def test_answer_node_names_subset_of_graph_node_names():
+    """ANSWER_NODE_NAMES should be a subset of GRAPH_NODE_NAMES."""
+    from app.chat.agent import ANSWER_NODE_NAMES, GRAPH_NODE_NAMES
+
+    assert ANSWER_NODE_NAMES <= GRAPH_NODE_NAMES
+    assert ANSWER_NODE_NAMES == {"direct_answer", "spark_summary", "attachment_answer"}
+
+
+def test_routing_no_longer_defines_llm_intent_schema():
+    """Routing is deterministic and does not maintain an LLM classifier schema."""
+    from app.chat import agent as agent_module
+
+    assert not hasattr(agent_module, "Intent")
+
+
+def test_chat_stream_signature():
+    """Verify chat_stream accepts history parameter."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context())
+    # Verify chat_stream method exists and accepts history
+    assert hasattr(agent, "chat_stream")
+    import inspect
+    sig = inspect.signature(agent.chat_stream)
+    assert "history" in sig.parameters
+    # chat_stream should NOT require image_urls or file_urls as parameters
+    assert "image_urls" not in sig.parameters
+    assert "file_urls" not in sig.parameters
+
+
+def test_classify_node_skips_llm_route_call_for_stable_concept_question():
+    """Stable learning questions must not pay for a model classification round trip."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context(enable_search=False))
+    agent.llm.ainvoke_json = AsyncMock()
+    state = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="操作系统中的处理机调度是什么？")],
+        "file_urls": [],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": False,
+        "resource_mode": "none",
+    }
+
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
+
+    assert result["route"] == "direct"
+    agent.llm.ainvoke_json.assert_not_awaited()
+
+
+def test_classify_node_detects_explicit_fresh_information_without_llm():
+    """Fresh-information wording deterministically enables the search path."""
+    from app.chat.agent import TutorAgent
+
+    agent = TutorAgent(_make_context(enable_search=False))
+    agent.llm.ainvoke_json = AsyncMock()
+    state = {
+        "user_id": 7,
+        "session_id": "session-1",
+        "messages": [HumanMessage(content="请查一下今天最新发布的 Linux 调度更新")],
+        "file_urls": [],
+        "image_urls": [],
+        "enable_search": False,
+        "need_teaching_diagram": False,
+        "resource_mode": "none",
+    }
+
+    import asyncio
+    result = asyncio.run(agent._classify_node(state))
+
+    assert result["route"] == "search"
+    assert result["enable_search"] is True
+    agent.llm.ainvoke_json.assert_not_awaited()
+
+
+def test_chat_stream_emits_incremental_answer_tokens_from_streaming_llm():
+    """The UI receives chunks without truncating the teaching response budget."""
+    from app.chat.agent import TutorAgent
+
+    class StreamingLLM:
+        def __init__(self) -> None:
+            self.stream_kwargs = []
+
+        def bind_tools(self, tools: Any, **kwargs: Any) -> "StreamingLLM":
+            return self
+
+        async def astream(self, *_args, **kwargs):
+            self.stream_kwargs.append(kwargs)
+            yield AIMessageChunk(content="处理机调度")
+            yield AIMessageChunk(content="负责分配 CPU 时间。")
+
+        async def ainvoke(self, *_args, **_kwargs):
+            raise AssertionError("answer path must stream instead of waiting for ainvoke")
+
+    async def collect_events():
+        agent = TutorAgent(_make_context(enable_search=False))
+        streaming_llm = StreamingLLM()
+        agent.llm = streaming_llm
+        events = [
+            event
+            async for event in agent.chat_stream(
+                [ChatHistoryMessage(role="user", content="处理机调度是什么？")]
+            )
         ]
-    )
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
+        return events, streaming_llm
 
-    state = {
-        "need_diagram": True,
-        "messages": [HumanMessage(content="TCP 三次握手是什么？请配图解释")],
-        "answer_text": "TCP 三次握手包括 SYN、SYN-ACK、ACK。",
-        "profile_context": "",
-        "fact_context": "",
-        "recent_chat_context": "",
-        "attachment_analysis_context": "",
-    }
+    import asyncio
+    events, streaming_llm = asyncio.run(collect_events())
+    token_values = [event["data"] for event in events if event["event"] == "token"]
 
-    result = asyncio.run(tutor._diagram_generate_node(state))
-
-    assert tutor.llm_manager.calls[0]["model_type"] == "spark_max"
-    assert tutor.llm_manager.calls[0]["structured_kwargs"]["strict"] is True
-    assert "structured_kwargs" not in tutor.llm_manager.calls[1]
-    assert result["diagram"]["type"] == "sequence"
-    assert result["diagram"]["render"]["engine"] == "mermaid"
-    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
-    assert "client->>server: SYN" in result["diagram"]["render"]["source"]
-
-
-def test_diagram_generate_node_accepts_mermaid_fenced_output():
-    from app.chat.agent import TutorAgent
-    from app.chat.schemas import DiagramDecision
-
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager(
-        [
-            DiagramDecision(need_diagram=True, diagram_type="hierarchy", reason="适合层级图"),
-            "```mermaid\ngraph TD\n    root[计算机网络] --> tcpip[TCP/IP]\n```",
-        ]
-    )
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-
-    state = {
-        "need_diagram": True,
-        "messages": [HumanMessage(content="输出一份关于计算机网络的知识图解")],
-        "answer_text": "计算机网络可从体系结构、传输机制和应用协议来理解。",
-        "profile_context": "",
-        "fact_context": "",
-        "recent_chat_context": "",
-        "attachment_analysis_context": "",
-    }
-
-    result = asyncio.run(tutor._diagram_generate_node(state))
-
-    assert result["diagram"]["type"] == "hierarchy"
-    assert result["diagram"]["render"]["source"] == "graph TD\n    root[计算机网络] --> tcpip[TCP/IP]"
-
-
-def test_diagram_generate_node_uses_last_ai_message_when_answer_text_missing():
-    from app.chat.agent import TutorAgent
-    from app.chat.schemas import DiagramDecision
-
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager(
-        [
-            DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
-            "sequenceDiagram\n    client->>server: SYN",
-        ]
-    )
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-
-    state = {
-        "need_diagram": True,
-        "messages": [
-            HumanMessage(content="TCP 三次握手是什么？请配图解释"),
-            AIMessage(content="客户端发送 SYN，服务器返回 SYN-ACK，客户端发送 ACK。"),
-        ],
-        "profile_context": "",
-        "fact_context": "",
-        "recent_chat_context": "",
-        "attachment_analysis_context": "",
-    }
-
-    result = asyncio.run(tutor._diagram_generate_node(state))
-
-    assert result["diagram"]["type"] == "sequence"
-    assert result["diagram"]["render"]["source"].startswith("sequenceDiagram")
-
-
-def test_diagram_generate_node_keeps_llm_authored_mermaid_sequence():
-    from app.chat.agent import TutorAgent
-    from app.chat.schemas import DiagramDecision
-
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager(
-        [
-            DiagramDecision(need_diagram=True, diagram_type="sequence", reason="适合时序图"),
-            "sequenceDiagram\n"
-            "    participant client as 客户端\n"
-            "    participant server as 服务端\n"
-            "    client->>server: SYN seq=x 请求建立连接\n"
-            "    server->>client: SYN ACK seq=y ack=x+1\n"
-            "    client->>server: ACK ack=y+1 连接建立",
-        ]
-    )
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-
-    state = {
-        "need_diagram": True,
-        "messages": [HumanMessage(content="请用图解说明 TCP 三次握手")],
-        "answer_text": "客户端先发 SYN，服务端回 SYN+ACK，客户端再发 ACK。",
-        "profile_context": "",
-        "fact_context": "",
-        "recent_chat_context": "",
-        "attachment_analysis_context": "",
-    }
-
-    result = asyncio.run(tutor._diagram_generate_node(state))
-
-    assert result["diagram"]["type"] == "sequence"
-    source = result["diagram"]["render"]["source"]
-    assert "SYN seq=x 请求建立连接" in source
-    assert "SYN ACK seq=y ack=x+1" in source
-    assert "ACK ack=y+1 连接建立" in source
-
-
-def test_decide_diagram_returns_none_when_user_requested_diagram_without_valid_type():
-    from app.chat.agent import TutorAgent
-    from app.chat.schemas import DiagramDecision
-
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager(
-        [
-            DiagramDecision(need_diagram=False, diagram_type=None, reason="简单问题"),
-        ]
-    )
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-
-    decision = asyncio.run(
-        tutor._decide_diagram(
-            question="TCP 三次握手是什么？请配图解释",
-            answer="客户端向服务器发送 SYN，服务器返回 SYN-ACK，客户端再发送 ACK。",
-            state={"need_diagram": True},
-        )
-    )
-
-    assert decision.need_diagram is False
-    assert decision.diagram_type is None
-
-
-def test_diagram_generate_node_returns_none_when_structured_output_is_unavailable():
-    from app.chat.agent import TutorAgent
-
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager([RuntimeError("This response_format type is unavailable now")])
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-
-    state = {
-        "need_diagram": True,
-        "messages": [
-            HumanMessage(content="TCP 三次握手是什么？请配图解释"),
-            AIMessage(content="客户端发送 SYN，服务器返回 SYN-ACK，客户端发送 ACK。"),
-        ],
-        "profile_context": "",
-        "fact_context": "",
-        "recent_chat_context": "",
-        "attachment_analysis_context": "",
-    }
-
-    result = asyncio.run(tutor._diagram_generate_node(state))
-
-    assert result["diagram"] is None
-
-
-def test_diagram_generate_node_returns_none_when_tool_choice_is_unsupported():
-    from app.chat.agent import TutorAgent
-
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager([RuntimeError("spark does not support this tool_choice")])
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-
-    state = {
-        "need_diagram": True,
-        "messages": [
-            HumanMessage(content="TCP 三次握手是什么？请配图解释"),
-            AIMessage(content="客户端发送 SYN，服务器返回 SYN-ACK，客户端发送 ACK。"),
-        ],
-        "profile_context": "",
-        "fact_context": "",
-        "recent_chat_context": "",
-        "attachment_analysis_context": "",
-    }
-
-    result = asyncio.run(tutor._diagram_generate_node(state))
-    assert result["diagram"] is None
-
-
-def test_diagram_generate_node_failure_does_not_raise():
-    from app.chat.agent import TutorAgent
-
-    tutor = TutorAgent.__new__(TutorAgent)
-    tutor.llm_manager = FakeLlmManager([RuntimeError("structured output unavailable")])
-    tutor.diagram_model_kwargs = {"temperature": 0.1, "streaming": False, "max_tokens": 1600}
-
-    state = {
-        "need_diagram": True,
-        "messages": [HumanMessage(content="进程和线程有什么区别？")],
-        "answer_text": "进程是资源分配单位，线程是调度单位。",
-    }
-
-    result = asyncio.run(tutor._diagram_generate_node(state))
-
-    assert result["diagram"] is None
-
-
-def test_chat_stream_done_event_includes_diagram_resource(monkeypatch):
-    from app.chat import agent as chat_agent
-
-    diagram = {
-        "type": "compare",
-        "title": "进程和线程",
-        "summary": "对比资源和调度差异",
-        "spec": {
-            "items": [
-                {"label": "进程", "description": "资源分配单位", "points": ["独立地址空间"]},
-                {"label": "线程", "description": "CPU调度单位", "points": ["共享进程资源"]},
-            ],
-            "dimensions": ["资源", "调度"],
-        },
-        "render": {
-            "engine": "mermaid",
-            "format": "text",
-            "source": "flowchart LR\n    item_1[\"进程\"]\n    item_2[\"线程\"]",
-        },
-    }
-
-    class FakeGraph:
-        async def astream_events(self, _initial_state, **_kwargs):
-            yield {"event": "on_chain_start", "name": "classify"}
-            yield {
-                "event": "on_chain_end",
-                "name": "classify",
-                "data": {"output": {"route": "direct", "execution_mode": "direct"}},
-            }
-            yield {"event": "on_chain_start", "name": "direct_answer"}
-            yield {
-                "event": "on_chat_model_stream",
-                "name": "ChatSparkLLM",
-                "metadata": {"langgraph_node": "direct_answer"},
-                "data": {"chunk": AIMessage(content="这是")},
-            }
-            yield {
-                "event": "on_chat_model_stream",
-                "name": "ChatSparkLLM",
-                "metadata": {"langgraph_node": "direct_answer"},
-                "data": {"chunk": AIMessage(content="最终整合后的回答")},
-            }
-            yield {
-                "event": "on_chain_end",
-                "name": "direct_answer",
-                "data": {
-                    "output": {
-                        "messages": [AIMessage(content="这是最终整合后的回答")],
-                        "answer_text": "这是最终整合后的回答",
-                        "termination_reason": "direct_answer_done",
-                    }
-                },
-            }
-            yield {"event": "on_chain_start", "name": "diagram_generate"}
-            yield {
-                "event": "on_chain_end",
-                "name": "diagram_generate",
-                "data": {"output": {"diagram": diagram}},
-            }
-
-    tutor = chat_agent.TutorAgent.__new__(chat_agent.TutorAgent)
-    tutor.memory_layer = FakeCtxService()
-    tutor.graph = FakeGraph()
-    tutor._background_tasks = set()
-    tutor._spawn_background = lambda coro, **_kwargs: coro.close()
-
-    async def fake_ensure_graph():
-        return None
-
-    tutor._ensure_graph = fake_ensure_graph
-
-    events = []
-
-    async def collect():
-        async for event in tutor.chat_stream(
-            user_id=1,
-            user_message="进程和线程有什么区别？",
-            session_id="s1",
-            need_diagram=True,
-        ):
-            events.append(event)
-
-    asyncio.run(collect())
-
-    token_events = [event for event in events if event["event"] == "token"]
-    status_events = [event for event in events if event["event"] == "status"]
-    done_events = [event for event in events if event["event"] == "done"]
-
-    assert token_events == [
-        {"event": "token", "data": "这是"},
-        {"event": "token", "data": "最终整合后的回答"},
-    ]
-    assert status_events[-1]["data"]["stage"] == "diagram_generate"
-    assert done_events[0]["data"]["resources"]["diagram"]["type"] == "compare"
-    assert done_events[0]["data"]["resources"]["diagram"]["render"]["engine"] == "mermaid"
-    assert done_events[0]["data"]["resources"]["video"] is None
+    assert token_values == ["处理机调度", "负责分配 CPU 时间。"]
+    assert events[-1]["data"]["full_response"] == "处理机调度负责分配 CPU 时间。"
+    assert "max_tokens" not in streaming_llm.stream_kwargs[0]

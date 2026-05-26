@@ -11,11 +11,12 @@ from app.auth.security import get_current_user
 from app.auth.service import auth_usecases
 from app.infra.database import get_session
 from app.infra.models import User
-from app.utils.paths import AVATAR_DIR
-from app.utils.response import HttpResponse
+from app.infra.paths import AVATAR_DIR
+from app.infra.response import HttpResponse
+from app.config import DEBUG
 
 router = APIRouter()
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=not DEBUG)
 
 
 @router.post("")
@@ -43,11 +44,13 @@ async def login(
 @router.delete("/auth")
 async def logout(
     background_tasks: BackgroundTasks,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    await auth_usecases.logout(session, credentials.credentials)
+    token = credentials.credentials if credentials else ""
+    if token:
+        await auth_usecases.logout(session, token)
     background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)
     return HttpResponse.success(message="退出登录成功")
 

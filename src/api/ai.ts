@@ -111,7 +111,7 @@ export interface CoursePathNodeDTO {
   prerequisites: string[]
   mastery_target: string | null
   estimated_minutes: number
-  difficulty: number
+  difficulty: string | null
   recommendation_reason: string | null
   resource_id: number | null
 }
@@ -132,10 +132,12 @@ export interface CoursePathResponse {
   created_at: string
 }
 
-export interface PathPlanFeedbackParams {
-  feedback: string
-  weak_points?: string[]
-  resource_id?: number | null
+export interface GenerateCoursePathParams {
+  goal: string
+  topic?: string
+  module?: string
+  current_knowledge?: string[]
+  preferences?: Record<string, unknown>
 }
 
 export function getActiveCoursePath(module = 'mentor') {
@@ -144,17 +146,13 @@ export function getActiveCoursePath(module = 'mentor') {
   })
 }
 
-export function generateCoursePath(goal: string, module = 'mentor') {
-  return http.post<ApiResponse<CoursePathResponse>>('/ai/path-plan/generate', {
-    goal,
-    module,
-  })
+export function generateCoursePath(params: GenerateCoursePathParams) {
+  return http.post<ApiResponse<CoursePathResponse>>('/ai/path-plan/generate', params)
 }
 
 export interface PathNodeResourceRequest {
-  learning_scenario: string
   selected_agents: {
-    agent_id: string
+    agent_id: 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt'
     enabled: boolean
     priority: number
   }[]
@@ -172,8 +170,12 @@ export function generatePathNodeResources(
   )
 }
 
-export function applyPathFeedback(params: PathPlanFeedbackParams) {
-  return http.post<ApiResponse<CoursePathResponse>>('/ai/path-plan/feedback', params)
+export function startCoursePathNode(nodeId: number) {
+  return http.post<ApiResponse<CoursePathResponse>>(`/ai/path-plan/nodes/${nodeId}/start`)
+}
+
+export function completeCoursePathNode(nodeId: number) {
+  return http.post<ApiResponse<CoursePathResponse>>(`/ai/path-plan/nodes/${nodeId}/complete`)
 }
 
 // ==========================================

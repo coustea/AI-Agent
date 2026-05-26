@@ -35,7 +35,7 @@ AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "reading", "pp
 # 请求模型
 # ======================================================================
 
-LearningScenario = Literal["exam_prep", "daily_review", "project_practice", "self_study"]
+LearningScenario = Literal["exam_prep", "daily_review", "project_practice", "self_study", "path_learning"]
 
 
 class ResourceAgentId(str, Enum):
@@ -278,6 +278,10 @@ class GeneratedResourceItem(BaseModel):
     summary_data: dict[str, Any] = Field(default_factory=dict)
     execution_report: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    status: str = "completed"
+    error_message: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class StudyPathStep(BaseModel):

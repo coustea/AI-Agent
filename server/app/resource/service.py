@@ -39,13 +39,12 @@ class ResourceUsecases:
         # LLM workers run concurrently, but a single AsyncSession must not commit concurrently.
         self._write_lock = asyncio.Lock()
 
-    async def create_resource(
+    def _new_resource_record(
         self,
         user_id: int,
         request: ResourceGenerationRequest,
     ) -> GeneratedResource:
-        """创建资源记录。"""
-        resource = GeneratedResource(
+        return GeneratedResource(
             user_id=user_id,
             learning_need=request.learning_need,
             personalization={},
@@ -53,6 +52,14 @@ class ResourceUsecases:
             agent_configs=request.agent_configs.model_dump(mode="json"),
             status="pending",
         )
+
+    async def create_resource(
+        self,
+        user_id: int,
+        request: ResourceGenerationRequest,
+    ) -> GeneratedResource:
+        """创建资源记录。"""
+        resource = self._new_resource_record(user_id, request)
         self.session.add(resource)
         try:
             await self.session.commit()
@@ -71,27 +78,26 @@ class ResourceUsecases:
         node_id: int | None = None,
         profile: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """统一入口：创建资源任务记录、读取画像、返回启动信息。
+        """统一入口：创建资源任务记录，并原子绑定路径节点任务。
 
         实际后台任务调度由 API 层负责（需要 FastAPI BackgroundTasks）。
         """
-        resource_record = await self.create_resource(user_id=user_id, request=request)
-        resource_id = int(getattr(resource_record, "id", 0) or 0)
-
-        # Read profile if not provided
-        if profile is None:
-            from app.memory.service import MemoryService
-            memory_service = MemoryService(module="mentor")
-            profile_record = await memory_service.get_profile(user_id=user_id)
-            profile = profile_record.model_dump(exclude_none=True) if profile_record else {}
-
-        # Set node to generating if path-driven
-        if node_id:
-            from app.infra.models import CoursePathNode
-            node = await self.session.get(CoursePathNode, node_id)
-            if node:
-                node.resource_status = "generating"
-                await self.session.commit()
+        resource_record = self._new_resource_record(user_id, request)
+        self.session.add(resource_record)
+        try:
+            await self.session.flush()
+            resource_id = int(getattr(resource_record, "id", 0) or 0)
+            if node_id is not None:
+                await self._bind_active_path_resource(
+                    user_id=user_id,
+                    node_id=node_id,
+                    resource_id=resource_id,
+                )
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
+        await self.session.refresh(resource_record)
 
         return {
             "resource_id": resource_id,
@@ -99,6 +105,42 @@ class ResourceUsecases:
             "node_id": node_id,
             "source": source,
         }
+
+    async def _bind_active_path_resource(
+        self,
+        *,
+        user_id: int,
+        node_id: int,
+        resource_id: int,
+    ) -> None:
+        """Bind the current task immediately so path retries reuse it."""
+        from app.infra.models import CoursePathNode, CoursePathResourceBinding
+
+        node = await self.session.get(CoursePathNode, node_id)
+        if node is None or node.user_id != user_id:
+            raise ValueError("路径节点不存在或不属于当前用户")
+        node.resource_status = "generating"
+
+        binding_stmt = (
+            select(CoursePathResourceBinding)
+            .where(
+                CoursePathResourceBinding.node_id == node_id,
+                CoursePathResourceBinding.user_id == user_id,
+            )
+            .order_by(col(CoursePathResourceBinding.created_at).desc())
+        )
+        binding = (await self.session.exec(binding_stmt)).first()
+        if binding:
+            binding.resource_id = resource_id
+            binding.resource_item_id = None
+        else:
+            self.session.add(
+                CoursePathResourceBinding(
+                    user_id=user_id,
+                    node_id=node_id,
+                    resource_id=resource_id,
+                )
+            )
 
     def _initial_workflow_progress(self, selected_agents: list[str]) -> dict[str, Any]:
         nodes = ["planning", *selected_agents, "review", "bundle"]
@@ -488,6 +530,10 @@ class ResourceUsecases:
             summary_data=envelope.get("summary_data") or {},
             execution_report=item.execution_report,
             metadata=envelope.get("metadata") or item.metadata_json or {},
+            status=item.status,
+            error_message=item.error_message,
+            created_at=item.created_at.isoformat() if item.created_at else None,
+            updated_at=item.updated_at.isoformat() if item.updated_at else None,
         )
 
     def _db_item_to_worker_result(self, item: GeneratedResourceItemModel) -> WorkerResult:
