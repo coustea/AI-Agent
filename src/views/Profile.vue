@@ -59,47 +59,17 @@
         </div>
       </div>
 
-      <div class="bento-card bento-span-2 history-card">
-        <div class="card-header-flex">
-          <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
-          <el-radio-group v-model="historyFilter" size="small" aria-label="资源过滤">
-            <el-radio-button label="全部" />
-            <el-radio-button label="已完成" />
-          </el-radio-group>
+      <div class="bento-card bento-span-3 combined-profile-card">
+        <div class="card-header-flex main-card-header">
+          <h4 class="card-title"><el-icon><User /></el-icon> 学习画像</h4>
+          <div class="profile-meta-tags" v-if="profileMetadata">
+            <el-tooltip content="学习时间越久等级越高" placement="top">
+              <el-tag size="small" type="success" style="cursor: help">V{{ profileMetadata.version }}</el-tag>
+            </el-tooltip>
+          </div>
         </div>
-
-        <el-table
-            :data="filteredTableData"
-            v-loading="resourceHistoryLoading"
-            height="260"
-            style="width: 100%"
-            :header-cell-style="{background:'#F8FAFC', color:'#64748B'}"
-        >
-          <el-table-column label="任务名称 / 学习主题" min-width="150" show-overflow-tooltip>
-            <template #default="scope">
-              <div class="task-title-cell">
-                <span>{{ scope.row.title }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="80">
-            <template #default="scope">
-              <el-tag :type="getStatusType(scope.row.status)" size="small" class="custom-tag">{{ scope.row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="time" label="时间" width="100" />
-          <el-table-column label="操作" width="60" fixed="right">
-            <template #default="scope">
-              <el-button link type="primary" @click="viewResourceDetail(scope.row)">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-
-      <div class="bento-card profile-info-card">
-        <div class="card-header-flex">
-          <h4 class="card-title">学习画像资料</h4>
-        </div>
+        <div class="combined-profile-layout">
+          <div class="combined-left-pane">
         <div class="profile-info-list">
           <div class="profile-info-row">
             <span><el-icon><Reading /></el-icon> 学历层次</span>
@@ -161,18 +131,12 @@
             <strong v-else>未填写</strong>
           </div>
         </div>
-      </div>
-
-      <div class="bento-card bento-span-2 complete-profile-card">
-        <div class="card-header-flex">
-          <h4 class="card-title"><el-icon><User /></el-icon> 完整学习画像</h4>
-          <div class="profile-meta-tags" v-if="profileMetadata">
-            <el-tag size="small" type="success">V{{ profileMetadata.version }}</el-tag>
-            <el-tag size="small" type="info">置信度: {{ profileMetadata.confidence }}%</el-tag>
           </div>
-        </div>
 
-        <el-tabs v-model="profileTab" class="profile-tabs-modern">
+          <div class="combined-divider"></div>
+
+          <div class="combined-right-pane">
+            <el-tabs v-model="profileTab" class="profile-tabs-modern">
           <el-tab-pane label="能力维度" name="dimensions">
             <div class="dimensions-layout">
               <div class="dimensions-list">
@@ -253,7 +217,6 @@
                     </div>
                     <p class="log-reason"><b>变更原因：</b>{{ item.change_reason || '系统自动分析同步' }}</p>
                     <div class="log-meta">
-                      <span>置信度: {{ Math.round((item.profile_score_json?.confidence || item.confidence || 0.8) * 100) }}%</span>
                       <span>综合评分: {{ item.profile_score_json?.score || item.score || '待评估' }}分</span>
                     </div>
                   </el-card>
@@ -297,9 +260,50 @@
             <span>更新原因：</span><strong>{{ profileMetadata.updated_reason || '系统诊断生成' }}</strong>
           </div>
         </div>
+          </div>
+        </div>
       </div>
 
-      <div class="bento-card performance-card">
+      <div class="bento-card bento-span-3 history-card">
+        <div class="card-header-flex">
+          <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
+          <el-radio-group v-model="historyFilter" size="small" aria-label="资源过滤">
+            <el-radio-button label="全部" />
+            <el-radio-button label="已完成" />
+          </el-radio-group>
+        </div>
+
+        <div style="flex: 1; height: 0; display: flex; flex-direction: column;">
+          <el-table
+              :data="filteredTableData"
+              v-loading="resourceHistoryLoading"
+              height="100%"
+              style="width: 100%; flex: 1;"
+              :header-cell-style="{background:'#F8FAFC', color:'#64748B'}"
+          >
+          <el-table-column label="任务名称 / 学习主题" min-width="150" show-overflow-tooltip>
+            <template #default="scope">
+              <div class="task-title-cell">
+                <span>{{ scope.row.title }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="80">
+            <template #default="scope">
+              <el-tag :type="getStatusType(scope.row.status)" size="small" class="custom-tag">{{ scope.row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="time" label="时间" width="100" />
+          <el-table-column label="操作" width="60" fixed="right">
+            <template #default="scope">
+              <el-button link type="primary" @click="viewResourceDetail(scope.row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        </div>
+      </div>
+
+      <div class="bento-card bento-span-2 performance-card">
         <div class="card-header-flex">
           <h4>近期表现</h4>
           <el-select v-model="timeRange" size="small" style="width: 90px" aria-label="时间范围">
@@ -324,10 +328,24 @@
               <span class="value">{{ dynamicStats.completedTasks }} <small>个</small></span>
             </div>
           </div>
+          <div class="perf-box">
+            <div class="perf-icon bg-orange-light"><el-icon class="text-orange"><Calendar /></el-icon></div>
+            <div class="perf-data">
+              <span class="label">活跃天数</span>
+              <span class="value">{{ dynamicStats.activeDays }} <small>天</small></span>
+            </div>
+          </div>
+          <div class="perf-box">
+            <div class="perf-icon bg-purple-light"><el-icon class="text-purple"><ChatDotRound /></el-icon></div>
+            <div class="perf-data">
+              <span class="label">互动次数</span>
+              <span class="value">{{ dynamicStats.interactions }} <small>次</small></span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="bento-card bento-span-4 trend-section">
+      <div class="bento-card bento-span-5 trend-section">
         <div class="card-header-flex">
           <h4 class="card-title">学习成长趋势（按课程）</h4>
 
@@ -537,7 +555,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import {
   InfoFilled, Timer, Checked, VideoPlay, Search, Check, ArrowRight, ArrowLeft,
   Reading, UserFilled, Clock, Cpu, StarFilled, DocumentCopy, Aim,
-  Top, Bottom, Right, User
+  Top, Bottom, Right, User, Calendar, ChatDotRound
 } from '@element-plus/icons-vue'
 import { getMe, uploadAvatar } from '@/api/auth'
 import {
@@ -556,7 +574,7 @@ const route = useRoute()
 
 const timeRange = ref('7')
 const historyFilter = ref('全部')
-const userName = ref('AI 学习者')
+const userName = ref('学习者')
 const userEmail = ref<string | null>('user@example.com')
 const userAvatar = ref<string | null>(null)
 const avatarUploading = ref(false)
@@ -861,7 +879,9 @@ const dynamicStats = computed(() => {
     compositeScore: avgScore,
     generatedResources: resourceHistory.value.length > 0 ? resourceHistory.value.length : 12,
     completedCourses: totalCourses > 0 ? totalCourses : 3,
-    completedTasks: completedResourcesCount > 0 ? completedResourcesCount : 8
+    completedTasks: completedResourcesCount > 0 ? completedResourcesCount : 8,
+    activeDays: 5,
+    interactions: 24
   }
 })
 
@@ -1274,22 +1294,40 @@ const getStatusType = (status: string) => {
 </script>
 
 <style scoped>
+.course-link { color: var(--color-primary); text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+.course-link:hover { text-decoration: underline; }
+
 .profile-dashboard {
   padding: var(--space-8); background-color: var(--color-bg); min-height: 100%; font-family: var(--font-sans);
 }
-.bento-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-6); }
+.bento-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-6); }
 .bento-card { background: var(--color-surface); border-radius: 8px; padding: var(--space-6); border: 1px solid var(--color-border); display: flex; flex-direction: column; }
+.history-card, .performance-card { height: 260px; }
 .bento-span-2 { grid-column: span 2; }
+.bento-span-3 { grid-column: span 3; }
 .bento-span-4 { grid-column: span 4; }
+.bento-span-5 { grid-column: span 5; }
+
+.combined-profile-layout { display: flex; gap: var(--space-6); height: 100%; align-items: stretch; }
+.combined-left-pane { flex: 0 0 220px; display: flex; flex-direction: column; }
+.main-card-header { padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-4) !important; }
+.combined-divider { width: 1px; background: var(--color-border); margin: 0; }
+.combined-right-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 /* Grid 响应式收缩 */
 @media (max-width: 1200px) {
   .bento-container { grid-template-columns: repeat(2, 1fr); }
+  .bento-span-3 { grid-column: span 2; }
   .bento-span-4 { grid-column: span 2; }
+  .bento-span-5 { grid-column: span 2; }
+  .combined-profile-layout { flex-direction: column; gap: var(--space-4); }
+  .combined-left-pane { flex: auto; }
+  .combined-divider { width: 100%; height: 1px; }
 }
 @media (max-width: 768px) {
   .bento-container { grid-template-columns: 1fr; }
-  .bento-span-2, .bento-span-4 { grid-column: span 1; }
+  .bento-span-2, .bento-span-3, .bento-span-4, .bento-span-5 { grid-column: span 1; }
+  .history-card, .performance-card { height: auto; min-height: 260px; }
 }
 
 .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-5); }
@@ -1311,16 +1349,20 @@ const getStatusType = (status: string) => {
 .avatar-upload-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity var(--transition-slow); border-radius: var(--radius-pill); }
 .avatar-box:hover .avatar-upload-overlay { opacity: 1; }
 .avatar-upload-overlay .el-icon { color: white; font-size: 1.5rem; }
-.user-info h3 { margin: 0; font-size: 1.3rem; font-weight: var(--weight-extrabold); }
-.user-info .email-text { margin: 2px 0 0; font-size: var(--text-xs); color: var(--color-text-faint); }
-.user-info .major { margin: var(--space-1) 0 var(--space-2); font-size: 0.9rem; color: var(--color-text-muted); }
+.user-info { flex: 1; }
+.name-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
+.name-row h3 { margin: 0; font-size: 1.5rem; color: var(--color-text); font-weight: 700; }
+.verify-icon { color: var(--color-primary); font-size: 1.1rem; }
+.email-text { color: var(--color-text-light); font-size: 0.95rem; margin: 0 0 var(--space-2) 0; }
+.major { font-size: 1rem; color: var(--color-text); margin: 0 0 var(--space-3) 0; }
 .tags { display: flex; gap: var(--space-2); }
-.tag { font-size: 0.75rem; padding: 3px var(--space-3); background: var(--color-surface-hover); color: var(--color-text-secondary); border-radius: var(--radius-sm); }
+.tag { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; background: var(--color-bg); color: var(--color-text); }
+.tag.outline { background: transparent; border: 1px solid var(--color-border); }
 .edit-btn { position: absolute; right: 0; top: 0; }
 .w-full { width: 100%; }
 
-.user-stats { display: flex; justify-content: space-between; padding-top: var(--space-5); border-top: 1px solid var(--color-surface-hover); margin-top: auto;}
-.stat-item { text-align: center; }
+.user-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--color-surface-hover); margin-top: var(--space-6); }
+.stat-item { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
 .stat-val { font-size: 1.4rem; font-weight: var(--weight-extrabold); color: var(--color-text); }
 .stat-label { font-size: 0.75rem; color: var(--color-text-faint); margin-top: 2px; }
 
@@ -1329,13 +1371,17 @@ const getStatusType = (status: string) => {
 .trend-chart-container { height: 220px; width: 100%; flex: 1; }
 
 /* Performance */
-.perf-grid { display: flex; flex-direction: column; gap: var(--space-4); flex: 1; justify-content: center; }
+.perf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); flex: 1; align-content: stretch; }
 .perf-box { display: flex; align-items: center; gap: 15px; background: var(--color-bg); padding: var(--space-4); border-radius: var(--radius-xl); }
-.perf-icon { width: 44px; height: 44px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+.perf-icon { width: 44px; height: 44px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
 .bg-blue-light { background: var(--color-info-soft); }
 .bg-green-light { background: var(--color-success-soft); }
+.bg-orange-light { background: #fff2e8; }
+.bg-purple-light { background: #f3e8ff; }
 .text-blue { color: var(--color-info); }
 .text-green { color: var(--color-success); }
+.text-orange { color: #fa8c16; }
+.text-purple { color: #9333ea; }
 .perf-data .label { font-size: var(--text-xs); color: var(--color-text-muted); display: block; margin-bottom: 2px; }
 .perf-data .value { font-size: 1.1rem; font-weight: var(--weight-bold); color: var(--color-text-strong); }
 
@@ -1548,7 +1594,7 @@ const getStatusType = (status: string) => {
 }
 
 /* Complete Learner Profile styles */
-.complete-profile-card {
+.combined-profile-card {
   min-height: 380px;
 }
 .profile-meta-tags {
@@ -1563,13 +1609,15 @@ const getStatusType = (status: string) => {
   font-weight: 700;
   font-size: 0.9rem;
 }
+.profile-tabs-modern :deep(.el-tabs__content) {
+  height: 290px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 .dimensions-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 290px;
-  overflow-y: auto;
-  padding-right: 4px;
 }
 .dimension-item {
   padding: 12px;

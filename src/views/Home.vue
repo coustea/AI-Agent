@@ -138,8 +138,8 @@
         </div>
 
         <div class="card-footer-link">
-          <el-button link type="primary" @click="goTo('/profile')" class="view-profile-link">
-            查看完整画像 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          <el-button class="home-link-button" @click="goTo('/profile')">
+            <span>查看完整画像</span> <el-icon class="el-icon--right"><ArrowRight /></el-icon>
           </el-button>
         </div>
       </article>
@@ -150,7 +150,6 @@
             <span class="section-label">MULTI-AGENT RESOURCES</span>
             <h2>多智能体资源流</h2>
           </div>
-          <el-button class="home-link-button" @click="goTo('/profile')">查看全部资源</el-button>
         </div>
 
         <div class="resource-flow" :class="{ 'is-empty': multiAgentResources.length === 0 }">
@@ -178,9 +177,14 @@
           </template>
           <div class="empty-resource-state" v-else>
             <el-icon class="empty-icon"><Cpu /></el-icon>
-            <p>还没有生成的资源流</p>
-            <span>点击上方“多智能体资源生成”卡片，让 AI 导师为你构建第一份讲义、代码模板或自测题</span>
+            <p>尚未生成任何学习资源</p>
+            <el-button type="primary" plain @click="goTo('/resource-generator')">立即生成</el-button>
           </div>
+        </div>
+        <div class="card-footer-link" style="margin-top: auto;">
+          <el-button class="home-link-button" @click="goTo('/profile')">
+            <span>查看全部资源历史</span> <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          </el-button>
         </div>
       </article>
     </section>
@@ -504,7 +508,7 @@ onMounted(() => {
   --home-primary-soft: var(--primary-light, #EEF2FF);
   --home-primary-border: #C7D2FE;
   min-height: calc(100vh - 64px);
-  padding: 28px;
+  padding: 32px;
   background: #F8FAFC;
   color: #0F172A;
   box-sizing: border-box;
@@ -514,9 +518,9 @@ onMounted(() => {
 .hub-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
-  gap: 20px;
+  gap: 24px;
   max-width: 1680px;
-  margin: 0 auto 20px;
+  margin: 0 auto 24px;
 }
 
 .hero-main,
@@ -692,10 +696,10 @@ onMounted(() => {
 
 .feature-row {
   max-width: 1680px;
-  margin: 0 auto 20px;
+  margin: 0 auto 24px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 24px;
 }
 
 .feature-card {
@@ -759,10 +763,10 @@ onMounted(() => {
 
 .hub-grid {
   max-width: 1680px;
-  margin: 0 auto 20px;
+  margin: 0 auto 24px;
   display: grid;
   grid-template-columns: minmax(340px, 0.8fr) minmax(0, 1.2fr);
-  gap: 20px;
+  gap: 24px;
 }
 
 .insight-card {
@@ -1213,11 +1217,7 @@ onMounted(() => {
   margin-top: 16px;
 }
 
-.view-profile-link {
-  font-weight: 700 !important;
-  font-size: 0.9rem !important;
-  color: var(--home-primary) !important;
-}
+
 
 @media (max-width: 1280px) {
   .feature-row {

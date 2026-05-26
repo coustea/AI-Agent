@@ -235,76 +235,39 @@
             </div>
             
             <div class="browser-filters">
-              <el-input
-                v-model="filters.query"
-                placeholder="搜索题干或知识点关键字..."
-                clearable
-                class="search-bar"
-              >
-                <template #prefix>
-                  <el-icon><Search /></el-icon>
-                </template>
-              </el-input>
-
-              <div class="filter-group">
-                <span class="filter-label">科目:</span>
-                <div class="filter-options">
-                  <span 
-                    :class="['filter-btn', { active: filters.subject === '' }]"
-                    @click="filters.subject = ''"
+              <div class="filter-dropdowns-row">
+                <div class="filter-dropdown-item">
+                  <span class="filter-label">科目</span>
+                  <el-select
+                    v-model="filters.subject"
+                    placeholder="全部科目"
+                    clearable
+                    class="filter-select"
                   >
-                    全部
-                  </span>
-                  <span 
-                    v-for="subj in subjects" 
-                    :key="subj"
-                    :class="['filter-btn', { active: filters.subject === subj }]"
-                    @click="filters.subject = subj"
+                    <el-option v-for="subj in subjects" :key="subj" :label="subj" :value="subj" />
+                  </el-select>
+                </div>
+                <div class="filter-dropdown-item">
+                  <span class="filter-label">难度</span>
+                  <el-select
+                    v-model="filters.difficulty"
+                    placeholder="全部难度"
+                    clearable
+                    class="filter-select"
                   >
-                    {{ subj }}
-                  </span>
+                    <el-option v-for="diff in difficulties" :key="diff" :label="diff" :value="diff" />
+                  </el-select>
                 </div>
-              </div>
-
-              <div class="filter-group-row">
-                <div class="filter-group">
-                  <span class="filter-label">难度:</span>
-                  <div class="filter-options">
-                    <span 
-                      :class="['filter-btn', { active: filters.difficulty === '' }]"
-                      @click="filters.difficulty = ''"
-                    >
-                      全部
-                    </span>
-                    <span 
-                      v-for="diff in difficulties" 
-                      :key="diff"
-                      :class="['filter-btn', { active: filters.difficulty === diff }]"
-                      @click="filters.difficulty = diff"
-                    >
-                      {{ diff }}
-                    </span>
-                  </div>
-                </div>
-
-                <div class="filter-group">
-                  <span class="filter-label">题型:</span>
-                  <div class="filter-options">
-                    <span 
-                      :class="['filter-btn', { active: filters.type === '' }]"
-                      @click="filters.type = ''"
-                    >
-                      全部
-                    </span>
-                    <span 
-                      v-for="t in types" 
-                      :key="t"
-                      :class="['filter-btn', { active: filters.type === t }]"
-                      @click="filters.type = t"
-                    >
-                      {{ t }}
-                    </span>
-                  </div>
+                <div class="filter-dropdown-item">
+                  <span class="filter-label">题型</span>
+                  <el-select
+                    v-model="filters.type"
+                    placeholder="全部题型"
+                    clearable
+                    class="filter-select"
+                  >
+                    <el-option v-for="t in types" :key="t" :label="t" :value="t" />
+                  </el-select>
                 </div>
               </div>
             </div>
@@ -1714,81 +1677,31 @@ onUnmounted(() => {
 .browser-filters {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
   background: rgba(248, 250, 252, 0.6);
-  padding: 20px;
-  border-radius: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
   border: 1px solid var(--border-light);
 }
 
-.search-bar :deep(.el-input__wrapper) {
-  background: #F1F5F9 !important;
-  border: 1px solid transparent !important;
-  transition: all 0.25s ease !important;
-  border-radius: 12px !important;
-  padding: 10px 16px !important;
+.filter-dropdowns-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.search-bar :deep(.el-input__wrapper.is-focus) {
-  background: #FFFFFF !important;
-  border-color: var(--primary-color) !important;
-  box-shadow: 0 0 0 3px rgba(90, 82, 255, 0.15) !important;
-}
-
-.filter-group {
+.filter-dropdown-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.filter-group-row {
-  display: flex;
-  gap: 40px;
-  flex-wrap: wrap;
-}
-
-.filter-label {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  min-width: 36px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.filter-options {
-  display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 150px;
 }
 
-.filter-btn {
-  font-size: 0.82rem;
-  padding: 6px 14px;
-  background: #FFFFFF;
-  border: 1px solid var(--border-light);
-  border-radius: 99px; /* Pill */
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  user-select: none;
-  color: var(--text-secondary);
-}
-
-.filter-btn:hover {
-  color: var(--primary-color);
-  border-color: var(--primary-color);
-  background: var(--primary-glow);
-  transform: translateY(-1px);
-}
-
-.filter-btn.active {
-  background: var(--primary-color);
-  color: #FFFFFF;
-  border-color: var(--primary-color);
-  box-shadow: 0 4px 12px rgba(90, 82, 255, 0.25);
-  font-weight: 600;
+.filter-select {
+  flex: 1;
 }
 
 .browser-questions-list {
