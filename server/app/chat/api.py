@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -28,6 +28,15 @@ router = APIRouter()
 def _get_memory_service() -> "MemoryService":
     """获取与 ChatUseCases 共享的 MemoryService 单例。"""
     return get_chat_usecases()._memory_service
+
+
+async def _sse_wrap(events: AsyncIterator) -> AsyncIterator[str]:
+    """将 dict 事件转为 SSE 文本格式：event: xxx\\ndata: yyy\\n\\n"""
+    async for ev in events:
+        etype = ev.get("event", "message")
+        data = ev.get("data")
+        data_str = json.dumps(data, ensure_ascii=False) if data is not None else ""
+        yield f"event: {etype}\ndata: {data_str}\n\n"
 
 
 @router.post("/chat/stream")
@@ -78,7 +87,7 @@ async def mentor_chat_stream(
 
     # 返回 SSE 流式响应
     return StreamingResponse(
-        uc.stream_chat(
+        _sse_wrap(uc.stream_chat(
             user_id=current_user.id,
             user_message=message,
             history=parsed_history,
@@ -88,7 +97,7 @@ async def mentor_chat_stream(
             generate_video=generate_video,
             enable_search=enable_search,
             enable_long_term_memory=enable_long_term_memory,
-        ),
+        )),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

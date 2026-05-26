@@ -178,7 +178,15 @@ class MemoryService:
             return "暂无长期记忆。"
         return memory.memory_markdown
 
-    def build_file_context(self, image_urls: list[str], file_urls: list[str]) -> str:
+    def build_file_context(self, attachments: list[str]) -> str:
+        IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
+        image_urls, file_urls = [], []
+        for url in attachments:
+            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
+            if ext in IMAGE_EXTS:
+                image_urls.append(url)
+            else:
+                file_urls.append(url)
         if not image_urls and not file_urls:
             return "本次对话无上传文件。"
         lines: list[str] = []

@@ -30,7 +30,7 @@ from app.config import (
 )
 from app.infra.logging import get_logger
 from app.memory.service import MemoryService, get_memory_service
-from app.chat.utils.storage import LocalFileStore, LocalFileStore
+from app.chat.utils.storage import LocalFileStore
 from app.chat.utils.vision import VisionService
 
 logger = get_logger(__name__)
@@ -283,6 +283,45 @@ class ChatUseCases:
             logger.warning("[ChatUseCases] 附件分析失败: %s", exc)
             return None
 
+    async def analyze_uploaded_attachments(
+        self,
+        *,
+        user_id: int,
+        question: str,
+        session_id: str | None = None,
+        files: list[tuple[str, bytes]] | None = None,
+        attachments: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """上传并分析附件，返回结构化分析结果（供数字人调用）。"""
+        effective_session = session_id or self.default_session_id(user_id)
+        all_urls: list[str] = list(attachments or [])
+
+        # 保存上传的文件并收集 URL
+        for filename, content in (files or []):
+            if not filename:
+                continue
+            saved = await self.save_upload(
+                filename=filename,
+                content=content,
+                user_id=user_id,
+                session_id=effective_session,
+            )
+            all_urls.append(saved["url"])
+
+        if not all_urls:
+            return {"analysis_context": "", "image_count": 0, "document_count": 0}
+
+        result = await self.analyze_attachments_parallel(
+            all_urls,
+            user_id=user_id,
+            session_id=effective_session,
+        )
+        return {
+            "analysis_context": result.analysis_context,
+            "image_count": len(result.images),
+            "document_count": len(result.documents),
+        }
+
     # ── 上下文构建 ──
 
     async def build_tutor_agent_context(
@@ -360,6 +399,35 @@ class ChatUseCases:
         enable_long_term_memory: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """SSE 流式对话主入口。"""
+        async for event in self.stream_chat_events(
+            user_id=user_id,
+            user_message=user_message,
+            history=history,
+            session_id=session_id,
+            attachments=attachments,
+            need_teaching_diagram=need_teaching_diagram,
+            generate_video=generate_video,
+            enable_search=enable_search,
+            enable_long_term_memory=enable_long_term_memory,
+            persist=True,
+        ):
+            yield event
+
+    async def stream_chat_events(
+        self,
+        *,
+        user_id: int,
+        user_message: str | None = None,
+        history: list[ChatHistoryMessage] | None = None,
+        session_id: str | None = None,
+        attachments: list[str] | None = None,
+        need_teaching_diagram: bool = False,
+        generate_video: bool = False,
+        enable_search: bool = False,
+        enable_long_term_memory: bool = False,
+        persist: bool = True,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """流式对话事件生成器，供 SSE 和 avatar bridge 共用。"""
         effective_session = session_id or self.default_session_id(user_id)
         merged_attachments = list(dict.fromkeys(attachments or []))
 
@@ -394,57 +462,59 @@ class ChatUseCases:
                 history.append(ChatHistoryMessage(role="user", content=user_message))
 
         # 保存用户消息
-        user_record = build_user_message_record(
-            user_message or "",
-            attachments=merged_attachments,
-        )
-        await self.save_message(
-            user_id=user_id,
-            session_id=effective_session,
-            role="user",
-            content=user_record.content,
-            attachments=user_record.attachments,
-        )
-
-        # 首条消息时自动生成标题
-        msg_count = await self.count_messages(user_id, effective_session)
-        if msg_count <= 1 and user_message:
-            self._spawn_background(
-                self._memory_service.generate_session_title(
-                    user_id=user_id,
-                    session_id=effective_session,
-                    first_message=user_message,
-                ),
-                label="generate_title",
+        if persist:
+            user_record = build_user_message_record(
+                user_message or "",
+                attachments=merged_attachments,
             )
+            await self.save_message(
+                user_id=user_id,
+                session_id=effective_session,
+                role="user",
+                content=user_record.content,
+                attachments=user_record.attachments,
+            )
+
+            # 首条消息时自动生成标题
+            msg_count = await self.count_messages(user_id, effective_session)
+            if msg_count <= 1 and user_message:
+                self._spawn_background(
+                    self._memory_service.generate_session_title(
+                        user_id=user_id,
+                        session_id=effective_session,
+                        first_message=user_message,
+                    ),
+                    label="generate_title",
+                )
 
         # 流式输出
         full_answer = ""
         async for event in TutorAgent(context).chat_stream(history):
-            if event.get("type") == "answer_delta":
-                full_answer += event.get("text", "")
+            if event.get("event") == "token":
+                full_answer += str(event.get("data", ""))
             yield event
 
         # 保存助手消息
-        await self.save_message(
-            user_id=user_id,
-            session_id=effective_session,
-            role="assistant",
-            content=full_answer,
-        )
-
-        # 后台记忆管线
-        if enable_long_term_memory and user_message:
-            self._spawn_background(
-                self._memory_service.after_turn(
-                    user_id=user_id,
-                    session_id=effective_session,
-                    user_message=user_message,
-                    assistant_reply=full_answer,
-                    enable_long_term_memory=True,
-                ),
-                label="memory_pipeline",
+        if persist:
+            await self.save_message(
+                user_id=user_id,
+                session_id=effective_session,
+                role="assistant",
+                content=full_answer,
             )
+
+            # 后台记忆管线
+            if enable_long_term_memory and user_message:
+                self._spawn_background(
+                    self._memory_service.after_turn(
+                        user_id=user_id,
+                        session_id=effective_session,
+                        user_message=user_message,
+                        assistant_reply=full_answer,
+                        enable_long_term_memory=True,
+                    ),
+                    label="memory_pipeline",
+                )
 
     # ── 文件上传 ──
 

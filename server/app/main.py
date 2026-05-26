@@ -27,10 +27,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Learning Platform", lifespan=lifespan)
 
-# ---------------------------------------------------------------------------
-# Global exception handlers — all errors return {code, message, data} envelope
-# ---------------------------------------------------------------------------
-
 
 @app.exception_handler(AuthError)
 async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
@@ -44,10 +40,6 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     return HttpResponse.error(code=exc.status_code, message=str(exc.detail))
 
 
-# ---------------------------------------------------------------------------
-# Middleware
-# ---------------------------------------------------------------------------
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,13 +48,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(chat_router, prefix="/api/v1/ai", tags=["ai"])
 app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 app.include_router(path_router, prefix="/api/v1/ai", tags=["path"])
 app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
 app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+
+    from app.config import DEBUG, HOST, PORT
+
+    uvicorn.run("app.main:app", host=HOST, port=PORT, reload=DEBUG)

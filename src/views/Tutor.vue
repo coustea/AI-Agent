@@ -1610,8 +1610,7 @@ const handleSend = async () => {
       {
         history: streamHistory,
         session_id: currentSessionId.value,
-        image_urls: imageUrls.length > 0 ? imageUrls : undefined,
-        file_urls: fileUrls.length > 0 ? fileUrls : undefined,
+        attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
         need_teaching_diagram: shouldGenerateTeachingDiagram,
         generate_video: generateVideo.value,
         enable_search: enableWebSearch.value,

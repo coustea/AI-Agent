@@ -8,7 +8,7 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.auth.security import get_current_user
-from app.chat.service import ChatUseCases
+from app.chat.service import ChatUseCases, get_avatar_chat_usecases
 from app.infra.models import User
 from app.memory import MemoryService
 from app.infra.response import HttpResponse
@@ -92,8 +92,7 @@ async def analyze_avatar_attachments(
     session_id: str | None = Form(default=None),
     files: list[UploadFile] = File(default=[]),
     file: UploadFile | None = File(default=None),
-    image_urls: str | None = Form(default=None),
-    file_urls: str | None = Form(default=None),
+    attachments: str | None = Form(default=None),
     user: User = Depends(get_current_user),
 ):
     """数字人可调用：上传并并行分析附件，返回结构化分析结果。"""
@@ -108,12 +107,7 @@ async def analyze_avatar_attachments(
             return HttpResponse.error(code=400, message="文件名不能为空")
         upload_payloads.append((upload.filename, await upload.read()))
 
-    parsed_image_urls: list[str] = []
-    parsed_file_urls: list[str] = []
-    if image_urls:
-        parsed_image_urls = [u.strip() for u in image_urls.split(",") if u.strip()]
-    if file_urls:
-        parsed_file_urls = [u.strip() for u in file_urls.split(",") if u.strip()]
+    parsed_attachments = [u.strip() for u in attachments.split(",") if u.strip()] if attachments else []
 
     try:
         payload = await uc.analyze_uploaded_attachments(
@@ -121,8 +115,7 @@ async def analyze_avatar_attachments(
             question=question,
             session_id=session_id,
             files=upload_payloads,
-            image_urls=parsed_image_urls,
-            file_urls=parsed_file_urls,
+            attachments=parsed_attachments,
         )
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))

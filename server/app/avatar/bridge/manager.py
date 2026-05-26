@@ -268,36 +268,28 @@ class RealtimeBridge:
                         urls.append(raw.strip())
         return list(dict.fromkeys(urls))
 
-    def _extract_attachment_urls(self, data: dict) -> tuple[list[str], list[str]]:
-        """Extract image/file urls from websocket text_input payload."""
-        image_urls = (
-            self._normalize_url_list(data.get("image_urls"))
-            or self._normalize_url_list(data.get("imageUrls"))
-            or self._normalize_url_list(data.get("image_url"))
-            or self._normalize_url_list(data.get("imageUrl"))
-        )
-        file_urls = (
-            self._normalize_url_list(data.get("file_urls"))
-            or self._normalize_url_list(data.get("fileUrls"))
-            or self._normalize_url_list(data.get("file_url"))
-            or self._normalize_url_list(data.get("fileUrl"))
-        )
+    def _extract_attachments(self, data: dict) -> list[str]:
+        """Extract all attachment URLs from websocket text_input payload."""
+        attachments: list[str] = []
 
-        attachments = data.get("attachments")
-        if isinstance(attachments, list):
-            for item in attachments:
-                if not isinstance(item, dict):
-                    continue
-                url = item.get("url")
-                kind = str(item.get("type", "")).lower()
-                if not isinstance(url, str) or not url.strip():
-                    continue
-                if kind == "image":
-                    image_urls.append(url.strip())
-                elif kind in {"file", "document", "doc"}:
-                    file_urls.append(url.strip())
+        # Legacy fields: normalize and merge
+        for key in ("image_urls", "imageUrls", "image_url", "imageUrl",
+                     "file_urls", "fileUrls", "file_url", "fileUrl"):
+            for url in self._normalize_url_list(data.get(key)):
+                attachments.append(url)
 
-        return list(dict.fromkeys(image_urls)), list(dict.fromkeys(file_urls))
+        # Unified attachments field: accepts string URLs or dicts with "url"
+        raw = data.get("attachments")
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, str) and item.strip():
+                    attachments.append(item.strip())
+                elif isinstance(item, dict):
+                    url = item.get("url")
+                    if isinstance(url, str) and url.strip():
+                        attachments.append(url.strip())
+
+        return list(dict.fromkeys(attachments))
 
     async def _handle_audio_chunk(self, data: dict):
         """Handle audio chunk from frontend."""
@@ -334,7 +326,7 @@ class RealtimeBridge:
         # Allow per-message speech rate override from frontend.
         if "speech_rate" in data:
             self._handle_set_speech_rate(data)
-        image_urls, file_urls = self._extract_attachment_urls(data)
+        attachments = self._extract_attachments(data)
         need_diagram = bool(data.get("need_diagram", False))
         self._need_diagram_default = need_diagram
         self._handle_capability_flags(data)
@@ -342,8 +334,7 @@ class RealtimeBridge:
         history = raw_history if isinstance(raw_history, list) else None
         await self._handle_user_text(
             text,
-            image_urls=image_urls,
-            file_urls=file_urls,
+            attachments=attachments,
             need_diagram=need_diagram,
             enable_search=self._enable_search_default,
             generate_video=self._generate_video_default,
@@ -647,8 +638,7 @@ class RealtimeBridge:
     async def _handle_user_text(
         self,
         user_text: str,
-        image_urls: Optional[list[str]] = None,
-        file_urls: Optional[list[str]] = None,
+        attachments: Optional[list[str]] = None,
         need_diagram: bool = False,
         enable_search: bool = False,
         generate_video: bool = False,
@@ -659,8 +649,7 @@ class RealtimeBridge:
         async with self._turn_lock:
             await self._run_user_text_turn(
                 user_text=user_text,
-                image_urls=image_urls,
-                file_urls=file_urls,
+                attachments=attachments,
                 need_diagram=need_diagram,
                 enable_search=enable_search,
                 generate_video=generate_video,
@@ -671,8 +660,7 @@ class RealtimeBridge:
     async def _run_user_text_turn(
         self,
         user_text: str,
-        image_urls: Optional[list[str]] = None,
-        file_urls: Optional[list[str]] = None,
+        attachments: Optional[list[str]] = None,
         need_diagram: bool = False,
         enable_search: bool = False,
         generate_video: bool = False,
@@ -685,8 +673,7 @@ class RealtimeBridge:
         from app.chat.request import ChatHistoryMessage
         from app.memory import MemoryService
 
-        image_urls = list(dict.fromkeys(image_urls or []))
-        file_urls = list(dict.fromkeys(file_urls or []))
+        merged_attachments = list(dict.fromkeys(attachments or []))
         # Keep memory module aligned with text AI pipeline to avoid
         # cross-module session permission errors.
         memory_layer = MemoryService(module=CHAT_MODULE_NAME)
@@ -730,8 +717,7 @@ class RealtimeBridge:
                     user_message=user_text,
                     history=normalized_history,
                     session_id=self.session_id,
-                    image_urls=image_urls,
-                    file_urls=file_urls,
+                    attachments=merged_attachments,
                     need_teaching_diagram=need_diagram,
                     enable_search=enable_search,
                     generate_video=generate_video,

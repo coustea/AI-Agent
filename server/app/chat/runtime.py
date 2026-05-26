@@ -161,7 +161,6 @@ async def prepare_tutor_turn(
     """
     effective_session = resolve_session_id(user_id, session_id)
     normalized_attachments = list(attachments or [])
-    image_urls, file_urls = _classify_attachments(normalized_attachments)
 
     user_record = build_user_message_record(
         user_message,
