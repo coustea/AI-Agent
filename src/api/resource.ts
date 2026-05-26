@@ -1,23 +1,6 @@
-function normalizeSsePayload(payload: string): unknown {
-  const trimmed = payload.trim()
-  if (!trimmed) return ''
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    return payload
-  }
-}
+export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'video'
 
-function parseSseFrames(raw: string): { frames: string[]; rest: string } {
-  const normalized = raw.replace(/\r\n/g, '\n')
-  const parts = normalized.split('\n\n')
-  const rest = parts.pop() || ''
-  return { frames: parts, rest }
-}
-
-export type ResourceAgentId = 'content' | 'mindmap' | 'knowledge_graph' | 'quiz' | 'reading' | 'code' | 'ppt' | 'video'
-
-export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study'
+export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 
 interface ResourceGenerationRequest {
   learning_need: string
@@ -42,14 +25,6 @@ interface ResourceGenerationRequest {
       expand_weak_points: boolean
       include_prerequisites: boolean
     }
-    knowledge_graph: {
-      layout_mode: 'force' | 'radial' | 'hierarchy'
-      max_nodes: number
-      relation_depth: number
-      highlight_mode: 'weak_points' | 'key_points' | 'all'
-      store_neo4j: boolean
-      include_orphan_points: boolean
-    }
     quiz: {
       question_count: number
       difficulty_mode: 'basic' | 'adaptive' | 'exam'
@@ -72,6 +47,12 @@ interface ResourceGenerationRequest {
       include_practice: boolean
       language_preference: 'chinese' | 'english' | 'both'
     }
+    ppt: {
+      template_id: 'theme-logic-blue'
+      page_count: number
+      difficulty: 'beginner' | 'intermediate' | 'advanced'
+      output_format: 'preview'
+    }
   }
   output_options: {
     output_format: 'json'
@@ -91,79 +72,91 @@ export interface ResourceGenerateEvent {
   timestamp: string
 }
 
-export function generateResources(
-  params: ResourceGenerationRequest,
-  onEvent: (event: ResourceGenerateEvent) => void,
-  onDone: () => void,
-  onError: (err: Error) => void,
-): AbortController {
-  const controller = new AbortController()
-  const token = localStorage.getItem('token')
+export interface ResourceProgressNode {
+  status: 'waiting' | 'running' | 'success' | 'failed' | 'skipped'
+  progress: number
+  message: string
+  steps: string[]
+}
 
-  fetch('/api/v1/ai/generate', {
+export interface ResourceWorkflowProgress {
+  stage: string
+  progress: number
+  latest_message: string
+  agents: Record<string, ResourceProgressNode>
+}
+
+export interface ResourceTaskStatus {
+  resource_id: number
+  status: 'pending' | 'planning' | 'generating' | 'reviewing' | 'completed' | 'partial_completed' | 'failed'
+  progress: ResourceWorkflowProgress
+}
+
+export async function startResourceGeneration(
+  params: ResourceGenerationRequest
+): Promise<{ resource_id: number; status: string }> {
+  const token = localStorage.getItem('token')
+  const response = await fetch('/api/v1/ai/generate/task', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(params),
-    signal: controller.signal,
   })
-    .then(async (response) => {
-      if (!response.ok) {
-        const text = await response.text()
-        throw new Error(text || `HTTP ${response.status}`)
-      }
 
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('ReadableStream not supported')
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `HTTP ${response.status}`)
+  }
 
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let completed = false
+  const json = await response.json()
+  if (json.code !== 200) {
+    throw new Error(json.message || '启动生成任务失败')
+  }
+  return json.data
+}
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+export async function pollResourceStatus(
+  resourceId: number
+): Promise<ResourceTaskStatus> {
+  const token = localStorage.getItem('token')
+  const response = await fetch(`/api/v1/ai/generate/task/${resourceId}/status`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
 
-        buffer += decoder.decode(value, { stream: true })
-        const { frames, rest } = parseSseFrames(buffer)
-        buffer = rest
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `HTTP ${response.status}`)
+  }
 
-        for (const frame of frames) {
-          const dataLines = frame
-            .split('\n')
-            .filter((line) => line.startsWith('data:'))
-            .map((line) => line.slice(5).replace(/^ /, ''))
-          if (dataLines.length === 0) continue
+  const json = await response.json()
+  if (json.code !== 200) {
+    throw new Error(json.message || '查询状态失败')
+  }
+  return json.data
+}
 
-          const payload = normalizeSsePayload(dataLines.join('\n'))
-          if (!payload || typeof payload !== 'object') continue
+export async function getResourceBundle(resourceId: number): Promise<any> {
+  const token = localStorage.getItem('token')
+  const response = await fetch(`/api/v1/ai/resources/${resourceId}`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
 
-          const event = payload as ResourceGenerateEvent
-          onEvent(event)
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `HTTP ${response.status}`)
+  }
 
-          if (event.event_type === 'done') {
-            completed = true
-            onDone()
-            return
-          }
-        }
-      }
-
-      const finalChunk = decoder.decode()
-      if (finalChunk) {
-        buffer += finalChunk
-      }
-
-      if (!completed) {
-        onDone()
-      }
-    })
-    .catch((err) => {
-      if (err.name === 'AbortError') return
-      onError(err)
-    })
-
-  return controller
+  const json = await response.json()
+  if (json.code !== 200) {
+    throw new Error(json.message || '获取资源失败')
+  }
+  return json.data
 }

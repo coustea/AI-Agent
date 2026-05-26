@@ -1,7 +1,7 @@
 <template>
   <div class="learn-path-container">
     <!-- 头部横幅：输入课程目标 -->
-    <section class="hero-section">
+    <section class="hero-section" v-if="!coursePath && !isGenerating">
       <div class="hero-content">
         <h1 class="hero-title">系统学习路径规划</h1>
         <p class="hero-subtitle">
@@ -13,7 +13,7 @@
             placeholder="例如：数据结构、计算机网络、微观经济学..."
             class="course-input"
             size="large"
-            @keyup.enter="generatePath"
+            @keyup.enter="handleGeneratePath"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -24,13 +24,12 @@
             size="large" 
             class="generate-btn"
             :loading="isGenerating"
-            @click="generatePath"
+            @click="handleGeneratePath"
           >
             生成路径
           </el-button>
         </div>
       </div>
-      <!-- 装饰性背景图或图形 -->
       <div class="hero-bg-decoration"></div>
     </section>
 
@@ -49,9 +48,9 @@
     <div v-else-if="coursePath" class="path-display-section">
       <div class="path-header">
         <div class="path-title-group">
-          <h2>{{ coursePath.course_name }} <span class="path-badge">专属学习地图</span></h2>
+          <h2>{{ coursePath.title }} <span class="path-badge">专属学习地图</span></h2>
           <p class="path-meta">
-            包含 {{ coursePath.total_nodes }} 个核心知识点 · 预计学习时长 {{ coursePath.estimated_hours }} 小时
+            包含 {{ coursePath.nodes.length }} 个核心知识点 · 预计学习时长 {{ coursePath.eta_days }} 天
           </p>
         </div>
         <div class="path-actions">
@@ -62,31 +61,31 @@
       <!-- 阶段时间线布局 -->
       <div class="skill-tree-layout">
         <div 
-          v-for="(phase, index) in coursePath.phases" 
-          :key="index"
+          v-for="(stage, index) in groupedStages" 
+          :key="stage.stage_id"
           class="phase-block"
         >
           <!-- 阶段标识 -->
           <div class="phase-indicator">
-            <div class="phase-number">{{ Number(index) + 1 }}</div>
-            <div v-if="index !== coursePath.phases.length - 1" class="phase-line"></div>
+            <div class="phase-number">{{ index + 1 }}</div>
+            <div v-if="index !== groupedStages.length - 1" class="phase-line"></div>
           </div>
 
           <!-- 阶段内容 -->
           <div class="phase-content">
-            <h3 class="phase-title">{{ phase.title }}</h3>
-            <p class="phase-desc">{{ phase.description }}</p>
+            <h3 class="phase-title">{{ stage.title }}</h3>
+            <p class="phase-desc">{{ stage.description }}</p>
 
             <!-- 节点卡片网格 -->
-            <div class="nodes-grid">
+            <div class="nodes-grid" v-if="stage.nodes && stage.nodes.length > 0">
               <div 
-                v-for="node in phase.nodes" 
+                v-for="node in stage.nodes" 
                 :key="node.id"
                 class="node-card"
                 :class="`status-${node.status}`"
               >
                 <div class="node-header">
-                  <span class="node-title">{{ node.topic_name }}</span>
+                  <span class="node-title">{{ node.title }}</span>
                   <el-tag 
                     :type="getStatusTagType(node.status)" 
                     size="small" 
@@ -98,166 +97,153 @@
                 </div>
                 
                 <div class="node-body">
-                  <p class="node-summary">{{ node.summary }}</p>
+                  <p class="node-summary">{{ node.recommendation_reason || node.mastery_target }}</p>
                 </div>
 
                 <div class="node-footer">
-                  <el-button 
-                    v-if="node.status === 'available'"
-                    type="primary" 
+                  <!-- Available + not_started: show "生成学习资料" -->
+                  <el-button
+                    v-if="node.status === 'available' && node.resource_status === 'not_started'"
+                    type="primary"
                     class="action-btn"
-                    @click="openResourceConfig(node)"
+                    :loading="generatingNodeId === node.id"
+                    @click="handleGenerateResources(node)"
                   >
-                    配置并生成资源
+                    生成学习资料
+                    <el-icon v-if="generatingNodeId !== node.id" class="el-icon--right"><ArrowRight /></el-icon>
+                  </el-button>
+                  <!-- Available + generating: disabled with loading -->
+                  <el-button
+                    v-else-if="node.status === 'available' && node.resource_status === 'generating'"
+                    type="primary"
+                    plain
+                    loading
+                    class="action-btn"
+                  >
+                    AI资源生成中...
+                  </el-button>
+                  <!-- Available + ready: show "开始学习" -->
+                  <el-button
+                    v-else-if="node.status === 'available' && node.resource_status === 'ready'"
+                    type="primary"
+                    class="action-btn"
+                    @click="viewResource(node)"
+                  >
+                    开始学习
                     <el-icon class="el-icon--right"><ArrowRight /></el-icon>
                   </el-button>
-                  <el-button 
+                  <!-- Available + failed: show "重新生成" -->
+                  <el-button
+                    v-else-if="node.status === 'available' && node.resource_status === 'failed'"
+                    type="warning"
+                    class="action-btn"
+                    @click="handleGenerateResources(node)"
+                  >
+                    重新生成
+                  </el-button>
+                  <!-- Completed: show "复习资源" -->
+                  <el-button
                     v-else-if="node.status === 'completed'"
-                    type="success" 
-                    plain 
+                    type="success"
+                    plain
                     class="action-btn"
                     @click="viewResource(node)"
                   >
                     复习资源
                   </el-button>
-                  <el-button 
-                    v-else
-                    disabled 
+                  <!-- Locked: disabled -->
+                  <el-button
+                    v-else-if="node.status === 'locked'"
+                    disabled
                     class="action-btn"
                   >
                     需完成前置节点
                     <el-icon class="el-icon--right"><Lock /></el-icon>
                   </el-button>
+                  <el-button
+                    v-else
+                    disabled
+                    class="action-btn"
+                  >
+                    未就绪
+                  </el-button>
                 </div>
               </div>
+            </div>
+            <!-- 对于还没有生成的后续阶段 -->
+            <div v-else class="nodes-empty">
+              <el-alert title="随进度动态解锁中..." type="info" :closable="false" />
             </div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- 空状态 -->
-    <div v-else class="empty-state">
-      <el-empty description="输入你想学的课程，开启你的专属学习之旅吧！">
-        <template #image>
-          <!-- 这里可以使用一个更好看的插画，为了演示使用默认 -->
-        </template>
-      </el-empty>
-    </div>
-
-    <!-- 微观资源配置抽屉 (Mock) -->
-    <el-drawer
-      v-model="drawerVisible"
-      :title="`正在为「${selectedNode?.topic_name}」配置资源`"
-      direction="rtl"
-      size="40%"
-    >
-      <div class="drawer-content">
-        <el-alert
-          title="你已进入“微观单点突破”模式"
-          type="info"
-          description="系统已自动提取该节点在宏观图谱中的上下文。你可以进一步微调多智能体生成策略。"
-          show-icon
-          :closable="false"
-          style="margin-bottom: 20px;"
-        />
-        
-        <div class="config-form">
-          <div class="config-item">
-            <h4>生成深度</h4>
-            <el-radio-group v-model="configMock.depth">
-              <el-radio-button label="浅尝辄止" />
-              <el-radio-button label="标准掌握" />
-              <el-radio-button label="极客探索" />
-            </el-radio-group>
-          </div>
-          
-          <div class="config-item">
-            <h4>倾向资源类型</h4>
-            <el-checkbox-group v-model="configMock.types">
-              <el-checkbox label="核心概念文档" />
-              <el-checkbox label="思维导图" />
-              <el-checkbox label="代码沙箱实操" />
-              <el-checkbox label="测验题库" />
-            </el-checkbox-group>
-          </div>
-        </div>
-        
-      </div>
-      <template #footer>
-        <div style="flex: auto">
-          <el-button @click="drawerVisible = false">取消</el-button>
-          <el-button type="primary" @click="startGeneration" :loading="isResourceGenerating">
-            呼叫智能体团队开始生成
-          </el-button>
-        </div>
-      </template>
-    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Search, Lock, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getActiveCoursePath, generateCoursePath, generatePathNodeResources, type CoursePathResponse, type CoursePathNodeDTO, type PathNodeResourceRequest } from '@/api/ai'
+
+const router = useRouter()
 
 // ---- 状态与数据 ----
 const courseGoal = ref('')
 const isGenerating = ref(false)
-const coursePath = ref<any>(null)
+const generatingNodeId = ref<number | null>(null)
+const coursePath = ref<CoursePathResponse | null>(null)
+let pollTimer: number | null = null
 
-const drawerVisible = ref(false)
-const selectedNode = ref<any>(null)
-const isResourceGenerating = ref(false)
-
-const configMock = ref({
-  depth: '标准掌握',
-  types: ['核心概念文档', '思维导图', '代码沙箱实操', '测验题库']
+// ---- 计算属性 ----
+const groupedStages = computed(() => {
+  if (!coursePath.value) return []
+  
+  const stages = coursePath.value.stages.map(stage => ({
+    ...stage,
+    nodes: coursePath.value!.nodes.filter(n => n.stage_id === stage.stage_id)
+  }))
+  return stages
 })
 
-// ---- 模拟数据生成 ----
-const mockGeneratePath = () => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        course_name: courseGoal.value || '数据结构',
-        total_nodes: 12,
-        estimated_hours: 45,
-        phases: [
-          {
-            title: '第一阶段：线性表与基础逻辑',
-            description: '掌握数据的线性结构，这是所有复杂数据结构的基础。',
-            nodes: [
-              { id: 'n1', topic_name: '数组与字符串', summary: '连续内存分配的利与弊，理解随机访问的本质。', status: 'completed' },
-              { id: 'n2', topic_name: '链表 (单链表/双向链表)', summary: '动态内存分配，指针的艺术。这是本课程的核心难点之一。', status: 'available' },
-              { id: 'n3', topic_name: '栈与队列', summary: '受限的线性表及其在算法中的神奇应用（如括号匹配、广度优先遍历）。', status: 'available' }
-            ]
-          },
-          {
-            title: '第二阶段：树形结构与非线性思维',
-            description: '从一维跨越到二维，理解层级关系。',
-            nodes: [
-              { id: 'n4', topic_name: '二叉树基础与遍历', summary: '前中后序遍历的递归与非递归实现。', status: 'locked' },
-              { id: 'n5', topic_name: '二叉搜索树 (BST)', summary: '利用结构特性提升搜索效率。', status: 'locked' },
-              { id: 'n6', topic_name: '平衡二叉树 (AVL/红黑树)', summary: '如何防止树退化为链表，高级自平衡机制。', status: 'locked' }
-            ]
-          },
-          {
-            title: '第三阶段：图与进阶算法',
-            description: '最通用的非线性结构，解决复杂的网状关系问题。',
-            nodes: [
-              { id: 'n7', topic_name: '图的存储与遍历', summary: '邻接矩阵与邻接表，DFS与BFS。', status: 'locked' },
-              { id: 'n8', topic_name: '最短路径算法', summary: 'Dijkstra与Floyd算法。', status: 'locked' }
-            ]
-          }
-        ]
-      })
-    }, 1500)
-  })
-}
+const needsPolling = computed(() => {
+  if (!coursePath.value) return false
+  return coursePath.value.nodes.some(n => n.resource_status === 'generating')
+})
+
+// ---- 生命周期 ----
+onMounted(() => {
+  fetchActivePath()
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 
 // ---- 方法 ----
-const generatePath = async () => {
+const fetchActivePath = async (silent = false) => {
+  try {
+    const res = await getActiveCoursePath()
+    if (res.data.data) {
+      coursePath.value = res.data.data
+      
+      // 如果有生成中的节点，则开启轮询
+      if (needsPolling.value) {
+        startPolling()
+      } else {
+        stopPolling()
+      }
+    }
+  } catch (error) {
+    if (!silent) {
+      console.error('拉取路径失败', error)
+    }
+  }
+}
+
+const handleGeneratePath = async () => {
   if (!courseGoal.value.trim()) {
     ElMessage.warning('请输入你想学习的课程名称')
     return
@@ -265,14 +251,19 @@ const generatePath = async () => {
   
   isGenerating.value = true
   coursePath.value = null
+  stopPolling()
   
   try {
-    // 模拟调用后端 MacroPlannerAgent API
-    const data = await mockGeneratePath()
-    coursePath.value = data
+    const res = await generateCoursePath(courseGoal.value)
+    coursePath.value = res.data.data
     ElMessage.success('专属学习路径已生成！')
-  } catch (error) {
-    ElMessage.error('路径生成失败，请重试')
+    
+    // 如果有生成中的节点，自动开启轮询
+    if (needsPolling.value) {
+      startPolling()
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '路径生成失败，请重试')
   } finally {
     isGenerating.value = false
   }
@@ -281,8 +272,25 @@ const generatePath = async () => {
 const resetPath = () => {
   courseGoal.value = ''
   coursePath.value = null
+  stopPolling()
 }
 
+// ---- 轮询机制 ----
+const startPolling = () => {
+  if (pollTimer) return
+  pollTimer = window.setInterval(async () => {
+    await fetchActivePath(true)
+  }, 3000)
+}
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// ---- UI 辅助 ----
 const getStatusTagType = (status: string) => {
   const map: Record<string, string> = {
     'completed': 'success',
@@ -301,33 +309,42 @@ const getStatusText = (status: string) => {
   return map[status] || '未知'
 }
 
-const openResourceConfig = (node: any) => {
-  selectedNode.value = node
-  drawerVisible.value = true
-}
-
-const viewResource = (node: any) => {
-  ElMessage.success(`正在打开 ${node.topic_name} 的复习资料...`)
-  // 实际项目中会跳转到资源详情页
-}
-
-const startGeneration = () => {
-  isResourceGenerating.value = true
-  setTimeout(() => {
-    isResourceGenerating.value = false
-    drawerVisible.value = false
-    
-    // 模拟完成状态变更
-    if (selectedNode.value) {
-      selectedNode.value.status = 'completed'
+const handleGenerateResources = async (node: CoursePathNodeDTO) => {
+  if (generatingNodeId.value) return
+  generatingNodeId.value = node.id
+  try {
+    const defaultPayload: PathNodeResourceRequest = {
+      learning_scenario: 'path_learning',
+      selected_agents: [
+        { agent_id: 'content', enabled: true, priority: 0 },
+        { agent_id: 'mindmap', enabled: true, priority: 1 },
+        { agent_id: 'quiz', enabled: true, priority: 2 },
+        { agent_id: 'ppt', enabled: true, priority: 3 },
+      ],
+      agent_configs: {},
+      output_options: { output_format: 'json' },
     }
-    
-    ElMessage({
-      message: '多智能体协作生成完毕！资源已就绪。',
-      type: 'success',
-      duration: 3000
-    })
-  }, 2000)
+    await generatePathNodeResources(node.id, defaultPayload)
+    ElMessage.success(`已开始生成「${node.title}」的学习资料`)
+    // Update local node status to trigger polling
+    if (coursePath.value) {
+      const found = coursePath.value.nodes.find(n => n.id === node.id)
+      if (found) found.resource_status = 'generating'
+    }
+    startPolling()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '生成资料失败，请重试')
+  } finally {
+    generatingNodeId.value = null
+  }
+}
+
+const viewResource = (node: CoursePathNodeDTO) => {
+  if (node.resource_id) {
+    router.push({ name: 'ResourceDetail', params: { id: node.resource_id } })
+  } else {
+    ElMessage.warning('资源未就绪')
+  }
 }
 </script>
 

@@ -17,7 +17,7 @@
               v-model="naturalInput"
               type="textarea"
               :autosize="{ minRows: 4, maxRows: 8 }"
-              placeholder="例如：我是软件工程大二学生，明天考《操作系统》。我搞不懂死锁的四个必要条件，我喜欢看知识图谱，请帮我生成复习资料和几道自测题…"
+              placeholder="例如：我是软件工程大二学生，明天考《操作系统》。我搞不懂死锁的四个必要条件，请帮我生成复习资料和几道自测题…"
               class="elegant-textarea"
               @focus="isInputFocused = true"
               @blur="isInputFocused = false"
@@ -128,32 +128,7 @@
                     </div>
                   </template>
 
-                  <template v-if="agent.id === 'knowledge_graph'">
-                    <div class="ctrl-group">
-                      <label>图谱布局</label>
-                      <el-select v-model="agentConfigs.knowledge_graph.layout_mode" size="default" class="w-full custom-select">
-                        <el-option label="力导向网络" value="force" />
-                        <el-option label="环形知识簇" value="radial" />
-                        <el-option label="层级结构" value="hierarchy" />
-                      </el-select>
-                    </div>
-                    <div class="ctrl-group">
-                      <div class="slider-label-row">
-                        <label>最大知识点</label>
-                        <span class="slider-value"><b>{{ agentConfigs.knowledge_graph.max_nodes }}</b> 个</span>
-                      </div>
-                      <el-slider v-model="agentConfigs.knowledge_graph.max_nodes" :min="6" :max="32" :step="1" class="custom-slider-v2" />
-                    </div>
-                    <div class="ctrl-group">
-                      <label>重点标注</label>
-                      <el-radio-group v-model="agentConfigs.knowledge_graph.highlight_mode" size="small" class="custom-radio-group">
-                        <el-radio-button label="weak_points">薄弱点</el-radio-button>
-                        <el-radio-button label="key_points">关键点</el-radio-button>
-                        <el-radio-button label="all">全部</el-radio-button>
-                      </el-radio-group>
-                    </div>
 
-                  </template>
 
                   <template v-if="agent.id === 'mindmap'">
                     <div class="ctrl-group">
@@ -258,19 +233,12 @@
 
                   <template v-if="agent.id === 'ppt'">
                     <div class="ctrl-group">
-                      <label>输出格式</label>
-                      <el-radio-group v-model="agentConfigs.ppt.output_format" size="small" class="custom-radio-group">
-                        <el-radio-button label="preview">在线预览</el-radio-button>
-                        <el-radio-button label="pptx">生成PPTX源文件</el-radio-button>
-                      </el-radio-group>
+                      <label>交付方式</label>
+                      <el-tag effect="plain" round>在线预览课件</el-tag>
                     </div>
                     <div class="ctrl-group">
                       <label>幻灯片主题风格</label>
-                      <el-select v-model="agentConfigs.ppt.template_id" size="default" class="w-full custom-select">
-                        <el-option label="经典学术蓝 (Logic Blue)" value="theme-logic-blue" />
-                        <el-option label="现代开发绿 (Dev Green)" value="theme-dev-green" />
-                        <el-option label="未来科技靛 (Tech Indigo)" value="theme-tech-indigo" />
-                      </el-select>
+                      <el-tag effect="plain" round type="primary">逻辑蓝 · 教学演示主题</el-tag>
                     </div>
                     <div class="ctrl-group">
                       <label>内容深度/难度</label>
@@ -336,12 +304,12 @@
     <section class="dag-hero-bar" aria-live="polite">
       <div class="dag-hero-left">
         <el-tag class="dag-hero-kicker" effect="plain" round>
-          <span class="ping-dot"></span> STREAMING
+          <span class="ping-dot"></span> LIVE STATUS
         </el-tag>
         <h2 class="dag-hero-title">{{ dagHeroMessage }}</h2>
       </div>
       <div class="dag-hero-right">
-        <span class="dag-progress-summary">{{ dagCompletedCount }}/{{ dagTotalCount }} 完成</span>
+        <span class="dag-progress-summary">{{ overallProgress }}% · {{ dagCompletedCount }}/{{ dagTotalCount }} 完成</span>
       </div>
     </section>
 
@@ -373,6 +341,7 @@
             <div v-if="node.status === 'waiting'" class="dag-node-info">等待中</div>
             <div v-if="node.status === 'success'" class="dag-node-info dag-info-ok">已完成</div>
             <div v-if="node.status === 'failed'" class="dag-node-info dag-info-err">生成失败</div>
+            <div v-if="node.status === 'skipped'" class="dag-node-info">已跳过</div>
           </div>
           <transition name="dag-expand">
             <div v-if="dagExpandedNodes[node.id]" class="dag-node-expanded">
@@ -410,10 +379,10 @@
           <div class="hero-content-left">
             <div class="hero-status-tag-mini success-glow">
               <el-icon><CircleCheckFilled /></el-icon>
-              <span>已完成</span>
+              <span>{{ resultWarning ? '部分完成' : '已完成' }}</span>
             </div>
             <h1 class="hero-title-compact">{{ finalBundle?.title || '个性化学习资源已就绪' }}</h1>
-            <p class="hero-subtitle-compact">多智能体协同加工完成，已为您生成专属多模态知识图谱</p>
+            <p class="hero-subtitle-compact">多智能体协同加工完成，已为您生成专属学习资源包</p>
           </div>
           <div class="hero-actions-right">
             <el-button round size="small" @click="resetGenerator">
@@ -421,6 +390,14 @@
             </el-button>
           </div>
         </header>
+        <el-alert
+          v-if="resultWarning"
+          class="result-warning"
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="resultWarning"
+        />
 
         <main class="results-body-bento">
           <div class="bento-grid-container">
@@ -476,7 +453,6 @@
       <div v-if="previewData" class="preview-dialog-body">
         <MindmapView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
         <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
-        <KnowledgeGraphView v-else-if="previewData.agentId === 'knowledge_graph'" :result-data="previewData.resultData" />
         <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
         <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
         <PptView v-else-if="previewData.agentId === 'ppt'" :result-data="previewData.resultData" />
@@ -487,7 +463,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   MagicStick, ArrowRight, Cpu,
@@ -499,12 +475,18 @@ import {
 import MindmapView from '@/components/resource/MindmapView.vue'
 import MarkdownView from '@/components/resource/MarkdownView.vue'
 import QuizView from '@/components/resource/QuizView.vue'
-import KnowledgeGraphView from '@/components/resource/KnowledgeGraphView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
 import PptView from '@/components/resource/PptView.vue'
 
-import { generateResources, type ResourceAgentId, type LearningScenario, type ResourceGenerateEvent } from '@/api/resource'
+import {
+  startResourceGeneration,
+  pollResourceStatus,
+  getResourceBundle,
+  type LearningScenario,
+  type ResourceAgentId,
+  type ResourceTaskStatus,
+} from '@/api/resource'
 
 defineOptions({ name: 'ResourceGenerator' })
 
@@ -522,7 +504,6 @@ type QuizQuestionType = 'single' | 'multiple' | 'judge' | 'fill'
 type AnyAgentConfigs = {
   content: { structure: string; include_common_mistakes: boolean; include_examples: boolean; focus_mode: string; depth_level: string }
   mindmap: { map_type: string; max_depth: number; highlight_weak: boolean; expand_weak_points: boolean; include_prerequisites: boolean }
-  knowledge_graph: { layout_mode: string; max_nodes: number; relation_depth: number; highlight_mode: string; store_neo4j: boolean; include_orphan_points: boolean }
   quiz: { question_count: number; difficulty_mode: string; weak_point_weight: number; exam_style: string; include_analysis: boolean; question_types?: QuizQuestionType[] }
   code: { programming_language: string; case_type: string; comment_level: string; include_test: boolean; difficulty: string }
   reading: { reading_depth: string; max_items: number; resource_quality: string; include_practice: boolean; language_preference: string }
@@ -531,10 +512,10 @@ type AnyAgentConfigs = {
 }
 
 const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
-  exam_prep: { content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' }, quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 70, exam_style: '考研', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 18, relation_depth: 2, highlight_mode: 'weak_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'algorithm_template', comment_level: 'standard', include_test: false, difficulty: 'intermediate' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'classic', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 8, difficulty: 'advanced', output_format: 'preview' } },
-  daily_review: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 16, relation_depth: 2, highlight_mode: 'key_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-dev-green', page_count: 5, difficulty: 'intermediate', output_format: 'preview' } },
-  project_practice: { content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 30, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'radial', max_nodes: 24, relation_depth: 3, highlight_mode: 'all', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: true, difficulty: 'intermediate' }, reading: { reading_depth: 'engineering', max_items: 5, resource_quality: 'latest', include_practice: true, language_preference: 'chinese' }, ppt: { template_id: 'theme-tech-indigo', page_count: 10, difficulty: 'intermediate', output_format: 'preview' } },
-  self_study: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true }, knowledge_graph: { layout_mode: 'force', max_nodes: 20, relation_depth: 2, highlight_mode: 'key_points', store_neo4j: true, include_orphan_points: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'verbose', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 6, difficulty: 'beginner', output_format: 'preview' } },
+  exam_prep: { content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' }, quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 70, exam_style: '考研', include_analysis: true }, mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'algorithm_template', comment_level: 'standard', include_test: false, difficulty: 'intermediate' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'classic', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 8, difficulty: 'advanced', output_format: 'preview' } },
+  daily_review: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 5, difficulty: 'intermediate', output_format: 'preview' } },
+  project_practice: { content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 30, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'standard', include_test: true, difficulty: 'intermediate' }, reading: { reading_depth: 'engineering', max_items: 5, resource_quality: 'latest', include_practice: true, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 10, difficulty: 'intermediate', output_format: 'preview' } },
+  self_study: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'verbose', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 6, difficulty: 'beginner', output_format: 'preview' } },
 }
 
 // ===================== 1. 核心状态 =====================
@@ -547,7 +528,7 @@ const learningScenario = ref<LearningScenario>('daily_review')
 
 const quickPrompts = [
   "复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题",
-  "零基础学习 Python 多线程，需要底层原理知识图谱和带详细注释的代码",
+  "零基础学习 Python 多线程，需要底层原理和带详细注释的代码",
   "考研冲刺《数据结构》二叉树，帮我精简思维导图，重点标注高频考点"
 ]
 
@@ -556,7 +537,6 @@ const agentMetaList = [
   { id: 'reviewer', name: '资源审查', icon: CircleCheckFilled, colorClass: 'text-emerald' },
   { id: 'assembler', name: '资源组装', icon: Position, colorClass: 'text-indigo' },
   { id: 'content', name: '核心知识讲解', icon: Document, colorClass: 'text-blue' },
-  { id: 'knowledge_graph', name: '知识图谱构建', icon: Share, colorClass: 'text-orange' },
   { id: 'mindmap', name: '知识结构图谱', icon: Share, colorClass: 'text-purple' },
   { id: 'code', name: '实战代码沙箱', icon: Cpu, colorClass: 'text-red' },
   { id: 'quiz', name: '自测题训练', icon: Edit, colorClass: 'text-emerald' },
@@ -566,7 +546,7 @@ const agentMetaList = [
 ]
 
 const getAgentMeta = (id: string) => agentMetaList.find(a => a.id === id) || { name: id, icon: Document, colorClass: 'text-blue' }
-const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading', 'ppt'])
+const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt'])
 
 const isAgentEnabled = (id: string) => enabledAgentIds.value.includes(id as ResourceAgentId)
 
@@ -601,7 +581,6 @@ const getScenarioDesc = (scenario: string) => {
 const agentConfigs = reactive({
   content: { structure: 'progressive' as const, include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage' as const, depth_level: 'standard' as const },
   mindmap: { map_type: 'knowledge_tree' as const, max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
-  knowledge_graph: { layout_mode: 'force' as const, max_nodes: 18, relation_depth: 2, highlight_mode: 'key_points' as const, store_neo4j: true, include_orphan_points: true },
   quiz: { question_count: 5, difficulty_mode: 'adaptive' as const, weak_point_weight: 50, exam_style: 'school' as const, include_analysis: true, question_types: ['single', 'multiple', 'judge'] as QuizQuestionType[] },
   code: { programming_language: 'python' as const, case_type: 'basic_demo' as const, comment_level: 'standard' as const, include_test: false, difficulty: 'beginner' as const },
   reading: { reading_depth: 'course_extended' as const, max_items: 3, resource_quality: 'balanced' as const, include_practice: false, language_preference: 'chinese' as const },
@@ -626,18 +605,17 @@ const goToPersonalize = () => {
 
 // ===================== 3. 工作流与生成逻辑 =====================
 const generatedResources = ref<GeneratedResourceItem[]>([])
-const reviewResult = ref<any | null>(null)
 const finalBundle = ref<any | null>(null)
-const profileSummary = ref<Record<string, any> | null>(null)
 const isGenerating = ref(false)
 const generationError = ref<string | null>(null)
-const streamController = ref<AbortController | null>(null)
-const resourceDisplayCounter = ref(0)
-const USE_FIXED_RESULT_PAGE = false
+const resultWarning = ref('')
+const overallProgress = ref(0)
+const latestWorkflowMessage = ref('')
+const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 
 // ===================== DAG layout =====================
 
-const RESOURCE_TYPE_ORDER = ['content', 'mindmap', 'knowledge_graph', 'code', 'quiz', 'reading', 'ppt', 'video']
+const RESOURCE_TYPE_ORDER = ['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt', 'video']
 
 // ===================== New DAG Generating Phase State =====================
 
@@ -645,7 +623,6 @@ const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   planning: { label: '规划', icon: '🎯' },
   content: { label: '课程讲解', icon: '📝' },
   mindmap: { label: '思维导图', icon: '🧠' },
-  knowledge_graph: { label: '知识图谱', icon: '🔗' },
   quiz: { label: '练习题', icon: '📋' },
   code: { label: '代码案例', icon: '💻' },
   reading: { label: '拓展阅读', icon: '📚' },
@@ -658,7 +635,7 @@ interface DagNodeState {
   id: string
   label: string
   icon: string
-  status: 'waiting' | 'running' | 'success' | 'failed'
+  status: 'waiting' | 'running' | 'success' | 'failed' | 'skipped'
   progress: number
   currentMessage: string
   stepHistory: string[]
@@ -777,7 +754,7 @@ const dagHeroMessage = computed(() => {
   if (running) return running.currentMessage || `${running.label}处理中...`
   const allDone = Object.values(dagNodeStates.value).every(n => n.status === 'success')
   if (allDone) return '所有资源生成完成'
-  return '多智能体协同生成中'
+  return latestWorkflowMessage.value || '多智能体协同生成中'
 })
 
 const dagTotalCount = computed(() => dagNodesV2.value.length)
@@ -823,7 +800,6 @@ const getResourceTypeLabel = (type: string) => {
   const labelMap: Record<string, string> = {
     content: '专业讲解',
     mindmap: '知识导图',
-    knowledge_graph: '知识图谱',
     code: '代码案例',
     quiz: '自测题',
     reading: '拓展阅读',
@@ -838,7 +814,6 @@ const getResourceUsageHint = (type: string) => {
   const hintMap: Record<string, string> = {
     content: '先阅读讲解，建立基础概念和关键术语理解。',
     mindmap: '用于梳理知识层级、概念关系和复习框架。',
-    knowledge_graph: '用图谱理解知识点依赖、包含、扩展和易混关系。',
     code: '通过代码案例把知识点落到实践，适合边运行边理解。',
     quiz: '完成自测题，检查掌握情况并定位仍然薄弱的知识点。',
     reading: '用于课后拓展和深入理解，适合完成基础资源后阅读。',
@@ -852,7 +827,6 @@ const getDefaultResourceFormat = (type: string) => {
   const formatMap: Record<string, string> = {
     content: 'Markdown',
     mindmap: 'Markdown / Tree',
-    knowledge_graph: 'Graph JSON',
     code: 'Code',
     quiz: 'Quiz JSON',
     reading: 'Reading List',
@@ -866,7 +840,6 @@ const getEstimatedTime = (type: string) => {
   const timeMap: Record<string, string> = {
     content: '10-15 分钟',
     mindmap: '5-8 分钟',
-    knowledge_graph: '6-10 分钟',
     code: '15-25 分钟',
     quiz: '10-20 分钟',
     reading: '20-30 分钟',
@@ -892,7 +865,6 @@ const getResourceToneClass = (type: string) => {
   const toneMap: Record<string, string> = {
     content: 'tone-blue',
     mindmap: 'tone-purple',
-    knowledge_graph: 'tone-amber',
     code: 'tone-rose',
     quiz: 'tone-emerald',
     reading: 'tone-indigo',
@@ -902,7 +874,6 @@ const getResourceToneClass = (type: string) => {
   return toneMap[type] || 'tone-blue'
 }
 
-// 运行中已生成资源列表：模拟栈，后生成的资源优先展示在顶部
 const sortedGeneratedResources = computed(() => {
   return [...generatedResources.value].sort((a, b) => {
     const aOrder = typeof a.displayOrder === 'number' ? a.displayOrder : -1
@@ -928,7 +899,6 @@ const getBentoCardGridStyle = (index: number, total: number) => {
   return { gridColumn: `span ${spanMap[remainder] || 3}` }
 }
 
-// 预览运行中已生成的单个资源
 const previewGeneratedResource = (resource: any) => {
   handlePreview({
     agentId: resource.type,
@@ -937,332 +907,133 @@ const previewGeneratedResource = (resource: any) => {
   })
 }
 
-const startGeneration = async () => {
-  dagNodeStates.value = {}
-  dagExpandedNodes.value = {}
-  if (USE_FIXED_RESULT_PAGE) {
-    applyFixedResultPage()
-    return
+function createDagNode(id: string, isSystem: boolean): DagNodeState {
+  const display = AGENT_DISPLAY[id] || { label: getResourceTypeLabel(id), icon: getDagNodeIcon(id) }
+  return {
+    id,
+    label: display.label,
+    icon: display.icon,
+    status: 'waiting',
+    progress: 0,
+    currentMessage: '',
+    stepHistory: [],
+    isSystem,
   }
+}
+
+function initializeWaitingNodes() {
+  const nodes: Record<string, DagNodeState> = {
+    planning: createDagNode('planning', true),
+    review: createDagNode('review', true),
+    bundle: createDagNode('bundle', true),
+  }
+  enabledAgentIds.value.forEach((agentId) => {
+    nodes[agentId] = createDagNode(agentId, false)
+  })
+  dagNodeStates.value = nodes
+}
+
+function applyProgressSnapshot(progress: ResourceTaskStatus['progress']) {
+  overallProgress.value = progress.progress
+  latestWorkflowMessage.value = progress.latest_message
+  Object.entries(progress.agents).forEach(([agentId, snapshot]) => {
+    const node = dagNodeStates.value[agentId] || createDagNode(
+      agentId,
+      ['planning', 'review', 'bundle'].includes(agentId),
+    )
+    node.status = snapshot.status
+    node.progress = snapshot.progress
+    node.currentMessage = snapshot.message
+    node.stepHistory = snapshot.steps || []
+    dagNodeStates.value[agentId] = node
+  })
+}
+
+const startGeneration = async () => {
   currentPhase.value = 'generating'
   resetGenerationState()
+  initializeWaitingNodes()
   isGenerating.value = true
 
   const requestAgentConfigs = {
     content: agentConfigs.content,
     mindmap: agentConfigs.mindmap,
-    knowledge_graph: agentConfigs.knowledge_graph,
     quiz: agentConfigs.quiz,
     code: agentConfigs.code,
     reading: agentConfigs.reading,
     ppt: agentConfigs.ppt,
   }
 
-  streamController.value = generateResources(
-    {
+  try {
+    const { resource_id } = await startResourceGeneration({
       learning_need: naturalInput.value,
       learning_scenario: learningScenario.value,
       selected_agents: enabledAgentIds.value.map((id, index) => ({ agent_id: id, enabled: true, priority: index })).filter(a => a.enabled),
       agent_configs: requestAgentConfigs,
       output_options: { output_format: 'json' }
-    },
-    handleSseEvent,
-    () => {
-      if (!generationError.value && currentPhase.value === 'generating') {
+    })
+
+    const checkStatus = async () => {
+      try {
+        const taskStatus = await pollResourceStatus(resource_id)
+        applyProgressSnapshot(taskStatus.progress)
+        if (taskStatus.status === 'completed' || taskStatus.status === 'partial_completed') {
+          stopPolling()
+          const bundle = await getResourceBundle(resource_id)
+          finalBundle.value = bundle
+          generatedResources.value = bundle.resources || []
+          resultWarning.value = taskStatus.status === 'partial_completed'
+            ? '部分资源生成失败或质量审查未通过，以下已完成内容仍可查看。'
+            : ''
+          isGenerating.value = false
+          currentPhase.value = 'result'
+        } else if (taskStatus.status === 'failed') {
+          stopPolling()
+          generationError.value = taskStatus.progress.latest_message || '资源生成失败，暂无可展示内容'
+          isGenerating.value = false
+          ElMessage.error(generationError.value || '资源生成失败，暂无可展示内容')
+        }
+      } catch (err: any) {
+        stopPolling()
+        generationError.value = err.message || '生成中断，请稍后重试'
         isGenerating.value = false
-        currentPhase.value = 'result'
+        ElMessage.error(generationError.value || '生成中断，请稍后重试')
       }
-    },
-    (err: any) => {
-      generationError.value = err.message || '生成中断，请稍后重试'
-      isGenerating.value = false
-      ElMessage.error(generationError.value || '生成中断，请稍后重试')
     }
-  )
-}
 
-const applyFixedResultPage = () => {
-  const now = new Date().toISOString()
-  resetGenerationState()
-  currentPhase.value = 'result'
-  dagNodeStates.value['planning'] = { id: 'planning', label: '规划', icon: '🎯', status: 'success', progress: 100, currentMessage: '已完成', stepHistory: [], isSystem: true }
-  dagNodeStates.value['review'] = { id: 'review', label: '质量审查', icon: '🔍', status: 'success', progress: 100, currentMessage: '已完成', stepHistory: [], isSystem: true }
-  dagNodeStates.value['bundle'] = { id: 'bundle', label: '打包', icon: '📦', status: 'success', progress: 100, currentMessage: '已完成', stepHistory: [], isSystem: true }
-
-  naturalInput.value = '复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题'
-
-  const mockResources: GeneratedResourceItem[] = [
-    {
-      id: 'mock-content-tcp-handshake',
-      type: 'content',
-      title: 'TCP三次握手高频考点速讲',
-      summary: '从为什么不是两次或四次出发，覆盖SYN/ACK语义、半连接队列、旧连接报文干扰与RST处理。',
-      format: 'Markdown',
-      metadata: { difficulty: 'intermediate', estimated_time: '12-18 分钟' },
-      content: { title: 'TCP三次握手高频考点速讲', markdown: '# TCP 三次握手...' },
-    },
-    {
-      id: 'mock-mindmap-tcp-handshake',
-      type: 'mindmap',
-      title: 'TCP三次握手思维导图（复习版）',
-      summary: '按目的、流程、状态、常见陷阱、面试追问组织，适合考前快速回忆。',
-      format: 'Markdown / Tree',
-      metadata: { difficulty: 'intermediate', estimated_time: '6-10 分钟' },
-      content: { title: 'TCP三次握手思维导图', markdown: '# TCP 三次握手思维导图...' },
-    },
-    {
-      id: 'mock-knowledge-graph-tcp',
-      type: 'knowledge_graph',
-      title: 'TCP三次握手知识图谱',
-      summary: '用知识点网络展示 SYN/ACK 语义、状态迁移、异常处理和安全风险之间的关系。',
-      format: 'Graph JSON',
-      metadata: { difficulty: 'advanced', estimated_time: '10-15 分钟' },
-      content: {
-        topic: 'TCP三次握手',
-        summary: '连接建立过程的知识点关系',
-        nodes: [
-          { id: 'kp1', label: 'SYN 请求', category: 'core', description: '客户端发起同步请求' },
-          { id: 'kp2', label: 'SYN-ACK', category: 'core', description: '服务端同步并确认' },
-          { id: 'kp3', label: 'ACK 确认', category: 'important', description: '客户端完成最终确认' },
-          { id: 'kp4', label: '旧报文干扰', category: 'weak', description: '两次握手无法抵御旧连接报文' },
-        ],
-        edges: [
-          { source: 'kp1', target: 'kp2', relation_type: 'prerequisite', label: '前置' },
-          { source: 'kp2', target: 'kp3', relation_type: 'extends', label: '推进' },
-          { source: 'kp4', target: 'kp1', relation_type: 'related', label: '易混' },
-        ],
-      },
-    },
-    {
-      id: 'mock-code-tcp',
-      type: 'code',
-      title: 'TCP握手抓包分析代码模板',
-      summary: '提供抓包字段解析模板，帮助定位重传、乱序和异常握手。',
-      format: 'Code',
-      metadata: { difficulty: 'intermediate', estimated_time: '15-20 分钟' },
-      content: { title: 'TCP抓包分析模板', code: 'print("tcp handshake analyzer")', language: 'python' },
-    },
-    {
-      id: 'mock-quiz-tcp-hard',
-      type: 'quiz',
-      title: 'TCP三次握手难题自测（8题）',
-      summary: '偏难题，覆盖半连接队列、SYN Cookie、抓包字段分析与故障定位。',
-      format: 'Quiz JSON',
-      metadata: { difficulty: 'hard', estimated_time: '18-25 分钟' },
-      content: {
-        title: 'TCP三次握手难题自测',
-        questions: [
-          { question_type: 'single_choice', stem: '为何第三次握手必要？', options: ['确认双向收发', '减少带宽', '避免拥塞', '提高吞吐'], answer: '确认双向收发' },
-        ],
-      },
-    },
-    {
-      id: 'mock-reading-tcp-extend',
-      type: 'reading',
-      title: 'TCP握手扩展阅读清单',
-      summary: '延伸到拥塞控制初始化、Fast Open、SYN Cookie 实现细节，便于深挖。',
-      format: 'Reading List',
-      metadata: { difficulty: 'advanced', estimated_time: '25-35 分钟' },
-      content: {
-        summary: '建议先完成时序图与难题，再扩展阅读。',
-        resources: [
-          { title: 'RFC 793 / RFC 9293 handshake sections', type: 'documentation' },
-          { title: 'SYN Flood defense and SYN Cookie notes', type: 'article' },
-        ],
-      },
-    },
-  ]
-
-  generatedResources.value = mockResources.map((item, index) => ({
-    ...item,
-    generatedAt: now,
-    displayOrder: index + 1,
-  }))
-
-  finalBundle.value = {
-    topic: naturalInput.value,
-    gap: naturalInput.value,
-    resources: generatedResources.value,
-    metadata: {
-      topic: naturalInput.value,
-      gap: naturalInput.value,
-      course: '计算机网络',
-    },
+    await checkStatus()
+    if (isGenerating.value) {
+      pollingInterval.value = setInterval(() => {
+        void checkStatus()
+      }, 3000)
+    }
+  } catch (err: any) {
+    generationError.value = err.message || '生成请求失败'
+    isGenerating.value = false
+    ElMessage.error(generationError.value || '生成请求失败')
   }
 }
 
 const resetGenerationState = () => {
   generatedResources.value = []
-  reviewResult.value = null
   finalBundle.value = null
-  profileSummary.value = null
   generationError.value = null
-  resourceDisplayCounter.value = 0
+  resultWarning.value = ''
+  overallProgress.value = 0
+  latestWorkflowMessage.value = ''
   isGenerating.value = false
   // Reset DAG state
   dagNodeStates.value = {}
   dagExpandedNodes.value = {}
 }
 
-const handleSseEvent = (event: ResourceGenerateEvent) => {
-  if (!event?.event_type) return
 
-  // --- Update DAG node state from SSE events ---
-  // Backend event type mapping:
-  //   PlanningAgent → emit_agent("planning") → event_type="agent", agent="planning"
-  //   SubAgents    → emit_agent_action()     → event_type="agent_step"
-  //   SubAgents    → emit_agent()            → event_type="agent"
-  //   ReviewAgent  → emit_agent("review")    → event_type="agent", agent="review"
-  //   Bundle       → emit_bundle()           → event_type="bundle"
-  //   Workflow     → emit_workflow()         → event_type="workflow"
-  //   Resource     → emit_resource()         → event_type="resource"
 
-  const systemNodeIds = new Set(['planning', 'review', 'bundle'])
-  const agentId = event.agent || ''
-
-  // Helper: ensure a dagNodeState exists
-  function ensureDagNode(id: string): DagNodeState {
-    if (!dagNodeStates.value[id]) {
-      const display = AGENT_DISPLAY[id]
-      dagNodeStates.value[id] = {
-        id, label: display?.label || id, icon: display?.icon || '📄',
-        status: 'waiting', progress: 0, currentMessage: '', stepHistory: [],
-        isSystem: systemNodeIds.has(id),
-      }
-    }
-    return dagNodeStates.value[id]
+const stopPolling = () => {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value)
+    pollingInterval.value = null
   }
-
-  // agent_step: sub-agent is running a step
-  if (event.event_type === 'agent_step') {
-    const node = ensureDagNode(agentId)
-    node.status = 'running'
-    node.progress = event.progress ?? node.progress
-    node.currentMessage = event.message || node.currentMessage
-    if (event.message) node.stepHistory.push(event.message)
-  }
-
-  // agent: status update (running/success/failed) for any agent including planning & review
-  if (event.event_type === 'agent') {
-    const node = ensureDagNode(agentId)
-    node.status = event.status === 'skipped' ? 'failed' : (event.status as 'running' | 'success' | 'failed')
-    if (event.status === 'success') {
-      node.progress = 100
-      node.currentMessage = event.message || '已完成'
-    } else if (event.status === 'failed') {
-      node.currentMessage = event.message || '生成失败'
-    } else if (event.status === 'running') {
-      node.currentMessage = event.message || node.currentMessage
-      if (event.progress) node.progress = event.progress
-    }
-    if (event.message && node.status !== 'success') node.stepHistory.push(event.message)
-  }
-
-  // bundle event
-  if (event.event_type === 'bundle') {
-    const node = ensureDagNode('bundle')
-    node.status = event.status === 'pending' ? 'waiting' : (event.status as 'running' | 'success' | 'failed')
-    node.currentMessage = event.message || node.currentMessage
-    if (event.message) node.stepHistory.push(event.message)
-    if (event.progress) node.progress = event.progress
-    if (event.status === 'success') node.progress = 100
-    if (event.payload?.bundle) {
-      finalBundle.value = event.payload.bundle
-    }
-  }
-
-  // workflow event
-  if (event.event_type === 'workflow') {
-    if (event.payload?.profile_summary) {
-      profileSummary.value = event.payload.profile_summary
-    }
-  }
-
-  // resource event: a sub-agent completed its output
-  if (event.event_type === 'resource') {
-    const resource = event.payload?.resource
-    if (resource) {
-      const eventTime = event.timestamp || new Date().toISOString()
-      upsertResource(resource, eventTime)
-      // Mark the agent node as success
-      const resAgentId = (resource.type as string) || agentId
-      if (resAgentId) {
-        const node = ensureDagNode(resAgentId)
-        node.status = 'success'
-        node.progress = 100
-        node.currentMessage = '资源已生成'
-      }
-    }
-  }
-
-  // review event (from emit_review, which has event_type="review")
-  if (event.event_type === 'review') {
-    const node = ensureDagNode('review')
-    node.status = event.status === 'pending' ? 'waiting' : (event.status as 'running' | 'success' | 'failed')
-    node.currentMessage = event.message || node.currentMessage
-    if (event.message) node.stepHistory.push(event.message)
-    if (event.progress) node.progress = event.progress
-    if (event.payload?.review_result) {
-      reviewResult.value = event.payload.review_result
-    }
-    if (event.status === 'success') node.progress = 100
-  }
-
-  // done event
-  if (event.event_type === 'done') {
-    finalBundle.value = event.payload?.bundle || finalBundle.value
-    // Mark all system nodes as success
-    ensureDagNode('planning').status = 'success'
-    ensureDagNode('planning').progress = 100
-    ensureDagNode('review').status = 'success'
-    ensureDagNode('review').progress = 100
-    ensureDagNode('bundle').status = 'success'
-    ensureDagNode('bundle').progress = 100
-    isGenerating.value = false
-    closeSseConnection()
-    currentPhase.value = 'result'
-  }
-
-  // error event
-  if (event.event_type === 'error') {
-    generationError.value = event.message
-    isGenerating.value = false
-    // Mark all running nodes as failed
-    Object.values(dagNodeStates.value).forEach(node => {
-      if (node.status === 'running') node.status = 'failed'
-    })
-    closeSseConnection()
-  }
-}
-
-const upsertResource = (resource: any, timestamp?: string) => {
-  const generatedAt = timestamp || new Date().toISOString()
-  const index = generatedResources.value.findIndex(item => item.id === resource.id || (item.type === resource.type && item.title === resource.title))
-  if (index >= 0) {
-    const previous = generatedResources.value[index]!
-    const displayOrder = typeof previous.displayOrder === 'number'
-      ? previous.displayOrder
-      : resourceDisplayCounter.value + 1
-    if (typeof previous.displayOrder !== 'number') resourceDisplayCounter.value = displayOrder
-    generatedResources.value[index] = {
-      ...previous,
-      ...resource,
-      generatedAt: previous.generatedAt || generatedAt,
-      displayOrder,
-    }
-    return
-  }
-  resourceDisplayCounter.value += 1
-  generatedResources.value.push({
-    ...resource,
-    generatedAt,
-    displayOrder: resourceDisplayCounter.value,
-  })
-}
-
-const closeSseConnection = () => {
-  streamController.value?.abort()
-  streamController.value = null
 }
 
 const stringifyCompact = (value: any, maxLength = 80): string => {
@@ -1280,7 +1051,7 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
   const fallback = getResourceTypeLabel(type)
   const raw = String(title || fallback).trim()
   if (!raw) return fallback
-  const suffixPattern = /\s*[-－—]\s*(内容讲解|思维导图|知识图谱|代码实操案例|拓展阅读|自测题)\s*$/
+  const suffixPattern = /\s*[-－—]\s*(内容讲解|思维导图|代码实操案例|拓展阅读|自测题)\s*$/
   const matched = raw.match(suffixPattern)
   if (!matched) return raw
   const suffix = matched[1] || ''
@@ -1288,19 +1059,13 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
   return prefix ? `${prefix}\n- ${suffix}` : suffix
 }
 
-onMounted(() => {
-  if (USE_FIXED_RESULT_PAGE) {
-    applyFixedResultPage()
-  }
-})
-
 onBeforeUnmount(() => {
-  closeSseConnection()
+  stopPolling()
 })
 
 // ===================== 4. UI 交互 =====================
 const resetGenerator = () => {
-  closeSseConnection()
+  stopPolling()
   naturalInput.value = ''
   resetGenerationState()
   currentPhase.value = 'input'

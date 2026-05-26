@@ -93,69 +93,43 @@ export interface ProfileHistoryItem {
 }
 
 
-export type PathNodeStatus = 'success' | 'processing' | 'wait'
-export type PathStageStatus = PathNodeStatus
-
-export interface PathNode {
-  id: string
+export interface AgentStage {
+  stage_id: string
   title: string
-  status: PathNodeStatus
+  description: string
+}
+
+export interface CoursePathNodeDTO {
+  id: number
+  node_id: string
+  stage_id: string
+  title: string
+  status: 'locked' | 'available' | 'in_progress' | 'completed' | string
+  resource_status: 'not_started' | 'generating' | 'ready' | 'failed' | string
   progress: number
   priority: number
-  desc: string | null
-  recommendation_reason?: string | null
-  resource_id?: number | null
-  resource_item_id?: number | null
-  resource_type?: string | null
-  resource_title?: string | null
-  resource_summary?: string | null
-  resource_format?: string | null
-  resource_status?: 'available' | 'missing' | 'pending' | 'failed' | null
+  prerequisites: string[]
+  mastery_target: string | null
+  estimated_minutes: number
+  difficulty: number
+  recommendation_reason: string | null
+  resource_id: number | null
 }
 
-export interface PathStage {
-  id: string
+export interface CoursePathResponse {
+  id: number
+  module: string
   title: string
-  status: PathStageStatus
-  progress: number
-  nodes: PathNode[]
-}
-
-export interface PathPlanSummary {
+  goal: string
   overall_progress: number
-  current_stage: string | null
-  current_node?: string | null
-  knowledge_level: string | null
+  current_stage_id: string | null
+  current_node_id: string | null
   eta_days: number
   confidence: number
-}
-
-export interface PathRecommendedNode {
-  node_id: string
-  title: string
-  priority: number
-  stage_id: string
-  reason: string
-}
-
-export interface PathPlanInsights {
-  adjustment_reason: string
-  next_action: string
-  recommended_nodes?: PathRecommendedNode[]
-}
-
-export interface PathPlanMeta {
-  generated_at: string
-  data_sources: string[]
-  resource_id: number | null
-  plan_version: number
-}
-
-export interface PathPlan {
-  summary: PathPlanSummary
-  stages: PathStage[]
-  insights: PathPlanInsights
-  meta: PathPlanMeta
+  status: string
+  stages: AgentStage[]
+  nodes: CoursePathNodeDTO[]
+  created_at: string
 }
 
 export interface PathPlanFeedbackParams {
@@ -164,20 +138,42 @@ export interface PathPlanFeedbackParams {
   resource_id?: number | null
 }
 
-export function getPathPlan(resourceId?: number) {
-  return http.get<ApiResponse<PathPlan>>('/ai/path-plan', {
-    params: resourceId ? { resource_id: resourceId } : undefined,
+export function getActiveCoursePath(module = 'mentor') {
+  return http.get<ApiResponse<CoursePathResponse>>('/ai/path-plan/active', {
+    params: { module },
   })
 }
 
-export function rebuildPathPlan(resourceId?: number) {
-  return http.post<ApiResponse<PathPlan>>('/ai/path-plan/rebuild', {
-    resource_id: resourceId ?? null,
+export function generateCoursePath(goal: string, module = 'mentor') {
+  return http.post<ApiResponse<CoursePathResponse>>('/ai/path-plan/generate', {
+    goal,
+    module,
   })
+}
+
+export interface PathNodeResourceRequest {
+  learning_scenario: string
+  selected_agents: {
+    agent_id: string
+    enabled: boolean
+    priority: number
+  }[]
+  agent_configs?: Record<string, unknown>
+  output_options?: { output_format: 'json' }
+}
+
+export function generatePathNodeResources(
+  nodeId: number,
+  payload: PathNodeResourceRequest,
+) {
+  return http.post<ApiResponse<{ resource_id: number; node_id: number; status: string }>>(
+    `/ai/path-plan/nodes/${nodeId}/generate-resources`,
+    payload,
+  )
 }
 
 export function applyPathFeedback(params: PathPlanFeedbackParams) {
-  return http.post<ApiResponse<PathPlan>>('/ai/path-plan/feedback', params)
+  return http.post<ApiResponse<CoursePathResponse>>('/ai/path-plan/feedback', params)
 }
 
 // ==========================================
