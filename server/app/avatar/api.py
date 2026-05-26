@@ -8,7 +8,7 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.auth.security import get_current_user
-from app.chat.service import CHAT_MODULE_NAME, get_avatar_chat_usecases
+from app.chat.service import ChatUseCases
 from app.infra.models import User
 from app.memory import MemoryService
 from app.infra.response import HttpResponse
@@ -65,7 +65,7 @@ async def clear_avatar_history(
 ):
     """清空数字人会话历史消息（默认清空当前会话）。"""
     from app.avatar.bridge.manager import avatar_bridge_manager
-    memory_layer = MemoryService(module=CHAT_MODULE_NAME)
+    memory_layer = MemoryService(module="mentor")
 
     target_session_id = (session_id or "").strip()
     if not target_session_id:

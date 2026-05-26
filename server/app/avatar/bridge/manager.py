@@ -360,7 +360,7 @@ class RealtimeBridge:
         """Clear current session chat history."""
         from app.avatar.bridge.state import MessageType
         from app.memory import MemoryService
-        from app.chat.service import CHAT_MODULE_NAME
+        from app.chat import CHAT_MODULE_NAME
 
         memory_layer = MemoryService(module=CHAT_MODULE_NAME)
 
@@ -680,7 +680,8 @@ class RealtimeBridge:
         history: Optional[list[dict]] = None,
     ):
         """Run one completed turn through chat service and avatar playback."""
-        from app.chat.service import get_chat_usecases, CHAT_MODULE_NAME
+        from app.chat.service import get_chat_usecases
+        from app.chat import CHAT_MODULE_NAME
         from app.chat.request import ChatHistoryMessage
         from app.memory import MemoryService
 

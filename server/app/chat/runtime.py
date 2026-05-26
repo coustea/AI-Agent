@@ -43,14 +43,13 @@ class TutorContextService(Protocol):
         user_id: int,
         session_id: str,
         user_message: str,
-        image_urls: list[str],
-        file_urls: list[str],
+        attachments: list[str],
     ) -> tuple[list[AnyMessage], str]:
         """构建近期对话上下文。"""
         ...
 
     @staticmethod
-    def build_file_context(image_urls: list[str], file_urls: list[str]) -> str:
+    def build_file_context(attachments: list[str]) -> str:
         """构建文件上下文。"""
         ...
 
@@ -93,8 +92,7 @@ def resolve_session_id(user_id: int, session_id: str | None) -> str:
 def build_user_message_record(
     user_message: str,
     *,
-    image_urls: list[str],
-    file_urls: list[str],
+    attachments: list[str],
 ) -> UserMessageRecord:
     """构建用户消息记录。
 
@@ -102,19 +100,18 @@ def build_user_message_record(
 
     Args:
         user_message: 用户消息文本。
-        image_urls: 图片URL列表。
-        file_urls: 文件URL列表。
+        attachments: 附件URL列表。
 
     Returns:
         用户消息记录对象。
     """
+    image_urls, file_urls = _classify_attachments(attachments)
     content = user_message
     if image_urls:
         content += f" [Attached Images: {', '.join(image_urls)}]"
     if file_urls:
         content += f" [Attached Files: {', '.join(file_urls)}]"
 
-    attachments = (image_urls or []) + (file_urls or [])
     if not attachments:
         return UserMessageRecord(content=content, attachments=None)
 
@@ -139,8 +136,7 @@ async def prepare_tutor_turn(
     user_id: int,
     user_message: str,
     session_id: str | None,
-    image_urls: list[str] | None,
-    file_urls: list[str] | None,
+    attachments: list[str] | None,
     enable_search: bool,
     enable_long_term_memory: bool,
     need_teaching_diagram: bool | None,
@@ -155,8 +151,7 @@ async def prepare_tutor_turn(
         user_id: 用户ID。
         user_message: 用户消息。
         session_id: 可选的会话ID。
-        image_urls: 图片URL列表。
-        file_urls: 文件URL列表。
+        attachments: 附件URL列表。
         enable_search: 是否启用搜索。
         need_teaching_diagram: 是否生成教学图解。
         attachment_analysis: 附件预分析结果。
@@ -165,25 +160,22 @@ async def prepare_tutor_turn(
         准备好的对话轮次对象。
     """
     effective_session = resolve_session_id(user_id, session_id)
-    image_urls = image_urls or []
-    file_urls = file_urls or []
-    normalized_attachments = image_urls + file_urls
+    normalized_attachments = list(attachments or [])
+    image_urls, file_urls = _classify_attachments(normalized_attachments)
 
     user_record = build_user_message_record(
         user_message,
-        image_urls=image_urls,
-        file_urls=file_urls,
+        attachments=normalized_attachments,
     )
 
-    file_info_str = ctx_service.build_file_context(image_urls, file_urls)
+    file_info_str = ctx_service.build_file_context(attachments=normalized_attachments)
     attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
     # 构建近期对话上下文
     initial_messages, recent_chat_context = await ctx_service.build_recent_chat_context(
         user_id=user_id,
         session_id=effective_session,
         user_message=user_message,
-        image_urls=image_urls,
-        file_urls=file_urls,
+        attachments=normalized_attachments,
     )
 
     # 拼接附件预分析上下文

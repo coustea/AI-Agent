@@ -12,13 +12,11 @@ import time
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from app.chat.agent import chat_stream
+from app.chat.agent import TutorAgent
 from app.chat.request import ChatHistoryMessage
 from app.chat.runtime import (
-    PreparedTutorTurn,
     _classify_attachments,
     build_user_message_record,
-    prepare_tutor_turn,
 )
 from app.chat.schemas import TutorAgentContext, TutorState
 from app.config import (
@@ -32,7 +30,7 @@ from app.config import (
 )
 from app.infra.logging import get_logger
 from app.memory.service import MemoryService, get_memory_service
-from app.chat.utils.files import FileStore, LocalFileStore
+from app.chat.utils.storage import LocalFileStore, LocalFileStore
 from app.chat.utils.vision import VisionService
 
 logger = get_logger(__name__)
@@ -106,7 +104,7 @@ class ChatUseCases:
 
     def __init__(self) -> None:
         self._memory_service = get_memory_service()
-        self.file_store: FileStore = LocalFileStore()
+        self.file_store: LocalFileStore = LocalFileStore()
         self._stream_runner = None
         self._bg_semaphore = asyncio.Semaphore(20)
 
@@ -377,7 +375,6 @@ class ChatUseCases:
                 need_teaching_diagram=need_teaching_diagram,
                 history=history,
             )
-            state = prepare_tutor_state(context, history)
         else:
             context = await self.build_tutor_agent_context(
                 user_id=user_id,
@@ -388,18 +385,13 @@ class ChatUseCases:
                 enable_long_term_memory=enable_long_term_memory,
                 need_teaching_diagram=need_teaching_diagram,
             )
-            turn = prepare_tutor_turn(
-                ctx_service=self._memory_service,
-                user_id=user_id,
-                user_message=user_message or "",
-                session_id=effective_session,
-                attachments=merged_attachments,
-                enable_search=enable_search,
-                enable_long_term_memory=enable_long_term_memory,
-                need_teaching_diagram=need_teaching_diagram,
-                attachment_analysis=context.attachment_analysis,
+            # 从数据库构建历史
+            raw_msgs = await self._memory_service.list_messages(
+                user_id=user_id, session_id=effective_session, limit=50,
             )
-            state = turn.initial_state
+            history = [ChatHistoryMessage(role=m.role, content=m.content) for m in raw_msgs]
+            if user_message:
+                history.append(ChatHistoryMessage(role="user", content=user_message))
 
         # 保存用户消息
         user_record = build_user_message_record(
@@ -428,7 +420,7 @@ class ChatUseCases:
 
         # 流式输出
         full_answer = ""
-        async for event in chat_stream(state):
+        async for event in TutorAgent(context).chat_stream(history):
             if event.get("type") == "answer_delta":
                 full_answer += event.get("text", "")
             yield event
@@ -554,7 +546,3 @@ def get_avatar_chat_usecases() -> ChatUseCases:
     return _avatar_chat_usecases
 
 
-def prepare_tutor_state(context: TutorAgentContext, history: list[ChatHistoryMessage]) -> TutorState:
-    """从上下文和历史构建 LangGraph 状态。"""
-    from app.chat.runtime import prepare_tutor_state as _prepare
-    return _prepare(context, history)
