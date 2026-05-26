@@ -54,6 +54,10 @@
                 <el-icon><User /></el-icon>个人中心
               </div>
 
+              <div class="dropdown-header-block" @click="router.push('/question-bank')">
+                <el-icon><Collection /></el-icon>学习题库
+              </div>
+
               <div class="dropdown-divider"></div>
 
               <el-dropdown-item command="logout" class="logout-item">
@@ -88,7 +92,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Menu, Connection, Cpu, DataLine, ChatDotRound,
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
-  User, DataBoard
+  User, DataBoard, Collection
 } from '@element-plus/icons-vue'
 import { logout } from '@/api/auth'
 import OnboardingDialog from '@/components/OnboardingDialog.vue'

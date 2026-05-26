@@ -1063,9 +1063,6 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
 }
 
 onMounted(() => {
-  if (USE_FIXED_RESULT_PAGE) {
-    applyFixedResultPage()
-  }
   const prompt = route.query.prompt
   if (prompt) {
     naturalInput.value = String(prompt)
