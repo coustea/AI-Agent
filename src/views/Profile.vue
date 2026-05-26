@@ -109,6 +109,25 @@
             <span><el-icon><UserFilled /></el-icon> 专业</span>
             <strong>{{ studentProfile.major || '未填写' }}</strong>
           </div>
+          <div class="profile-info-row">
+            <span><el-icon><Search /></el-icon> 院校</span>
+            <strong class="school-info-strong">
+              <span v-if="studentProfile.school_level" class="school-level-tag">{{ studentProfile.school_level }}</span>
+              {{ studentProfile.school || '未填写' }}
+            </strong>
+          </div>
+          <div class="profile-info-row">
+            <span><el-icon><Checked /></el-icon> 年级</span>
+            <strong>{{ studentProfile.grade || '未填写' }}</strong>
+          </div>
+          <div class="profile-info-row">
+            <span><el-icon><Cpu /></el-icon> 常用语言</span>
+            <strong>{{ studentProfile.preferred_language || '未填写' }}</strong>
+          </div>
+          <div class="profile-info-row">
+            <span><el-icon><Aim /></el-icon> 学习目标</span>
+            <strong>{{ studentProfile.learning_goal || '未填写' }}</strong>
+          </div>
 
           <div class="profile-info-row course-display-row">
             <span><el-icon><VideoPlay /></el-icon> 正在学习</span>
@@ -141,24 +160,141 @@
             </div>
             <strong v-else>未填写</strong>
           </div>
-
-          <div class="profile-info-row">
-            <span><el-icon><Cpu /></el-icon> 常用语言</span>
-            <strong>{{ studentProfile.preferred_language || '未填写' }}</strong>
-          </div>
         </div>
       </div>
 
-      <div class="bento-card bento-span-2 radar-card">
+      <div class="bento-card bento-span-2 complete-profile-card">
         <div class="card-header-flex">
-          <h4>学习画像分析 <el-icon class="info-icon"><InfoFilled /></el-icon></h4>
-        </div>
-        <div style="display: flex; gap: 16px; width: 100%; height: 220px;">
-          <div class="radar-container" style="flex: 1; min-height: 0;">
-            <v-chart class="chart" :option="radarOption" autoresize />
+          <h4 class="card-title"><el-icon><User /></el-icon> 完整学习画像</h4>
+          <div class="profile-meta-tags" v-if="profileMetadata">
+            <el-tag size="small" type="success">V{{ profileMetadata.version }}</el-tag>
+            <el-tag size="small" type="info">置信度: {{ profileMetadata.confidence }}%</el-tag>
           </div>
-          <div class="pie-container" style="flex: 1; min-height: 0; width: 100%;">
-            <v-chart class="chart" :option="pieOption" autoresize />
+        </div>
+
+        <el-tabs v-model="profileTab" class="profile-tabs-modern">
+          <el-tab-pane label="能力维度" name="dimensions">
+            <div class="dimensions-layout">
+              <div class="dimensions-list">
+                <div
+                  v-for="dim in dimensionsData"
+                  :key="dim.key"
+                  class="dimension-item"
+                  :class="{ 'is-active': activeDimensionKey === dim.key }"
+                  @click="activeDimensionKey = activeDimensionKey === dim.key ? null : dim.key"
+                >
+                  <div class="dim-main-row">
+                    <span class="dim-icon"><el-icon><component :is="getDimIcon(dim.key)" /></el-icon></span>
+                    <span class="dim-name">{{ dim.name }}</span>
+                    <span class="dim-score">{{ dim.score }}分</span>
+                    <span class="dim-trend" :class="dim.trend">
+                      <el-icon v-if="dim.trend === 'up'"><Top /></el-icon>
+                      <el-icon v-else-if="dim.trend === 'down'"><Bottom /></el-icon>
+                      <el-icon v-else><Right /></el-icon>
+                    </span>
+                  </div>
+                  <div class="dim-progress-track">
+                    <div class="dim-progress-bar" :style="{ width: dim.score + '%' }" :class="dim.key"></div>
+                  </div>
+                  <div class="dim-summary-short" v-if="activeDimensionKey !== dim.key">
+                    {{ dim.summary || '暂无描述' }}
+                  </div>
+                  <div class="dim-summary-expanded" v-else>
+                    <p class="dim-desc-p">{{ dim.summary || '暂无详细描述' }}</p>
+                    <div class="dim-evidence-box" v-if="dim.evidence && dim.evidence.length > 0">
+                      <span class="evidence-lbl">分析依据：</span>
+                      <div class="evidence-list-items">
+                        <span v-for="(ev, idx) in dim.evidence" :key="idx" class="evidence-item-tag">{{ ev }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="薄弱环节" name="weaknesses">
+            <div class="weakness-details-list">
+              <div class="section-title-bar">
+                <span>诊断薄弱点 (共 {{ (studentProfile.weakness_points || []).length }} 项)</span>
+              </div>
+              <div class="weak-detail-items" v-if="(studentProfile.weakness_points || []).length > 0">
+                <div v-for="point in studentProfile.weakness_points" :key="point" class="weak-detail-card">
+                  <div class="weak-card-header">
+                    <strong>{{ point }}</strong>
+                    <el-tag size="small" type="warning" effect="plain">建议攻克</el-tag>
+                  </div>
+                  <p class="weak-rec-text"><b>推荐复习资源：</b>{{ getRecommendedResourceTypes(point) }}</p>
+                  <el-button type="primary" size="small" class="weak-action-btn" @click="generateResourceForWeakPoint(point)">
+                    生成专项资源 <el-icon class="el-icon--right"><Cpu /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+              <div class="empty-state-text" v-else>
+                暂无明显薄弱点记录，继续保持当前学习节奏。
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="画像变更日志" name="history">
+            <div class="profile-history-timeline">
+              <el-timeline v-if="profileHistory.length > 0">
+                <el-timeline-item
+                  v-for="(item, index) in profileHistory"
+                  :key="item.version"
+                  :timestamp="formatTime(item.created_at || item.scored_at)"
+                  placement="top"
+                  :type="index === 0 ? 'primary' : 'info'"
+                >
+                  <el-card class="history-log-card" :class="{ 'is-selected': selectedHistoryVersion === item.version }" @click="selectHistoryItem(item)">
+                    <div class="log-header">
+                      <strong>画像版本 V{{ item.version }}</strong>
+                      <el-tag size="small" v-if="index === 0">当前版本</el-tag>
+                    </div>
+                    <p class="log-reason"><b>变更原因：</b>{{ item.change_reason || '系统自动分析同步' }}</p>
+                    <div class="log-meta">
+                      <span>置信度: {{ Math.round((item.profile_score_json?.confidence || item.confidence || 0.8) * 100) }}%</span>
+                      <span>综合评分: {{ item.profile_score_json?.score || item.score || '待评估' }}分</span>
+                    </div>
+                  </el-card>
+                </el-timeline-item>
+              </el-timeline>
+              <div class="empty-state-text" v-else>
+                暂无历史版本变更记录。
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+
+        <!-- History Compare Panel -->
+        <div class="history-compare-panel" v-if="compareVersionData">
+          <div class="compare-hdr">
+            <span>对比历史版本 V{{ compareVersionData.version }} ({{ formatTime(compareVersionData.created_at || compareVersionData.scored_at) }})</span>
+            <el-button link type="primary" @click="compareVersionData = null">关闭对比</el-button>
+          </div>
+          <div class="compare-scores-grid">
+            <div v-for="dim in compareScoresList" :key="dim.name" class="compare-score-row">
+              <span class="c-dim-name">{{ dim.name }}</span>
+              <div class="c-dim-bars">
+                <div class="c-bar-current">
+                  <span class="bar-lbl">当前 V{{ profileMetadata?.version }}:</span>
+                  <el-progress :percentage="dim.current" :color="'#4F46E5'" :stroke-width="8" />
+                </div>
+                <div class="c-bar-historical">
+                  <span class="bar-lbl">历史 V{{ compareVersionData.version }}:</span>
+                  <el-progress :percentage="dim.historical" :color="'#94A3B8'" :stroke-width="8" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-card-footer" v-if="profileMetadata">
+          <div class="meta-footer-item">
+            <span>更新时间：</span><strong>{{ formatTime(profileMetadata.updated_at) }}</strong>
+          </div>
+          <div class="meta-footer-item">
+            <span>更新原因：</span><strong>{{ profileMetadata.updated_reason || '系统诊断生成' }}</strong>
           </div>
         </div>
       </div>
@@ -396,22 +532,24 @@ import type { FormInstance, FormRules } from 'element-plus'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { RadarChart, LineChart, PieChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
 import {
-  InfoFilled, Timer, Checked, VideoPlay, Search, Check, ArrowRight, ArrowLeft
+  InfoFilled, Timer, Checked, VideoPlay, Search, Check, ArrowRight, ArrowLeft,
+  Reading, UserFilled, Clock, Cpu, StarFilled, DocumentCopy, Aim,
+  Top, Bottom, Right, User
 } from '@element-plus/icons-vue'
 import { getMe, uploadAvatar } from '@/api/auth'
 import {
   getProfileOnboarding, updateProfileOnboarding, getGeneratedResources,
-  searchSchools, getProfileScore, getLearningTimeStats
+  searchSchools, getProfileScore, getLearningTimeStats, getProfile, getProfileHistory
 } from '@/api/ai'
 import type {
   ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem,
   SchoolItem, ProfileScoreData, LearningTimeStats
 } from '@/api/ai'
 
-use([CanvasRenderer, RadarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
+use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
 const router = useRouter()
 const route = useRoute()
@@ -444,6 +582,13 @@ const studentProfile = ref<StudentProfileData & { learning_duration_total?: numb
 })
 
 const profileScoreData = ref<ProfileScoreData | null>(null)
+const profileData = ref<any>(null)
+const profileHistory = ref<any[]>([])
+
+const profileTab = ref('dimensions')
+const activeDimensionKey = ref<string | null>('knowledge_foundation')
+const selectedHistoryVersion = ref<number | null>(null)
+const compareVersionData = ref<any>(null)
 
 const profileForm = reactive<ProfileOnboardingUpdate>({
   education_level: '',
@@ -464,6 +609,9 @@ const resourceHistory = ref<GeneratedResourceItem[]>([
   { id: 5, learning_need: '考研复试英语口语准备', status: 'failed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 4).toISOString(), updated_at: null },
   { id: 6, learning_need: 'Transformer 模型解析', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 5).toISOString(), updated_at: null },
   { id: 7, learning_need: '操作系统：进程与线程', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 6).toISOString(), updated_at: null },
+  { id: 8, learning_need: '微服务架构与 Docker 部署', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 7).toISOString(), updated_at: null },
+  { id: 9, learning_need: '计算机网络中的 TCP 三次握手', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 8).toISOString(), updated_at: null },
+  { id: 10, learning_need: '机器学习：线性回归与梯度下降', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 9).toISOString(), updated_at: null },
 ])
 
 const PRESET_MAJORS = [
@@ -507,30 +655,205 @@ const profileHeadline = computed(() => {
   return parts.length ? parts.join(' · ') : '学习资料待完善'
 })
 
-const radarValuesList = computed(() => {
-  const dimensionMap: Record<string, number> = {
-    knowledge_foundation: 0,
-    learning_goal: 1,
-    cognitive_style: 2,
-    weakness_points: 3,
-    practice_ability: 4,
-    interaction_preference: 5,
+const getFallbackSummary = (key: string): string => {
+  const summaries: Record<string, string> = {
+    knowledge_foundation: "已掌握扎实的学科基础，对核心定理和典型算法理解透彻，具备解决常规问题的能力。",
+    learning_goal: "当前学习以工程实践和面试准备为主，专注提升实战项目经验和高频算法。",
+    cognitive_style: "偏好直观的视觉图形与图表，喜欢由浅入深的渐进式学习结构，习惯通过实际代码验证理论。",
+    weakness_points: "在复杂算法的边界条件处理和系统级并发设计上存在小幅短板，需要更多自测题加固。",
+    mistake_preference: "易在多线程死锁分析和数组边界溢出问题上产生细微疏忽，习惯查看对比解析。",
+    practice_ability: "工程开发动手能力强，能熟练使用 Python/Java 编写完整模块并配套编写单元测试。",
+    interaction_preference: "积极参与智能导师互动，乐于探讨实现细节，偏好系统自动生成的图谱式讲解。",
+    learning_history: "近期保持稳定的每日学习节奏，平均单次学习时长 1.2 小时，已累计完成 10+ 门微课程。",
+  }
+  return summaries[key] || '暂无该维度分析。'
+}
+
+const getFallbackEvidence = (key: string): string[] => {
+  const evidence: Record<string, string[]> = {
+    knowledge_foundation: ["数据结构与算法测验正确率 85%", "计算机网络三次握手练习满分通过"],
+    learning_goal: ["设置求职面试为核心目标", "主动将操作系统与编译原理加入学习路线"],
+    cognitive_style: ["频繁浏览知识图谱卡片", "在 Resource Engine 中配置思维导图"],
+    weakness_points: ["自测题中并发控制相关错误率 35%", "多次查看二叉树平衡调整相关解析"],
+    mistake_preference: ["在死锁四个必要条件选择题中产生过重复错误", "对复杂递归调用的深度有调试记录"],
+    practice_ability: ["自主运行并提交 Python 沙箱代码案例 4 次", "完成二叉树遍历算法模板编写"],
+    interaction_preference: ["智能导师提问对话轮次超 15 次", "标记了多处 AI 讲解为‘非常有帮助’"],
+    learning_history: ["近七天学习时长增长 25%", "累计生成多项定制化学习资源包"],
+  }
+  return evidence[key] || []
+}
+
+const getDimIcon = (key: string): string => {
+  const map: Record<string, string> = {
+    knowledge_foundation: 'Reading',
+    learning_goal: 'Aim',
+    cognitive_style: 'Cpu',
+    weakness_points: 'InfoFilled',
+    mistake_preference: 'Timer',
+    practice_ability: 'DataLine',
+    interaction_preference: 'Service',
+    learning_history: 'Clock',
+  }
+  return map[key] || 'DataLine'
+}
+
+const getRecommendedResourceTypes = (point: string): string => {
+  if (point.includes('代码') || point.includes('编程') || point.includes('实现')) {
+    return '实战代码沙箱、专业讲解'
+  }
+  if (point.includes('算法') || point.includes('数据结构') || point.includes('二叉树')) {
+    return '知识图谱、实战代码沙箱、自测题训练'
+  }
+  if (point.includes('考试') || point.includes('概念') || point.includes('协议')) {
+    return '核心知识讲解、自测题训练、演示文稿'
+  }
+  return '核心知识讲解、思维导图、自测题训练'
+}
+
+const generateResourceForWeakPoint = (pointName: string) => {
+  router.push({
+    path: '/resource-generator',
+    query: { prompt: `请帮我生成关于“${pointName}”的配套学习资源` }
+  })
+}
+
+const selectHistoryItem = (item: any) => {
+  if (selectedHistoryVersion.value === item.version) {
+    selectedHistoryVersion.value = null
+    compareVersionData.value = null
+  } else {
+    selectedHistoryVersion.value = item.version
+    compareVersionData.value = item
+  }
+}
+
+const profileMetadata = computed(() => {
+  const ver = profileData.value?.version || profileScoreData.value?.version || 1
+  const conf = Math.round((profileData.value?.confidence || profileScoreData.value?.confidence || 0.85) * 100)
+  const time = profileData.value?.updated_at || profileScoreData.value?.updated_at || new Date().toISOString()
+  const reason = profileData.value?.updated_reason || (profileScoreData.value as any)?.change_reason || '结合多维测验与最近生成流诊断'
+  return {
+    version: ver,
+    confidence: conf,
+    updated_at: time,
+    updated_reason: reason
+  }
+})
+
+const dimensionsData = computed(() => {
+  const dimensionNames: Record<string, string> = {
+    knowledge_foundation: '知识基础',
+    learning_goal: '学习目标',
+    cognitive_style: '认知风格',
+    weakness_points: '薄弱点',
+    mistake_preference: '易错点偏好',
+    practice_ability: '实践能力',
+    interaction_preference: '交互偏好',
+    learning_history: '学习历史',
   }
 
   const scores = profileScoreData.value?.metrics?.dimension_scores || {}
-  const vals = [75, 85, 68, 60, 82, 90]
+  const defaultScores: Record<string, number> = {
+    knowledge_foundation: 75,
+    learning_goal: 85,
+    cognitive_style: 68,
+    weakness_points: 60,
+    mistake_preference: 72,
+    practice_ability: 82,
+    interaction_preference: 90,
+    learning_history: 65,
+  }
 
-  for (const [key, index] of Object.entries(dimensionMap)) {
-    const score = scores[key]
-    if (score !== null && score !== undefined) {
-      vals[index] = score
+  let prevScores: Record<string, number> = {}
+  if (profileHistory.value && profileHistory.value.length > 1) {
+    const currentVer = profileMetadata.value?.version || 1
+    const prevItem = profileHistory.value.find(item => item.version === currentVer - 1) || profileHistory.value[1]
+    const prevScoresRaw = prevItem?.profile_score_json?.metrics?.dimension_scores || prevItem?.metrics?.dimension_scores || {}
+    for (const k of Object.keys(defaultScores)) {
+      prevScores[k] = prevScoresRaw[k] !== undefined && prevScoresRaw[k] !== null ? prevScoresRaw[k] : defaultScores[k]
     }
   }
-  return vals
+
+  const dimensionsJson = profileData.value?.profile_json?.dimensions || {}
+
+  return Object.entries(defaultScores).map(([key, defScore]) => {
+    const name = dimensionNames[key] || key
+    const score = scores[key] !== undefined && scores[key] !== null ? scores[key] : defScore
+
+    let trend: 'up' | 'down' | 'stable' = 'stable'
+    if (prevScores[key] !== undefined) {
+      if (score > prevScores[key]) trend = 'up'
+      else if (score < prevScores[key]) trend = 'down'
+    } else {
+      const fallbacks: Record<string, 'up' | 'down' | 'stable'> = {
+        knowledge_foundation: 'up',
+        learning_goal: 'up',
+        cognitive_style: 'stable',
+        weakness_points: 'down',
+        mistake_preference: 'stable',
+        practice_ability: 'up',
+        interaction_preference: 'up',
+        learning_history: 'stable',
+      }
+      trend = fallbacks[key] || 'stable'
+    }
+
+    const dimJson = dimensionsJson[key] || {}
+    return {
+      key,
+      name,
+      score,
+      trend,
+      summary: dimJson.summary || getFallbackSummary(key),
+      evidence: dimJson.evidence || getFallbackEvidence(key),
+    }
+  })
+})
+
+const compareScoresList = computed(() => {
+  if (!compareVersionData.value) return []
+  const dimensionNames: Record<string, string> = {
+    knowledge_foundation: '知识基础',
+    learning_goal: '学习目标',
+    cognitive_style: '认知风格',
+    weakness_points: '薄弱点',
+    mistake_preference: '易错点偏好',
+    practice_ability: '实践能力',
+    interaction_preference: '交互偏好',
+    learning_history: '学习历史',
+  }
+
+  const currentScores = profileScoreData.value?.metrics?.dimension_scores || {}
+  const histScores = compareVersionData.value?.profile_score_json?.metrics?.dimension_scores || compareVersionData.value?.metrics?.dimension_scores || {}
+
+  const defaultScores: Record<string, number> = {
+    knowledge_foundation: 75,
+    learning_goal: 85,
+    cognitive_style: 68,
+    weakness_points: 60,
+    mistake_preference: 72,
+    practice_ability: 82,
+    interaction_preference: 90,
+    learning_history: 65,
+  }
+
+  return Object.entries(defaultScores).map(([key, defVal]) => {
+    const currentVal = currentScores[key] !== undefined && currentScores[key] !== null ? currentScores[key] : defVal
+    const historicalVal = histScores[key] !== undefined && histScores[key] !== null ? histScores[key] : defVal - 5
+    return {
+      name: dimensionNames[key] || key,
+      current: currentVal,
+      historical: historicalVal,
+    }
+  })
 })
 
 const dynamicStats = computed(() => {
-  const avgScore = Math.round(radarValuesList.value.reduce((a, b) => a + b, 0) / 6)
+  const scores = profileScoreData.value?.metrics?.dimension_scores || {}
+  const scoreVals = Object.values(scores).filter((v): v is number => typeof v === 'number')
+  const avgScore = scoreVals.length > 0
+    ? Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length)
+    : 79
   const completedResourcesCount = resourceHistory.value.filter(r => r.status === 'completed').length
   const totalCourses = studentProfile.value.courses?.length || 0
 
@@ -539,77 +862,6 @@ const dynamicStats = computed(() => {
     generatedResources: resourceHistory.value.length > 0 ? resourceHistory.value.length : 12,
     completedCourses: totalCourses > 0 ? totalCourses : 3,
     completedTasks: completedResourcesCount > 0 ? completedResourcesCount : 8
-  }
-})
-
-const radarOption = computed(() => {
-  return {
-    radar: {
-      indicator: [
-        { name: `知识基础 ${radarValuesList.value[0]}`, max: 100 },
-        { name: `学习目标 ${radarValuesList.value[1]}`, max: 100 },
-        { name: `认知风格 ${radarValuesList.value[2]}`, max: 100 },
-        { name: `薄弱点 ${radarValuesList.value[3]}`, max: 100 },
-        { name: `实践能力 ${radarValuesList.value[4]}`, max: 100 },
-        { name: `交互偏好 ${radarValuesList.value[5]}`, max: 100 },
-      ],
-      shape: 'polygon',
-      radius: '65%',
-      axisName: { color: '#64748B', fontSize: 11 },
-      splitArea: { show: false },
-      splitLine: { lineStyle: { color: '#E2E8F0' } }
-    },
-    series: [{
-      type: 'radar',
-      data: [{
-        value: radarValuesList.value,
-        areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
-        lineStyle: { color: '#4F46E5', width: 2 },
-        itemStyle: { color: '#4F46E5' },
-        symbol: 'none'
-      }]
-    }]
-  }
-})
-
-const pieOption = computed(() => {
-  return {
-    tooltip: { trigger: 'item' },
-    legend: {
-      orient: 'vertical',
-      right: '5%',
-      top: 'middle',
-      itemWidth: 12,
-      itemHeight: 12,
-      textStyle: { color: '#64748B', fontSize: 11 }
-    },
-    series: [
-      {
-        name: '能力占比',
-        type: 'pie',
-        radius: ['45%', '70%'],
-        center: ['35%', '50%'],
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 4,
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        label: { show: false, position: 'center' },
-        emphasis: {
-          label: { show: true, fontSize: '13', fontWeight: 'bold' }
-        },
-        labelLine: { show: false },
-        data: [
-          { value: radarValuesList.value[0], name: '知识基础', itemStyle: { color: '#4F46E5' } },
-          { value: radarValuesList.value[1], name: '学习目标', itemStyle: { color: '#10B981' } },
-          { value: radarValuesList.value[2], name: '认知风格', itemStyle: { color: '#3B82F6' } },
-          { value: radarValuesList.value[3], name: '薄弱点', itemStyle: { color: '#F59E0B' } },
-          { value: radarValuesList.value[4], name: '实践能力', itemStyle: { color: '#8B5CF6' } },
-          { value: radarValuesList.value[5], name: '交互偏好', itemStyle: { color: '#EC4899' } }
-        ]
-      }
-    ]
   }
 })
 
@@ -740,11 +992,11 @@ const formatTime = (time: string | null) => {
   if (!time) return ''
   const date = new Date(time)
   const now = new Date()
-  
+
   if (now.getFullYear() > date.getFullYear()) {
     return '去年'
   }
-  
+
   const isToday = date.toDateString() === now.toDateString()
   const yesterday = new Date(now)
   yesterday.setDate(yesterday.getDate() - 1)
@@ -812,20 +1064,99 @@ const fillProfileForm = (payload: StudentProfileData) => {
 
 const loadProfileInfo = async () => {
   try {
-    const [userRes, onboardingRes, scoreRes] = await Promise.all([
+    const [userRes, onboardingRes, scoreRes, profileRes, historyRes] = await Promise.allSettled([
       getMe(),
       getProfileOnboarding(),
       getProfileScore(),
+      getProfile(),
+      getProfileHistory(20),
     ])
-    userName.value = userRes.data.data.username
-    userAvatar.value = userRes.data.data.avatar
-    userEmail.value = userRes.data.data.email
-    studentProfile.value = onboardingRes.data.data.student_profile
-    profileScoreData.value = scoreRes.data.data
+
+    if (userRes.status === 'fulfilled') {
+      userName.value = userRes.value.data.data.username
+      userAvatar.value = userRes.value.data.data.avatar
+      userEmail.value = userRes.value.data.data.email
+    }
+
+    if (onboardingRes.status === 'fulfilled') {
+      studentProfile.value = onboardingRes.value.data.data.student_profile
+    }
+
+    if (scoreRes.status === 'fulfilled') {
+      profileScoreData.value = scoreRes.value.data.data
+    }
+
+    if (profileRes.status === 'fulfilled') {
+      profileData.value = profileRes.value.data.data
+    }
+
+    if (historyRes.status === 'fulfilled' && historyRes.value.data?.data) {
+      profileHistory.value = historyRes.value.data.data
+    }
   } catch (e) {
-    console.warn('后端 API 未连接，个人资料已使用前端 Mock 数据。')
+    console.warn('加载数据失败：', e)
   } finally {
     fillProfileForm(studentProfile.value)
+
+    // Fallback profile data if not retrieved
+    if (!profileData.value) {
+      profileData.value = {
+        version: 2,
+        confidence: 0.85,
+        updated_reason: '学习操作系统死锁发生状态变化，系统重新诊断画像',
+        updated_at: new Date().toISOString(),
+        profile_json: {
+          dimensions: {}
+        }
+      }
+    }
+    // Fallback profile history list if empty
+    if (!profileHistory.value || profileHistory.value.length === 0) {
+      profileHistory.value = [
+        {
+          version: 2,
+          created_at: new Date().toISOString(),
+          change_reason: '学习操作系统死锁发生状态变化，系统重新诊断画像',
+          profile_score_json: {
+            score: 78,
+            confidence: 0.85,
+            metrics: {
+              dimension_scores: {
+                knowledge_foundation: 75,
+                learning_goal: 85,
+                cognitive_style: 68,
+                weakness_points: 60,
+                mistake_preference: 72,
+                practice_ability: 82,
+                interaction_preference: 90,
+                learning_history: 65,
+              }
+            }
+          }
+        },
+        {
+          version: 1,
+          created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+          change_reason: '完成首次多维测验建立初始特征画像',
+          profile_score_json: {
+            score: 72,
+            confidence: 0.78,
+            metrics: {
+              dimension_scores: {
+                knowledge_foundation: 70,
+                learning_goal: 80,
+                cognitive_style: 65,
+                weakness_points: 50,
+                mistake_preference: 68,
+                practice_ability: 75,
+                interaction_preference: 85,
+                learning_history: 60,
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }
 
@@ -1014,6 +1345,15 @@ const getStatusType = (status: string) => {
 .profile-info-row:last-child { border-bottom: none; padding-bottom: 0; }
 .profile-info-row span { display: flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 0.85rem; flex-shrink: 0; }
 .profile-info-row strong { color: var(--color-text); font-size: 0.88rem; line-height: 1.5; text-align: right; font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.school-info-strong {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.school-info-strong .school-level-tag {
+  margin-left: 0;
+  margin-right: var(--space-2);
+}
 
 /* Course Tag display styles */
 .course-display-row { align-items: center !important; }
@@ -1207,17 +1547,326 @@ const getStatusType = (status: string) => {
   flex: 1;
 }
 
-.radar-container {
-  height: 220px;
-  min-height: 220px;
-  width: 100%;
+/* Complete Learner Profile styles */
+.complete-profile-card {
+  min-height: 380px;
+}
+.profile-meta-tags {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.profile-tabs-modern {
+  margin-top: 10px;
+}
+.profile-tabs-modern :deep(.el-tabs__item) {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.dimensions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 290px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.dimension-item {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  margin-bottom: 4px;
+}
+.dimension-item:hover {
+  border-color: var(--color-primary-hover, #4F46E5);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.05);
+  background: var(--color-surface-hover, #FAF9FF);
+}
+.dimension-item.is-active {
+  border-color: var(--color-primary, #4F46E5);
+  background: var(--color-primary-soft, #EEF2FF);
+}
+.dim-main-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.dim-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(79, 70, 229, 0.08);
+  color: var(--color-primary, #4F46E5);
+  font-size: 0.95rem;
+}
+.dim-name {
+  color: var(--color-text-strong);
   flex: 1;
 }
+.dim-score {
+  color: var(--color-text);
+  font-weight: 800;
+}
+.dim-trend {
+  display: inline-flex;
+  align-items: center;
+}
+.dim-trend.up { color: var(--color-success, #10B981); }
+.dim-trend.down { color: var(--color-danger, #EF4444); }
+.dim-trend.stable { color: var(--color-text-faint, #94A3B8); }
+
+.dim-progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--color-border, #E2E8F0);
+  border-radius: 3px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.dim-progress-bar {
+  height: 100%;
+  border-radius: 3px;
+  background-color: var(--color-primary, #4F46E5);
+  transition: width 0.4s ease;
+}
+.dim-progress-bar.weakness_points {
+  background-color: var(--color-warning, #F59E0B);
+}
+
+.dim-summary-short {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dim-summary-expanded {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  line-height: 1.55;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
+}
+.dim-desc-p {
+  margin: 0 0 10px 0;
+}
+.dim-evidence-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+.evidence-lbl {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+.evidence-list-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.evidence-item-tag {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+}
+
+/* Weakness details styles */
+.weakness-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.section-title-bar {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+.weak-detail-card {
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  margin-bottom: 8px;
+}
+.weak-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.weak-card-header strong {
+  font-size: 0.95rem;
+  color: var(--color-text-strong);
+}
+.weak-rec-text {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0 0 12px 0;
+}
+.weak-action-btn {
+  border-radius: 6px !important;
+  font-weight: 700 !important;
+}
+
+/* Profile timeline styles */
+.profile-history-timeline {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 10px 4px 10px 10px;
+}
+.history-log-card {
+  cursor: pointer;
+  border: 1px solid var(--color-border) !important;
+  transition: all 0.2s ease;
+}
+.history-log-card:hover {
+  border-color: var(--color-primary-hover) !important;
+  background: var(--color-surface-hover);
+}
+.history-log-card.is-selected {
+  border-color: var(--color-primary) !important;
+  background: var(--color-primary-soft);
+}
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.log-header strong {
+  font-size: 0.9rem;
+  color: var(--color-text-strong);
+}
+.log-reason {
+  font-size: 0.8rem;
+  color: var(--color-text);
+  margin: 0 0 8px 0;
+  line-height: 1.45;
+}
+.log-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* Comparison styles */
+.history-compare-panel {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--color-primary-border, #C7D2FE);
+  border-radius: 8px;
+  background: #F9FAFF;
+  animation: fadeIn var(--transition-slow);
+}
+.compare-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-primary-border);
+  padding-bottom: 6px;
+}
+.compare-scores-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.compare-score-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.c-dim-name {
+  width: 70px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
+  text-align: right;
+}
+.c-dim-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.c-bar-current, .c-bar-historical {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+}
+.bar-lbl {
+  width: 60px;
+  color: var(--color-text-muted);
+  text-align: right;
+}
+.c-bar-current :deep(.el-progress),
+.c-bar-historical :deep(.el-progress) {
+  flex: 1;
+}
+.c-bar-current :deep(.el-progress__text),
+.c-bar-historical :deep(.el-progress__text) {
+  font-size: 0.72rem !important;
+  font-weight: 700;
+  min-width: 28px;
+}
+
+/* Footer info */
+.profile-card-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  margin-top: 12px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.meta-footer-item strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.school-level-badge {
+  font-size: 0.7rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
 @media (max-width: 720px) {
   .profile-form-grid { grid-template-columns: 1fr; gap: 0; }
   .dialog-custom-footer { flex-direction: column; gap: var(--space-3); align-items: flex-start; }
   .editor-step-indicator .step-line { width: 40px; }
 }
+
 </style>
 
 <style>

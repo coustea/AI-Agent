@@ -424,7 +424,7 @@
                 <div class="card-body">
                   <h4 class="card-title">{{ formatBentoTitle(res.title, res.type) }}</h4>
                   <p class="card-summary">{{ stringifyCompact(res.summary || getResourceUsageHint(res.type), 100) }}</p>
-                  
+
                   <div class="card-metrics-modern">
                     <div class="metric-badge">
                       <el-icon><Odometer /></el-icon> {{ getDifficultyLabel(res.metadata?.difficulty) }}
@@ -463,7 +463,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   MagicStick, ArrowRight, Cpu,
@@ -489,6 +490,8 @@ import {
 } from '@/api/resource'
 
 defineOptions({ name: 'ResourceGenerator' })
+
+const route = useRoute()
 
 // Use ResourceGenerateEvent from api/resource.ts - local type not needed
 
@@ -1058,6 +1061,16 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
   const prefix = raw.replace(suffixPattern, '').trim()
   return prefix ? `${prefix}\n- ${suffix}` : suffix
 }
+
+onMounted(() => {
+  if (USE_FIXED_RESULT_PAGE) {
+    applyFixedResultPage()
+  }
+  const prompt = route.query.prompt
+  if (prompt) {
+    naturalInput.value = String(prompt)
+  }
+})
 
 onBeforeUnmount(() => {
   stopPolling()
@@ -1668,7 +1681,7 @@ const handlePreview = (data: any) => {
   --resource-accent: var(--color-info);
   --resource-soft: var(--color-info-soft);
   --resource-border: #BFDBFE;
-  
+
   position: relative;
   min-width: 0;
   grid-column: span 3;

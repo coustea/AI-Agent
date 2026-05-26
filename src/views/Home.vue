@@ -12,7 +12,12 @@
         </p>
 
         <div class="portrait-strip">
-          <div v-for="item in portraitStats" :key="item.label" class="portrait-stat">
+          <div
+            v-for="item in actionIndicators"
+            :key="item.label"
+            class="portrait-stat clickable"
+            @click="handleIndicatorClick(item.type)"
+          >
             <span>{{ item.label }}</span>
             <strong>{{ item.value }}</strong>
           </div>
@@ -73,7 +78,26 @@
           </el-button>
         </div>
 
-        <div class="profile-summary">
+        <div class="portrait-radar-section" v-if="!isNewUser || profileScoreData">
+          <div class="radar-chart-wrapper">
+            <v-chart class="chart" :option="radarOption" :autoresize="true" />
+          </div>
+          <div class="prominent-dimensions">
+            <div class="dimensions-title">能力最强维度</div>
+            <div class="dimension-tags-list">
+              <div v-for="dim in prominentDimensions" :key="dim.name" class="dim-tag-item">
+                <span class="dim-name">{{ dim.name }}</span>
+                <span class="dim-score">{{ dim.score }}分</span>
+                <span class="dim-trend" :class="dim.trendType">
+                  <el-icon v-if="dim.trendType === 'up'"><Top /></el-icon>
+                  <el-icon v-else-if="dim.trendType === 'down'"><Bottom /></el-icon>
+                  <el-icon v-else><Right /></el-icon>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="profile-summary" v-else>
           <div class="profile-avatar">
             <el-icon><User /></el-icon>
           </div>
@@ -83,29 +107,40 @@
           </div>
         </div>
 
-        <div class="profile-tags" v-if="learnerProfile.tags.length > 0">
-          <span v-for="tag in learnerProfile.tags" :key="tag">{{ tag }}</span>
-        </div>
-
-        <div class="weak-focus">
+        <div class="weak-focus" id="weak-focus-section">
           <div class="focus-header">
             <span>当前薄弱点</span>
             <b>{{ learnerProfile.weakPoints.length }} 项</b>
           </div>
           <div class="weak-list" v-if="learnerProfile.weakPoints.length > 0">
-            <button
-                v-for="point in learnerProfile.weakPoints"
+            <div
+                v-for="point in learnerProfile.weakPoints.slice(0, 3)"
                 :key="point.name"
-                type="button"
-                @click="goTo('/resource-generator')"
+                class="weak-item"
             >
-              <strong>{{ point.name }}</strong>
-              <span>{{ point.hint }}</span>
-            </button>
+              <div class="weak-info">
+                <strong>{{ point.name }}</strong>
+                <span>{{ point.hint }}</span>
+              </div>
+              <el-button
+                type="primary"
+                size="small"
+                class="weak-cta-btn"
+                @click="generateResourceForWeakPoint(point.name)"
+              >
+                生成资源 <el-icon class="el-icon--right"><Cpu /></el-icon>
+              </el-button>
+            </div>
           </div>
           <div class="empty-state-text" v-else>
             暂无薄弱点记录，开始学习评测或生成资源后将自动同步
           </div>
+        </div>
+
+        <div class="card-footer-link">
+          <el-button link type="primary" @click="goTo('/profile')" class="view-profile-link">
+            查看完整画像 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          </el-button>
         </div>
       </article>
 
@@ -115,13 +150,13 @@
             <span class="section-label">MULTI-AGENT RESOURCES</span>
             <h2>多智能体资源流</h2>
           </div>
-          <el-button class="home-link-button" @click="goTo('/resource-generator')">进入资源引擎</el-button>
+          <el-button class="home-link-button" @click="goTo('/profile')">查看全部资源</el-button>
         </div>
 
         <div class="resource-flow" :class="{ 'is-empty': multiAgentResources.length === 0 }">
           <template v-if="multiAgentResources.length > 0">
             <button
-                v-for="resource in multiAgentResources"
+                v-for="resource in multiAgentResources.slice(0, 3)"
                 :key="resource.id"
                 type="button"
                 class="resource-item"
@@ -153,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -167,10 +202,21 @@ import {
   Edit,
   Monitor,
   Share,
-  User
+  User,
+  Top,
+  Bottom,
+  Right
 } from '@element-plus/icons-vue'
 
-import { getProfileOnboarding, getGeneratedResources, getActiveCoursePath } from '@/api/ai'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { RadarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+
+import { getProfileOnboarding, getGeneratedResources, getPathPlan, getProfileScore } from '@/api/ai'
+
+use([CanvasRenderer, RadarChart, GridComponent, TooltipComponent])
 
 const router = useRouter()
 
@@ -204,6 +250,8 @@ const learnerProfile = ref({
   tags: [] as string[],
   weakPoints: [] as { name: string; hint: string }[]
 })
+
+const profileScoreData = ref<any>(null)
 
 const multiAgentResources = ref<any[]>([])
 
@@ -242,19 +290,140 @@ const primaryActions = ref([
   }
 ])
 
+const radarValuesList = computed(() => {
+  const dimensionMap: Record<string, number> = {
+    knowledge_foundation: 0,
+    learning_goal: 1,
+    cognitive_style: 2,
+    weakness_points: 3,
+    practice_ability: 4,
+    interaction_preference: 5,
+  }
+
+  const scores = profileScoreData.value?.metrics?.dimension_scores || {}
+  const vals = [75, 85, 68, 60, 82, 90] // Fallbacks
+
+  for (const [key, index] of Object.entries(dimensionMap)) {
+    const score = scores[key]
+    if (score !== null && score !== undefined) {
+      vals[index] = score
+    }
+  }
+  return vals
+})
+
+const radarOption = computed(() => {
+  return {
+    radar: {
+      indicator: [
+        { name: '知识基础', max: 100 },
+        { name: '学习目标', max: 100 },
+        { name: '认知风格', max: 100 },
+        { name: '薄弱点', max: 100 },
+        { name: '实践能力', max: 100 },
+        { name: '交互偏好', max: 100 },
+      ],
+      shape: 'polygon',
+      radius: '68%',
+      axisName: { color: '#64748B', fontSize: 10, fontWeight: 'bold' },
+      splitArea: { show: false },
+      splitLine: { lineStyle: { color: '#E2E8F0' } }
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: radarValuesList.value,
+        areaStyle: { color: 'rgba(79, 70, 229, 0.15)' },
+        lineStyle: { color: '#4F46E5', width: 2 },
+        itemStyle: { color: '#4F46E5' },
+        symbol: 'none'
+      }]
+    }]
+  }
+})
+
+// Computes the top 3 prominent dimensions
+const prominentDimensions = computed(() => {
+  const dimensions = [
+    { name: '知识基础', score: radarValuesList.value[0] ?? 75, key: 'knowledge_foundation' },
+    { name: '学习目标', score: radarValuesList.value[1] ?? 85, key: 'learning_goal' },
+    { name: '认知风格', score: radarValuesList.value[2] ?? 68, key: 'cognitive_style' },
+    { name: '薄弱点', score: radarValuesList.value[3] ?? 60, key: 'weakness_points' },
+    { name: '实践能力', score: radarValuesList.value[4] ?? 82, key: 'practice_ability' },
+    { name: '交互偏好', score: radarValuesList.value[5] ?? 90, key: 'interaction_preference' },
+  ]
+  // Sort descending by score
+  const sorted = [...dimensions].sort((a, b) => b.score - a.score)
+  // Take top 3 and add trends
+  return sorted.slice(0, 3).map((d) => {
+    let trendType = 'stable'
+    if (d.score >= 80) trendType = 'up'
+    else if (d.score < 65) trendType = 'down'
+    return {
+      name: d.name,
+      score: d.score,
+      trendType
+    }
+  })
+})
+
+// Action indicators computed
+const actionIndicators = computed(() => {
+  const goalVal = recommendedGoal.value.topic || '暂无目标'
+  const weakCount = learnerProfile.value.weakPoints.length
+  const progressVal = recommendedGoal.value.confidence.includes('完成度')
+    ? recommendedGoal.value.confidence.replace('完成度 ', '')
+    : '0%'
+
+  return [
+    { label: '推荐学习目标', value: goalVal, type: 'goal' },
+    { label: '当前薄弱点数量', value: `${weakCount} 项`, type: 'weakness' },
+    { label: '学习路径完成度', value: progressVal, type: 'progress' }
+  ]
+})
+
+const handleIndicatorClick = (type: string) => {
+  if (type === 'weakness') {
+    const el = document.getElementById('weak-focus-section')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' })
+    }
+  } else if (type === 'progress') {
+    goTo('/path-planner')
+  } else if (type === 'goal') {
+    const el = document.querySelector('.goal-panel')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
+}
+
+const generateResourceForWeakPoint = (pointName: string) => {
+  router.push({
+    path: '/resource-generator',
+    query: { prompt: `请帮我生成关于“${pointName}”的配套学习资源` }
+  })
+}
+
 const loadDashboardData = async () => {
   try {
-    const [profileRes, resourcesRes, pathRes] = await Promise.allSettled([
+    const [profileRes, resourcesRes, pathRes, scoreRes] = await Promise.allSettled([
       getProfileOnboarding(),
       getGeneratedResources(8),
-      getActiveCoursePath()
+      getPathPlan(),
+      getProfileScore()
     ])
 
     let hasProfile = false
     let hasResources = false
     let hasPath = false
+    let hasScore = false
 
-    // 1. 画像解析
+    if (scoreRes.status === 'fulfilled' && scoreRes.value.data?.data) {
+      profileScoreData.value = scoreRes.value.data.data
+      hasScore = true
+    }
+
     if (profileRes.status === 'fulfilled' && profileRes.value.data?.data) {
       const profile = profileRes.value.data.data.student_profile
       if (profile && (profile.grade || profile.learning_goal || profile.major)) {
@@ -280,7 +449,6 @@ const loadDashboardData = async () => {
       }
     }
 
-    // 2. 资源流解析
     if (resourcesRes.status === 'fulfilled' && resourcesRes.value.data?.data) {
       const resources = resourcesRes.value.data.data
       if (Array.isArray(resources) && resources.length > 0) {
@@ -300,7 +468,6 @@ const loadDashboardData = async () => {
       }
     }
 
-    // 3. 学习路径解析
     if (pathRes.status === 'fulfilled' && pathRes.value.data?.data) {
       const plan = pathRes.value.data.data
       const currentStage = plan.stages?.find((s: any) => s.stage_id === plan.current_stage_id) || plan.stages?.[0]
@@ -317,13 +484,11 @@ const loadDashboardData = async () => {
       }
     }
 
-    // 根据是否有数据决定是否取消新用户引导状态
-    if (hasProfile || hasResources || hasPath) {
+    if (hasProfile || hasResources || hasPath || hasScore) {
       isNewUser.value = false
     }
 
   } catch (error) {
-    // 异常情况下维持新用户UI，不暴露错误和加载态
     console.error('Failed to load dashboard data:', error)
   }
 }
@@ -912,6 +1077,148 @@ onMounted(() => {
   box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.3);
 }
 
+.portrait-stat.clickable {
+  cursor: pointer;
+  transition: border-color 0.25s ease, background-color 0.25s ease, transform 0.2s ease;
+}
+
+.portrait-stat.clickable:hover {
+  border-color: var(--home-primary-border);
+  background-color: var(--home-primary-soft);
+  transform: translateY(-2px);
+}
+
+.portrait-radar-section {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.radar-chart-wrapper {
+  flex: 1.2;
+  height: 240px;
+  min-height: 240px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.prominent-dimensions {
+  flex: 0.8;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dimensions-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #64748B;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.dimension-tags-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dim-tag-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.dim-name {
+  color: #475569;
+}
+
+.dim-score {
+  color: #0F172A;
+  font-weight: 800;
+}
+
+.dim-trend {
+  display: inline-flex;
+  align-items: center;
+  font-weight: bold;
+}
+
+.dim-trend.up {
+  color: #10B981;
+}
+
+.dim-trend.down {
+  color: #EF4444;
+}
+
+.dim-trend.stable {
+  color: #94A3B8;
+}
+
+.weak-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  margin-bottom: 8px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.weak-item:hover {
+  border-color: #CBD5E1;
+  background-color: #F8FAFC;
+}
+
+.weak-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.weak-info strong {
+  color: #0F172A;
+  font-size: 0.95rem;
+}
+
+.weak-info span {
+  color: #64748B;
+  font-size: 0.84rem;
+}
+
+.weak-cta-btn {
+  flex-shrink: 0;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+}
+
+.card-footer-link {
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+  border-top: 1px solid #E2E8F0;
+  margin-top: 16px;
+}
+
+.view-profile-link {
+  font-weight: 700 !important;
+  font-size: 0.9rem !important;
+  color: var(--home-primary) !important;
+}
+
 @media (max-width: 1280px) {
   .feature-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -945,7 +1252,7 @@ onMounted(() => {
   }
 
   .hero-main p {
-    white-space: normal; /* 移动端为了防止内容被截断，允许换行 */
+    white-space: normal;
   }
 
   .bottom-utility {
@@ -955,6 +1262,21 @@ onMounted(() => {
 
   .utility-actions {
     justify-content: flex-start;
+  }
+
+  .portrait-radar-section {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .radar-chart-wrapper {
+    width: 100%;
+    height: 200px;
+    min-height: 200px;
+  }
+
+  .prominent-dimensions {
+    width: 100%;
   }
 }
 </style>

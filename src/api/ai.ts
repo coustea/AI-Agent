@@ -1,6 +1,10 @@
 import http from '@/utils/http'
 import type { ApiResponse } from '@/utils/http'
 
+export function getPathPlan() {
+}
+
+
 // ==========================================
 // 类型定义
 // ==========================================
