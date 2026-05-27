@@ -17,8 +17,10 @@ from app.chat.request import ChatHistoryMessage
 from app.chat.runtime import (
     _classify_attachments,
     build_user_message_record,
+    latest_user_message,
 )
-from app.chat.schemas import TutorAgentContext, TutorState
+from app.chat.schemas import TutorAgentContext
+from app.chat.tools.learner_context import MemoryLearnerContextReader
 from app.config import (
     MAX_ANALYZE_FILE_COUNT,
     MAX_ANALYZE_TOTAL_CHARS,
@@ -29,7 +31,8 @@ from app.config import (
     MAX_UPLOAD_FILES_PER_REQUEST,
 )
 from app.infra.logging import get_logger
-from app.memory.service import MemoryService, get_memory_service
+from app.memory.service import get_memory_service
+from app.prompts import registry
 from app.chat.utils.storage import LocalFileStore
 from app.chat.utils.vision import VisionService
 
@@ -105,7 +108,6 @@ class ChatUseCases:
     def __init__(self) -> None:
         self._memory_service = get_memory_service()
         self.file_store: LocalFileStore = LocalFileStore()
-        self._stream_runner = None
         self._bg_semaphore = asyncio.Semaphore(20)
 
     # ── 会话 ──
@@ -200,6 +202,18 @@ class ChatUseCases:
     async def count_messages(self, user_id: int, session_id: str) -> int:
         """统计会话消息数。"""
         return await self._memory_service.count_messages(user_id=user_id, session_id=session_id)
+
+    async def clear_history(self, user_id: int, session_id: str) -> int:
+        """通过服务边界清除已持久化的短期消息。"""
+        deleted_count = await self._memory_service.delete_short_term_messages(
+            user_id=user_id,
+            session_id=session_id,
+        )
+        await self._memory_service.reset_session_counters(
+            user_id=user_id,
+            session_id=session_id,
+        )
+        return deleted_count
 
     # ── 附件分析 ──
 
@@ -328,59 +342,50 @@ class ChatUseCases:
         self,
         *,
         user_id: int,
-        user_message: str | None,
         session_id: str | None,
         attachments: list[str],
         enable_search: bool = False,
-        enable_long_term_memory: bool = False,
         need_teaching_diagram: bool = False,
-        history: list[ChatHistoryMessage] | None = None,
+        generate_video: bool = False,
     ) -> TutorAgentContext:
-        """构建 TutorAgent 所需的完整上下文。"""
+        """构建不可变的只读上下文，供无状态代理调用前使用。"""
         effective_session = session_id or self.default_session_id(user_id)
 
-        # 附件分析
         attachment_analysis = await self._build_attachment_analysis(
             user_id=user_id,
             session_id=effective_session,
             attachments=attachments,
         )
-
-        # 构建上下文
         file_info_str = self._memory_service.build_file_context(attachments)
-        initial_messages, recent_chat_context = await self._memory_service.build_recent_chat_context(
+        session_summary_context = await self._memory_service.get_session_summary_context(
             user_id=user_id,
             session_id=effective_session,
-            user_message=user_message or "",
-            attachments=attachments,
         )
-
-        # 附件预分析上下文
         attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
 
-        # 拼接系统提示词
-        from app.prompts import registry
-        analysis_hint = (
-            f"\n\n### 附件并行预分析结果\n{attachment_analysis_context}\n"
-            if attachment_analysis_context
-            else ""
-        )
         system_prompt = registry.get("chat/tutor_system").format(
-            recent_chat_context=recent_chat_context,
-        ) + analysis_hint
+            session_summary_context=session_summary_context,
+            file_context=file_info_str,
+            attachment_analysis_context=attachment_analysis_context or "本轮没有可用的附件预分析内容。",
+        )
 
         return TutorAgentContext(
             user_id=user_id,
             session_id=effective_session,
-            attachments=attachments,
-            enable_search=enable_search,
-            enable_long_term_memory=enable_long_term_memory,
-            need_teaching_diagram=need_teaching_diagram,
+            system_prompt=system_prompt,
+            session_summary_context=session_summary_context,
             file_context=file_info_str,
-            recent_chat_context=recent_chat_context,
             attachment_analysis_context=attachment_analysis_context,
             attachment_analysis=attachment_analysis or {},
-            system_prompt=system_prompt,
+            attachments=attachments,
+            enable_search=enable_search,
+            need_teaching_diagram=need_teaching_diagram,
+            diagram_mode="requested" if need_teaching_diagram else "off",
+            generate_video=generate_video,
+            learner_context_reader=MemoryLearnerContextReader(
+                user_id=user_id,
+                memory_service=self._memory_service,
+            ),
         )
 
     # ── 对话流 ──
@@ -396,7 +401,7 @@ class ChatUseCases:
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
-        enable_long_term_memory: bool = False,
+        enable_long_term_memory: bool = True,
     ) -> AsyncIterator[dict[str, Any]]:
         """SSE 流式对话主入口。"""
         async for event in self.stream_chat_events(
@@ -424,47 +429,35 @@ class ChatUseCases:
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
-        enable_long_term_memory: bool = False,
+        enable_long_term_memory: bool = True,
         persist: bool = True,
     ) -> AsyncIterator[dict[str, Any]]:
         """流式对话事件生成器，供 SSE 和 avatar bridge 共用。"""
         effective_session = session_id or self.default_session_id(user_id)
         merged_attachments = list(dict.fromkeys(attachments or []))
+        normalized_history = list(history or [])
+        if not normalized_history and (user_message or "").strip():
+            normalized_history = [
+                ChatHistoryMessage(role="user", content=str(user_message).strip())
+            ]
 
-        # 如果没有传 history，从记忆中构建上下文
-        if history is not None:
-            context = await self.build_tutor_agent_context(
-                user_id=user_id,
-                user_message=user_message,
-                session_id=effective_session,
-                attachments=merged_attachments,
-                enable_search=enable_search,
-                enable_long_term_memory=enable_long_term_memory,
-                need_teaching_diagram=need_teaching_diagram,
-                history=history,
-            )
-        else:
-            context = await self.build_tutor_agent_context(
-                user_id=user_id,
-                user_message=user_message,
-                session_id=effective_session,
-                attachments=merged_attachments,
-                enable_search=enable_search,
-                enable_long_term_memory=enable_long_term_memory,
-                need_teaching_diagram=need_teaching_diagram,
-            )
-            # 从数据库构建历史
-            raw_msgs = await self._memory_service.list_messages(
-                user_id=user_id, session_id=effective_session, limit=50,
-            )
-            history = [ChatHistoryMessage(role=m.role, content=m.content) for m in raw_msgs]
-            if user_message:
-                history.append(ChatHistoryMessage(role="user", content=user_message))
+        current_message = latest_user_message(normalized_history)
+        if not current_message:
+            yield {"event": "error", "data": "本轮对话缺少用户消息。"}
+            yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+            return
 
-        # 保存用户消息
+        yield {
+            "event": "status",
+            "data": {
+                "stage": "preparing_context",
+                "message": "正在分析附件并准备本轮对话..." if merged_attachments else "正在准备本轮对话...",
+            },
+        }
+
         if persist:
             user_record = build_user_message_record(
-                user_message or "",
+                current_message,
                 attachments=merged_attachments,
             )
             await self.save_message(
@@ -477,44 +470,69 @@ class ChatUseCases:
 
             # 首条消息时自动生成标题
             msg_count = await self.count_messages(user_id, effective_session)
-            if msg_count <= 1 and user_message:
+            if msg_count <= 1:
                 self._spawn_background(
                     self._memory_service.generate_session_title(
                         user_id=user_id,
                         session_id=effective_session,
-                        first_message=user_message,
+                        first_message=current_message,
                     ),
                     label="generate_title",
                 )
 
-        # 流式输出
+        context = await self.build_tutor_agent_context(
+            user_id=user_id,
+            session_id=effective_session,
+            attachments=merged_attachments,
+            enable_search=enable_search,
+            need_teaching_diagram=need_teaching_diagram,
+            generate_video=generate_video,
+        )
+
         full_answer = ""
-        async for event in TutorAgent(context).chat_stream(history):
+        teaching_diagram: dict[str, Any] | None = None
+        stream_failed = False
+        completion_event: dict[str, Any] | None = None
+        async for event in TutorAgent(context).chat_stream(normalized_history):
             if event.get("event") == "token":
                 full_answer += str(event.get("data", ""))
+            elif event.get("event") == "diagram" and isinstance(event.get("data"), dict):
+                teaching_diagram = event["data"]
+            elif event.get("event") == "error":
+                stream_failed = True
+            elif event.get("event") == "done":
+                completion_event = event
+                continue
             yield event
 
-        # 保存助手消息
-        if persist:
+        has_assistant_output = bool(full_answer.strip()) or teaching_diagram is not None
+        if persist and has_assistant_output and not stream_failed:
+            yield {
+                "event": "status",
+                "data": {"stage": "persisting_turn", "message": "正在保存本轮学习记录..."},
+            }
             await self.save_message(
                 user_id=user_id,
                 session_id=effective_session,
                 role="assistant",
                 content=full_answer,
+                teaching_diagram=teaching_diagram,
             )
 
-            # 后台记忆管线
-            if enable_long_term_memory and user_message:
-                self._spawn_background(
-                    self._memory_service.after_turn(
-                        user_id=user_id,
-                        session_id=effective_session,
-                        user_message=user_message,
-                        assistant_reply=full_answer,
-                        enable_long_term_memory=True,
-                    ),
-                    label="memory_pipeline",
-                )
+        if persist and full_answer.strip() and not stream_failed:
+            self._spawn_background(
+                self._memory_service.after_turn(
+                    user_id=user_id,
+                    session_id=effective_session,
+                    user_message=current_message,
+                    assistant_reply=full_answer,
+                    enable_long_term_memory=enable_long_term_memory,
+                ),
+                label="memory_pipeline",
+            )
+
+        if completion_event is not None:
+            yield completion_event
 
     # ── 文件上传 ──
 
@@ -535,23 +553,12 @@ class ChatUseCases:
         if len(existing) >= MAX_UPLOAD_FILES_PER_REQUEST:
             raise ValueError(f"单次上传最多 {MAX_UPLOAD_FILES_PER_REQUEST} 个文件")
 
-        saved_path = await self.file_store.save(
+        return await self.file_store.save_upload(
             filename=filename,
             content=content,
             user_id=user_id,
             session_id=session_id,
         )
-
-        owner_id = user_id
-        url = f"/api/v1/ai/chat/uploads/{owner_id}/{session_id}/{filename}"
-        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-        is_image = ext in {"png", "jpg", "jpeg", "gif", "webp"}
-        return {
-            "url": url,
-            "type": "image" if is_image else "document",
-            "name": filename,
-            "size": len(content),
-        }
 
     def resolve_uploaded_file(
         self,
@@ -564,7 +571,12 @@ class ChatUseCases:
         """解析上传文件路径，带权限校验。"""
         if current_user_id != owner_id:
             raise PermissionError("无权访问此文件")
-        return self.file_store.resolve(user_id=owner_id, session_id=session_id, filename=filename)
+        return self.file_store.resolve_user_file(
+            current_user_id=current_user_id,
+            owner_id=owner_id,
+            session_id=session_id,
+            filename=filename,
+        )
 
     # ── 后台任务 ──
 
@@ -577,11 +589,6 @@ class ChatUseCases:
                     await coro
                 except Exception as exc:
                     logger.error("[ChatUseCases] 后台任务失败 label=%s err=%s", label, exc)
-                    # 最多重试 1 次
-                    try:
-                        await coro
-                    except Exception as retry_exc:
-                        logger.error("[ChatUseCases] 后台任务重试失败 label=%s err=%s", label, retry_exc)
 
         try:
             loop = asyncio.get_running_loop()
@@ -614,5 +621,3 @@ def get_avatar_chat_usecases() -> ChatUseCases:
     if _avatar_chat_usecases is None:
         _avatar_chat_usecases = ChatUseCases()
     return _avatar_chat_usecases
-
-

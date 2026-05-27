@@ -4,18 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
-
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.config import MSG_LIMIT
 from app.memory.store import MemoryStore
 from app.memory.types import (
     DEFAULT_SESSION_TITLE,
     ModuleName,
     estimate_token_count,
-    should_include_session_summary,
-    truncate_text,
 )
 from app.memory.compression import SessionCompressor
 from app.memory.long_term import LongTermMemoryExtractor
@@ -123,6 +118,22 @@ class MemoryService:
     async def list_summaries(self, *, user_id: int, session_id: str, limit: int = 3) -> list[Any]:
         return await self.store.list_summaries(user_id=user_id, session_id=session_id, module=self.module, limit=limit)
 
+    async def get_session_summary_context(self, *, user_id: int, session_id: str) -> str:
+        """Return compacted prior turns for read-only prompt injection."""
+        summaries = await self.store.list_summaries(
+            user_id=user_id,
+            session_id=session_id,
+            module=self.module,
+            limit=2,
+        )
+        if not summaries:
+            return "暂无会话概要。"
+        return "\n\n---\n\n".join(
+            summary.summary_markdown
+            for summary in summaries
+            if summary.summary_markdown
+        ) or "暂无会话概要。"
+
     # ── 画像 ──
 
     async def get_profile(self, *, user_id: int) -> Any:
@@ -160,7 +171,7 @@ class MemoryService:
     async def get_or_create_long_term_memory(self, *, user_id: int) -> Any:
         return await self.store.get_or_create_long_term_memory(user_id=user_id, module=self.module)
 
-    # ── 工具记忆构建 ──
+    # ── 只读 Agent 上下文 ──
 
     async def get_profile_markdown(self, user_id: int) -> str:
         profile = await self.store.get_profile(user_id=user_id, module=self.module)
@@ -198,98 +209,6 @@ class MemoryService:
             lines.extend(f"  - {url.split('/')[-1]}" for url in file_urls)
         return "\n".join(lines)
 
-    async def build_recent_chat_context(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        user_message: str,
-        attachments: list[str] | None = None,
-    ) -> tuple[list[AnyMessage], str]:
-        raw_messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=MSG_LIMIT)
-        selected = self._select_recent_messages(raw_messages, user_message=user_message)
-        messages: list[AnyMessage] = []
-        for message in selected:
-            if message.role == "user":
-                messages.append(HumanMessage(content=message.content))
-            elif message.role == "assistant":
-                messages.append(AIMessage(content=message.content))
-        content = user_message
-        IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
-        image_urls, file_urls = [], []
-        for url in (attachments or []):
-            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
-            if ext in IMAGE_EXTS:
-                image_urls.append(url)
-            else:
-                file_urls.append(url)
-        if image_urls:
-            content += f"\n[Attached Images: {', '.join(image_urls)}]"
-        if file_urls:
-            content += f"\n[Attached Files: {', '.join(file_urls)}]"
-        messages.append(HumanMessage(content=content))
-
-        recent_ctx = self._render_recent_chat(selected)
-        if should_include_session_summary(user_message):
-            summary_ctx = await self._build_session_summary_context(user_id, session_id)
-            if summary_ctx != "暂无会话概要。":
-                recent_ctx = f"# 会话概要\n{summary_ctx}\n\n# 最近对话\n{recent_ctx}"
-            cross_ctx = await self._build_cross_session_context(user_id, session_id)
-            if cross_ctx:
-                recent_ctx = f"{cross_ctx}\n\n{recent_ctx}"
-        return messages, recent_ctx
-
-    async def _build_session_summary_context(self, user_id: int, session_id: str) -> str:
-        summaries = await self.store.list_summaries(user_id=user_id, session_id=session_id, module=self.module, limit=2)
-        if not summaries:
-            return "暂无会话概要。"
-        return "\n\n---\n\n".join(summary.summary_markdown for summary in summaries if summary.summary_markdown)
-
-    async def _build_cross_session_context(self, user_id: int, current_session_id: str, char_budget: int = 800) -> str:
-        summaries = await self.store.list_cross_session_summaries(
-            user_id=user_id,
-            module=self.module,
-            exclude_session_id=current_session_id,
-            limit=5,
-        )
-        chunks: list[str] = []
-        for summary in summaries:
-            if summary.summary_markdown and summary.summary_markdown.strip():
-                first_line = summary.summary_markdown.strip().split("\n")[0]
-                chunks.append(f"- {first_line}")
-        return truncate_text("# 其他会话概要\n" + "\n".join(chunks), char_budget) if chunks else ""
-
-    @staticmethod
-    def _select_recent_messages(messages: list[Any], *, user_message: str, char_budget: int = 4000) -> list[Any]:
-        dialogue = [
-            message
-            for message in messages
-            if getattr(message, "role", None) in {"user", "assistant"} and (getattr(message, "content", "") or "").strip()
-        ]
-        if dialogue and getattr(dialogue[-1], "role", None) == "user" and (getattr(dialogue[-1], "content", "") or "").strip() == (user_message or "").strip():
-            dialogue = dialogue[:-1]
-        selected: list[Any] = []
-        used_chars = 0
-        for message in reversed(dialogue):
-            line = f"- {'用户' if getattr(message, 'role', '') == 'user' else '助手'}: {(getattr(message, 'content', '') or '').strip()}"
-            next_size = len(line) + 1
-            if selected and used_chars + next_size > char_budget:
-                continue
-            if not selected and next_size > char_budget:
-                selected.append(message)
-                break
-            selected.append(message)
-            used_chars += next_size
-        return list(reversed(selected))
-
-    @staticmethod
-    def _render_recent_chat(messages: list[Any], char_budget: int = 4000) -> str:
-        context = "\n".join(
-            f"- {'用户' if getattr(m, 'role', '') == 'user' else '助手'}: {truncate_text((getattr(m, 'content', '') or '').strip(), char_budget)}"
-            for m in messages
-        )
-        return truncate_text(context, char_budget) if context else "最近 7 天暂无历史对话。"
-
     # ── 工作流 ──
 
     async def after_turn(
@@ -312,6 +231,7 @@ class MemoryService:
             session_id=session_id,
             user_message=user_message,
             assistant_reply=assistant_reply,
+            enable_long_term_memory=enable_long_term_memory,
         )
 
     async def post_turn(
@@ -322,6 +242,7 @@ class MemoryService:
         user_message: str,
         assistant_reply: str,
         turn_count: int = 0,
+        enable_long_term_memory: bool = True,
     ) -> dict[str, bool]:
         """单轮对话后执行记忆管线：压缩 → 长期记忆 → 画像。"""
         results: dict[str, bool] = {}
@@ -336,6 +257,11 @@ class MemoryService:
         except Exception as exc:
             logger.error("[MemoryService] 压缩失败: %s", exc)
             results["compressed"] = False
+
+        if not enable_long_term_memory:
+            results["ltm_updated"] = False
+            results["profile_updated"] = False
+            return results
 
         try:
             updated = await self.ltm_extractor.maybe_update(

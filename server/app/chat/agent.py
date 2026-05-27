@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-"""TutorAgent: context-initialized intelligent tutoring orchestrator.
+"""TutorAgent：基于上下文初始化的智能辅导编排器。
 
-Each route first produces a complete written explanation. When requested, a
-pure teaching-diagram node then produces an InsightCanvas artifact for the UI.
-"""
+回答路由会流式输出文字讲解，然后可能生成 InsightCanvas 图板。
+独立的图解请求则直接将上一轮对话可视化。"""
 
 from __future__ import annotations
 
@@ -65,7 +64,7 @@ def _get_prompt(name: str) -> str:
 
 
 def _explicit_diagram_requested(user_message: str) -> bool:
-    """Only activate the diagram artifact for an explicit request in this turn."""
+    """仅在用户本轮显式请求时才激活图解图板。"""
     normalized = re.sub(r"\s+", "", (user_message or "").lower())
     if not normalized:
         return False
@@ -73,16 +72,56 @@ def _explicit_diagram_requested(user_message: str) -> bool:
         return False
     patterns = (
         r"图解(?:说明|解释|展示|一下)?",
-        r"(?:请|帮我|能否|可以)?(?:用图|画图)(?:说明|解释|展示|梳理)?",
-        r"(?:画|生成|提供)(?:一张|一个)?(?:流程图|示意图|结构图|时序图)",
+        r"(?:请|帮我|能否|可以)?(?:用|通过)(?:一张|一个)?(?:图|图解|图示)(?:说明|解释|展示|梳理|讲解)?",
+        r"(?:请|帮我|能否|可以)?(?:用图|画图|画一下)(?:说明|解释|展示|梳理|讲解)?",
+        r"(?:画|生成|提供|做|来)(?:一张|一个)?(?:流程图|示意图|结构图|时序图|图解|图示)",
+        r"(?:把|将).{1,24}(?:画|整理|转成|做成)(?:一张|一个)?(?:图|图解|流程图|示意图)",
+        r"(?:图示|视觉化)(?:说明|解释|展示|呈现|讲解)?",
         r"(?:可视化)(?:说明|解释|展示|呈现)",
         r"(?:diagram|visuali[sz]e|visualization)",
     )
     return any(re.search(pattern, normalized) for pattern in patterns)
 
 
+def _diagram_only_requested(user_message: str) -> bool:
+    """检测依赖上一轮教学回答的纯图解指令。"""
+    normalized = re.sub(r"[\s，。！？!?、：:；;]", "", (user_message or "").lower())
+    if not normalized:
+        return False
+    patterns = (
+        r"(?:我想|我要|请|帮我|给我|能否|可以|麻烦)?(?:生成|制作|做|画|展示|提供|来)?(?:一张|一个)?(?:教学)?图解(?:说明)?(?:一下|看看)?",
+        r"(?:我想|我要|请|帮我|给我|能否|可以|麻烦)?(?:生成|制作|做|画|展示|提供|来)?(?:一张|一个)?(?:流程图|示意图|结构图|时序图)(?:一下|看看)?",
+    )
+    return any(re.fullmatch(pattern, normalized) for pattern in patterns)
+
+
+def _previous_teaching_exchange(messages: list[Any]) -> tuple[str, str]:
+    """返回本轮之前的用户问题和助教讲解。"""
+    latest_user_index = next(
+        (index for index in range(len(messages) - 1, -1, -1) if isinstance(messages[index], HumanMessage)),
+        -1,
+    )
+    if latest_user_index <= 0:
+        return "", ""
+
+    for answer_index in range(latest_user_index - 1, -1, -1):
+        message = messages[answer_index]
+        if not isinstance(message, AIMessage):
+            continue
+        answer = normalize_message_content(message.content).strip()
+        if not answer:
+            continue
+        prior_question = extract_question(messages[:answer_index])
+        if _diagram_only_requested(prior_question):
+            # 连续的"生成图解"轮次必须继续使用最近的实质性讲解，
+            # 而非更早的图解确认回复。
+            continue
+        return prior_question, answer
+    return "", ""
+
+
 def _search_requested(user_message: str) -> bool:
-    """Route only explicit fresh-information requests through web search."""
+    """仅将明确的最新信息请求路由到联网搜索。"""
     normalized = re.sub(r"\s+", "", (user_message or "").lower())
     if not normalized:
         return False
@@ -96,7 +135,7 @@ def _search_requested(user_message: str) -> bool:
 
 
 def _answer_generation_policy(user_message: str) -> str:
-    """Select prompt-level answer scope without imposing output truncation."""
+    """选择提示词级别的回答深度，不施加输出截断。"""
     normalized = re.sub(r"\s+", "", (user_message or "").lower())
     is_learning_statement = bool(
         re.search(r"(?:我)?(?:最近|目前|现在|正在)?(?:在)?(?:学习|复习|了解|看)(?:一下)?", normalized)
@@ -115,6 +154,28 @@ def _answer_generation_policy(user_message: str) -> str:
     return (
         "本轮采用默认答复深度：先直接回答核心问题，再用必要的要点或一个例子说明；"
         "若学生未要求深入，不要扩写成完整课程章节。"
+    )
+
+
+def _learner_context_requests(user_message: str) -> tuple[bool, bool]:
+    """仅在问题需要个性化时选择读取学习者上下文。"""
+    normalized = re.sub(r"\s+", "", (user_message or "").lower())
+    if not normalized:
+        return False, False
+
+    profile_patterns = (
+        r"(?:按|根据|结合).{0,8}(?:我的|本人)",
+        r"我的(?:基础|水平|专业|目标|偏好|情况|学习风格|薄弱点|弱点)",
+        r"(?:适合我|为我定制|给我定制|个性化)",
+    )
+    memory_patterns = (
+        r"(?:我之前|我上次|之前我|以前我|我最近).{0,24}(?:学|不会|不懂|错误|做错|问题|薄弱|掌握)",
+        r"我的(?:薄弱点|弱点|错题|学习记录|学习历史|历史问题)",
+        r"(?:学到哪|记得我|回顾我|根据我.{0,8}(?:记录|历史))",
+    )
+    return (
+        any(re.search(pattern, normalized) for pattern in profile_patterns),
+        any(re.search(pattern, normalized) for pattern in memory_patterns),
     )
 
 
@@ -163,10 +224,11 @@ def _stream_chunk_text(chunk: Any) -> str:
 class TutorAgent:
     """智能辅导 Agent — 轻量级编排器。
 
-    三种对话路径：
-    1. direct_answer — Spark MAX 直接回答，无工具
-    2. search_node → spark_summary — Spark MAX 搜索后 Spark MAX 总结
-    3. attachment_answer — Spark MAX 基于附件分析结果回答
+    四种对话路径：
+    1. direct_answer — Spark MAX 直接回答，个性化请求可读取只读学习依据
+    2. teaching_diagram_generate — 纯图解指令直接复用上一轮教学答案生成图板
+    3. search_node → spark_summary — Spark MAX 搜索后 Spark MAX 总结
+    4. attachment_answer — Spark MAX 基于附件分析结果回答
     """
 
     def __init__(self, context: TutorAgentContext) -> None:
@@ -178,9 +240,8 @@ class TutorAgent:
         # LLM 实例
         self.llm = get_llm()
 
-        # 图与工具
+        # 图仅编排本轮对话；持久化上下文由服务层注入。
         self.graph = None
-        self.memory_tools = []
         self._init_lock = asyncio.Lock()
 
         logger.info("[TutorAgent] 初始化完成")
@@ -197,15 +258,15 @@ class TutorAgent:
         config: RunnableConfig,
         fallback_text: str = "抱歉，我暂时无法回答这个问题，请稍后重试。",
         retry_prompt: str = "请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。",
-        tools: list[Any] | None = None,
     ) -> AIMessage:
-        """Stream text chunks immediately; retry only before any visible output."""
-        llm = self.llm.bind_tools(tools) if tools else self.llm
+        """流式输出文本块；仅在尚未输出可见内容时重试。"""
+        has_visible_output = False
 
         async def generate(input_messages: list[Any]) -> AIMessage | None:
+            nonlocal has_visible_output
             final_chunk = None
             try:
-                async for chunk in llm.astream(
+                async for chunk in self.llm.astream(
                     input_messages,
                     temperature=0.3,
                 ):
@@ -216,6 +277,7 @@ class TutorAgent:
                         
                     text = _stream_chunk_text(chunk)
                     if text:
+                        has_visible_output = True
                         await adispatch_custom_event(
                             "answer_token",
                             {"node": node_name, "text": text},
@@ -224,13 +286,15 @@ class TutorAgent:
                 return final_chunk
             except Exception as exc:
                 logger.warning("[TutorAgent] %s 流式调用失败 err=%s", node_name, exc)
+                if has_visible_output:
+                    raise
             return None
 
         result = await generate(messages)
         if result and (result.content or getattr(result, "tool_calls", [])):
             return result
 
-        logger.warning("[TutorAgent] %s 重试 原因=未产生有效流式内容", node_name)
+        logger.warning("[TutorAgent] %s 重试 原因=未产生可见流式内容", node_name)
         result = await generate(messages + [HumanMessage(content=retry_prompt)])
         if result and (result.content or getattr(result, "tool_calls", [])):
             return result
@@ -241,6 +305,79 @@ class TutorAgent:
             config=config,
         )
         return AIMessage(content=fallback_text)
+
+    async def _load_learner_context(
+        self,
+        state: TutorState,
+        config: RunnableConfig,
+    ) -> tuple[str, str]:
+        """仅在必要时通过注入的能力读取学习者依据。"""
+        profile_context = str(state.get("retrieved_profile_context", "")).strip()
+        memory_context = str(state.get("retrieved_memory_context", "")).strip()
+        reader = self.context.learner_context_reader
+        if reader is None:
+            return profile_context, memory_context
+
+        question = extract_question(state.get("messages") or [])
+        need_profile, need_memory = _learner_context_requests(question)
+
+        if need_profile and not profile_context:
+            await adispatch_custom_event(
+                "learner_context_status",
+                {"stage": "reading_profile", "message": "正在读取学习画像以调整讲解方式..."},
+                config=config,
+            )
+            try:
+                profile_context = (await reader.read_learning_profile()).strip()
+            except Exception as exc:
+                logger.warning("[TutorAgent] 读取学习画像失败，继续通用回答 err=%s", exc)
+
+        if need_memory and not memory_context:
+            await adispatch_custom_event(
+                "learner_context_status",
+                {"stage": "searching_learning_memory", "message": "正在检索相关学习记录..."},
+                config=config,
+            )
+            try:
+                memory_context = (await reader.search_learning_memory(question)).strip()
+            except Exception as exc:
+                logger.warning("[TutorAgent] 检索学习记忆失败，继续通用回答 err=%s", exc)
+
+        return profile_context, memory_context
+
+    @staticmethod
+    def _scoped_answer_prompt(
+        system_prompt: str,
+        *,
+        question: str,
+        profile_context: str,
+        memory_context: str,
+        diagram_enabled: bool,
+    ) -> str:
+        """基于本轮实际读取的依据组织回答提示词。"""
+        sections = [
+            system_prompt,
+            f"# 本轮答复深度\n{_answer_generation_policy(question)}",
+        ]
+        evidence: list[str] = []
+        if profile_context:
+            evidence.append(f"## 按需读取的学习画像\n{profile_context}")
+        if memory_context:
+            evidence.append(f"## 按需检索的长期学习依据\n{memory_context}")
+        if evidence:
+            sections.append(
+                "# 本轮按需读取的学习依据\n"
+                "仅据下列真实记录调整回答，不要延伸推断学生能力或学习经历。\n\n"
+                + "\n\n".join(evidence)
+            )
+        if diagram_enabled:
+            sections.append(
+                "# 本轮图解输出已启用\n"
+                "系统会在文字回答之后生成并渲染结构化教学图板。"
+                "正文只需要清楚回答问题；如果需要提及图解，只能说图板将随本轮回答展示。"
+                "严禁声称无法生成可视化图解，严禁建议学生改用第三方绘图工具完成本轮请求。"
+            )
+        return "\n\n".join(sections)
 
     # ------------------------------------------------------------------
     # 图构建
@@ -258,12 +395,6 @@ class TutorAgent:
             if self.graph is not None:
                 return
 
-            from langgraph.prebuilt import ToolNode
-            from app.chat.tools.memory import build_memory_tools
-            
-            self.memory_tools = build_memory_tools(self.context.user_id)
-            memory_tool_node = ToolNode(self.memory_tools)
-
             # 创建状态图
             graph = StateGraph(TutorState)
             # 添加节点
@@ -273,7 +404,6 @@ class TutorAgent:
             graph.add_node("spark_summary", self._spark_summary_node)
             graph.add_node("attachment_answer", self._attachment_answer_node)
             graph.add_node("teaching_diagram_generate", self._teaching_diagram_generate_node)
-            graph.add_node("memory_tools", memory_tool_node)
 
             # 添加边
             graph.add_edge(START, "classify")
@@ -282,6 +412,7 @@ class TutorAgent:
                 classify_route,
                 {
                     "direct": "direct_answer",
+                    "diagram_only": "teaching_diagram_generate",
                     "search": "search_node",
                     "attachment_needed": "attachment_answer",
                 },
@@ -290,7 +421,6 @@ class TutorAgent:
                 "direct_answer",
                 self._route_after_answer,
                 {
-                    "tools": "memory_tools",
                     "diagram": "teaching_diagram_generate",
                     "end": END,
                 },
@@ -312,15 +442,6 @@ class TutorAgent:
                     "end": END,
                 },
             )
-            graph.add_conditional_edges(
-                "memory_tools",
-                self._route_after_tools,
-                {
-                    "direct_answer": "direct_answer",
-                    "spark_summary": "spark_summary",
-                    "attachment_answer": "attachment_answer",
-                },
-            )
             graph.add_edge("teaching_diagram_generate", END)
 
             self.graph = graph.compile()
@@ -331,21 +452,8 @@ class TutorAgent:
 
     @staticmethod
     def _route_after_answer(state: dict) -> str:
-        """Run a diagram only after a complete text answer has been produced, or route to tools."""
-        messages = state.get("messages", [])
-        if messages and hasattr(messages[-1], "tool_calls") and getattr(messages[-1], "tool_calls", []):
-            return "tools"
+        """在文字回答完成后运行可选的每轮图解。"""
         return "diagram" if state.get("need_teaching_diagram", False) else "end"
-
-    @staticmethod
-    def _route_after_tools(state: dict) -> str:
-        """返回调用记忆工具之前的节点。"""
-        route = state.get("route", "")
-        if route == "search":
-            return "spark_summary"
-        elif route == "attachment_needed":
-            return "attachment_answer"
-        return "direct_answer"
 
     # ------------------------------------------------------------------
     # 节点: classify
@@ -385,6 +493,18 @@ class TutorAgent:
             elif has_attachments:
                 route = "attachment_needed"
                 execution_mode = "attachment"
+            elif need_diagram and _diagram_only_requested(user_message):
+                _, prior_answer = _previous_teaching_exchange(list(messages))
+                if prior_answer:
+                    route = "diagram_only"
+                    execution_mode = "diagram_only"
+                else:
+                    # 没有更早的讲解就没有可可视化的主题；
+                    # 让正常回答路径去询问缺失的学习主题。
+                    need_diagram = False
+                    route = "direct"
+                    execution_mode = "direct"
+                    state_updates["need_teaching_diagram"] = False
             else:
                 route = "direct"
                 execution_mode = "direct"
@@ -415,7 +535,7 @@ class TutorAgent:
         state: TutorState,
         config: RunnableConfig,
     ) -> dict[str, Any]:
-        """直接回答路径：Spark MAX 直接回答，不调用工具。
+        """直接回答路径：Spark MAX 直接回答，按需读取只读学习依据。
 
         Args:
             state: LangGraph 状态。
@@ -432,22 +552,28 @@ class TutorAgent:
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
 
-            depth_instruction = _answer_generation_policy(question)
-            scoped_prompt = f"{system_prompt}\n\n# 本轮答复深度\n{depth_instruction}"
+            profile_context, memory_context = await self._load_learner_context(state, config)
+            scoped_prompt = self._scoped_answer_prompt(
+                system_prompt,
+                question=question,
+                profile_context=profile_context,
+                memory_context=memory_context,
+                diagram_enabled=bool(state.get("need_teaching_diagram", False)),
+            )
             full_messages = build_messages(scoped_prompt, list(messages))
             result = await self._stream_answer_with_retry(
                 full_messages,
                 node_name="direct_answer",
                 config=config,
-                tools=self.memory_tools,
             )
 
-            state_updates: dict[str, Any] = {"messages": [result]}
-            if not getattr(result, "tool_calls", []):
-                state_updates["answer_text"] = result.content
-                state_updates["termination_reason"] = "direct_answer_done"
-                
-            return state_updates
+            return {
+                "messages": [result],
+                "answer_text": result.content,
+                "retrieved_profile_context": profile_context,
+                "retrieved_memory_context": memory_context,
+                "termination_reason": "direct_answer_done",
+            }
 
     # ------------------------------------------------------------------
     # 节点: search_node
@@ -491,17 +617,17 @@ class TutorAgent:
                 [duckduckgo_search, tavily_search, serp_search],
             )
 
+            response = None
             try:
                 response = await self.llm.ainvoke(full_messages, model=llm_with_tools)
-            except Exception:
-                logger.exception("[TutorAgent] search_node Spark MAX 调用失败")
-                raise
+            except Exception as exc:
+                logger.warning("[TutorAgent] 搜索意图生成失败，进入直接检索兜底 err=%s", exc)
 
             # 处理工具调用
-            search_result = normalize_message_content(getattr(response, "content", response))
+            search_result = normalize_message_content(getattr(response, "content", "") if response else "")
 
             # 如果有工具调用，执行它们
-            tool_calls = getattr(response, "tool_calls", [])
+            tool_calls = getattr(response, "tool_calls", []) if response else []
             tool_results = []
             if tool_calls:
                 for tool_call in tool_calls:
@@ -585,10 +711,17 @@ class TutorAgent:
             )
             fallback_text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
             retry_prompt = "请基于已有资料重新回答，给出完整、可读、适合教学场景的中文回答。"
-            depth_instruction = _answer_generation_policy(question)
+            profile_context, memory_context = await self._load_learner_context(state, config)
+            scoped_prompt = self._scoped_answer_prompt(
+                system_prompt,
+                question=question,
+                profile_context=profile_context,
+                memory_context=memory_context,
+                diagram_enabled=bool(state.get("need_teaching_diagram", False)),
+            )
 
             full_messages = [
-                SystemMessage(content=f"{system_prompt}\n\n# 本轮答复深度\n{depth_instruction}"),
+                SystemMessage(content=scoped_prompt),
                 HumanMessage(content=prompt),
             ]
 
@@ -598,15 +731,15 @@ class TutorAgent:
                 config=config,
                 fallback_text=fallback_text,
                 retry_prompt=retry_prompt,
-                tools=self.memory_tools,
             )
 
-            state_updates: dict[str, Any] = {"messages": [result]}
-            if not getattr(result, "tool_calls", []):
-                state_updates["answer_text"] = result.content
-                state_updates["termination_reason"] = "spark_summary_done"
-                
-            return state_updates
+            return {
+                "messages": [result],
+                "answer_text": result.content,
+                "retrieved_profile_context": profile_context,
+                "retrieved_memory_context": memory_context,
+                "termination_reason": "spark_summary_done",
+            }
 
 
     # ------------------------------------------------------------------
@@ -666,30 +799,36 @@ class TutorAgent:
                 "回答要清晰、分点、适合教学场景。"
             )
 
-            depth_instruction = _answer_generation_policy(question)
-            scoped_prompt = f"{system_prompt}\n\n# 本轮答复深度\n{depth_instruction}"
+            profile_context, memory_context = await self._load_learner_context(state, config)
+            scoped_prompt = self._scoped_answer_prompt(
+                system_prompt,
+                question=question,
+                profile_context=profile_context,
+                memory_context=memory_context,
+                diagram_enabled=bool(state.get("need_teaching_diagram", False)),
+            )
             full_messages = build_messages(scoped_prompt, [HumanMessage(content=answer_prompt)])
 
             result = await self._stream_answer_with_retry(
                 full_messages,
                 node_name="attachment_answer",
                 config=config,
-                tools=self.memory_tools,
             )
 
-            state_updates: dict[str, Any] = {"messages": [result]}
-            if not getattr(result, "tool_calls", []):
-                state_updates["answer_text"] = result.content
-                state_updates["attachment_analysis_result"] = {
+            return {
+                "messages": [result],
+                "answer_text": result.content,
+                "retrieved_profile_context": profile_context,
+                "retrieved_memory_context": memory_context,
+                "attachment_analysis_result": {
                     "mode": "upload_preanalysis",
                     "analysis_context": full_context,
-                }
-                state_updates["termination_reason"] = "attachment_answer_done"
-                
-            return state_updates
+                },
+                "termination_reason": "attachment_answer_done",
+            }
 
     async def _teaching_diagram_generate_node(self, state: TutorState) -> TutorState:
-        """Generate one teaching board after the written answer, without I/O."""
+        """基于本轮回答或上一轮教学对话生成教学图板。"""
         if not state.get("need_teaching_diagram", False):
             return state
         user_id = int(state.get("user_id") or 0)
@@ -698,6 +837,9 @@ class TutorAgent:
             try:
                 question = extract_question(state.get("messages") or [])
                 answer = normalize_message_content(state.get("answer_text", "")).strip()
+                if _diagram_only_requested(question):
+                    question, answer = _previous_teaching_exchange(list(state.get("messages") or []))
+                    state["termination_reason"] = "teaching_diagram_only_done"
                 if not question or not answer:
                     state["teaching_diagram"] = None
                     state["teaching_diagram_error"] = "缺少问题或文字回答，跳过图解说明生成"
@@ -725,18 +867,18 @@ class TutorAgent:
         answer: str,
         state: TutorState,
     ) -> InsightCanvas:
-        """Generate a validated learner-facing board using injected context only."""
-        profile_context = str(state.get("profile_context", "")).strip()
-        fact_context = str(state.get("fact_context", "")).strip()
-        recent_chat_context = str(state.get("recent_chat_context", "")).strip()
+        """使用注入的上下文生成经过验证的面向学习者的图板。"""
+        profile_context = str(state.get("retrieved_profile_context", "")).strip()
+        long_term_memory_context = str(state.get("retrieved_memory_context", "")).strip()
+        session_summary_context = str(state.get("session_summary_context", "")).strip()
         attachment_context = str(state.get("attachment_analysis_context", "")).strip()
         context_parts = []
         if profile_context:
-            context_parts.append(f"用户画像上下文：\n{profile_context}")
-        if fact_context:
-            context_parts.append(f"长期记忆上下文：\n{fact_context}")
-        if recent_chat_context:
-            context_parts.append(f"近期对话上下文：\n{recent_chat_context}")
+            context_parts.append(f"本轮按需读取的用户画像：\n{profile_context}")
+        if long_term_memory_context:
+            context_parts.append(f"本轮按需检索的长期学习依据：\n{long_term_memory_context}")
+        if session_summary_context:
+            context_parts.append(f"会话摘要上下文：\n{session_summary_context}")
         if attachment_context:
             context_parts.append(f"附件预分析上下文：\n{attachment_context}")
         preferred = state.get("diagram_type") or "由你选择最适合的类型"
@@ -807,13 +949,30 @@ class TutorAgent:
                     # 节点开始事件
                     if kind == "on_chain_start" and name in GRAPH_NODE_NAMES:
                         active_node = name
-                        if name in ANSWER_NODE_NAMES:
+                        if name == "classify":
                             yield stream_event(
                                 "status",
-                                {
-                                    "stage": name,
-                                    "message": "正在检索和组织答案，请稍候...",
-                                },
+                                {"stage": name, "message": "正在判断最合适的答疑方式..."},
+                            )
+                        elif name == "search_node":
+                            yield stream_event(
+                                "status",
+                                {"stage": name, "message": "正在检索与问题相关的补充资料..."},
+                            )
+                        elif name == "direct_answer":
+                            yield stream_event(
+                                "status",
+                                {"stage": name, "message": "正在组织回答..."},
+                            )
+                        elif name == "spark_summary":
+                            yield stream_event(
+                                "status",
+                                {"stage": name, "message": "正在结合检索资料组织回答..."},
+                            )
+                        elif name == "attachment_answer":
+                            yield stream_event(
+                                "status",
+                                {"stage": name, "message": "正在结合附件内容组织回答..."},
                             )
                         elif name == "teaching_diagram_generate":
                             yield stream_event(
@@ -847,6 +1006,11 @@ class TutorAgent:
                             full_reply += chunk_text
                             yield stream_event("token", chunk_text)
 
+                    if kind == "on_custom_event" and name == "learner_context_status":
+                        payload = event.get("data", {})
+                        if isinstance(payload, dict):
+                            yield stream_event("status", payload)
+
                     # 兼容未产生流式 chunk 的模型/路径，避免前端空白。
                     if kind == "on_chain_end" and name in ANSWER_NODE_NAMES and not full_reply:
                         node_output = event.get("data", {}).get("output", {})
@@ -859,6 +1023,9 @@ class TutorAgent:
                                 )
                                 final_text = normalize_message_content(final_ai.content if final_ai else "")
                                 if final_text:
+                                    if first_token_ms is None:
+                                        first_token_ms = int((time.monotonic() - started_at) * 1000)
+                                        logger.info("[TutorAgent] 首个 token 已发送 first_token_ms=%s", first_token_ms)
                                     full_reply = final_text
                                     yield stream_event("token", final_text)
 
@@ -880,7 +1047,7 @@ class TutorAgent:
             return
 
         # 从状态中提取回复
-        if not full_reply:
+        if not full_reply and runtime_state.get("execution_mode") != "diagram_only":
             messages = runtime_state.get("messages", [])
             if isinstance(messages, list):
                 for msg in reversed(messages):
@@ -888,13 +1055,14 @@ class TutorAgent:
                         full_reply = normalize_message_content(msg.content)
                         break
 
-        # 检查无效回复
-        if is_unusable_reply_text(full_reply):
+        teaching_diagram = runtime_state.get("teaching_diagram")
+
+        # 独立的图解图板即使没有文字也是有效回复，无需补充文字。
+        if not isinstance(teaching_diagram, dict) and is_unusable_reply_text(full_reply):
             yield stream_event("error", "模型未返回有效内容，请重试。")
             yield stream_event("done", {"session_id": context.session_id, "error": True})
             return
 
-        teaching_diagram = runtime_state.get("teaching_diagram")
         if isinstance(teaching_diagram, dict):
             yield stream_event("diagram", teaching_diagram)
 

@@ -8,9 +8,8 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.auth.security import get_current_user
-from app.chat.service import ChatUseCases, get_avatar_chat_usecases
+from app.chat.service import get_avatar_chat_usecases, get_chat_usecases
 from app.infra.models import User
-from app.memory import MemoryService
 from app.infra.response import HttpResponse
 
 router = APIRouter()
@@ -65,24 +64,20 @@ async def clear_avatar_history(
 ):
     """清空数字人会话历史消息（默认清空当前会话）。"""
     from app.avatar.bridge.manager import avatar_bridge_manager
-    memory_layer = MemoryService(module="mentor")
+    chat_uc = get_chat_usecases()
 
     target_session_id = (session_id or "").strip()
     if not target_session_id:
         status = await avatar_bridge_manager.get_status(user.id)
         target_session_id = str(status.get("session_id") or "").strip()
     if not target_session_id:
-        sessions = await memory_layer.list_sessions(user_id=user.id, limit=1)
+        sessions = await chat_uc.list_sessions(user_id=user.id, limit=1)
         if sessions:
-            target_session_id = sessions[0].id
+            target_session_id = str(sessions[0]["id"])
     if not target_session_id:
         return HttpResponse.success(data={"session_id": "", "deleted_count": 0})
 
-    deleted_count = await memory_layer.delete_short_term_messages(
-        user_id=user.id,
-        session_id=target_session_id,
-    )
-    await memory_layer.reset_session_counters(user_id=user.id, session_id=target_session_id)
+    deleted_count = await chat_uc.clear_history(user.id, target_session_id)
     return HttpResponse.success(data={"session_id": target_session_id, "deleted_count": deleted_count})
 
 

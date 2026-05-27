@@ -33,6 +33,7 @@ export interface StreamExtend {
 export interface DigitalHumanCallbacks {
     onAssistantChunk?: (chunk: string) => void
     onAssistantComplete?: () => void
+    onStatus?: (status: { stage?: string; message?: string }) => void
     onDiagram?: (diagram: unknown) => void
     onAsrResult?: (text: string) => void
     onError?: (msg: string) => void
@@ -249,6 +250,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             isSpeaking.value = true
             updateCache(data.content || '', true) // 实时追加到缓存
             callbacks?.onAssistantChunk?.(data.content || '')
+        } else if (type === 'status') {
+            callbacks?.onStatus?.(data.data || {})
         } else if (type === 'assistant_complete') {
             isSpeaking.value = false
             try {

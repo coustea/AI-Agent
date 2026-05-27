@@ -194,7 +194,10 @@
                   <span class="time">{{ msg.time }}</span>
                 </div>
 
-                <div class="bubble markdown-body">
+                <div
+                    v-if="msg.role === 'user' || getDisplayContent(msg) || (!msg.teachingDiagramGenerating && (msg.searchStage || !msg.teachingDiagram))"
+                    class="bubble markdown-body"
+                >
                   <template v-if="msg.role === 'user'">
                     <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
                   </template>
@@ -213,9 +216,6 @@
                         :content="getDisplayContent(msg)"
                         :is-streaming="isStreamingMessage(msg)"
                     />
-                    <div v-else-if="msg.teachingDiagramGenerating || msg.teachingDiagram" class="direct-graph-text">
-                      正在把这道问题组织成一张可理解、可复习的图解说明。
-                    </div>
                   </template>
                 </div>
 
@@ -510,6 +510,7 @@ const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 const chatMode = ref('standard')
 const userInput = ref('')
 const isAIThinking = ref(false)
+const digitalHumanBackendStatus = ref('')
 const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
@@ -545,7 +546,11 @@ const {
   enableAudio: enableAvatarAudio,
   setPlayerContainer,
 } = useDigitalHuman({
+  onStatus: (status) => {
+    digitalHumanBackendStatus.value = status.message || ''
+  },
   onAssistantChunk: (chunk) => {
+    digitalHumanBackendStatus.value = ''
     clearAsrProcessing()
     startAvatarThinkingTimeout()
     if (isVoiceChatting.value && isVadListening.value) {
@@ -576,6 +581,7 @@ const {
     scrollToBottom()
   },
   onAssistantComplete: () => {
+    digitalHumanBackendStatus.value = ''
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
     isStreamDone = true
@@ -651,6 +657,7 @@ const {
     hasSpeechDetected.value = detected
   },
   onError: (msg) => {
+    digitalHumanBackendStatus.value = ''
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
     stopTeachingDiagramGeneratingForCurrentAi()
@@ -807,6 +814,7 @@ const voiceAsrStage = computed<VoiceAsrStage>(() => {
 })
 
 const digitalHumanStatusText = computed(() => {
+  if (isAIThinking.value && digitalHumanBackendStatus.value) return digitalHumanBackendStatus.value
   if (isAIThinking.value || isAvatarSpeaking.value) return '正在多模态解答中...'
   if (voiceAsrStage.value === 'no_voice') return '未识别到声音'
   if (voiceAsrStage.value === 'heard_voice') return '已识别到声音'
@@ -1377,7 +1385,7 @@ const getAvatarCapabilities = () => ({
   history: buildStreamHistory().map(item => ({ role: item.role, content: item.content })),
   enable_search: enableWebSearch.value,
   generate_video: generateVideo.value,
-  enable_long_term_memory: false,
+  enable_long_term_memory: true,
 })
 
 const handleTeachingDiagramToggle = () => {
@@ -1526,6 +1534,7 @@ const handleSend = async () => {
   })
 
   isAIThinking.value = true
+  digitalHumanBackendStatus.value = ''
   scrollToBottom()
 
   const currentPending = [...pendingFiles.value]
@@ -1657,18 +1666,25 @@ const handleSend = async () => {
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg) return
 
-          if (payload?.stage === 'search_node' || payload?.stage === 'spark_summary') {
+          if ([
+            'preparing_context',
+            'classify',
+            'search_node',
+            'spark_summary',
+            'direct_answer',
+            'attachment_answer',
+            'reading_profile',
+            'searching_learning_memory',
+            'persisting_turn',
+          ].includes(payload?.stage || '')) {
             aiMsg.searchStage = payload.stage
-            aiMsg.searchMessage = payload.message || '正在检索和组织答案，请稍候...'
+            aiMsg.searchMessage = payload.message || '正在组织本轮回答...'
             scrollToBottom()
             return
           }
-          if (payload?.stage === 'direct_answer' || payload?.stage === 'attachment_answer') {
+          if (payload?.stage === 'teaching_diagram_generate') {
             aiMsg.searchStage = undefined
             aiMsg.searchMessage = undefined
-            return
-          }
-          if (payload?.stage === 'teaching_diagram_generate') {
             aiMsg.teachingDiagramGenerating = true
             scrollToBottom()
             return
@@ -1680,6 +1696,8 @@ const handleSend = async () => {
           const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg || !diagram) return
+          aiMsg.searchStage = undefined
+          aiMsg.searchMessage = undefined
           aiMsg.teachingDiagram = diagram
           aiMsg.teachingDiagramGenerating = false
           scrollToBottom()
@@ -1694,6 +1712,8 @@ const handleSend = async () => {
           const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg) return
+          aiMsg.searchStage = undefined
+          aiMsg.searchMessage = undefined
           aiMsg.teachingDiagramGenerating = false
           if (!diagram) return
           aiMsg.teachingDiagram = diagram

@@ -824,7 +824,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -939,7 +939,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -962,7 +962,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -985,30 +985,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
-    "split": "dev"
-  },
-  {
-    "id": "dragon_03_3.4_3_4_4 ！",
-    "source": "Dragon-Book",
-    "subject": "编译原理",
-    "subject_en": "compiler",
-    "type": "分析题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "对 s 进行归纳，证明图 3-19 的算法正确地计算出了失效函数。\n\n**图 3-19：计算关键字 b_1b_2…b_n 的失效函数**\n\n    01  t = 0;\n    02  f(1) = 0;\n    03  for (s = 1; s < n; s ++){\n    04      while( t > 0 && b_s+1 != b_t+1) t = f(t);\n    05      if(b_s+1 == b_t+1){\n    06          t = t + 1;\n    07          f(s + 1) = t;\n    08      }else{\n    09          f(s + 1) = 0;\n    10      }\n    11  }\n\n#### 证明\n\n1. 已知 f(1) = 0\n2. 在第 1 次 for 循环时，计算 f(2) 的值，当第5行代码 b_2 == b_1 成立时，代码进入到第7行得出 f(2) = 1，不成立时，则代码进入第9行得出 f(2) = 0。显然，这次循环正确的计算出了 f(2) 。\n3. 假设在第 i-1 次进入循环时，也正确的计算出了 f(i)，也有 f(i) = t (无论 t 是大于 0 还是等于 0)\n4. 那么在第 1 次进入循环时，分两种情况进行考虑：\n    1. t == 0\n        \n        这种情况比较简单，直接从第 5 行开始，当 b_i+1 == b_1 时，f(i+1) = 1，否则 f(i+1) = 0\n    2. t > 0\n        while 循环会不断缩小 t 值，试图找出最大可能的使得 b_i+1 == b_t+1 成立的 t 值，如果找到了，则进入第 5 行执行，得到 f(i+1) = t+1；或者直到 t == 0 时也没有找到，则跳出循环，这时进入第 5 行执行，过程类似于前一种情况。",
-    "options": null,
-    "answer": "",
-    "analysis": "",
-    "knowledge_points": [
-      "第03章"
-    ],
-    "tags": [
-      "compiler",
-      "dragon-book",
-      "ch03"
-    ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1031,7 +1008,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1054,7 +1031,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1077,7 +1054,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1100,7 +1077,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1123,7 +1100,7 @@
       "dragon-book",
       "ch03"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1675,7 +1652,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1836,7 +1813,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1859,7 +1836,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1882,7 +1859,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1905,7 +1882,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1928,7 +1905,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1951,7 +1928,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1974,7 +1951,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -1997,7 +1974,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2020,7 +1997,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2043,7 +2020,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2066,7 +2043,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2089,7 +2066,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2112,7 +2089,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2135,7 +2112,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2158,7 +2135,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2181,7 +2158,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2204,7 +2181,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2227,7 +2204,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2250,7 +2227,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2273,7 +2250,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2296,7 +2273,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2319,7 +2296,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2342,7 +2319,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2365,7 +2342,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2388,7 +2365,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2411,7 +2388,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2434,7 +2411,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2457,7 +2434,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2480,7 +2457,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2503,7 +2480,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2526,7 +2503,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2549,7 +2526,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2572,7 +2549,7 @@
       "dragon-book",
       "ch04"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2595,7 +2572,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2618,7 +2595,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2641,7 +2618,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2664,7 +2641,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2687,7 +2664,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2710,7 +2687,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2733,7 +2710,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2756,7 +2733,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2779,7 +2756,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2802,7 +2779,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2825,7 +2802,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2848,7 +2825,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2871,7 +2848,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2894,7 +2871,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2917,7 +2894,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2940,7 +2917,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2963,7 +2940,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -2986,7 +2963,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3009,7 +2986,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3032,7 +3009,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3055,7 +3032,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3078,7 +3055,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3101,7 +3078,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3124,7 +3101,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3147,7 +3124,7 @@
       "dragon-book",
       "ch05"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3216,7 +3193,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3239,7 +3216,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3262,7 +3239,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3285,7 +3262,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3308,7 +3285,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3331,7 +3308,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3354,7 +3331,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3377,7 +3354,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3400,7 +3377,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3423,7 +3400,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3446,7 +3423,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3469,7 +3446,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3492,7 +3469,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3515,7 +3492,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3538,7 +3515,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3561,7 +3538,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3584,7 +3561,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3607,7 +3584,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3630,7 +3607,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3653,7 +3630,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3676,7 +3653,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3699,7 +3676,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3722,7 +3699,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3745,7 +3722,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3768,7 +3745,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -3791,7 +3768,7 @@
       "dragon-book",
       "ch06"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4251,7 +4228,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4320,7 +4297,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4343,7 +4320,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4366,7 +4343,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4389,7 +4366,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4435,7 +4412,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4504,7 +4481,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4573,7 +4550,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {
@@ -4642,7 +4619,7 @@
       "dragon-book",
       "ch08"
     ],
-    "language": "en",
+    "language": "zh",
     "split": "dev"
   },
   {

@@ -912,30 +912,6 @@
     "split": "dev"
   },
   {
-    "id": "ceval_probability_and_statistics_0038",
-    "source": "C-Eval",
-    "subject": "概率论与数理统计",
-    "subject_en": "probability_and_statistics",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "设$X_{1},X_{2},\\cdots,X_{50}$为来自总体$X$的简单随机样本,$X$的概率密度都为\n$$\nf(x)=\\left\\{\\begin{array}{cc}\n0.1e^{-0.1x},&x>0\\\\\n0,&x\\leq0\n\\end{array}\\right.\n$$\n$\\bar{X}=\\frac{1}{50}\\sum_{i=1}^{50}X_{i}$是样本均值,根据中心极限定理估计概率$P(7<\\bar{X}<13)$为\n（其中$\\phi(x)$是标准正态分布的分布函数）____",
-    "options": {
-      "A": "$2\\phi\\left(\\frac{3}{\\sqrt{2}}\\right)-1$",
-      "B": "$2 \\phi\\left(\\frac{3}{2.5}\\right)-1$",
-      "C": "$1-\\phi(0.3)$",
-      "D": "$2 \\phi\\left(\\frac{3}{2}\\right)-1$"
-    },
-    "answer": "A",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "probability_and_statistics"
-    ],
-    "language": "zh",
-    "split": "dev"
-  },
-  {
     "id": "ceval_probability_and_statistics_0039",
     "source": "C-Eval",
     "subject": "概率论与数理统计",
@@ -3159,30 +3135,6 @@
       "D": "$\n\\frac{1}{4 n} \\sum_{i=1}^n\\left|x_i\\right|\n$"
     },
     "answer": "A",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "probability_and_statistics"
-    ],
-    "language": "zh",
-    "split": "dev"
-  },
-  {
-    "id": "ceval_probability_and_statistics_0132",
-    "source": "C-Eval",
-    "subject": "概率论与数理统计",
-    "subject_en": "probability_and_statistics",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "已知随机变量$X_1，X_2，X_3，X_4$相互独立，$X_1$与$X_2$服从标准正态分布，$X_3$与$X_4$的概率分布为\n\\begin{tabular}{|c|c|c|}\n\\hline$X_i$&-1&1\\\\\n\\hline$P$&$\\frac{1}{4}$&$\\frac{3}{4}$\\\\\n\\hline\n\\end{tabular}\ni=3,4，定义$X=X_1X_3-X_2X_4$，则X所服从分布为____",
-    "options": {
-      "A": "N(0,1)",
-      "B": "N(0,2)",
-      "C": "N(2,2)",
-      "D": "N(1,2)"
-    },
-    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [

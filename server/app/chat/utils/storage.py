@@ -1,4 +1,4 @@
-"""Local filesystem storage adapter."""
+"""本地文件系统存储适配器。"""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ import string
 from datetime import datetime
 from pathlib import Path
 
-from app.chat.schemas import UploadResponse
+from app.chat.response import UploadResponse
 from app.infra.paths import CHAT_DIR
 
 
 class LocalFileStore:
-    """Local file storage for user uploads."""
+    """用户上传文件的本地存储。"""
 
     def __init__(self) -> None:
         self.upload_dir = CHAT_DIR
@@ -24,6 +24,13 @@ class LocalFileStore:
 
     def ensure_roots(self) -> None:
         self.upload_dir.mkdir(parents=True, exist_ok=True)
+
+    def list_files(self, *, user_id: int, session_id: str) -> list[Path]:
+        """列出用户某次会话中已上传的文件。"""
+        session_dir = self.upload_dir / str(user_id) / session_id
+        if not session_dir.exists():
+            return []
+        return [path for path in session_dir.iterdir() if path.is_file()]
 
     async def save_upload(
         self,

@@ -14,25 +14,25 @@
 
           <div class="search-box-wrapper" :class="{ 'is-focused': isInputFocused }">
             <el-input
-              v-model="naturalInput"
-              type="textarea"
-              :autosize="{ minRows: 4, maxRows: 8 }"
-              placeholder="例如：我是软件工程大二学生，明天考《操作系统》。我搞不懂死锁的四个必要条件，请帮我生成复习资料和几道自测题…"
-              class="elegant-textarea"
-              @focus="isInputFocused = true"
-              @blur="isInputFocused = false"
-              @keydown.enter.exact.prevent="goToPersonalize"
+                v-model="naturalInput"
+                type="textarea"
+                :autosize="{ minRows: 4, maxRows: 8 }"
+                placeholder="例如：我是软件工程大二学生，明天考《操作系统》。我搞不懂死锁的四个必要条件，请帮我生成复习资料和几道自测题…"
+                class="elegant-textarea"
+                @focus="isInputFocused = true"
+                @blur="isInputFocused = false"
+                @keydown.enter.exact.prevent="goToPersonalize"
             />
             <div class="search-actions">
               <div class="action-left">
                 <span class="ai-hint"><el-icon><Cpu /></el-icon> 多智能体协同，全自动构建个性化资源流</span>
               </div>
               <el-button
-                type="primary"
-                class="generate-btn"
-                round
-                :disabled="!naturalInput.trim()"
-                @click="goToPersonalize"
+                  type="primary"
+                  class="generate-btn"
+                  round
+                  :disabled="!naturalInput.trim()"
+                  @click="goToPersonalize"
               >
                 下一步：配置智能体 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
               </el-button>
@@ -61,15 +61,10 @@
 
           <div class="scenario-selector-v2">
             <div
-              v-for="s in [
-                { icon: '备', name: '考试备考', value: 'exam_prep' },
-                { icon: '学', name: '日常学习', value: 'daily_review' },
-                { icon: '践', name: '项目实践', value: 'project_practice' },
-                { icon: '预', name: '预习自学', value: 'self_study' }
-              ]"
-              :key="s.value"
-              :class="['scenario-card', { active: learningScenario === s.value }]"
-              @click="learningScenario = s.value as LearningScenario; applyScenarioDefaults(learningScenario)"
+                v-for="s in scenarioOptions"
+                :key="s.value"
+                :class="['scenario-card', { active: learningScenario === s.value }]"
+                @click="selectScenario(s.value)"
             >
               <div class="scenario-icon-box">{{ s.icon }}</div>
               <div class="scenario-info">
@@ -90,10 +85,10 @@
                   <span class="cc-title">{{ agent.name }}</span>
                   <div class="cc-header-switch">
                     <el-switch
-                      v-if="!agent.disabled"
-                      :model-value="isAgentEnabled(agent.id)"
-                      @change="toggleAgent(agent.id)"
-                      active-color="#0369A1"
+                        v-if="!agent.disabled"
+                        :model-value="isAgentEnabled(agent.id)"
+                        @change="toggleAgent(agent.id)"
+                        active-color="#0369A1"
                     />
                     <el-tag v-else size="small" type="info">敬请期待</el-tag>
                   </div>
@@ -127,8 +122,6 @@
                       </div>
                     </div>
                   </template>
-
-
 
                   <template v-if="agent.id === 'mindmap'">
                     <div class="ctrl-group">
@@ -276,12 +269,12 @@
               <span class="sab-label">本次将调度 {{ enabledAgentIds.length }} 个智能体：</span>
               <div class="sab-pills">
                 <el-tag
-                  v-for="id in enabledAgentIds"
-                  :key="id"
-                  size="small"
-                  effect="plain"
-                  round
-                  class="sab-pill"
+                    v-for="id in enabledAgentIds"
+                    :key="id"
+                    size="small"
+                    effect="plain"
+                    round
+                    class="sab-pill"
                 >
                   <el-icon><component :is="getAgentMeta(id).icon" /></el-icon>
                   {{ getAgentMeta(id).name }}
@@ -300,79 +293,198 @@
       </div>
 
       <div v-else-if="currentPhase === 'generating'" class="phase-view generating-view" key="generating">
-  <div class="generation-workbench">
-    <section class="dag-hero-bar" aria-live="polite">
-      <div class="dag-hero-left">
-        <el-tag class="dag-hero-kicker" effect="plain" round>
-          <span class="ping-dot"></span> LIVE STATUS
-        </el-tag>
-        <h2 class="dag-hero-title">{{ dagHeroMessage }}</h2>
-      </div>
-      <div class="dag-hero-right">
-        <span class="dag-progress-summary">{{ overallProgress }}% · {{ dagCompletedCount }}/{{ dagTotalCount }} 完成</span>
-      </div>
-    </section>
-
-    <el-alert v-if="generationError" class="generation-error" type="error" :closable="false" show-icon :title="generationError" />
-
-    <main class="dag-canvas-card">
-      <div class="dag-canvas">
-        <svg class="dag-lines" :viewBox="`0 0 ${dagCanvasWidthV2} ${dagCanvasHeightV2}`" preserveAspectRatio="xMidYMid meet">
-          <line v-for="edge in dagEdges" :key="`${edge.from}-${edge.to}`"
-            :x1="dagNodePositionsV2[edge.from]?.x" :y1="dagNodePositionsV2[edge.from]?.y"
-            :x2="dagNodePositionsV2[edge.to]?.x" :y2="dagNodePositionsV2[edge.to]?.y"
-            :class="['dag-edge', edge.statusClass]" />
-        </svg>
-        <div v-for="node in dagNodesV2" :key="node.id"
-          class="dag-node" :class="[`dag-${node.status}`, { 'dag-expanded': dagExpandedNodes[node.id], 'dag-sys': node.isSystem }]"
-          :style="dagNodeStyle(node)" @click="toggleDagNodeExpand(node.id)">
-          <div class="dag-node-compact">
-            <div class="dag-node-head">
-              <span class="dag-node-icon">{{ node.icon }}</span>
-              <span class="dag-node-name">{{ node.label }}</span>
-              <span v-if="node.status === 'success'" class="dag-node-check">✓</span>
-              <span v-if="node.status === 'failed'" class="dag-node-x">✗</span>
-            </div>
-            <div v-if="node.status === 'running'" class="dag-node-running">
-              <p class="dag-node-msg">{{ node.currentMessage }}</p>
-              <div class="dag-bar"><div class="dag-bar-fill" :style="{ width: `${node.progress}%` }"></div></div>
-              <span class="dag-bar-text">{{ node.progress }}%</span>
-            </div>
-            <div v-if="node.status === 'waiting'" class="dag-node-info">等待中</div>
-            <div v-if="node.status === 'success'" class="dag-node-info dag-info-ok">已完成</div>
-            <div v-if="node.status === 'failed'" class="dag-node-info dag-info-err">生成失败</div>
-            <div v-if="node.status === 'skipped'" class="dag-node-info">已跳过</div>
-          </div>
-          <transition name="dag-expand">
-            <div v-if="dagExpandedNodes[node.id]" class="dag-node-expanded">
-              <div v-for="(step, i) in node.stepHistory" :key="i"
-                class="dag-step" :class="{ 'dag-step-cur': i === node.stepHistory.length - 1 && node.status === 'running' }">
-                <span class="dag-step-mk">{{ i < node.stepHistory.length - 1 ? '✓' : (node.status === 'running' ? '→' : node.status === 'success' ? '✓' : '✗') }}</span>
-                <span class="dag-step-txt">{{ step }}</span>
+        <div class="workflow-shell">
+          <!-- Topbar: Title + Stats + Stage Steps -->
+          <section class="workflow-topbar" aria-live="polite">
+            <div class="workflow-topbar-main">
+              <div class="workflow-title-block">
+                <el-tag class="workflow-kicker" effect="plain" round>
+                  <span class="ping-dot"></span> 多智能体工作流运行中
+                </el-tag>
+                <h2>{{ dagHeroMessage }}</h2>
+              </div>
+              <div class="workflow-summary-panel">
+                <div class="summary-item">
+                  <span>总进度</span>
+                  <strong>{{ overallProgress }}%</strong>
+                </div>
+                <div class="summary-divider"></div>
+                <div class="summary-item">
+                  <span>完成节点</span>
+                  <strong>{{ dagCompletedCount }}<small>/{{ dagTotalCount }}</small></strong>
+                </div>
+                <el-progress
+                    class="workflow-total-progress"
+                    :percentage="overallProgress"
+                    :stroke-width="8"
+                    :show-text="false"
+                />
               </div>
             </div>
-          </transition>
+
+            <!-- Stage steps horizontal strip -->
+            <div class="stage-steps-strip">
+              <div
+                  v-for="(stage, index) in workflowStages"
+                  :key="stage.id"
+                  class="stage-step"
+                  :class="`is-${stage.status}`"
+              >
+                <div class="step-dot">
+                  <span v-if="stage.status === 'success'">&#10003;</span>
+                  <span v-else>{{ index + 1 }}</span>
+                </div>
+                <div class="step-label">
+                  <strong>{{ stage.title }}</strong>
+                </div>
+                <div class="step-connector" v-if="index < workflowStages.length - 1"></div>
+              </div>
+            </div>
+          </section>
+
+          <el-alert v-if="generationError" class="generation-error" type="error" :closable="false" show-icon :title="generationError" />
+
+          <!-- Full-width DAG canvas -->
+          <section class="workflow-canvas-panel workflow-card">
+            <div class="panel-header canvas-header">
+              <div>
+                <span class="panel-eyebrow">AGENT ORCHESTRATION</span>
+                <h3>智能体协作流程</h3>
+              </div>
+              <el-tag size="small" effect="plain" round>{{ dagSelectedAgentIds.length }} 个资源智能体</el-tag>
+            </div>
+
+            <div class="workflow-canvas">
+              <div class="parallel-layer-label">并行资源生成层</div>
+              <svg class="workflow-lines" :viewBox="`0 0 ${dagCanvasWidthV2} ${dagCanvasHeightV2}`" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <linearGradient id="workflow-active-line" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#2563EB" />
+                    <stop offset="100%" stop-color="#06B6D4" />
+                  </linearGradient>
+                </defs>
+                <line
+                    v-for="edge in dagEdges"
+                    :key="`${edge.from}-${edge.to}`"
+                    :x1="dagNodePositionsV2[edge.from]?.x"
+                    :y1="dagNodePositionsV2[edge.from]?.y"
+                    :x2="dagNodePositionsV2[edge.to]?.x"
+                    :y2="dagNodePositionsV2[edge.to]?.y"
+                    :class="['workflow-edge', edge.statusClass]"
+                />
+              </svg>
+
+              <button
+                  v-for="node in dagNodesV2"
+                  :key="node.id"
+                  class="workflow-agent-node"
+                  :class="[`is-${node.status}`, { 'is-system-node': node.isSystem, 'is-selected': selectedDagNodeId === node.id }]"
+                  :style="dagNodeStyle(node)"
+                  type="button"
+                  @click="selectedDagNodeId = node.id"
+              >
+                <div class="agent-node-topline">
+                  <span class="agent-icon-bubble">{{ node.icon }}</span>
+                  <span class="agent-node-name">{{ node.label }}</span>
+                  <span class="agent-status-dot"></span>
+                </div>
+
+                <p class="agent-node-message">
+                  {{ node.currentMessage || getNodeFallbackMessage(node) }}
+                </p>
+
+                <div class="agent-node-footer">
+                  <span>{{ getStatusText(node.status) }}</span>
+                  <strong>{{ node.progress }}%</strong>
+                </div>
+
+                <div class="agent-mini-progress">
+                  <span :style="{ width: `${node.progress}%` }"></span>
+                </div>
+              </button>
+            </div>
+
+            <!-- Inline agent detail panel below canvas -->
+            <transition name="detail-slide">
+              <div v-if="selectedDagNode" class="inline-agent-detail">
+                <div class="iad-header">
+                  <div class="iad-agent-info">
+                    <span class="iad-icon">{{ selectedDagNode.icon }}</span>
+                    <div>
+                      <h4>{{ selectedDagNode.label }}</h4>
+                      <span :class="['detail-status-pill', `is-${selectedDagNode.status}`]">
+                        {{ getStatusText(selectedDagNode.status) }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="iad-progress-wrap">
+                    <el-progress
+                        :percentage="selectedDagNode.progress"
+                        :stroke-width="8"
+                        :status="selectedDagNode.status === 'failed' ? 'exception' : selectedDagNode.status === 'success' ? 'success' : undefined"
+                        style="width: 180px"
+                    />
+                  </div>
+                  <div class="iad-action">
+                    <span class="iad-action-text">{{ selectedDagNode.currentMessage || getNodeFallbackMessage(selectedDagNode) }}</span>
+                  </div>
+                  <button type="button" class="iad-close" @click="selectedDagNodeId = ''">×</button>
+                </div>
+                <div class="iad-logs" v-if="selectedDagNode.stepHistory?.length">
+                  <div
+                      v-for="(step, index) in selectedDagNode.stepHistory"
+                      :key="index"
+                      class="agent-log-item"
+                      :class="{ active: index === selectedDagNode.stepHistory.length - 1 && selectedDagNode.status === 'running' }"
+                  >
+                    <span class="log-dot"></span>
+                    <span>{{ step }}</span>
+                  </div>
+                </div>
+                <div class="iad-logs-empty" v-else>等待工作流推送实时日志。</div>
+              </div>
+            </transition>
+          </section>
+
+          <section class="workflow-resource-strip workflow-card">
+            <div class="resource-strip-header">
+              <div>
+                <span class="panel-eyebrow">DELIVERABLES</span>
+                <h3>阶段性产物实时接收区</h3>
+              </div>
+              <transition name="scale-fade">
+                <el-tag size="small" effect="plain" round v-if="generatedResources.length" class="res-count-badge">
+                  已接收 {{ generatedResources.length }} 项
+                </el-tag>
+              </transition>
+            </div>
+
+            <div v-if="generatedResources.length" class="resource-strip-list">
+              <article
+                  v-for="resource in sortedGeneratedResources"
+                  :key="resource.id || resource.type"
+                  class="resource-chip-card"
+                  :class="getResourceToneClass(resource.type)"
+                  @click="previewGeneratedResource(resource)"
+              >
+                <span class="resource-chip-icon">{{ getDagNodeIcon(resource.type) }}</span>
+                <div class="resource-chip-meta">
+                  <span>{{ getResourceTypeLabel(resource.type) }}</span>
+                  <strong :title="resource.title">{{ resource.title || '未命名数据片段' }}</strong>
+                </div>
+                <el-icon><ArrowRight /></el-icon>
+              </article>
+            </div>
+
+            <div v-else class="resource-empty-state">
+              <div class="empty-wave-loader">
+                <span></span><span></span><span></span>
+              </div>
+              <span>多个智能体正在并行加工，资源产物生成后会在这里实时出现。</span>
+            </div>
+          </section>
         </div>
       </div>
-    </main>
-
-    <section class="dag-res-row">
-      <div class="dag-res-hdr">
-        <el-icon><Collection /></el-icon>
-        <span>已生成资源</span>
-        <el-tag size="small" effect="plain" round v-if="generatedResources.length">{{ generatedResources.length }} 项</el-tag>
-      </div>
-      <div v-if="generatedResources.length" class="dag-res-cards">
-        <article v-for="resource in sortedGeneratedResources" :key="resource.id || resource.type"
-          class="dag-res-card" :class="getResourceToneClass(resource.type)" @click="previewGeneratedResource(resource)">
-          <span class="dag-rc-icon">{{ getDagNodeIcon(resource.type) }}</span>
-          <span class="dag-rc-title">{{ resource.title || getResourceTypeLabel(resource.type) }}</span>
-        </article>
-      </div>
-      <div v-else class="dag-res-empty"><span class="loading-dots">等待资源生成中...</span></div>
-    </section>
-  </div>
-</div>
 
       <div v-else-if="currentPhase === 'result'" class="phase-view results-view result-dashboard-view" key="result">
         <header class="result-hero-compact">
@@ -391,24 +503,24 @@
           </div>
         </header>
         <el-alert
-          v-if="resultWarning"
-          class="result-warning"
-          type="warning"
-          :closable="false"
-          show-icon
-          :title="resultWarning"
+            v-if="resultWarning"
+            class="result-warning"
+            type="warning"
+            :closable="false"
+            show-icon
+            :title="resultWarning"
         />
 
         <main class="results-body-bento">
           <div class="bento-grid-container">
             <div class="premium-resource-grid">
               <article
-                v-for="(res, index) in resultResources"
-                :key="res.id || res.title"
-                class="premium-res-card"
-                :class="getResourceToneClass(res.type)"
-                :style="{...getBentoCardGridStyle(index, resultResources.length), animationDelay: `${index * 0.08}s`}"
-                @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
+                  v-for="(res, index) in resultResources"
+                  :key="res.id || res.title"
+                  class="premium-res-card"
+                  :class="getResourceToneClass(res.type)"
+                  :style="{...getBentoCardGridStyle(index, resultResources.length), animationDelay: `${index * 0.08}s`}"
+                  @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
               >
                 <div class="card-bg-glow"></div>
                 <div class="card-header">
@@ -447,7 +559,6 @@
       </div>
 
     </transition>
-
 
     <el-dialog v-model="previewVisible" :title="previewData?.title || '资源预览'" width="78%" top="6vh" destroy-on-close class="elegant-dialog">
       <div v-if="previewData" class="preview-dialog-body">
@@ -493,16 +604,12 @@ defineOptions({ name: 'ResourceGenerator' })
 
 const route = useRoute()
 
-// Use ResourceGenerateEvent from api/resource.ts - local type not needed
-
-
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
   displayOrder?: number
 }
 
-
-// ===================== 场景默认配置 =====================
+// ===================== 场景默认参数字典 =====================
 type QuizQuestionType = 'single' | 'multiple' | 'judge' | 'fill'
 type AnyAgentConfigs = {
   content: { structure: string; include_common_mistakes: boolean; include_examples: boolean; focus_mode: string; depth_level: string }
@@ -521,13 +628,20 @@ const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
   self_study: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', comment_level: 'verbose', include_test: false, difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, resource_quality: 'balanced', include_practice: false, language_preference: 'chinese' }, ppt: { template_id: 'theme-logic-blue', page_count: 6, difficulty: 'beginner', output_format: 'preview' } },
 }
 
-// ===================== 1. 核心状态 =====================
+// ===================== 核心状态管理 =====================
 type Phase = 'input' | 'personalize' | 'generating' | 'result'
 const currentPhase = ref<Phase>('input')
 
 const naturalInput = ref('')
 const isInputFocused = ref(false)
 const learningScenario = ref<LearningScenario>('daily_review')
+
+const scenarioOptions: Array<{ icon: string; name: string; value: LearningScenario }> = [
+  { icon: '备', name: '考试备考', value: 'exam_prep' },
+  { icon: '学', name: '日常学习', value: 'daily_review' },
+  { icon: '践', name: '项目实践', value: 'project_practice' },
+  { icon: '预', name: '预习自学', value: 'self_study' }
+]
 
 const quickPrompts = [
   "复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题",
@@ -552,7 +666,6 @@ const getAgentMeta = (id: string) => agentMetaList.find(a => a.id === id) || { n
 const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt'])
 
 const isAgentEnabled = (id: string) => enabledAgentIds.value.includes(id as ResourceAgentId)
-
 const MIN_AGENTS = 3
 
 const toggleAgent = (id: string) => {
@@ -580,7 +693,7 @@ const getScenarioDesc = (scenario: string) => {
   return descMap[scenario] || ''
 }
 
-// ===================== 2. 参数配置状态 =====================
+// ===================== 参数表单状态 =====================
 const agentConfigs = reactive({
   content: { structure: 'progressive' as const, include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage' as const, depth_level: 'standard' as const },
   mindmap: { map_type: 'knowledge_tree' as const, max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
@@ -601,12 +714,17 @@ const applyScenarioDefaults = (scenario: LearningScenario) => {
   })
 }
 
+const selectScenario = (scenario: LearningScenario) => {
+  learningScenario.value = scenario
+  applyScenarioDefaults(scenario)
+}
+
 const goToPersonalize = () => {
   if (!naturalInput.value.trim()) return
   currentPhase.value = 'personalize'
 }
 
-// ===================== 3. 工作流与生成逻辑 =====================
+// ===================== 异步工作流大盘画布引擎 =====================
 const generatedResources = ref<GeneratedResourceItem[]>([])
 const finalBundle = ref<any | null>(null)
 const isGenerating = ref(false)
@@ -616,22 +734,18 @@ const overallProgress = ref(0)
 const latestWorkflowMessage = ref('')
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 
-// ===================== DAG layout =====================
-
-const RESOURCE_TYPE_ORDER = ['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt', 'video']
-
-// ===================== New DAG Generating Phase State =====================
+const RESOURCE_TYPE_ORDER = ['content', 'diagram', 'mindmap', 'code', 'quiz', 'reading', 'ppt', 'video']
 
 const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
-  planning: { label: '规划', icon: '🎯' },
+  planning: { label: '规划任务', icon: '🎯' },
   content: { label: '课程讲解', icon: '📝' },
   mindmap: { label: '思维导图', icon: '🧠' },
-  quiz: { label: '练习题', icon: '📋' },
+  quiz: { label: '自测题库', icon: '📋' },
   code: { label: '代码案例', icon: '💻' },
   reading: { label: '拓展阅读', icon: '📚' },
   ppt: { label: '演示文稿', icon: '📊' },
   review: { label: '质量审查', icon: '🔍' },
-  bundle: { label: '打包', icon: '📦' },
+  bundle: { label: '资源组装', icon: '📦' },
 }
 
 interface DagNodeState {
@@ -646,25 +760,23 @@ interface DagNodeState {
 }
 
 const dagNodeStates = ref<Record<string, DagNodeState>>({})
-const dagExpandedNodes = ref<Record<string, boolean>>({})
+const selectedDagNodeId = ref('planning')
 
-// Which agents are selected in personalize phase
 const dagSelectedAgentIds = computed(() => {
   return enabledAgentIds.value.filter(id => !['master', 'reviewer', 'assembler'].includes(id))
 })
 
-// DAG Nodes (dynamic based on selected agents)
 const dagNodesV2 = computed<DagNodeState[]>(() => {
   const selected = dagSelectedAgentIds.value
   const nodes: DagNodeState[] = []
 
-  // Planning
+  // 1. 顶层规划节点
   nodes.push(dagNodeStates.value['planning'] || {
-    id: 'planning', label: '规划', icon: '🎯',
+    id: 'planning', label: '规划任务', icon: '🎯',
     status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
 
-  // Selected sub-agents
+  // 2. 选中的业务子智能体群组
   for (const agentId of selected) {
     const display = AGENT_DISPLAY[agentId]
     if (!display) continue
@@ -674,66 +786,108 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
     })
   }
 
-  // Review
+  // 3. 质量审查节点
   nodes.push(dagNodeStates.value['review'] || {
     id: 'review', label: '质量审查', icon: '🔍',
     status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
 
-  // Bundle
+  // 4. 打包输出节点
   nodes.push(dagNodeStates.value['bundle'] || {
-    id: 'bundle', label: '打包', icon: '📦',
+    id: 'bundle', label: '资源组装', icon: '📦',
     status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
 
   return nodes
 })
 
-// DAG node positions (4-layer layout)
-const dagCanvasWidthV2 = 960
-const dagCanvasHeightV2 = 520
-const dagLayerY: [number, number, number, number] = [60, 200, 340, 460]
+const selectedDagNode = computed(() => {
+  return dagNodesV2.value.find(node => node.id === selectedDagNodeId.value) || dagNodesV2.value[0]
+})
+
+const workflowStages = computed(() => {
+  const states = dagNodeStates.value
+  const businessNodes = dagSelectedAgentIds.value.map(id => states[id]).filter(Boolean)
+  const hasRunningBusiness = businessNodes.some(node => node?.status === 'running')
+  const hasFailedBusiness = businessNodes.some(node => node?.status === 'failed')
+  const allBusinessDone = businessNodes.length > 0 && businessNodes.every(node => ['success', 'skipped'].includes(node?.status || ''))
+
+  return [
+    {
+      id: 'planning',
+      title: '需求解析与任务规划',
+      desc: 'MasterAgent 解析学习目标并生成调度计划',
+      status: states.planning?.status || 'waiting',
+    },
+    {
+      id: 'parallel',
+      title: '资源智能体并行生成',
+      desc: '讲解、导图、代码、题库、阅读等智能体协同工作',
+      status: hasFailedBusiness ? 'failed' : hasRunningBusiness ? 'running' : allBusinessDone ? 'success' : 'waiting',
+    },
+    {
+      id: 'review',
+      title: '质量审查',
+      desc: 'ReviewerAgent 检查资源完整性、质量与可用性',
+      status: states.review?.status || 'waiting',
+    },
+    {
+      id: 'bundle',
+      title: '资源组装交付',
+      desc: 'AssemblerAgent 统一打包并输出学习资源包',
+      status: states.bundle?.status || 'waiting',
+    },
+  ]
+})
+
+
+// 定位参数定义：采用“上中下 + 并行区两行网格”布局，避免多个智能体挤在一条横线上
+const dagCanvasWidthV2 = 820
+const dagCanvasHeightV2 = 660
+const dagLayerY: [number, number, number, number, number] = [68, 220, 350, 505, 600]
 
 const dagNodePositionsV2 = computed<Record<string, { x: number; y: number }>>(() => {
   const positions: Record<string, { x: number; y: number }> = {}
   const selected = dagSelectedAgentIds.value
   const cx = dagCanvasWidthV2 / 2
 
-  // Layer 0: Planning
   positions['planning'] = { x: cx, y: dagLayerY[0] }
 
-  // Layer 1: Sub-agents (evenly distributed)
   if (selected.length > 0) {
-    const spacing = dagCanvasWidthV2 / (selected.length + 1)
-    selected.forEach((id, i) => {
+    const firstRowCount = selected.length <= 3 ? selected.length : Math.ceil(selected.length / 2)
+    const secondRowCount = Math.max(0, selected.length - firstRowCount)
+    const firstRow = selected.slice(0, firstRowCount)
+    const secondRow = selected.slice(firstRowCount)
+
+    firstRow.forEach((id, i) => {
+      const spacing = dagCanvasWidthV2 / (firstRowCount + 1)
       positions[id] = { x: spacing * (i + 1), y: dagLayerY[1] }
+    })
+
+    secondRow.forEach((id, i) => {
+      const spacing = dagCanvasWidthV2 / (secondRowCount + 1)
+      positions[id] = { x: spacing * (i + 1), y: dagLayerY[2] }
     })
   }
 
-  // Layer 2: Review
-  positions['review'] = { x: cx, y: dagLayerY[2] }
-
-  // Layer 3: Bundle
-  positions['bundle'] = { x: cx, y: dagLayerY[3] }
+  positions['review'] = { x: cx, y: dagLayerY[3] }
+  positions['bundle'] = { x: cx, y: dagLayerY[4] }
 
   return positions
 })
 
-// DAG edges
 const dagEdges = computed<{ from: string; to: string; statusClass: string }[]>(() => {
   const edges: { from: string; to: string; statusClass: string }[] = []
   const selected = dagSelectedAgentIds.value
   const states = dagNodeStates.value
 
   for (const agentId of selected) {
-    // Planning → Agent
     const fromDone = states['planning']?.status === 'success'
     edges.push({
       from: 'planning', to: agentId,
       statusClass: fromDone ? (states[agentId]?.status === 'success' ? 'completed' : 'active') : 'pending',
     })
 
-    // Agent → Review
     const agentDone = states[agentId]?.status === 'success'
     edges.push({
       from: agentId, to: 'review',
@@ -741,7 +895,6 @@ const dagEdges = computed<{ from: string; to: string; statusClass: string }[]>((
     })
   }
 
-  // Review → Bundle
   const reviewDone = states['review']?.status === 'success'
   edges.push({
     from: 'review', to: 'bundle',
@@ -751,7 +904,6 @@ const dagEdges = computed<{ from: string; to: string; statusClass: string }[]>((
   return edges
 })
 
-// Hero message and progress summary
 const dagHeroMessage = computed(() => {
   const running = Object.values(dagNodeStates.value).find(n => n.status === 'running')
   if (running) return running.currentMessage || `${running.label}处理中...`
@@ -763,41 +915,50 @@ const dagHeroMessage = computed(() => {
 const dagTotalCount = computed(() => dagNodesV2.value.length)
 const dagCompletedCount = computed(() => dagNodesV2.value.filter(n => n.status === 'success').length)
 
-// Node style function
+// 动态高度和宽度自适应适配
 function dagNodeStyle(node: DagNodeState): Record<string, string> {
   const pos = dagNodePositionsV2.value[node.id]
   if (!pos) return {}
-  const expanded = dagExpandedNodes.value[node.id]
-  const width = expanded ? 220 : 160
-  const height = expanded ? (80 + node.stepHistory.length * 24) : (node.status === 'running' ? 90 : 56)
+
+  const width = node.isSystem ? 190 : 162
+  const height = node.isSystem ? 84 : 78
+
   return {
     left: `${pos.x - width / 2}px`,
     top: `${pos.y - height / 2}px`,
     width: `${width}px`,
     minHeight: `${height}px`,
+    transition: 'left 0.25s ease, top 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease',
   }
 }
 
-// Toggle expand function
-function toggleDagNodeExpand(nodeId: string) {
-  dagExpandedNodes.value[nodeId] = !dagExpandedNodes.value[nodeId]
+function getStatusText(status: DagNodeState['status']) {
+  const statusMap: Record<DagNodeState['status'], string> = {
+    waiting: '等待中',
+    running: '运行中',
+    success: '已完成',
+    failed: '失败',
+    skipped: '已跳过',
+  }
+  return statusMap[status]
 }
 
-// Helper functions
+function getNodeFallbackMessage(node: DagNodeState) {
+  if (node.status === 'waiting') return '等待 MasterAgent 调度'
+  if (node.status === 'success') return '该节点已完成处理'
+  if (node.status === 'failed') return '该节点执行失败，请查看日志'
+  if (node.status === 'skipped') return '本次任务未启用该节点'
+  return '正在处理任务'
+}
+
 function getDagNodeIcon(type: string): string {
   return AGENT_DISPLAY[type]?.icon || '📄'
 }
-
 
 const resultResources = computed(() => {
   const resources = finalBundle.value?.resources
   return Array.isArray(resources) && resources.length ? resources : generatedResources.value
 })
-
-// Computed properties for result display logic removed as they are no longer used in the condensed header.
-
-
-
 
 const getResourceTypeLabel = (type: string) => {
   const labelMap: Record<string, string> = {
@@ -934,6 +1095,7 @@ function initializeWaitingNodes() {
     nodes[agentId] = createDagNode(agentId, false)
   })
   dagNodeStates.value = nodes
+  selectedDagNodeId.value = 'planning'
 }
 
 function applyProgressSnapshot(progress: ResourceTaskStatus['progress']) {
@@ -941,8 +1103,8 @@ function applyProgressSnapshot(progress: ResourceTaskStatus['progress']) {
   latestWorkflowMessage.value = progress.latest_message
   Object.entries(progress.agents).forEach(([agentId, snapshot]) => {
     const node = dagNodeStates.value[agentId] || createDagNode(
-      agentId,
-      ['planning', 'review', 'bundle'].includes(agentId),
+        agentId,
+        ['planning', 'review', 'bundle'].includes(agentId),
     )
     node.status = snapshot.status
     node.progress = snapshot.progress
@@ -950,6 +1112,9 @@ function applyProgressSnapshot(progress: ResourceTaskStatus['progress']) {
     node.stepHistory = snapshot.steps || []
     dagNodeStates.value[agentId] = node
   })
+
+  const runningNode = Object.values(dagNodeStates.value).find(node => node.status === 'running')
+  if (runningNode) selectedDagNodeId.value = runningNode.id
 }
 
 const startGeneration = async () => {
@@ -986,8 +1151,8 @@ const startGeneration = async () => {
           finalBundle.value = bundle
           generatedResources.value = bundle.resources || []
           resultWarning.value = taskStatus.status === 'partial_completed'
-            ? '部分资源生成失败或质量审查未通过，以下已完成内容仍可查看。'
-            : ''
+              ? '部分资源生成失败或质量审查未通过，以下已完成内容仍可查看。'
+              : ''
           isGenerating.value = false
           currentPhase.value = 'result'
         } else if (taskStatus.status === 'failed') {
@@ -1025,12 +1190,9 @@ const resetGenerationState = () => {
   overallProgress.value = 0
   latestWorkflowMessage.value = ''
   isGenerating.value = false
-  // Reset DAG state
   dagNodeStates.value = {}
-  dagExpandedNodes.value = {}
+  selectedDagNodeId.value = 'planning'
 }
-
-
 
 const stopPolling = () => {
   if (pollingInterval.value) {
@@ -1073,7 +1235,6 @@ onBeforeUnmount(() => {
   stopPolling()
 })
 
-// ===================== 4. UI 交互 =====================
 const resetGenerator = () => {
   stopPolling()
   naturalInput.value = ''
@@ -1090,21 +1251,19 @@ const handlePreview = (data: any) => {
 </script>
 
 <style scoped>
-/* ================= 全局布局与转场 ================= */
+/* ================= 全局基础排版与转场 ================= */
 .elegant-generator-layout { width: 100%; height: calc(100vh - 64px); background: var(--color-bg); font-family: var(--font-sans); overflow-x: hidden; position: relative; padding-top: var(--space-5); }
 .phase-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; background: transparent; }
 .page-slide-enter-active, .page-slide-leave-active { transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
 .page-slide-leave-to { opacity: 0; transform: translateY(-30px) scale(1.02); }
 
-/* ================= Phase 1: Input View ================= */
+/* ================= Phase 1: 输入需求控制 ================= */
 .input-view {
   align-items: center;
   justify-content: center;
   padding: 2.4rem 2rem;
-  background:
-    radial-gradient(circle at 50% -8%, rgba(37, 99, 235, 0.18) 0%, rgba(37, 99, 235, 0.08) 22%, transparent 56%),
-    linear-gradient(180deg, #F2F7FF 0%, #F7FAFF 48%, #FCFEFF 100%);
+  background: #F9FAFB;
 }
 .input-container { width: 100%; max-width: 800px; display: flex; flex-direction: column; align-items: center; margin-top: -8vh; }
 .welcome-header { text-align: center; margin-bottom: 2.75rem; }
@@ -1112,31 +1271,30 @@ const handlePreview = (data: any) => {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  width: 62px;
-  height: 62px;
-  background: linear-gradient(135deg, #F0F4FF 0%, #E0E7FF 100%);
-  color: var(--color-primary);
-  font-size: 1.9rem;
-  border-radius: var(--radius-2xl);
-  margin-bottom: 1.35rem;
-  box-shadow: var(--shadow-md);
+  width: 56px;
+  height: 56px;
+  background: #FFFFFF;
+  color: #111827;
+  font-size: 1.6rem;
+  border-radius: 16px;
+  margin-bottom: 1.25rem;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 .greeting-title { font-size: clamp(2.1rem, 4.2vw, 3.15rem); font-weight: var(--weight-extrabold); color: var(--color-text); margin: 0 0 0.9rem; letter-spacing: -0.03em; }
 .greeting-subtitle { font-size: 1.08rem; color: var(--color-text-muted); line-height: 1.75; max-width: 680px; margin: 0 auto; }
 .search-box-wrapper {
   width: 100%;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(203, 213, 225, 0.6);
-  border-radius: 28px; /* 增加圆角，使其比 2xl 更圆润，但又不像 pill 那么极端 */
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(12px);
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
   padding: var(--space-2);
-  transition: border-color var(--transition-slow), box-shadow var(--transition-slow), transform var(--transition-slow);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 .search-box-wrapper.is-focused {
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-4px) scale(1.005);
+  border-color: #D1D5DB;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 .elegant-textarea :deep(.el-textarea__inner) {
   border: none;
@@ -1180,40 +1338,33 @@ const handlePreview = (data: any) => {
 }
 .s-tag:hover { transform: translateY(-1px); background: var(--color-info-soft) !important; border-color: #93C5FD !important; color: #1D4ED8 !important; }
 
-/* ================= Phase 2: Personalize View ================= */
-.personalize-view { background: var(--color-bg); align-items: center; overflow-y: auto; padding: 60px var(--space-5); position: relative; }
-.aurora-background { position: absolute; top: -20%; left: -10%; width: 120%; height: 140%; z-index: 0; background: radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%), radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.02) 0%, transparent 60%); filter: blur(80px); pointer-events: none; }
+/* ================= Phase 2: 参数定制配置 ================= */
+.personalize-view { background: #F9FAFB; align-items: center; overflow-y: auto; padding: 60px var(--space-5); position: relative; }
+.aurora-background { display: none; }
 .personalize-container { width: 100%; max-width: 1160px; display: flex; flex-direction: column; gap: var(--space-12); position: relative; z-index: 1; }
 .view-header { text-align: center; margin-bottom: 0; }
 .header-badge { margin-bottom: var(--space-4); font-weight: var(--weight-bold); letter-spacing: 0.05em; background: var(--color-text) !important; border: none; }
 .view-header h2 { font-family: var(--font-sans); font-size: 2.5rem; font-weight: var(--weight-extrabold); color: var(--color-text); margin: 0 0 var(--space-4); letter-spacing: -0.02em; }
 .view-header p { font-size: 1.1rem; color: var(--color-text-muted); margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
 .scenario-selector-v2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
-.scenario-card { background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-2xl); padding: var(--space-5); display: flex; align-items: center; gap: var(--space-4); cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); position: relative; box-shadow: var(--shadow-sm), var(--shadow-xs); }
-.scenario-card:hover { transform: translateY(-3px); background: rgba(255, 255, 255, 0.75); border-color: rgba(148, 163, 184, 0.4); box-shadow: var(--shadow-lg), var(--shadow-sm); }
-.scenario-card.active { background: var(--color-surface); border-color: var(--color-text); box-shadow: var(--shadow-lg); border-width: 1.5px; }
-.scenario-icon-box { width: 48px; height: 48px; background: var(--color-bg); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: var(--weight-extrabold); color: #0369A1; transition: background-color var(--transition-slow), transform var(--transition-slow); }
-.scenario-card.active .scenario-icon-box { background: var(--color-info-soft); transform: scale(1.1); }
+.scenario-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: var(--space-5); display: flex; align-items: center; gap: var(--space-4); cursor: pointer; transition: all 0.2s ease; position: relative; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); }
+.scenario-card:hover { transform: translateY(-2px); border-color: #D1D5DB; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }
+.scenario-card.active { border-color: #111827; box-shadow: 0 4px 12px rgba(17, 24, 39, 0.08); border-width: 1.5px; }
+.scenario-icon-box { width: 44px; height: 44px; background: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: #4B5563; transition: background-color 0.2s, transform 0.2s; }
+.scenario-card.active .scenario-icon-box { background: #111827; color: #FFFFFF; }
 .scenario-info { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
 .s-name { font-weight: var(--weight-bold); font-size: 1rem; color: var(--color-text); }
 .s-desc { font-size: 0.75rem; color: var(--color-text-muted); line-height: 1.4; }
-.active-dot { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; background: var(--color-text); border-radius: 50%; box-shadow: none; }
+.active-dot { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; background: var(--color-text); border-radius: 50%; }
 .config-section-v2 { margin-top: var(--space-2); }
-.agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-8); }
-.config-card-v2 { background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-2xl); overflow: hidden; display: flex; flex-direction: column; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-sm), var(--shadow-xs); }
-.config-card-v2:hover { transform: translateY(-3px); border-color: rgba(148, 163, 184, 0.4); box-shadow: var(--shadow-lg), var(--shadow-sm); }
-.cc-header-v2 { padding: var(--space-6) var(--space-6) 16px; display: flex; align-items: center; gap: var(--space-3); }
-.cc-icon-wrap { width: 40px; height: 40px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; background: var(--color-bg); }
-.cc-icon-wrap.text-blue { background: var(--color-info-soft); color: var(--color-info); }
-.cc-icon-wrap.text-orange { background: #FFF7ED; color: var(--color-warning); }
-.cc-icon-wrap.text-purple { background: #F5F3FF; color: #8B5CF6; }
-.cc-icon-wrap.text-red { background: var(--color-danger-soft); color: var(--color-danger); }
-.cc-icon-wrap.text-emerald { background: var(--color-success-soft); color: var(--color-success); }
-.cc-icon-wrap.text-indigo { background: var(--color-primary-soft); color: var(--color-primary); }
-.cc-icon-wrap.text-slate { background: var(--color-surface-hover); color: var(--color-text-secondary); }
-.config-card-v2.disabled { opacity: 0.74; background: var(--color-bg); }
-.config-card-v2.agent-off { border-color: var(--color-border); opacity: 0.85; }
-.cc-header-v2 { padding: var(--space-6) var(--space-6) 16px; display: flex; align-items: center; gap: var(--space-3); }
+.agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-6); }
+.config-card-v2 { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); }
+.config-card-v2:hover { transform: translateY(-2px); border-color: #D1D5DB; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06); }
+.cc-header-v2 { padding: var(--space-5) var(--space-5) 12px; display: flex; align-items: center; gap: var(--space-3); }
+.cc-icon-wrap { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
+.cc-icon-wrap.text-blue, .cc-icon-wrap.text-orange, .cc-icon-wrap.text-purple, .cc-icon-wrap.text-red, .cc-icon-wrap.text-emerald, .cc-icon-wrap.text-indigo, .cc-icon-wrap.text-slate { background: #F3F4F6; color: #374151; }
+.config-card-v2.disabled { opacity: 0.7; background: #F9FAFB; }
+.config-card-v2.agent-off { border-color: #E5E7EB; opacity: 0.85; }
 .cc-header-switch { margin-left: auto; flex-shrink: 0; }
 .cc-body-v2.body-disabled { opacity: 0.38; pointer-events: none; filter: grayscale(60%); }
 .question-type-group { display: flex; gap: var(--space-3); flex-wrap: wrap; }
@@ -1247,571 +1398,398 @@ const handlePreview = (data: any) => {
 .custom-slider-v2 { padding: 0 var(--space-2); }
 .personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: var(--space-5); margin-top: var(--space-4); padding-bottom: 40px; }
 .footer-btns { display: flex; justify-content: center; gap: var(--space-6); }
-.selected-agents-bar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; justify-content: center; background: rgba(255,255,255,0.75); backdrop-filter: blur(12px); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-5); max-width: 860px; }
-.sab-label { font-size: 0.85rem; color: var(--color-text-muted); font-weight: var(--weight-bold); white-space: nowrap; }
+.selected-agents-bar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; justify-content: center; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: var(--space-3) var(--space-5); max-width: 860px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+.sab-label { font-size: 0.85rem; color: #6B7280; font-weight: var(--weight-bold); white-space: nowrap; }
 .sab-pills { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .sab-pill { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 0.82rem; font-weight: var(--weight-semibold); cursor: default; }
-.sab-hint { font-size: 0.78rem; color: var(--tone-amber); font-weight: var(--weight-bold); }
-.footer-back-btn { font-weight: var(--weight-bold); color: var(--color-text-muted); border: 1px solid var(--color-border); }
-.launch-btn-v2 { font-family: var(--font-sans); font-weight: var(--weight-extrabold); padding: 0 var(--space-10); background: #0369A1 !important; border: none; box-shadow: var(--shadow-lg); transition: transform var(--transition-slow), box-shadow var(--transition-slow); }
-.launch-btn-v2:hover { transform: translateY(-3px); box-shadow: var(--shadow-xl); }
+.sab-hint { font-size: 0.78rem; color: #6B7280; font-weight: var(--weight-bold); }
+.footer-back-btn { font-weight: var(--weight-semibold); color: #4B5563; border: 1px solid #D1D5DB; }
+.launch-btn-v2 { font-weight: var(--weight-bold); padding: 0 var(--space-10); background: #111827 !important; color: #FFFFFF !important; border: none; box-shadow: 0 2px 6px rgba(17, 24, 39, 0.1); transition: transform 0.2s, box-shadow 0.2s; }
+.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(17, 24, 39, 0.15); }
 
-/* ================= Phase 3: Generating View ================= */
-.generating-view { background: var(--color-bg); overflow-y: auto; }
-.generation-workbench { width: 100%; max-width: 1760px; margin: 0 auto; padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-5); color: var(--color-text); }
-.generation-error { border-radius: var(--radius-xl); }
-.generation-workbench { flex: 1 0 auto !important; min-height: min-content !important; }
-
-/* ================= DAG Canvas ================= */
-.dag-canvas-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-2xl); box-shadow: var(--shadow-md); padding: var(--space-6); }
-.dag-canvas { position: relative; overflow: auto; border-radius: var(--radius-2xl); background: var(--color-bg); border: 1px solid rgba(226, 232, 240, 0.6); min-height: 480px; }
-
-/* DAG SVG lines */
-.dag-lines { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
-.dag-edge { stroke: var(--color-border-hover); stroke-width: 2; stroke-linecap: round; opacity: 0.5; }
-.dag-edge.dashed { stroke-dasharray: 6 4; opacity: 0.4; }
-.dag-edge.flowing { stroke: var(--color-info); stroke-width: 2.5; stroke-dasharray: 8 6; animation: dagFlowDash 1s linear infinite; opacity: 1; }
-.dag-edge.completed { stroke: var(--color-success); stroke-width: 2; opacity: 0.7; }
-@keyframes dagFlowDash { to { stroke-dashoffset: -14; } }
-
-/* DAG Node base */
-.dag-node {
-  position: absolute;
-  z-index: 5;
-  width: 160px;
-  border: 2px solid rgba(203, 213, 225, 0.6);
-  border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(12px);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-3) var(--space-4);
-  text-align: left;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
-}
-.dag-node:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-/* DAG Node head */
-.dag-node-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.dag-node-emoji { font-size: 1.25rem; line-height: 1; flex-shrink: 0; }
-.dag-node-label { font-weight: var(--weight-extrabold); font-size: 0.9rem; color: var(--color-text-strong); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dag-node-check { color: var(--color-success); font-weight: var(--weight-extrabold); font-size: 0.9rem; margin-left: auto; flex-shrink: 0; }
-.dag-node-x { color: var(--color-danger); font-weight: var(--weight-extrabold); font-size: 0.9rem; margin-left: auto; flex-shrink: 0; }
-
-/* Node status-specific text */
-.dag-node-status-text { font-size: 0.78rem; color: var(--color-text-faint); font-weight: var(--weight-semibold); }
-.dag-node-failed-text { color: var(--color-danger); }
-
-/* Running state */
-.dag-node-running { display: flex; flex-direction: column; gap: var(--space-1); }
-.dag-node-step-msg { margin: 0; font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.dag-node-progress-bar { height: 4px; background: var(--color-border); border-radius: var(--radius-pill); overflow: hidden; }
-.dag-node-progress-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--color-info), var(--color-primary)); transition: width 0.3s ease; }
-.dag-node-progress-text { font-size: 0.7rem; color: var(--color-info); font-weight: var(--weight-extrabold); font-variant-numeric: tabular-nums; }
-
-/* Node visual states */
-.dag-node.is-waiting { border-color: rgba(203, 213, 225, 0.6); }
-.dag-node.is-waiting .dag-node-emoji { opacity: 0.5; }
-.dag-node.is-waiting .dag-node-label { color: var(--color-text-faint); }
-
-.dag-node.is-running {
-  border-color: #7C9CF5;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08), var(--shadow-md);
-  animation: dagNodePulse 2s ease-in-out infinite;
-}
-.dag-node.is-running .dag-node-emoji { opacity: 1; }
-.dag-node.is-running .dag-node-label { color: var(--color-text); }
-@keyframes dagNodePulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08), var(--shadow-md); }
-  50% { box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.12), 0 8px 24px rgba(15, 23, 42, 0.08); }
-}
-
-.dag-node.is-success { border-color: #86EFAC; }
-.dag-node.is-success .dag-node-emoji { opacity: 1; }
-.dag-node.is-success .dag-node-label { color: var(--color-text); }
-
-.dag-node.is-failed { border-color: #FCA5A5; }
-.dag-node.is-failed .dag-node-emoji { opacity: 1; }
-.dag-node.is-failed .dag-node-label { color: var(--color-text); }
-
-/* Expanded node: step history */
-.dag-node.expanded {
-  box-shadow: var(--shadow-lg);
-  z-index: 10;
-}
-.dag-node-steps {
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  max-height: 200px;
+/* ==================== 第三部分：多智能体工作流控制台 ==================== */
+.generating-view {
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(79, 70, 229, 0.12) 0%, transparent 40%),
+    radial-gradient(ellipse at 100% 100%, rgba(99, 102, 241, 0.1) 0%, transparent 40%),
+    linear-gradient(180deg, #F5F4FF 0%, #F0F4FF 40%, #F8FAFC 100%);
   overflow-y: auto;
 }
-.dag-step-item {
+.workflow-shell {
+  width: 100%;
+  max-width: 1540px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-8) var(--space-8);
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-1);
-  font-size: 0.75rem;
-  line-height: 1.4;
+  flex-direction: column;
+  gap: var(--space-5);
 }
-.dag-step-marker { flex-shrink: 0; font-size: 0.7rem; }
-.dag-step-item.is-done .dag-step-marker { color: var(--color-success); }
-.dag-step-item.is-current .dag-step-marker { color: var(--color-info); }
-.dag-step-text { color: var(--color-text-secondary); word-break: break-word; }
-.dag-step-item.is-done .dag-step-text { color: var(--color-text-faint); }
-.dag-step-item.is-current .dag-step-text { color: var(--color-text); font-weight: var(--weight-semibold); }
-
-/* Expand transition */
-.dag-expand-enter-active, .dag-expand-leave-active { transition: all 0.25s ease; overflow: hidden; }
-.dag-expand-enter-from, .dag-expand-leave-to { opacity: 0; max-height: 0; margin-top: 0; padding-top: 0; }
-.dag-expand-enter-to, .dag-expand-leave-from { opacity: 1; max-height: 200px; }
-
-/* Resource panel below DAG */
-.compact-resource-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-xl); padding: var(--space-5); box-shadow: var(--shadow-sm); }
-.panel-header-minimal { display: flex; justify-content: space-between; margin-bottom: var(--space-4); }
-.phm-left { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-extrabold); font-size: 1.05rem; color: var(--color-text); }
-.phm-left .el-tag { margin-left: var(--space-1); }
-.generated-resource-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); }
-.mini-resource-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-lg); cursor: pointer; transition: all var(--transition-base); }
-.mini-resource-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); background: var(--color-surface); border-color: var(--color-border-hover); }
-.mrc-icon { width: 36px; height: 36px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; background: rgba(15, 23, 42, 0.03); }
-.mrc-info { display: flex; flex-direction: column; min-width: 0; }
-.mrc-info h4 { margin: 0; font-size: 0.9rem; font-weight: var(--weight-bold); color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mrc-info span { font-size: 0.75rem; color: var(--color-text-muted); }
-.side-empty.minimal { display: flex; align-items: center; justify-content: center; height: 100px; color: var(--color-text-faint); font-size: 0.9rem; font-weight: var(--weight-semibold); }
-
-.interactive-resources-panel { min-height: 0; height: auto; padding-top: var(--space-1); padding-bottom: var(--space-1); }
-
-/* ================= Phase 4: Premium Results View ================= */
-.results-view {
-  background: var(--color-bg);
-  overflow-y: auto;
-  padding-bottom: 80px;
-  position: relative;
+.workflow-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
-.results-view::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 500px;
-  background: linear-gradient(180deg, rgba(224, 231, 255, 0.6) 0%, rgba(244, 247, 251, 0) 100%);
-  pointer-events: none;
-  z-index: 0;
+.workflow-topbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
-
-.result-hero-compact {
+.workflow-topbar-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-4) var(--space-8);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: var(--space-6);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  gap: var(--space-5);
 }
+.workflow-title-block { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.workflow-kicker {
+  width: fit-content;
+  color: #374151 !important;
+  border-color: #D1D5DB !important;
+  background: #F3F4F6 !important;
+  font-weight: var(--weight-extrabold);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+.ping-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background-color: #10B981;
+  border-radius: 999px;
+  margin-right: 6px;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+  animation: ssePingPulse 1.6s infinite;
+}
+@keyframes ssePingPulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35); }
+  70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.workflow-title-block h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: var(--weight-extrabold);
+  color: #111827;
+}
+.workflow-title-block p { margin: 0; font-size: 0.9rem; color: #6B7280; }
+.workflow-summary-panel {
+  min-width: 320px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: auto auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 18px;
+}
+.summary-item { display: flex; flex-direction: column; gap: 2px; }
+.summary-item span { font-size: 0.76rem; color: #64748B; font-weight: var(--weight-bold); }
+.summary-item strong { font-size: 1.35rem; color: #0F172A; font-weight: var(--weight-extrabold); }
+.summary-item small { font-size: 0.82rem; color: #94A3B8; margin-left: 2px; }
+.summary-divider { width: 1px; height: 36px; background: #E2E8F0; }
+.workflow-total-progress { grid-column: 1 / -1; }
+.workflow-total-progress :deep(.el-progress-bar__outer) { background: #E5E7EB; }
+.workflow-total-progress :deep(.el-progress-bar__inner) { background: #374151; }
+.generation-error { border-radius: var(--radius-xl); }
+
+/* Stage Steps Strip */
+.stage-steps-strip {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: var(--space-3) var(--space-4);
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+.stage-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  position: relative;
+}
+.step-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #F3F4F6;
+  border: 1.5px solid #D1D5DB;
+  color: #6B7280;
+  font-size: 0.75rem;
+  font-weight: var(--weight-extrabold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+}
+.stage-step.is-running .step-dot {
+  background: #111827;
+  border-color: #111827;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.12);
+  animation: stepPulse 1.8s ease-in-out infinite;
+}
+.stage-step.is-success .step-dot {
+  background: #059669;
+  border-color: #059669;
+  color: #fff;
+}
+.stage-step.is-failed .step-dot { background: #FEF2F2; border-color: #FECACA; color: #EF4444; }
+@keyframes stepPulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.12); } 50% { box-shadow: 0 0 0 6px rgba(17, 24, 39, 0.06); } }
+.step-label strong { font-size: 0.79rem; color: #6B7280; font-weight: var(--weight-medium); white-space: nowrap; }
+.stage-step.is-running .step-label strong { color: #111827; font-weight: var(--weight-semibold); }
+.stage-step.is-success .step-label strong { color: #059669; }
+.step-connector {
+  width: 28px;
+  height: 1px;
+  background: #D1D5DB;
+  margin: 0 var(--space-2);
+}
+.workflow-main-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+}
+.panel-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.panel-header.compact { align-items: flex-start; flex-direction: column; gap: 3px; }
+.panel-header h3, .resource-strip-header h3 { margin: 0; font-size: 1rem; color: #0F172A; font-weight: var(--weight-extrabold); }
+.panel-eyebrow { font-size: 0.7rem; letter-spacing: 0.12em; color: #94A3B8; font-weight: var(--weight-extrabold); }
+.workflow-canvas-panel { padding: var(--space-5); }
+.canvas-header { margin-bottom: var(--space-4); }
+.workflow-canvas {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  height: 720px;
+  margin: 0 auto;
+  background-color: #FAFAFA;
+  background-image:
+    linear-gradient(#F0F0F0 1px, transparent 1px),
+    linear-gradient(90deg, #F0F0F0 1px, transparent 1px);
+  background-size: 32px 32px;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.parallel-layer-label {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 145px;
+  height: 280px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10px;
+  background: rgba(249, 250, 251, 0.7);
+  border: 1px dashed #D1D5DB;
+  border-radius: 14px;
+  color: #9CA3AF;
+  font-size: 0.72rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+.workflow-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.workflow-edge { stroke-width: 1.2; transition: stroke 0.3s ease, stroke-width 0.3s ease, opacity 0.3s ease; }
+.workflow-edge.pending { stroke: #D1D5DB; stroke-dasharray: 5 5; opacity: 0.5; }
+.workflow-edge.active { stroke: #374151; stroke-width: 1.8; stroke-dasharray: 8 6; animation: dagFlowMoving 1.2s linear infinite; }
+.workflow-edge.completed { stroke: #059669; stroke-width: 1.6; opacity: 0.8; }
+@keyframes dagFlowMoving { from { stroke-dashoffset: 28; } to { stroke-dashoffset: 0; } }
+.workflow-agent-node {
+  position: absolute;
+  z-index: 5;
+  appearance: none;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  border-radius: 14px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.workflow-agent-node:hover, .workflow-agent-node.is-selected { transform: translateY(-2px); border-color: #9CA3AF; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); }
+.workflow-agent-node.is-waiting { opacity: 0.65; }
+.workflow-agent-node.is-running { border-color: #6B7280; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); animation: workflowNodePulse 2s ease-in-out infinite; }
+.workflow-agent-node.is-success { border-color: #A7F3D0; background: #FAFFFE; }
+.workflow-agent-node.is-failed { border-color: #FECACA; background: #FFFBFB; }
+.workflow-agent-node.is-system-node { background: #FFFFFF; border-color: #E5E7EB; }
+@keyframes workflowNodePulse { 0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); } 50% { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); } }
+.agent-node-topline { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.agent-icon-bubble { width: 28px; height: 28px; border-radius: 8px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.agent-node-name { font-size: 0.8rem; color: #111827; font-weight: var(--weight-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-status-dot { width: 7px; height: 7px; border-radius: 999px; background: #D1D5DB; margin-left: auto; }
+.workflow-agent-node.is-running .agent-status-dot { background: #10B981; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15); }
+.workflow-agent-node.is-success .agent-status-dot { background: #10B981; }
+.workflow-agent-node.is-failed .agent-status-dot { background: #EF4444; }
+.agent-node-message { margin: 0; min-height: 20px; font-size: 0.7rem; line-height: 1.45; color: #6B7280; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.agent-node-footer { display: flex; justify-content: space-between; align-items: center; color: #9CA3AF; font-size: 0.68rem; font-weight: var(--weight-semibold); }
+.agent-node-footer strong { color: #374151; font-family: var(--font-mono); }
+.agent-mini-progress { height: 3px; border-radius: 999px; overflow: hidden; background: #F3F4F6; }
+.agent-mini-progress span { display: block; height: 100%; border-radius: inherit; background: #374151; transition: width 0.35s ease; }
+.workflow-canvas::before,
+.workflow-canvas::after {
+  content: '↓';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  color: #9CA3AF;
+  font-weight: var(--weight-semibold);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.workflow-canvas::before { top: 118px; }
+.workflow-canvas::after { top: 443px; }
+
+/* Inline Agent Detail Panel */
+.inline-agent-detail {
+  margin-top: var(--space-4);
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  background: #FAFAFA;
+  overflow: hidden;
+}
+.iad-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: #FFFFFF;
+  border-bottom: 1px solid #F3F4F6;
+}
+.iad-agent-info { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.iad-icon { width: 38px; height: 38px; border-radius: 10px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; border: 1px solid #E5E7EB; }
+.iad-agent-info h4 { margin: 0 0 3px; font-size: 0.95rem; font-weight: var(--weight-bold); color: #111827; }
+.iad-progress-wrap { flex-shrink: 0; }
+.iad-action { flex: 1; min-width: 0; }
+.iad-action-text { font-size: 0.82rem; color: #6B7280; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.iad-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #E5E7EB;
+  background: #F9FAFB;
+  color: #6B7280;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.iad-close:hover { background: #F3F4F6; color: #111827; }
+.iad-logs { display: flex; flex-direction: column; gap: 6px; padding: var(--space-4) var(--space-5); max-height: 160px; overflow-y: auto; }
+.iad-logs-empty { padding: var(--space-4) var(--space-5); color: #9CA3AF; font-size: 0.82rem; }
+.detail-slide-enter-active, .detail-slide-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.detail-slide-enter-from, .detail-slide-leave-to { opacity: 0; transform: translateY(-6px); }
+
+.workflow-detail-panel { display: flex; flex-direction: column; gap: var(--space-5); }
+.agent-detail-card { display: flex; flex-direction: column; gap: var(--space-5); }
+.detail-agent-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 18px; }
+.detail-agent-icon { width: 44px; height: 44px; border-radius: 16px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; box-shadow: var(--shadow-xs); }
+.detail-agent-head h4 { margin: 0 0 5px; color: #0F172A; font-size: 1rem; font-weight: var(--weight-extrabold); }
+.detail-status-pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; background: #F1F5F9; color: #64748B; font-size: 0.68rem; font-weight: var(--weight-bold); }
+.detail-status-pill.is-running { background: #EFF6FF; color: #2563EB; }
+.detail-status-pill.is-success { background: #ECFDF5; color: #10B981; }
+.detail-status-pill.is-failed { background: #FEF2F2; color: #EF4444; }
+.detail-section { display: flex; flex-direction: column; gap: var(--space-2); }
+.detail-label { font-size: 0.68rem; color: #94A3B8; font-weight: var(--weight-extrabold); letter-spacing: 0.08em; }
+.detail-section p { margin: 0; color: #334155; font-size: 0.88rem; line-height: 1.65; }
+.agent-log-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; padding-right: 4px; }
+.agent-log-item { display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; background: #F8FAFC; border: 1px solid #EEF2F7; border-radius: 12px; color: #475569; font-size: 0.78rem; line-height: 1.45; }
+.agent-log-item.active { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; font-weight: var(--weight-semibold); }
+.log-dot { width: 7px; height: 7px; margin-top: 6px; border-radius: 999px; background: #CBD5E1; flex-shrink: 0; }
+.agent-log-item.active .log-dot { background: #2563EB; animation: stepBulletBlink 0.9s infinite alternate; }
+@keyframes stepBulletBlink { from { opacity: 0.3; } to { opacity: 1; } }
+.agent-log-empty { padding: var(--space-4); border-radius: 14px; border: 1px dashed #CBD5E1; background: #F8FAFC; color: #94A3B8; font-size: 0.82rem; text-align: center; }
+.workflow-resource-strip { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+.resource-strip-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); }
+.res-count-badge { background: #ECFDF5 !important; color: #10B981 !important; border-color: rgba(16, 185, 129, 0.18) !important; font-weight: var(--weight-bold); }
+.resource-strip-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-3); }
+.resource-chip-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 16px; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease; }
+.resource-chip-card:hover { transform: translateY(-2px); background: #FFFFFF; border-color: #BFDBFE; box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06); }
+.resource-chip-icon { width: 34px; height: 34px; border-radius: 12px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-xs); flex-shrink: 0; }
+.resource-chip-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.resource-chip-meta span { font-size: 0.68rem; color: #94A3B8; font-weight: var(--weight-bold); }
+.resource-chip-meta strong { font-size: 0.8rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.resource-chip-card .el-icon { color: #94A3B8; }
+.resource-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: var(--space-8); color: #64748B; font-size: 0.9rem; }
+.empty-wave-loader { display: flex; gap: 4px; align-items: center; height: 12px; }
+.empty-wave-loader span { width: 4px; height: 7px; background-color: #CBD5E1; border-radius: 2px; animation: emptyWavePluse 1.2s infinite ease-in-out alternate; }
+.empty-wave-loader span:nth-child(2) { animation-delay: 0.2s; }
+.empty-wave-loader span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes emptyWavePluse { from { transform: scaleY(0.6); background-color: #E2E8F0; } to { transform: scaleY(1.8); background-color: #94A3B8; } }
+.scale-fade-enter-active, .scale-fade-leave-active { transition: all 0.2s ease; }
+.scale-fade-enter-from, .scale-fade-leave-to { transform: scale(0.85); opacity: 0; }
+
+/* ================= Phase 4: 交付中心看板 (Bento Layout) ================= */
+.results-view { background: #F9FAFB; overflow-y: auto; padding-bottom: 80px; position: relative; }
+.result-hero-compact { display: flex; justify-content: space-between; align-items: center; padding: var(--space-4) var(--space-8); background: #FFFFFF; border-bottom: 1px solid #E5E7EB; margin-bottom: var(--space-6); border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: sticky; top: 0; z-index: 100; }
 .hero-content-left { display: flex; flex-direction: column; gap: var(--space-1); }
 .hero-status-tag-mini { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--color-success); font-size: 0.75rem; font-weight: var(--weight-extrabold); }
 .hero-title-compact { margin: 0; font-size: 1.25rem; font-weight: var(--weight-extrabold); color: var(--color-text-strong); }
 .hero-subtitle-compact { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); }
 .hero-actions-right { display: flex; gap: var(--space-3); align-items: center; }
-.action-btn-premium-mini {
-  background: #0369A1 !important;
-  color: white !important;
-  font-weight: var(--weight-extrabold);
-  font-size: 1.05rem;
-  padding: var(--space-3) var(--space-8);
-  height: auto;
-  border-radius: var(--radius-lg);
-  transition: all var(--transition-slow);
-  border: none !important;
-  position: relative;
-  overflow: hidden;
-}
+.results-body-bento { max-width: 1440px; margin: 0 auto; padding: var(--space-10) 60px; display: flex; flex-direction: column; gap: var(--space-10); position: relative; z-index: 1; }
+.premium-resource-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--space-8); align-items: stretch; }
+.premium-res-card { grid-column: span 3; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-5); position: relative; overflow: hidden; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer; animation: fadeSlideUp 0.6s ease-out backwards; }
+@keyframes fadeSlideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+.premium-res-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-color: #D1D5DB; }
+.card-bg-glow { display: none; }
 
-.action-btn-premium-mini.glow-effect {
-  box-shadow: var(--shadow-lg);
-}
-.action-btn-premium-mini:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-xl);
-}
-.action-btn-premium-mini::after {
-  content: '';
-  position: absolute;
-  top: 0; left: -100%; width: 50%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-  animation: btn-shine 3s infinite;
-}
-@keyframes btn-shine {
-  0% { left: -100%; }
-  20% { left: 200%; }
-  100% { left: 200%; }
-}
-
-.results-body-bento {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: var(--space-10) 60px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-10);
-  position: relative;
-  z-index: 1;
-}
-
-.premium-stats-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--space-6);
-}
-.premium-stat-card {
-  background: var(--color-surface);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: var(--radius-2xl);
-  padding: var(--space-6) var(--space-8);
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  box-shadow: var(--shadow-md);
-  transition: transform var(--transition-slow), box-shadow var(--transition-slow);
-}
-.premium-stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-}
-.stat-icon-wrapper {
-  width: 64px; height: 64px;
-  border-radius: var(--radius-xl);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2rem;
-  background: var(--color-bg);
-}
-.stat-icon-wrapper.text-blue { background: var(--color-info-soft); color: var(--color-info); }
-.stat-icon-wrapper.text-purple { background: #F5F3FF; color: #8B5CF6; }
-.stat-icon-wrapper.text-emerald { background: var(--color-success-soft); color: var(--color-success); }
-
-.stat-info { display: flex; flex-direction: column; gap: var(--space-1); }
-.premium-stat-card .stat-v { font-size: 2.2rem; font-weight: var(--weight-extrabold); color: var(--color-text); line-height: 1; font-family: var(--font-sans); }
-.premium-stat-card .stat-l { font-size: 0.9rem; font-weight: var(--weight-bold); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-
-.premium-resource-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--space-8);
-  align-items: stretch;
-}
-.premium-res-card {
-  grid-column: span 3;
-  background: var(--color-surface);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: var(--radius-2xl);
-  padding: var(--space-8);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  position: relative;
-  overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.03);
-  cursor: pointer;
-  animation: fadeSlideUp 0.6s ease-out backwards;
-}
-@keyframes fadeSlideUp {
-  0% { opacity: 0; transform: translateY(20px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-.premium-res-card:hover {
-  transform: translateY(-8px);
-  box-shadow: var(--shadow-xl);
-  border-color: transparent;
-}
-.card-bg-glow {
-  position: absolute;
-  top: 0; left: 0; right: 0; height: 100%;
-  background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 100%);
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  z-index: 0;
-  pointer-events: none;
-}
-.premium-res-card.tone-blue:hover { border-color: rgba(59, 130, 246, 0.3); }
-.premium-res-card.tone-blue:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 70%); opacity: 1; }
-.premium-res-card.tone-purple:hover { border-color: rgba(139, 92, 246, 0.3); }
-.premium-res-card.tone-purple:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.08) 0%, transparent 70%); opacity: 1; }
-.premium-res-card.tone-amber:hover { border-color: rgba(245, 158, 11, 0.3); }
-.premium-res-card.tone-amber:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 70%); opacity: 1; }
-.premium-res-card.tone-rose:hover { border-color: rgba(225, 29, 72, 0.3); }
-.premium-res-card.tone-rose:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(225, 29, 72, 0.08) 0%, transparent 70%); opacity: 1; }
-.premium-res-card.tone-emerald:hover { border-color: rgba(16, 185, 129, 0.3); }
-.premium-res-card.tone-emerald:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 70%); opacity: 1; }
-.premium-res-card.tone-indigo:hover { border-color: rgba(99, 102, 241, 0.3); }
-.premium-res-card.tone-indigo:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 70%); opacity: 1; }
-.premium-res-card.tone-slate:hover { border-color: rgba(100, 116, 139, 0.3); }
-.premium-res-card.tone-slate:hover .card-bg-glow { background: radial-gradient(circle at 50% 0%, rgba(100, 116, 139, 0.08) 0%, transparent 70%); opacity: 1; }
-
-.premium-res-card .card-header,
-.premium-res-card .card-body,
-.premium-res-card .card-footer {
-  position: relative;
-  z-index: 1;
-}
-.premium-res-card .type-icon-box {
-  width: 48px; height: 48px;
-  border-radius: var(--radius-lg);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem;
-  background: rgba(15, 23, 42, 0.03); border: 1px solid rgba(15, 23, 42, 0.04);
-}
+.premium-res-card .card-header, .premium-res-card .card-body, .premium-res-card .card-footer { position: relative; z-index: 1; }
+.premium-res-card .type-icon-box { width: 48px; height: 48px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; background: rgba(15, 23, 42, 0.03); border: 1px solid rgba(15, 23, 42, 0.04); }
 .premium-res-card.tone-blue .type-icon-box { color: var(--color-info); }
 .premium-res-card.tone-purple .type-icon-box { color: #7C3AED; }
-.premium-res-card.tone-amber .type-icon-box { color: var(--tone-amber); }
 .premium-res-card.tone-rose .type-icon-box { color: #E11D48; }
 .premium-res-card.tone-emerald .type-icon-box { color: var(--tone-emerald); }
 .premium-res-card.tone-indigo .type-icon-box { color: var(--color-primary); }
-.premium-res-card.tone-slate .type-icon-box { color: var(--color-text-secondary); }
+.premium-res-card.tone-pink .type-icon-box { color: #DB2777; }
 
-.premium-res-card .card-title {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text);
-  line-height: 1.45;
-  white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
-}
-.premium-res-card .card-summary {
-  margin: 0;
-  font-size: 0.95rem;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
-  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.card-metrics-modern {
-  display: flex;
-  gap: var(--space-3);
-  margin-top: auto;
-  padding-top: var(--space-3);
-}
-.metric-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  background: var(--color-bg);
-  color: var(--color-text-secondary);
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid rgba(15, 23, 42, 0.04);
-  border-radius: var(--radius-md);
-  font-size: 0.8rem;
-  font-weight: var(--weight-bold);
-}
-.premium-res-card .card-footer {
-  border-top: 1px solid rgba(226, 232, 240, 0.6);
-  padding-top: var(--space-5);
-  margin-top: var(--space-1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.modern-text-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text);
-  font-weight: var(--weight-extrabold);
-  font-size: 0.95rem;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  transition: color var(--transition-base);
-}
-.modern-text-btn span {
-  transition: transform var(--transition-slow);
-}
-.premium-res-card:hover .modern-text-btn {
-  color: var(--color-info);
-}
-.premium-res-card:hover .modern-text-btn span {
-  transform: translateX(4px);
-}
-.interactive-resources-panel .panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-.interactive-resources-panel .panel-title > span {
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-text);
-  font-size: 1rem;
-  font-weight: var(--weight-extrabold);
-}
-.generated-resource-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: var(--space-5);
-  row-gap: 44px;
-  align-items: stretch;
-  margin-top: var(--space-3);
-  padding-bottom: var(--space-4);
-}
-.generated-resource-card {
-  --resource-accent: var(--color-info);
-  --resource-soft: var(--color-info-soft);
-  --resource-border: #BFDBFE;
+.premium-res-card .card-title { margin: 0; font-size: 1.15rem; font-weight: var(--weight-extrabold); color: var(--color-text); line-height: 1.45; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.premium-res-card .card-summary { margin: 0; font-size: 0.95rem; color: var(--color-text-secondary); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-metrics-modern { display: flex; gap: var(--space-3); margin-top: auto; padding-top: var(--space-3); }
+.metric-badge { display: inline-flex; align-items: center; gap: var(--space-1); background: var(--color-bg); color: var(--color-text-secondary); padding: var(--space-1) var(--space-3); border: 1px solid rgba(15, 23, 42, 0.04); border-radius: var(--radius-md); font-size: 0.8rem; font-weight: var(--weight-bold); }
+.premium-res-card .card-footer { border-top: 1px solid rgba(226, 232, 240, 0.6); padding-top: var(--space-5); margin-top: var(--space-1); display: flex; justify-content: space-between; align-items: center; }
+.modern-text-btn { background: transparent; border: none; color: var(--color-text); font-weight: var(--weight-extrabold); font-size: 0.95rem; padding: 0; cursor: pointer; display: flex; align-items: center; gap: var(--space-2); transition: color var(--transition-base); }
+.modern-text-btn span { transition: transform var(--transition-slow); }
+.premium-res-card:hover .modern-text-btn { color: var(--color-info); }
+.premium-res-card:hover .modern-text-btn span { transform: translateX(4px); }
 
-  position: relative;
-  min-width: 0;
-  grid-column: span 3;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: start;
-  height: 100%;
-  min-height: 142px;
-  padding: var(--space-5) var(--space-5) 16px;
-  border: 1px solid rgba(15, 23, 42, 0.05);
-  border-radius: var(--radius-xl);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  box-shadow: var(--shadow-xs);
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.generated-resource-card::before {
-  display: none;
-}
-.generated-resource-card:hover,
-.generated-resource-card:focus-visible {
-  transform: translateY(-4px);
-  border-color: rgba(15, 23, 42, 0.12);
-  box-shadow: var(--shadow-lg);
-  outline: none;
-}
-.generated-resource-card.tone-blue { --resource-accent: var(--color-info); --resource-soft: var(--color-info-soft); --resource-border: #BFDBFE; }
-.generated-resource-card.tone-purple { --resource-accent: #7C3AED; --resource-soft: #F5F3FF; --resource-border: #DDD6FE; }
-.generated-resource-card.tone-amber { --resource-accent: var(--tone-amber); --resource-soft: var(--color-warning-soft); --resource-border: #FDE68A; }
-.generated-resource-card.tone-rose { --resource-accent: #E11D48; --resource-soft: #FFF1F2; --resource-border: #FFE4E6; }
-.generated-resource-card.tone-emerald { --resource-accent: var(--tone-emerald); --resource-soft: var(--color-success-soft); --resource-border: var(--color-success-soft); }
-.generated-resource-card.tone-indigo { --resource-accent: var(--color-primary); --resource-soft: var(--color-primary-soft); --resource-border: var(--color-primary-border); }
-.generated-resource-card.tone-slate { --resource-accent: var(--color-text-secondary); --resource-soft: var(--color-surface-hover); --resource-border: var(--color-border-hover); }
-.generated-resource-card .resource-card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-lg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--resource-soft);
-  border: none;
-  color: var(--resource-accent);
-  font-size: 1.25rem;
-  flex-shrink: 0;
-  box-shadow: 0 4px 12px var(--resource-soft);
-}
-.resource-card-info {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: var(--space-1);
-}
-.resource-card-meta-line {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.resource-card-meta-line span {
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
-  font-weight: var(--weight-semibold);
-}
-.resource-card-info h4 {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 1rem;
-  line-height: 1.5;
-  font-weight: var(--weight-bold);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.resource-card-info p {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.88rem;
-  line-height: 1.55;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.resource-card-action {
-  grid-column: 1 / -1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-1);
-  margin-top: var(--space-1);
-  padding-top: var(--space-3);
-  background: transparent;
-  color: var(--color-text-faint);
-  border: none;
-  border-top: 1px solid rgba(15, 23, 42, 0.04);
-  font-size: 0.82rem;
-  font-weight: var(--weight-semibold);
-  transition: all var(--transition-slow);
-}
-.generated-resource-card:hover .resource-card-action,
-.generated-resource-card:focus-visible .resource-card-action {
-  background: transparent;
-  color: var(--resource-accent);
-  border-color: rgba(15, 23, 42, 0.08);
-}
-.generated-resource-card:hover .resource-card-action .el-icon {
-  transform: translateX(4px);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.side-empty.compact { padding: var(--space-3); }
-
+/* ================= 媒体查询与响应式适配 ================= */
 @media (max-width: 1200px) {
-  .resource-side-panel { grid-column: 1 / -1; position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .agent-configs-grid { grid-template-columns: repeat(2, 1fr); }
-  .bento-stats-row { grid-template-columns: repeat(2, 1fr); }
-  .bento-resource-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .bento-res-card { grid-column: span 2 !important; }
-  .resource-metric-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .premium-resource-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .premium-res-card { grid-column: span 2 !important; }
   .results-body-bento { padding: var(--space-6) var(--space-8); }
-  .generated-resource-card { grid-column: span 4; }
-  .interactive-resources-panel { min-height: 0; height: auto; }
   .dag-canvas { min-height: 380px; }
-  .dag-node { width: 140px; }
 }
 @media (max-width: 768px) {
   .elegant-generator-layout { height: auto; min-height: calc(100vh - 64px); }
@@ -1830,392 +1808,28 @@ const handlePreview = (data: any) => {
   .agent-configs-grid { grid-template-columns: 1fr; }
   .scenario-selector-v2 { grid-template-columns: 1fr; }
   .generation-workbench { padding: var(--space-4); }
-  .resource-side-panel { grid-template-columns: 1fr; }
-  .resource-status-item { grid-template-columns: 1fr; }
-  .generated-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .generated-resource-card { grid-column: span 1; grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
-  .interactive-resources-panel { min-height: 0; }
-  .resource-card-action { grid-column: 1 / -1; width: 100%; }
-  .resource-side-panel { position: static; }
   .results-body-bento { padding: var(--space-4); }
-  .result-hero-minimal { padding: var(--space-5); }
-  .bento-stats-row { grid-template-columns: 1fr; }
-  .bento-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bento-res-card { grid-column: span 1 !important; }
-  .compact-hero-bar { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+  .premium-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .premium-res-card { grid-column: span 1 !important; }
   .dag-canvas { min-height: 360px; }
-  .dag-node { width: 120px; padding: var(--space-2) var(--space-3); }
-  .dag-node-label { font-size: 0.78rem; }
 }
 @media (max-width: 520px) {
-  .sequence-track { display: flex; overflow-x: auto; padding-bottom: var(--space-1); }
-  .sequence-node { min-width: 240px; }
-  .resource-card-actions { flex-direction: column; }
-  .resource-metric-stack { grid-template-columns: 1fr; }
-  .generated-resource-grid { grid-template-columns: 1fr; }
-  .bento-resource-grid { grid-template-columns: 1fr; }
-  .bento-res-card { grid-column: span 1 !important; }
+  .premium-resource-grid { grid-template-columns: 1fr; }
+  .premium-res-card { grid-column: span 1 !important; }
 }
 
+/* Element Plus 弹窗深度订制 */
 .elegant-dialog :deep(.el-dialog) { border-radius: var(--radius-2xl); overflow: hidden; box-shadow: var(--shadow-xl); }
 .elegant-dialog :deep(.el-dialog__header) { padding: var(--space-6) var(--space-8) var(--space-5); margin-right: 0; border-bottom: 1px solid var(--color-surface-hover); }
 .elegant-dialog :deep(.el-dialog__title) { font-weight: var(--weight-extrabold); font-size: 1.2rem; color: var(--color-text); }
 .elegant-dialog :deep(.el-dialog__body) { padding: var(--space-8); background: var(--color-bg); }
 
-/* ================= 极致明亮模式：排版微调 ================= */
-h1, h2, h3, h4, .hero-title, .cc-title {
-  letter-spacing: -0.025em;
-  color: var(--color-text);
-  font-weight: var(--weight-bold);
+h1, h2, h3, h4, .greeting-title, .cc-title { letter-spacing: -0.025em; color: var(--color-text); font-weight: var(--weight-bold); }
+p, .card-summary, .s-desc, .greeting-subtitle { line-height: 1.65; letter-spacing: 0.01em; color: var(--color-text-secondary); }
+@media (max-width: 1280px) {
+  .workflow-canvas {
+    height: 520px;
+  }
 }
 
-p, .card-summary, .s-desc, .greeting-subtitle {
-  line-height: 1.65;
-  letter-spacing: 0.01em;
-  color: var(--color-text-secondary);
-}
-
-/* ================= 极致明亮模式：细节打磨与对齐 ================= */
-.bento-res-card {
-  display: flex;
-  flex-direction: column;
-  height: auto;
-}
-.card-body {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 auto;
-}
-
-.card-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-  padding-top: var(--space-4);
-}
-.metric-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  background: var(--color-bg);
-  border: 1px solid rgba(15, 23, 42, 0.04);
-  border-radius: var(--radius-md);
-  padding: var(--space-1) var(--space-3);
-}
-.m-l {
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-  font-weight: var(--weight-semibold);
-  text-transform: uppercase;
-}
-.m-v {
-  font-size: 0.8rem;
-  color: var(--color-text);
-  font-weight: var(--weight-extrabold);
-}
-
-.group-badge {
-  background: var(--color-surface-hover);
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  font-size: 0.75rem;
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.05em;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-md);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-/* ================= 极简明亮模式：生成中顶部面板 ================= */
-.compact-hero-bar { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: var(--radius-xl); padding: var(--space-4) var(--space-6); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); transition: all var(--transition-slow); }
-.hero-bar-left { display: flex; align-items: center; gap: var(--space-5); }
-.hero-kicker { display: flex; align-items: center; gap: var(--space-1); color: #0369A1 !important; border-color: #BAE6FD !important; background: #F0F9FF !important; font-weight: var(--weight-extrabold); padding: 0 var(--space-3); }
-.ping-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-success); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
-@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
-.hero-bar-title { margin: 0 0 var(--space-1); font-size: 1.25rem; font-weight: var(--weight-extrabold); color: var(--color-text); }
-.hero-bar-message { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; }
-.hero-bar-right { display: flex; align-items: center; gap: var(--space-6); }
-.mini-progress { position: relative; display: flex; justify-content: center; align-items: center; }
-.mini-progress-text { position: absolute; font-size: 0.75rem; font-weight: var(--weight-extrabold); color: #0369A1; }
-
-/* DAG Generating Phase */
-.dag-hero-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #0c4a6e 0%, #164e63 100%);
-  border-radius: 12px;
-  margin-bottom: 16px;
-}
-.dag-hero-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.dag-hero-kicker {
-  color: #7dd3fc !important;
-  border-color: rgba(125, 211, 252, 0.3) !important;
-  background: rgba(125, 211, 252, 0.08) !important;
-}
-.dag-hero-title {
-  color: #f0f9ff;
-  font-size: 15px;
-  font-weight: 500;
-  margin: 0;
-}
-.dag-hero-right {
-  display: flex;
-  align-items: center;
-}
-.dag-progress-summary {
-  color: #7dd3fc;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.dag-canvas-card {
-  background: #0f172a;
-  border-radius: 12px;
-  border: 1px solid #1e293b;
-  padding: 20px;
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-.dag-canvas {
-  position: relative;
-  width: 960px;
-  max-width: 100%;
-  margin: 0 auto;
-  height: 520px;
-}
-
-/* SVG edges */
-.dag-lines {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-.dag-edge {
-  stroke-width: 2;
-  transition: stroke 0.3s, stroke-dasharray 0.3s;
-}
-.dag-edge.pending {
-  stroke: #334155;
-  stroke-dasharray: 6 4;
-}
-.dag-edge.active {
-  stroke: #38bdf8;
-  stroke-dasharray: none;
-  animation: dag-edge-flow 1.5s linear infinite;
-}
-.dag-edge.completed {
-  stroke: #22c55e;
-  stroke-dasharray: none;
-}
-@keyframes dag-edge-flow {
-  from { stroke-dashoffset: 10; }
-  to { stroke-dashoffset: 0; }
-}
-
-/* DAG nodes */
-.dag-node {
-  position: absolute;
-  background: #1e293b;
-  border: 2px solid #334155;
-  border-radius: 10px;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  z-index: 1;
-}
-.dag-node:hover {
-  border-color: #475569;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-.dag-node.dag-waiting {
-  border-color: #334155;
-  opacity: 0.6;
-}
-.dag-node.dag-running {
-  border-color: #38bdf8;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
-  animation: dag-pulse 2s ease-in-out infinite;
-}
-.dag-node.dag-success {
-  border-color: #22c55e;
-  opacity: 0.9;
-}
-.dag-node.dag-failed {
-  border-color: #ef4444;
-  opacity: 0.9;
-}
-.dag-node.dag-system {
-  background: #1a2332;
-}
-@keyframes dag-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(56, 189, 248, 0.15); }
-  50% { box-shadow: 0 0 20px rgba(56, 189, 248, 0.35); }
-}
-
-.dag-node-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.dag-node-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.dag-node-icon {
-  font-size: 16px;
-}
-.dag-node-name {
-  color: #e2e8f0;
-  font-size: 13px;
-  font-weight: 600;
-}
-.dag-node-check {
-  color: #22c55e;
-  font-weight: bold;
-  margin-left: auto;
-}
-.dag-node-x {
-  color: #ef4444;
-  font-weight: bold;
-  margin-left: auto;
-}
-
-.dag-node-running-info {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.dag-node-message {
-  color: #94a3b8;
-  font-size: 11px;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dag-node-progress-bar {
-  height: 4px;
-  background: #334155;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.dag-node-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #0ea5e9, #38bdf8);
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-.dag-node-progress-text {
-  color: #7dd3fc;
-  font-size: 10px;
-}
-.dag-node-waiting-info,
-.dag-node-success-info,
-.dag-node-failed-info {
-  color: #64748b;
-  font-size: 11px;
-}
-.dag-node-success-info {
-  color: #4ade80;
-}
-.dag-node-failed-info {
-  color: #f87171;
-}
-
-/* Expanded step history */
-.dag-node-expanded {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid #334155;
-}
-.dag-step-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 2px 0;
-  font-size: 11px;
-  color: #94a3b8;
-}
-.dag-step-row.dag-step-current {
-  color: #38bdf8;
-}
-.dag-step-marker {
-  flex-shrink: 0;
-  width: 14px;
-  text-align: center;
-}
-.dag-step-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dag-expand-enter-active,
-.dag-expand-leave-active {
-  transition: all 0.2s ease;
-  overflow: hidden;
-}
-.dag-expand-enter-from,
-.dag-expand-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-
-/* Resource row */
-.dag-resource-row {
-  background: #0f172a;
-  border-radius: 12px;
-  border: 1px solid #1e293b;
-  padding: 12px 16px;
-}
-.dag-resource-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: #94a3b8;
-  font-size: 13px;
-}
-.dag-resource-cards {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.dag-resource-card {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.dag-resource-card:hover {
-  border-color: #475569;
-  background: #263348;
-}
-.dag-rc-icon {
-  font-size: 14px;
-}
-.dag-rc-title {
-  color: #e2e8f0;
-  font-size: 12px;
-}
-.dag-resource-empty {
-  color: #64748b;
-  font-size: 13px;
-}
 </style>

@@ -23,7 +23,6 @@
     "answer": "C",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "math",
       "英文题",
@@ -40,7 +39,7 @@
     "type": "选择题",
     "difficulty": 4,
     "bloom_level": "分析",
-    "content": "Use Stokes' Theorem to evaluate $\\int_C \\mathbf{F} \\cdot d \\mathbf{r}$, where $\\mathbf{F}(x, y, z)=x y \\mathbf{i}+y z \\mathbf{j}+z x \\mathbf{k}$, and $C$ is the triangle with vertices $(1,0,0),(0,1,0)$, and $(0,0,1)$, oriented counterclockwise as viewed from above.\n",
+    "content": "Use Stokes' Theorem to evaluate $\\int_C \\mathbf{F} \\cdot d \\mathbf{r}$, where $\\mathbf{F}(x, y, z)=x y \\mathbf{i}+y z \\mathbf{j}+z x \\mathbf{k}$, and $C$ is the triangle with vertices $(1,0,0),(0,1,0)$, and $(0,0,1)$, oriented counterclockwise as viewed from above.",
     "options": {
       "A": " $-\\frac{1}{2}$",
       "B": "$\\frac{1}{2}$",
@@ -56,7 +55,6 @@
     "answer": "A",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "math",
       "英文题",
@@ -89,7 +87,6 @@
     "answer": "B",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "math",
       "英文题",
@@ -122,7 +119,6 @@
     "answer": "B",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "math",
       "英文题",
@@ -155,7 +151,6 @@
     "answer": "C",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -188,7 +183,6 @@
     "answer": "D",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -221,7 +215,6 @@
     "answer": "B",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -254,7 +247,6 @@
     "answer": "E",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -287,7 +279,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -320,7 +311,6 @@
     "answer": "J",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -353,7 +343,6 @@
     "answer": "D",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -386,7 +375,6 @@
     "answer": "B",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "physics",
       "英文题",
@@ -419,7 +407,6 @@
     "answer": "E",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -452,7 +439,6 @@
     "answer": "A",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -485,7 +471,6 @@
     "answer": "J",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -518,7 +503,6 @@
     "answer": "A",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -551,7 +535,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -583,7 +566,6 @@
     "answer": "E",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -615,7 +597,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -648,7 +629,6 @@
     "answer": "D",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -681,7 +661,6 @@
     "answer": "A",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -714,7 +693,6 @@
     "answer": "G",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -747,7 +725,6 @@
     "answer": "I",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -780,7 +757,6 @@
     "answer": "D",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -811,7 +787,6 @@
     "answer": "C",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -844,7 +819,6 @@
     "answer": "I",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -877,7 +851,6 @@
     "answer": "G",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -910,7 +883,6 @@
     "answer": "C",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -943,7 +915,6 @@
     "answer": "C",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -976,7 +947,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -1009,7 +979,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -1042,7 +1011,6 @@
     "answer": "E",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -1075,7 +1043,6 @@
     "answer": "B",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -1108,7 +1075,6 @@
     "answer": "D",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "computer science",
       "英文题",
@@ -1141,7 +1107,6 @@
     "answer": "J",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1174,7 +1139,6 @@
     "answer": "D",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1207,7 +1171,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1234,7 +1197,6 @@
     "answer": "B",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1267,7 +1229,6 @@
     "answer": "G",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1300,7 +1261,6 @@
     "answer": "I",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1333,7 +1293,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1366,7 +1325,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1399,7 +1357,6 @@
     "answer": "B",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1432,7 +1389,6 @@
     "answer": "J",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1465,7 +1421,6 @@
     "answer": "D",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1498,7 +1453,6 @@
     "answer": "E",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1531,7 +1485,6 @@
     "answer": "G",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1564,7 +1517,6 @@
     "answer": "H",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1597,7 +1549,6 @@
     "answer": "G",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1630,7 +1581,6 @@
     "answer": "F",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1663,7 +1613,6 @@
     "answer": "H",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1696,7 +1645,6 @@
     "answer": "I",
     "analysis": "",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",
@@ -1729,7 +1677,6 @@
     "answer": "C",
     "analysis": "A: Let's think step by step. An SR latch is a set-reset latch; in the case where S=1 and R=1, the circuit has no stable state; instead a race condition will be produced within the circuit, so the device will be in an undefined state. So S=1, R=1 is an illegal input. The answer is (C).",
     "knowledge_points": [],
-    "misconceptions": [],
     "tags": [
       "engineering",
       "英文题",

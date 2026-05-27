@@ -44,7 +44,7 @@ class RealtimeBridge:
         self._need_diagram_default: bool = False
         self._enable_search_default: bool = False
         self._generate_video_default: bool = False
-        self._enable_long_term_memory_default: bool = False
+        self._enable_long_term_memory_default: bool = True
         self._history_default: Optional[list[dict]] = None
         self._turn_lock = asyncio.Lock()
 
@@ -350,10 +350,7 @@ class RealtimeBridge:
     async def _handle_clear_history(self):
         """Clear current session chat history."""
         from app.avatar.bridge.state import MessageType
-        from app.memory import MemoryService
-        from app.chat import CHAT_MODULE_NAME
-
-        memory_layer = MemoryService(module=CHAT_MODULE_NAME)
+        from app.chat.service import get_chat_usecases
 
         if not self.session_id:
             await self._send_to_frontend(
@@ -364,11 +361,7 @@ class RealtimeBridge:
             )
             return
 
-        deleted_count = await memory_layer.delete_short_term_messages(
-            user_id=self.user_id,
-            session_id=self.session_id,
-        )
-        await memory_layer.reset_session_counters(user_id=self.user_id, session_id=self.session_id)
+        deleted_count = await get_chat_usecases().clear_history(self.user_id, self.session_id)
         logger.info(
             "[Bridge] ? user=%s session=%s deleted=%s",
             self.user_id,
@@ -642,7 +635,7 @@ class RealtimeBridge:
         need_diagram: bool = False,
         enable_search: bool = False,
         generate_video: bool = False,
-        enable_long_term_memory: bool = False,
+        enable_long_term_memory: bool = True,
         history: Optional[list[dict]] = None,
     ):
         """Serialize turns so one frontend response stream maps to one answer."""
@@ -664,44 +657,31 @@ class RealtimeBridge:
         need_diagram: bool = False,
         enable_search: bool = False,
         generate_video: bool = False,
-        enable_long_term_memory: bool = False,
+        enable_long_term_memory: bool = True,
         history: Optional[list[dict]] = None,
     ):
         """Run one completed turn through chat service and avatar playback."""
         from app.chat.service import get_chat_usecases
-        from app.chat import CHAT_MODULE_NAME
         from app.chat.request import ChatHistoryMessage
-        from app.memory import MemoryService
 
         merged_attachments = list(dict.fromkeys(attachments or []))
-        # Keep memory module aligned with text AI pipeline to avoid
-        # cross-module session permission errors.
-        memory_layer = MemoryService(module=CHAT_MODULE_NAME)
-        if not self.session_id:
-            # 创建新会话
-            session = await memory_layer.create_session(user_id=self.user_id)
-            self.session_id = session.id
-
-        # Use the same service-owned persistence and TutorAgent path as text chat.
         chat_uc = get_chat_usecases()
+        if not self.session_id:
+            session = await chat_uc.create_session(user_id=self.user_id)
+            self.session_id = str(session["id"])
+
         normalized_history: list[ChatHistoryMessage] = []
         for item in history or []:
             try:
                 normalized_history.append(ChatHistoryMessage(**item))
             except Exception:
                 logger.debug("[Bridge] ignored malformed history item=%s", item)
-        if not normalized_history:
-            stored_messages = await memory_layer.list_messages(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                only_unexpired=False,
-            )
-            normalized_history = [
-                ChatHistoryMessage(role=message.role, content=message.content)
-                for message in stored_messages
-                if message.role in {"user", "assistant"} and str(message.content).strip()
-            ]
-        if not normalized_history or normalized_history[-1].role != "user":
+        latest_content = normalized_history[-1].content.strip() if normalized_history else ""
+        if (
+            not normalized_history
+            or normalized_history[-1].role != "user"
+            or latest_content != user_text.strip()
+        ):
             normalized_history.append(ChatHistoryMessage(role="user", content=user_text))
         full_response = ""
         event_count = 0
@@ -712,6 +692,7 @@ class RealtimeBridge:
         try:
             async def _consume_stream_events():
                 nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
+                nonlocal stream_failed, fail_reason
                 async for event in chat_uc.stream_chat_events(
                     user_id=self.user_id,
                     user_message=user_text,
@@ -735,25 +716,22 @@ class RealtimeBridge:
                                 event_count, event_type, type(payload).__name__,
                                 str(payload)[:120] if payload else "None")
 
-                    if event_type == "text_chunk":
-                        content = self._repair_text_encoding(str(payload or ""))
-                        full_response += content
-                        if self.frontend_ws:
-                            await self._send_to_frontend({"type": "assistant_chunk", "content": content})
-                    elif event_type == "token":
+                    if event_type == "token":
                         content = self._repair_text_encoding(str(payload or ""))
                         if content:
                             full_response += content
                             if self.frontend_ws:
                                 await self._send_to_frontend({"type": "assistant_chunk", "content": content})
 
-                    elif event_type == "tool_result":
-                        if self.frontend_ws:
-                            await self._send_to_frontend({"type": "tool_result", "data": payload})
+                    elif event_type == "status":
+                        if self.frontend_ws and isinstance(payload, dict):
+                            await self._send_to_frontend({"type": "status", "data": payload})
 
-                    elif event_type == "tool_error":
+                    elif event_type == "error":
+                        stream_failed = True
+                        fail_reason = str(payload or "数字人回答失败，请重试")
                         if self.frontend_ws:
-                            await self._send_to_frontend({"type": "tool_error", "data": payload})
+                            await self._send_to_frontend({"type": "error", "content": fail_reason})
 
                     elif event_type == "diagram":
                         last_diagram_payload = payload
@@ -761,20 +739,6 @@ class RealtimeBridge:
                             await self._send_to_frontend({"type": "diagram", "data": payload})
                             diagram_forwarded = True
 
-                    elif event_type == "complete":
-                        if not full_response and isinstance(payload, dict):
-                            full_response = self._repair_text_encoding(
-                                str(payload.get("full_response", "") or "")
-                            )
-                            if full_response and self.frontend_ws:
-                                await self._send_to_frontend({"type": "assistant_chunk", "content": full_response})
-                        if isinstance(payload, dict):
-                            diagram_payload = payload.get("teaching_diagram") or payload.get("diagram")
-                            if diagram_payload:
-                                last_diagram_payload = diagram_payload
-                            if diagram_payload and self.frontend_ws and not diagram_forwarded:
-                                await self._send_to_frontend({"type": "diagram", "data": diagram_payload})
-                                diagram_forwarded = True
                     elif event_type == "done":
                         if isinstance(payload, dict):
                             maybe_text = self._repair_text_encoding(

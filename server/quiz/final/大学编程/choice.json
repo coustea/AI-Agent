@@ -3408,30 +3408,6 @@
     "split": "test"
   },
   {
-    "id": "ceval_0145",
-    "source": "C-Eval",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "与后置++不同，前置++运算符在C++语法中可以连续对变量使用，即可以++(++a)，这也是在重载前置++运算符时需要返回引用的原因。那么观察以下计时器类Timer的定义\n#include<iostream>\nusing namespace std;\nclass Timer{\nprivate:\nint sec;\npublic:\nTimer(){\nsec=0;\n}\nTimer operator++(){//注意返回值不是引用\nsec++;\nreturn *this;\n}\nvoid show(){\ncout<<sec<<endl;\n}\n};\nint main(){\nTimer t;\n++(++(++t));//连续调用三次前置++\nt.show();\nreturn 0;\n}\n其中在重载前置++中，代码错误地没有返回Timer类的引用，那么下列说法正确的是____",
-    "options": {
-      "A": "程序无法通过编译",
-      "B": "程序可以通过编译，程序仍然正确，输出 3",
-      "C": "程序可以通过编译，程序逻辑错误，输出 0",
-      "D": "程序可以通过编译，程序逻辑错误，输出 1"
-    },
-    "answer": "D",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "college_programming"
-    ],
-    "language": "zh",
-    "split": "test"
-  },
-  {
     "id": "ceval_0146",
     "source": "C-Eval",
     "subject": "大学编程",
@@ -4551,30 +4527,6 @@
       "D": "||"
     },
     "answer": "D",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "college_programming"
-    ],
-    "language": "zh",
-    "split": "test"
-  },
-  {
-    "id": "ceval_0193",
-    "source": "C-Eval",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "对于下面定义的类\nclass Base {\nprotected: int x;\npublic: Base(int val = 1) { x = val; }\nvirtual void disp(){cout<< x<< endl; }\nvoid print() {cout<<x<< endl; }\n};\nclass Derived: public Base { int y;\npublic:\nDerived(int vail = 0, int val2 = 0): Base(vall) { y = val2; }\nvoid disp(){ cout<< \"x=\"<< x<< \" y=\"<< y<< endl; }\nvoid print() { cout<<\"x=\"<<x<<\" y=\"<< y<< endl; }\n};\n有定义Derived dd(3,4);\nBase *bp=&dd,bb=dd;\n则dd.disp()执行的是____",
-    "options": {
-      "A": "派生类的 disp 函数",
-      "B": "派生类的 pririt 函数",
-      "C": "基类的 disp 函数",
-      "D": "基类的 print 函数"
-    },
-    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [
@@ -7224,30 +7176,6 @@
     "split": "test"
   },
   {
-    "id": "ceval_0307",
-    "source": "C-Eval",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "定义如下的Test类，下列说法正确的是____ \nclass Test{\n\t\tconst int member;\n\t\tfloat another_member;\n\tpublic:\n\t\tTest(int mem):member(mem){another_member=1.0;}\n\t\tint MyMember()const{return member;}\n\t\tfloat MyAnotherMember(){return another_member;}\n\t}",
-    "options": {
-      "A": "member的值在不同的Test对象中可以不同",
-      "B": "初始化数据成员member时，可以采用类似于another_member的初始化方式，在构造函数的函数体中赋值",
-      "C": "成员函数MyMember的函数体内可以增加语句，修改another_member的值",
-      "D": "定义一个Test类的常量对象，其可以调用MyMember和MyAnotherMember两个成员函数"
-    },
-    "answer": "C",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "college_programming"
-    ],
-    "language": "zh",
-    "split": "test"
-  },
-  {
     "id": "ceval_0308",
     "source": "C-Eval",
     "subject": "大学编程",
@@ -7959,30 +7887,6 @@
       "D": "&dr='#'"
     },
     "answer": "B",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "college_programming"
-    ],
-    "language": "zh",
-    "split": "test"
-  },
-  {
-    "id": "ceval_0338",
-    "source": "C-Eval",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "定义如下所示的Base类和Derive类，下列说法错误的是：____\n #include <iostream>\n using namespace std;\n class Base {\n  int data;\n public:\n  Base() : data(0) { cout << \"Base::Base(\" << data << \")\\n\"; }\n  Base(int i) : data(i) { cout << \"Base::Base(\" << i << \")\\n\"; }\n };\n class Derive : public Base {\n  int data{2018};\n public: \n  Derive() {}\n  Derive(int i) : Base(i) {}\n  void print() { cout << \"data = \" << data << endl; }\n };\n int main() {\n  Derive obj1;\n  Derive obj2(2019);\n  obj1.print();\n  obj2.print();\n  return 0;\n }",
-    "options": {
-      "A": "Derive类的默认构造函数没有显式调用Base类的构造函数，此时编译器会自动调用Base类的默认构造函数",
-      "B": "Derive类的普通构造函数可以在初始化列表中显式调用Base类的普通构造函数",
-      "C": "该程序的输出为Base::Base(0)\\nBase::Base(2019)\\ndata = 2018\\ndata = 2019\\n",
-      "D": "obj1析构时先执行Derive类的析构函数，再执行Base类的析构函数"
-    },
-    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [
@@ -9059,7 +8963,8 @@
     "options": {
       "A": "constants.mph",
       "B": "constants.speed_of_sound",
-      "C": "constants.kmh"
+      "C": "constants.kmh",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. constants.mph: This represents miles per hour, a unit of speed, but not specifically the speed of sound.\n  B. constants.speed_of_sound: This is the correct attribute that directly represents the speed of sound in meters per second within the `scipy.constants` module.\n  C. constants.kmh: This represents kilometers per hour, another unit of speed, but not specifically the speed of sound.",
@@ -9178,7 +9083,8 @@
     "options": {
       "A": "dp = [1] + [-1] * target",
       "B": "dp = [1] + [float('inf')] * target",
-      "C": "dp = [1] + [0] * target"
+      "C": "dp = [1] + [0] * target",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. dp = [1] + [-1] * target: This initializes the DP array with a base case of 1 for the target 0, indicating one way to achieve a sum of zero (using no numbers). The rest of the array is initialized to -1, which acts as a marker for uncomputed states.\n  B. dp = [1] + [float('inf')] * target: This initializes the DP array with infinity, which is inappropriate for counting combinations as it suggests an unreachable state rather than an uncomputed one.\n  C. dp = [1] + [0] * target: This initializes the DP array with zeros, which would incorrectly suggest that there are zero ways to achieve any target initially, conflicting with the need to compute these values dynamically.",
@@ -9273,7 +9179,8 @@
     "options": {
       "A": ".container-fluid",
       "B": ".container-fixed",
-      "C": ".container"
+      "C": ".container",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. .container-fluid: This class creates a container that spans the full width of the viewport, making it fluid and not fixed.\n  B. .container-fixed: This is not a standard Bootstrap class. It does not exist in Bootstrap's framework, so it cannot provide a fixed width container.\n  C. .container: This class provides a responsive fixed width container that adjusts its width based on the viewport size while maintaining a fixed width at each breakpoint.",
@@ -10041,7 +9948,8 @@
     "options": {
       "A": ".group-list",
       "B": ".grouped-list",
-      "C": ".list-group"
+      "C": ".list-group",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. .group-list: This is not a standard class in popular CSS frameworks for creating list groups. It does not follow the naming conventions used by frameworks like Bootstrap.\n  B. .grouped-list: Similar to option A, this is not a recognized class for list groups in standard frameworks. It suggests a grouping but is not the correct syntax.\n  C. .list-group: This is the correct class used in frameworks like Bootstrap to create a list group, which is a flexible and powerful component for displaying a series of content.",
@@ -10568,7 +10476,8 @@
     "options": {
       "A": ".select",
       "B": ".dropdown-list",
-      "C": ".dropdown"
+      "C": ".dropdown",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "Option A, .select, suggests a selection element but is more commonly associated with HTML <select> elements rather than dropdown menus. Option B, .dropdown-list, implies a list structure but does not specifically denote a dropdown menu. Option C, .dropdown, is a widely recognized class name used to indicate a dropdown menu in many CSS frameworks and custom styles.",
@@ -11455,7 +11364,8 @@
     "options": {
       "A": "None of the other two answers are correct",
       "B": "The data is skewed left",
-      "C": "The data is skewed right"
+      "C": "The data is skewed right",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. This option is incorrect because one of the other answers is indeed correct. A negative skew has a specific interpretation related to the direction of the skew.\n  B. This option is correct because a negative skew means the tail of the distribution extends to the left, indicating that the bulk of the data is concentrated on the right.\n  C. This option is incorrect because a positive skew, not a negative skew, indicates that the data is skewed to the right, with the tail extending to the right.",
@@ -11550,7 +11460,8 @@
     "options": {
       "A": "from members.models import Member",
       "B": "import Member from members",
-      "C": "import members.Member"
+      "C": "import members.Member",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option correctly uses the Django import syntax: `from <app_name>.models import <ModelName>`. It specifies the app `members` and the model `Member`, which is the standard way to import a model in Django.\n  B. This option incorrectly uses the syntax `import <ModelName> from <app_name>`. This is not valid Python syntax for importing a model from a Django app.\n  C. This option uses `import members.Member`, which is incorrect because it assumes `Member` is a module or package within `members`, rather than a class within the `models` module.",
@@ -13206,7 +13117,8 @@
     "options": {
       "A": "find()",
       "B": "where()",
-      "C": "search()"
+      "C": "search()",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. find() - This method is commonly used in some programming languages, like JavaScript, to locate an element in an array. However, it is not universally applicable across all languages.\n  B. where() - This method is often used in SQL and some programming libraries to filter or search for specific values in a dataset, making it a correct choice in certain contexts.\n  C. search() - This is not a standard method for searching arrays in most programming languages. It is more commonly associated with searching strings or text.",
@@ -14038,7 +13950,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Array indexes start with:",
@@ -14163,7 +14075,8 @@
     "options": {
       "A": "172.16.24.255",
       "B": "172.16.24.0",
-      "C": "172.16.24.1"
+      "C": "172.16.24.1",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. 172.16.24.255: This is the last address in the 172.16.24.0/24 subnet, making it the broadcast address. \n  B. 172.16.24.0: This is the network address, which identifies the subnet itself, not used for broadcasting.\n  C. 172.16.24.1: This is the first usable host address in the subnet, not the broadcast address.",
@@ -14395,7 +14308,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: The semicolon at the end of an SQL statement is optional?",
@@ -15089,7 +15002,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: What attributes are used to create rounded corners for the SVG <rect> element?",
@@ -15166,7 +15079,8 @@
     "options": {
       "A": "AWS S3",
       "B": "AWS Redshift",
-      "C": "AWS Snowmobile"
+      "C": "AWS Snowmobile",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. AWS S3: This is a scalable storage service for storing and retrieving any amount of data at any time. It is not specifically designed for transferring petabytes of data.\n  B. AWS Redshift: This is a data warehouse service used for big data analytics, not for transferring large volumes of data to and from the cloud.\n  C. AWS Snowmobile: This is a service designed to physically transport massive amounts of data (up to 100 petabytes) using a secure truck, making it ideal for transferring petabytes of data.",
@@ -15285,7 +15199,8 @@
     "options": {
       "A": "ICMP handshake Request, TCP ACK, NMAP",
       "B": "ICMP Echo Request, ICMP Timestamp Request, TCP SYN, TCP ACK",
-      "C": "ICMP Echo Request, TCP SYN, SW-1TCH, ICMP Timestamp Request"
+      "C": "ICMP Echo Request, TCP SYN, SW-1TCH, ICMP Timestamp Request",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. ICMP handshake Request is not a standard packet type; NMAP is a tool, not a packet type. TCP ACK can be used to check if a port is open, but without a prior SYN, it may not elicit a response.\n  B. ICMP Echo Request is commonly used in ping operations to check if a host is reachable. ICMP Timestamp Request can also be used to determine if a host is alive. TCP SYN is used in the initial step of a TCP handshake to establish a connection, and TCP ACK can confirm an open port.\n  C. SW-1TCH is not a recognized packet type. ICMP Echo Request and TCP SYN are valid, but the inclusion of SW-1TCH makes this option incorrect.",
@@ -15500,7 +15415,8 @@
     "options": {
       "A": "LIKE",
       "B": "FROM",
-      "C": "GET"
+      "C": "GET",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. LIKE: This operator is used in SQL to search for a specified pattern in a column. It is often used with wildcard characters to match complex patterns.\n  B. FROM: This keyword is used in SQL to specify the table from which to select or delete data. It does not relate to pattern matching.\n  C. GET: This is not a standard SQL operator or keyword for pattern searching. It is not used in SQL for querying databases.",
@@ -15619,7 +15535,8 @@
     "options": {
       "A": "## firtstname ##",
       "B": "{{ firstname }}",
-      "C": "'' firstname ''"
+      "C": "'' firstname ''",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. ## firstname ##: This syntax is incorrect for Django templates. It resembles a comment or placeholder syntax but is not used in Django for variable interpolation.\n  B. {{ firstname }}: This is the correct syntax for referencing a variable in a Django template. The double curly braces {{ }} are used to output the value of a variable.\n  C. '' firstname '': This syntax treats \"firstname\" as a string literal rather than a variable. It does not perform variable interpolation.",
@@ -15666,7 +15583,8 @@
     "options": {
       "A": "COLLAPSE",
       "B": "DELETE",
-      "C": "REMOVE"
+      "C": "REMOVE",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. COLLAPSE: This is not a valid SQL command. SQL does not use \"COLLAPSE\" for any operation related to data manipulation or structure.\n  B. DELETE: This is the correct SQL command used to remove rows from a table. It allows for specifying conditions to delete specific records.\n  C. REMOVE: This is not a standard SQL command. SQL does not use \"REMOVE\" for deleting data from tables.",
@@ -15737,7 +15655,8 @@
     "options": {
       "A": "Tables",
       "B": "SQLite",
-      "C": "Models"
+      "C": "Models",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. Tables: In Django, tables are part of the database structure where data is stored, but they are not the objects used to create data. Tables are the result of how models are translated into the database.\n  B. SQLite: This is a type of database that Django can use to store data. It is not an object in Django but rather a database engine.\n  C. Models: In Django, models are the objects that define the structure of data. They are Python classes that map to database tables and are used to create, retrieve, update, and delete data.",
@@ -16120,7 +16039,8 @@
     "options": {
       "A": "10",
       "B": "Compiler Error: var is not defined",
-      "C": "0"
+      "C": "0",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. 10: The 'extern' keyword is used to declare a variable that is defined elsewhere, but here it is incorrectly used with an initializer. Despite this, many compilers allow it, treating 'var' as a global variable initialized to 0, then set to 10 in 'main'.\n  B. Compiler Error: var is not defined: This is incorrect because 'var' is declared globally with 'extern int var = 0;', which is valid in many compilers despite the misuse of 'extern'.\n  C. 0: This is incorrect because 'var' is explicitly set to 10 in the 'main' function before being printed.",
@@ -16311,7 +16231,8 @@
     "options": {
       "A": "Infrastructure threats",
       "B": "Software vulnerabilities",
-      "C": "Dos and DDoS attacks"
+      "C": "Dos and DDoS attacks",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. Infrastructure threats: While AWS offers services to protect infrastructure, AWS Shield specifically focuses on network-based attacks rather than general infrastructure threats.\n  B. Software vulnerabilities: AWS Shield does not address software vulnerabilities, which are typically handled by other security measures like patch management or AWS Inspector.\n  C. Dos and DDoS attacks: AWS Shield is specifically designed to protect against Denial of Service (DoS) and Distributed Denial of Service (DDoS) attacks, which aim to disrupt the availability of services.",
@@ -16406,7 +16327,8 @@
     "options": {
       "A": "DELETE ROW FirstName='Peter' FROM Persons",
       "B": "DELETE FROM Persons WHERE FirstName = 'Peter'",
-      "C": "DELETE FirstName='Peter' FROM Persons"
+      "C": "DELETE FirstName='Peter' FROM Persons",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "Option A: \"DELETE ROW FirstName='Peter' FROM Persons\" is incorrect because SQL does not use \"DELETE ROW\" syntax. The correct command starts with \"DELETE FROM\".\n  Option B: \"DELETE FROM Persons WHERE FirstName = 'Peter'\" is correct. It uses the proper SQL syntax for deleting records from a table where a specified condition is met.\n  Option C: \"DELETE FirstName='Peter' FROM Persons\" is incorrect because it lacks the \"WHERE\" clause, which is necessary to specify the condition for deletion.",
@@ -16549,7 +16471,8 @@
     "options": {
       "A": "<feDropShadow>",
       "B": "Both <feDropShadow> and <feOffset> can be used",
-      "C": "<feOffset>"
+      "C": "<feOffset>",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "Option A, <feDropShadow>, is a specific SVG filter primitive designed to create drop shadows directly and efficiently. Option B suggests that both <feDropShadow> and <feOffset> can be used, which is true because <feOffset> can be combined with other primitives like <feGaussianBlur> to manually create a drop shadow effect. Option C, <feOffset>, alone only shifts the position of an element and does not create a shadow effect by itself.",
@@ -16644,7 +16567,8 @@
     "options": {
       "A": "The shape is the number of elements in each dimension.",
       "B": "The shape is the number of rows.",
-      "C": "The shape is the number of columns."
+      "C": "The shape is the number of columns.",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. Correct. The shape of a NumPy array is defined as the number of elements in each dimension. For example, a 2D array with 3 rows and 4 columns has a shape of (3, 4).\n  B. Incorrect. The number of rows is only part of the shape in a 2D array, not the complete definition of shape.\n  C. Incorrect. Similarly, the number of columns is only part of the shape in a 2D array, not the complete definition of shape.",
@@ -16732,7 +16656,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Django templates are often .html pages.",
@@ -17025,7 +16949,8 @@
     "options": {
       "A": ".jumbotron",
       "B": ".container",
-      "C": ".bigbox"
+      "C": ".bigbox",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. .jumbotron: This class is used in Bootstrap to create a large, attention-grabbing section, often with a large font and background, making it ideal for highlighting key content.\n  B. .container: This class is used to create a responsive, fixed-width container for layout purposes, not specifically for drawing extra attention.\n  C. .bigbox: This is not a standard class in popular CSS frameworks like Bootstrap, and it does not have a predefined purpose for creating attention-grabbing sections.",
@@ -17913,7 +17838,8 @@
     "options": {
       "A": "BETWEEN",
       "B": "WITHIN",
-      "C": "RANGE"
+      "C": "RANGE",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. BETWEEN: This is the correct SQL operator used to filter results by specifying a range of values, inclusive of the boundary values.\n  B. WITHIN: This is not an SQL operator. It is not used for range selection in SQL queries.\n  C. RANGE: This is not a recognized SQL operator for selecting values within a range.",
@@ -18097,7 +18023,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Output of following Java Program?\r\r\n\n\nclass Base {\n    public void show() {\n       System.out.println(\\\"Base::show() called\\\");\n    }\n}\n \nclass Derived extends Base {\n    public void show() {\n       System.out.println(\\\"Derived::show() called\\\");\n    }\n}\n \npublic class Main {\n    public static void main(String[] args) {\n        Base b = new Derived();;\n        b.show();\n    }\n}\n\n``````Java",
@@ -18198,7 +18124,8 @@
     "options": {
       "A": "An XML document",
       "B": "An XML element",
-      "C": "An XML attribute"
+      "C": "An XML attribute",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. An XML document: This is the correct choice because an XML instance typically refers to an XML document, which is a complete and well-formed XML file.\n  B. An XML element: This is incorrect because an XML element is a component or part of an XML document, not the entire instance itself.\n  C. An XML attribute: This is incorrect because an XML attribute is a property or characteristic of an XML element, not an instance of XML.",
@@ -18293,7 +18220,8 @@
     "options": {
       "A": "<mp3>",
       "B": "<sound>",
-      "C": "<audio>"
+      "C": "<audio>",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. <mp3>: This is not a valid HTML element. \"mp3\" is a file format for audio, not an HTML tag.\n  B. <sound>: This is not a standard HTML element. It might seem intuitive, but it is incorrect.\n  C. <audio>: This is the correct HTML element designed specifically for embedding audio content in web pages.",
@@ -18388,7 +18316,8 @@
     "options": {
       "A": "EXTRACT FirstName FROM Persons",
       "B": "SELECT FirstName FROM Persons",
-      "C": "SELECT Persons.FirstName"
+      "C": "SELECT Persons.FirstName",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. \"EXTRACT FirstName FROM Persons\" is incorrect because \"EXTRACT\" is not a valid SQL keyword for selecting data from a table. It is used for extracting parts of a date or time.\n  B. \"SELECT FirstName FROM Persons\" is correct because \"SELECT\" is the standard SQL keyword used to retrieve data from a database, and this syntax correctly specifies the column and table.\n  C. \"SELECT Persons.FirstName\" is incorrect because it lacks the \"FROM\" clause, which is necessary to specify the table from which to select the data.",
@@ -19875,7 +19804,8 @@
     "options": {
       "A": "controls",
       "B": "views",
-      "C": "models"
+      "C": "models",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. controls: This term is not used in Django to refer to functions that handle requests. It might be confused with \"controllers\" in other MVC frameworks, but Django uses a different terminology.\n  B. views: In Django, views are the functions or classes that receive HTTP requests and return HTTP responses. They are central to processing requests and generating responses.\n  C. models: Models in Django are used to define the structure of the database and interact with it. They do not handle HTTP requests directly.",
@@ -20210,7 +20140,8 @@
     "options": {
       "A": "dijkstra()",
       "B": "ford()",
-      "C": "bellmann()"
+      "C": "bellmann()",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. dijkstra(): This is a well-known algorithm for finding the shortest paths between nodes in a graph, particularly when the graph has non-negative weights. It is commonly implemented in graph-related libraries, including csgraph.\n  B. ford(): This option seems to refer to the Bellman-Ford algorithm, which is used for graphs with negative weights. However, \"ford()\" is not a recognized method in the csgraph module.\n  C. bellmann(): This option likely refers to the Bellman-Ford algorithm as well, but \"bellmann()\" is not a valid method in the csgraph module.",
@@ -20257,7 +20188,8 @@
     "options": {
       "A": "get(firstname='Emil')",
       "B": "filter(firstname='Emil')",
-      "C": "where(firstname LIKE 'Emil')"
+      "C": "where(firstname LIKE 'Emil')",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. `get(firstname='Emil')` is used to retrieve a single object that matches the given criteria. It raises an error if no match or multiple matches are found, making it unsuitable for general querying.\n  B. `filter(firstname='Emil')` is the correct syntax for retrieving all objects that match the specified condition. It returns a QuerySet containing all matching records.\n  C. `where(firstname LIKE 'Emil')` is not valid Django ORM syntax. Django uses Pythonic methods like `filter()` instead of SQL-like syntax.",
@@ -20280,7 +20212,8 @@
     "options": {
       "A": "x and y attributes",
       "B": "cx and cy attributes",
-      "C": "rx and ry attributes"
+      "C": "rx and ry attributes",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "Option A: The x and y attributes are not used with the <ellipse> element; they are typically associated with the <rect> element to define its position.\n  Option B: The cx and cy attributes define the center coordinates of the ellipse, but they alone are insufficient to define an ellipse without specifying its radii.\n  Option C: The rx and ry attributes specify the radii of the ellipse along the x-axis and y-axis, respectively, which are essential for defining the shape of an ellipse.",
@@ -20351,7 +20284,8 @@
     "options": {
       "A": "a) matrix[1, 2]",
       "B": "b) matrix[2][1]",
-      "C": "c) matrix[3][2]"
+      "C": "c) matrix[3][2]",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. The syntax matrix[1, 2] is incorrect for accessing elements in a 2D array. This syntax is not valid in JavaScript for accessing nested arrays.\n  B. The syntax matrix[1][2] correctly accesses the element in the second row and third column. In JavaScript, matrix[1] accesses the second row (index 1), and [2] accesses the third element within that row (index 2).\n  C. The syntax matrix[3][2] attempts to access the fourth row (index 3), which does not exist in the given matrix, leading to an undefined result.",
@@ -20470,7 +20404,8 @@
     "options": {
       "A": "Java",
       "B": "C",
-      "C": "Python"
+      "C": "Python",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. Java: Java is a widely-used programming language, but it is not the language in which Django is written. Java is more commonly associated with frameworks like Spring.\n  B. C: C is a foundational programming language known for system-level programming, but it is not used for Django, which is a web framework.\n  C. Python: Python is a high-level, versatile programming language known for its readability and efficiency. Django is specifically designed to leverage Python's features and syntax.",
@@ -20805,7 +20740,8 @@
     "options": {
       "A": "Blocking specific ports that SQL injections are usually attacked via",
       "B": "Programmers will not make web applications that allow user input",
-      "C": "Sanitizing users input in a web application"
+      "C": "Sanitizing users input in a web application",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. Blocking specific ports is not effective because SQL injection exploits vulnerabilities in the application code, not network ports. SQL queries are typically executed over standard database ports, which cannot be blocked without disrupting legitimate traffic.\n  B. Expecting programmers to avoid creating applications that allow user input is impractical and unrealistic. User input is essential for most web applications, and the focus should be on handling it securely.\n  C. Sanitizing user input involves validating and cleaning input data to prevent malicious SQL code from being executed. This is a widely recognized and effective method to prevent SQL injection attacks.",
@@ -20876,7 +20812,8 @@
     "options": {
       "A": "imputation",
       "B": "amputation",
-      "C": "adoptation"
+      "C": "adoptation",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. imputation: This is the correct term for the process of replacing missing data with substituted values, often using interpolation or other statistical methods.\n  B. amputation: This term refers to the removal of a part, typically in a medical context, and is unrelated to data processing.\n  C. adoptation: This is not a recognized term in data processing or any relevant context, and seems to be a misspelling or confusion with \"adoption.\"",
@@ -21835,7 +21772,8 @@
     "options": {
       "A": "A convex hull is the smallest square that covers four given points.",
       "B": "A convex hull is the smallest triangle that covers all of the given points.",
-      "C": "A convex hull is the smallest polygon that covers all of the given points."
+      "C": "A convex hull is the smallest polygon that covers all of the given points.",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. This option incorrectly describes a convex hull as a square. A convex hull is not limited to a specific shape like a square; it adapts to the distribution of points.\n  B. This option incorrectly describes a convex hull as a triangle. While a triangle can be a convex hull if only three points are involved, a convex hull generally forms a polygon that may have more than three sides.\n  C. This option correctly identifies a convex hull as the smallest polygon that can cover all given points. The polygon is convex, meaning any line segment between two points in the polygon lies entirely within or on the boundary of the polygon.",
@@ -22170,7 +22108,8 @@
     "options": {
       "A": "if x > y then:",
       "B": "if (x > y)",
-      "C": "if x > y:"
+      "C": "if x > y:",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. This option uses \"then:\" which is not part of C# syntax. C# does not use \"then\" in if statements.\n  B. This option correctly uses parentheses to enclose the condition (x > y), which is the required syntax in C# for if statements.\n  C. This option uses a colon, which is not used in C# if statements. Colons are not part of the C# if statement syntax.",
@@ -22889,7 +22828,8 @@
     "options": {
       "A": "create myFunction():",
       "B": "def myFunction():",
-      "C": "function myfunction():"
+      "C": "function myfunction():",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. \"create myFunction():\" is incorrect because \"create\" is not a valid keyword in Python for defining functions.\n  B. \"def myFunction():\" is correct because \"def\" is the proper keyword used in Python to define a function, followed by the function name and parentheses.\n  C. \"function myfunction():\" is incorrect because \"function\" is not a recognized keyword in Python for defining functions.",
@@ -23416,7 +23356,8 @@
     "options": {
       "A": "checkbox control",
       "B": "custom-control custom-checkbox",
-      "C": "custom-check custom-checkbox"
+      "C": "custom-check custom-checkbox",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. \"checkbox control\" is not a standard combination of classes used for styling checkboxes in modern web frameworks like Bootstrap.\n  B. \"custom-control custom-checkbox\" is a known combination of classes used in frameworks like Bootstrap to style checkboxes with custom designs.\n  C. \"custom-check custom-checkbox\" is not a recognized combination of classes in popular CSS frameworks for creating custom checkboxes.",
@@ -23919,7 +23860,8 @@
     "options": {
       "A": "172.17.1.30",
       "B": "172.16.1.30",
-      "C": "9.0.0.1"
+      "C": "9.0.0.1",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. 172.17.1.30 - This address falls within the range 172.16.0.0 to 172.31.255.255, which is a private IP range according to RFC 1918.\n  B. 172.16.1.30 - This address is within the 172.16.0.0 to 172.31.255.255 range, making it a private IP address as per RFC 1918.\n  C. 9.0.0.1 - This address does not fall within any of the RFC 1918 private IP ranges (10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16) and is a public IP address.",
@@ -24398,7 +24340,8 @@
     "options": {
       "A": "df.get(0)",
       "B": "df[0]",
-      "C": "df.loc[0]"
+      "C": "df.loc[0]",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. df.get(0): The `get` method is not used for accessing rows in a DataFrame. It is typically used with dictionaries to retrieve values by key, not applicable for DataFrame row access.\n  B. df[0]: This syntax attempts to use integer-based indexing directly, which is not valid for accessing rows in a DataFrame. It is more commonly used for accessing columns by label.\n  C. df.loc[0]: The `loc` indexer is used for label-based indexing in Pandas. Using `df.loc[0]` correctly accesses the first row, assuming the DataFrame is indexed starting from 0.",
@@ -24823,7 +24766,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: A library relational database system uses the following schemaUSERS (User#, UserName, HomeTown)\nBOOKS (Book#, BookTitle, AuthorName)\nISSUED (Book#, User#, Date)\nExplain in one English sentence, what each of the following relational algebra queries is designed to determine",
@@ -24965,7 +24908,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: What SVG attribute is used to define the color of the line drawn outside of an element?",
@@ -25978,7 +25921,8 @@
     "options": {
       "A": "settings.py",
       "B": "manage.py",
-      "C": "urls.py"
+      "C": "urls.py",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. settings.py: This file is used for configuring the Django project, including database settings, middleware, and installed apps. It does not handle HTTP requests directly.\n  B. manage.py: This is a command-line utility that lets you interact with your Django project in various ways, such as running the development server or applying migrations. It does not handle HTTP requests.\n  C. urls.py: This file is responsible for routing incoming HTTP requests to the appropriate views based on the URL patterns defined in it. It plays a crucial role in handling requests by determining which view should process a given request.",
@@ -26241,7 +26185,8 @@
     "options": {
       "A": "!=",
       "B": "<>",
-      "C": "Both options are valid"
+      "C": "Both options are valid",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "Option A, \"!=\" is a common representation of the \"NOT EQUAL TO\" operator in many programming languages such as C, C++, Java, and JavaScript.\n  Option B, \"<>\", is also used to represent \"NOT EQUAL TO\" in languages like SQL and Pascal.\n  Option C suggests that both options are valid, which is true because different programming languages use different symbols for the same operator.",
@@ -26552,7 +26497,8 @@
     "options": {
       "A": "print(myArr,1)",
       "B": "print(myArr[0])",
-      "C": "print(myArr[1])"
+      "C": "print(myArr[1])",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. print(myArr,1) - This syntax is incorrect because it attempts to print the entire array and the number 1, not the first element.\n  B. print(myArr[0]) - This is the correct syntax. In zero-indexed arrays, myArr[0] accesses the first element.\n  C. print(myArr[1]) - This accesses the second element of the array, not the first, due to zero-based indexing.",
@@ -26575,7 +26521,8 @@
     "options": {
       "A": "It is a serverless application deployment module for AWS CloudFormation",
       "B": "It is a service that handles massive amounts of data",
-      "C": "It is a service that helps you watch your serverless apps"
+      "C": "It is a service that helps you watch your serverless apps",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option correctly identifies AWS SAM as a serverless application deployment module for AWS CloudFormation, which is used to simplify the deployment and management of serverless applications.\n  B. This option incorrectly describes AWS SAM as a service for handling massive amounts of data, which is not its purpose. AWS SAM focuses on serverless application deployment, not data handling.\n  C. This option incorrectly suggests that AWS SAM is a monitoring service for serverless apps. While AWS SAM can be used to deploy serverless applications, it does not specifically provide monitoring capabilities.",
@@ -26718,7 +26665,8 @@
     "options": {
       "A": "GET cars.model;",
       "B": "SELECT model FROM cars;",
-      "C": "EXTRACT FROM cars [model];"
+      "C": "EXTRACT FROM cars [model];",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "Option A: \"GET cars.model;\" is incorrect because SQL does not use the keyword 'GET' for retrieving data. The correct keyword is 'SELECT'.\n  Option B: \"SELECT model FROM cars;\" is correct. It uses the standard SQL syntax where 'SELECT' specifies the columns to retrieve, and 'FROM' specifies the table.\n  Option C: \"EXTRACT FROM cars [model];\" is incorrect because 'EXTRACT' is not a standard SQL keyword for selecting data from a table. The correct keyword is 'SELECT'.",
@@ -26813,7 +26761,8 @@
     "options": {
       "A": "The & sign",
       "B": "The * sign",
-      "C": "The + sign"
+      "C": "The + sign",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. The & sign is used as a bitwise AND operator in many programming languages, not for addition.\n  B. The * sign is used as a multiplication operator, not for addition.\n  C. The + sign is the standard operator used for adding two values together in most programming languages.",
@@ -27533,7 +27482,8 @@
     "options": {
       "A": "# This is a comment",
       "B": "// This is a comment",
-      "C": "/* This is a comment"
+      "C": "/* This is a comment",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. # This is a comment: This syntax is used for comments in Python, not C#. It is incorrect for C#.\n  B. // This is a comment: This is the correct syntax for single-line comments in C#. It tells the compiler to ignore everything on the line after the //.\n  C. /* This is a comment: This syntax is incorrect as it is incomplete. In C#, block comments require both opening (/*) and closing (*/) symbols.",
@@ -27693,7 +27643,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Only one of the following statements is true when it comes to Copies in NumPy, which one?",
@@ -28034,7 +27984,8 @@
     "options": {
       "A": "INSERT ('Olsen') INTO Persons (LastName)",
       "B": "INSERT INTO Persons (LastName) VALUES ('Olsen')",
-      "C": "INSERT INTO Persons ('Olsen') INTO LastName"
+      "C": "INSERT INTO Persons ('Olsen') INTO LastName",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. This option incorrectly places the value 'Olsen' before the INTO keyword, which is not the correct syntax for an INSERT statement.\n  B. This option correctly uses the INSERT INTO syntax, specifying the table name, column name, and the VALUES keyword followed by the value in parentheses.\n  C. This option incorrectly uses two INTO keywords and places the value 'Olsen' in the wrong position, which is not valid SQL syntax.",
@@ -28153,7 +28104,8 @@
     "options": {
       "A": "dropna(original = True)",
       "B": "dropna(inplace = True)",
-      "C": "dropna(keep = True)"
+      "C": "dropna(keep = True)",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. dropna(original = True): There is no 'original' parameter in the dropna() method. This option is incorrect because it doesn't exist in the Pandas library.\n  B. dropna(inplace = True): The 'inplace' parameter, when set to True, modifies the original DataFrame directly. This is a common parameter in Pandas for methods that can alter data structures.\n  C. dropna(keep = True): The 'keep' parameter is not relevant to the dropna() method. It is used in methods like drop_duplicates() to specify which duplicates to keep.",
@@ -28416,7 +28368,8 @@
     "options": {
       "A": "line attribute",
       "B": "circle attribute",
-      "C": "points attribute"
+      "C": "points attribute",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. The \"line\" attribute is not associated with the <polygon> element. It is not a valid attribute for defining the shape or structure of a polygon in SVG.\n  B. The \"circle\" attribute is not relevant to the <polygon> element. It is used with the <circle> element to define circles, not polygons.\n  C. The \"points\" attribute is essential for the <polygon> element. It defines the vertices of the polygon by specifying a list of coordinate pairs, which determine the shape of the polygon.",
@@ -28991,7 +28944,8 @@
     "options": {
       "A": "A network where only some resources/devices are trusted",
       "B": "A network where all systems/resources need explicit access to be able to communicate",
-      "C": "A network where we do not trust public network(internet), but we trust local network"
+      "C": "A network where we do not trust public network(internet), but we trust local network",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. This option suggests partial trust within the network, which contradicts the Zero-Trust principle of not trusting any resource by default.\n  B. This option correctly describes Zero-Trust architecture, where no device or user is trusted by default, and explicit access is required for communication.\n  C. This option implies trust in the local network, which is contrary to the Zero-Trust model that treats all network segments as untrusted.",
@@ -29207,7 +29161,8 @@
     "options": {
       "A": "matlab.get()",
       "B": "loadmat()",
-      "C": "matlab()"
+      "C": "matlab()",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. matlab.get() - This option suggests a method that might be used for accessing Matlab data, but it is not a standard function for importing .mat files.\n  B. loadmat() - This is the correct method used in libraries like SciPy in Python to load data from Matlab .mat files. It reads the data and imports it into the Python environment.\n  C. matlab() - This option appears to be a generic reference to Matlab but is not a method for importing .mat files.",
@@ -29494,7 +29449,8 @@
     "options": {
       "A": "random.rand(100)",
       "B": "random.randint(100)",
-      "C": "random.rand()"
+      "C": "random.rand()",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "Option A, random.rand(100), generates an array of 100 random floats between 0 and 1, not a single integer between 0 and 100.\n  Option B, random.randint(100), correctly generates a random integer from 0 up to, but not including, 100.\n  Option C, random.rand(), generates a single random float between 0 and 1, not an integer between 0 and 100.",
@@ -29949,7 +29905,8 @@
     "options": {
       "A": "<?xml version=\"1.0\" />",
       "B": "<?xml version=\"1.0\"?>",
-      "C": "<xml version=\"1.0\" />"
+      "C": "<xml version=\"1.0\" />",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. The syntax in option A incorrectly uses a self-closing tag (\"/>\"), which is not appropriate for the XML declaration.\n  B. Option B correctly uses the XML declaration syntax with \"<?xml version=\"1.0\"?>\" which is the standard format for specifying the XML version.\n  C. Option C incorrectly uses angle brackets (\"<xml>\") which are used for XML elements, not for declarations.",
@@ -30020,7 +29977,8 @@
     "options": {
       "A": "<style src=\"mystyle.css\">",
       "B": "<stylesheet>mystyle.css</stylesheet>",
-      "C": "<link rel=\"stylesheet\" type=\"text/css\" href=\"mystyle.css\">"
+      "C": "<link rel=\"stylesheet\" type=\"text/css\" href=\"mystyle.css\">",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "Option A uses the <style> tag with a 'src' attribute, which is incorrect because the <style> tag is used for internal styles, not linking external files. Option B uses a non-existent <stylesheet> tag, which is not valid HTML and cannot be used to link style sheets. Option C uses the <link> tag with 'rel', 'type', and 'href' attributes, which is the correct syntax for linking an external style sheet.",
@@ -30397,7 +30355,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Pick the best statement for the below:\r\n\n\nint arr[50] = {0,1,2,[47]=47,48,49};\n\n``````C",
@@ -30690,7 +30648,8 @@
     "options": {
       "A": "Reliability",
       "B": "Operational excellence",
-      "C": "Performance efficiency"
+      "C": "Performance efficiency",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. Reliability: This pillar is focused on ensuring a system can recover from failures and continue to function. It includes strategies for fault tolerance, recovery planning, and maintaining service availability.\n  B. Operational excellence: This pillar emphasizes the ability to run and monitor systems to deliver business value and continuously improve processes and procedures, but it does not specifically focus on recovery from disruptions.\n  C. Performance efficiency: This pillar is about using IT and computing resources efficiently to meet system requirements, focusing on optimizing performance rather than recovery from disruptions.",
@@ -31217,7 +31176,8 @@
     "options": {
       "A": "settings.py",
       "B": "templates.py",
-      "C": "manage.py"
+      "C": "manage.py",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. settings.py: This file is part of the Django project configuration, containing settings for the project such as database configurations and installed apps.\n  B. templates.py: This file is not a standard part of a Django project. Django uses a 'templates' directory for HTML templates, not a .py file.\n  C. manage.py: This file is included in every Django project. It is a command-line utility that lets you interact with the Django project in various ways.",
@@ -31696,7 +31656,8 @@
     "options": {
       "A": "20",
       "B": "40",
-      "C": "Compiler Error"
+      "C": "Compiler Error",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. 20: This option assumes the instance variable retains its initial value set during declaration, ignoring the constructor's effect.\n  B. 40: This option recognizes that the constructor modifies the instance variable 't' to 40, which is the value printed.\n  C. Compiler Error: This option suggests a syntax or semantic error in the code, which is incorrect as the code is valid and compiles successfully.",
@@ -31959,7 +31920,8 @@
     "options": {
       "A": "INSERT INTO Persons VALUES ('Jimmy', 'Jackson')",
       "B": "INSERT ('Jimmy', 'Jackson') INTO Persons",
-      "C": "INSERT VALUES ('Jimmy', 'Jackson') INTO Persons"
+      "C": "INSERT VALUES ('Jimmy', 'Jackson') INTO Persons",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "Option A: \"INSERT INTO Persons VALUES ('Jimmy', 'Jackson')\" is correct because it follows the standard SQL syntax for inserting data into a table. It specifies the table name and uses the VALUES keyword to provide the data to be inserted.\n  \n  Option B: \"INSERT ('Jimmy', 'Jackson') INTO Persons\" is incorrect because it does not follow the correct SQL syntax. The INTO keyword must immediately follow INSERT, and VALUES is required before specifying the data.\n  \n  Option C: \"INSERT VALUES ('Jimmy', 'Jackson') INTO Persons\" is incorrect because it misplaces the VALUES keyword. The correct syntax requires the INTO keyword to specify the table before using VALUES.",
@@ -32174,7 +32136,8 @@
     "options": {
       "A": "Compiler Error in \"cout << c;\"",
       "B": "Garbage Value",
-      "C": "Compiler Error in \"class Derived: public Base1, public Base2\""
+      "C": "Compiler Error in \"class Derived: public Base1, public Base2\"",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. Compiler Error in \"cout << c;\": The variable 'c' is ambiguous because both Base1 and Base2 have a member named 'c'. The compiler cannot determine which 'c' to use, resulting in an error.\n  B. Garbage Value: This option is incorrect because the code will not compile due to the ambiguity error, so no value (garbage or otherwise) will be printed.\n  C. Compiler Error in \"class Derived: public Base1, public Base2\": This option is incorrect because the syntax for multiple inheritance is correct. The error is not in the inheritance declaration but in the ambiguous access of 'c'.",
@@ -32365,7 +32328,8 @@
     "options": {
       "A": "Duval()",
       "B": "Dmitri()",
-      "C": "Delaunay()"
+      "C": "Delaunay()",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. Duval() - This is not related to triangulation. It does not pertain to any known method in computational geometry.\n  B. Dmitri() - This is not a recognized method in the context of triangulation or computational geometry.\n  C. Delaunay() - This is a well-known method in computational geometry used for creating a triangulation of a set of points.",
@@ -32525,7 +32489,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Which of the following XML fragments is well-formed?",
@@ -32602,7 +32566,8 @@
     "options": {
       "A": "indent",
       "B": "padding-left",
-      "C": "margin-left"
+      "C": "margin-left",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. indent: This is not a valid CSS property. The closest related property is 'text-indent', which affects the indentation of text, not margins.\n  B. padding-left: This property adjusts the padding on the left side of an element, which is the space inside the element's border, not the margin.\n  C. margin-left: This property is used to set the margin on the left side of an element, which is the space outside the element's border.",
@@ -33242,7 +33207,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: These two SQL statements will return the same result:SELECT model AS car FROM cars;SELECT model car FROM cars;```\nSELECT model AS car FROM cars;\n``````\nSELECT model car FROM cars;\n```",
@@ -34303,7 +34268,8 @@
     "options": {
       "A": "Compiler Error: var is not defined",
       "B": "20",
-      "C": "0"
+      "C": "0",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. Compiler Error: var is not defined - This option is correct because 'extern int var;' declares 'var' but does not define it. Without a definition, the compiler cannot allocate memory for 'var', leading to an error.\n  B. 20 - This option is incorrect because the code does not define 'var' or assign it a value of 20. The assignment 'var = 10;' would fail due to the lack of definition.\n  C. 0 - This option is incorrect because 'var' is not initialized to 0 or any value. The code would not compile due to the missing definition of 'var'.",
@@ -34758,7 +34724,8 @@
     "options": {
       "A": "rx, ry, cx and cy",
       "B": "x1, x2, y1 and y2",
-      "C": "cx, cy, fx and fy"
+      "C": "cx, cy, fx and fy",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "Option A: The attributes rx and ry are not used with <radialGradient>. They are typically associated with defining the radii of an ellipse.\n  Option B: The attributes x1, x2, y1, and y2 are used with the <linearGradient> element to define the start and end points of a linear gradient, not a radial gradient.\n  Option C: The attributes cx, cy, fx, and fy are used with <radialGradient>. cx and cy define the center of the gradient, while fx and fy define the focal point, which can be different from the center.",
@@ -34805,7 +34772,8 @@
     "options": {
       "A": "SELECT LastName>'Hansen' AND LastName<'Pettersen' FROM Persons",
       "B": "SELECT * FROM Persons WHERE LastName>'Hansen' AND LastName<'Pettersen'",
-      "C": "SELECT * FROM Persons WHERE LastName BETWEEN 'Hansen' AND 'Pettersen'"
+      "C": "SELECT * FROM Persons WHERE LastName BETWEEN 'Hansen' AND 'Pettersen'",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. This option incorrectly uses the comparison operators '>' and '<' without a WHERE clause, which is syntactically incorrect in SQL.\n  B. This option uses the correct WHERE clause but incorrectly uses '>' and '<', which would exclude \"Hansen\" and \"Pettersen\" themselves from the results.\n  C. This option correctly uses the BETWEEN operator, which includes both boundary values \"Hansen\" and \"Pettersen\", fulfilling the requirement of the question.",
@@ -35517,7 +35485,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Is this a \"well formed\" XML document?<?xml version=\"1.0\"?><note><to age=29>Tove</to><from>Jani</from></note>",
@@ -35714,7 +35682,8 @@
     "options": {
       "A": "Find the average color of the image, to measure against.",
       "B": "Find the lightest part of the picture that might lie next to",
-      "C": "Not possible. Text on images is not accessible."
+      "C": "Not possible. Text on images is not accessible.",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. Finding the average color of the image does not accurately represent the contrast experienced by the viewer, as it may not reflect the areas directly adjacent to the text.\n  B. Measuring against the lightest part of the image that might be next to the text ensures that the contrast is sufficient where it matters most for readability.\n  C. The statement that text on images is not accessible is incorrect. While challenging, text on images can be made accessible by ensuring sufficient contrast.",
@@ -36265,7 +36234,8 @@
     "options": {
       "A": "Python tuples",
       "B": "Python functions",
-      "C": "Python dictionaries"
+      "C": "Python dictionaries",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. Python tuples: Tuples are immutable sequences in Python, used to store collections of items. They are not used for defining Views in Django.\n  B. Python functions: Functions in Python are blocks of reusable code that perform a specific task. In Django, Views are typically written as functions (or class-based views) to process requests and return responses.\n  C. Python dictionaries: Dictionaries are collections of key-value pairs in Python. They are not used to define Views in Django, although they may be used within Views to manage data.",
@@ -36864,7 +36834,8 @@
     "options": {
       "A": "global maxima",
       "B": "maximo dutti",
-      "C": "maxima"
+      "C": "maxima",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. global maxima - This term correctly refers to the highest point on the entire curve, considering the full domain of the function. It is the point where the function reaches its maximum value globally.\n  B. maximo dutti - This is not a mathematical term; it is actually a brand name and irrelevant to the context of curves and maxima.\n  C. maxima - This term refers to points where a function reaches a local maximum, which could be the highest point in a small region but not necessarily the entire curve.",
@@ -36935,7 +36906,8 @@
     "options": {
       "A": "CloudWatch is a monitoring service that monitors your resources, and configures automatic alarms.",
       "B": "CloudWatch monitors your account and recommends you cost optimization and performance improvement actions.",
-      "C": "CloudWatch is a service tha logs your AWS environment Actions. It is used to create events that describe how your application is being used."
+      "C": "CloudWatch is a service tha logs your AWS environment Actions. It is used to create events that describe how your application is being used.",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option correctly identifies CloudWatch as a monitoring service that not only observes resources but also allows configuration of automatic alarms, which is a core feature.\n  B. This option incorrectly describes CloudWatch as a service for cost optimization and performance recommendations, which is more aligned with AWS Trusted Advisor.\n  C. This option inaccurately describes CloudWatch as primarily a logging service for AWS environment actions, which is more characteristic of AWS CloudTrail.",
@@ -37126,7 +37098,8 @@
     "options": {
       "A": "cityblock()",
       "B": "blocks()",
-      "C": "block_distance()"
+      "C": "block_distance()",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. cityblock(): This is the correct method name for calculating the Manhattan Distance, which measures the distance between two points in a grid-based path, summing the absolute differences of their coordinates.\n  B. blocks(): This option is incorrect as there is no standard method named 'blocks()' associated with calculating Manhattan Distance in common spatial data libraries.\n  C. block_distance(): This option is incorrect because it is not a recognized method name for Manhattan Distance in standard spatial data modules.",
@@ -37437,7 +37410,8 @@
     "options": {
       "A": "to_matlab()",
       "B": "save_to_mat()",
-      "C": "savemat()"
+      "C": "savemat()",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "Option A, to_matlab(), is not a recognized function in Python's libraries for exporting data to Matlab format. \n  Option B, save_to_mat(), is also not a standard function for this purpose. \n  Option C, savemat(), is a function from the scipy.io module in Python, specifically designed to save data in Matlab's .mat file format.",
@@ -37700,7 +37674,8 @@
     "options": {
       "A": "No, it looks like a button, so it should be coded as a <button>.",
       "B": "No, the class name basebutton indicates that this sould be a <button>",
-      "C": "Yes, all good!"
+      "C": "Yes, all good!",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. The code uses an <a> tag with a URL, which is appropriate for navigation. Accessibility is not compromised by using an <a> tag instead of a <button> when the purpose is to link to another page.\n  B. The class name \"basebutton\" is a styling choice and does not affect accessibility. The tag choice should be based on functionality, not class names.\n  C. The <a> tag is correctly used for navigation, and the text \"Sign up to ride\" is descriptive, making the link accessible.",
@@ -37723,7 +37698,8 @@
     "options": {
       "A": "Lower Data",
       "B": "Full Array",
-      "C": "Dense Array"
+      "C": "Dense Array",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. Lower Data: This term is not commonly used in the context of arrays or data structures and does not relate to the concept of sparsity or density.\n  B. Full Array: While this might imply an array that is completely filled, it is not the standard term used to describe the opposite of sparse data.\n  C. Dense Array: This is the correct term for an array where most of the elements are non-zero or filled, making it the opposite of a sparse array.",
@@ -37890,7 +37866,8 @@
     "options": {
       "A": "Returns the headers and the specified number of rows, starting from the top",
       "B": "Returns the specified number of rows, starting from the top",
-      "C": "Returns the headers"
+      "C": "Returns the headers",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "Option A states that the `head()` method returns the headers and a specified number of rows from the top. This is accurate because `head()` by default shows the first 5 rows, including the column headers.\n  Option B suggests that `head()` returns only the specified number of rows from the top. This is partially correct but omits the fact that the headers are also included in the output.\n  Option C claims that `head()` returns only the headers. This is incorrect as `head()` returns both headers and data rows.",
@@ -37961,7 +37938,8 @@
     "options": {
       "A": "cy attribute",
       "B": "r attribute",
-      "C": "cx attribute"
+      "C": "cx attribute",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. The 'cy' attribute specifies the y-coordinate of the circle's center. While important for positioning, it is not required to define the circle itself.\n  B. The 'r' attribute defines the radius of the circle. Without a radius, the circle cannot be rendered, making this attribute essential.\n  C. The 'cx' attribute specifies the x-coordinate of the circle's center. Like 'cy', it is important for positioning but not mandatory for the circle's existence.",
@@ -38056,7 +38034,8 @@
     "options": {
       "A": "np.createArray([1, 2, 3, 4, 5])",
       "B": "np.array([1, 2, 3, 4, 5])",
-      "C": "np.object([1, 2, 3, 4, 5])"
+      "C": "np.object([1, 2, 3, 4, 5])",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "Option A uses a non-existent method `np.createArray`, which is not part of the NumPy library. \n  Option B uses `np.array`, the correct function provided by NumPy to create arrays from lists or other array-like structures.\n  Option C uses `np.object`, which is not a valid method for creating arrays in NumPy and is unrelated to array creation.",
@@ -39088,7 +39067,8 @@
     "options": {
       "A": "Amazon Simple Queue Service",
       "B": "Amazon Standard Quote Service",
-      "C": "Amazon Simple Query Service"
+      "C": "Amazon Simple Query Service",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. Amazon Simple Queue Service: This is the correct expansion of SQS. It is a managed message queuing service that enables decoupling and scaling of microservices, distributed systems, and serverless applications.\n  B. Amazon Standard Quote Service: This option is incorrect as there is no AWS service by this name, and it does not relate to the functionality of SQS.\n  C. Amazon Simple Query Service: This is incorrect because it confuses SQS with a querying service, which is not its purpose. SQS is about message queuing, not querying.",
@@ -39135,7 +39115,8 @@
     "options": {
       "A": "Structured Question Language",
       "B": "Strong Question Language",
-      "C": "Structured Query Language"
+      "C": "Structured Query Language",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. \"Structured Question Language\" is incorrect because SQL is not about forming questions but about querying databases.\n  B. \"Strong Question Language\" is incorrect as it misrepresents SQL's purpose and structure, which is not about strength or questions.\n  C. \"Structured Query Language\" is correct because SQL is specifically designed to query and manage structured data in databases.",
@@ -39158,7 +39139,8 @@
     "options": {
       "A": "shape(arr)",
       "B": "arr.shape",
-      "C": "arr.shape()"
+      "C": "arr.shape()",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. `shape(arr)` is incorrect because `shape` is not a standalone function. The shape is an attribute of the array object.\n  B. `arr.shape` is correct because `shape` is an attribute of the array object that returns a tuple representing the dimensions of the array.\n  C. `arr.shape()` is incorrect because `shape` is an attribute, not a method, so it should not be called with parentheses.",
@@ -39294,7 +39276,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: A cookie can not be used to control a users session/state",
@@ -39803,7 +39785,8 @@
     "options": {
       "A": "print(arr(0: step = 2))",
       "B": "print(arr[1:3:5:7])",
-      "C": "print(arr[::2])"
+      "C": "print(arr[::2])",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. Incorrect because the syntax uses parentheses instead of square brackets and incorrectly places the step keyword inside the slicing notation.\n  B. Incorrect because the slicing syntax is malformed with too many colons, which does not conform to the standard slicing format.\n  C. Correct because it uses the correct slicing syntax with double colons (::) to specify a step of 2, effectively selecting every other element.",
@@ -40762,7 +40745,8 @@
     "options": {
       "A": "AWS CloudTrail",
       "B": "AWS CloudWatch",
-      "C": "AWS TrustedAdvisor"
+      "C": "AWS TrustedAdvisor",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. AWS CloudTrail: This service is specifically designed to log and monitor account activity related to actions across your AWS infrastructure. It provides a complete history of user activity, making it ideal for auditing.\n  B. AWS CloudWatch: This service is primarily used for monitoring and managing operational health and performance metrics of AWS resources, not for tracking user activity history.\n  C. AWS TrustedAdvisor: This service offers recommendations to optimize AWS resources, improve security, and reduce costs, but it does not provide a history of user activity.",
@@ -41522,7 +41506,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Can all accounts of an AWS Organization be billed with a single bill?",
@@ -41983,7 +41967,8 @@
     "options": {
       "A": "Outside GeeksQuiz",
       "B": "GeeksQuiz",
-      "C": "Nothing gets printed"
+      "C": "Nothing gets printed",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. \"Outside GeeksQuiz\" suggests that the printf statement outside the switch cases will execute, but this is incorrect because it is not syntactically valid.\n  B. \"GeeksQuiz\" assumes the default case executes, but the switch statement is invalid due to a typo in \"default\" as \"defau1t\".\n  C. \"Nothing gets printed\" is correct because the program contains a syntax error in the switch statement, preventing compilation.",
@@ -42384,7 +42369,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: What SVG attribute is used to set the color of the inside of an element?",
@@ -44166,7 +44151,8 @@
     "options": {
       "A": "a) An error will be thrown",
       "B": "b) [[-3, -1], [1, 3]]",
-      "C": "c) [[-3, -5], [1, 3]]"
+      "C": "c) [[-3, -5], [1, 3]]",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. An error will be thrown: JavaScript does not support direct matrix operations like subtraction. Attempting to subtract arrays directly will result in an error.\n  B. [[-3, -1], [1, 3]]: This option assumes element-wise subtraction is performed correctly, but JavaScript does not natively support this operation.\n  C. [[-3, -5], [1, 3]]: Similar to option B, this assumes element-wise subtraction, but JavaScript cannot perform this operation directly on arrays.",
@@ -44381,7 +44367,8 @@
     "options": {
       "A": "<?xml-stylesheet type=\"text/xsl\" href=\"mystyle.xsl\" ?>",
       "B": "<stylesheet type=\"text/xsl\" href=\"mystyle.xsl\" />",
-      "C": "<link type=\"text/xsl\" href=\"mystyle.xsl\" />"
+      "C": "<link type=\"text/xsl\" href=\"mystyle.xsl\" />",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "Option A uses the correct XML processing instruction syntax `<?xml-stylesheet ... ?>` to link an XSL file. It specifies the type as \"text/xsl\" and provides the correct href attribute pointing to \"mystyle.xsl\".\n  Option B uses an incorrect tag `<stylesheet ... />`, which is not a valid XML processing instruction for linking stylesheets.\n  Option C uses an HTML `<link ... />` tag, which is not applicable in XML for linking stylesheets. This tag is used in HTML documents, not XML.",
@@ -44500,7 +44487,8 @@
     "options": {
       "A": "10",
       "B": "0",
-      "C": "compiler error"
+      "C": "compiler error",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. 10: The default constructor `Point()` calls the parameterized constructor `Point(int x, int y)` with arguments (10, 10), setting `m_x` to 10.\n  B. 0: This would be the default value if no constructor was called to initialize `m_x`, which is not the case here.\n  C. compiler error: The code is syntactically correct, so no compiler error occurs.",
@@ -44883,7 +44871,8 @@
     "options": {
       "A": "arr = np.array([1, 2, 3, 4]).toFloat()",
       "B": "arr = np.array([1, 2, 3, 4], dtype='f')",
-      "C": "arr = np.float([1, 2, 3, 4])"
+      "C": "arr = np.float([1, 2, 3, 4])",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "Option A attempts to convert an array to float using a non-existent method `toFloat()`, which is incorrect in NumPy. \n  Option B correctly uses the `dtype` parameter in `np.array()` to specify the data type as float, using `'f'` as the shorthand for float.\n  Option C incorrectly uses `np.float()`, which is not a valid method for creating an array. `np.float` is a type, not a function for array creation.",
@@ -45218,7 +45207,8 @@
     "options": {
       "A": "Do a real-time analysis of security alerts generated by applications, hosts and network hardware",
       "B": "Secure the servers that are hosted in the cloud",
-      "C": "Preventively block attacks against networks"
+      "C": "Preventively block attacks against networks",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. Correct. SIEM systems are designed to perform real-time analysis of security alerts generated by applications, hosts, and network hardware. They collect and aggregate log data from various sources to identify potential security threats.\n  B. Incorrect. While SIEM can help in monitoring cloud environments, it does not directly secure servers. Securing servers involves implementing security measures like firewalls and encryption, which are not the primary functions of SIEM.\n  C. Incorrect. SIEM systems are not primarily used to preventively block attacks. They focus on monitoring and analyzing data to detect and respond to threats, rather than blocking them proactively.",
@@ -45258,7 +45248,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Can we make a folder in Windows with the same name?",
@@ -45383,7 +45373,8 @@
     "options": {
       "A": "VARTEXT",
       "B": "VARCHAR",
-      "C": "NTEXT"
+      "C": "NTEXT",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. VARTEXT: This is not a standard SQL data type for text fields. It appears to be a misnomer or incorrect option.\n  B. VARCHAR: This is a standard SQL data type used for variable-length strings, making it suitable for text fields.\n  C. NTEXT: While NTEXT is a SQL data type for storing large text data, it is deprecated in favor of newer types like NVARCHAR(MAX).",
@@ -45454,7 +45445,8 @@
     "options": {
       "A": "median()",
       "B": "mode()",
-      "C": "mean()"
+      "C": "mean()",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. median(): The median is the middle value of a data set when it is ordered from least to greatest. It does not consider the frequency of values.\n  B. mode(): The mode is the value that appears most frequently in a data set. It directly relates to frequency.\n  C. mean(): The mean is the average of all values in a data set, calculated by summing all values and dividing by the number of values. It does not consider frequency of individual values.",
@@ -45614,7 +45606,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: What are the supported types of joins in MySQL?",
@@ -45907,7 +45899,8 @@
     "options": {
       "A": "INSERT INTO Persons VALUES ('Jimmy', 'Jackson')",
       "B": "INSERT ('Jimmy', 'Jackson') INTO Persons",
-      "C": "INSERT VALUES ('Jimmy', 'Jackson') INTO Persons"
+      "C": "INSERT VALUES ('Jimmy', 'Jackson') INTO Persons",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option correctly uses the SQL syntax: \"INSERT INTO [table] VALUES ([values])\". It specifies the table \"Persons\" and provides the values 'Jimmy' and 'Jackson' in the correct format.\n  B. This option incorrectly places the values before the INTO clause, which is not valid SQL syntax. The correct order should be \"INSERT INTO [table] VALUES ([values])\".\n  C. This option incorrectly uses \"INSERT VALUES\" without the INTO clause, which is not valid. The INTO clause is necessary to specify the target table.",
@@ -45923,7 +45916,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Is this a \"well formed\" XML document?<?xml version=\"1.0\"?><to>Tove</to><from>Jani</from><heading>Reminder</heading><body>Don't forget me this weekend!</body>",
@@ -46053,28 +46046,6 @@
     },
     "answer": "A",
     "analysis": "A. The code lacks proper syntax and logic to print all nodes, but it attempts to traverse the tree, which aligns with printing nodes.\n  B. The code has syntax errors and logical flaws, but it attempts a task related to tree traversal, not a completely invalid task.\n  C. The code does not correctly implement logic to print ancestors of a node; it lacks the necessary checks and structure.\n  D. The code does not implement logic to print nodes from a leaf to a specific node; it lacks the necessary traversal path logic.",
-    "knowledge_points": [],
-    "tags": [
-      "programming"
-    ],
-    "language": "en",
-    "split": "train"
-  },
-  {
-    "id": "coding_mcq_2665",
-    "source": "Coding-MCQ",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "Question:",
-    "options": {
-      "A": "<button aria-label=\"Select phone number country code\" aria-expanded=\"false\" aria-controls=\"core-ui-id-5005823451-popover\">\n  <img src=\"gb.svg\">\n  <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" style=\"fill: var(--core-ui-theme-icon-secondary,rgba(12,11,49,0.7));\">\n    <path d=\"…\"></path>\n  </svg>\n</button>",
-      "B": "<button aria-label=\"Select phone number country code\" aria-expanded=\"false\" aria-controls=\"core-ui-id-5005823451-popover\">\n  <img src=\"gb.svg\">\n  <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" style=\"fill: var(--core-ui-theme-icon-secondary,rgba(12,11,49,0.7));\">\n    <path d=\"…\"></path>\n  </svg>\n</button>"
-    },
-    "answer": "C",
-    "analysis": "Both options A and B are identical in terms of their HTML structure and attributes. They both contain a button with an aria-label for selecting a phone number country code, an image, and an SVG icon. There is no visible distinction between them in the provided information.",
     "knowledge_points": [],
     "tags": [
       "programming"
@@ -47270,7 +47241,8 @@
     "options": {
       "A": "AWS Marketplace lets you list and sell software",
       "B": "AWS Marketplace lets you see the cost analysis of all AWS Cloud Services",
-      "C": "AWS Marketplace lets you list all AWS Cloud Services"
+      "C": "AWS Marketplace lets you list all AWS Cloud Services",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. AWS Marketplace lets you list and sell software: This is correct because AWS Marketplace is designed for vendors to list their software products and for customers to purchase them.\n  B. AWS Marketplace lets you see the cost analysis of all AWS Cloud Services: This is incorrect as cost analysis is typically done through AWS Cost Explorer or AWS Billing, not AWS Marketplace.\n  C. AWS Marketplace lets you list all AWS Cloud Services: This is incorrect because AWS Marketplace is not for listing AWS services themselves, but for third-party software that can be used with AWS services.",
@@ -48349,7 +48321,8 @@
     "options": {
       "A": "NoSQL database",
       "B": "Relational database",
-      "C": "Document database"
+      "C": "Document database",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. NoSQL database: DynamoDB is designed as a NoSQL database, which means it is optimized for high performance and scalability without the constraints of a fixed schema.\n  B. Relational database: Relational databases use structured query language (SQL) and have a fixed schema, which is not the case for DynamoDB.\n  C. Document database: While DynamoDB can store documents, it is not specifically a document database like MongoDB; it is broader in its NoSQL capabilities.",
@@ -48660,7 +48633,8 @@
     "options": {
       "A": "Application, Presentation, Session",
       "B": "Data Link, Transport, Application",
-      "C": "Transport, Session, Presentation"
+      "C": "Transport, Session, Presentation",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. Application, Presentation, Session: These are the top three layers of the OSI Model and are generally implemented in software. They handle high-level data processing and user interface functions.\n  B. Data Link, Transport, Application: The Data Link layer is typically implemented in hardware or firmware, not software within the OS. The Transport layer can be implemented in software, but the combination here is incorrect.\n  C. Transport, Session, Presentation: While the Transport layer can be implemented in software, it is not typically grouped with the Session and Presentation layers in this context.",
@@ -48844,7 +48818,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: What is true for SVG?",
@@ -49250,7 +49224,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Can destructors be virtual in C++?",
@@ -50071,7 +50045,8 @@
     "options": {
       "A": "False. IPS is also able to detect if positioned correctly in the network",
       "B": "True. IDS and IPS are two separate product or devices, with designed roles on different parts of the network. IDS tells the IPS to block/prevent.",
-      "C": "Neither of the other options are correct"
+      "C": "Neither of the other options are correct",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option suggests that an IPS can detect intrusions if positioned correctly. An IPS is designed to monitor network traffic and take action to prevent threats, which inherently involves detection capabilities.\n  B. This option claims IDS and IPS are separate devices with distinct roles, implying that detection and prevention require both. However, an IPS can perform both functions.\n  C. This option states neither A nor B is correct, which is incorrect because A accurately describes the capabilities of an IPS.",
@@ -50382,7 +50357,8 @@
     "options": {
       "A": "INSERT INTO Persons (LastName) VALUES ('Olsen')",
       "B": "INSERT ('Olsen') INTO Persons (LastName)",
-      "C": "INSERT INTO Persons ('Olsen') INTO LastName"
+      "C": "INSERT INTO Persons ('Olsen') INTO LastName",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option correctly uses the SQL INSERT INTO syntax. It specifies the table \"Persons\" and the column \"LastName\" where the value 'Olsen' should be inserted.\n  B. This option incorrectly places the value before the INTO keyword, which is not valid SQL syntax. The correct order is to specify the table and column before the value.\n  C. This option incorrectly uses the INTO keyword twice and places the value before specifying the column, which is not valid SQL syntax.",
@@ -50789,7 +50765,8 @@
     "options": {
       "A": "()",
       "B": "{}",
-      "C": "[]"
+      "C": "[]",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. () - Parentheses are used for method calls or to define tuples, not for declaring arrays.\n  B. {} - Curly braces are used for initializing arrays or defining blocks of code, not for declaring arrays.\n  C. [] - Square brackets are used to declare arrays in C#, indicating that the variable is an array type.",
@@ -50836,7 +50813,8 @@
     "options": {
       "A": "SELECT DISTINCT",
       "B": "SELECT DIFFERENT",
-      "C": "SELECT UNIQUE"
+      "C": "SELECT UNIQUE",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. SELECT DISTINCT: This is the correct SQL syntax used in MySQL to filter out duplicate values and return only unique entries in the result set.\n  B. SELECT DIFFERENT: This is not a valid SQL statement in MySQL. The term \"DIFFERENT\" is not used in SQL syntax for retrieving unique values.\n  C. SELECT UNIQUE: While \"UNIQUE\" is a keyword in SQL, it is not used in the context of selecting unique values. It is used in defining constraints on columns.",
@@ -50931,7 +50909,8 @@
     "options": {
       "A": "A Next-Generation Firewall with phaser features",
       "B": "A Next-Generation Firewall with layer 6 features",
-      "C": "A Next-Generation Firewall with layer 7 features"
+      "C": "A Next-Generation Firewall with layer 7 features",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. \"Phaser features\" is not a recognized term in firewall technology. This option is incorrect because it does not relate to any known functionality for blocking specific file types.\n  B. Layer 6, the presentation layer, deals with data translation and encryption but does not handle application-specific tasks like file type detection.\n  C. Layer 7, the application layer, is responsible for understanding application-specific data, which includes detecting and blocking specific file types. This makes it the correct choice.",
@@ -51218,7 +51197,8 @@
     "options": {
       "A": "{ for x in y }",
       "B": "<% for x in y %>",
-      "C": "{% for x in y %}"
+      "C": "{% for x in y %}",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. { for x in y } - This syntax resembles Python's dictionary syntax and is not valid in Django templates, which require specific delimiters for logic.\n  B. <% for x in y %> - This syntax is similar to that used in some other templating languages like JSP, but it is not used in Django.\n  C. {% for x in y %} - This is the correct Django template syntax for starting a for loop. The {% and %} delimiters are used for template tags in Django.",
@@ -51625,7 +51605,8 @@
     "options": {
       "A": "DELETE FROM Persons WHERE FirstName = 'Peter'",
       "B": "DELETE ROW FirstName='Peter' FROM Persons",
-      "C": "DELETE FirstName='Peter' FROM Persons"
+      "C": "DELETE FirstName='Peter' FROM Persons",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option correctly uses the SQL DELETE syntax: \"DELETE FROM [table] WHERE [condition]\". It specifies the table \"Persons\" and the condition \"FirstName = 'Peter'\", which is the correct way to delete records based on a condition.\n  B. This option incorrectly uses \"DELETE ROW\", which is not valid SQL syntax. The correct command is simply \"DELETE FROM\".\n  C. This option incorrectly omits \"FROM\" and uses an incorrect syntax. The correct syntax requires \"DELETE FROM [table] WHERE [condition]\".",
@@ -52009,7 +51990,8 @@
     "options": {
       "A": "The values are sorted ascending",
       "B": "Most of the values are not zero.",
-      "C": "The values are all positive"
+      "C": "The values are all positive",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. The values are sorted ascending: This option describes the order of elements, not their density. An array can be dense regardless of whether its elements are sorted.\n  B. Most of the values are not zero: This option correctly identifies a dense array, which is defined by having most of its elements as non-zero.\n  C. The values are all positive: This option describes the sign of the elements, not their density. An array can be dense with both positive and negative non-zero values.",
@@ -52152,7 +52134,8 @@
     "options": {
       "A": "line attribute",
       "B": "circle attribute",
-      "C": "points attribute"
+      "C": "points attribute",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. The \"line\" attribute does not exist for the <polyline> element. Instead, <line> is a separate SVG element with its own attributes.\n  B. The \"circle\" attribute is not associated with <polyline>. It pertains to the <circle> element in SVG, which defines circles, not polylines.\n  C. The \"points\" attribute is used with the <polyline> element to define a series of connected points, which is essential for creating the shape.",
@@ -52823,7 +52806,8 @@
     "options": {
       "A": "if (x > y)",
       "B": "if x > y then:",
-      "C": "if x > y:"
+      "C": "if x > y:",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option correctly uses the R syntax for an if statement, which requires the condition to be enclosed in parentheses.\n  B. This option uses syntax that resembles other programming languages like Python, but it is incorrect for R as it lacks parentheses and uses \"then,\" which is not part of R's syntax.\n  C. This option also lacks parentheses and uses a colon, which is not used in R's if statement syntax.",
@@ -52918,7 +52902,8 @@
     "options": {
       "A": "10",
       "B": "5",
-      "C": "All"
+      "C": "All",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. 10: This is incorrect because the default number of rows returned by `head()` is not 10.\n  B. 5: This is correct because the `head()` method in Pandas returns the first 5 rows of a DataFrame by default.\n  C. All: This is incorrect because `head()` does not return all rows by default; it is designed to return a limited number of rows for a quick preview.",
@@ -53685,7 +53670,8 @@
     "options": {
       "A": "pd.Series(mylist, lables = [\"x\", \"y\", \"z\"])",
       "B": "pd.Series(mylist, index = [\"x\", \"y\", \"z\"])",
-      "C": "pd.Series(mylist, names = [\"x\", \"y\", \"z\"])"
+      "C": "pd.Series(mylist, names = [\"x\", \"y\", \"z\"])",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. The option uses 'lables', which is a misspelling and not a valid parameter in Pandas. The correct parameter for assigning labels is 'index'.\n  B. This option correctly uses the 'index' parameter to assign labels \"x\", \"y\", and \"z\" to the Series. This is the correct syntax in Pandas.\n  C. The option uses 'names', which is not a valid parameter for labeling elements in a Pandas Series. 'names' is not recognized for this purpose.",
@@ -53773,7 +53759,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: Using the same strong password, with high entropy, on multiple sites is good practice",
@@ -54114,7 +54100,8 @@
     "options": {
       "A": "<input type=\"textbox\">",
       "B": "<input type=\"textarea\">",
-      "C": "<textarea>"
+      "C": "<textarea>",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "Option A, <input type=\"textbox\">, is incorrect because \"textbox\" is not a valid type attribute for the <input> tag in HTML.\n  Option B, <input type=\"textarea\">, is incorrect because \"textarea\" is not a valid type attribute for the <input> tag. The <input> tag does not support multi-line text input.\n  Option C, <textarea>, is correct because it is the proper HTML tag specifically designed to create a multi-line text input area.",
@@ -54353,7 +54340,8 @@
     "options": {
       "A": "django-admin startproject my_tennis_club",
       "B": "django start my_tennis_club",
-      "C": "py manage.py start-django my_tennis_club"
+      "C": "py manage.py start-django my_tennis_club",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "A. This option uses \"django-admin startproject my_tennis_club\", which is the correct command to create a new Django project. \"django-admin\" is the command-line utility provided by Django, and \"startproject\" is the subcommand used to initiate a new project.\n  B. This option uses \"django start my_tennis_club\", which is incorrect because \"django\" is not a valid command-line tool. The correct tool is \"django-admin\".\n  C. This option uses \"py manage.py start-django my_tennis_club\", which is incorrect because \"manage.py\" is used for project-specific commands, not for starting a new project. Additionally, \"start-django\" is not a valid subcommand.",
@@ -54376,7 +54364,8 @@
     "options": {
       "A": "var1, var2, var3 = \"Orange\"",
       "B": "var1 <- var2 <- var3 <- \"Orange\"",
-      "C": "var1, var2, var3 <- \"Orange\""
+      "C": "var1, var2, var3 <- \"Orange\"",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. This syntax attempts to assign \"Orange\" to three variables simultaneously, but it only assigns \"Orange\" to var1. The other variables remain uninitialized.\n  B. This syntax uses the chain assignment method, where \"Orange\" is assigned to var3, and then var3's value is assigned to var2 and var1, effectively assigning \"Orange\" to all three variables.\n  C. This syntax is incorrect because it mixes comma-separated variables with the assignment operator '<-', which is not valid for simultaneous assignment.",
@@ -54728,7 +54717,7 @@
     "source": "Coding-MCQ",
     "subject": "大学编程",
     "subject_en": "college_programming",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "Question: \nIn this example from Booking, the link to Italy is focused. They have relied on the browser default styling. However, the outline is only on the left and right side of the linked section. What might be a reason that there is no outline at the top and bottom?",
@@ -55837,7 +55826,8 @@
     "options": {
       "A": "MySQL",
       "B": "PostgreSQL",
-      "C": "Amazon Aurora"
+      "C": "Amazon Aurora",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. MySQL: While MySQL is a popular open-source database, it may not offer the same level of scalability and enterprise-grade features as other options, making it less ideal for very large organizations.\n  B. PostgreSQL: PostgreSQL is a powerful open-source database with advanced features, but it may require more manual tuning and management compared to managed services specifically designed for enterprise use.\n  C. Amazon Aurora: Amazon Aurora is a cloud-based relational database service designed for high performance and availability, offering automatic scaling, backup, and recovery, making it highly suitable for large enterprises.",
@@ -56172,7 +56162,8 @@
     "options": {
       "A": "S3 Inteligent-Tiering",
       "B": "S3 Glacier Deep Archive",
-      "C": "S3 Standard"
+      "C": "S3 Standard",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. S3 Intelligent-Tiering: This storage class automatically moves data between two access tiers when access patterns change, optimizing costs. However, it is not the lowest cost option due to management fees and higher storage costs compared to archival classes.\n  B. S3 Glacier Deep Archive: Designed for long-term data archiving, this class offers the lowest storage cost among all S3 classes, suitable for data that is rarely accessed.\n  C. S3 Standard: This class is optimized for frequently accessed data and offers high availability and performance, but it is more expensive than archival classes like Glacier Deep Archive.",
@@ -56435,7 +56426,8 @@
     "options": {
       "A": "[1, 2, 3, 4, 5]",
       "B": "42",
-      "C": "[[1, 2, 3], [4, 5, 6]]"
+      "C": "[[1, 2, 3], [4, 5, 6]]",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. [1, 2, 3, 4, 5] - This is a one-dimensional array, as it consists of a single list of elements without any nested arrays.\n  B. 42 - This is a single integer, not an array at all, and therefore cannot be a 2-D array.\n  C. [[1, 2, 3], [4, 5, 6]] - This is a two-dimensional array because it contains two separate arrays as its elements, each representing a row.",
@@ -57058,7 +57050,8 @@
     "options": {
       "A": "Automated responses that inform about possible security risks",
       "B": "Methods for visualizing and coordinating your workflow",
-      "C": "An open standard for persistent client-server connections"
+      "C": "An open standard for persistent client-server connections",
+      "D": "None of the above"
     },
     "answer": "C",
     "analysis": "A. This option describes automated responses related to security, which is unrelated to WebSockets. WebSockets are not about security alerts.\n  B. This option refers to methods for workflow visualization and coordination, which are typically associated with project management tools, not WebSockets.\n  C. This option correctly identifies WebSockets as an open standard for maintaining persistent connections between a client and a server, allowing for real-time data exchange.",
@@ -57321,7 +57314,8 @@
     "options": {
       "A": "A data set where most of the item values are zero.",
       "B": "A data set with only negative values",
-      "C": "A data set where all numbers are higher than the previous number."
+      "C": "A data set where all numbers are higher than the previous number.",
+      "D": "None of the above"
     },
     "answer": "A",
     "analysis": "Option A describes a data set where most of the item values are zero, which is the standard definition of sparse data. Sparse data is characterized by a large number of zero or null entries, making it distinct from dense data.\n  Option B suggests a data set with only negative values. This does not relate to sparsity, as sparsity concerns the frequency of non-zero values, not the sign of the values.\n  Option C describes a data set where all numbers are higher than the previous number, indicating a strictly increasing sequence. This is unrelated to the concept of sparsity, which focuses on the presence of zero values.",
@@ -57416,7 +57410,8 @@
     "options": {
       "A": "COLLAPSE",
       "B": "DELETE",
-      "C": "REMOVE"
+      "C": "REMOVE",
+      "D": "None of the above"
     },
     "answer": "B",
     "analysis": "A. COLLAPSE: This is not a valid SQL command. SQL does not use \"COLLAPSE\" for any data manipulation or definition operations.\n  B. DELETE: This is the correct SQL command used to remove rows from a table in a database. It is part of the Data Manipulation Language (DML) in SQL.\n  C. REMOVE: While it might seem intuitive, \"REMOVE\" is not a recognized SQL command for deleting data. SQL uses \"DELETE\" for this purpose.",
@@ -57586,11 +57581,11 @@
       "C": "= (",
       "D": "&&"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57608,11 +57603,11 @@
       "C": "6 (",
       "D": "None of the above"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57630,11 +57625,11 @@
       "C": "is inside of another function (",
       "D": "calls itself"
     },
-    "answer": "",
+    "answer": "D",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57652,11 +57647,11 @@
       "C": "The subscript for the last element of an array is the array size. (",
       "D": "None of the above."
     },
-    "answer": "",
+    "answer": "D",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57667,14 +57662,14 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "What is NOT a benefit of functions? \n警 示 \n\n \n 第2 页 / 共6 页 \n(",
+    "content": "What is NOT a benefit of functions? \n警 示 \n\n \n  \n(",
     "options": {
       "A": "Make a program faster (",
       "B": "Software reusability (",
       "C": "Avoid code repetition (",
       "D": "Divide and conquer"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
@@ -57696,11 +57691,11 @@
       "C": "char hello[] = \" \"; (",
       "D": "char hello[] = \"hello\";"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57718,11 +57713,11 @@
       "C": "can only be used on a sorted array (",
       "D": "is slower than a linear search"
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57740,11 +57735,11 @@
       "C": "*b[bPtr + 6] (",
       "D": "bPtr + 6"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57762,11 +57757,11 @@
       "C": "int a[][2] = {1, 2, 3}; (",
       "D": "None of the above"
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57777,39 +57772,18 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "Suppose we have the following node definitions and declaration. \n struct node { \n \n \nint a; \n \n \nstruct node *link; \n \n} *head, *p, *q; \np and q respectively point to two adjacent nodes , shown as following: \n \n\n \n 第3 页 / 共6 页 \n \n \nWhich of the following statements are NOT correct statements to delete node p? \n(",
+    "content": "Suppose we have the following node definitions and declaration. \n struct node { \n \n \nint a; \n \n \nstruct node *link; \n \n} *head, *p, *q; \np and q respectively point to two adjacent nodes , shown as following: \n \n\n \n  \n \n \nWhich of the following statements are NOT correct statements to delete node p? \n(",
     "options": {
       "A": "q->link = p->link; free(p); (",
       "B": "Short Answer (40 points) Briefly answer the questions according the requirements.",
       "C": "(*p).link = (*q).link; free(p); (",
       "D": "p = (*p).link; free((*q).link); (*q).link = p; Section"
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
-    "split": "dev"
-  },
-  {
-    "id": "SYSU-Exam_college_programming_c0011",
-    "source": "SYSU-Exam",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "(6 points) Represent the following three equations in C programming language.",
-    "options": {
-      "A": "(2points) 2 2 1 2 2 1 ) ( ) ( y y x x y − + − =",
-      "B": "(2 points) a ac b b x 2 4 2 − + − =",
-      "C": "(2 points) 2 2 b a c x + = . Hint: fabs() is a function for the absolute value."
-    },
-    "answer": "",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57827,53 +57801,11 @@
       "C": "(2 points) Write the function getCircumference() that passes a circle as the parameter and returns the circumference of the circle.",
       "D": "(4 points) Write the function isInside() that passes a point and a circle as the parameters and decides if the point is inside the circle or not. If the point is inside the circle, returns 1 and otherwise return 0."
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
-    "split": "dev"
-  },
-  {
-    "id": "SYSU-Exam_college_programming_c0013",
-    "source": "SYSU-Exam",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "(10 points) Identify and correct the errors in each of the following statements or \nprogram fragments:",
-    "options": {
-      "A": "(3 points) constant char *str[] = {'Hi', 'Kay'}; *str[1] = 'Joe';",
-      "B": "(3 points) int b[6, 6] = 0, i; for (i = 1; i <= 6; i++) b[i, i] = i * i;",
-      "C": "(4 points) add(double x, y) { return double x + y; }"
-    },
-    "answer": "",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [],
-    "language": "zh",
-    "split": "dev"
-  },
-  {
-    "id": "SYSU-Exam_college_programming_c0014",
-    "source": "SYSU-Exam",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "Ans:",
-    "options": {
-      "A": "y = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) (2points)",
-      "B": "x = (-b + sqrt(b * b - 4 * a * c)) / (2 * a) (2points)",
-      "C": "/ sqrt(a * a + b * b) (2points)"
-    },
-    "answer": "",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57891,11 +57823,11 @@
       "C": "To refer to a particular location or element within an array, we specify the name of the array and the value of the particular element. (",
       "D": "The following are all valid variable names: _under_bar_, m928134, j7, his_account_total, a."
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57913,11 +57845,11 @@
       "C": "5 (",
       "D": "5.5"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57935,11 +57867,11 @@
       "C": "(x+1)++; (",
       "D": "char c; getchar(c);"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57957,11 +57889,11 @@
       "C": "( ) (",
       "D": "++"
     },
-    "answer": "",
+    "answer": "D",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -57979,11 +57911,11 @@
       "C": "char *str; str = “I love China”; (",
       "D": "char str[14]=“I love China”;"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58001,7 +57933,7 @@
       "C": "Numerous times. It is a dead loop. (",
       "D": "None of above"
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
@@ -58023,11 +57955,11 @@
       "C": "(*aPtr).face (",
       "D": "&a->face"
     },
-    "answer": "",
+    "answer": "D",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58045,11 +57977,11 @@
       "C": "24 (",
       "D": "25"
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58067,7 +57999,7 @@
       "C": "*q->next = new; *new->next = p; (",
       "D": "(*q).next = *new; (*new).next = *p; q p …… …… int i=20; switch(i) { case 10: i+=1; case 20: i+=2; case 30:i+=3; default: i-=1; } struct card { char *face; char *suit; } a, *aPtr = &a; 第- 3 -页 / 共8 页"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
@@ -58089,11 +58021,11 @@
       "C": "p[i][j] (",
       "D": "*(*p+4*i+j) Section"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58111,11 +58043,11 @@
       "C": "2F (",
       "D": "_b2c"
     },
-    "answer": "",
+    "answer": "D",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58133,11 +58065,11 @@
       "C": "3; (",
       "D": "4;"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58155,11 +58087,11 @@
       "C": "*s stores char ‘P’. (",
       "D": "s stores a string."
     },
-    "answer": "",
+    "answer": "D",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58177,11 +58109,11 @@
       "C": "scanf(“%d”, &pa); (",
       "D": "scanf(“%d”, *pa);"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58199,11 +58131,11 @@
       "C": "5 (",
       "D": "6"
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58221,7 +58153,7 @@
       "C": "2006 (",
       "D": "2008"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
@@ -58243,11 +58175,11 @@
       "C": "char s[10]; strcpy(s, “hello!”); (",
       "D": "char s*10+=”hello!”;"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58265,11 +58197,11 @@
       "C": "Global variable and local static variable have different storage durations. (",
       "D": "Local automatic variable and local static variable have the same scope."
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58287,11 +58219,11 @@
       "C": "{9,8,6,5,4,3,1} (",
       "D": "{9,8,6,5,4,3,1}"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58309,11 +58241,11 @@
       "C": "head->next=q; q->next=p; p->next = q->next; (",
       "D": "q->next = p; head->next=q; p->next = q->next; Section II: Short Answer (40 points) page 3 of 5 Briefly answer the questions according the requirements."
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58331,11 +58263,11 @@
       "C": "Operating system",
       "D": "Application program answer:A"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58353,11 +58285,11 @@
       "C": "because binary numbers are simplest.",
       "D": "because binary numbers are the bases upon which all other number systems are built. answer:B"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58375,11 +58307,11 @@
       "C": "12",
       "D": "16 answer:B"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58397,11 +58329,11 @@
       "C": "high-level language",
       "D": "none of the above answer:A"
     },
-    "answer": "",
+    "answer": "A",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58419,11 +58351,11 @@
       "C": "CPU",
       "D": "The operating system answer:B"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58441,11 +58373,11 @@
       "C": "Windows 8",
       "D": "Visual Basic E. Ada answer:c"
     },
-    "answer": "",
+    "answer": "C",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58463,7 +58395,7 @@
       "C": "Every comment line must end with a semicolon;",
       "D": "Every function must end with a semicolon; E. Every preprocessor directive must end with a semicolon; answer:B"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
@@ -58485,11 +58417,11 @@
       "C": "C code",
       "D": "another high-level language code answer:B"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   },
   {
@@ -58507,11 +58439,11 @@
       "C": ".class",
       "D": ".exe answer:b"
     },
-    "answer": "",
+    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [],
-    "language": "zh",
+    "language": "en",
     "split": "dev"
   }
 ]

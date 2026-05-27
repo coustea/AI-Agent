@@ -7,7 +7,7 @@
     "type": "简答题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "在CPU四种特权级模型中最低两级分别叫作用户态和内核态。CPU为什么要区分这\n两种特权级？在什么情况下进行两种特权级的切换？ \n\n▒▓中山大学本科生考试试卷▒▓",
+    "content": "在CPU四种特权级模型中最低两级分别叫作用户态和内核态。CPU为什么要区分这\n两种特权级？在什么情况下进行两种特权级的切换？",
     "options": null,
     "answer": "",
     "analysis": "",

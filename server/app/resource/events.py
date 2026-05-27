@@ -55,7 +55,6 @@ class AgentEventEmitter:
         self.task_id = task_id or (str(resource_id) if resource_id else "")
         self._event_sink = event_sink
         self._queue: asyncio.Queue[ResourceGenerateEvent | None] = asyncio.Queue()
-        self._started = False
         self._finished = False
 
     def bind_task(self, task_id: str) -> None:
@@ -330,13 +329,6 @@ class AgentEventEmitter:
     # SSE 流式输出
     # ------------------------------------------------------------------
 
-    def should_start_workflow(self) -> bool:
-        """检查是否应该启动工作流 (在第一个事件后调用)。"""
-        if not self._started:
-            self._started = True
-            return True
-        return False
-
     async def stream(self) -> AsyncGenerator[str, None]:
         """以 SSE 格式流式输出事件。"""
         while True:
@@ -345,30 +337,6 @@ class AgentEventEmitter:
                 yield "event: close\ndata: {}\n\n"
                 break
             yield self._format_sse(event)
-
-    async def stream_all(self) -> AsyncGenerator[str, None]:
-        """流式输出所有事件 (包括已缓存的)。"""
-        while True:
-            try:
-                event = self._queue.get_nowait()
-                if event is None:
-                    break
-                yield self._format_sse(event)
-            except asyncio.QueueEmpty:
-                if self._finished:
-                    break
-                await asyncio.sleep(0.05)
-
-    async def drain(self) -> AsyncGenerator[str, None]:
-        """排空队列中剩余的事件。"""
-        while True:
-            try:
-                event = self._queue.get_nowait()
-                if event is None:
-                    break
-                yield self._format_sse(event)
-            except asyncio.QueueEmpty:
-                break
 
     def _format_sse(self, event: ResourceGenerateEvent) -> str:
         """将事件格式化为 SSE 字符串。"""

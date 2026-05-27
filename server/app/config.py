@@ -103,12 +103,3 @@ MAX_DOCX_PARAGRAPHS_TO_READ = get("chat.max_docx_paragraphs", 1200)
 MAX_IMAGE_ANALYZE_COUNT = get("chat.max_analyze_images", 8)
 MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
 
-# ============ Neo4j Knowledge Graph ============
-NEO4J_ENABLED = get("neo4j.enabled", False)
-NEO4J_URI = get("neo4j.uri", "")
-NEO4J_USER = get("neo4j.user", "")
-NEO4J_PASSWORD = get("neo4j.password", "")
-NEO4J_DATABASE = get("neo4j.database", "neo4j")
-NEO4J_MAX_NODES = get("neo4j.max_nodes", 18)
-NEO4J_RELATION_DEPTH = get("neo4j.relation_depth", 2)
-NEO4J_INCLUDE_ORPHAN_POINTS = get("neo4j.include_orphan_points", True)

@@ -1,4 +1,4 @@
-"""Chat HTTP routing.
+"""聊天 HTTP 路由。
 
 聊天模块的 HTTP 路由定义，包含对话流、文件上传、会话管理、画像等端点。
 """
@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from app.auth.security import get_current_user
 from app.infra.models import User
 from app.chat.request import ChatHistoryMessage
+from app.chat.runtime import latest_user_message
 from app.chat.service import get_chat_usecases
 from app.memory import OnboardingResponse, OnboardingUpdate
 from app.infra.response import HttpResponse
@@ -48,7 +49,7 @@ async def mentor_chat_stream(
     need_teaching_diagram: bool = Form(default=False),
     generate_video: bool = Form(default=False),
     enable_search: bool = Form(default=False),
-    enable_long_term_memory: bool = Form(default=False),
+    enable_long_term_memory: bool = Form(default=True),
     current_user: User = Depends(get_current_user),
 ):
     """SSE 流式对话主入口。
@@ -63,7 +64,7 @@ async def mentor_chat_stream(
         need_teaching_diagram: 是否生成图解说明。
         generate_video: 是否生成视频。
         enable_search: 是否启用联网搜索。
-        enable_long_term_memory: 是否启用长期记忆读写。
+        enable_long_term_memory: 是否在成功回答后维护长期记忆与画像，默认开启。
         current_user: 当前登录用户。
 
     Returns:
@@ -83,13 +84,21 @@ async def mentor_chat_stream(
         except Exception as exc:
             return HttpResponse.error(code=400, message=f"history 格式错误: {exc}")
 
+    effective_message = latest_user_message(parsed_history or [])
+    if not effective_message:
+        effective_message = (message or "").strip()
+        if effective_message:
+            parsed_history = [ChatHistoryMessage(role="user", content=effective_message)]
+    if not effective_message:
+        return HttpResponse.error(code=400, message="history 或 message 必须包含一条用户消息")
+
     effective_session = session_id or uc.default_session_id(current_user.id)
 
     # 返回 SSE 流式响应
     return StreamingResponse(
         _sse_wrap(uc.stream_chat(
             user_id=current_user.id,
-            user_message=message,
+            user_message=effective_message,
             history=parsed_history,
             session_id=effective_session,
             attachments=parsed_attachments or None,

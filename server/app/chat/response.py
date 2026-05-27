@@ -1,4 +1,4 @@
-"""Chat response schemas."""
+"""聊天响应模式定义。"""
 
 from __future__ import annotations
 

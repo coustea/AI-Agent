@@ -995,7 +995,8 @@
     "options": {
       "A": "实体完整性约束",
       "B": "参照完整性约束",
-      "C": "用户定义的完整性约束"
+      "C": "用户定义的完整性约束",
+      "D": "以上都不对"
     },
     "answer": "B",
     "analysis": "",
@@ -1018,7 +1019,8 @@
     "options": {
       "A": "实体完整性约束",
       "B": "参照完整性约束",
-      "C": "用户定义的完整性约束"
+      "C": "用户定义的完整性约束",
+      "D": "以上都不对"
     },
     "answer": "C",
     "analysis": "",
@@ -1041,7 +1043,8 @@
     "options": {
       "A": "实体完整性约束",
       "B": "参照完整性约束",
-      "C": "用户定义的完整性约束"
+      "C": "用户定义的完整性约束",
+      "D": "以上都不对"
     },
     "answer": "A",
     "analysis": "",
@@ -1057,7 +1060,7 @@
     "source": "CNBlogs-DB",
     "subject": "数据库系统",
     "subject_en": "database_system",
-    "type": "选择题",
+    "type": "判断题",
     "difficulty": null,
     "bloom_level": null,
     "content": "外码与参照的主码类型长度",
@@ -1655,7 +1658,7 @@
     "source": "CNBlogs-DB",
     "subject": "数据库系统",
     "subject_en": "database_system",
-    "type": "选择题",
+    "type": "多选题",
     "difficulty": null,
     "bloom_level": null,
     "content": "以下是T-SQL语言注释的语句是:  (多选题）",
@@ -1665,7 +1668,7 @@
       "C": "//",
       "D": "'"
     },
-    "answer": "AB",
+    "answer": "A,B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [

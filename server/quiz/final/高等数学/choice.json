@@ -4224,30 +4224,6 @@
     "split": "test"
   },
   {
-    "id": "ceval_1541",
-    "source": "C-Eval",
-    "subject": "高等数学",
-    "subject_en": "advanced_mathematics",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "设$f\\left(x\\right)$在$\\left[-1,1\\right]$上有定义，$f\\prime\\left(0\\right)$存在，求极限：$\\lim_{n\\rightarrow\\infty}\\left[f\\left(\\frac{1}{n^2}\\right)+f\\left(\\frac{2}{n^2}\\right)+\\cdots+f\\left(\\frac{n}{n^2}\\right)-nf\\left(0\\right)\\right]=$____",
-    "options": {
-      "A": "$\\dfrac{1}{3}f'(0)$",
-      "B": "$\\dfrac{1}{2}f'(0)$",
-      "C": "$\\dfrac{1}{4}f'(0)$",
-      "D": "$\\dfrac{2}{3}f'(0)$"
-    },
-    "answer": "B",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "advanced_mathematics"
-    ],
-    "language": "zh",
-    "split": "test"
-  },
-  {
     "id": "ceval_1542",
     "source": "C-Eval",
     "subject": "高等数学",
@@ -8367,30 +8343,6 @@
       "D": "$\\sqrt[3]{4e}$"
     },
     "answer": "A",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "advanced_mathematics"
-    ],
-    "language": "zh",
-    "split": "dev"
-  },
-  {
-    "id": "ceval_advanced_mathematics_0153",
-    "source": "C-Eval",
-    "subject": "高等数学",
-    "subject_en": "advanced_mathematics",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "设$f\\left(x\\right)$在$\\left[-1,1\\right]$上有定义，$f\\prime\\left(0\\right)$存在，求极限：$\\lim_{n\\rightarrow\\infty}\\left[f\\left(\\frac{1}{n^2}\\right)+f\\left(\\frac{2}{n^2}\\right)+\\cdots+f\\left(\\frac{n}{n^2}\\right)-nf\\left(0\\right)\\right]=$____",
-    "options": {
-      "A": "$\\dfrac{1}{3}f'(0)$",
-      "B": "$\\dfrac{1}{2}f'(0)$",
-      "C": "$\\dfrac{1}{4}f'(0)$",
-      "D": "$\\dfrac{2}{3}f'(0)$"
-    },
-    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [

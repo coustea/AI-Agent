@@ -11,12 +11,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET, DEBUG
+from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET
 from app.infra.database import session_scope
 from app.infra.models import ActiveToken, User
 from app.infra.response import HttpResponse
 
-bearer_scheme = HTTPBearer(auto_error=not DEBUG)
+bearer_scheme = HTTPBearer()
 optional_bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -108,16 +108,6 @@ async def _resolve_current_user_from_token(token: str) -> User:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> User:
-    if DEBUG:
-        async with session_scope() as session:
-            user = await session.get(User, 1)
-            if not user:
-                user = User(id=1, username="debug_user", password="debug_password")
-                session.add(user)
-                await session.commit()
-                await session.refresh(user)
-            return user
-
     if not credentials:
         raise AuthError("缺少 Token")
     return await _resolve_current_user_from_token(credentials.credentials)
@@ -127,16 +117,6 @@ async def get_current_user_flexible(
     credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
     token: str | None = Query(default=None),
 ) -> User:
-    if DEBUG:
-        async with session_scope() as session:
-            user = await session.get(User, 1)
-            if not user:
-                user = User(id=1, username="debug_user", password="debug_password")
-                session.add(user)
-                await session.commit()
-                await session.refresh(user)
-            return user
-
     resolved_token = credentials.credentials if credentials else token
     if not resolved_token:
         raise AuthError("缺少 Token")
