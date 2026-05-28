@@ -20,7 +20,7 @@ from app.chat.runtime import (
     latest_user_message,
 )
 from app.chat.schemas import TutorAgentContext
-from app.chat.tools.learner_context import MemoryLearnerContextReader
+from app.chat.tools.memory import DefaultMemoryReader
 from app.config import (
     MAX_ANALYZE_FILE_COUNT,
     MAX_ANALYZE_TOTAL_CHARS,
@@ -382,7 +382,7 @@ class ChatUseCases:
             need_teaching_diagram=need_teaching_diagram,
             diagram_mode="requested" if need_teaching_diagram else "off",
             generate_video=generate_video,
-            learner_context_reader=MemoryLearnerContextReader(
+            memory_reader=DefaultMemoryReader(
                 user_id=user_id,
                 memory_service=self._memory_service,
             ),
@@ -400,8 +400,7 @@ class ChatUseCases:
         attachments: list[str] | None = None,
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
-        enable_search: bool = False,
-        enable_long_term_memory: bool = True,
+        enable_search: bool = False
     ) -> AsyncIterator[dict[str, Any]]:
         """SSE 流式对话主入口。"""
         async for event in self.stream_chat_events(
@@ -413,7 +412,6 @@ class ChatUseCases:
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
             enable_search=enable_search,
-            enable_long_term_memory=enable_long_term_memory,
             persist=True,
         ):
             yield event
@@ -429,7 +427,6 @@ class ChatUseCases:
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
         enable_search: bool = False,
-        enable_long_term_memory: bool = True,
         persist: bool = True,
     ) -> AsyncIterator[dict[str, Any]]:
         """流式对话事件生成器，供 SSE 和 avatar bridge 共用。"""
@@ -525,8 +522,7 @@ class ChatUseCases:
                     user_id=user_id,
                     session_id=effective_session,
                     user_message=current_message,
-                    assistant_reply=full_answer,
-                    enable_long_term_memory=enable_long_term_memory,
+                    assistant_reply=full_answer
                 ),
                 label="memory_pipeline",
             )

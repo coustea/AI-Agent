@@ -8,6 +8,10 @@ from typing import Any, Final
 
 from pydantic import BaseModel, Field
 
+
+class ConcurrentUpdateError(Exception):
+    """画像并发更新冲突。"""
+
 class ModuleName:
     MENTOR: Final[str] = "mentor"
     RESOURCE: Final[str] = "resource"

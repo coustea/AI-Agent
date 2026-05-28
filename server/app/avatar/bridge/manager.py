@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Digital-human realtime bridge for the shared TutorAgent chat pipeline.
 
 The bridge owns WebSocket, ASR and avatar playback concerns only. Tutoring
@@ -44,7 +44,6 @@ class RealtimeBridge:
         self._need_diagram_default: bool = False
         self._enable_search_default: bool = False
         self._generate_video_default: bool = False
-        self._enable_long_term_memory_default: bool = True
         self._history_default: Optional[list[dict]] = None
         self._turn_lock = asyncio.Lock()
 
@@ -246,8 +245,6 @@ class RealtimeBridge:
             self._enable_search_default = bool(data.get("enable_search"))
         if "generate_video" in data:
             self._generate_video_default = bool(data.get("generate_video"))
-        if "enable_long_term_memory" in data:
-            self._enable_long_term_memory_default = bool(data.get("enable_long_term_memory"))
 
     @staticmethod
     def _normalize_url_list(value) -> list[str]:
@@ -338,7 +335,6 @@ class RealtimeBridge:
             need_diagram=need_diagram,
             enable_search=self._enable_search_default,
             generate_video=self._generate_video_default,
-            enable_long_term_memory=self._enable_long_term_memory_default,
             history=history,
         )
 
@@ -509,7 +505,6 @@ class RealtimeBridge:
                                 need_diagram=self._need_diagram_default,
                                 enable_search=self._enable_search_default,
                                 generate_video=self._generate_video_default,
-                                enable_long_term_memory=self._enable_long_term_memory_default,
                                 history=self._history_default,
                             )
                         )
@@ -635,7 +630,6 @@ class RealtimeBridge:
         need_diagram: bool = False,
         enable_search: bool = False,
         generate_video: bool = False,
-        enable_long_term_memory: bool = True,
         history: Optional[list[dict]] = None,
     ):
         """Serialize turns so one frontend response stream maps to one answer."""
@@ -646,7 +640,6 @@ class RealtimeBridge:
                 need_diagram=need_diagram,
                 enable_search=enable_search,
                 generate_video=generate_video,
-                enable_long_term_memory=enable_long_term_memory,
                 history=history,
             )
 
@@ -657,7 +650,6 @@ class RealtimeBridge:
         need_diagram: bool = False,
         enable_search: bool = False,
         generate_video: bool = False,
-        enable_long_term_memory: bool = True,
         history: Optional[list[dict]] = None,
     ):
         """Run one completed turn through chat service and avatar playback."""
@@ -702,7 +694,6 @@ class RealtimeBridge:
                     need_teaching_diagram=need_diagram,
                     enable_search=enable_search,
                     generate_video=generate_video,
-                    enable_long_term_memory=enable_long_term_memory,
                     persist=True,
                 ):
                     event_count += 1

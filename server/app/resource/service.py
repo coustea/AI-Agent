@@ -39,36 +39,6 @@ class ResourceUsecases:
         # LLM workers run concurrently, but a single AsyncSession must not commit concurrently.
         self._write_lock = asyncio.Lock()
 
-    def _new_resource_record(
-        self,
-        user_id: int,
-        request: ResourceGenerationRequest,
-    ) -> GeneratedResource:
-        return GeneratedResource(
-            user_id=user_id,
-            learning_need=request.learning_need,
-            personalization={},
-            selected_agents=request.enabled_agent_ids(),
-            agent_configs=request.agent_configs.model_dump(mode="json"),
-            status="pending",
-        )
-
-    async def create_resource(
-        self,
-        user_id: int,
-        request: ResourceGenerationRequest,
-    ) -> GeneratedResource:
-        """创建资源记录。"""
-        resource = self._new_resource_record(user_id, request)
-        self.session.add(resource)
-        try:
-            await self.session.commit()
-        except Exception as exc:
-            await self.session.rollback()
-            raise exc
-        await self.session.refresh(resource)
-        return resource
-
     async def start_resource_task(
         self,
         *,
@@ -82,22 +52,50 @@ class ResourceUsecases:
 
         实际后台任务调度由 API 层负责（需要 FastAPI BackgroundTasks）。
         """
-        resource_record = self._new_resource_record(user_id, request)
-        self.session.add(resource_record)
+        resource = GeneratedResource(
+            user_id=user_id,
+            learning_need=request.learning_need,
+            personalization={},
+            selected_agents=request.enabled_agent_ids(),
+            agent_configs=request.agent_configs.model_dump(mode="json"),
+            status="pending",
+        )
+        self.session.add(resource)
         try:
             await self.session.flush()
-            resource_id = int(getattr(resource_record, "id", 0) or 0)
+            resource_id = int(getattr(resource, "id", 0) or 0)
             if node_id is not None:
-                await self._bind_active_path_resource(
-                    user_id=user_id,
-                    node_id=node_id,
-                    resource_id=resource_id,
+                from app.infra.models import CoursePathNode, CoursePathResourceBinding
+
+                node = await self.session.get(CoursePathNode, node_id)
+                if node is None or node.user_id != user_id:
+                    raise ValueError("路径节点不存在或不属于当前用户")
+                node.resource_status = "generating"
+                binding_stmt = (
+                    select(CoursePathResourceBinding)
+                    .where(
+                        CoursePathResourceBinding.node_id == node_id,
+                        CoursePathResourceBinding.user_id == user_id,
+                    )
+                    .order_by(col(CoursePathResourceBinding.created_at).desc())
                 )
+                binding = (await self.session.exec(binding_stmt)).first()
+                if binding:
+                    binding.resource_id = resource_id
+                    binding.resource_item_id = None
+                else:
+                    self.session.add(
+                        CoursePathResourceBinding(
+                            user_id=user_id,
+                            node_id=node_id,
+                            resource_id=resource_id,
+                        )
+                    )
             await self.session.commit()
         except Exception:
             await self.session.rollback()
             raise
-        await self.session.refresh(resource_record)
+        await self.session.refresh(resource)
 
         return {
             "resource_id": resource_id,
@@ -105,42 +103,6 @@ class ResourceUsecases:
             "node_id": node_id,
             "source": source,
         }
-
-    async def _bind_active_path_resource(
-        self,
-        *,
-        user_id: int,
-        node_id: int,
-        resource_id: int,
-    ) -> None:
-        """Bind the current task immediately so path retries reuse it."""
-        from app.infra.models import CoursePathNode, CoursePathResourceBinding
-
-        node = await self.session.get(CoursePathNode, node_id)
-        if node is None or node.user_id != user_id:
-            raise ValueError("路径节点不存在或不属于当前用户")
-        node.resource_status = "generating"
-
-        binding_stmt = (
-            select(CoursePathResourceBinding)
-            .where(
-                CoursePathResourceBinding.node_id == node_id,
-                CoursePathResourceBinding.user_id == user_id,
-            )
-            .order_by(col(CoursePathResourceBinding.created_at).desc())
-        )
-        binding = (await self.session.exec(binding_stmt)).first()
-        if binding:
-            binding.resource_id = resource_id
-            binding.resource_item_id = None
-        else:
-            self.session.add(
-                CoursePathResourceBinding(
-                    user_id=user_id,
-                    node_id=node_id,
-                    resource_id=resource_id,
-                )
-            )
 
     def _initial_workflow_progress(self, selected_agents: list[str]) -> dict[str, Any]:
         nodes = ["planning", *selected_agents, "review", "bundle"]
@@ -169,7 +131,7 @@ class ResourceUsecases:
             personalization["workflow_progress"] = self._initial_workflow_progress(selected_agents)
             resource.personalization = personalization
             resource.updated_at = datetime.now(timezone.utc)
-            await self._commit_resource(resource)
+            await self._commit(resource)
 
     async def record_generation_event(self, resource_id: int, event: ResourceGenerateEvent) -> None:
         """将 Agent 发出的真实事件折叠为可轮询的轻量进度快照。"""
@@ -207,7 +169,7 @@ class ResourceUsecases:
             if task_status and resource.status not in {"completed", "partial_completed", "failed"}:
                 resource.status = task_status
             resource.updated_at = datetime.now(timezone.utc)
-            await self._commit_resource(resource)
+            await self._commit(resource)
 
     async def get_generation_status(self, user_id: int, resource_id: int) -> dict[str, Any] | None:
         """读取任务总状态及数据库中记录的真实进度。"""
@@ -235,7 +197,7 @@ class ResourceUsecases:
             if resource:
                 resource.status = status
                 resource.updated_at = datetime.now(timezone.utc)
-                await self._commit_resource(resource)
+                await self._commit(resource)
 
     def _resolve_progress_node(self, event: ResourceGenerateEvent) -> str | None:
         if event.event_type == "bundle" or event.agent == "assembler":
@@ -263,54 +225,57 @@ class ResourceUsecases:
             return "planning", "planning"
         return event.stage or None, None
 
-    async def _commit_resource(self, resource: GeneratedResource) -> None:
+    async def _commit(self, obj: Any) -> None:
+        """提交并刷新数据库对象。"""
         try:
             await self.session.commit()
         except Exception as exc:
             await self.session.rollback()
             raise exc
-        await self.session.refresh(resource)
+        await self.session.refresh(obj)
 
-    async def save_resource_item(
-        self,
-        resource_id: int,
-        user_id: int,
-        item: schemas.GeneratedResourceItem,
-    ) -> GeneratedResourceItemModel:
-        """保存生成资源明细到数据库。"""
-        async with self._write_lock:
-            return await self._insert_resource_item(resource_id, user_id, item)
-
-    async def _insert_resource_item(
-        self,
-        resource_id: int,
-        user_id: int,
-        item: schemas.GeneratedResourceItem,
-    ) -> GeneratedResourceItemModel:
-        content_json, content_text = self._split_item_content(item)
-        resource_item = GeneratedResourceItemModel(
-            resource_id=resource_id,
-            user_id=user_id,
-            agent_type=item.type.value,
-            content_format=item.format,
-            title=item.title,
-            summary=item.summary,
-            generated_by=item.type.value,
-            content_json=content_json,
-            content_text=content_text,
-            metadata_json=item.metadata,
-            execution_report=item.execution_report,
-            status="completed",
-            updated_at=datetime.now(timezone.utc),
-        )
-        self.session.add(resource_item)
-        try:
-            await self.session.commit()
-        except Exception as exc:
-            await self.session.rollback()
-            raise exc
-        await self.session.refresh(resource_item)
-        return resource_item
+    def _content_envelope(self, result: WorkerResult) -> tuple[dict[str, Any] | None, str | None]:
+        """根据格式拆分 WorkerResult 内容为 content_json 和 content_text。"""
+        fmt = result.file_type.lower()
+        content = result.content
+        envelope = {
+            "title": result.title,
+            "summary": result.summary,
+            "summary_data": result.summary_data,
+            "metadata": result.metadata,
+            "format": result.file_type,
+            "content": content,
+        }
+        if fmt in {"markdown", "mermaid", "text", "code"}:
+            if isinstance(content, str):
+                return envelope, content
+            return envelope, json.dumps(content, ensure_ascii=False)
+        if fmt == "json":
+            if isinstance(content, dict):
+                envelope["content"] = content
+                return envelope, None
+            if isinstance(content, list):
+                envelope["content"] = {"items": content}
+                return envelope, None
+            if isinstance(content, str):
+                try:
+                    parsed = json.loads(content)
+                except json.JSONDecodeError:
+                    return envelope, content
+                if isinstance(parsed, dict):
+                    envelope["content"] = parsed
+                    return envelope, None
+                if isinstance(parsed, list):
+                    envelope["content"] = {"items": parsed}
+                    return envelope, None
+                envelope["content"] = {"value": parsed}
+                return envelope, None
+            envelope["content"] = {"value": content}
+            return envelope, None
+        if isinstance(content, str):
+            return envelope, content
+        envelope["content"] = {"value": content}
+        return envelope, None
 
     async def save_worker_result(
         self,
@@ -322,8 +287,27 @@ class ResourceUsecases:
         """单个 Worker 成功后立即发布其数据库资源项。"""
         if not result.success or not result.content:
             raise ValueError("仅能保存已成功生成且含内容的资源")
-        item = self._to_resource_item(resource_id=resource_id, result=result)
-        return await self.save_resource_item(resource_id=resource_id, user_id=user_id, item=item)
+        agent_id = str(result.metadata.get("agent_id") or "")
+        title = result.title or f"{agent_id} 资源"
+        content_json, content_text = self._content_envelope(result)
+        resource_item = GeneratedResourceItemModel(
+            resource_id=resource_id,
+            user_id=user_id,
+            agent_type=agent_id,
+            content_format=result.file_type,
+            title=title,
+            summary=result.summary,
+            generated_by=agent_id,
+            content_json=content_json,
+            content_text=content_text,
+            metadata_json=result.metadata,
+            status="completed",
+            updated_at=datetime.now(timezone.utc),
+        )
+        async with self._write_lock:
+            self.session.add(resource_item)
+            await self._commit(resource_item)
+        return resource_item
 
     async def list_resource_items(
         self,
@@ -378,51 +362,6 @@ class ResourceUsecases:
         }
         return {**persisted, **failures}
 
-    def _split_item_content(
-        self,
-        item: schemas.GeneratedResourceItem,
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        fmt = item.format.lower()
-        content = item.content
-        envelope = {
-            "title": item.title,
-            "summary": item.summary,
-            "summary_data": item.summary_data,
-            "metadata": item.metadata,
-            "format": item.format,
-            "content": content,
-        }
-        if fmt in {"markdown", "mermaid", "text", "code"}:
-            if isinstance(content, str):
-                return envelope, content
-            return envelope, json.dumps(content, ensure_ascii=False)
-        if fmt == "json":
-            if isinstance(content, dict):
-                envelope["content"] = content
-                return envelope, None
-            if isinstance(content, list):
-                envelope["content"] = {"items": content}
-                return envelope, None
-            if isinstance(content, str):
-                try:
-                    parsed = json.loads(content)
-                except json.JSONDecodeError:
-                    return envelope, content
-                if isinstance(parsed, dict):
-                    envelope["content"] = parsed
-                    return envelope, None
-                if isinstance(parsed, list):
-                    envelope["content"] = {"items": parsed}
-                    return envelope, None
-                envelope["content"] = {"value": parsed}
-                return envelope, None
-            envelope["content"] = {"value": content}
-            return envelope, None
-        if isinstance(content, str):
-            return envelope, content
-        envelope["content"] = {"value": content}
-        return envelope, None
-
     async def save_generation_results(
         self,
         *,
@@ -438,10 +377,13 @@ class ResourceUsecases:
         failed_agents = [agent_id for agent_id, result in results.items() if not result.success]
         if not review_result.passed and "review" not in failed_agents:
             failed_agents.append("review")
-        status = self._resolve_generation_status(
-            successful_count=len(saved_items),
-            failed_count=len(failed_agents),
-        )
+        successful = len(saved_items)
+        if failed_agents and successful:
+            status = "partial_completed"
+        elif failed_agents:
+            status = "failed"
+        else:
+            status = "completed"
         async with self._write_lock:
             resource = await self.session.get(GeneratedResource, resource_id)
             if resource is None or resource.user_id != user_id:
@@ -457,27 +399,7 @@ class ResourceUsecases:
             resource.status = status
             resource.updated_at = datetime.now(timezone.utc)
             resource.personalization = personalization
-            await self._commit_resource(resource)
-
-    def _resolve_generation_status(self, *, successful_count: int, failed_count: int) -> str:
-        if failed_count and successful_count:
-            return "partial_completed"
-        if failed_count and not successful_count:
-            return "failed"
-        return "completed"
-
-    def _to_resource_item(self, *, resource_id: int, result: WorkerResult) -> GeneratedResourceItem:
-        agent_id = str(result.metadata.get("agent_id") or "")
-        return GeneratedResourceItem(
-            id=f"{resource_id}-{agent_id}" if agent_id else "",
-            type=agent_id,
-            title=result.title or f"{agent_id} 资源",
-            format=result.file_type,
-            content=result.content,
-            summary=result.summary,
-            summary_data=result.summary_data,
-            metadata=result.metadata,
-        )
+            await self._commit(resource)
 
     async def get_resource_bundle(
         self,
@@ -517,8 +439,12 @@ class ResourceUsecases:
             metadata=metadata,
         )
 
+    def _envelope_from_item(self, item: GeneratedResourceItemModel) -> dict[str, Any]:
+        """从 DB 资源明细提取 content_json envelope，兜底为空字典。"""
+        return dict(item.content_json) if isinstance(item.content_json, dict) else {}
+
     def _db_item_to_resource_item(self, item: GeneratedResourceItemModel) -> GeneratedResourceItem:
-        envelope = item.content_json if isinstance(item.content_json, dict) else {}
+        envelope = self._envelope_from_item(item)
         content = envelope.get("content") if item.content_json is not None else item.content_text
         return GeneratedResourceItem(
             id=str(item.id),
@@ -537,18 +463,18 @@ class ResourceUsecases:
         )
 
     def _db_item_to_worker_result(self, item: GeneratedResourceItemModel) -> WorkerResult:
-        resource_item = self._db_item_to_resource_item(item)
-        content = resource_item.content
+        envelope = self._envelope_from_item(item)
+        content = envelope.get("content") if item.content_json is not None else item.content_text
         if not isinstance(content, str):
             content = json.dumps(content, ensure_ascii=False)
         return WorkerResult(
             success=True,
             content=content,
-            file_type=resource_item.format,
-            title=resource_item.title,
-            summary=resource_item.summary,
-            summary_data=resource_item.summary_data,
-            metadata=resource_item.metadata,
+            file_type=envelope.get("format") or item.content_format,
+            title=envelope.get("title") or item.title or "",
+            summary=envelope.get("summary") or item.summary or "",
+            summary_data=envelope.get("summary_data") or {},
+            metadata=envelope.get("metadata") or item.metadata_json or {},
         )
 
     async def get_resource(
@@ -578,9 +504,6 @@ class ResourceUsecases:
         return list(result.all())
 
 
-
-
-
 async def bg_gen_task(
     user_id: int,
     request: ResourceGenerationRequest,
@@ -608,6 +531,7 @@ async def bg_gen_task(
             resource_service=usecases,
         )
 
+        success = False
         try:
             result = await workflow.run(
                 user_id=user_id,
@@ -615,36 +539,20 @@ async def bg_gen_task(
                 profile=profile,
                 resource_id=resource_id,
             )
-
-            # Read actual saved items from database
             saved_items = await usecases.list_resource_items(user_id, resource_id)
-            item_count = len(saved_items)
-
-            # Determine final status based on workflow result and saved items
             resource = await usecases.get_resource(user_id, resource_id)
             current_status = resource.status if resource else "failed"
-
-            # completed/partial_completed with items -> node ready
-            # failed or no items -> node failed
-            if current_status in ("completed", "partial_completed") and item_count > 0:
-                if node_id:
-                    await _update_node_resource_status(
-                        session, node_id, "ready", resource_id, user_id,
-                    )
-            else:
-                await usecases.update_resource_status(resource_id, "failed")
-                if node_id:
-                    await _update_node_resource_status(
-                        session, node_id, "failed", None, user_id,
-                    )
-
+            success = current_status in ("completed", "partial_completed") and len(saved_items) > 0
         except Exception:
             logger.exception("后台资源生成任务异常")
+
+        if not success:
             await usecases.update_resource_status(resource_id, "failed")
-            if node_id:
-                await _update_node_resource_status(
-                    session, node_id, "failed", None, user_id,
-                )
+        if node_id:
+            await _update_node_resource_status(
+                session, node_id, "ready" if success else "failed",
+                resource_id if success else None, user_id,
+            )
 
 
 async def _update_node_resource_status(

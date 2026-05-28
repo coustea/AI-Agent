@@ -131,15 +131,6 @@ async def list_resources(
     return HttpResponse.success(data=items)
 
 
-@router.get("/resources/{resource_id}/files/{filename}")
-async def get_resource_file(
-    resource_id: int,
-    filename: str,
-    token: str = Query(default="", description="资源文件访问 token"),
-):
-    """旧文件下载接口已废弃。"""
-    return HttpResponse.error(code=410, message="资源已改为数据库存储，请使用资源详情接口读取 content")
-
 
 @router.get("/resources/{resource_id}")
 async def get_resource(

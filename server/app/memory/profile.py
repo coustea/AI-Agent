@@ -6,22 +6,25 @@ import json
 from copy import deepcopy
 from typing import Any
 
+from sqlmodel import func, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.memory.store import MemoryStore
+from app.infra.models import ChatMessage, UserProfile, UserProfileHistory, UserLongTermMemory
 from app.memory.types import (
     ALL_DIMENSIONS,
-    CONFIDENCE_HIGH,
-    CONFIDENCE_LOW,
-    CONFIDENCE_MEDIUM,
+    ConcurrentUpdateError,
     DIMENSION_NAMES,
     DIALOGUE_ROLES,
+    MESSAGE_EXPIRE_DAYS,
     ONBOARDING_OPTIONAL_FIELDS,
     ONBOARDING_REQUIRED_FIELDS,
     PROFILE_MIN_COVERAGE,
     PROFILE_UPDATE_INTERVALS,
     ProfileOutput,
     confidence_label,
+    days_ago,
     has_profile_signal,
     make_default_profile_json,
     make_default_score_json,
@@ -118,6 +121,30 @@ def render_profile_markdown(profile_json: dict[str, Any]) -> str:
     return "\n".join(lines) if len(lines) > 1 else "# 用户画像\n\n暂无画像信息。"
 
 
+def render_profile_dimension(profile_json: dict[str, Any], dimension: str) -> str:
+    """渲染特定维度的画像供 LLM 工具按需读取。"""
+    dims = profile_json.get("dimensions") or {}
+    target_dim = dims.get(dimension)
+    if not target_dim:
+        return f"画像中暂无指定的维度（{dimension}）信息。"
+    
+    summary = target_dim.get("summary")
+    evidence = target_dim.get("evidence") or []
+    if not summary and not evidence:
+        return f"画像中指定维度（{dimension}）内容为空。"
+        
+    title = DIMENSION_NAMES.get(dimension, dimension)
+    conf = _clamp_confidence(target_dim.get("confidence"))
+    label = confidence_label(conf)
+    
+    lines = [f"## {title}（{label}）"]
+    if summary:
+        lines.append(str(summary))
+    for item in evidence[:3]:
+        lines.append(f"- {item}")
+    return "\n".join(lines)
+
+
 def calculate_score(profile_json: dict[str, Any]) -> dict[str, Any]:
     dims = profile_json.get("dimensions") or {}
     dim_scores: dict[str, int | None] = {}
@@ -157,13 +184,14 @@ def _get_update_interval(coverage: float) -> int:
 class ProfileBuilder:
     """统一处理首次登录画像与对话画像更新。"""
 
-    def __init__(self, *, module: str = "mentor", store: MemoryStore | None = None) -> None:
+    def __init__(self, *, module: str = "mentor") -> None:
         self.module = module
-        self.store = store or MemoryStore()
         self.llm = get_llm()
 
-    async def get_onboarding(self, user_id: int) -> dict[str, Any]:
-        profile = await self.store.get_profile(user_id=user_id, module=self.module)
+    async def get_onboarding(self, *, db: AsyncSession, user_id: int) -> dict[str, Any]:
+        profile = (
+            await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
+        ).first()
         profile_json = profile.profile_json if profile and profile.profile_json else {}
         student = normalize_onboarding(profile_json.get("student_profile"))
         return {"student_profile": student, "profile_initialized": is_onboarding_complete(student)}
@@ -171,12 +199,15 @@ class ProfileBuilder:
     async def upsert(
         self,
         *,
+        db: AsyncSession,
         user_id: int,
         session_id: str | None = None,
         onboarding: dict[str, Any] | None = None,
         reason: str = "manual",
     ):
-        old = await self.store.get_profile(user_id=user_id, module=self.module)
+        old = (
+            await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
+        ).first()
         old_json = old.profile_json if old and old.profile_json else make_default_profile_json()
 
         if onboarding is not None:
@@ -184,16 +215,16 @@ class ProfileBuilder:
             profile_json = self._build_onboarding_profile(normalized, old_json)
             updated_reason = "基于首次登录学习资料生成画像"
         else:
-            success, updated, profile_json = await self._build_from_dialogue(user_id=user_id, session_id=session_id, old_json=old_json)
+            success, updated, profile_json = await self._build_from_dialogue(db=db, user_id=user_id, session_id=session_id, old_json=old_json)
             if not success or not updated:
                 return None
             updated_reason = "基于近期对话更新画像"
 
         score_json = calculate_score(profile_json)
         profile_markdown = render_profile_markdown(profile_json)
-        return await self.store.update_profile(
+        return await self._update_profile_db(
+            db=db,
             user_id=user_id,
-            module=self.module,
             profile_json=profile_json,
             score_json=score_json,
             profile_markdown=profile_markdown,
@@ -206,6 +237,7 @@ class ProfileBuilder:
     async def maybe_upsert(
         self,
         *,
+        db: AsyncSession,
         user_id: int,
         session_id: str,
         user_message: str,
@@ -213,15 +245,17 @@ class ProfileBuilder:
         turn_count: int = 0,
     ) -> bool:
         try:
-            if not await self._should_update(user_id, session_id, user_message, turn_count):
+            if not await self._should_update(db=db, user_id=user_id, session_id=session_id, user_message=user_message, turn_count=turn_count):
                 return False
-            return await self.upsert(user_id=user_id, session_id=session_id, reason="post_turn") is not None
+            return await self.upsert(db=db, user_id=user_id, session_id=session_id, reason="post_turn") is not None
         except Exception as exc:
             logger.error("[MemoryProfile] 更新画像失败 user=%s session=%s err=%s", user_id, session_id, exc)
             return False
 
-    async def _should_update(self, user_id: int, session_id: str, user_message: str, turn_count: int) -> bool:
-        profile = await self.store.get_profile(user_id=user_id, module=self.module)
+    async def _should_update(self, *, db: AsyncSession, user_id: int, session_id: str, user_message: str, turn_count: int) -> bool:
+        profile = (
+            await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
+        ).first()
         score = profile.profile_score_json if profile and profile.profile_score_json else {}
         coverage = int(score.get("section_coverage") or 0)
 
@@ -316,9 +350,11 @@ class ProfileBuilder:
         profile["overall_confidence"] = _avg_confidence(profile)
         return profile
 
-    async def _build_from_dialogue(self, *, user_id: int, session_id: str | None, old_json: dict[str, Any]) -> tuple[bool, bool, dict[str, Any]]:
-        long_term = await self.store.get_long_term_memory(user_id=user_id, module=self.module)
-        recent_dialogue = await self._build_recent_dialogue(user_id=user_id, session_id=session_id)
+    async def _build_from_dialogue(self, *, db: AsyncSession, user_id: int, session_id: str | None, old_json: dict[str, Any]) -> tuple[bool, bool, dict[str, Any]]:
+        long_term = (
+            await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
+        ).first()
+        recent_dialogue = await self._build_recent_dialogue(db=db, user_id=user_id, session_id=session_id)
         prompt = registry.render(
             "memory/profile",
             student_profile=json.dumps(old_json.get("student_profile") or {}, ensure_ascii=False, indent=2),
@@ -342,10 +378,20 @@ class ProfileBuilder:
             return True, False, old_json
         return True, True, new_json
 
-    async def _build_recent_dialogue(self, *, user_id: int, session_id: str | None, limit: int = 40) -> str:
+    async def _build_recent_dialogue(self, *, db: AsyncSession, user_id: int, session_id: str | None, limit: int = 40) -> str:
         if not session_id:
             return "暂无近期原始对话。"
-        messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=limit)
+        filters = [
+            ChatMessage.user_id == user_id,
+            ChatMessage.session_id == session_id,
+            ChatMessage.module == self.module,
+            ChatMessage.created_at >= days_ago(MESSAGE_EXPIRE_DAYS),
+        ]
+        total = (await db.exec(select(func.count()).where(*filters))).one()
+        stmt = select(ChatMessage).where(*filters).order_by(ChatMessage.created_at.asc())
+        if total > limit:
+            stmt = stmt.offset(total - limit)
+        messages = list((await db.exec(stmt)).all())
         lines: list[str] = []
         for msg in messages:
             if msg.role not in DIALOGUE_ROLES:
@@ -404,3 +450,60 @@ class ProfileBuilder:
             return value
 
         return strip(new) == strip(old)
+
+    async def _update_profile_db(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: int,
+        profile_json: dict[str, Any],
+        score_json: dict[str, Any],
+        profile_markdown: str | None = None,
+        updated_reason: str,
+        source_session_ids: list[str] | None = None,
+        source_summary_ids: list[int] | None = None,
+        confidence: float = 0.7,
+        expected_version: int | None = None,
+    ) -> UserProfile:
+        profile = (
+            await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
+        ).first()
+        if not profile:
+            profile = UserProfile(user_id=user_id, module=self.module)
+        elif expected_version is not None and profile.version != expected_version:
+            raise ConcurrentUpdateError(f"画像版本冲突: 期望 {expected_version}, 实际 {profile.version}")
+        else:
+            profile.version = (profile.version or 1) + 1
+        profile.profile_json = profile_json
+        profile.profile_score_json = score_json
+        profile.profile_markdown = profile_markdown
+        profile.updated_reason = updated_reason
+        profile.source_session_ids = source_session_ids
+        profile.source_summary_ids = source_summary_ids
+        profile.confidence = confidence
+        profile.updated_at = now()
+        db.add(profile)
+        await db.flush()
+
+        latest_version = (
+            await db.exec(
+                select(func.max(UserProfileHistory.version)).where(
+                    UserProfileHistory.user_id == user_id,
+                    UserProfileHistory.module == self.module,
+                )
+            )
+        ).one()
+        db.add(
+            UserProfileHistory(
+                user_id=user_id,
+                module=self.module,
+                version=0 if latest_version is None else int(latest_version) + 1,
+                profile_json=profile_json,
+                profile_score_json=score_json,
+                profile_markdown=profile_markdown,
+                change_reason=updated_reason,
+                source_session_ids=source_session_ids,
+                source_summary_ids=source_summary_ids,
+            )
+        )
+        return profile

@@ -11,8 +11,7 @@ from typing_extensions import TypedDict
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-
-from app.chat.tools.learner_context import LearnerContextReader
+from app.chat.tools.memory import MemoryReader
 
 
 # ===================================================================
@@ -41,7 +40,7 @@ class TutorAgentContext(BaseModel):
     preferred_diagram_type: Optional["TeachingDiagramType"] = None
     generate_video: bool = False
     resource_mode: str = "none"
-    learner_context_reader: LearnerContextReader | None = None
+    memory_reader: MemoryReader | None = None
 
 
 class TutorState(TypedDict, total=False):

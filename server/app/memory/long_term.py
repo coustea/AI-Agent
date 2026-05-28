@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.memory.store import MemoryStore
+from app.infra.models import ChatSessionSummary, UserLongTermMemory
 from app.memory.types import (
     LTM_PERIODIC_THRESHOLD,
     MEMORY_UPDATE_COOLDOWN_SECONDS,
     MemoryUpdateOutput,
     has_stable_signal,
+    make_default_memory_markdown,
     now,
 )
 from app.prompts import registry
@@ -22,9 +24,8 @@ logger = get_logger(__name__)
 class LongTermMemoryExtractor:
     """双层触发：正则即时 + 周期性 LLM 判断。"""
 
-    def __init__(self, *, module: str = "mentor", store: MemoryStore | None = None) -> None:
+    def __init__(self, *, module: str = "mentor") -> None:
         self.module = module
-        self.store = store or MemoryStore()
         self.llm = get_llm()
 
     def should_consider_update(
@@ -42,6 +43,7 @@ class LongTermMemoryExtractor:
     async def maybe_update(
         self,
         *,
+        db: AsyncSession,
         user_id: int,
         session_id: str,
         user_message: str,
@@ -55,13 +57,38 @@ class LongTermMemoryExtractor:
             return False
 
         try:
-            old_memory = await self.store.get_or_create_long_term_memory(user_id=user_id, module=self.module)
+            existing = (
+                await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
+            ).first()
+
+            if existing:
+                old_memory = existing
+            else:
+                old_memory = UserLongTermMemory(
+                    user_id=user_id,
+                    module=self.module,
+                    memory_markdown=make_default_memory_markdown(),
+                    category="general",
+                )
+                db.add(old_memory)
+                await db.flush()
 
             if not signal_detected and periodic_trigger:
                 if old_memory.updated_at and (now() - old_memory.updated_at).total_seconds() < MEMORY_UPDATE_COOLDOWN_SECONDS:
                     return False
 
-            latest_summary = await self.store.get_latest_summary(user_id=user_id, session_id=session_id, module=self.module)
+            latest_summary = (
+                await db.exec(
+                    select(ChatSessionSummary)
+                    .where(
+                        ChatSessionSummary.user_id == user_id,
+                        ChatSessionSummary.session_id == session_id,
+                        ChatSessionSummary.module == self.module,
+                    )
+                    .order_by(ChatSessionSummary.created_at.desc())
+                    .limit(1)
+                )
+            ).first()
             prompt = registry.render(
                 "memory/ltm_update",
                 user_message=user_message[:1000],
@@ -78,14 +105,19 @@ class LongTermMemoryExtractor:
             )
             if not resp.need_update or not resp.memory_markdown:
                 return False
-            await self.store.update_long_term_memory(
-                user_id=user_id,
-                module=self.module,
-                memory_markdown=resp.memory_markdown,
-                updated_reason="基于稳定信号更新长期记忆" if signal_detected else "周期性检查更新长期记忆",
-                source_session_ids=[session_id],
-                source_summary_ids=[latest_summary.id] if latest_summary and latest_summary.id else None,
-            )
+
+            if not existing:
+                memory = old_memory
+            else:
+                memory = existing
+                memory.version = (memory.version or 1) + 1
+            memory.memory_markdown = resp.memory_markdown
+            memory.category = "general"
+            memory.updated_reason = "基于稳定信号更新长期记忆" if signal_detected else "周期性检查更新长期记忆"
+            memory.source_session_ids = [session_id]
+            memory.source_summary_ids = [latest_summary.id] if latest_summary and latest_summary.id else None
+            memory.updated_at = now()
+            db.add(memory)
             return True
         except Exception as exc:
             logger.error("[LongTermMemory] 更新失败 user=%s session=%s err=%s", user_id, session_id, exc)

@@ -2,19 +2,37 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import func, select
+
+from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.memory.store import MemoryStore
-from app.memory.types import (
-    DEFAULT_SESSION_TITLE,
-    ModuleName,
-    estimate_token_count,
+from app.infra.models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionSummary,
+    UserLongTermMemory,
+    UserProfile,
+    UserProfileHistory,
 )
 from app.memory.compression import SessionCompressor
 from app.memory.long_term import LongTermMemoryExtractor
 from app.memory.profile import ProfileBuilder, render_profile_markdown
+from app.memory.types import (
+    DEFAULT_SESSION_TITLE,
+    ModuleName,
+    MESSAGE_EXPIRE_DAYS,
+    TITLE_MAX_LENGTH,
+    make_default_memory_markdown,
+    make_default_profile_json,
+    make_default_score_json,
+    now,
+    estimate_token_count,
+)
 
 logger = get_logger(__name__)
 
@@ -24,28 +42,70 @@ class MemoryService:
 
     def __init__(self, *, module: str = ModuleName.MENTOR) -> None:
         self.module = module
-        self.store = MemoryStore()
-        self.compressor = SessionCompressor(module=module, store=self.store)
-        self.ltm_extractor = LongTermMemoryExtractor(module=module, store=self.store)
-        self.profile_builder = ProfileBuilder(module=module, store=self.store)
+        self.compressor = SessionCompressor(module=module)
+        self.ltm_extractor = LongTermMemoryExtractor(module=module)
+        self.profile_builder = ProfileBuilder(module=module)
         self.llm = get_llm()
 
     # ── 会话 ──
 
     async def create_session(self, *, user_id: int, title: str = DEFAULT_SESSION_TITLE) -> Any:
-        return await self.store.create_session(user_id=user_id, module=self.module, title=title)
+        async with session_scope() as db:
+            chat_session = ChatSession(user_id=user_id, module=self.module, title=title)
+            db.add(chat_session)
+            await db.commit()
+            await db.refresh(chat_session)
+            return chat_session
 
     async def get_session(self, session_id: str) -> Any:
-        return await self.store.get_session(session_id)
+        async with session_scope() as db:
+            return (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
 
     async def list_sessions(self, *, user_id: int, limit: int = 20) -> list[Any]:
-        return await self.store.list_sessions(user_id=user_id, module=self.module, limit=limit)
+        async with session_scope() as db:
+            stmt = select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_archived.is_(False))
+            stmt = stmt.where(ChatSession.module == self.module)
+            result = await db.exec(stmt.order_by(ChatSession.updated_at.desc()).limit(limit))
+            return list(result.all())
 
     async def archive_session(self, *, user_id: int, session_id: str) -> bool:
-        return await self.store.archive_session(user_id=user_id, session_id=session_id)
+        async with session_scope() as db:
+            chat_session = (
+                await db.exec(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
+            ).first()
+            if not chat_session:
+                return False
+            chat_session.is_archived = True
+            chat_session.updated_at = now()
+            db.add(chat_session)
+            await db.commit()
+            return True
 
     async def update_session_title(self, *, user_id: int, session_id: str, title: str) -> bool:
-        return await self.store.update_session_title(user_id=user_id, session_id=session_id, title=title)
+        async with session_scope() as db:
+            chat_session = (
+                await db.exec(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
+            ).first()
+            if not chat_session:
+                return False
+            chat_session.title = title[:TITLE_MAX_LENGTH]
+            chat_session.updated_at = now()
+            db.add(chat_session)
+            await db.commit()
+            return True
+
+    async def update_attachment_analyses(self, *, user_id: int, session_id: str, analyses: dict[str, Any]) -> bool:
+        async with session_scope() as db:
+            chat_session = (
+                await db.exec(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
+            ).first()
+            if not chat_session:
+                return False
+            chat_session.attachment_analyses = analyses
+            chat_session.updated_at = now()
+            db.add(chat_session)
+            await db.commit()
+            return True
 
     async def generate_session_title(self, *, user_id: int, session_id: str, first_message: str) -> str | None:
         if not (first_message or "").strip():
@@ -86,46 +146,98 @@ class MemoryService:
         tool_calls: list[dict[str, Any]] | None = None,
         teaching_diagram: dict[str, Any] | None = None,
     ) -> None:
-        await self.store.save_message(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module,
-            role=role,
-            content=content,
-            attachments=attachments,
-            tool_calls=tool_calls,
-            teaching_diagram=teaching_diagram,
-        )
+        async with session_scope() as db:
+            chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
+            if chat_session:
+                if chat_session.user_id != user_id or chat_session.module != self.module:
+                    raise PermissionError("会话不属于当前用户或模块")
+                chat_session.updated_at = now()
+            else:
+                chat_session = ChatSession(id=session_id, user_id=user_id, module=self.module)
+            db.add(chat_session)
+            db.add(
+                ChatMessage(
+                    user_id=user_id,
+                    session_id=session_id,
+                    module=self.module,
+                    role=role,
+                    content=content,
+                    attachments=attachments,
+                    tool_calls=tool_calls,
+                    teaching_diagram=teaching_diagram,
+                )
+            )
+            await db.commit()
 
     async def list_messages(self, *, user_id: int, session_id: str, limit: int | None = None, only_unexpired: bool = True) -> list[Any]:
-        return await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=limit, only_unexpired=only_unexpired)
+        async with session_scope() as db:
+            filters = [
+                ChatMessage.user_id == user_id,
+                ChatMessage.session_id == session_id,
+                ChatMessage.module == self.module,
+            ]
+            if only_unexpired:
+                filters.append(ChatMessage.created_at >= now() - timedelta(days=MESSAGE_EXPIRE_DAYS))
+            total = (await db.exec(select(func.count()).where(*filters))).one()
+            stmt = select(ChatMessage).where(*filters).order_by(ChatMessage.created_at.asc())
+            if limit is not None and limit > 0 and total > limit:
+                stmt = stmt.offset(total - limit)
+            return list((await db.exec(stmt)).all())
 
     async def count_messages(self, *, user_id: int, session_id: str) -> int:
-        return await self.store.count_messages(user_id=user_id, session_id=session_id, module=self.module)
+        async with session_scope() as db:
+            return (
+                await db.exec(
+                    select(func.count()).where(
+                        ChatMessage.user_id == user_id,
+                        ChatMessage.session_id == session_id,
+                        ChatMessage.module == self.module,
+                    )
+                )
+            ).one()
 
     async def delete_short_term_messages(self, *, user_id: int, session_id: str) -> int:
-        return await self.store.delete_session_messages(user_id=user_id, session_id=session_id, module=self.module)
+        async with session_scope() as db:
+            messages = (
+                await db.exec(
+                    select(ChatMessage).where(
+                        ChatMessage.user_id == user_id,
+                        ChatMessage.session_id == session_id,
+                        ChatMessage.module == self.module,
+                    )
+                )
+            ).all()
+            for message in messages:
+                await db.delete(message)
+            await db.commit()
+            return len(messages)
 
     async def reset_session_counters(self, *, user_id: int, session_id: str) -> None:
-        await self.store.reset_session_token_count(session_id)
-
-    async def update_attachment_analyses(self, *, user_id: int, session_id: str, analyses: dict[str, Any]) -> bool:
-        """更新会话的附件预分析结果。"""
-        return await self.store.update_attachment_analyses(session_id=session_id, user_id=user_id, analyses=analyses)
+        async with session_scope() as db:
+            chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
+            if chat_session:
+                chat_session.summary_token_count = 0
+                db.add(chat_session)
+                await db.commit()
 
     # ── 概要 ──
 
     async def list_summaries(self, *, user_id: int, session_id: str, limit: int = 3) -> list[Any]:
-        return await self.store.list_summaries(user_id=user_id, session_id=session_id, module=self.module, limit=limit)
+        async with session_scope() as db:
+            stmt = (
+                select(ChatSessionSummary)
+                .where(
+                    ChatSessionSummary.user_id == user_id,
+                    ChatSessionSummary.session_id == session_id,
+                    ChatSessionSummary.module == self.module,
+                )
+                .order_by(ChatSessionSummary.created_at.desc())
+                .limit(limit)
+            )
+            return list((await db.exec(stmt)).all())
 
     async def get_session_summary_context(self, *, user_id: int, session_id: str) -> str:
-        """Return compacted prior turns for read-only prompt injection."""
-        summaries = await self.store.list_summaries(
-            user_id=user_id,
-            session_id=session_id,
-            module=self.module,
-            limit=2,
-        )
+        summaries = await self.list_summaries(user_id=user_id, session_id=session_id, limit=2)
         if not summaries:
             return "暂无会话概要。"
         return "\n\n---\n\n".join(
@@ -137,10 +249,32 @@ class MemoryService:
     # ── 画像 ──
 
     async def get_profile(self, *, user_id: int) -> Any:
-        return await self.store.get_profile(user_id=user_id, module=self.module)
+        async with session_scope() as db:
+            return (
+                await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
+            ).first()
 
     async def get_or_create_profile(self, *, user_id: int) -> Any:
-        return await self.store.get_or_create_profile(user_id=user_id, module=self.module)
+        async with session_scope() as db:
+            profile = UserProfile(
+                user_id=user_id,
+                module=self.module,
+                profile_json=make_default_profile_json(),
+                profile_score_json=make_default_score_json(),
+            )
+            db.add(profile)
+            try:
+                await db.commit()
+                await db.refresh(profile)
+                return profile
+            except IntegrityError:
+                await db.rollback()
+                existing = (
+                    await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
+                ).first()
+                if existing:
+                    return existing
+                raise
 
     async def upsert_profile(
         self,
@@ -150,44 +284,90 @@ class MemoryService:
         onboarding: dict[str, Any] | None = None,
         reason: str = "manual",
     ) -> Any:
-        return await self.profile_builder.upsert(
-            user_id=user_id,
-            session_id=session_id,
-            onboarding=onboarding,
-            reason=reason,
-        )
+        async with session_scope() as db:
+            return await self.profile_builder.upsert(db=db, user_id=user_id, session_id=session_id, onboarding=onboarding, reason=reason)
 
     async def list_profile_history(self, *, user_id: int, limit: int = 20) -> list[Any]:
-        return await self.store.list_profile_history(user_id=user_id, module=self.module, limit=limit)
+        async with session_scope() as db:
+            stmt = (
+                select(UserProfileHistory)
+                .where(UserProfileHistory.user_id == user_id, UserProfileHistory.module == self.module)
+                .order_by(UserProfileHistory.created_at.desc())
+                .limit(limit)
+            )
+            return list((await db.exec(stmt)).all())
 
     async def get_onboarding(self, *, user_id: int) -> dict[str, Any]:
-        return await self.profile_builder.get_onboarding(user_id)
+        async with session_scope() as db:
+            return await self.profile_builder.get_onboarding(db=db, user_id=user_id)
 
     # ── 长期记忆 ──
 
     async def get_long_term_memory(self, *, user_id: int) -> Any:
-        return await self.store.get_long_term_memory(user_id=user_id, module=self.module)
+        async with session_scope() as db:
+            return (
+                await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
+            ).first()
 
     async def get_or_create_long_term_memory(self, *, user_id: int) -> Any:
-        return await self.store.get_or_create_long_term_memory(user_id=user_id, module=self.module)
+        async with session_scope() as db:
+            existing = (
+                await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
+            ).first()
+            if existing:
+                return existing
+            memory = UserLongTermMemory(
+                user_id=user_id,
+                module=self.module,
+                memory_markdown=make_default_memory_markdown(),
+                category="general",
+            )
+            db.add(memory)
+            await db.commit()
+            await db.refresh(memory)
+            return memory
 
     # ── 只读 Agent 上下文 ──
 
-    async def get_profile_markdown(self, user_id: int) -> str:
-        profile = await self.store.get_profile(user_id=user_id, module=self.module)
-        if not profile:
-            return "暂无画像信息（新用户），请直接开始对话。"
-        if profile.profile_markdown and profile.profile_markdown.strip():
-            return profile.profile_markdown
-        if profile.profile_json:
-            return render_profile_markdown(profile.profile_json)
-        return "暂无画像信息。"
+    async def get_profile_markdown(self, user_id: int, dimension: str | None = None) -> str:
+        async with session_scope() as db:
+            profile = (
+                await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
+            ).first()
+            if not profile:
+                return "暂无画像信息（新用户），请直接开始对话。"
 
-    async def get_memory_markdown(self, user_id: int) -> str:
-        memory = await self.store.get_long_term_memory(user_id=user_id, module=self.module)
-        if not memory or not memory.memory_markdown:
-            return "暂无长期记忆。"
-        return memory.memory_markdown
+            if dimension and profile.profile_json:
+                from app.memory.profile import render_profile_dimension
+                return render_profile_dimension(profile.profile_json, dimension)
+
+            if profile.profile_markdown and profile.profile_markdown.strip():
+                return profile.profile_markdown
+            if profile.profile_json:
+                return render_profile_markdown(profile.profile_json)
+            return "暂无画像信息。"
+
+    async def get_memory_markdown(self, user_id: int, category: str | None = None) -> str:
+        async with session_scope() as db:
+            memory = (
+                await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
+            ).first()
+            if not memory or not memory.memory_markdown:
+                return "暂无长期记忆。"
+
+            if category:
+                from app.memory.types import LTM_CATEGORY_NAMES
+                import re
+                target_title = LTM_CATEGORY_NAMES.get(category, category)
+                pattern = re.compile(rf"## {re.escape(target_title)}\n(.*?)(?=\n## |\Z)", re.DOTALL)
+                match = pattern.search(memory.memory_markdown)
+                if match:
+                    content = match.group(1).strip()
+                    if content and content != "暂无信息。":
+                        return f"## {target_title}\n{content}"
+                return f"记忆中暂无指定的分类（{category}）信息。"
+
+            return memory.memory_markdown
 
     def build_file_context(self, attachments: list[str]) -> str:
         IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -217,12 +397,26 @@ class MemoryService:
         user_id: int,
         session_id: str,
         user_message: str,
-        assistant_reply: str,
-        enable_long_term_memory: bool = True,
+        assistant_reply: str
     ) -> None:
         delta = estimate_token_count(user_message) + estimate_token_count(assistant_reply)
         try:
-            await self.store.add_session_token_count(session_id=session_id, user_id=user_id, module=self.module, delta=delta)
+            async with session_scope() as db:
+                chat_session = (
+                    await db.exec(
+                        select(ChatSession).where(
+                            ChatSession.id == session_id,
+                            ChatSession.user_id == user_id,
+                            ChatSession.module == self.module,
+                        )
+                    )
+                ).first()
+                if not chat_session:
+                    chat_session = ChatSession(id=session_id, user_id=user_id, module=self.module, title=DEFAULT_SESSION_TITLE)
+                chat_session.summary_token_count = max(0, (chat_session.summary_token_count or 0) + delta)
+                chat_session.updated_at = now()
+                db.add(chat_session)
+                await db.commit()
         except Exception as exc:
             logger.error("[MemoryService] token 计数更新失败 user=%s session=%s err=%s", user_id, session_id, exc)
 
@@ -230,8 +424,7 @@ class MemoryService:
             user_id=user_id,
             session_id=session_id,
             user_message=user_message,
-            assistant_reply=assistant_reply,
-            enable_long_term_memory=enable_long_term_memory,
+            assistant_reply=assistant_reply
         )
 
     async def post_turn(
@@ -241,50 +434,49 @@ class MemoryService:
         session_id: str,
         user_message: str,
         assistant_reply: str,
-        turn_count: int = 0,
-        enable_long_term_memory: bool = True,
+        turn_count: int = 0
     ) -> dict[str, bool]:
         """单轮对话后执行记忆管线：压缩 → 长期记忆 → 画像。"""
         results: dict[str, bool] = {}
 
         try:
-            summary = await self.compressor.maybe_compress(
-                user_id=user_id,
-                session_id=session_id,
-                reason="post_turn",
-            )
-            results["compressed"] = summary is not None
+            async with session_scope() as db:
+                summary = await self.compressor.maybe_compress(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    reason="post_turn",
+                )
+                results["compressed"] = summary is not None
         except Exception as exc:
             logger.error("[MemoryService] 压缩失败: %s", exc)
             results["compressed"] = False
-
-        if not enable_long_term_memory:
-            results["ltm_updated"] = False
-            results["profile_updated"] = False
-            return results
-
         try:
-            updated = await self.ltm_extractor.maybe_update(
-                user_id=user_id,
-                session_id=session_id,
-                user_message=user_message,
-                assistant_reply=assistant_reply,
-                turn_count=turn_count,
-            )
-            results["ltm_updated"] = updated
+            async with session_scope() as db:
+                updated = await self.ltm_extractor.maybe_update(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    user_message=user_message,
+                    assistant_reply=assistant_reply,
+                    turn_count=turn_count,
+                )
+                results["ltm_updated"] = updated
         except Exception as exc:
             logger.error("[MemoryService] 长期记忆更新失败: %s", exc)
             results["ltm_updated"] = False
 
         try:
-            updated = await self.profile_builder.maybe_upsert(
-                user_id=user_id,
-                session_id=session_id,
-                user_message=user_message,
-                assistant_reply=assistant_reply,
-                turn_count=turn_count,
-            )
-            results["profile_updated"] = updated
+            async with session_scope() as db:
+                updated = await self.profile_builder.maybe_upsert(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    user_message=user_message,
+                    assistant_reply=assistant_reply,
+                    turn_count=turn_count,
+                )
+                results["profile_updated"] = updated
         except Exception as exc:
             logger.error("[MemoryService] 画像更新失败: %s", exc)
             results["profile_updated"] = False
@@ -295,24 +487,44 @@ class MemoryService:
         """用户登出时强制压缩和画像更新。"""
         if session_id:
             try:
-                await self.compressor.maybe_compress(
-                    user_id=user_id,
-                    session_id=session_id,
-                    force=True,
-                    reason="logout",
-                )
+                async with session_scope() as db:
+                    await self.compressor.maybe_compress(
+                        db=db,
+                        user_id=user_id,
+                        session_id=session_id,
+                        force=True,
+                        reason="logout",
+                    )
             except Exception as exc:
                 logger.error("[MemoryService] 登出压缩失败: %s", exc)
 
         try:
-            await self.profile_builder.upsert(user_id=user_id, session_id=session_id, reason="logout")
+            async with session_scope() as db:
+                await self.profile_builder.upsert(db=db, user_id=user_id, session_id=session_id, reason="logout")
         except Exception as exc:
             logger.error("[MemoryService] 登出画像更新失败: %s", exc)
 
     # ── Token 计数 ──
 
     async def add_session_token_count(self, *, session_id: str, user_id: int, delta: int) -> int:
-        return await self.store.add_session_token_count(session_id=session_id, user_id=user_id, module=self.module, delta=delta)
+        async with session_scope() as db:
+            chat_session = (
+                await db.exec(
+                    select(ChatSession).where(
+                        ChatSession.id == session_id,
+                        ChatSession.user_id == user_id,
+                        ChatSession.module == self.module,
+                    )
+                )
+            ).first()
+            if not chat_session:
+                chat_session = ChatSession(id=session_id, user_id=user_id, module=self.module, title=DEFAULT_SESSION_TITLE)
+            chat_session.summary_token_count = max(0, (chat_session.summary_token_count or 0) + delta)
+            chat_session.updated_at = now()
+            db.add(chat_session)
+            await db.commit()
+            await db.refresh(chat_session)
+            return chat_session.summary_token_count
 
 
 # ============ 模块级单例工厂 ============

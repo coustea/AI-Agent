@@ -108,7 +108,6 @@ def prepare_tutor_state(context: TutorAgentContext, history: list[ChatHistoryMes
         "system_prompt": context.system_prompt,
         "messages": messages,
         "answer_text": "",
-        "retrieved_docs": [],
         "termination_reason": "",
     }
 

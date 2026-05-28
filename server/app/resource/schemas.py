@@ -148,6 +148,10 @@ class AgentConfigs(BaseModel):
         return value.model_dump(mode="json")
 
 
+def _agent_sort_key(item: AgentSelection) -> tuple[int, int]:
+    return (item.priority, AGENT_DEFAULT_ORDER.index(item.agent_id.value) if item.agent_id.value in AGENT_DEFAULT_ORDER else 999)
+
+
 class ResourceGenerationRequest(BaseModel):
     """资源生成请求 — 与前端 TypeScript 类型对齐。"""
     model_config = ConfigDict(extra="forbid")
@@ -175,29 +179,16 @@ class ResourceGenerationRequest(BaseModel):
             ]
         if not [item for item in self.selected_agents if item.enabled]:
             raise ValueError("selected_agents 过滤 enabled=true 后不能为空")
-        self.selected_agents = sorted(
-            self.selected_agents,
-            key=lambda item: (
-                item.priority,
-                AGENT_DEFAULT_ORDER.index(item.agent_id.value) if item.agent_id.value in AGENT_DEFAULT_ORDER else 999,
-            ),
-        )
+        self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)
         return self
 
     def enabled_agent_ids(self) -> list[str]:
         """获取启用的 Agent ID 列表，按前端优先级和默认顺序排序。"""
-        enabled = [item for item in self.selected_agents if item.enabled]
-        enabled.sort(
-            key=lambda item: (
-                item.priority,
-                AGENT_DEFAULT_ORDER.index(item.agent_id.value) if item.agent_id.value in AGENT_DEFAULT_ORDER else 999,
-            ),
-        )
-        result: list[str] = []
-        for item in enabled:
-            if item.agent_id.value not in result:
-                result.append(item.agent_id.value)
-        return result
+        return [
+            item.agent_id.value
+            for item in sorted(self.selected_agents, key=_agent_sort_key)
+            if item.enabled
+        ]
 
 
 # ======================================================================
@@ -362,14 +353,24 @@ class ResourceResponse(BaseModel):
     items: list[ResourceItemResponse] = Field(default_factory=list)
 
 
-# ======================================================================
-# Re-exports from response.py
-# ======================================================================
+class ResourceDetailResponse(BaseModel):
+    """Resource detail response with content."""
 
-from app.resource.response import (  # noqa: E402
-    ResourceDetailResponse,
-    ResourceListResponse,
-)
+    id: int
+    title: str
+    resource_type: str
+    status: str = "pending"
+    content: str | None = None
+    metadata: dict | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ResourceListResponse(BaseModel):
+    """Resource list response."""
+
+    items: list[ResourceResponse] = Field(default_factory=list)
+    total: int = 0
 
 __all__ = [
     # Constants

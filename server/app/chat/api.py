@@ -49,7 +49,6 @@ async def mentor_chat_stream(
     need_teaching_diagram: bool = Form(default=False),
     generate_video: bool = Form(default=False),
     enable_search: bool = Form(default=False),
-    enable_long_term_memory: bool = Form(default=True),
     current_user: User = Depends(get_current_user),
 ):
     """SSE 流式对话主入口。
@@ -64,7 +63,6 @@ async def mentor_chat_stream(
         need_teaching_diagram: 是否生成图解说明。
         generate_video: 是否生成视频。
         enable_search: 是否启用联网搜索。
-        enable_long_term_memory: 是否在成功回答后维护长期记忆与画像，默认开启。
         current_user: 当前登录用户。
 
     Returns:
@@ -105,7 +103,6 @@ async def mentor_chat_stream(
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
             enable_search=enable_search,
-            enable_long_term_memory=enable_long_term_memory,
         )),
         media_type="text/event-stream",
         headers={
@@ -252,7 +249,10 @@ async def get_chat_file(
     if current_user.id != owner_id:
         return HttpResponse.error(code=403, message="无权访问此文件")
 
-    file_path = CHAT_DIR / str(owner_id) / str(session_id) / filename
+    file_path = (CHAT_DIR / str(owner_id) / str(session_id) / filename).resolve()
+    base_dir = (CHAT_DIR / str(owner_id) / str(session_id)).resolve()
+    if not str(file_path).startswith(str(base_dir)):
+        return HttpResponse.error(code=400, message="非法文件路径")
     if not file_path.exists():
         return HttpResponse.error(code=404, message="文件不存在")
 

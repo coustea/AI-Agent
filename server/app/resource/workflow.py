@@ -31,12 +31,8 @@ class ResourceGenerationWorkflow:
         self.emitter = emitter
         self.resource_service = resource_service
 
-    async def run(self, user_id: int, request: ResourceGenerationRequest, profile: dict[str, Any], resource_id: int | None = None) -> dict[str, Any]:
+    async def run(self, user_id: int, request: ResourceGenerationRequest, profile: dict[str, Any], resource_id: int) -> dict[str, Any]:
         """执行资源生成并返回前端资源包。"""
-        if resource_id is None:
-            resource_record = await self.resource_service.create_resource(user_id=user_id, request=request)
-            resource_id = int(getattr(resource_record, "id", 0) or 0)
-
         self.emitter.resource_id = resource_id
 
         await self.emitter.emit_workflow("created", "资源生成任务已创建", progress=2)
@@ -49,8 +45,8 @@ class ResourceGenerationWorkflow:
                 await self.emitter.emit_done(bundle=None)
                 return {"success": False, "error": "没有启用的 Agent"}
 
-            plan = await self._run_planning(request=request, profile=profile, enabled_agents=enabled_agents)
-            results = await self._run_resource_agents(
+            plan = await self._plan(request=request, profile=profile, enabled_agents=enabled_agents)
+            results = await self._run_agent(
                 user_id=user_id,
                 resource_id=resource_id,
                 enabled_agents=enabled_agents,
@@ -68,7 +64,7 @@ class ResourceGenerationWorkflow:
                 resource_id,
                 failed_results,
             )
-            review_result = await self._run_review(
+            review_result = await self._review(
                 request=request,
                 profile=profile,
                 plan=plan,
@@ -100,7 +96,7 @@ class ResourceGenerationWorkflow:
             await self.emitter.emit_done(bundle=None)
             return {"success": False, "error": str(exc)}
 
-    async def _run_planning(
+    async def _plan(
         self,
         *,
         request: ResourceGenerationRequest,
@@ -136,7 +132,7 @@ class ResourceGenerationWorkflow:
                 personalization_summary=f"PlanningAgent 失败，已使用基础教学蓝图继续生成: {error}",
             )
 
-    async def _run_resource_agents(
+    async def _run_agent(
         self,
         *,
         user_id: int,
@@ -211,7 +207,7 @@ class ResourceGenerationWorkflow:
             payload={"error": error},
         )
 
-    async def _run_review(
+    async def _review(
         self,
         *,
         request: ResourceGenerationRequest,

@@ -122,20 +122,6 @@ def _previous_teaching_exchange(messages: list[Any]) -> tuple[str, str]:
     return "", ""
 
 
-def _search_requested(user_message: str) -> bool:
-    """仅将明确的最新信息请求路由到联网搜索。"""
-    normalized = re.sub(r"\s+", "", (user_message or "").lower())
-    if not normalized:
-        return False
-    patterns = (
-        r"(?:联网|上网)(?:搜索|查询|检索|查)",
-        r"(?:搜索|检索|查一下|帮我查|查询)(?:一下)?(?:最新|今天|近期|当前|版本|新闻|资料)?",
-        r"(?:最新|今天|今日|近期发布|最近更新|当前版本|实时|新闻)",
-        r"(?:报错|异常堆栈|traceback|error|版本兼容|升级到|release)",
-    )
-    return any(re.search(pattern, normalized) for pattern in patterns)
-
-
 def _answer_generation_policy(user_message: str) -> str:
     """选择提示词级别的回答深度，不施加输出截断。"""
     normalized = re.sub(r"\s+", "", (user_message or "").lower())
@@ -272,19 +258,22 @@ class TutorAgent:
         *,
         node_name: str,
         config: RunnableConfig,
+        runnable: Any = None,
         fallback_text: str = "抱歉，我暂时无法回答这个问题，请稍后重试。",
         retry_prompt: str = "请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。",
     ) -> AIMessage:
         """流式输出文本块；仅在尚未输出可见内容时重试。"""
         has_visible_output = False
+        effective_runnable = runnable or self.llm
 
         async def generate(input_messages: list[Any]) -> AIMessage | None:
             nonlocal has_visible_output
             final_chunk = None
             try:
-                async for chunk in self.llm.astream(
+                kwargs = {"temperature": 0.3} if effective_runnable is self.llm else {}
+                async for chunk in effective_runnable.astream(
                     input_messages,
-                    temperature=0.3,
+                    **kwargs,
                 ):
                     if final_chunk is None:
                         final_chunk = chunk
@@ -322,70 +311,24 @@ class TutorAgent:
         )
         return AIMessage(content=fallback_text)
 
-    async def _load_learner_context(
-        self,
-        state: TutorState,
-        config: RunnableConfig,
-    ) -> tuple[str, str]:
-        """仅在必要时通过注入的能力读取学习者依据。"""
-        profile_context = str(state.get("retrieved_profile_context", "")).strip()
-        memory_context = str(state.get("retrieved_memory_context", "")).strip()
-        reader = self.context.learner_context_reader
-        if reader is None:
-            return profile_context, memory_context
-
-        question = extract_question(state.get("messages") or [])
-        need_profile, need_memory = _learner_context_requests(question)
-
-        if need_profile and not profile_context:
-            await adispatch_custom_event(
-                "learner_context_status",
-                {"stage": "reading_profile", "message": "正在读取学习画像以调整讲解方式..."},
-                config=config,
-            )
-            try:
-                profile_context = (await reader.read_learning_profile()).strip()
-            except Exception as exc:
-                logger.warning("[TutorAgent] 读取学习画像失败，继续通用回答 err=%s", exc)
-
-        if need_memory and not memory_context:
-            await adispatch_custom_event(
-                "learner_context_status",
-                {"stage": "searching_learning_memory", "message": "正在检索相关学习记录..."},
-                config=config,
-            )
-            try:
-                memory_context = (await reader.search_learning_memory(question)).strip()
-            except Exception as exc:
-                logger.warning("[TutorAgent] 检索学习记忆失败，继续通用回答 err=%s", exc)
-
-        return profile_context, memory_context
+    # (Removed _load_learner_context)
 
     @staticmethod
     def _scoped_answer_prompt(
         system_prompt: str,
         *,
         question: str,
-        profile_context: str,
-        memory_context: str,
         diagram_enabled: bool,
     ) -> str:
         """基于本轮实际读取的依据组织回答提示词。"""
         sections = [
             system_prompt,
             f"# 本轮答复深度\n{_answer_generation_policy(question)}",
+            "# 工具使用说明\n"
+            "如果你需要了解学生的背景、基础水平或偏好，请自主调用 `get_user_profile` 工具。\n"
+            "如果你需要了解学生过去学过什么、有什么薄弱点、历史错题，请自主调用 `get_long_term_memory` 工具。\n"
+            "如果你需要查询时效性信息（比如最新版本、新闻、资料等），请自主调用搜索工具（如 `tavily_search` 等）。"
         ]
-        evidence: list[str] = []
-        if profile_context:
-            evidence.append(f"## 按需读取的学习画像\n{profile_context}")
-        if memory_context:
-            evidence.append(f"## 按需检索的长期学习依据\n{memory_context}")
-        if evidence:
-            sections.append(
-                "# 本轮按需读取的学习依据\n"
-                "仅据下列真实记录调整回答，不要延伸推断学生能力或学习经历。\n\n"
-                + "\n\n".join(evidence)
-            )
         if diagram_enabled:
             sections.append(
                 "# 本轮图解输出已启用\n"
@@ -495,7 +438,6 @@ class TutorAgent:
         has_attachments = bool(attachments)
 
         with node_timer("classify", user=user_id, session=session_id):
-            enable_search = enable_search or _search_requested(user_message)
 
             # 图解不能由概率分类结果擅自开启，只接受 UI 开关或本轮显式文字请求。
             need_diagram = need_teaching_diagram or _explicit_diagram_requested(user_message)
@@ -553,15 +495,15 @@ class TutorAgent:
         state: TutorState,
         config: RunnableConfig,
     ) -> dict[str, Any]:
-        """直接回答路径：Spark MAX 直接回答，按需读取只读学习依据。
-
+        """直接回答路径：Spark MAX 直接回答，支持自主调用搜索和记忆工具。
+        
         Args:
             state: LangGraph 状态。
-
+            
         Returns:
             更新后的状态片段。
         """
-        messages = state.get("messages") or []
+        messages = list(state.get("messages") or [])
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         system_prompt = state.get("system_prompt", "")
@@ -570,29 +512,59 @@ class TutorAgent:
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
 
-            profile_context = str(state.get("retrieved_profile_context", "")).strip()
-            memory_context = str(state.get("retrieved_memory_context", "")).strip()
             scoped_prompt = self._scoped_answer_prompt(
                 system_prompt,
                 question=question,
-                profile_context=profile_context,
-                memory_context=memory_context,
                 diagram_enabled=bool(state.get("need_teaching_diagram", False)),
             )
             full_messages = build_messages(scoped_prompt, list(messages))
-            result = await self._stream_answer_with_retry(
-                full_messages,
-                node_name="direct_answer",
-                config=config,
-            )
-
-            return {
-                "messages": [result],
-                "answer_text": result.content,
-                "retrieved_profile_context": profile_context,
-                "retrieved_memory_context": memory_context,
-                "termination_reason": "direct_answer_done",
-            }
+            
+            # 初始化工具
+            from app.chat.tools.memory import make_memory_tools
+            memory_tools = []
+            if self.context.memory_reader:
+                memory_tools = make_memory_tools(self.context.memory_reader)
+            tools = memory_tools + [duckduckgo_search, tavily_search, serp_search]
+            tools_by_name = {t.name: t for t in tools}
+            
+            llm_with_tools = self.llm.model.bind_tools(tools)
+            
+            while True:
+                result = await self._stream_answer_with_retry(
+                    full_messages,
+                    node_name="direct_answer",
+                    config=config,
+                    runnable=llm_with_tools,
+                )
+                
+                tool_calls = getattr(result, "tool_calls", [])
+                if not tool_calls:
+                    return {
+                        "messages": [result],
+                        "answer_text": result.content,
+                        "retrieved_profile_context": "",
+                        "retrieved_memory_context": "",
+                        "termination_reason": "direct_answer_done",
+                    }
+                    
+                # 处理工具调用
+                from langchain_core.messages import ToolMessage
+                full_messages.append(result)
+                
+                for tc in tool_calls:
+                    tool_name = tc.get("name", "")
+                    tool_args = tc.get("args", {})
+                    tool_id = tc.get("id", "")
+                    
+                    try:
+                        if tool_name in tools_by_name:
+                            tool_result = await tools_by_name[tool_name].ainvoke(tool_args)
+                        else:
+                            tool_result = f"Error: Tool {tool_name} not found"
+                        full_messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=str(tool_result)))
+                    except Exception as exc:
+                        logger.warning("[TutorAgent] 工具调用失败: %s", exc)
+                        full_messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=f"调用失败: {exc}"))
 
     # ------------------------------------------------------------------
     # 节点: search_node
@@ -712,8 +684,8 @@ class TutorAgent:
         state: TutorState,
         config: RunnableConfig,
     ) -> dict[str, Any]:
-        """Spark 总结节点：基于搜索资料生成完整教学回答。"""
-        messages = state.get("messages") or []
+        """Spark 总结节点：基于搜索资料生成完整教学回答，支持自主调用记忆工具。"""
+        messages = list(state.get("messages") or [])
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         search_result = state.get("search_result", "")
@@ -730,13 +702,10 @@ class TutorAgent:
             )
             fallback_text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
             retry_prompt = "请基于已有资料重新回答，给出完整、可读、适合教学场景的中文回答。"
-            profile_context = str(state.get("retrieved_profile_context", "")).strip()
-            memory_context = str(state.get("retrieved_memory_context", "")).strip()
+            
             scoped_prompt = self._scoped_answer_prompt(
                 system_prompt,
                 question=question,
-                profile_context=profile_context,
-                memory_context=memory_context,
                 diagram_enabled=bool(state.get("need_teaching_diagram", False)),
             )
 
@@ -744,22 +713,54 @@ class TutorAgent:
                 SystemMessage(content=scoped_prompt),
                 HumanMessage(content=prompt),
             ]
-
-            result = await self._stream_answer_with_retry(
-                full_messages,
-                node_name="spark_summary",
-                config=config,
-                fallback_text=fallback_text,
-                retry_prompt=retry_prompt,
-            )
-
-            return {
-                "messages": [result],
-                "answer_text": result.content,
-                "retrieved_profile_context": profile_context,
-                "retrieved_memory_context": memory_context,
-                "termination_reason": "spark_summary_done",
-            }
+            
+            # 初始化工具（仅记忆工具，由于已经搜索过，不再重复提供搜索工具）
+            from app.chat.tools.memory import make_memory_tools
+            memory_tools = []
+            if self.context.memory_reader:
+                memory_tools = make_memory_tools(self.context.memory_reader)
+            tools_by_name = {t.name: t for t in memory_tools}
+            
+            llm_with_tools = self.llm.model.bind_tools(memory_tools) if memory_tools else self.llm
+            
+            while True:
+                result = await self._stream_answer_with_retry(
+                    full_messages,
+                    node_name="spark_summary",
+                    config=config,
+                    runnable=llm_with_tools,
+                    fallback_text=fallback_text,
+                    retry_prompt=retry_prompt,
+                )
+                
+                tool_calls = getattr(result, "tool_calls", [])
+                if not tool_calls:
+                    return {
+                        "messages": [result],
+                        "answer_text": result.content,
+                        "retrieved_profile_context": "",
+                        "retrieved_memory_context": "",
+                        "termination_reason": "spark_summary_done",
+                    }
+                    
+                # 处理工具调用
+                from langchain_core.messages import ToolMessage
+                full_messages.append(result)
+                
+                for tc in tool_calls:
+                    tool_name = tc.get("name", "")
+                    tool_args = tc.get("args", {})
+                    tool_id = tc.get("id", "")
+                    
+                    try:
+                        if tool_name in tools_by_name:
+                            tool_result = await tools_by_name[tool_name].ainvoke(tool_args)
+                        else:
+                            tool_result = f"Error: Tool {tool_name} not found"
+                        full_messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=str(tool_result)))
+                    except Exception as exc:
+                        logger.warning("[TutorAgent] 工具调用失败: %s", exc)
+                        full_messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=f"调用失败: {exc}"))
 
 
     # ------------------------------------------------------------------
@@ -819,13 +820,9 @@ class TutorAgent:
                 "回答要清晰、分点、适合教学场景。"
             )
 
-            profile_context = str(state.get("retrieved_profile_context", "")).strip()
-            memory_context = str(state.get("retrieved_memory_context", "")).strip()
             scoped_prompt = self._scoped_answer_prompt(
                 system_prompt,
                 question=question,
-                profile_context=profile_context,
-                memory_context=memory_context,
                 diagram_enabled=bool(state.get("need_teaching_diagram", False)),
             )
             full_messages = build_messages(scoped_prompt, [HumanMessage(content=answer_prompt)])
@@ -839,8 +836,8 @@ class TutorAgent:
             return {
                 "messages": [result],
                 "answer_text": result.content,
-                "retrieved_profile_context": profile_context,
-                "retrieved_memory_context": memory_context,
+                "retrieved_profile_context": "",
+                "retrieved_memory_context": "",
                 "attachment_analysis_result": {
                     "mode": "upload_preanalysis",
                     "analysis_context": full_context,

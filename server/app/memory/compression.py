@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from sqlmodel import func, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.memory.store import MemoryStore
+from app.infra.models import ChatMessage, ChatSession, ChatSessionSummary
 from app.memory.types import (
     DIALOGUE_ROLES,
     SUMMARY_KEEP_RECENT,
@@ -20,34 +23,48 @@ logger = get_logger(__name__)
 class SessionCompressor:
     """按触发条件把旧消息压缩为 Markdown 概要。"""
 
-    def __init__(self, *, module: str = "mentor", store: MemoryStore | None = None) -> None:
+    def __init__(self, *, module: str = "mentor") -> None:
         self.module = module
-        self.store = store or MemoryStore()
         self.llm = get_llm()
 
     async def maybe_compress(
         self,
         *,
+        db: AsyncSession,
         user_id: int,
         session_id: str,
         keep_recent: int = SUMMARY_KEEP_RECENT,
         force: bool = False,
         reason: str = "post_turn",
     ):
-        should_compress = force or await self.should_compress(user_id=user_id, session_id=session_id)
+        should_compress = force or await self._should_compress(db=db, user_id=user_id, session_id=session_id)
         if not should_compress:
             return None
-        return await self.compress(user_id=user_id, session_id=session_id, keep_recent=keep_recent, reason=reason)
+        return await self._compress(db=db, user_id=user_id, session_id=session_id, keep_recent=keep_recent, reason=reason)
 
-    async def should_compress(self, *, user_id: int, session_id: str) -> bool:
-        token_count = await self.store.get_session_token_count(session_id)
+    async def _should_compress(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
+        chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
+        token_count = chat_session.summary_token_count if chat_session else 0
         if token_count >= SUMMARY_TOKEN_THRESHOLD:
             return True
-        message_count = await self.store.count_messages(user_id=user_id, session_id=session_id, module=self.module)
-        return message_count > SUMMARY_MESSAGE_THRESHOLD
+        count_result = (
+            await db.exec(
+                select(func.count()).where(
+                    ChatMessage.user_id == user_id,
+                    ChatMessage.session_id == session_id,
+                    ChatMessage.module == self.module,
+                )
+            )
+        ).one()
+        return count_result > SUMMARY_MESSAGE_THRESHOLD
 
-    async def compress(self, *, user_id: int, session_id: str, keep_recent: int = SUMMARY_KEEP_RECENT, reason: str = "manual"):
-        messages = await self.store.list_messages(user_id=user_id, session_id=session_id, module=self.module, limit=None, only_unexpired=False)
+    async def _compress(self, *, db: AsyncSession, user_id: int, session_id: str, keep_recent: int = SUMMARY_KEEP_RECENT, reason: str = "manual"):
+        filters = [
+            ChatMessage.user_id == user_id,
+            ChatMessage.session_id == session_id,
+            ChatMessage.module == self.module,
+        ]
+        messages = list((await db.exec(select(ChatMessage).where(*filters).order_by(ChatMessage.created_at.asc()))).all())
         dialogue = [msg for msg in messages if msg.role in DIALOGUE_ROLES and str(msg.content or "").strip()]
         if len(dialogue) <= keep_recent:
             return None
@@ -75,7 +92,7 @@ class SessionCompressor:
         if not summary_markdown or not summary_markdown.strip():
             summary_markdown = extract_fallback_summary_markdown(chat_text)
 
-        summary = await self.store.create_summary(
+        summary = ChatSessionSummary(
             user_id=user_id,
             session_id=session_id,
             module=self.module,
@@ -84,8 +101,26 @@ class SessionCompressor:
             start_message_id=target[0].id,
             end_message_id=target[-1].id,
         )
+        db.add(summary)
+        await db.flush()
+
         first_kept = dialogue[-keep_recent].id if keep_recent > 0 else (target[-1].id + 1 if target[-1].id else 0)
         if first_kept:
-            await self.store.delete_messages_before(user_id=user_id, session_id=session_id, module=self.module, before_message_id=first_kept)
-        await self.store.reset_session_token_count(session_id)
+            stale_messages = list(
+                (await db.exec(
+                    select(ChatMessage).where(
+                        ChatMessage.user_id == user_id,
+                        ChatMessage.session_id == session_id,
+                        ChatMessage.module == self.module,
+                        ChatMessage.id < first_kept,
+                    )
+                )).all()
+            )
+            for msg in stale_messages:
+                await db.delete(msg)
+
+        chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
+        if chat_session:
+            chat_session.summary_token_count = 0
+            db.add(chat_session)
         return summary
