@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from typing import Any
@@ -48,6 +49,7 @@ GRAPH_RECURSION_LIMIT = 30
 # 图节点名称集合
 GRAPH_NODE_NAMES = {
     "classify",
+    "decide_learner_context",
     "direct_answer",
     "search_node",
     "spark_summary",
@@ -177,6 +179,20 @@ def _learner_context_requests(user_message: str) -> tuple[bool, bool]:
         any(re.search(pattern, normalized) for pattern in profile_patterns),
         any(re.search(pattern, normalized) for pattern in memory_patterns),
     )
+
+
+def _has_loose_learning_signal(question: str) -> bool:
+    """宽松信号检测：正则未明确匹配但有微弱个性化需求迹象。"""
+    normalized = re.sub(r"\s+", "", (question or "").lower())
+    if not normalized:
+        return False
+    patterns = (
+        r"(?:我|自己|本人).{0,16}(?:理解|掌握|觉得|感觉|困惑|迷茫|不清楚|不明白|不会|做错|容易错|混淆)",
+        r"(?:薄弱|困难|难点|瓶颈|卡住|踩坑|坑|误区|陷阱|常见错误)",
+        r"(?:帮我|给我|推荐|建议|适合|定制)",
+        r"(?:怎么学|学习路线|复习|备考|突击|准备|冲刺)",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
 
 
 def _graph_stream_kwargs() -> dict[str, Any]:
@@ -399,6 +415,7 @@ class TutorAgent:
             graph = StateGraph(TutorState)
             # 添加节点
             graph.add_node("classify", self._classify_node)
+            graph.add_node("decide_learner_context", self._decide_learner_context_node)
             graph.add_node("direct_answer", self._direct_answer_node)
             graph.add_node("search_node", self._search_node)
             graph.add_node("spark_summary", self._spark_summary_node)
@@ -407,8 +424,9 @@ class TutorAgent:
 
             # 添加边
             graph.add_edge(START, "classify")
+            graph.add_edge("classify", "decide_learner_context")
             graph.add_conditional_edges(
-                "classify",
+                "decide_learner_context",
                 classify_route,
                 {
                     "direct": "direct_answer",
@@ -552,7 +570,8 @@ class TutorAgent:
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
 
-            profile_context, memory_context = await self._load_learner_context(state, config)
+            profile_context = str(state.get("retrieved_profile_context", "")).strip()
+            memory_context = str(state.get("retrieved_memory_context", "")).strip()
             scoped_prompt = self._scoped_answer_prompt(
                 system_prompt,
                 question=question,
@@ -711,7 +730,8 @@ class TutorAgent:
             )
             fallback_text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
             retry_prompt = "请基于已有资料重新回答，给出完整、可读、适合教学场景的中文回答。"
-            profile_context, memory_context = await self._load_learner_context(state, config)
+            profile_context = str(state.get("retrieved_profile_context", "")).strip()
+            memory_context = str(state.get("retrieved_memory_context", "")).strip()
             scoped_prompt = self._scoped_answer_prompt(
                 system_prompt,
                 question=question,
@@ -799,7 +819,8 @@ class TutorAgent:
                 "回答要清晰、分点、适合教学场景。"
             )
 
-            profile_context, memory_context = await self._load_learner_context(state, config)
+            profile_context = str(state.get("retrieved_profile_context", "")).strip()
+            memory_context = str(state.get("retrieved_memory_context", "")).strip()
             scoped_prompt = self._scoped_answer_prompt(
                 system_prompt,
                 question=question,

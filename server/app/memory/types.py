@@ -8,8 +8,6 @@ from typing import Any, Final
 
 from pydantic import BaseModel, Field
 
-from pydantic import BaseModel, Field
-
 class ModuleName:
     MENTOR: Final[str] = "mentor"
     RESOURCE: Final[str] = "resource"
@@ -199,19 +197,6 @@ def make_default_memory_markdown() -> str:
     return "\n".join(lines)
 
 
-def make_default_summary_markdown() -> str:
-    """会话概要默认 Markdown（3 字段）。"""
-    return "# 会话概要\n\n## 学习任务\n暂无。\n\n## 困惑点\n暂无。\n\n## 关键主题\n暂无。"
-
-
-class SummaryLLMOutput(BaseModel):
-    """压缩概要 LLM 输出（Markdown 格式，3 字段）。"""
-
-    summary_markdown: str = Field(
-        description="会话概要 Markdown，用 ## 分节：学习任务、困惑点、关键主题",
-    )
-
-
 class DimensionOutput(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     summary: str | None = None
@@ -286,25 +271,31 @@ COMPRESSION_FALLBACK_TOPIC_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
 
 
 def extract_fallback_summary_markdown(dialogue_text: str) -> str:
-    """LLM 失败时用启发式正则提取概要 Markdown。"""
-    task_matches = [m.group().strip() for m in COMPRESSION_FALLBACK_TASK_PATTERNS if m.search(dialogue_text)]
-    confusion_matches = [m.group().strip() for m in COMPRESSION_FALLBACK_CONFUSION_PATTERNS if m.search(dialogue_text)]
-    topic_matches = [m.group().strip() for m in COMPRESSION_FALLBACK_TOPIC_PATTERNS if m.search(dialogue_text)]
+    """LLM 失败时用启发式正则提取任务状态 Markdown（降级）。"""
+    task_matches = [m.group().strip() for p in COMPRESSION_FALLBACK_TASK_PATTERNS if (m := p.search(dialogue_text))]
+    confusion_matches = [m.group().strip() for p in COMPRESSION_FALLBACK_CONFUSION_PATTERNS if (m := p.search(dialogue_text))]
+    topic_matches = [m.group().strip() for p in COMPRESSION_FALLBACK_TOPIC_PATTERNS if (m := p.search(dialogue_text))]
 
-    lines = ["# 会话概要（降级提取）"]
-    lines.append("\n## 学习任务")
+    lines = ["# 当前会话摘要（降级提取）"]
+    lines.append("\n## 当前任务")
     if task_matches:
         lines.extend(f"- {t}" for t in task_matches[:5])
     else:
-        lines.append("未能自动提取学习任务。")
-    lines.append("\n## 困惑点")
+        lines.append("暂无。")
+    lines.append("\n## 当前阶段")
+    lines.append("未能自动提取。")
+    lines.append("\n## 用户最新意图")
     if confusion_matches:
-        lines.extend(f"- {c}" for c in confusion_matches[:5])
+        lines.extend(f"- {c}" for c in confusion_matches[:3])
     else:
-        lines.append("未能自动提取困惑点。")
-    lines.append("\n## 关键主题")
+        lines.append("暂无。")
+    lines.append("\n## 已确认结论")
     if topic_matches:
-        lines.extend(f"- {t}" for t in topic_matches[:8])
+        lines.extend(f"- {t}" for t in topic_matches[:5])
     else:
-        lines.append("未能自动提取关键主题。")
+        lines.append("暂无。")
+    lines.append("\n## 用户纠正与约束")
+    lines.append("暂无。")
+    lines.append("\n## 下一步")
+    lines.append("继续对话以明确任务方向。")
     return "\n".join(lines)

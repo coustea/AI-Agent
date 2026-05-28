@@ -281,20 +281,6 @@ class MemoryStore:
         summaries = await self.list_summaries(user_id=user_id, session_id=session_id, module=module, limit=1)
         return summaries[0] if summaries else None
 
-    async def list_cross_session_summaries(
-        self,
-        *,
-        user_id: int,
-        module: str,
-        exclude_session_id: str | None = None,
-        limit: int = 5,
-    ) -> list[ChatSessionSummary]:
-        async with await self._get_session() as session:
-            stmt = select(ChatSessionSummary).where(ChatSessionSummary.user_id == user_id, ChatSessionSummary.module == module)
-            if exclude_session_id:
-                stmt = stmt.where(ChatSessionSummary.session_id != exclude_session_id)
-            return list((await session.exec(stmt.order_by(ChatSessionSummary.created_at.desc()).limit(limit))).all())
-
     async def get_profile(self, *, user_id: int, module: str) -> UserProfile | None:
         async with await self._get_session() as session:
             return (
