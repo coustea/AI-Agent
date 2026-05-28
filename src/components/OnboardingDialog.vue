@@ -29,7 +29,7 @@
         </div>
       </header>
 
-      <main class="chat-messages" :class="{ 'is-expanded-view': isAllStepsFinished }" ref="messagesRef">
+      <main class="chat-messages" ref="messagesRef">
         <transition-group name="msg-list">
           <div v-for="msg in messages" :key="msg.id" class="message-row" :class="msg.role">
             <div class="avatar" v-if="msg.role === 'bot'">
@@ -689,6 +689,7 @@ const handleHeaderCommand = (cmd: string) => {
 /* Messages Area */
 .chat-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 30px var(--space-6);
   display: flex;
@@ -696,10 +697,6 @@ const handleHeaderCommand = (cmd: string) => {
   gap: var(--space-6);
   background: var(--color-surface);
   transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.chat-messages.is-expanded-view {
-  flex: 1 0 auto;
 }
 
 .msg-list-enter-active,

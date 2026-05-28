@@ -6,11 +6,11 @@ export interface QuestionOption {
 export interface Question {
   id: string;
   subject: string;
-  type: '选择题' | '判断题' | '填空题' | '简答题';
+  type: '选择题' | '多选题' | '判断题' | '填空题' | '简答题';
   difficulty: '简单' | '中等' | '困难';
   content: string;
   options?: Record<string, string>; // 选择题选项，如 { A: 'xx', B: 'yy' }
-  answer: string; // 选择题为 'A'，判断题为 '正确'/'错误'，填空题为关键词，简答题为参考答案
+  answer: string; // 单选为 'A'，多选为 'A,B'，判断题为 '正确'/'错误'
   analysis: string; // 答案解析
   knowledge_points: string[]; // 知识点标签
 }
@@ -104,6 +104,22 @@ export const mockQuestions: Question[] = [
     answer: '基本原理：通过一趟排序将待排记录分割成独立的两部分，其中一部分记录的关键字均比另一部分的关键字小，则可分别对这两部分记录继续进行排序，以达到整个序列有序。使用双指针和分治策略。\n时间复杂度：平均时间复杂度为 O(N log N)，最坏时间复杂度为 O(N²)。\n最坏情况：当待排序序列已经基本有序（升序或降序）或基本逆序，且每次选择第一个元素作为枢轴（Pivot）时，划分极度不均匀，会导致递归树退化为单支树，此时达到最坏复杂度 O(N²)。\n优化方案：1. 三数取中法（选择首、尾、中三个数的中间值作为枢轴）；2. 随机选取枢轴；3. 当子序列长度较小时，切换为插入排序。',
     analysis: '快速排序是一种高效的划分交换排序，虽然最坏情况下是 O(N²)，但通过合理的枢轴选择策略（如三数取中）可以大概率避免最坏情况的发生。',
     knowledge_points: ['快速排序', '分治法', '复杂度分析', '算法优化']
+  },
+  {
+    id: 'ds_008',
+    subject: '数据结构与算法',
+    type: '多选题',
+    difficulty: '中等',
+    content: '下列排序算法中，平均时间复杂度为 O(N log N) 的有：',
+    options: {
+      A: '快速排序',
+      B: '归并排序',
+      C: '冒泡排序',
+      D: '堆排序'
+    },
+    answer: 'A,B,D',
+    analysis: '快速排序的平均时间复杂度为 O(N log N)，归并排序和堆排序在平均情况下也均为 O(N log N)。冒泡排序的平均时间复杂度为 O(N²)。',
+    knowledge_points: ['排序算法', '时间复杂度', '多选题']
   },
 
   // ================= 操作系统 =================

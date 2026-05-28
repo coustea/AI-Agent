@@ -443,6 +443,35 @@
                     placeholder="输入课程名后【按回车】即可添加"
                     class="w-full"
                 >
+                  <template #tag>
+                    <div v-if="profileForm.courses.length > 0" class="editor-course-selection">
+                      <strong class="course-single-title" :title="profileForm.courses[0]">{{ profileForm.courses[0] }}</strong>
+                      <el-popover
+                        v-if="profileForm.courses.length > 1"
+                        placement="top"
+                        :width="220"
+                        trigger="hover"
+                        popper-class="course-popover"
+                      >
+                        <template #reference>
+                          <el-button link type="primary" class="view-all-courses-btn" @click.stop>
+                            (共{{ profileForm.courses.length }}门)
+                          </el-button>
+                        </template>
+                        <div class="all-courses-popover-content">
+                          <div class="popover-title">
+                            <el-icon><VideoPlay /></el-icon> 正在学习的全部课程
+                          </div>
+                          <div class="popover-course-list">
+                            <div v-for="(course, idx) in profileForm.courses" :key="course" class="popover-course-item">
+                              <span class="course-number">{{ idx + 1 }}.</span>
+                              <span class="course-name">{{ course }}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </el-popover>
+                    </div>
+                  </template>
                   <el-option v-for="course in PRESET_COURSES" :key="course" :label="course" :value="course" />
                 </el-select>
               </el-form-item>
@@ -604,7 +633,7 @@ const profileData = ref<any>(null)
 const profileHistory = ref<any[]>([])
 
 const profileTab = ref('dimensions')
-const activeDimensionKey = ref<string | null>('knowledge_foundation')
+const activeDimensionKey = ref<string | null>(null)
 const selectedHistoryVersion = ref<number | null>(null)
 const compareVersionData = ref<any>(null)
 
@@ -1431,6 +1460,13 @@ const getStatusType = (status: string) => {
 .view-all-courses-btn:hover {
   opacity: 0.8;
   text-decoration: underline;
+}
+.editor-course-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .task-title-cell { font-weight: var(--weight-semibold); color: var(--color-text-strong); }
