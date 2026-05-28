@@ -1385,7 +1385,6 @@ const getAvatarCapabilities = () => ({
   history: buildStreamHistory().map(item => ({ role: item.role, content: item.content })),
   enable_search: enableWebSearch.value,
   generate_video: generateVideo.value,
-  enable_long_term_memory: true,
 })
 
 const handleTeachingDiagramToggle = () => {

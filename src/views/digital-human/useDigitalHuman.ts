@@ -12,7 +12,6 @@ export interface TextMessageParams {
     attachments?: string[]
     enable_search?: boolean
     generate_video?: boolean
-    enable_long_term_memory?: boolean
     speech_rate?: number
 }
 
@@ -21,7 +20,6 @@ export interface DigitalHumanCapabilities {
     history?: Array<{ role: string; content: string }>
     enable_search?: boolean
     generate_video?: boolean
-    enable_long_term_memory?: boolean
 }
 
 export interface StreamExtend {
@@ -456,8 +454,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         if (params.attachments?.length) msg.attachments = params.attachments
         if (typeof params.enable_search === 'boolean') msg.enable_search = params.enable_search
         if (typeof params.generate_video === 'boolean') msg.generate_video = params.generate_video
-        if (typeof params.enable_long_term_memory === 'boolean') msg.enable_long_term_memory = params.enable_long_term_memory
-        if (typeof params.speech_rate === 'number') msg.speech_rate = params.speech_rate
+                if (typeof params.speech_rate === 'number') msg.speech_rate = params.speech_rate
 
         ws.send(JSON.stringify(msg))
         resetIdleTimer()

@@ -52,7 +52,6 @@ export interface StreamChatParams {
   need_teaching_diagram?: boolean
   generate_video?: boolean
   enable_search?: boolean
-  enable_long_term_memory?: boolean
 }
 
 export interface StreamChatHistoryItem {
@@ -164,8 +163,6 @@ export function streamChat(
   if (params.enable_search != null) {
     formData.append('enable_search', String(Boolean(params.enable_search)))
   }
-  if (params.enable_long_term_memory != null) {
-    formData.append('enable_long_term_memory', String(Boolean(params.enable_long_term_memory)))
   }
 
   fetch('/api/v1/ai/chat/stream', {
