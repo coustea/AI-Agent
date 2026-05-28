@@ -1,6 +1,7 @@
 <template>
   <div class="tutor-message-content">
     <div
+      ref="markdownRef"
       class="stream-markdown markdown-body tutor-markdown-block"
       v-html="streamingHtml"
       @click="handleContentClick"
@@ -9,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { renderStreamingMarkdownHtml } from '@/utils/markdown'
 import { ElMessage } from 'element-plus'
 
@@ -19,7 +20,49 @@ const props = defineProps<{
 }>()
 
 const streamingHtml = ref('')
+const markdownRef = ref<HTMLElement | null>(null)
 let renderTimer: ReturnType<typeof setTimeout> | null = null
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
+
+const copyCode = async (button: HTMLButtonElement, code: string) => {
+  try {
+    await navigator.clipboard.writeText(code)
+    button.textContent = '已复制'
+  } catch {
+    button.textContent = '复制失败'
+  }
+
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer)
+  }
+  copyResetTimer = setTimeout(() => {
+    button.textContent = '复制'
+    copyResetTimer = null
+  }, 1800)
+}
+
+const enhanceCodeBlocks = () => {
+  const root = markdownRef.value
+  if (!root) return
+
+  const blocks = root.querySelectorAll('pre')
+  blocks.forEach((pre) => {
+    if (pre.querySelector('.code-copy-button')) return
+
+    const code = pre.querySelector('code')
+    if (!code) return
+
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'code-copy-button'
+    button.textContent = '复制'
+    button.addEventListener('click', () => {
+      void copyCode(button, code.textContent || '')
+    })
+
+    pre.appendChild(button)
+  })
+}
 
 const handleContentClick = async (event: MouseEvent) => {
   const target = event.target as HTMLElement
@@ -58,6 +101,7 @@ const shouldRenderMarkdownNow = (text: string): boolean => {
 const commitStreamingHtml = () => {
   renderTimer = null
   streamingHtml.value = renderStreamingMarkdownHtml(props.content || '')
+  void nextTick(enhanceCodeBlocks)
 }
 
 watch(
@@ -103,6 +147,10 @@ onBeforeUnmount(() => {
     clearTimeout(renderTimer)
     renderTimer = null
   }
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer)
+    copyResetTimer = null
+  }
 })
 </script>
 
@@ -124,7 +172,36 @@ onBeforeUnmount(() => {
 }
 
 .stream-markdown :deep(pre) {
+  position: relative;
   overflow-x: auto;
+  padding-top: 2.75rem;
+}
+
+.stream-markdown :deep(.code-copy-button) {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.75rem;
+  z-index: 1;
+  padding: 0.2rem 0.65rem;
+  color: #14532d;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.stream-markdown :deep(.code-copy-button:hover) {
+  background: #bbf7d0;
+  border-color: #4ade80;
+}
+
+.stream-markdown :deep(.hljs-comment),
+.stream-markdown :deep(.hljs-quote) {
+  color: #16a34a !important;
+  font-style: normal;
 }
 
 .stream-markdown :deep(.code-block-wrapper) {

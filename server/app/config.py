@@ -58,6 +58,13 @@ WORKPLACE_DIR = get("paths.workplace", "workplace")
 LOGS_DIR = get("paths.logs", "logs")
 KB_DIR = get("paths.knowledge", "data")
 
+# ============ Knowledge Base ============
+KB_ENABLED = get("knowledge.enabled", True)
+KB_COLLECTION = get("knowledge.collection", "md_books")
+KB_EMBED_MODEL = get("knowledge.embed_model", "bge-m3:latest")
+KB_TOP_K = get("knowledge.top_k", 4)
+KB_OLLAMA_BASE_URL = get("knowledge.ollama_base_url", "http://127.0.0.1:11434")
+
 # ============ Logging ============
 LOG_LEVEL = get("logging.level", "INFO")
 LANGCHAIN_DEBUG = False

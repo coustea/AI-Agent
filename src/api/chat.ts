@@ -23,6 +23,14 @@ export interface TeachingDiagram {
   payload: any
 }
 
+export interface KnowledgeSource {
+  rank?: number
+  source: string
+  file_name?: string
+  chunk_index?: number
+  distance?: number
+}
+
 export interface ChatMessageItem {
   role: string
   content: string

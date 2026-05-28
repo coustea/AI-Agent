@@ -68,7 +68,14 @@ search:
 paths:
   workplace: "workplace"
   logs: "logs"
-  knowledge: "data"
+  knowledge: "data/chroma_md_db"
+
+knowledge:
+  enabled: true
+  collection: "md_books"
+  embed_model: "bge-m3:latest"
+  top_k: 4
+  ollama_base_url: "http://127.0.0.1:11434"
 
 # 日志配置
 logging:

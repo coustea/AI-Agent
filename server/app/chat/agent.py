@@ -30,6 +30,7 @@ from app.config import LANGGRAPH_DEBUG
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
+from app.chat.tools.knowledge import format_knowledge_context, search_knowledge_base
 from app.chat.tools.search import duckduckgo_search, serp_search, tavily_search
 
 from langchain_core.callbacks.manager import adispatch_custom_event
@@ -521,7 +522,7 @@ class TutorAgent:
             memory_tools = []
             if self.context.memory_reader:
                 memory_tools = make_memory_tools(self.context.memory_reader)
-            tools = memory_tools + [duckduckgo_search, tavily_search, serp_search]
+            tools = memory_tools + [search_knowledge_base, duckduckgo_search, tavily_search, serp_search]
             tools_by_name = {t.name: t for t in tools}
             
             llm_with_tools = self.llm.model.bind_tools(tools)
@@ -613,6 +614,21 @@ class TutorAgent:
 
             # 处理工具调用
             search_result = normalize_message_content(getattr(response, "content", "") if response else "")
+            knowledge_context, knowledge_rows = format_knowledge_context(question)
+            knowledge_sources = [
+                {
+                    "rank": item.get("rank"),
+                    "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("file_name") or "未知来源",
+                    "file_name": (item.get("metadata") or {}).get("file_name") or "",
+                    "chunk_index": (item.get("metadata") or {}).get("chunk_index"),
+                    "distance": item.get("distance"),
+                }
+                for item in knowledge_rows
+            ]
+            if knowledge_rows:
+                search_result = (
+                    f"【本地知识库检索结果】\n{knowledge_context}\n\n{search_result}"
+                ).strip()
 
             # 如果有工具调用，执行它们
             tool_calls = getattr(response, "tool_calls", []) if response else []
@@ -662,12 +678,14 @@ class TutorAgent:
                     tool_results.append(f"【tavily_search (自动兜底)】\n{tavily_result}")
 
             # 合并搜索结果
-            search_result = search_result + "\n\n" + "\n\n".join(tool_results)
+            combined_parts = [part for part in [search_result, "\n\n".join(tool_results)] if part.strip()]
+            search_result = "\n\n".join(combined_parts)
 
             logger.debug("[TutorAgent] search_node 完成 preview=%s", truncate(search_result, 220))
 
             return {
                 "search_result": search_result,
+                "knowledge_sources": knowledge_sources,
                 "termination_reason": "search_done",
             }
 
@@ -1071,6 +1089,7 @@ class TutorAgent:
                         break
 
         teaching_diagram = runtime_state.get("teaching_diagram")
+        knowledge_sources = runtime_state.get("knowledge_sources")
 
         # 独立的图解图板即使没有文字也是有效回复，无需补充文字。
         if not isinstance(teaching_diagram, dict) and is_unusable_reply_text(full_reply):
@@ -1087,6 +1106,7 @@ class TutorAgent:
             {
                 "session_id": context.session_id,
                 "full_response": full_reply,
+                "knowledge_sources": knowledge_sources or [],
                 "resource_mode": "none",
                 "resource": None,
                 "teaching_diagram": teaching_diagram,
