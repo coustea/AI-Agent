@@ -6,7 +6,7 @@ app:
 
 # 数据库配置
 database:
-  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 10
   max_overflow: 20
@@ -28,10 +28,10 @@ models:
   model_name: "generalv3.5"
   concurrency: 10
 
-#  base_url: https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
-#  api_key: 6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx
-#  model_name: astron-code-latest
-#  concurrency: 10
+  #  base_url: https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
+  #  api_key: 6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx
+  #  model_name: astron-code-latest
+  #  concurrency: 10
 
   # 图片理解模型（独立配置）
   vision:
@@ -98,15 +98,3 @@ chat:
   max_analyze_images: 8
   # 单次上传最大文件数量
   max_upload_files: 12
-
-# Neo4j 知识图谱存储
-neo4j:
-  enabled: false
-  uri: "neo4j://127.0.0.1:7687"
-  user: "neo4j"
-  password: "12345678"
-  database: "neo4j"
-  # 知识图谱生成参数
-  max_nodes: 18
-  relation_depth: 2
-  include_orphan_points: true
