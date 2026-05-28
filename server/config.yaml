@@ -76,7 +76,7 @@ knowledge:
   embed_model: "bge-m3:latest"
   top_k: 4
   ollama_base_url: "http://127.0.0.1:11434"
-
+# 自己本地ollama的bge-m3模型
 # 日志配置
 logging:
   level: "INFO"
