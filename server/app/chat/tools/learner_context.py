@@ -1,46 +1,71 @@
-"""回合作用域内的只读学习者上下文能力，供 TutorAgent 使用。"""
+"""只读学习者上下文读取能力。
+
+供 TutorAgent 在每轮对话中按需读取用户画像与长期记忆，
+避免无差别注入全部上下文造成 prompt 冗余。
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
+from langchain_core.tools import tool
+
+from app.infra.logging import get_logger
 from app.memory.service import MemoryService
 
+if TYPE_CHECKING:
+    from app.chat.tools.learner_context import MemoryLearnerContextReader
 
-@runtime_checkable
-class LearnerContextReader(Protocol):
-    """暴露给单次智能体执行的窄学习者上下文边界。"""
+logger = get_logger(__name__)
+
+
+class LearnerContextReader(ABC):
+    """Agent 可按需读取学习者上下文的只读能力接口。"""
+
+    @abstractmethod
+    async def read_learning_profile(self) -> str:
+        """返回当前用户的学习画像 Markdown。"""
+
+    @abstractmethod
+    async def search_learning_memory(self, question: str) -> str:
+        """基于用户问题检索相关的长期学习记忆。"""
+
+
+class MemoryLearnerContextReader(LearnerContextReader):
+    """基于 MemoryService 的学习者上下文读取实现。"""
+
+    def __init__(self, *, user_id: int, memory_service: MemoryService) -> None:
+        self._user_id = user_id
+        self._memory_service = memory_service
 
     async def read_learning_profile(self) -> str:
-        """读取已记录的学习特征与偏好，用于个性化。"""
-        ...
+        return await self._memory_service.get_profile_markdown(self._user_id)
 
-    async def search_learning_memory(self, query: str) -> str:
-        """读取与连续性查询相关的长期学习证据。"""
-        ...
+    async def search_learning_memory(self, question: str) -> str:
+        return await self._memory_service.get_memory_markdown(self._user_id)
 
 
-@dataclass
-class MemoryLearnerContextReader:
-    """由 MemoryService 支持的只读适配器，为单次聊天回合缓存数据。"""
+def make_learner_tools(reader: MemoryLearnerContextReader) -> list:
+    """工厂函数：创建绑定了用户信息的 learner context 工具。
 
-    user_id: int
-    memory_service: MemoryService
-    _profile_cache: str | None = field(default=None, init=False)
-    _memory_cache: dict[str, str] = field(default_factory=dict, init=False)
+    reader 已持有 user_id 和 memory_service，闭包内直接调用。
+    返回的 tools 实例传给 LLM.bind_tools() 即可。
+    """
 
-    async def read_learning_profile(self) -> str:
-        if self._profile_cache is None:
-            self._profile_cache = await self.memory_service.get_profile_markdown(self.user_id)
-        return self._profile_cache
+    @tool("read_my_learning_profile")
+    async def read_my_learning_profile() -> str:
+        """读取当前用户的学习画像（基础水平、学习目标、偏好、薄弱点等）。
+        仅当学生的问题涉及个性化辅导、结合自身情况回答时才调用此工具。
+        普通概念问答不需要调用。"""
+        return await reader.read_learning_profile()
 
-    async def search_learning_memory(self, query: str) -> str:
-        normalized_query = " ".join((query or "").split()).strip() or "__all__"
-        if normalized_query not in self._memory_cache:
-            # 现有记忆存储基于 Markdown；此边界后续可切换为
-            # 语义检索，而无需修改 TutorAgent。
-            self._memory_cache[normalized_query] = await self.memory_service.get_memory_markdown(
-                self.user_id
-            )
-        return self._memory_cache[normalized_query]
+    @tool("search_my_learning_memory")
+    async def search_my_learning_memory(query: str) -> str:
+        """基于问题关键词检索当前用户的既往学习记录和薄弱点。
+        仅当需要了解学生过去的学习情况、错误记录或薄弱环节时才调用。
+        query 参数应提炼出与学习历史相关的关键词。
+        普通概念问答不需要调用。"""
+        return await reader.search_learning_memory(query)
+
+    return [read_my_learning_profile, search_my_learning_memory]

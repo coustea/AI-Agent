@@ -10,9 +10,7 @@ from app.memory.types import (
     SUMMARY_KEEP_RECENT,
     SUMMARY_MESSAGE_THRESHOLD,
     SUMMARY_TOKEN_THRESHOLD,
-    SummaryLLMOutput,
     extract_fallback_summary_markdown,
-    make_default_summary_markdown,
 )
 from app.prompts import registry
 
@@ -64,14 +62,13 @@ class SessionCompressor:
             prompt = registry.render("memory/compression", dialogue_text=chat_text[:5000])
             logger.info("[MemoryCompression] LLM 开始会话压缩。")
 
-            resp = await self.llm.ainvoke_json(
-                SummaryLLMOutput,
-                prompt,
-                function_name="compress_learning_dialogue",
-                function_description="压缩学习对话为 Markdown 概要。",
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            resp = await self.llm.ainvoke(
+                [SystemMessage(content=prompt), HumanMessage(content="请根据以上对话记录输出会话摘要 Markdown。")],
                 temperature=0.1,
             )
-            summary_markdown = resp.summary_markdown
+            summary_markdown = str(resp.content or "").strip()
         except Exception as exc:
             logger.warning("[MemoryCompression] LLM 压缩失败，降级启发式提取: %s", exc)
 
