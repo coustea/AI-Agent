@@ -49,7 +49,6 @@ GRAPH_RECURSION_LIMIT = 30
 # 图节点名称集合
 GRAPH_NODE_NAMES = {
     "classify",
-    "decide_learner_context",
     "direct_answer",
     "search_node",
     "spark_summary",
@@ -358,7 +357,6 @@ class TutorAgent:
             graph = StateGraph(TutorState)
             # 添加节点
             graph.add_node("classify", self._classify_node)
-            graph.add_node("decide_learner_context", self._decide_learner_context_node)
             graph.add_node("direct_answer", self._direct_answer_node)
             graph.add_node("search_node", self._search_node)
             graph.add_node("spark_summary", self._spark_summary_node)
@@ -367,9 +365,8 @@ class TutorAgent:
 
             # 添加边
             graph.add_edge(START, "classify")
-            graph.add_edge("classify", "decide_learner_context")
             graph.add_conditional_edges(
-                "decide_learner_context",
+                "classify",
                 classify_route,
                 {
                     "direct": "direct_answer",

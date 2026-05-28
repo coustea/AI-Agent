@@ -163,7 +163,6 @@ export function streamChat(
   if (params.enable_search != null) {
     formData.append('enable_search', String(Boolean(params.enable_search)))
   }
-  }
 
   fetch('/api/v1/ai/chat/stream', {
     method: 'POST',
@@ -247,4 +246,4 @@ export function streamChat(
     })
 
   return controller
-}
+  }
