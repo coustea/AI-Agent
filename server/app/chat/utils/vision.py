@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import json
 import ssl
+from mimetypes import guess_type
 from datetime import datetime
 from time import mktime
 from urllib.parse import urlencode, urlparse
@@ -26,6 +27,17 @@ from app.chat.utils.files import resolve_uploaded_image_path
 logger = get_logger(__name__)
 
 _SPARK_IMAGE_URL = "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image"
+
+
+def _build_image_input(url: str) -> dict | None:
+    image_path = resolve_uploaded_image_path(url)
+    if image_path and image_path.is_file():
+        mime_type = guess_type(image_path.name)[0] or "image/png"
+        image_b64 = base64.b64encode(image_path.read_bytes()).decode("utf-8")
+        return {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_b64}"}}
+    if not url:
+        return None
+    return {"type": "image_url", "image_url": {"url": url}}
 
 
 # ---------------------------------------------------------------------------
@@ -158,10 +170,11 @@ class VisionService:
         # GLM-4V 降级模式
         content_blocks: list[dict] = [{"type": "text", "text": question or "请描述这些图片"}]
         for url in image_urls:
-            content_blocks.append({"type": "image_url", "image_url": {"url": url}})
+            image_input = _build_image_input(url)
+            if image_input:
+                content_blocks.append(image_input)
         response = await self.llm.vision(
             [HumanMessage(content=content_blocks)],
-            module="vision",
             temperature=0.7,
         )
         return {

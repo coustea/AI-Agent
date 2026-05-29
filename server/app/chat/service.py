@@ -236,11 +236,18 @@ class ChatUseCases:
                 return
             vision = VisionService()
             try:
-                image_results = await vision.analyze_images(
+                question = "请详细分析这些图片中的文字、题目、图表和关键信息，并用中文总结。"
+                vision_result = await vision.analyze_images(
                     image_urls[:MAX_IMAGE_ANALYZE_COUNT],
-                    session_id=session_id,
-                    user_id=user_id,
+                    question,
                 )
+                if vision_result.get("success") and vision_result.get("analysis_text"):
+                    image_results = [{
+                        "type": "image",
+                        "description": str(vision_result.get("analysis_text", "")).strip(),
+                        "mode": vision_result.get("mode", ""),
+                        "source_count": min(len(image_urls), MAX_IMAGE_ANALYZE_COUNT),
+                    }]
             except Exception as exc:
                 logger.warning("[ChatUseCases] 图片分析失败: %s", exc)
 

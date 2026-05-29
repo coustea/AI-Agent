@@ -1,7 +1,6 @@
 <template>
   <div class="tutor-message-content">
     <div
-      ref="markdownRef"
       class="stream-markdown markdown-body tutor-markdown-block"
       v-html="streamingHtml"
       @click="handleContentClick"
@@ -20,7 +19,6 @@ const props = defineProps<{
 }>()
 
 const streamingHtml = ref('')
-const markdownRef = ref<HTMLElement | null>(null)
 let renderTimer: ReturnType<typeof setTimeout> | null = null
 
 const handleContentClick = async (event: MouseEvent) => {
