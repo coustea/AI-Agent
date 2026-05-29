@@ -6,30 +6,102 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
-from app.infra.logging import get_logger
+from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
-logger = get_logger(__name__)
+logger = get_module_logger("resource", sub="ppt")
 
 
-class SlideContent(BaseModel):
-    heading: str = Field(description="幻灯片标题")
-    bullets: list[str] = Field(default_factory=list, description="要点列表")
-    notes: str = Field(default="", description="演讲者备注")
+class CoverData(BaseModel):
+    main_title: str = Field(description="主标题")
+    sub_title: str = Field(default="", description="副标题")
+    lecturer: str = Field(default="", description="演讲者")
+
+
+class AgendaData(BaseModel):
+    model_config = {"populate_by_name": True}
+    items: list[str] = Field(default_factory=list, alias="list", description="目录列表")
+
+
+class BulletPointsData(BaseModel):
+    title: str = Field(description="页面标题")
+    points: list[str] = Field(default_factory=list, description="要点列表")
+
+
+class GridCardItem(BaseModel):
+    title: str = Field(description="卡片标题")
+    desc: str = Field(description="卡片描述")
+
+
+class GridCardsData(BaseModel):
+    title: str = Field(description="页面标题")
+    cards: list[GridCardItem] = Field(default_factory=list, description="卡片列表")
+
+
+class ComparisonData(BaseModel):
+    title: str = Field(description="页面标题")
+    left_label: str = Field(default="", description="左侧标签")
+    left_content: list[str] = Field(default_factory=list, description="左侧内容")
+    right_label: str = Field(default="", description="右侧标签")
+    right_content: list[str] = Field(default_factory=list, description="右侧内容")
+
+
+class SlideMetadata(BaseModel):
+    speaker_notes: str = Field(default="", description="演讲者备注")
+    transition: str = Field(default="none", description="切换效果")
+    background_override: str | None = Field(default=None, description="自定义背景色")
+
+
+class SlideCover(BaseModel):
+    layout: str = Field(default="cover", description="布局类型")
+    data: CoverData = Field(description="封面数据")
+    metadata: SlideMetadata = Field(default_factory=SlideMetadata)
+
+
+class SlideAgenda(BaseModel):
+    layout: str = Field(default="agenda", description="布局类型")
+    data: AgendaData = Field(description="目录数据")
+    metadata: SlideMetadata = Field(default_factory=SlideMetadata)
+
+
+class SlideBulletPoints(BaseModel):
+    layout: str = Field(default="bullet_points", description="布局类型")
+    data: BulletPointsData = Field(description="要点数据")
+    metadata: SlideMetadata = Field(default_factory=SlideMetadata)
+
+
+class SlideGridCards(BaseModel):
+    layout: str = Field(default="grid_cards", description="布局类型")
+    data: GridCardsData = Field(description="卡片数据")
+    metadata: SlideMetadata = Field(default_factory=SlideMetadata)
+
+
+class SlideComparison(BaseModel):
+    layout: str = Field(default="comparison", description="布局类型")
+    data: ComparisonData = Field(description="对比数据")
+    metadata: SlideMetadata = Field(default_factory=SlideMetadata)
+
+
+PPTSlide = SlideCover | SlideAgenda | SlideBulletPoints | SlideGridCards | SlideComparison
+
+
+class PPTConfig(BaseModel):
+    template_id: str = Field(default="theme-logic-blue", description="主题ID")
+    topic: str = Field(default="", description="PPT主题")
 
 
 class PptPayload(BaseModel):
-    title: str = Field(description="PPT 标题")
-    theme: str = Field(default="education", description="主题风格")
-    slides: list[SlideContent] = Field(default_factory=list, description="幻灯片列表")
+    config: PPTConfig = Field(default_factory=PPTConfig, description="PPT配置")
+    slides: list[PPTSlide] = Field(default_factory=list, description="幻灯片列表")
 
 
 @register_agent
@@ -44,6 +116,9 @@ class PptAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        start = time.perf_counter()
+        logger.info("Agent[ppt] 启动: learning_need=%s", state.learning_need[:50])
+
         await self.emitter.emit_agent("ppt", status="running", message="正在准备PPT", progress=0)
         await self.emitter.emit_agent_action(
             "ppt", "outline", detail="正在规划幻灯片大纲",
@@ -68,8 +143,11 @@ class PptAgent(BaseResourceAgent):
             )
             ppt_data = result.model_dump(mode="json")
             content = json.dumps(ppt_data, ensure_ascii=False, indent=2)
+
+            elapsed = time.perf_counter() - start
+            logger.debug("Agent[ppt] LLM 调用完成: %.2fs", elapsed)
         except Exception as exc:
-            logger.warning("[PptAgent] 结构化输出失败，尝试 JSON 文本解析: %s", exc)
+            logger.warning("Agent[ppt] 结构化输出失败，尝试 fallback: %s", exc)
 
             await self.emitter.emit_agent_action(
                 "ppt", "fallback", detail="正在重新整理PPT格式",
@@ -77,9 +155,15 @@ class PptAgent(BaseResourceAgent):
             )
 
             response = await self.llm.ainvoke(full_prompt, temperature=0.3)
+
+            elapsed = time.perf_counter() - start
+            logger.debug("Agent[ppt] LLM fallback 调用完成: %.2fs", elapsed)
+
             raw = response.content if hasattr(response, "content") else str(response)
             ppt_data = self._salvage_ppt_payload(raw)
             if ppt_data is None:
+                elapsed = time.perf_counter() - start
+                logger.warning("Agent[ppt] 失败: %.2fs, error=PPT JSON 解析失败", elapsed)
                 return WorkerResult(success=False, error=f"PPT JSON 解析失败: {exc}")
             content = json.dumps(ppt_data, ensure_ascii=False, indent=2)
 
@@ -90,6 +174,10 @@ class PptAgent(BaseResourceAgent):
             current_step=4, total_steps=4, step_label="生成完成", progress=100,
         )
         await self.emitter.emit_agent("ppt", status="success", message=f"已生成 {slide_count} 页幻灯片", progress=100)
+
+        elapsed = time.perf_counter() - start
+        logger.info("Agent[ppt] 完成: %.2fs", elapsed)
+
         return WorkerResult(
             success=True,
             content=content,
@@ -121,31 +209,71 @@ class PptAgent(BaseResourceAgent):
         return await self._execute(input_text, state)
 
     def _salvage_ppt_payload(self, raw: str) -> dict | None:
+        """Try to parse raw LLM output as PPT JSON; convert old format if needed."""
+        data = None
         try:
             data = json.loads(raw)
-            if isinstance(data, dict) and "slides" in data:
-                return data
         except json.JSONDecodeError:
             pass
 
-        pattern = r"```(?:json)?\s*\n(.*?)```"
-        match = re.search(pattern, raw, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                if isinstance(data, dict) and "slides" in data:
-                    return data
-            except json.JSONDecodeError:
-                pass
+        if data is None:
+            pattern = r"```(?:json)?\s*\n(.*?)```"
+            match = re.search(pattern, raw, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
 
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                data = json.loads(raw[start:end + 1])
-                if isinstance(data, dict) and "slides" in data:
-                    return data
-            except json.JSONDecodeError:
-                pass
+        if data is None:
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start >= 0 and end > start:
+                try:
+                    data = json.loads(raw[start:end + 1])
+                except json.JSONDecodeError:
+                    pass
 
-        return None
+        if not isinstance(data, dict) or "slides" not in data:
+            return None
+
+        # Already in PPTDocument format (has config + layout-based slides)
+        if "config" in data and isinstance(data["config"], dict):
+            return data
+
+        # Convert old format {title, theme, slides: [{heading, bullets, notes}]}
+        return self._convert_legacy_format(data)
+
+    def _convert_legacy_format(self, data: dict) -> dict:
+        """Convert old {title, theme, slides: [{heading, bullets, notes}]} to PPTDocument format."""
+        title = data.get("title", "")
+        slides = data.get("slides", [])
+        converted_slides = []
+        for i, slide in enumerate(slides):
+            heading = slide.get("heading", "")
+            bullets = slide.get("bullets", [])
+            notes = slide.get("notes", "")
+
+            if i == 0:
+                converted_slides.append({
+                    "layout": "cover",
+                    "data": {"main_title": heading or title, "sub_title": "", "lecturer": ""},
+                    "metadata": {"speaker_notes": notes, "transition": "none"},
+                })
+            elif i == 1:
+                converted_slides.append({
+                    "layout": "agenda",
+                    "data": {"list": bullets or [heading]},
+                    "metadata": {"speaker_notes": notes, "transition": "none"},
+                })
+            else:
+                converted_slides.append({
+                    "layout": "bullet_points",
+                    "data": {"title": heading, "points": bullets},
+                    "metadata": {"speaker_notes": notes, "transition": "none"},
+                })
+
+        return {
+            "config": {"template_id": "theme-logic-blue", "topic": title},
+            "slides": converted_slides,
+        }
