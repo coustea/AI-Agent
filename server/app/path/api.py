@@ -4,7 +4,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.models import User
-from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest
+from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest, PathPlanFeedbackRequest
 from app.path.service import CoursePathService, bg_generate_path_task
 from app.resource.service import bg_gen_task
 from app.infra.response import HttpResponse
@@ -138,3 +138,18 @@ async def complete_node(
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=response.model_dump(mode="json"))
+
+
+@router.post("/adjust")
+async def adjust_path(
+    request: PathPlanFeedbackRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """根据用户反馈或当前画像，动态纠偏并重新编排后续学习节点。"""
+    service = CoursePathService(session)
+    try:
+        updated_path = await service.adjust_path(user_id=current_user.id, request=request)
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=updated_path.model_dump(mode="json"))

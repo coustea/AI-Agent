@@ -128,6 +128,8 @@ class CoursePathResponse(BaseModel):
     status: str = "pending"
     stages: list[dict[str, Any]] = Field(default_factory=list)
     nodes: list[CoursePathNodeDTO] = Field(default_factory=list)
+    needs_optimization: bool = False
+    optimization_tips: list[str] = Field(default_factory=list)
     created_at: str = ""
 
 
@@ -145,18 +147,10 @@ class PathGenerationTaskResponse(BaseModel):
 
 
 # ======================================================================
-# Re-exports from request.py / response.py
+# Re-exports from request.py
 # ======================================================================
 
 from app.path.request import PathPlanFeedbackRequest  # noqa: E402
-from app.path.response import (  # noqa: E402
-    PathNodeStatus,
-    PathPlanInsights,
-    PathPlanMeta,
-    PathRecommendedNode,
-    PathPlanResponse,
-    PathPlanSummary,
-)
 
 __all__ = [
     # Request
@@ -171,10 +165,4 @@ __all__ = [
     "CoursePathNodeDTO",
     "CoursePathResponse",
     "PathGenerationTaskResponse",
-    "PathNodeStatus",
-    "PathPlanSummary",
-    "PathRecommendedNode",
-    "PathPlanInsights",
-    "PathPlanMeta",
-    "PathPlanResponse",
 ]
