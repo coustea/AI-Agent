@@ -273,33 +273,45 @@
           </el-radio-group>
         </div>
 
-        <div style="flex: 1; height: 0; display: flex; flex-direction: column;">
-          <el-table
-              :data="filteredTableData"
-              v-loading="resourceHistoryLoading"
-              height="100%"
-              style="width: 100%; flex: 1;"
-              :header-cell-style="{background:'#F8FAFC', color:'#64748B'}"
-          >
-          <el-table-column label="任务名称 / 学习主题" min-width="150" show-overflow-tooltip>
-            <template #default="scope">
-              <div class="task-title-cell">
-                <span>{{ scope.row.title }}</span>
+        <div style="flex: 1; height: 0; display: flex; flex-direction: column; overflow-y: auto; padding-right: 4px;" v-loading="resourceHistoryLoading">
+          <div v-if="filteredTableData.length === 0" class="empty-history">
+            <el-empty description="暂无历史生成记录" :image-size="60" />
+          </div>
+          <div v-else class="history-list-flow">
+            <div
+                v-for="item in filteredTableData"
+                :key="item.id"
+                class="history-row-card"
+                :class="getStatusClass(item.rawStatus)"
+                @click="viewResourceDetail(item)"
+            >
+              <!-- 左侧状态线 -->
+              <div class="status-bar"></div>
+
+              <!-- 类型图标 -->
+              <div class="item-icon-wrapper">
+                <el-icon><component :is="getHistoryIcon(item.rawStatus)" /></el-icon>
               </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="80">
-            <template #default="scope">
-              <el-tag :type="getStatusType(scope.row.status)" size="small" class="custom-tag">{{ scope.row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="time" label="时间" width="100" />
-          <el-table-column label="操作" width="60" fixed="right">
-            <template #default="scope">
-              <el-button link type="primary" @click="viewResourceDetail(scope.row)">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+
+              <!-- 主体信息 -->
+              <div class="item-main-info">
+                <span class="item-title" :title="item.title">{{ item.title }}</span>
+                <div class="item-sub-meta">
+                  <span class="item-time"><el-icon><Clock /></el-icon>{{ item.time }}</span>
+                  <span class="status-badge-pill" :class="item.rawStatus">
+                    <span class="badge-dot"></span>
+                    {{ item.status }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 动作 -->
+              <div class="item-action-btn">
+                <span>查看</span>
+                <el-icon class="action-arrow"><ArrowRight /></el-icon>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -595,6 +607,7 @@ import type {
   ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem,
   SchoolItem, ProfileScoreData, LearningTimeStats
 } from '@/api/ai'
+import { getMockResourceHistory } from '@/utils/mockResourceData'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
@@ -648,18 +661,7 @@ const profileForm = reactive<ProfileOnboardingUpdate>({
   preferred_language: '',
 })
 
-const resourceHistory = ref<GeneratedResourceItem[]>([
-  { id: 1, learning_need: '深度学习核心概念', status: 'completed', resource_types: [], created_at: new Date().toISOString(), updated_at: null },
-  { id: 2, learning_need: 'Python 高级编程指南', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: null },
-  { id: 3, learning_need: '计算机视觉中的CNN', status: 'pending', resource_types: [], created_at: new Date(Date.now() - 86400000 * 2).toISOString(), updated_at: null },
-  { id: 4, learning_need: '数据结构：二叉树遍历', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 3).toISOString(), updated_at: null },
-  { id: 5, learning_need: '考研复试英语口语准备', status: 'failed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 4).toISOString(), updated_at: null },
-  { id: 6, learning_need: 'Transformer 模型解析', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 5).toISOString(), updated_at: null },
-  { id: 7, learning_need: '操作系统：进程与线程', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 6).toISOString(), updated_at: null },
-  { id: 8, learning_need: '微服务架构与 Docker 部署', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 7).toISOString(), updated_at: null },
-  { id: 9, learning_need: '计算机网络中的 TCP 三次握手', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 8).toISOString(), updated_at: null },
-  { id: 10, learning_need: '机器学习：线性回归与梯度下降', status: 'completed', resource_types: [], created_at: new Date(Date.now() - 86400000 * 9).toISOString(), updated_at: null },
-])
+const resourceHistory = ref<GeneratedResourceItem[]>(getMockResourceHistory())
 
 const PRESET_MAJORS = [
   '计算机科学与技术', '软件工程', '人工智能', '数据科学', '网络安全',
@@ -1225,9 +1227,12 @@ const loadResourceHistory = async () => {
     const res = await getGeneratedResources(20)
     if (res.data.data && res.data.data.length > 0) {
       resourceHistory.value = res.data.data
+    } else {
+      resourceHistory.value = getMockResourceHistory()
     }
   } catch (e) {
     console.warn('后端 API 未连接，资源历史已使用前端 Mock 数据。')
+    resourceHistory.value = getMockResourceHistory()
   } finally {
     resourceHistoryLoading.value = false
   }
@@ -1314,11 +1319,14 @@ const viewResourceDetail = (row: { id: number }) => {
   router.push({ name: 'ResourceDetail', params: { id: row.id } })
 }
 
-const getStatusType = (status: string) => {
-  if (status === '已完成') return 'success'
-  if (status === '生成中') return 'primary'
-  if (status === '失败') return 'danger'
-  return 'info'
+const getHistoryIcon = (status: string) => {
+  if (status === 'failed') return InfoFilled
+  if (status === 'pending' || status === 'processing') return Cpu
+  return Check
+}
+
+const getStatusClass = (status: string) => {
+  return `status-${status}`
 }
 </script>
 
@@ -2000,5 +2008,209 @@ const getStatusType = (status: string) => {
 }
 .all-courses-popover-content .course-name {
   font-weight: 600;
+}
+
+/* ============================================================
+   资源生成历史 ——— 无界行卡片流样式
+   ============================================================ */
+.history-list-flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 4px;
+}
+
+.history-row-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 12px 18px 12px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.history-row-card:hover {
+  transform: translateX(4px);
+  border-color: var(--color-primary-border);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.06);
+}
+
+/* 左侧状态指示彩色条 */
+.history-row-card .status-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-text-faint);
+  transition: width 0.2s ease;
+}
+
+.history-row-card:hover .status-bar {
+  width: 6px;
+}
+
+.history-row-card.status-completed .status-bar {
+  background: var(--color-success);
+}
+
+.history-row-card.status-pending .status-bar,
+.history-row-card.status-processing .status-bar {
+  background: var(--color-primary);
+}
+
+.history-row-card.status-failed .status-bar {
+  background: var(--color-danger);
+}
+
+/* 图标包裹器 */
+.item-icon-wrapper {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.history-row-card:hover .item-icon-wrapper {
+  transform: scale(1.05);
+}
+
+.history-row-card.status-completed .item-icon-wrapper {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.history-row-card.status-pending .item-icon-wrapper,
+.history-row-card.status-processing .item-icon-wrapper {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.history-row-card.status-failed .item-icon-wrapper {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* 主体信息区 */
+.item-main-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.item-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-sub-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.item-time {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* 状态药丸胶囊 */
+.status-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-weight: var(--weight-bold);
+  font-size: 0.7rem;
+}
+
+.status-badge-pill.completed {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.status-badge-pill.pending,
+.status-badge-pill.processing {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.status-badge-pill.failed {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* 生成中呼吸灯动画 */
+.status-badge-pill.pending .badge-dot,
+.status-badge-pill.processing .badge-dot {
+  animation: badge-pulse 1.6s infinite alternate;
+}
+
+@keyframes badge-pulse {
+  0% { transform: scale(0.9); opacity: 0.4; }
+  100% { transform: scale(1.3); opacity: 1; }
+}
+
+/* 右侧动作查看按钮 */
+.item-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
+  opacity: 0.6;
+  transition: all var(--transition-fast);
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.history-row-card:hover .item-action-btn {
+  opacity: 1;
+  background: var(--color-primary-soft);
+}
+
+.action-arrow {
+  transition: transform 0.2s ease;
+}
+
+.history-row-card:hover .action-arrow {
+  transform: translateX(3px);
+}
+
+.empty-history {
+  padding: var(--space-6) 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 </style>
