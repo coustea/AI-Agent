@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import time
 import asyncio
 import json
 from copy import deepcopy
@@ -28,9 +29,9 @@ from app.resource.schemas import (
     WorkerResult,
 )
 from app.resource.agents import AGENT_REGISTRY
-from app.infra.logging import get_logger
+from app.infra.logging import get_module_logger
 
-logger = get_logger(__name__)
+logger = get_module_logger("resource", sub="workflow")
 
 
 class ResourceUsecases:
@@ -549,6 +550,8 @@ async def bg_gen_task(
 
         success = False
         try:
+            start_time = time.perf_counter()
+            logger.info("启动资源生成: user_id=%s, resource_id=%s, agents=%s", user_id, resource_id, enabled_agents)
             # 1. PlanningAgent
             planning_state = WorkerState(
                 learning_need=request.learning_need,
@@ -570,12 +573,21 @@ async def bg_gen_task(
                     if isinstance(inst_data, dict):
                         instruction_map[aid] = AgentInstruction.model_validate(inst_data)
 
+            planning_elapsed = time.perf_counter() - start_time
+            if planning_result.success:
+                logger.info("Planning 完成: %.2fs", planning_elapsed)
+            else:
+                logger.warning("Planning 失败: %.2fs, error=%s", planning_elapsed, planning_result.error)
+
             # 2. Parallel worker agents
+            worker_start = time.perf_counter()
             await emitter.emit_workflow("generating", "并行生成资源", progress=20)
             results: dict[str, WorkerResult] = {}
 
             async def run_one(agent_id: str) -> None:
                 try:
+                    agent_start = time.perf_counter()
+                    logger.info("Agent[%s] 启动", agent_id)
                     state = WorkerState(
                         resource_id=resource_id,
                         learning_need=request.learning_need,
@@ -589,6 +601,11 @@ async def bg_gen_task(
                     agent = AGENT_REGISTRY[agent_id](emitter)
                     result = await agent.run(state)
                     results[agent_id] = result
+                    agent_elapsed = time.perf_counter() - agent_start
+                    if result.success:
+                        logger.info("Agent[%s] 完成: %.2fs", agent_id, agent_elapsed)
+                    else:
+                        logger.warning("Agent[%s] 失败: %.2fs, error=%s", agent_id, agent_elapsed, result.error)
                     if result.success and result.content:
                         await usecases.save_worker_result(
                             user_id=user_id,
@@ -605,7 +622,8 @@ async def bg_gen_task(
                             metadata=result.metadata,
                         )
                 except Exception as exc:
-                    logger.exception("[bg_gen_task] Agent %s 异常", agent_id)
+                    agent_elapsed = time.perf_counter() - agent_start
+                    logger.error("Agent[%s] 异常: %.2fs", agent_id, agent_elapsed, exc_info=True)
                     results[agent_id] = WorkerResult(
                         success=False,
                         error=str(exc),
@@ -613,7 +631,13 @@ async def bg_gen_task(
                     )
 
             worker_agents = [a for a in enabled_agents if a in AGENT_REGISTRY and a not in ("planning", "review")]
+            logger.info("开始并行 Worker 生成: agents=%s", worker_agents)
             await asyncio.gather(*(run_one(agent_id) for agent_id in worker_agents))
+
+            worker_elapsed = time.perf_counter() - worker_start
+            success_count = sum(1 for r in results.values() if r.success)
+            fail_count = sum(1 for r in results.values() if not r.success)
+            logger.info("Worker 全部完成: 成功=%s, 失败=%s, 耗时=%.2fs", success_count, fail_count, worker_elapsed)
 
             # 3. ReviewAgent
             await emitter.emit_workflow("reviewing", "质量审查中", progress=85)
@@ -626,9 +650,14 @@ async def bg_gen_task(
                     blueprint=blueprint,
                     agent_config={"worker_results": [r.model_dump(mode="json") for r in review_results.values()]},
                 )
-                review_result = await AGENT_REGISTRY["review"](emitter).run(review_state)
+                review_worker_result = await AGENT_REGISTRY["review"](emitter).run(review_state)
+                logger.info("Review 完成: success=%s", review_worker_result.success)
+                review_result = ReviewResult(
+                    passed=review_worker_result.success,
+                    overall_score=100 if review_worker_result.success else 0,
+                    suggestions=[review_worker_result.content] if review_worker_result.content else [],
+                )
             else:
-                from app.resource.schemas import ReviewResult
                 review_result = ReviewResult(passed=True, overall_score=100)
 
             # 4. Save final results
@@ -656,8 +685,11 @@ async def bg_gen_task(
             resource = await usecases.get_resource(user_id, resource_id)
             current_status = resource.status if resource else "failed"
             success = current_status in ("completed", "partial_completed") and len(saved_items) > 0
+            total_elapsed = time.perf_counter() - start_time
+            logger.info("资源生成结束: resource_id=%s, success=%s, 耗时=%.2fs", resource_id, success, total_elapsed)
         except Exception:
-            logger.exception("后台资源生成任务异常")
+            total_elapsed = time.perf_counter() - start_time
+            logger.error("资源生成异常: resource_id=%s, 耗时=%.2fs", resource_id, total_elapsed, exc_info=True)
 
         if not success:
             await usecases.update_resource_status(resource_id, "failed")
@@ -692,11 +724,19 @@ async def bg_single_gen_task(
 
         success = False
         try:
+            start_time = time.perf_counter()
+            logger.info("启动单智能体生成: user_id=%s, resource_id=%s, agent=%s", user_id, resource_id, agent_id)
             state = WorkerState(
                 learning_need=learning_need,
                 profile=profile,
             )
             result = await AGENT_REGISTRY[agent_id](emitter).run(state)
+
+            agent_elapsed = time.perf_counter() - start_time
+            if result.success:
+                logger.info("Agent[%s] 完成: %.2fs", agent_id, agent_elapsed)
+            else:
+                logger.warning("Agent[%s] 失败: %.2fs, error=%s", agent_id, agent_elapsed, result.error)
 
             if result.success and result.content:
                 await usecases.save_worker_result(
@@ -717,12 +757,14 @@ async def bg_single_gen_task(
 
             await emitter.emit_done(bundle=None)
         except Exception:
-            logger.exception("后台单智能体生成任务异常")
+            logger.error("单智能体生成异常: agent=%s, resource_id=%s", agent_id, resource_id, exc_info=True)
 
         if not success:
             await usecases.update_resource_status(resource_id, "failed")
         else:
             await usecases.update_resource_status(resource_id, "completed")
+        total_elapsed = time.perf_counter() - start_time
+        logger.info("单智能体生成结束: agent=%s, success=%s, 耗时=%.2fs", agent_id, success, total_elapsed)
         if node_id:
             await _update_node_resource_status(
                 session, node_id, "ready" if success else "failed",
