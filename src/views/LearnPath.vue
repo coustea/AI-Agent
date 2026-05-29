@@ -345,12 +345,15 @@ import { ElMessage } from 'element-plus'
 import {
   completeCoursePathNode,
   generateCoursePath,
+  getActiveCoursePathTask,
+  getCoursePathTaskStatus,
   generatePathNodeResources,
   getActiveCoursePath,
   startCoursePathNode,
   adjustCoursePath,
   type CoursePathNodeDTO,
   type CoursePathResponse,
+  type PathGenerationTaskResponse,
   type PathNodeResourceRequest,
 } from '@/api/ai'
 import { pollResourceStatus, type ResourceTaskStatus } from '@/api/resource'
@@ -363,6 +366,7 @@ const generatingNodeId = ref<number | null>(null)
 const completingNodeId = ref<number | null>(null)
 const coursePath = ref<CoursePathResponse | null>(null)
 const nodeTaskStatuses = ref<Record<number, ResourceTaskStatus>>({})
+const activePathTask = ref<PathGenerationTaskResponse | null>(null)
 
 const showOptimizeDialog = ref(false)
 const isOptimizing = ref(false)
@@ -407,24 +411,85 @@ const agentLabels: Record<string, string> = {
 }
 
 onMounted(() => {
-  fetchActivePath()
+  initializePathView()
 })
 
 onUnmounted(() => {
   stopPolling()
 })
 
-async function fetchActivePath(silent = false) {
+async function initializePathView() {
+  const hasActivePath = await fetchExistingPath()
+  if (hasActivePath) return
+  await resumePathGenerationTask()
+}
+
+async function fetchExistingPath() {
   try {
     const res = await getActiveCoursePath()
     if (res.data.data) {
       coursePath.value = res.data.data
+      activePathTask.value = null
+      isGenerating.value = false
       await refreshTaskStatuses()
       if (needsPolling.value) {
         startPolling()
       } else {
         stopPolling()
       }
+      return true
+    }
+  } catch (error) {
+    console.error('鎷夊彇璺緞澶辫触', error)
+  }
+  coursePath.value = null
+  return false
+}
+
+async function resumePathGenerationTask() {
+  try {
+    const res = await getActiveCoursePathTask()
+    const task = res.data.data
+    if (!task) {
+      activePathTask.value = null
+      isGenerating.value = false
+      return
+    }
+
+    activePathTask.value = task
+    if (task.status === 'completed') {
+      isGenerating.value = false
+      await fetchActivePath(true)
+      return
+    }
+
+    if (task.status === 'failed') {
+      isGenerating.value = false
+      return
+    }
+
+    isGenerating.value = true
+    startPolling()
+  } catch (error) {
+    console.error('鎭㈠璺緞鐢熸垚浠诲姟澶辫触', error)
+  }
+}
+
+async function fetchActivePath(silent = false) {
+  try {
+    const res = await getActiveCoursePath()
+    if (res.data.data) {
+      coursePath.value = res.data.data
+      activePathTask.value = null
+      isGenerating.value = false
+      await refreshTaskStatuses()
+      if (needsPolling.value) {
+        startPolling()
+      } else {
+        stopPolling()
+      }
+    } else if (!silent) {
+      coursePath.value = null
     }
   } catch (error) {
     if (!silent) {
@@ -441,28 +506,31 @@ async function handleGeneratePath() {
   
   isGenerating.value = true
   coursePath.value = null
+  activePathTask.value = null
+  nodeTaskStatuses.value = {}
   stopPolling()
   
   try {
     const goal = courseGoal.value.trim()
     const res = await generateCoursePath({ goal, topic: goal, module: 'mentor' })
-    coursePath.value = res.data.data
+    activePathTask.value = res.data.data
     ElMessage.success('专属学习路径已生成！')
     
-    // 如果有生成中的节点，自动开启轮询
-    if (needsPolling.value) {
-      startPolling()
-    }
+    startPolling()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '路径生成失败，请重试')
   } finally {
-    isGenerating.value = false
+    if (!activePathTask.value) {
+      isGenerating.value = false
+    }
   }
 }
 
 function resetPath() {
   courseGoal.value = ''
   coursePath.value = null
+  activePathTask.value = null
+  isGenerating.value = false
   nodeTaskStatuses.value = {}
   stopPolling()
 }
@@ -470,7 +538,7 @@ function resetPath() {
 function startPolling() {
   if (pollTimer) return
   pollTimer = window.setInterval(async () => {
-    await fetchActivePath(true)
+    await pollPageState()
   }, 3000)
 }
 
@@ -478,6 +546,43 @@ function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
+  }
+}
+
+async function pollPageState() {
+  if (activePathTask.value && isGenerating.value) {
+    await refreshPathTaskStatus()
+    return
+  }
+  await fetchActivePath(true)
+}
+
+async function refreshPathTaskStatus() {
+  if (!activePathTask.value) return
+
+  try {
+    const res = await getCoursePathTaskStatus(activePathTask.value.task_id)
+    const task = res.data.data
+    activePathTask.value = task
+
+    if (task.status === 'completed') {
+      isGenerating.value = false
+      await fetchActivePath(true)
+      stopPolling()
+      ElMessage.success('专属学习路径已生成！')
+      return
+    }
+
+    if (task.status === 'failed') {
+      isGenerating.value = false
+      stopPolling()
+      ElMessage.error(task.error_message || task.latest_message || '路径生成失败，请重试')
+      return
+    }
+
+    isGenerating.value = true
+  } catch (error) {
+    console.error('刷新路径任务状态失败', error)
   }
 }
 

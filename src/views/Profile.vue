@@ -638,7 +638,7 @@ const studentProfile = ref<StudentProfileData & { learning_duration_total?: numb
   school: '测试大学',
   school_level: '双一流',
   preferred_language: 'Python',
-  learning_duration_total: 45600
+  learning_duration_total: 0
 })
 
 const profileScoreData = ref<ProfileScoreData | null>(null)
@@ -902,47 +902,36 @@ const dynamicStats = computed(() => {
   const scoreVals = Object.values(scores).filter((v): v is number => typeof v === 'number')
   const avgScore = scoreVals.length > 0
     ? Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length)
-    : 79
+    : 0
   const completedResourcesCount = resourceHistory.value.filter(r => r.status === 'completed').length
   const totalCourses = studentProfile.value.courses?.length || 0
+  const activeDays = learningStats.value?.daily_breakdown?.filter((item) => item.seconds > 0).length || 0
+  const totalInteractions = profileHistory.value.length
 
   return {
     compositeScore: avgScore,
-    generatedResources: resourceHistory.value.length > 0 ? resourceHistory.value.length : 12,
-    completedCourses: totalCourses > 0 ? totalCourses : 3,
-    completedTasks: completedResourcesCount > 0 ? completedResourcesCount : 8,
-    activeDays: 5,
-    interactions: 24
+    generatedResources: resourceHistory.value.length,
+    completedCourses: totalCourses,
+    completedTasks: completedResourcesCount,
+    activeDays,
+    interactions: totalInteractions
   }
 })
 
 const lineOption = computed(() => {
-  const dates = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    dates.push(`${d.getMonth() + 1}-${d.getDate()}`)
-  }
-
-  let mockValues = [0, 0, 0, 0, 0, 0, 0]
-  if (selectedTrendCourse.value) {
-    const modifier = selectedTrendCourse.value.length % 5
-    mockValues = [
-      12 + modifier,
-      25 + modifier * 2,
-      40 + modifier,
-      58 + modifier * 3,
-      80 + modifier * 2,
-      105 + modifier,
-      130 + modifier * 4
-    ]
-  }
+  const dailyBreakdown = learningStats.value?.daily_breakdown || []
+  const dates = dailyBreakdown.map((item) => {
+    const date = new Date(item.date)
+    if (Number.isNaN(date.getTime())) return item.date
+    return `${date.getMonth() + 1}-${date.getDate()}`
+  })
+  const values = dailyBreakdown.map((item) => Math.round(item.seconds / 60))
 
   return {
     grid: { top: 30, right: 20, bottom: 25, left: 45 },
     tooltip: {
       trigger: 'axis',
-      formatter: `{b} <br/>课程: ${selectedTrendCourse.value || '无'} <br/>掌握度: {c} 分`
+      formatter: `{b} <br/>课程: ${selectedTrendCourse.value || '全部课程'} <br/>学习时长: {c} 分钟`
     },
     xAxis: {
       type: 'category',
@@ -952,14 +941,14 @@ const lineOption = computed(() => {
     },
     yAxis: {
       type: 'value',
-      name: '掌握度(预测)',
+      name: '学习时长',
       nameTextStyle: { color: '#94A3B8', fontSize: 10, padding: [0, 0, 0, 10] },
       splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } },
       axisLabel: { color: '#94A3B8', fontSize: 10 }
     },
     series: [{
       name: selectedTrendCourse.value,
-      data: mockValues,
+      data: values,
       type: 'line',
       smooth: true,
       showSymbol: true,
@@ -1216,8 +1205,11 @@ const loadLearningStats = async () => {
     const days = parseInt(timeRange.value) || 7
     const res = await getLearningTimeStats(days)
     learningStats.value = res.data.data
+    studentProfile.value.learning_duration_total = res.data.data.total_seconds
   } catch (e) {
-    console.warn('后端 API 未连接，学习时长统计已使用前端 Mock 数据。')
+    console.warn('后端学习时长统计加载失败', e)
+    learningStats.value = null
+    studentProfile.value.learning_duration_total = 0
   }
 }
 

@@ -24,8 +24,8 @@ jwt:
 models:
   # 文本模型（修改以下三项即可切换本地/云端）
   base_url: "https://spark-api-open.xf-yun.com/v1"
-  api_key: "FvxNBbopqlFUuPhAJLao:fBrnRiJXyuSgymznRJAI"
-  model_name: "generalv3.5"
+  api_key: "hpsPlkflXyCLIrMxjSDk:RmSfDFfHtnSCmgtlCtiC"
+  model_name: "4.0Ultra"
   concurrency: 10
 
   #  base_url: https://maas-coding-api.cn-huabei-1.xf-yun.com/v2

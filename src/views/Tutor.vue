@@ -1133,6 +1133,34 @@ const enqueueStreamChunk = (messageId: number, chunk: string) => {
   scheduleStreamFlush()
 }
 
+const drainPendingStreamText = () => {
+  if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+    return
+  }
+  let out = ''
+  while (pendingRenderQueueStart < pendingRenderQueue.length) {
+    const part = pendingRenderQueue[pendingRenderQueueStart] || ''
+    const available = part.length - pendingRenderOffset
+    if (available <= 0) {
+      pendingRenderQueueStart += 1
+      pendingRenderOffset = 0
+      continue
+    }
+    out += part.slice(pendingRenderOffset)
+    pendingRenderChars -= available
+    pendingRenderQueueStart += 1
+    pendingRenderOffset = 0
+  }
+  if (out) {
+    streamRenderedChunks.push(out)
+    streamDisplayText.value += out
+  }
+  pendingRenderQueue.length = 0
+  pendingRenderQueueStart = 0
+  pendingRenderOffset = 0
+  pendingRenderChars = 0
+}
+
 const finishStream = (messageId: number) => {
   commitStreamTextToMessage(messageId)
   isAIThinking.value = false
@@ -1155,6 +1183,7 @@ const commitStreamTextToMessage = (messageId: number) => {
     streamDisplayText.value = ''
     return
   }
+  drainPendingStreamText()
   if (streamRenderedChunks.length > 0) {
     aiMsg.content += streamRenderedChunks.join('')
   } else if (streamDisplayText.value) {

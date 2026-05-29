@@ -158,6 +158,17 @@ export interface GenerateCoursePathParams {
   preferences?: Record<string, unknown>
 }
 
+export interface PathGenerationTaskResponse {
+  task_id: number
+  module: string
+  goal: string
+  status: 'pending' | 'preparing' | 'planning' | 'validating' | 'completed' | 'failed' | string
+  progress: number
+  latest_message: string
+  error_message: string | null
+  generated_path_id: number | null
+}
+
 export function getActiveCoursePath(module = 'mentor') {
   return http.get<ApiResponse<CoursePathResponse>>('/ai/path-plan/active', {
     params: { module },
@@ -165,7 +176,17 @@ export function getActiveCoursePath(module = 'mentor') {
 }
 
 export function generateCoursePath(params: GenerateCoursePathParams) {
-  return http.post<ApiResponse<CoursePathResponse>>('/ai/path-plan/generate', params)
+  return http.post<ApiResponse<PathGenerationTaskResponse>>('/ai/path-plan/generate', params)
+}
+
+export function getActiveCoursePathTask(module = 'mentor') {
+  return http.get<ApiResponse<PathGenerationTaskResponse | null>>('/ai/path-plan/tasks/active', {
+    params: { module },
+  })
+}
+
+export function getCoursePathTaskStatus(taskId: number) {
+  return http.get<ApiResponse<PathGenerationTaskResponse>>(`/ai/path-plan/tasks/${taskId}/status`)
 }
 
 export interface PathNodeResourceRequest {

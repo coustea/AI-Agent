@@ -109,8 +109,10 @@ streamingMarkdown.renderer.rules.fence = (tokens, idx, options, _env, self) => {
   const displayLang = language || 'text'
 
   return `<div class="code-block-wrapper">
-  <span class="code-block-lang">${escapeHtml(displayLang)}</span>
-  <button class="code-block-copy-btn">复制</button>
+  <div class="code-block-header">
+    <span class="code-block-lang">${escapeHtml(displayLang)}</span>
+    <button class="code-block-copy-btn">复制</button>
+  </div>
   <pre><code class="${languageClass}hljs">${highlightedCode}</code></pre>
 </div>`
 }

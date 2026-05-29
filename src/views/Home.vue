@@ -160,7 +160,7 @@
                 type="button"
                 class="resource-item"
                 :class="resource.tone"
-                @click="goTo('/resource-generator')"
+                @click="goToResourceDetail(resource.id)"
             >
               <div class="resource-icon">
                 <el-icon><component :is="resource.icon" /></el-icon>
@@ -226,6 +226,10 @@ const router = useRouter()
 
 const goTo = (path: string) => {
   router.push(path)
+}
+
+const goToResourceDetail = (resourceId: number) => {
+  router.push({ name: 'ResourceDetail', params: { id: resourceId } })
 }
 
 // 默认设为 true，即默认展示新用户状态，直到加载到数据才切换
