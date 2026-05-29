@@ -3,10 +3,6 @@
     <div v-if="questions.length" class="quiz-list">
       <article v-for="(question, index) in visibleQuestions" :key="index" class="technical-frame quiz-item">
 
-        <div class="frame-header">
-          <div class="status-indicator"></div>
-          <span class="technical-label">技术练习 // 模块_{{ (index + 1).toString().padStart(2, '0') }}</span>
-        </div>
 
         <div class="quiz-stem">
           <span class="quiz-index">Q{{ index + 1 }}</span>
@@ -236,7 +232,7 @@ const getQuestionTypeText = (questionType?: string) => {
   background: var(--bg);
   border: none;
   border-radius: 4px;
-  padding: 40px 32px 32px;
+  padding: 24px 32px 32px;
   box-shadow: none;
   transition: all 0.3s ease;
 }

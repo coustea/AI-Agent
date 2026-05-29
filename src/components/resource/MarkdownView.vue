@@ -2,10 +2,6 @@
   <div class="markdown-resource" :class="{ compact }">
     <div v-if="content" class="technical-frame">
       
-      <div class="frame-header">
-        <div class="status-indicator"></div>
-        <span class="technical-label">RESOURCE_CONTENT // VERSION 2.0</span>
-      </div>
 
       <MarkdownPreview class="markdown-shell" :content="content" />
       
@@ -53,7 +49,7 @@ const content = computed(() => getMarkdownContent(props.resultData))
   background: var(--bg);
   border: none;
   border-radius: 4px;
-  padding: 40px 32px 32px;
+  padding: 24px 32px 32px;
   box-shadow: none;
   transition: all 0.3s ease;
 }

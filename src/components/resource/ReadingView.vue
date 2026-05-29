@@ -2,10 +2,6 @@
   <div class="reading-resource" :class="{ compact }">
     <div v-if="readingData && resources.length" class="technical-frame reading-container">
 
-      <div class="frame-header">
-        <div class="status-indicator"></div>
-        <span class="technical-label">阅读资源 // 拓展学习 // 模块A</span>
-      </div>
 
       <div v-if="!compact && readingData.summary" class="reading-summary">
         <div class="summary-icon"><el-icon><Reading /></el-icon></div>
@@ -30,7 +26,7 @@
             </span>
           </div>
           <div class="reading-reason" v-if="getRecommendReason(resource) && !compact">
-            <div class="reason-label">推荐理由 //</div>
+            <div class="reason-label">推荐理由</div>
             {{ getRecommendReason(resource) }}
           </div>
           <div class="reading-desc" v-if="getDescription(resource) && !compact">
@@ -138,7 +134,7 @@ const getDifficultyText = (difficulty?: string) => {
   background: var(--bg);
   border: none;
   border-radius: 4px;
-  padding: 44px 32px 32px;
+  padding: 24px 32px 32px;
   box-shadow: none;
   transition: all 0.3s ease;
   display: flex;

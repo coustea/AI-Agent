@@ -2,11 +2,6 @@
   <div class="code-resource" :class="{ compact }" @click="handleMessageClick">
     <div v-if="parsedData || markdownContent" class="technical-frame code-card-content">
 
-      <div class="frame-header">
-        <div class="status-indicator"></div>
-        <span class="technical-label">代码资源 // {{ (parsedData?.language || 'TEXT').toUpperCase() }} // 版本_4.0</span>
-      </div>
-
       <!-- 顶部信息栏：简述 -->
       <div v-if="!compact && parsedData?.explanation" class="code-header-meta">
         <span class="code-summary-text">{{ parsedData.explanation }}</span>
@@ -239,7 +234,7 @@ watch(pureCode, performHighlight)
   background: var(--bg);
   border: none;
   border-radius: 4px;
-  padding: 44px 32px 32px;
+  padding: 24px 32px 32px;
   box-shadow: none;
   transition: all 0.3s ease;
   display: flex;

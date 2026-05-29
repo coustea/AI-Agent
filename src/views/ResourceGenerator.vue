@@ -2,56 +2,84 @@
   <div class="elegant-generator-layout">
     <transition name="page-slide" mode="out-in">
 
-      <div v-if="currentPhase === 'input'" class="phase-view input-view" key="input">
-        <div class="input-container">
-          <div class="welcome-header">
-            <div class="sparkle-icon"><el-icon><MagicStick /></el-icon></div>
-            <h1 class="greeting-title">今天想学点什么？</h1>
-            <p class="greeting-subtitle">
-              请用自然语言描述你的学习需求，系统将直接向多智能体发送指令。
-            </p>
+      <div v-if="currentPhase === 'input'" class="phase-view omni-input-view" key="input">
+        <!-- Soft Ambient Background (Not Flashy, Just Rich) -->
+        <div class="omni-ambient-bg">
+          <div class="ambient-glow glow-blue"></div>
+          <div class="ambient-glow glow-indigo"></div>
+          <div class="omni-pattern-bg"></div>
+        </div>
+        
+        <div class="omni-container">
+          <!-- Hero Header -->
+          <div class="omni-hero-header">
+            <h1 class="hero-title">AI 学习资源引擎</h1>
+            <p class="hero-subtitle">输入你的学习目标，自动构建专属的知识图谱、测试与课件</p>
           </div>
 
-          <div class="search-box-wrapper" :class="{ 'is-focused': isInputFocused }">
+          <!-- Spotlight Input Box -->
+          <div class="omni-spotlight-wrapper" :class="{ 'is-focused': isInputFocused, 'has-content': naturalInput.trim().length > 0 }">
             <el-input
                 v-model="naturalInput"
                 type="textarea"
-                :autosize="{ minRows: 4, maxRows: 8 }"
-                placeholder="例如：我是软件工程大二学生，明天考《操作系统》。我搞不懂死锁的四个必要条件，请帮我生成复习资料和几道自测题…"
-                class="elegant-textarea"
+                :autosize="{ minRows: 1, maxRows: 10 }"
+                placeholder="输入学习需求，唤醒多智能体..."
+                class="omni-textarea"
                 @focus="isInputFocused = true"
                 @blur="isInputFocused = false"
                 @keydown.enter.exact.prevent="goToPersonalize"
             />
-            <div class="search-actions">
-              <div class="action-left">
-                <span class="ai-hint"><el-icon><Cpu /></el-icon> 多智能体协同，全自动构建个性化资源流</span>
-              </div>
-              <el-button
-                  type="primary"
-                  class="generate-btn"
-                  round
+            <div class="omni-actions">
+              <span class="omni-hint" v-if="naturalInput.trim().length > 0">
+                回车键进入参数配置 ⏎
+              </span>
+              <span class="omni-hint" v-else>
+                描述考研、期末、或任意技术栈...
+              </span>
+              <button
+                  class="omni-submit-btn"
                   :disabled="!naturalInput.trim()"
                   @click="goToPersonalize"
               >
-                下一步：配置智能体 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-              </el-button>
+                <el-icon><Top /></el-icon>
+              </button>
             </div>
           </div>
 
-          <div class="suggestion-area">
-            <span class="suggestion-label">快捷指令：</span>
-            <div class="suggestion-tags">
-              <el-tag v-for="(prompt, index) in quickPrompts" :key="index" class="s-tag" effect="plain" round @click="naturalInput = prompt">
-                {{ prompt }}
-              </el-tag>
+          <!-- Rich Inspiration Grid -->
+          <div class="omni-inspiration-grid">
+            <div class="inspiration-card" @click="naturalInput = '复习《计算机网络》TCP三次握手，请多出几道难题'">
+              <div class="ins-icon" style="background: #EFF6FF; color: #3B82F6;"><el-icon><StarFilled /></el-icon></div>
+              <div class="ins-content">
+                <h4>深度复习</h4>
+                <p>复习《计算机网络》TCP三次握手...</p>
+              </div>
+            </div>
+            <div class="inspiration-card" @click="naturalInput = '零基础学习 Python 多线程，需要底层原理和代码'">
+              <div class="ins-icon" style="background: #F0FDF4; color: #22C55E;"><el-icon><Cpu /></el-icon></div>
+              <div class="ins-content">
+                <h4>零基础入门</h4>
+                <p>零基础学习 Python 多线程原理...</p>
+              </div>
+            </div>
+            <div class="inspiration-card" @click="naturalInput = '考研冲刺《数据结构》二叉树，帮我精简思维导图，重点标注高频考点'">
+              <div class="ins-icon" style="background: #FEF2F2; color: #EF4444;"><el-icon><Odometer /></el-icon></div>
+              <div class="ins-content">
+                <h4>考研冲刺</h4>
+                <p>《数据结构》二叉树，精简思维导图...</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div v-else-if="currentPhase === 'personalize'" class="phase-view personalize-view" key="personalize">
-        <div class="aurora-background"></div>
+        <!-- Soft Ambient Background (Consistent with Phase 1) -->
+        <div class="omni-ambient-bg">
+          <div class="ambient-glow glow-blue"></div>
+          <div class="ambient-glow glow-indigo"></div>
+          <div class="omni-pattern-bg"></div>
+        </div>
         <div class="personalize-container">
           <div class="view-header">
             <el-tag size="small" effect="dark" round class="header-badge">AI CONFIGURATION</el-tag>
@@ -77,7 +105,7 @@
 
           <div class="config-section-v2">
             <div class="agent-configs-grid">
-              <div class="config-card-v2" :class="{ disabled: agent.disabled, 'agent-off': !isAgentEnabled(agent.id) && !agent.disabled }" v-for="agent in personalizeAgents" :key="agent.id">
+              <div class="config-card-v2" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
                 <div class="cc-header-v2">
                   <div class="cc-icon-wrap" :class="agent.colorClass">
                     <el-icon><component :is="agent.icon" /></el-icon>
@@ -85,16 +113,14 @@
                   <span class="cc-title">{{ agent.name }}</span>
                   <div class="cc-header-switch">
                     <el-switch
-                        v-if="!agent.disabled"
                         :model-value="isAgentEnabled(agent.id)"
                         @change="toggleAgent(agent.id)"
                         active-color="#0369A1"
                     />
-                    <el-tag v-else size="small" type="info">敬请期待</el-tag>
                   </div>
                 </div>
 
-                <div class="cc-body-v2" :class="{ 'body-disabled': !isAgentEnabled(agent.id) && !agent.disabled }">
+                <div class="cc-body-v2" :class="{ 'body-disabled': !isAgentEnabled(agent.id) }">
                   <template v-if="agent.id === 'content'">
                     <div class="ctrl-group">
                       <label>讲解结构</label>
@@ -250,15 +276,6 @@
                     </div>
                   </template>
 
-                  <template v-if="agent.id === 'video'">
-                    <div class="coming-soon-panel">
-                      <el-icon><VideoPlay /></el-icon>
-                      <div>
-                        <strong>视频动画脚本即将支持</strong>
-                        <span>当前不会加入本次生成请求，后端接入 VideoAgent 后自动开放。</span>
-                      </div>
-                    </div>
-                  </template>
                 </div>
               </div>
             </div>
@@ -285,7 +302,7 @@
             <div class="footer-btns">
               <el-button plain round size="large" @click="currentPhase = 'input'" class="footer-back-btn">返回修改需求</el-button>
               <el-button type="primary" round size="large" class="launch-btn-v2" @click="startGeneration">
-                确认配置，启动多智能体加工 <el-icon class="el-icon--right"><VideoPlay /></el-icon>
+                确认配置，启动多智能体加工 <el-icon class="el-icon--right"><Position /></el-icon>
               </el-button>
             </div>
           </div>
@@ -362,16 +379,30 @@
                     <stop offset="0%" stop-color="#2563EB" />
                     <stop offset="100%" stop-color="#06B6D4" />
                   </linearGradient>
+                  <!-- 粒子流动渐变 -->
+                  <linearGradient id="flow-particle" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="rgba(59, 130, 246, 0)" />
+                    <stop offset="50%" stop-color="#3B82F6" />
+                    <stop offset="100%" stop-color="rgba(59, 130, 246, 0)" />
+                  </linearGradient>
                 </defs>
-                <line
-                    v-for="edge in dagEdges"
-                    :key="`${edge.from}-${edge.to}`"
-                    :x1="dagNodePositionsV2[edge.from]?.x"
-                    :y1="dagNodePositionsV2[edge.from]?.y"
-                    :x2="dagNodePositionsV2[edge.to]?.x"
-                    :y2="dagNodePositionsV2[edge.to]?.y"
-                    :class="['workflow-edge', edge.statusClass]"
-                />
+                <template v-for="edge in dagEdges" :key="`${edge.from}-${edge.to}`">
+                  <line
+                      :x1="dagNodePositionsV2[edge.from]?.x"
+                      :y1="dagNodePositionsV2[edge.from]?.y"
+                      :x2="dagNodePositionsV2[edge.to]?.x"
+                      :y2="dagNodePositionsV2[edge.to]?.y"
+                      :class="['workflow-edge-base', edge.statusClass]"
+                  />
+                  <line
+                      v-if="edge.statusClass === 'active'"
+                      :x1="dagNodePositionsV2[edge.from]?.x"
+                      :y1="dagNodePositionsV2[edge.from]?.y"
+                      :x2="dagNodePositionsV2[edge.to]?.x"
+                      :y2="dagNodePositionsV2[edge.to]?.y"
+                      class="workflow-edge-flow"
+                  />
+                </template>
               </svg>
 
               <button
@@ -578,10 +609,10 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  MagicStick, ArrowRight, Cpu,
-  CircleCheckFilled, RefreshLeft, Position, VideoPlay,
+  ArrowRight, Cpu,
+  CircleCheckFilled, RefreshLeft, Position,
   Document, Share, Edit, Collection,
-  Clock, Odometer, DataBoard
+  Clock, Odometer, DataBoard, Top, StarFilled
 } from '@element-plus/icons-vue'
 
 import MindmapView from '@/components/resource/MindmapView.vue'
@@ -595,6 +626,7 @@ import {
   startResourceGeneration,
   pollResourceStatus,
   getResourceBundle,
+  streamResourceEvents,
   type LearningScenario,
   type ResourceAgentId,
   type ResourceTaskStatus,
@@ -617,7 +649,6 @@ type AnyAgentConfigs = {
   quiz: { question_count: number; difficulty_mode: string; weak_point_weight: number; exam_style: string; include_analysis: boolean; question_types?: QuizQuestionType[] }
   code: { programming_language: string; case_type: string; comment_level: string; include_test: boolean; difficulty: string }
   reading: { reading_depth: string; max_items: number; resource_quality: string; include_practice: boolean; language_preference: string }
-  video: { script_style: string; estimated_duration: number }
   ppt: { template_id: string; page_count: number; difficulty: string; output_format: string }
 }
 
@@ -643,11 +674,7 @@ const scenarioOptions: Array<{ icon: string; name: string; value: LearningScenar
   { icon: '预', name: '预习自学', value: 'self_study' }
 ]
 
-const quickPrompts = [
-  "复习《计算机网络》TCP三次握手，我喜欢看时序图，请多出几道难题",
-  "零基础学习 Python 多线程，需要底层原理和带详细注释的代码",
-  "考研冲刺《数据结构》二叉树，帮我精简思维导图，重点标注高频考点"
-]
+
 
 const agentMetaList = [
   { id: 'master', name: '多智能体调度', icon: Cpu, colorClass: 'text-blue' },
@@ -659,7 +686,6 @@ const agentMetaList = [
   { id: 'quiz', name: '自测题训练', icon: Edit, colorClass: 'text-emerald' },
   { id: 'reading', name: '拓展阅读推荐', icon: Collection, colorClass: 'text-indigo' },
   { id: 'ppt', name: 'PPT文稿生成', icon: DataBoard, colorClass: 'text-pink' },
-  { id: 'video', name: '视频动画脚本', icon: VideoPlay, colorClass: 'text-slate', disabled: true }
 ]
 
 const getAgentMeta = (id: string) => agentMetaList.find(a => a.id === id) || { name: id, icon: Document, colorClass: 'text-blue' }
@@ -700,7 +726,6 @@ const agentConfigs = reactive({
   quiz: { question_count: 5, difficulty_mode: 'adaptive' as const, weak_point_weight: 50, exam_style: 'school' as const, include_analysis: true, question_types: ['single', 'multiple', 'judge'] as QuizQuestionType[] },
   code: { programming_language: 'python' as const, case_type: 'basic_demo' as const, comment_level: 'standard' as const, include_test: false, difficulty: 'beginner' as const },
   reading: { reading_depth: 'course_extended' as const, max_items: 3, resource_quality: 'balanced' as const, include_practice: false, language_preference: 'chinese' as const },
-  video: { script_style: 'concept_animation', estimated_duration: 3 },
   ppt: { template_id: 'theme-logic-blue' as const, page_count: 6, difficulty: 'intermediate' as const, output_format: 'preview' as const },
 })
 
@@ -733,8 +758,10 @@ const resultWarning = ref('')
 const overallProgress = ref(0)
 const latestWorkflowMessage = ref('')
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const resourceStreamController = ref<AbortController | null>(null)
+const generationFinalized = ref(false)
 
-const RESOURCE_TYPE_ORDER = ['content', 'diagram', 'mindmap', 'code', 'quiz', 'reading', 'ppt', 'video']
+const RESOURCE_TYPE_ORDER = ['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt']
 
 const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   planning: { label: '规划任务', icon: '🎯' },
@@ -968,7 +995,6 @@ const getResourceTypeLabel = (type: string) => {
     quiz: '自测题',
     reading: '拓展阅读',
     ppt: '演示文稿',
-    video: '视频脚本',
     reviewer: '质量审查',
   }
   return labelMap[type] || getAgentMeta(type).name || type
@@ -982,7 +1008,6 @@ const getResourceUsageHint = (type: string) => {
     quiz: '完成自测题，检查掌握情况并定位仍然薄弱的知识点。',
     reading: '用于课后拓展和深入理解，适合完成基础资源后阅读。',
     ppt: '精美的自动生成幻灯片，可用于直接演示或快速概览。',
-    video: '可作为后续视频或动画讲解的脚本基础。',
   }
   return hintMap[type] || '建议结合本次学习目标使用该资源。'
 }
@@ -995,7 +1020,6 @@ const getDefaultResourceFormat = (type: string) => {
     quiz: 'Quiz JSON',
     reading: 'Reading List',
     ppt: 'PPT JSON',
-    video: 'Script',
   }
   return formatMap[type] || 'Resource'
 }
@@ -1008,7 +1032,6 @@ const getEstimatedTime = (type: string) => {
     quiz: '10-20 分钟',
     reading: '20-30 分钟',
     ppt: '5-10 分钟',
-    video: '3-5 分钟',
   }
   return timeMap[type] || '待评估'
 }
@@ -1033,7 +1056,6 @@ const getResourceToneClass = (type: string) => {
     quiz: 'tone-emerald',
     reading: 'tone-indigo',
     ppt: 'tone-pink',
-    video: 'tone-slate',
   }
   return toneMap[type] || 'tone-blue'
 }
@@ -1117,6 +1139,84 @@ function applyProgressSnapshot(progress: ResourceTaskStatus['progress']) {
   if (runningNode) selectedDagNodeId.value = runningNode.id
 }
 
+function applyTaskStatus(taskStatus: ResourceTaskStatus) {
+  applyProgressSnapshot(taskStatus.progress)
+  if (Array.isArray(taskStatus.resources)) {
+    generatedResources.value = taskStatus.resources
+  }
+}
+
+async function completeGeneration(resourceId: number, taskStatus: ResourceTaskStatus) {
+  if (generationFinalized.value) return
+  generationFinalized.value = true
+  stopPolling()
+  stopResourceStream()
+
+  if (taskStatus.status === 'completed' || taskStatus.status === 'partial_completed') {
+    const bundle = await getResourceBundle(resourceId)
+    finalBundle.value = bundle
+    generatedResources.value = bundle.resources || taskStatus.resources || []
+    resultWarning.value = taskStatus.status === 'partial_completed'
+        ? '部分资源生成失败或质量审查未通过，以下已完成内容仍可查看。'
+        : ''
+    isGenerating.value = false
+    currentPhase.value = 'result'
+    return
+  }
+
+  generationError.value = taskStatus.progress.latest_message || '资源生成失败，暂无可展示内容'
+  isGenerating.value = false
+  ElMessage.error(generationError.value || '资源生成失败，暂无可展示内容')
+}
+
+async function checkStatusOnce(resourceId: number) {
+  const taskStatus = await pollResourceStatus(resourceId)
+  applyTaskStatus(taskStatus)
+  if (['completed', 'partial_completed', 'failed'].includes(taskStatus.status)) {
+    await completeGeneration(resourceId, taskStatus)
+  }
+}
+
+function startPollingFallback(resourceId: number) {
+  if (pollingInterval.value) return
+  void checkStatusOnce(resourceId)
+  pollingInterval.value = setInterval(() => {
+    void checkStatusOnce(resourceId).catch((err: any) => {
+      stopPolling()
+      generationError.value = err.message || '生成中断，请稍后重试'
+      isGenerating.value = false
+      ElMessage.error(generationError.value || '生成中断，请稍后重试')
+    })
+  }, 1500)
+}
+
+function startResourceStream(resourceId: number) {
+  stopResourceStream()
+  resourceStreamController.value = streamResourceEvents(
+    resourceId,
+    ({ event, data }) => {
+      if ((event === 'snapshot' || event === 'done') && data && typeof data === 'object') {
+        const taskStatus = data as ResourceTaskStatus
+        applyTaskStatus(taskStatus)
+        if (['completed', 'partial_completed', 'failed'].includes(taskStatus.status)) {
+          void completeGeneration(resourceId, taskStatus)
+        }
+      }
+    },
+    () => {
+      if (isGenerating.value && !generationFinalized.value) {
+        startPollingFallback(resourceId)
+      }
+    },
+    (err) => {
+      if (!isGenerating.value || generationFinalized.value) return
+      console.warn('[ResourceGenerator] SSE 连接失败，切换到轮询兜底:', err)
+      latestWorkflowMessage.value = '实时连接中断，已切换到状态同步模式'
+      startPollingFallback(resourceId)
+    },
+  )
+}
+
 const startGeneration = async () => {
   currentPhase.value = 'generating'
   resetGenerationState()
@@ -1141,40 +1241,7 @@ const startGeneration = async () => {
       output_options: { output_format: 'json' }
     })
 
-    const checkStatus = async () => {
-      try {
-        const taskStatus = await pollResourceStatus(resource_id)
-        applyProgressSnapshot(taskStatus.progress)
-        if (taskStatus.status === 'completed' || taskStatus.status === 'partial_completed') {
-          stopPolling()
-          const bundle = await getResourceBundle(resource_id)
-          finalBundle.value = bundle
-          generatedResources.value = bundle.resources || []
-          resultWarning.value = taskStatus.status === 'partial_completed'
-              ? '部分资源生成失败或质量审查未通过，以下已完成内容仍可查看。'
-              : ''
-          isGenerating.value = false
-          currentPhase.value = 'result'
-        } else if (taskStatus.status === 'failed') {
-          stopPolling()
-          generationError.value = taskStatus.progress.latest_message || '资源生成失败，暂无可展示内容'
-          isGenerating.value = false
-          ElMessage.error(generationError.value || '资源生成失败，暂无可展示内容')
-        }
-      } catch (err: any) {
-        stopPolling()
-        generationError.value = err.message || '生成中断，请稍后重试'
-        isGenerating.value = false
-        ElMessage.error(generationError.value || '生成中断，请稍后重试')
-      }
-    }
-
-    await checkStatus()
-    if (isGenerating.value) {
-      pollingInterval.value = setInterval(() => {
-        void checkStatus()
-      }, 3000)
-    }
+    startResourceStream(resource_id)
   } catch (err: any) {
     generationError.value = err.message || '生成请求失败'
     isGenerating.value = false
@@ -1190,6 +1257,7 @@ const resetGenerationState = () => {
   overallProgress.value = 0
   latestWorkflowMessage.value = ''
   isGenerating.value = false
+  generationFinalized.value = false
   dagNodeStates.value = {}
   selectedDagNodeId.value = 'planning'
 }
@@ -1198,6 +1266,13 @@ const stopPolling = () => {
   if (pollingInterval.value) {
     clearInterval(pollingInterval.value)
     pollingInterval.value = null
+  }
+}
+
+const stopResourceStream = () => {
+  if (resourceStreamController.value) {
+    resourceStreamController.value.abort()
+    resourceStreamController.value = null
   }
 }
 
@@ -1233,10 +1308,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopPolling()
+  stopResourceStream()
 })
 
 const resetGenerator = () => {
   stopPolling()
+  stopResourceStream()
   naturalInput.value = ''
   resetGenerationState()
   currentPhase.value = 'input'
@@ -1252,116 +1329,263 @@ const handlePreview = (data: any) => {
 
 <style scoped>
 /* ================= 全局基础排版与转场 ================= */
-.elegant-generator-layout { width: 100%; height: calc(100vh - 64px); background: var(--color-bg); font-family: var(--font-sans); overflow-x: hidden; position: relative; padding-top: var(--space-5); }
-.phase-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; background: transparent; }
+.elegant-generator-layout { width: 100%; height: calc(100vh - 64px); background: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; overflow-x: hidden; position: relative; padding-top: var(--space-5); }
+.phase-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; background: transparent; backdrop-filter: blur(20px); }
 .page-slide-enter-active, .page-slide-leave-active { transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
 .page-slide-leave-to { opacity: 0; transform: translateY(-30px) scale(1.02); }
 
-/* ================= Phase 1: 输入需求控制 ================= */
-.input-view {
+/* ================= Phase 1: Omni Spotlight 输入舱 ================= */
+.omni-input-view {
   align-items: center;
   justify-content: center;
-  padding: 2.4rem 2rem;
-  background: #F9FAFB;
+  position: relative;
+  background: #F8FAFC;
 }
-.input-container { width: 100%; max-width: 800px; display: flex; flex-direction: column; align-items: center; margin-top: -8vh; }
-.welcome-header { text-align: center; margin-bottom: 2.75rem; }
-.sparkle-icon {
-  display: inline-flex;
-  justify-content: center;
+
+/* Ambient Background */
+.omni-ambient-bg {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; z-index: 0;
+}
+.ambient-glow {
+  position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.5;
+}
+.glow-blue { width: 600px; height: 600px; background: #DBEAFE; top: -100px; left: -100px; }
+.glow-indigo { width: 500px; height: 500px; background: #E0E7FF; bottom: -10vh; right: 10%; }
+
+/* 学术网格背景 (Subtle dot pattern) */
+.omni-pattern-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: radial-gradient(circle, #CBD5E1 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.6;
+  z-index: 1;
+  pointer-events: none;
+}
+.omni-pattern-bg::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: radial-gradient(circle at center, transparent 0%, #F8FAFC 90%);
+}
+
+.omni-container {
+  width: 100%;
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  width: 56px;
-  height: 56px;
-  background: #FFFFFF;
-  color: #111827;
-  font-size: 1.6rem;
-  border-radius: 16px;
-  margin-bottom: 1.25rem;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  gap: 2.5rem;
+  margin-top: -6vh;
+  position: relative;
+  z-index: 10;
 }
-.greeting-title { font-size: clamp(2.1rem, 4.2vw, 3.15rem); font-weight: var(--weight-extrabold); color: var(--color-text); margin: 0 0 0.9rem; letter-spacing: -0.03em; }
-.greeting-subtitle { font-size: 1.08rem; color: var(--color-text-muted); line-height: 1.75; max-width: 680px; margin: 0 auto; }
-.search-box-wrapper {
+
+/* Hero Header */
+.omni-hero-header {
+  text-align: center;
+  margin-bottom: 0.5rem;
+  animation: fadeDown 0.8s ease-out forwards;
+}
+@keyframes fadeDown {
+  0% { opacity: 0; transform: translateY(-20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.hero-title {
+  font-size: 2.8rem;
+  font-weight: 800;
+  color: #0F172A;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px 0;
+  background: linear-gradient(135deg, #1E293B, #3B82F6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero-subtitle {
+  font-size: 1.1rem;
+  color: #64748B;
+  font-weight: 500;
+  margin: 0;
+}
+
+.omni-spotlight-wrapper {
   width: 100%;
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  border: 1px solid #E2E8F0;
   border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-  padding: var(--space-2);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 10px 15px -3px rgba(0, 0, 0, 0.03),
+    0 25px 50px -12px rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  animation: scaleUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
 }
-.search-box-wrapper.is-focused {
-  border-color: #D1D5DB;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+@keyframes scaleUp {
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
 }
-.elegant-textarea :deep(.el-textarea__inner) {
+.omni-spotlight-wrapper.is-focused, .omni-spotlight-wrapper.has-content {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 
+    0 8px 30px rgba(59, 130, 246, 0.08),
+    0 0 0 4px rgba(59, 130, 246, 0.1);
+  transform: translateY(-2px);
+}
+.omni-textarea :deep(.el-textarea__inner) {
   border: none;
   background: transparent;
   box-shadow: none !important;
-  font-size: 1.13rem;
-  color: var(--color-text);
-  padding: var(--space-6) 26px;
-  line-height: 1.68;
+  font-size: 1.15rem;
+  color: #1E293B;
+  padding: 18px 20px 8px;
+  line-height: 1.6;
   resize: none;
+  font-weight: 500;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-.elegant-textarea :deep(.el-textarea__inner)::placeholder { color: var(--color-text-faint); font-weight: var(--weight-medium); }
-.search-actions { display: flex; justify-content: space-between; align-items: center; padding: var(--space-2) var(--space-4) 10px 24px; gap: var(--space-3); }
-.ai-hint { font-size: 0.92rem; color: var(--color-text-muted); display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-semibold); }
-.ai-hint .el-icon { color: var(--color-info); font-size: 1rem; }
-.generate-btn {
-  padding: var(--space-3) var(--space-8);
-  font-size: 1.02rem;
-  font-weight: var(--weight-extrabold);
-  border-radius: var(--radius-pill);
-  background: var(--color-text) !important;
-  border-color: transparent !important;
-  box-shadow: var(--shadow-md);
-  transition: transform var(--transition-base), box-shadow var(--transition-base), filter var(--transition-base);
+.omni-textarea :deep(.el-textarea__inner)::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
-.generate-btn:hover:not(:disabled) { transform: translateY(-1px); background: var(--color-text-strong) !important; box-shadow: var(--shadow-lg); filter: none; }
-.suggestion-area { margin-top: 2.25rem; display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
-.suggestion-label { font-size: 0.84rem; color: var(--color-text-faint); font-weight: var(--weight-bold); letter-spacing: 0.04em; }
-.suggestion-tags { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
-.s-tag {
-  cursor: pointer;
-  background: var(--color-surface) !important;
-  border-color: var(--color-primary-border) !important;
-  color: var(--color-text-secondary) !important;
-  padding: var(--space-2) var(--space-4);
-  height: auto;
+.omni-textarea :deep(.el-textarea__inner)::placeholder {
+  color: #94A3B8;
+  font-weight: 400;
+}
+.omni-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px 10px 20px;
+}
+.omni-hint {
   font-size: 0.9rem;
-  font-weight: var(--weight-semibold);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+  color: #64748B;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.s-tag:hover { transform: translateY(-1px); background: var(--color-info-soft) !important; border-color: #93C5FD !important; color: #1D4ED8 !important; }
+.omni-submit-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #F1F5F9;
+  color: #94A3B8;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.omni-spotlight-wrapper.has-content .omni-submit-btn {
+  background: #3B82F6;
+  color: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+.omni-spotlight-wrapper.has-content .omni-submit-btn:hover {
+  transform: translateY(-2px) scale(1.05);
+  background: #2563EB;
+}
+
+/* Rich Inspiration Grid */
+.omni-inspiration-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  width: 100%;
+  animation: fadeUp 0.6s ease-out 0.2s both;
+}
+@keyframes fadeUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.inspiration-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(148, 163, 184, 0.04);
+}
+.inspiration-card:hover {
+  border-color: #CBD5E1;
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(148, 163, 184, 0.08);
+}
+.ins-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+.ins-content h4 {
+  margin: 0 0 6px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1E293B;
+}
+.ins-content p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748B;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 
 /* ================= Phase 2: 参数定制配置 ================= */
-.personalize-view { background: #F9FAFB; align-items: center; overflow-y: auto; padding: 60px var(--space-5); position: relative; }
-.aurora-background { display: none; }
-.personalize-container { width: 100%; max-width: 1160px; display: flex; flex-direction: column; gap: var(--space-12); position: relative; z-index: 1; }
+.personalize-view { background: #F8FAFC; align-items: center; overflow-y: auto; padding: 60px var(--space-5); position: relative; }
+.personalize-container { width: 100%; max-width: 1160px; display: flex; flex-direction: column; gap: var(--space-12); position: relative; z-index: 10; }
 .view-header { text-align: center; margin-bottom: 0; }
-.header-badge { margin-bottom: var(--space-4); font-weight: var(--weight-bold); letter-spacing: 0.05em; background: var(--color-text) !important; border: none; }
-.view-header h2 { font-family: var(--font-sans); font-size: 2.5rem; font-weight: var(--weight-extrabold); color: var(--color-text); margin: 0 0 var(--space-4); letter-spacing: -0.02em; }
-.view-header p { font-size: 1.1rem; color: var(--color-text-muted); margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+.header-badge { margin-bottom: var(--space-4); font-weight: 700; letter-spacing: 0.05em; background: #E2E8F0 !important; color: #475569 !important; border: none; padding: 0 12px; }
+.view-header h2 { 
+  font-size: 2.5rem; 
+  font-weight: 800; 
+  margin: 0 0 12px 0; 
+  letter-spacing: -0.02em; 
+  background: linear-gradient(135deg, #1E293B, #3B82F6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.view-header p { font-size: 1.1rem; color: #64748B; margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
 .scenario-selector-v2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
-.scenario-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: var(--space-5); display: flex; align-items: center; gap: var(--space-4); cursor: pointer; transition: all 0.2s ease; position: relative; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); }
-.scenario-card:hover { transform: translateY(-2px); border-color: #D1D5DB; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); }
-.scenario-card.active { border-color: #111827; box-shadow: 0 4px 12px rgba(17, 24, 39, 0.08); border-width: 1.5px; }
-.scenario-icon-box { width: 44px; height: 44px; background: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: #4B5563; transition: background-color 0.2s, transform 0.2s; }
-.scenario-card.active .scenario-icon-box { background: #111827; color: #FFFFFF; }
+.scenario-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: var(--space-5); display: flex; align-items: center; gap: var(--space-4); cursor: pointer; transition: all 0.2s ease; position: relative; box-shadow: 0 2px 8px rgba(148, 163, 184, 0.04); }
+.scenario-card:hover { transform: translateY(-2px); border-color: #CBD5E1; box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08); }
+.scenario-card.active { border-color: #3B82F6; box-shadow: 0 8px 24px rgba(59, 130, 246, 0.12); border-width: 1px; }
+.scenario-icon-box { width: 44px; height: 44px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: #475569; transition: background-color 0.2s, transform 0.2s; }
+.scenario-card.active .scenario-icon-box { background: #3B82F6; color: #FFFFFF; border-color: #3B82F6; }
 .scenario-info { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
-.s-name { font-weight: var(--weight-bold); font-size: 1rem; color: var(--color-text); }
-.s-desc { font-size: 0.75rem; color: var(--color-text-muted); line-height: 1.4; }
-.active-dot { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; background: var(--color-text); border-radius: 50%; }
+.s-name { font-weight: 700; font-size: 1rem; color: #1E293B; }
+.s-desc { font-size: 0.75rem; color: #64748B; line-height: 1.4; }
+.active-dot { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; background: #3B82F6; border-radius: 50%; }
 .config-section-v2 { margin-top: var(--space-2); }
 .agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-6); }
-.config-card-v2 { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); }
-.config-card-v2:hover { transform: translateY(-2px); border-color: #D1D5DB; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06); }
+.config-card-v2 { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 24px rgba(148, 163, 184, 0.06); }
+.config-card-v2:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(148, 163, 184, 0.12); }
 .cc-header-v2 { padding: var(--space-5) var(--space-5) 12px; display: flex; align-items: center; gap: var(--space-3); }
-.cc-icon-wrap { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
+.cc-icon-wrap { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
 .cc-icon-wrap.text-blue, .cc-icon-wrap.text-orange, .cc-icon-wrap.text-purple, .cc-icon-wrap.text-red, .cc-icon-wrap.text-emerald, .cc-icon-wrap.text-indigo, .cc-icon-wrap.text-slate { background: #F3F4F6; color: #374151; }
 .config-card-v2.disabled { opacity: 0.7; background: #F9FAFB; }
 .config-card-v2.agent-off { border-color: #E5E7EB; opacity: 0.85; }
@@ -1394,18 +1618,20 @@ const handlePreview = (data: any) => {
 :deep(.custom-radio-group .el-radio-button__inner) { width: 100%; border-radius: var(--radius-md) !important; border: 1px solid transparent !important; background: rgba(241, 245, 249, 0.6); color: var(--color-text-muted); font-weight: var(--weight-semibold); transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base); padding: 10px 0; }
 :deep(.custom-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner) { background-color: var(--color-surface) !important; color: var(--color-text) !important; border-color: rgba(226, 232, 240, 0.8) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important; }
 .slider-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: -4px; }
-.slider-value { font-size: 0.9rem; color: var(--color-info); font-weight: var(--weight-bold); }
+.slider-value { font-size: 0.9rem; color: #3B82F6; font-weight: 700; }
 .custom-slider-v2 { padding: 0 var(--space-2); }
-.personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: var(--space-5); margin-top: var(--space-4); padding-bottom: 40px; }
-.footer-btns { display: flex; justify-content: center; gap: var(--space-6); }
-.selected-agents-bar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; justify-content: center; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: var(--space-3) var(--space-5); max-width: 860px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
-.sab-label { font-size: 0.85rem; color: #6B7280; font-weight: var(--weight-bold); white-space: nowrap; }
-.sab-pills { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.sab-pill { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 0.82rem; font-weight: var(--weight-semibold); cursor: default; }
-.sab-hint { font-size: 0.78rem; color: #6B7280; font-weight: var(--weight-bold); }
-.footer-back-btn { font-weight: var(--weight-semibold); color: #4B5563; border: 1px solid #D1D5DB; }
-.launch-btn-v2 { font-weight: var(--weight-bold); padding: 0 var(--space-10); background: #111827 !important; color: #FFFFFF !important; border: none; box-shadow: 0 2px 6px rgba(17, 24, 39, 0.1); transition: transform 0.2s, box-shadow 0.2s; }
-.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(17, 24, 39, 0.15); }
+.personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: 24px; margin-top: 16px; padding-bottom: 60px; }
+.footer-btns { display: flex; justify-content: center; gap: 20px; }
+.selected-agents-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid #E2E8F0; border-radius: 24px; padding: 16px 24px; max-width: 860px; box-shadow: 0 4px 24px rgba(148, 163, 184, 0.08); }
+.sab-label { font-size: 0.9rem; color: #64748B; font-weight: 700; white-space: nowrap; }
+.sab-pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.sab-pills :deep(.el-tag.sab-pill) { background: #F8FAFC !important; border: 1px solid #E2E8F0 !important; color: #475569 !important; border-radius: 99px !important; padding: 0 16px !important; height: 32px !important; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; }
+.sab-pills :deep(.el-tag.sab-pill) .el-icon { color: #3B82F6; font-size: 1rem; }
+.sab-hint { font-size: 0.8rem; color: #64748B; font-weight: 600; margin-left: 8px; }
+.footer-back-btn { font-weight: 600; color: #64748B; border: 1px solid #E2E8F0; background: #FFFFFF; }
+.footer-back-btn:hover { color: #1E293B; border-color: #CBD5E1; background: #F8FAFC; }
+.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: #3B82F6 !important; color: #FFFFFF !important; border: none; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
+.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4); background: #2563EB !important; }
 
 /* ==================== 第三部分：多智能体工作流控制台 ==================== */
 .generating-view {
@@ -1602,35 +1828,37 @@ const handlePreview = (data: any) => {
   pointer-events: none;
 }
 .workflow-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.workflow-edge { stroke-width: 1.2; transition: stroke 0.3s ease, stroke-width 0.3s ease, opacity 0.3s ease; }
-.workflow-edge.pending { stroke: #D1D5DB; stroke-dasharray: 5 5; opacity: 0.5; }
-.workflow-edge.active { stroke: #374151; stroke-width: 1.8; stroke-dasharray: 8 6; animation: dagFlowMoving 1.2s linear infinite; }
-.workflow-edge.completed { stroke: #059669; stroke-width: 1.6; opacity: 0.8; }
-@keyframes dagFlowMoving { from { stroke-dashoffset: 28; } to { stroke-dashoffset: 0; } }
+.workflow-edge-base { stroke: #D1D5DB; stroke-width: 1.2; stroke-dasharray: 4 4; opacity: 0.5; transition: stroke 0.3s ease; fill: none; }
+.workflow-edge-base.completed { stroke: #059669; stroke-width: 1.5; opacity: 0.6; stroke-dasharray: none; }
+.workflow-edge-base.active { stroke: #94A3B8; stroke-dasharray: none; }
+.workflow-edge-flow { stroke: url(#flow-particle); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 20 100; animation: dagFlowMoving 1.5s linear infinite; filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.5)); fill: none; }
+@keyframes dagFlowMoving { from { stroke-dashoffset: 120; } to { stroke-dashoffset: 0; } }
+
 .workflow-agent-node {
   position: absolute;
   z-index: 5;
   appearance: none;
   border: 1px solid #E5E7EB;
-  background: #FFFFFF;
-  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
   padding: 10px;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   gap: 7px;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.workflow-agent-node:hover, .workflow-agent-node.is-selected { transform: translateY(-2px); border-color: #9CA3AF; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); }
+.workflow-agent-node:hover, .workflow-agent-node.is-selected { transform: translateY(-4px); border-color: #9CA3AF; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08); }
 .workflow-agent-node.is-waiting { opacity: 0.65; }
-.workflow-agent-node.is-running { border-color: #6B7280; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); animation: workflowNodePulse 2s ease-in-out infinite; }
-.workflow-agent-node.is-success { border-color: #A7F3D0; background: #FAFFFE; }
+.workflow-agent-node.is-running { border-color: transparent; background: #FFFFFF; box-shadow: 0 0 0 2px #3B82F6, 0 8px 30px rgba(59, 130, 246, 0.2); animation: workflowNodePulse 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.workflow-agent-node.is-success { border-color: #A7F3D0; background: #FAFFFE; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08); }
 .workflow-agent-node.is-failed { border-color: #FECACA; background: #FFFBFB; }
-.workflow-agent-node.is-system-node { background: #FFFFFF; border-color: #E5E7EB; }
-@keyframes workflowNodePulse { 0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); } 50% { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); } }
+.workflow-agent-node.is-system-node { background: rgba(255, 255, 255, 0.95); border-color: #E5E7EB; }
+@keyframes workflowNodePulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(59,130,246,0.8), 0 8px 24px rgba(59,130,246,0.15); } 50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.4), 0 12px 36px rgba(59,130,246,0.25); } }
 .agent-node-topline { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .agent-icon-bubble { width: 28px; height: 28px; border-radius: 8px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .agent-node-name { font-size: 0.8rem; color: #111827; font-weight: var(--weight-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

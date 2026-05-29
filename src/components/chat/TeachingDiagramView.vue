@@ -82,7 +82,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, SankeyChart, TreeChart, LineChart } from 'echarts/charts'

@@ -407,3 +407,76 @@ code, pre {
   font-size: 0.9rem;
   line-height: 1.6;
 }
+
+/* ============================================================
+   Custom Code Syntax Highlighting — High Contrast Light Theme
+   ============================================================ */
+/* 关键字/选择器 */
+.hljs-keyword,
+.token.keyword,
+.token.selector,
+.token.atrule,
+.token.command {
+  color: #cf222e !important; /* 鲜明深红 */
+  font-weight: 700 !important;
+}
+
+/* 字符串 */
+.hljs-string,
+.token.string,
+.token.attr-value {
+  color: #0a3069 !important; /* 浓郁深蓝 */
+}
+
+/* 注释 */
+.hljs-comment,
+.token.comment {
+  color: #57606a !important; /* 较深的灰石色 */
+  font-style: italic !important;
+}
+
+/* 数字、布尔值与属性 */
+.hljs-number,
+.hljs-literal,
+.token.number,
+.token.boolean,
+.token.property,
+.token.constant {
+  color: #0550ae !important; /* 宝蓝色 */
+  font-weight: 600 !important;
+}
+
+/* 函数名与类名 */
+.hljs-function,
+.hljs-title.function_,
+.token.function,
+.token.class-name {
+  color: #8250df !important; /* 扎实的紫色 */
+  font-weight: 600 !important;
+}
+
+/* 内置对象、类定义等 */
+.hljs-built_in,
+.hljs-class,
+.hljs-title.class_,
+.token.builtin,
+.token.class {
+  color: #953800 !important; /* 高对比度暗橙色 */
+  font-weight: 600 !important;
+}
+
+/* 标签、各种属性名与参数 */
+.hljs-tag,
+.hljs-attr,
+.token.tag,
+.token.attr-name,
+.token.parameter {
+  color: #116329 !important; /* 鲜明绿色 */
+}
+
+/* 函数参数、常规变量名 */
+.hljs-params,
+.hljs-variable,
+.token.variable {
+  color: #24292f !important; /* 接近黑色 */
+}

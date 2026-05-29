@@ -1,6 +1,7 @@
 export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
+export type ResourceStreamEventName = 'snapshot' | 'done' | 'error' | 'heartbeat' | string
 
 interface ResourceGenerationRequest {
   learning_need: string
@@ -34,7 +35,7 @@ interface ResourceGenerationRequest {
       question_types: ('single' | 'multiple' | 'judge' | 'fill')[]
     }
     code: {
-      programming_language: 'python' | 'cpp' | 'java' | 'go' | 'javascript'
+      programming_language: 'python' | 'c' | 'cpp' | 'java' | 'go' | 'javascript' | 'typescript'
       case_type: 'basic_demo' | 'algorithm_template' | 'debug_demo'
       comment_level: 'minimal' | 'standard' | 'verbose'
       include_test: boolean
@@ -90,6 +91,12 @@ export interface ResourceTaskStatus {
   resource_id: number
   status: 'pending' | 'planning' | 'generating' | 'reviewing' | 'completed' | 'partial_completed' | 'failed'
   progress: ResourceWorkflowProgress
+  resources?: any[]
+}
+
+export interface ResourceStreamEvent {
+  event: ResourceStreamEventName
+  data: unknown
 }
 
 export async function startResourceGeneration(
@@ -159,4 +166,102 @@ export async function getResourceBundle(resourceId: number): Promise<any> {
     throw new Error(json.message || '获取资源失败')
   }
   return json.data
+}
+
+function normalizeSsePayload(payload: string): unknown {
+  const trimmed = payload.trim()
+  if (!trimmed) return ''
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return payload
+  }
+}
+
+function parseSseFrames(raw: string): { frames: string[]; rest: string } {
+  const normalized = raw.replace(/\r\n/g, '\n')
+  const parts = normalized.split('\n\n')
+  const rest = parts.pop() || ''
+  return { frames: parts, rest }
+}
+
+export function streamResourceEvents(
+  resourceId: number,
+  onEvent: (event: ResourceStreamEvent) => void,
+  onDone: () => void,
+  onError: (err: Error) => void,
+): AbortController {
+  const controller = new AbortController()
+  const token = localStorage.getItem('token')
+
+  fetch(`/api/v1/ai/generate/task/${resourceId}/events`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `HTTP ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('ReadableStream not supported')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let completed = false
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const { frames, rest } = parseSseFrames(buffer)
+        buffer = rest
+
+        for (const frame of frames) {
+          if (!frame.trim()) continue
+
+          let eventName = 'message'
+          const dataLines: string[] = []
+
+          frame.split('\n').forEach((line) => {
+            if (line.startsWith('event:')) {
+              eventName = line.slice(6).trim() || 'message'
+              return
+            }
+            if (line.startsWith('data:')) {
+              dataLines.push(line.slice(5).replace(/^ /, ''))
+            }
+          })
+
+          const payload = normalizeSsePayload(dataLines.join('\n'))
+          onEvent({ event: eventName, data: payload })
+
+          if (eventName === 'error') {
+            const msg = typeof payload === 'string'
+              ? payload
+              : (payload as any)?.message || JSON.stringify(payload)
+            throw new Error(msg || 'resource stream error')
+          }
+
+          if (eventName === 'done') {
+            completed = true
+            onDone()
+            return
+          }
+        }
+      }
+
+      if (!completed) onDone()
+    })
+    .catch((err) => {
+      if (err.name === 'AbortError') return
+      onError(err)
+    })
+
+  return controller
 }

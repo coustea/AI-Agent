@@ -54,8 +54,49 @@
           </p>
         </div>
         <div class="path-actions">
+          <el-button type="primary" plain @click="openOptimizationDialog" class="opt-btn-action">
+            <el-icon class="btn-icon"><MagicStick /></el-icon>
+            诊断优化路径
+          </el-button>
           <el-button plain @click="resetPath">重新规划</el-button>
         </div>
+      </div>
+
+      <!-- 智能诊断建议卡片 -->
+      <transition name="el-zoom-in-top">
+        <div v-if="coursePath.needs_optimization && coursePath.optimization_tips?.length" class="diagnostic-card">
+          <div class="diagnostic-header">
+            <el-icon class="diagnostic-icon"><Cpu /></el-icon>
+            <span class="diagnostic-title">AI 学习诊断与优化建议</span>
+          </div>
+          <div class="diagnostic-body">
+            <ul class="tips-list">
+              <li v-for="(tip, i) in coursePath.optimization_tips" :key="i" class="tip-item">
+                <el-icon class="tip-icon"><Warning /></el-icon>
+                <span>{{ tip }}</span>
+              </li>
+            </ul>
+            <div class="diagnostic-actions">
+              <el-button type="primary" size="default" class="optimize-btn-cta" @click="openOptimizationDialog">
+                <el-icon class="btn-icon"><MagicStick /></el-icon>
+                一键诊断并优化路径
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- 路径微调说明 -->
+      <div v-if="coursePath.adjustment_rationale && coursePath.adjustment_rationale.length > 0" class="adjustment-banner">
+        <div class="banner-title">
+          <el-icon class="banner-title-icon"><InfoFilled /></el-icon>
+          <span>路径微调说明</span>
+        </div>
+        <ul class="rationale-list">
+          <li v-for="(rat, i) in coursePath.adjustment_rationale" :key="i" class="rationale-item">
+            {{ rat }}
+          </li>
+        </ul>
       </div>
 
       <!-- 阶段时间线布局 -->
@@ -205,13 +246,101 @@
         </div>
       </div>
     </div>
+
+    <!-- 路径调整与诊断优化对话框 -->
+    <el-dialog
+      v-model="showOptimizeDialog"
+      title="学习路径智能诊断与微调"
+      width="540px"
+      border-radius="16px"
+      class="optimize-dialog"
+    >
+      <div class="dialog-desc">
+        AI 将根据你最近的知识掌握情况（如测验成绩、学习偏好等）和你的反馈，精细化调整后续的学习节点。已学完的节点将保持不变。
+      </div>
+      
+      <div class="preset-section">
+        <span class="section-label">快捷诊断意图：</span>
+        <div class="preset-tags">
+          <el-tag
+            v-for="tag in presetTags"
+            :key="tag"
+            class="preset-tag"
+            :effect="customFeedback === tag ? 'dark' : 'plain'"
+            type="info"
+            @click="selectPresetTag(tag)"
+          >
+            {{ tag }}
+          </el-tag>
+        </div>
+      </div>
+      
+      <div class="feedback-input-section">
+        <span class="section-label">自定义微调要求（可选）：</span>
+        <el-input
+          v-model="customFeedback"
+          type="textarea"
+          :rows="4"
+          placeholder="例如：我觉得目前的理论有点深，希望能放缓坡度，增加一些更基础的图解材料和代码练习案例。"
+          maxlength="200"
+          show-word-limit
+        />
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showOptimizeDialog = false">取消</el-button>
+          <el-button type="primary" :loading="isOptimizing" @click="handleOptimizePath">
+            开始诊断并应用优化
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- AI 诊断与优化加载中动画 -->
+    <div v-if="isOptimizing" class="optimizing-overlay">
+      <div class="optimizing-box">
+        <div class="glowing-spinner">
+          <div class="spinner-inner"></div>
+        </div>
+        <h3 class="optimizing-title">AI 智能诊断与路径微调中</h3>
+        <p class="optimizing-subtitle">正在计算最佳学习路径...</p>
+        
+        <div class="step-progress">
+          <div 
+            v-for="(step, idx) in optimizeSteps" 
+            :key="idx" 
+            class="step-item"
+            :class="{ active: idx <= currentOptimizeStep, completed: idx < currentOptimizeStep }"
+          >
+            <el-icon class="step-icon">
+              <CircleCheck v-if="idx < currentOptimizeStep" />
+              <Loading v-else-if="idx === currentOptimizeStep" />
+              <CircleClose v-else />
+            </el-icon>
+            <span>{{ step }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Lock, ArrowRight } from '@element-plus/icons-vue'
+import {
+  Search,
+  Lock,
+  ArrowRight,
+  Cpu,
+  Warning,
+  MagicStick,
+  InfoFilled,
+  CircleCheck,
+  CircleClose,
+  Loading,
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   completeCoursePathNode,
@@ -219,6 +348,7 @@ import {
   generatePathNodeResources,
   getActiveCoursePath,
   startCoursePathNode,
+  adjustCoursePath,
   type CoursePathNodeDTO,
   type CoursePathResponse,
   type PathNodeResourceRequest,
@@ -233,6 +363,23 @@ const generatingNodeId = ref<number | null>(null)
 const completingNodeId = ref<number | null>(null)
 const coursePath = ref<CoursePathResponse | null>(null)
 const nodeTaskStatuses = ref<Record<number, ResourceTaskStatus>>({})
+
+const showOptimizeDialog = ref(false)
+const isOptimizing = ref(false)
+const customFeedback = ref('')
+const currentOptimizeStep = ref(0)
+const presetTags = [
+  '测验成绩不理想，需要强化复习',
+  '概念过于抽象，希望增加图解和案例',
+  '时间紧迫，快速突破核心要点',
+  '偏好实践，多提供一些代码实操'
+]
+const optimizeSteps = [
+  '正在读取历史学习数据与测试成绩...',
+  '智能分析画像并检测薄弱知识点...',
+  '构建增量规划图并调整后续节点...',
+  '重新编排依赖拓扑并生成新地图...'
+]
 
 const groupedStages = computed(() => {
   if (!coursePath.value) return []
@@ -401,7 +548,8 @@ async function handleGenerateResources(node: CoursePathNodeDTO) {
         { agent_id: 'mindmap', enabled: true, priority: 1 },
         { agent_id: 'quiz', enabled: true, priority: 2 },
         { agent_id: 'reading', enabled: true, priority: 3 },
-        { agent_id: 'ppt', enabled: true, priority: 4 },
+        { agent_id: 'code', enabled: true, priority: 4 },
+        { agent_id: 'ppt', enabled: true, priority: 5 },
       ],
       agent_configs: {},
       output_options: { output_format: 'json' },
@@ -452,6 +600,41 @@ function viewResource(node: CoursePathNodeDTO) {
     router.push({ name: 'ResourceDetail', params: { id: node.resource_id } })
   } else {
     ElMessage.warning('资源未就绪')
+  }
+}
+
+function openOptimizationDialog() {
+  customFeedback.value = ''
+  showOptimizeDialog.value = true
+}
+
+function selectPresetTag(tag: string) {
+  customFeedback.value = tag
+}
+
+async function handleOptimizePath() {
+  const feedbackText = customFeedback.value.trim() || '依据画像诊断自动优化'
+  showOptimizeDialog.value = false
+  isOptimizing.value = true
+  currentOptimizeStep.value = 0
+  
+  const interval = window.setInterval(() => {
+    if (currentOptimizeStep.value < optimizeSteps.length - 1) {
+      currentOptimizeStep.value++
+    }
+  }, 1200)
+
+  try {
+    const res = await adjustCoursePath({ feedback: feedbackText })
+    await new Promise(resolve => setTimeout(resolve, 800))
+    coursePath.value = res.data.data
+    ElMessage.success('学习路径优化成功！已更新后续学习节点。')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '路径优化失败，请重试')
+  } finally {
+    clearInterval(interval)
+    isOptimizing.value = false
+    currentOptimizeStep.value = 0
   }
 }
 </script>
@@ -808,5 +991,269 @@ function viewResource(node: CoursePathNodeDTO) {
 .config-item h4 {
   margin: 0 0 16px 0;
   color: var(--text-main);
+}
+
+/* AI 诊断卡片样式 - 流光渐变与高级边框 */
+.diagnostic-card {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.04) 0%, rgba(147, 51, 234, 0.04) 100%);
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.05);
+}
+
+.diagnostic-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.diagnostic-icon {
+  font-size: 20px;
+  color: var(--primary-color);
+  animation: rotateGlow 3s linear infinite;
+}
+
+@keyframes rotateGlow {
+  0% { transform: rotate(0deg); filter: drop-shadow(0 0 2px var(--primary-color)); }
+  50% { filter: drop-shadow(0 0 6px #9333ea); }
+  100% { transform: rotate(360deg); filter: drop-shadow(0 0 2px var(--primary-color)); }
+}
+
+.diagnostic-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.2px;
+}
+
+.tips-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tip-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.tip-icon {
+  font-size: 16px;
+  color: #ea580c;
+  margin-top: 2px;
+}
+
+.diagnostic-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.optimize-btn-cta {
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+}
+
+/* 路径微调说明 Banner */
+.adjustment-banner {
+  background: #f8fafc;
+  border-left: 4px solid var(--primary-color);
+  border-radius: 4px 12px 12px 4px;
+  padding: 16px 20px;
+  margin-bottom: 32px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+}
+
+.banner-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.banner-title-icon {
+  color: var(--primary-color);
+}
+
+.rationale-list {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.rationale-item {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 4px;
+}
+
+/* 路径诊断对话框与预设标签 */
+.dialog-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.preset-section, .feedback-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.preset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-tag {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 6px 12px;
+  transition: all 0.2s ease;
+}
+
+.preset-tag:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+/* AI 诊断覆盖加载中全屏 Overlay */
+.optimizing-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.85); /* 极暗的高级遮罩 */
+  backdrop-filter: blur(10px); /* 玻璃毛玻璃效果 */
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.optimizing-box {
+  background: white;
+  border-radius: 24px;
+  padding: 40px 48px;
+  width: 460px;
+  text-align: center;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: boxPopUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes boxPopUp {
+  from { transform: scale(0.9) translateY(20px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* 渐变发光 Spinner */
+.glowing-spinner {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-color) 0%, #9333ea 50%, #06b6d4 100%);
+  padding: 4px;
+  animation: spinGlow 2s linear infinite;
+  margin-bottom: 24px;
+}
+
+.spinner-inner {
+  width: 100%;
+  height: 100%;
+  background: white;
+  border-radius: 50%;
+}
+
+@keyframes spinGlow {
+  0% { transform: rotate(0deg); box-shadow: 0 0 10px rgba(79, 70, 229, 0.4); }
+  50% { box-shadow: 0 0 24px rgba(147, 51, 234, 0.7); }
+  100% { transform: rotate(360deg); box-shadow: 0 0 10px rgba(79, 70, 229, 0.4); }
+}
+
+.optimizing-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0 0 8px 0;
+}
+
+.optimizing-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 32px 0;
+}
+
+/* 步骤进度线 */
+.step-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: #94a3b8;
+  transition: all 0.3s ease;
+}
+
+.step-icon {
+  font-size: 16px;
+}
+
+.step-item.active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.step-item.completed {
+  color: #10b981;
+}
+
+.opt-btn-action {
+  border-radius: 10px;
+}
+.opt-btn-action .el-icon {
+  margin-right: 4px;
 }
 </style>

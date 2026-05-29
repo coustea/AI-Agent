@@ -1,10 +1,6 @@
 <template>
   <div class="ppt-resource" :class="{ compact }">
     <article class="technical-frame ppt-item">
-      <div class="frame-header">
-        <div class="status-indicator"></div>
-        <span class="technical-label">幻灯片引擎 // PRESENTATION_ENGINE</span>
-      </div>
       
       <!-- PptPlayer wrapper -->
       <div class="player-wrapper" v-if="pptDocument">
@@ -53,7 +49,7 @@ const pptDocument = computed<PPTDocument | null>(() => {
   position: relative;
   background: #FFFFFF;
   border-radius: 4px;
-  padding: 40px 32px 32px;
+  padding: 24px 32px 32px;
   box-shadow: none;
   transition: all 0.3s ease;
 }

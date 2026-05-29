@@ -17,10 +17,13 @@ config({
 
 const app = createApp(App)
 
+import VChart from 'vue-echarts'
+
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
 
+app.component('v-chart', VChart)
 app.use(ElementPlus)
 app.use(router)
 app.mount('#app')

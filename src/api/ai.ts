@@ -134,7 +134,20 @@ export interface CoursePathResponse {
   status: string
   stages: AgentStage[]
   nodes: CoursePathNodeDTO[]
+  needs_optimization?: boolean
+  optimization_tips?: string[]
+  adjustment_rationale?: string[]
   created_at: string
+}
+
+export interface PathPlanFeedbackRequest {
+  feedback: string
+  weak_points?: string[] | null
+  resource_id?: number | null
+}
+
+export function adjustCoursePath(payload: PathPlanFeedbackRequest) {
+  return http.post<ApiResponse<CoursePathResponse>>('/ai/path-plan/adjust', payload)
 }
 
 export interface GenerateCoursePathParams {

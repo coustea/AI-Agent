@@ -2,10 +2,6 @@
   <div class="mindmap-resource" :class="{ compact }">
     <div v-if="markdownContent" class="technical-frame mindmap-container">
 
-      <div class="frame-header">
-        <div class="status-indicator"></div>
-        <span class="technical-label">知识拓扑 // 知识映射 // 序号_{{ Math.floor(Math.random() * 9999) }}</span>
-      </div>
 
       <div ref="markmapRef" class="markmap-shell"></div>
 
@@ -170,7 +166,7 @@ onMounted(() => {
   background: var(--bg);
   border: none;
   border-radius: 4px;
-  padding: 44px 32px 32px;
+  padding: 24px 32px 32px;
   box-shadow: none;
   transition: all 0.3s ease;
   display: flex;
