@@ -13,7 +13,7 @@ Multi-agent personalized learning resource platform (多智能体个性化学习
 ```bash
 uv sync                                    # Install dependencies
 uv run fastapi dev app/main.py             # Dev server with auto-reload (port 9999)
-uv run python app/main.py                  # Production server (reads .env for host/port)
+uv run python app/main.py                  # Production server (reads config.yaml)
 uv run pytest                              # Run tests
 uv run pytest tests/modules/user/test_auth.py  # Run a single test file
 uv run pytest -x                           # Stop on first failure
@@ -35,51 +35,71 @@ No linter is configured for either frontend or backend.
 
 ### Backend (`server/app/`)
 
-Feature modules follow a layered pattern:
+Feature modules are top-level directories, each self-contained:
 
 ```
-modules/<module>/
-  router.py       # FastAPI endpoints
-  schemas.py      # Pydantic request/response models
-  service.py      # Business logic
-  repository.py   # SQLModel data access (optional, some modules skip this)
+auth/          # Authentication & user management
+chat/          # AI tutor conversation (SSE streaming)
+resource/      # Multi-agent resource generation
+memory/        # Memory system facade (short-term, long-term, profile)
+evaluation/    # Learning assessment & events
+path/          # Course-level learning path planning
+avatar/        # Digital human (讯飞) WebSocket bridge
+infra/         # Shared infrastructure (DB, LLM, response, models, logging)
 ```
 
-**Core infrastructure** (`core/`):
-- `engine.py` — MySQL engine via PyMySQL, `init_db()` auto-creates all tables (no migration tool)
-- `security.py` — JWT via PyJWT, bcrypt password hashing, `get_current_user` dependency. Token whitelist in `ActiveToken` DB table (not Redis)
-- `response.py` — `HttpResponse` envelope: `{code, message, data}` with `.success()` and `.error()` factory methods
-- `dependencies.py` — `get_session` yields a SQLModel `Session`
-- `logging.py` — File-based logging with rotation
+Each module follows a consistent file pattern:
+- `api.py` — FastAPI endpoints + dependency injection
+- `service.py` — Business logic + runtime orchestration
+- `schemas.py` or `request.py`/`response.py` — Pydantic DTOs
+- Module-specific files: `agent.py`, `tools/`, `agents/`, `bridge/`, etc.
 
-**Models** (`models/`): SQLModel table classes with auto-increment integer PKs (not UUIDs). Key models:
-- `user.py` — `User` with profile fields
-- `common.py` — `ActiveToken` (JWT whitelist), `ChatMessage` (short-term memory), `UserMemory` (long-term memory)
-- `profile_builder.py` — `UserProfile` (8-dimension learning profile, keyed by user_id), `UserProfileHistory` (versioned snapshots)
+**Infra layer** (`infra/`):
+- `database.py` — PostgreSQL async engine via asyncpg, `init_db()` with retry logic. `DEBUG=true` drops all public-schema tables then recreates. Provides `get_session()` (DI) and `session_scope()` (explicit).
+- `models.py` — All SQLModel table classes centralized here. Tables auto-created on startup (no migration tool). New tables must be added to `REGISTERED_MODELS` tuple.
+- `llm.py` — `Llm` singleton wrapping `ChatOpenAI`. Provides `ainvoke()`, `astream()`, `ainvoke_json(schema, ...)`, `vision()`. Concurrency controlled by Semaphore per model. `ainvoke_json` uses 3-tier fallback: function calling → `response_format: json_object` → plain text + JSON parse.
+- `response.py` — `HttpResponse` envelope `{code, message, data}` with `.success()` and `.error()` factory methods.
+- `security.py` — JWT auth + bcrypt hashing. `AuthError` exception class. `get_current_user` dependency validates JWT + checks `ActiveToken` DB whitelist.
+- `config.py` — Loads `config.yaml` with nested-path access via `get("path.to.key")`. All settings are module-level constants.
+- `logging.py` — `get_logger()` facade (loguru-based).
+
+**Database tables** (`infra/models.py`): PostgreSQL with JSONB columns. Key tables:
+- `User` — Auto-increment int PK, `is_first_login` flag
+- `ActiveToken` — JWT whitelist (DB-based, not Redis)
+- `ChatSession` — UUID string PK, per-user multi-session, `attachment_analyses` JSONB, token-count triggers
+- `ChatMessage` — Raw conversation with `tool_calls`, `attachments`, `teaching_diagram` JSONB
+- `ChatSessionSummary` — Compressed context summaries (incremental/full)
+- `UserLongTermMemory` — One row per user+module, `memory_markdown` as authoritative source
+- `UserProfile` / `UserProfileHistory` — 8-dimension profile with JSONB + versioning
+- `GeneratedResource` / `GeneratedResourceItem` — Resource generation records with agent outputs
+- `LearningEvent` — Assessment events tracking
+- `CoursePath` / `CoursePathNode` / `CoursePathResourceBinding` — Path planning structure
+- `CoursePathGenerationTask` — Slow generation progress tracking
+- `School` — Imported school data
 
 ### Multi-Agent System
 
-The platform uses LangChain (not raw LangGraph) for agent orchestration:
+Built on LangGraph (StateGraph pattern, not raw LangChain chains):
 
-**ChatAgent** (`profile_builder/chat_agent.py`) — Interactive learning tutor that streams responses via SSE. Reads 3-layer context (user profile, long-term memories, recent chat history) and builds the system prompt dynamically. Saves both user and assistant messages to short-term memory.
+**TutorAgent** (`chat/agent.py`) — LangGraph StateGraph with nodes: `classify` → `decide_learner_context` → `direct_answer` / `search_node` / `spark_summary` / `attachment_answer` / `teaching_diagram_generate`. Streams via SSE. Reads 3-layer context (profile, long-term memory, chat history). Uses `runtime_context` ContextVar for user session injection. Tools: `learner_context`, `search` (DuckDuckGo/SerpAPI/Tavily).
 
-**ProfileBuilderAgent** (`profile_builder/profile_agent.py`) — Background agent that merges new conversation insights into the user's structured learning profile. Uses `with_structured_output(ProfileExtraction)` to enforce JSON schema. Triggered at message thresholds (3rd message for new users, then every 20 messages) and on logout.
+**Resource Generation** (`resource/service.py`) — Two flat orchestration functions in service layer:
+- `bg_gen_task()` — Multi-agent mode: PlanningAgent → parallel Worker Agents → ReviewAgent → save. PlanningAgent generates blueprint + per-agent instructions, workers run concurrently via `asyncio.gather`, ReviewAgent validates.
+- `bg_single_gen_task()` — Single-agent mode: direct `AGENT_REGISTRY[agent_id].run(state)` with only `learning_need` + `profile`. Used by path planning and on-demand generation. No Planning/Review overhead.
 
-**MindmapGenerator** (`resource_generator/mindmap_agent.py`) — Generates knowledge mindmaps: LLM produces markdown → MCP markmap service converts to interactive HTML.
+**Resource Agents** (`resource/agents/`): `planning`, `content`, `mindmap`, `quiz`, `code`, `reading`, `ppt`, `review`. Each inherits `BaseResourceAgent` and is registered via `@register_agent` decorator into `AGENT_REGISTRY`. Every agent can run independently — `blueprint`/`instruction` in `WorkerState` are Optional (None = single-agent mode, present = multi-agent mode). `AgentEventEmitter` handles SSE progress streaming.
 
-**TutorAgent** (`tutor/agent.py`) — Minimal placeholder.
+**MemoryService** (`memory/service.py`) — Facade delegating to sub-services:
+- `MemoryStore` (`store.py`) — DB CRUD for sessions, messages, summaries, long-term memory, profiles
+- `SessionCompressor` (`compression.py`) — Short-term → summary compression
+- `LongTermMemoryExtractor` (`long_term.py`) — Fact extraction into `UserLongTermMemory`
+- `ProfileBuilder` (`profile.py`) — 8-dimension profile from memory + events
 
-**MemoryService** (`memory/service.py`) — Central singleton managing all agent state:
-- Short-term: `ChatMessage` table (raw conversation)
-- Long-term: `UserMemory` table (LLM-summarized facts)
-- Profile: `UserProfile` table (8-dimension structured profile) with versioned `UserProfileHistory`
-- All agents share this service; it manages its own DB sessions internally (no external Session injection)
+Triggered at token-count thresholds on `ChatSession`.
 
-### MCP Integration
+**Path Planner** (`path/`) — `planner.py` agent for course-level learning path generation with progress tracking via `CoursePathGenerationTask`. Node resource generation uses `bg_single_gen_task()` (single-agent mode) instead of the full multi-agent pipeline.
 
-`MCPManager` singleton (`utils/mcp_manager.py`) manages external MCP tool services. Config loaded from `mcp/settings.json`. Supports variable substitution (`${SERVER_DIR}`, `${MCP_DIR}`, etc.) in config values. Agents call `mcp_manager.call_tool()` or get LangChain-compatible tools via `mcp_manager.get_tools()`.
-
-Current MCP services: `markmap` — converts markdown to interactive mindmap HTML files, output to `server/workplace/mindmap/`.
+**Avatar Bridge** (`avatar/`) — `RealtimeBridge` manages WebSocket connections for 讯飞 digital-human. ASR (speech recognition) → avatar playback. Separate from tutoring logic.
 
 ### API Routes
 
@@ -87,64 +107,66 @@ All routes mounted in `main.py` under `/api/v1/`:
 
 | Prefix | Module | Key Endpoints |
 |--------|--------|---------------|
-| `/api/v1/users` | user | `POST /` register, `POST /auth` login, `DELETE /auth` logout, `GET /me`, `PATCH /me` |
-| `/api/v1/ai` | profile_builder | `POST /chat/stream` (SSE), `GET /profile`, `GET /profile/history`, `GET /chat/history` |
+| `/api/v1/users` | auth | `POST /` register, `POST /auth` login, `DELETE /auth` logout, `GET /me`, `PATCH /me` |
+| `/api/v1/ai` | chat | `POST /chat/stream` (SSE), `POST /chat/upload`, session CRUD, history |
+| `/api/v1/ai` | resource | `POST /generate` (SSE), `POST /generate/single`, `GET /agents`, `GET /resources` |
+| `/api/v1/ai` | path | Path planning endpoints |
+| `/api/v1/ai` | evaluation | Assessment endpoints |
+| `/api/v1/ai` | avatar | Digital-human WebSocket bridge |
 
 ### Auth Flow
 
 - Login returns JWT token; frontend stores in `localStorage`
 - `get_current_user` dependency validates JWT + checks `ActiveToken` DB table whitelist
 - Logout removes token from whitelist + triggers background profile build
+- `AuthError` exception caught by global handler → `HttpResponse.error(code=401)`
 
 ### Frontend (`src/`)
 
-Vue 3 Composition API (`<script setup lang="ts">`). Libraries: Element Plus, ECharts, Marked, Axios.
+Vue 3 Composition API (`<script setup lang="ts">`). Libraries: Element Plus, ECharts, Marked, Axios, markdown-it, mermaid, markmap-lib.
 
-- `router/index.ts` — Public routes (`/login`, `/register`) and protected routes under `MainLayout`. Route guard checks `localStorage.token`.
-- `api/auth.ts` — Auth API calls
-- `api/ai.ts` — Profile assistant API calls (profile, history, chat)
-- `utils/http.ts` — Axios instance with interceptors
-- `views/` — Home, Login, Register, ProfileAssistant, ResourceGenerator, PathPlanner, Tutor, Evaluation
+Protected routes under `MainLayout`: dashboard, resource-generator, path-planner, tutor, evaluation, profile, resource-detail, question-bank. Public: login, register, onboarding.
 
-Vite dev server proxies `/api` to `http://localhost:9999` (matching backend port).
+Vite dev server proxies `/api` → `http://localhost:9999` and `/ws` → `ws://localhost:9999`.
 
-## Environment Variables
+Composables: `useGlobalProfile`, `useLearningTracker`. Components: chat, common, resource, ppt-engine, `TutorMessageContent`, `GlobalProfileDialog`, `OnboardingDialog`.
 
-`.env` file is in `server/` directory:
+## Configuration
 
+Config loaded from `server/config.yaml` (not `.env`). Structure:
+
+```yaml
+app:          # host, port, debug
+database:     # url (postgresql+asyncpg://...), pool settings
+jwt:          # secret_key, algorithm, expire_days
+models:       # base_url, api_key, model_name, concurrency; vision sub-config
+avatar:       # 讯飞 digital-human WebSocket config
+search:       # tavily_key
+paths:        # workplace, logs, knowledge dirs
+memory:       # profile_gate_turns, msg_limit, budgets
+chat:         # file content limits, upload limits
 ```
-SERVER_HOST=0.0.0.0
-SERVER_PORT=9999
 
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=agent
-DB_ECHO=false
-
-JWT_SECRET_KEY=your-secret-key
-JWT_ALGORITHM=HS256
-JWT_EXPIRE_DAYS=7
-
-OPENAI_API_KEY=your-key
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_API_BASE=https://your-endpoint
-```
+`DEBUG=true` drops all tables on startup — only use in development.
 
 ## Vue 3 Frontend Code Style
 
 All `.vue` files must follow the conventions in `docs/vue-code-style.md`. Key rules:
 - Use `<script setup lang="ts">` only, no Options API
-- Strict internal ordering: imports → defineProps/defineEmits → composables → ref/reactive → computed → constants → watch → lifecycle hooks → functions
+- Strict internal ordering: imports → defineProps/defineEmits → defineModel → composables → ref/reactive → computed → constants → watch → lifecycle hooks → functions
 - Must use `<style scoped>`, respect `prefers-reduced-motion`
+- Never destructure `props` or `reactive` objects
 
 ## Key Conventions
 
 - All API responses use `HttpResponse` envelope (`{code, message, data}`)
-- Error responses use `HttpResponse.error()` with appropriate HTTP status codes (not `HTTPException`) except for auth failures which use `HTTPException`
-- Backend modules are self-contained with their own router/schemas/service layers
+- Error responses use `HttpResponse.error()` with appropriate HTTP status codes (not `HTTPException`) except for auth failures which raise `AuthError` caught by global handler
+- Backend modules are self-contained with their own api/service/schemas layers
 - Python managed with `uv`; frontend managed with `npm`
-- Agent prompt templates stored as Python string constants or markdown files in `prompt/` subdirectories
-- Global singletons pattern: `memory_service`, `mcp_manager`, `chat_agent`, `mindmap_generator` are module-level instances
-- LLM config uses `OPENAI_API_BASE` for endpoint URL (OpenAI-compatible API)
+- Agent prompt templates loaded via `app.prompts.registry` or stored as `.md` files in module directories
+- Module-level singleton pattern for services and agents
+- LLM config uses OpenAI-compatible API (`base_url` in config.yaml)
+- Database is PostgreSQL (asyncpg), not MySQL
+- `config.yaml` is the single config source (not `.env`)
+- New SQLModel tables must be added to `REGISTERED_MODELS` in `infra/models.py`
+- Python code must follow Google Python Style Guide (see `server/docs/google_python_style_guide.md`)
