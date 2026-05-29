@@ -445,12 +445,12 @@ class TutorAgent:
             if need_diagram != need_teaching_diagram:
                 state_updates["need_teaching_diagram"] = need_diagram
 
-            if enable_search:
-                route = "search"
-                execution_mode = "attachment_search" if has_attachments else "search"
-            elif has_attachments:
+            if has_attachments:
                 route = "attachment_needed"
-                execution_mode = "attachment"
+                execution_mode = "attachment_search" if enable_search else "attachment"
+            elif enable_search:
+                route = "search"
+                execution_mode = "search"
             elif need_diagram and _diagram_only_requested(user_message):
                 _, prior_answer = _previous_teaching_exchange(list(messages))
                 if prior_answer:
@@ -567,6 +567,101 @@ class TutorAgent:
     # ------------------------------------------------------------------
     # 节点: search_node
     # ------------------------------------------------------------------
+
+    async def _collect_search_context(
+        self,
+        *,
+        question: str,
+        system_prompt: str,
+        messages: list[Any],
+        attachment_context: str = "",
+    ) -> tuple[str, list[dict[str, Any]]]:
+        search_instruction = HumanMessage(
+            content=(
+                "请根据用户最新问题调用搜索工具查找必要信息，只整理与问题直接相关的事实、"
+                "来源线索和不足之处。若本轮包含附件预分析上下文，请围绕附件内容和用户问题补充检索。"
+                "不要生成最终教学回答。"
+                + (
+                    f"\n\n附件预分析上下文：\n{attachment_context}"
+                    if attachment_context
+                    else ""
+                )
+            )
+        )
+        full_messages = build_messages(system_prompt, list(messages) + [search_instruction])
+
+        llm_with_tools = self.llm.model.bind_tools(
+            [duckduckgo_search, tavily_search, serp_search],
+        )
+
+        response = None
+        try:
+            response = await self.llm.ainvoke(full_messages, model=llm_with_tools)
+        except Exception as exc:
+            logger.warning("[TutorAgent] 搜索意图生成失败，进入直接检索兜底 err=%s", exc)
+
+        search_result = normalize_message_content(getattr(response, "content", "") if response else "")
+        knowledge_context, knowledge_rows = format_knowledge_context(question)
+        knowledge_sources = [
+            {
+                "rank": item.get("rank"),
+                "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("file_name") or "未知来源",
+                "file_name": (item.get("metadata") or {}).get("file_name") or "",
+                "chunk_index": (item.get("metadata") or {}).get("chunk_index"),
+                "distance": item.get("distance"),
+            }
+            for item in knowledge_rows
+        ]
+        if knowledge_rows:
+            search_result = (
+                f"【本地知识库检索结果】\n{knowledge_context}\n\n{search_result}"
+            ).strip()
+
+        tool_calls = getattr(response, "tool_calls", []) if response else []
+        tool_results = []
+        if tool_calls:
+            for tool_call in tool_calls:
+                tool_name = tool_call.get("name", "")
+                tool_args = tool_call.get("args", {})
+                try:
+                    if tool_name == "duckduckgo_search":
+                        result = await duckduckgo_search.ainvoke(tool_args)
+                    elif tool_name == "tavily_search":
+                        result = await tavily_search.ainvoke(tool_args)
+                    elif tool_name == "serp_search":
+                        result = await serp_search.ainvoke(tool_args)
+                    else:
+                        result = ""
+                    if result:
+                        tool_results.append(f"【{tool_name}】\n{result}")
+                except Exception as exc:
+                    logger.warning("[TutorAgent] 搜索工具 %s 失败: %s", tool_name, exc)
+                    tool_results.append(f"【{tool_name}】搜索失败")
+
+        if not tool_results:
+            logger.info("[TutorAgent] 搜索节点未触发工具调用或无结果，启动自动兜底搜索")
+            tavily_result = ""
+            try:
+                tavily_result = await tavily_search.ainvoke({"query": question})
+            except Exception as exc:
+                logger.warning("[TutorAgent] 自动兜底 Tavily 搜索失败: %s", exc)
+
+            if not tavily_result or "Tavily 搜索不可用" in tavily_result or "Tavily 搜索失败" in tavily_result:
+                logger.info("[TutorAgent] Tavily 不可用或失败，使用 DuckDuckGo 搜索兜底")
+                try:
+                    ddg_result = await duckduckgo_search.ainvoke({"query": question})
+                    if ddg_result and "DuckDuckGo 搜索失败" not in ddg_result:
+                        tool_results.append(f"【duckduckgo_search (自动兜底)】\n{ddg_result}")
+                    else:
+                        tool_results.append("【自动搜索兜底】无可用搜索结果。")
+                except Exception as exc:
+                    logger.warning("[TutorAgent] 自动兜底 DuckDuckGo 搜索失败: %s", exc)
+                    tool_results.append("【自动搜索兜底】所有搜索引擎调用均失败。")
+            else:
+                tool_results.append(f"【tavily_search (自动兜底)】\n{tavily_result}")
+
+        combined_parts = [part for part in [search_result, "\n\n".join(tool_results)] if part.strip()]
+        return "\n\n".join(combined_parts), knowledge_sources
 
     async def _search_node(self, state: TutorState) -> dict[str, Any]:
         """搜索节点：Spark MAX 使用搜索工具查找信息。
@@ -787,14 +882,7 @@ class TutorAgent:
         state: TutorState,
         config: RunnableConfig,
     ) -> dict[str, Any]:
-        """附件理解路径：Spark MAX 基于附件预分析结果回答。
-
-        Args:
-            state: LangGraph 状态。
-
-        Returns:
-            更新后的状态片段。
-        """
+        """??????????/????????????????????"""
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         attachments = state.get("attachments") or []
@@ -810,29 +898,47 @@ class TutorAgent:
             attachment_count=len(attachments),
         ):
             logger.info(
-                "[TutorAgent] 附件回答 route=attachment_answer question=%s attachments=%s",
+                "[TutorAgent] ???? route=attachment_answer question=%s attachments=%s",
                 truncate(question, 180),
                 len(attachments),
             )
 
-            # 获取附件分析上下文
             full_context = str(state.get("attachment_analysis_context", "")).strip()
             if not full_context and isinstance(pre_analysis, dict):
                 full_context = str(pre_analysis.get("analysis_context", "")).strip()
 
             if not full_context:
                 full_context = (
-                    "本轮包含附件，但上传阶段未返回可用的附件预分析结果。"
-                    "请基于用户问题说明目前无法可靠读取附件内容，并建议用户重新上传或稍后重试。"
+                    "???????????????????????????"
+                    "???????????????????????????????"
                 )
 
-            # 构建回答提示词
-            answer_prompt = (
-                f"用户问题: {question}\n\n"
-                f"以下是上传阶段已经完成的附件预分析内容：\n{full_context}\n\n"
-                "请只根据这些预分析内容和已有对话回答用户问题，不要尝试读取附件、调用文件工具或重新分析图片。"
-                "如果内容不足以回答问题，请明确说明缺失点；"
-                "回答要清晰、分点、适合教学场景。"
+            search_context = ""
+            knowledge_sources: list[dict[str, Any]] = []
+            if bool(state.get("enable_search", False)):
+                search_context, knowledge_sources = await self._collect_search_context(
+                    question=question,
+                    system_prompt=system_prompt,
+                    messages=messages,
+                    attachment_context=full_context,
+                )
+
+            answer_prompt = f"""????: {question}
+
+??????????:
+{full_context}
+
+"""
+            if search_context:
+                answer_prompt += f"""???????????????????????:
+{search_context}
+
+"""
+            answer_prompt += (
+                "??????/????????????????????????????????"
+                "??????????????????"
+                "????????????????????"
+                "????????????????"
             )
 
             scoped_prompt = self._scoped_answer_prompt(
@@ -857,6 +963,7 @@ class TutorAgent:
                     "mode": "upload_preanalysis",
                     "analysis_context": full_context,
                 },
+                "knowledge_sources": knowledge_sources,
                 "termination_reason": "attachment_answer_done",
             }
 

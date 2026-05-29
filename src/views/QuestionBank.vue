@@ -75,13 +75,22 @@
                           <el-icon v-else><CircleClose /></el-icon>
                           <span>{{ randomIsCorrect ? '回答正确！' : '回答错误' }}</span>
                         </div>
-                        <el-button type="primary" plain size="small" @click="loadNewRandomQuestion">下一题</el-button>
+                        <div class="feedback-actions">
+                          <el-button 
+                            type="primary" 
+                            size="small" 
+                            class="next-question-btn"
+                            @click="loadNewRandomQuestion"
+                          >
+                            下一题
+                          </el-button>
+                        </div>
                       </div>
                     </div>
 
                     <!-- 答题解析展示 -->
                     <transition name="el-collapse-transition">
-                      <div v-if="randomSubmitted" class="random-analysis-panel">
+                      <div v-if="randomSubmitted && challengeAnalysisVisible" class="random-analysis-panel">
                         <div class="analysis-title">参考答案: <span class="ans-badge">{{ formatAnswer(randomQuestion.answer) }}</span></div>
                         <div class="analysis-body markdown-body">
                           <strong>答案解析：</strong>
@@ -208,50 +217,77 @@
         <div class="grid-right-col">
           <!-- 题库检索区 -->
           <div class="premium-card question-browser-card">
-<!--            <div class="card-header">-->
-<!--              <div class="header-title">-->
-<!--                <el-icon class="icon-accent"><Search /></el-icon>-->
-<!--                <span>题库检索</span>-->
-<!--              </div>-->
-<!--            </div>-->
-            
-            <div class="browser-filters">
-              <div class="filter-dropdowns-row">
-                <div class="filter-dropdown-item">
-                  <span class="filter-label">科目</span>
-                  <el-select
-                    v-model="filters.subject"
-                    placeholder="全部科目"
-                    clearable
-                    class="filter-select"
-                  >
-                    <el-option v-for="subj in subjects" :key="subj" :label="subj" :value="subj" />
-                  </el-select>
-                </div>
-                <div class="filter-dropdown-item">
-                  <span class="filter-label">难度</span>
-                  <el-select
-                    v-model="filters.difficulty"
-                    placeholder="全部难度"
-                    clearable
-                    class="filter-select"
-                  >
-                    <el-option v-for="diff in difficulties" :key="diff" :label="diff" :value="diff" />
-                  </el-select>
-                </div>
-                <div class="filter-dropdown-item">
-                  <span class="filter-label">题型</span>
-                  <el-select
-                    v-model="filters.type"
-                    placeholder="全部题型"
-                    clearable
-                    class="filter-select"
-                  >
-                    <el-option v-for="t in types" :key="t" :label="t" :value="t" />
-                  </el-select>
+            <!-- 题库检索头部栏与展开/折叠按钮 -->
+            <div class="browser-header-row">
+              <div class="header-title">
+                <el-icon class="icon-accent"><Search /></el-icon>
+                <span>题库检索</span>
+              </div>
+              <button 
+                class="toggle-filters-btn" 
+                :class="{ 'is-expanded': isFiltersExpanded }" 
+                @click="toggleFilters"
+              >
+                <el-icon><Filter /></el-icon>
+                <span>{{ isFiltersExpanded ? '隐藏筛选' : '高级筛选' }}</span>
+                <el-icon class="arrow-icon" :class="{ 'is-active': isFiltersExpanded }"><ArrowDown /></el-icon>
+              </button>
+            </div>
+
+            <!-- 使用内置折叠动画包裹筛选面板 -->
+            <transition name="el-collapse-transition">
+              <div v-show="isFiltersExpanded" class="browser-filters">
+                <div class="filter-dropdowns-row">
+                  <!-- 模糊搜索关键词输入框 -->
+                  <div class="filter-dropdown-item search-item">
+                    <span class="filter-label">搜索</span>
+                    <el-input
+                      v-model="filters.query"
+                      placeholder="搜索题目/知识点..."
+                      clearable
+                      class="filter-select"
+                    >
+                      <template #prefix>
+                        <el-icon><Search /></el-icon>
+                      </template>
+                    </el-input>
+                  </div>
+                  <div class="filter-dropdown-item">
+                    <span class="filter-label">科目</span>
+                    <el-select
+                      v-model="filters.subject"
+                      placeholder="全部科目"
+                      clearable
+                      class="filter-select"
+                    >
+                      <el-option v-for="subj in subjects" :key="subj" :label="subj" :value="subj" />
+                    </el-select>
+                  </div>
+                  <div class="filter-dropdown-item">
+                    <span class="filter-label">难度</span>
+                    <el-select
+                      v-model="filters.difficulty"
+                      placeholder="全部难度"
+                      clearable
+                      class="filter-select"
+                    >
+                      <el-option v-for="diff in difficulties" :key="diff" :label="diff" :value="diff" />
+                    </el-select>
+                  </div>
+                  <div class="filter-dropdown-item">
+                    <span class="filter-label">题型</span>
+                    <el-select
+                      v-model="filters.type"
+                      placeholder="全部题型"
+                      clearable
+                      class="filter-select"
+                    >
+                      <el-option v-for="t in types" :key="t" :label="t" :value="t" />
+                    </el-select>
+                  </div>
                 </div>
               </div>
-            </div>
+            </transition>
 
             <!-- 题目列表 -->
             <div class="browser-questions-list">
@@ -309,17 +345,20 @@
                   </div>
                 </div>
                 <div class="q-card-footer">
-                  <span
+                  <div
                     v-if="browserSubmitted[q.id]"
-                    class="browser-result"
+                    class="result-indicator browser-result"
                     :class="browserCorrect[q.id] ? 'correct' : 'wrong'"
                   >
-                    {{ browserCorrect[q.id] ? '回答正确' : '回答错误' }}
-                  </span>
+                    <el-icon v-if="browserCorrect[q.id]"><CircleCheck /></el-icon>
+                    <el-icon v-else><CircleClose /></el-icon>
+                    <span>{{ browserCorrect[q.id] ? '回答正确！' : '回答错误' }}</span>
+                  </div>
                   <el-button
                     type="primary"
                     size="small"
                     :disabled="browserSubmitted[q.id] || !hasAnswer(browserAnswers[q.id])"
+                    class="submit-browser-btn"
                     @click="submitBrowserAnswer(q)"
                   >
                     提交答案
@@ -363,19 +402,29 @@
           <div class="exam-title-block">
             <h2>{{ examTitle }}</h2>
             <div class="meta-tags">
-              <el-tag size="small" type="primary">试题数量: {{ examPaper.length }} 题</el-tag>
+              <el-tag type="primary" class="header-meta-tag">试题数量: {{ examPaper.length }} 题</el-tag>
+              <el-tag v-if="isExamSubmitted" type="success" class="header-meta-tag header-accuracy-tag">
+                答题正确率: {{ reportScore }}%
+              </el-tag>
             </div>
           </div>
         </div>
 
         <div class="exam-header-right">
           <!-- 计时器 -->
-          <div class="exam-timer" :class="{ 'warning': examTimeRemaining < 120 }">
+          <div class="exam-timer" v-if="!isExamSubmitted">
             <el-icon class="timer-icon"><Timer /></el-icon>
-            <span class="timer-text">{{ formattedTimeRemaining }}</span>
+            <span class="timer-text">{{ formattedTimeElapsed }}</span>
           </div>
-          <el-button type="danger" class="submit-paper-btn" @click="quitExamConfirm">
+          <div class="exam-timer" v-else>
+            <el-icon class="timer-icon"><Timer /></el-icon>
+            <span class="timer-text">用时: {{ reportTimeSpent }}</span>
+          </div>
+          <el-button v-if="!isExamSubmitted" type="danger" class="submit-paper-btn" @click="quitExamConfirm">
             <el-icon><Close /></el-icon> 退出答卷
+          </el-button>
+          <el-button v-else type="primary" class="back-bank-btn" @click="backToBankDashboard">
+            返回题库主页
           </el-button>
         </div>
       </header>
@@ -391,12 +440,19 @@
             @click="currentExamIndex = index"
           >
             <div class="q-title-row">
-              <span class="q-index">第 {{ index + 1 }} 题</span>
-              <div class="q-types">
-                <el-tag size="small" type="info">{{ q.subject }}</el-tag>
-                <el-tag size="small" type="warning">{{ q.type }}</el-tag>
-                <el-tag v-if="q.type === '多选题'" size="small" type="primary">可多选</el-tag>
-                <el-tag size="small" :type="getDifficultyType(q.difficulty)">{{ q.difficulty }}</el-tag>
+              <div class="q-title-left">
+                <span class="q-index">第 {{ index + 1 }} 题</span>
+                <div class="q-types">
+                  <el-tag size="small" type="info">{{ q.subject }}</el-tag>
+                  <el-tag size="small" type="warning">{{ q.type }}</el-tag>
+                  <el-tag v-if="q.type === '多选题'" size="small" type="primary">可多选</el-tag>
+                  <el-tag size="small" :type="getDifficultyType(q.difficulty)">{{ q.difficulty }}</el-tag>
+                </div>
+              </div>
+              <div v-if="isExamSubmitted" class="result-indicator" :class="isExamAnswerCorrect(q) ? 'correct' : 'wrong'">
+                <el-icon v-if="isExamAnswerCorrect(q)"><CircleCheck /></el-icon>
+                <el-icon v-else><CircleClose /></el-icon>
+                <span>{{ isExamAnswerCorrect(q) ? '回答正确！' : '回答错误' }}</span>
               </div>
             </div>
 
@@ -407,11 +463,18 @@
               <div 
                 v-for="(val, key) in getQuestionOptions(q)"
                 :key="key"
-                :class="['exam-option-item', { 'selected': isAnswerSelected(examAnswers[q.id], key) }]"
-                @click="selectExamOption(q, key)"
+                :class="['exam-option-item', { 
+                  'selected': isAnswerSelected(examAnswers[q.id], key),
+                  'is-correct': isExamSubmitted && isCorrectOption(q, key),
+                  'is-wrong': isExamSubmitted && isAnswerSelected(examAnswers[q.id], key) && !isCorrectOption(q, key),
+                  'is-disabled': isExamSubmitted
+                }]"
+                @click="!isExamSubmitted && selectExamOption(q, key)"
               >
                 <span class="indicator">{{ key }}</span>
                 <span class="text">{{ val }}</span>
+                <el-tag v-if="isExamSubmitted && isCorrectOption(q, key)" size="small" type="success" class="option-res-tag">正确答案</el-tag>
+                <el-tag v-if="isExamSubmitted && isAnswerSelected(examAnswers[q.id], key) && !isCorrectOption(q, key)" size="small" type="danger" class="option-res-tag">您的选项</el-tag>
               </div>
             </div>
 
@@ -423,7 +486,22 @@
                 :rows="4"
                 placeholder="请输入填空答案..."
                 class="answer-textarea"
+                :disabled="isExamSubmitted"
               />
+              
+              <div v-if="isExamSubmitted" class="exam-text-answer-review">
+                <div class="user-answer-indicator" :class="isExamAnswerCorrect(q) ? 'correct' : 'wrong'">
+                  <strong>您的回答：</strong>{{ examAnswers[q.id] || '(未作答)' }}
+                  <span class="status-icon">
+                    <el-icon v-if="isExamAnswerCorrect(q)"><CircleCheck /></el-icon>
+                    <el-icon v-else><CircleClose /></el-icon>
+                    {{ isExamAnswerCorrect(q) ? '正确' : '错误/未填' }}
+                  </span>
+                </div>
+                <div class="standard-answer-review">
+                  <strong>参考答案：</strong>{{ q.answer }}
+                </div>
+              </div>
             </div>
 
             <!-- 简答题 -->
@@ -434,8 +512,49 @@
                 :rows="4"
                 placeholder="请详细描述您的解答步骤与答案..."
                 class="answer-textarea"
+                :disabled="isExamSubmitted"
               />
+              
+              <div v-if="isExamSubmitted" class="exam-text-answer-review">
+                <div class="user-answer-indicator" :class="isExamAnswerCorrect(q) ? 'correct' : 'wrong'">
+                  <strong>您的回答：</strong>{{ examAnswers[q.id] || '(未作答)' }}
+                  <span class="status-icon">
+                    <el-icon v-if="isExamAnswerCorrect(q)"><CircleCheck /></el-icon>
+                    <el-icon v-else><CircleClose /></el-icon>
+                    {{ isExamAnswerCorrect(q) ? '正确' : '不完全正确/未答' }}
+                  </span>
+                </div>
+                <div class="standard-answer-review">
+                  <strong>参考答案：</strong>{{ q.answer }}
+                </div>
+              </div>
             </div>
+
+            <!-- 查看解析按钮与面板 -->
+            <div v-if="isExamSubmitted" class="review-analysis-toggle-row">
+              <el-button 
+                type="primary" 
+                plain 
+                size="small" 
+                class="review-toggle-btn"
+                @click="toggleReviewAnalysis(q.id)"
+              >
+                {{ isReviewAnalysisVisible(q.id) ? '收起答案解析' : '查看答案解析' }}
+              </el-button>
+            </div>
+            
+            <transition name="el-collapse-transition">
+              <div v-if="isExamSubmitted && isReviewAnalysisVisible(q.id)" class="exam-q-analysis-panel">
+                <div class="analysis-body markdown-body">
+                  <strong>答案解析：</strong>
+                  <div v-html="renderMarkdown(q.analysis)"></div>
+                </div>
+                <div class="analysis-kps">
+                  <span>考查知识点：</span>
+                  <el-tag v-for="kp in q.knowledge_points" :key="kp" size="small" type="info" class="mr-1">{{ kp }}</el-tag>
+                </div>
+              </div>
+            </transition>
           </div>
         </main>
 
@@ -443,9 +562,13 @@
         <aside class="exam-status-sidebar">
           <div class="status-sidebar-card">
             <h3>答题卡</h3>
-            <div class="status-legend">
+            <div class="status-legend" v-if="!isExamSubmitted">
               <span class="legend-item"><span class="dot done"></span> 已答</span>
               <span class="legend-item"><span class="dot todo"></span> 未答</span>
+            </div>
+            <div class="status-legend" v-else>
+              <span class="legend-item"><span class="dot correct"></span> 正确</span>
+              <span class="legend-item"><span class="dot wrong"></span> 错误</span>
             </div>
             
             <div class="navigator-grid">
@@ -454,8 +577,10 @@
                 :key="q.id"
                 type="button"
                 :class="['nav-grid-item', { 
-                  'has-answered': isQuestionAnswered(q),
-                  'active-item': currentExamIndex === idx 
+                  'has-answered': !isExamSubmitted && isQuestionAnswered(q),
+                  'active-item': currentExamIndex === idx,
+                  'review-correct': isExamSubmitted && isExamAnswerCorrect(q),
+                  'review-wrong': isExamSubmitted && !isExamAnswerCorrect(q)
                 }]"
                 @click="scrollToQuestion(idx)"
               >
@@ -463,7 +588,7 @@
               </button>
             </div>
 
-            <div class="progress-bar-wrapper">
+            <div class="progress-bar-wrapper" v-if="!isExamSubmitted">
               <div class="progress-info">
                 <span>答题进度</span>
                 <span>{{ answeredCount }} / {{ examPaper.length }}</span>
@@ -475,9 +600,24 @@
               />
             </div>
 
-            <div class="bottom-submit-wrapper">
+            <div class="bottom-submit-wrapper" v-if="!isExamSubmitted">
               <el-button type="success" class="full-width-btn" @click="submitExamConfirm">
                 确认交卷
+              </el-button>
+            </div>
+            <div class="bottom-report-summary" v-else>
+              <div class="review-score-display">
+                <span class="score-label">答对题数</span>
+                <div class="score-num" :style="{ color: getScoreColor(reportScore) }">
+                  {{ reportCorrectCount }} <span class="score-total">/ {{ examPaper.length }} 题</span>
+                </div>
+              </div>
+              <div class="review-score-eval">
+                <h4>{{ getScoreLevel(reportScore) }}</h4>
+                <p>{{ getScoreEncouragement(reportScore) }}</p>
+              </div>
+              <el-button type="primary" class="full-width-btn margin-top-12" @click="backToBankDashboard">
+                返回题库主页
               </el-button>
             </div>
           </div>
@@ -517,156 +657,18 @@
       </template>
     </el-dialog>
 
-    <!-- 视图 3：考试成绩多维评估报告 -->
-    <div v-if="activeView === 'report'" class="exam-report-view">
-      <header class="report-header">
-        <h1>模拟考试综合能力评估报告</h1>
-        <p class="subtitle">交卷时间：{{ new Date().toLocaleString() }} | 试卷名称：{{ examTitle }}</p>
-      </header>
 
-      <div class="report-summary-grid">
-        <!-- 环形得分图 -->
-        <div class="premium-card score-gauge-card">
-          <div class="radial-progress-wrapper">
-            <el-progress 
-              type="dashboard" 
-              :percentage="reportScore" 
-              :stroke-width="12" 
-              :color="getScoreColor(reportScore)"
-            >
-              <template #default>
-                <div class="score-display">
-                  <span class="score-val">{{ reportScore }}</span>
-                  <span class="score-total">/ 100分</span>
-                </div>
-              </template>
-            </el-progress>
-          </div>
-          <div class="score-summary-text">
-            <h3>{{ getScoreLevel(reportScore) }}</h3>
-            <p>{{ getScoreEncouragement(reportScore) }}</p>
-          </div>
-        </div>
-
-        <!-- 答题基本统计 -->
-        <div class="premium-card stats-overview-card">
-          <h3>做题指标概览</h3>
-          <div class="report-stats-grid">
-            <div class="stat-item">
-              <span class="label">试题总数</span>
-              <strong class="val">{{ examPaper.length }} 题</strong>
-            </div>
-            <div class="stat-item">
-              <span class="label">答对题数</span>
-              <strong class="val correct">{{ reportCorrectCount }} 题</strong>
-            </div>
-            <div class="stat-item">
-              <span class="label">答错/未答</span>
-              <strong class="val wrong">{{ reportWrongCount }} 题</strong>
-            </div>
-            <div class="stat-item">
-              <span class="label">考试用时</span>
-              <strong class="val">{{ reportTimeSpent }}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 题目对错详情与解析列表 -->
-      <section class="report-questions-section">
-        <div class="section-title">
-          <h2>答题分析与详细解析</h2>
-          <span class="hint">绿色代表回答正确，红色代表错误</span>
-        </div>
-
-        <div class="report-questions-list">
-          <div 
-            v-for="(q, idx) in examPaper" 
-            :key="q.id"
-            :class="['report-q-card', { 'q-correct': isExamAnswerCorrect(q), 'q-wrong': !isExamAnswerCorrect(q) }]"
-          >
-            <div class="q-header">
-              <div class="q-badge-row">
-                <span class="index">第 {{ idx + 1 }} 题</span>
-                <el-tag size="small" type="info">{{ q.subject }}</el-tag>
-                <el-tag size="small" type="warning">{{ q.type }}</el-tag>
-                <el-tag v-if="q.type === '多选题'" size="small" type="primary">可多选</el-tag>
-                <el-tag size="small" :type="getDifficultyType(q.difficulty)">{{ q.difficulty }}</el-tag>
-              </div>
-              
-              <div class="right-status">
-                <span v-if="isExamAnswerCorrect(q)" class="status-text correct">
-                  <el-icon><Check /></el-icon> 正确
-                </span>
-                <span v-else class="status-text wrong">
-                  <el-icon><Close /></el-icon> 错误
-                </span>
-              </div>
-            </div>
-
-            <div class="q-body">
-              <div class="q-content markdown-body" v-html="renderMarkdown(q.content)"></div>
-
-              <!-- 客观题统一展示选项 -->
-              <div v-if="isOptionQuestion(q)" class="options-display">
-                <div 
-                  v-for="(val, key) in getQuestionOptions(q)"
-                  :key="key"
-                  :class="['option-show-item', { 
-                    'user-selected': isAnswerSelected(examAnswers[q.id], key),
-                    'is-correct': isCorrectOption(q, key)
-                  }]"
-                >
-                  <span class="key">{{ key }}</span>
-                  <span class="val">{{ val }}</span>
-                  <el-tag v-if="isCorrectOption(q, key)" size="small" type="success" class="ans-tag">正确答案</el-tag>
-                  <el-tag v-if="isAnswerSelected(examAnswers[q.id], key) && !isCorrectOption(q, key)" size="small" type="danger" class="ans-tag">您的选项</el-tag>
-                </div>
-              </div>
-
-              <!-- 填空或问答题 -->
-              <div v-else class="text-answer-display">
-                <div class="user-typed-ans">
-                  <strong>您的回答：</strong>
-                  <p class="typed-text">{{ examAnswers[q.id] || '(未作答)' }}</p>
-                </div>
-                <div class="standard-ans">
-                  <strong>参考答案：</strong>
-                  <p class="standard-text">{{ q.answer }}</p>
-                </div>
-              </div>
-
-              <!-- 解析模块 -->
-              <div class="analysis-wrapper markdown-body">
-                <strong>答案解析：</strong>
-                <div v-html="renderMarkdown(q.analysis)"></div>
-                <div class="kps-row">
-                  <span>考查知识点：</span>
-                  <el-tag v-for="kp in q.knowledge_points" :key="kp" size="small" type="info" class="mr-1">{{ kp }}</el-tag>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 报告尾部操作 -->
-      <footer class="report-actions">
-        <el-button type="primary" size="large" @click="backToBankDashboard">
-          返回题库主页
-        </el-button>
-      </footer>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, reactive } from 'vue';
-import { ElMessageBox, ElMessage } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import { 
   Collection, Cpu,
   Close, Checked, Timer, CircleCheck, CircleClose, 
-  Opportunity, Check, Finished, DataLine, WarningFilled, DocumentChecked
+  Opportunity, Finished, DataLine, WarningFilled, DocumentChecked,
+  ArrowDown, Filter, Search
 } from '@element-plus/icons-vue';
 import { mockQuestions } from '@/utils/mockQuestions';
 import type { Question } from '@/utils/mockQuestions';
@@ -674,7 +676,7 @@ import { renderStreamingMarkdownHtml } from '@/utils/markdown';
 
 // 全局状态与基本选项数据
 // ------------------------------
-const activeView = ref<'bank' | 'exam' | 'report'>('bank');
+const activeView = ref<'bank' | 'exam'>('bank');
 const activeSidebarTab = ref('challenge');
 
 const renderMarkdown = (text: string) => {
@@ -732,11 +734,13 @@ const randomQuestion = ref<Question | null>(null);
 const randomUserAnswer = ref<any>('');
 const randomSubmitted = ref(false);
 const randomIsCorrect = ref(false);
+const challengeAnalysisVisible = ref(false);
 
 const loadNewRandomQuestion = () => {
   randomUserAnswer.value = '';
   randomSubmitted.value = false;
   randomIsCorrect.value = false;
+  challengeAnalysisVisible.value = false;
   
   // 随机取一道题
   if (mockQuestions.length > 0) {
@@ -757,6 +761,7 @@ const submitRandomAnswer = () => {
   const correct = evaluateAnswer(randomQuestion.value, randomUserAnswer.value);
   
   randomIsCorrect.value = correct;
+  challengeAnalysisVisible.value = true;
   
   // 记录到全局统计
   saveGlobalStats(1, correct ? 1 : 0);
@@ -771,6 +776,13 @@ const submitRandomAnswer = () => {
 // ------------------------------
 // 题库检索浏览器逻辑
 // ------------------------------
+const isFiltersExpanded = ref(localStorage.getItem('qb_filters_expanded') === 'true');
+
+const toggleFilters = () => {
+  isFiltersExpanded.value = !isFiltersExpanded.value;
+  localStorage.setItem('qb_filters_expanded', String(isFiltersExpanded.value));
+};
+
 const filters = reactive({
   query: '',
   subject: '',
@@ -881,13 +893,20 @@ const examPaper = ref<Question[]>([]);
 const examTitle = ref('');
 const examAnswers = ref<Record<string, any>>({});
 const currentExamIndex = ref(0);
-const examTimeRemaining = ref(0);
-const examTotalTime = ref(0);
-const hasShownOneMinuteWarning = ref(false);
+const examTimeElapsed = ref(0);
 const examConfirmVisible = ref(false);
 const examConfirmAction = ref<'quit' | 'submit'>('submit');
 const examConfirmMessage = ref('');
 let timerId: number | null = null;
+
+const isExamSubmitted = ref(false);
+const reportAnalysisVisible = ref<Record<string, boolean>>({});
+const toggleReviewAnalysis = (id: string) => {
+  reportAnalysisVisible.value[id] = !reportAnalysisVisible.value[id];
+};
+const isReviewAnalysisVisible = (id: string) => {
+  return !!reportAnalysisVisible.value[id];
+};
 
 const startExam = (paper: Question[], title: string) => {
   examPaper.value = paper;
@@ -900,49 +919,31 @@ const startExam = (paper: Question[], title: string) => {
     examAnswers.value[q.id] = q.type === '多选题' ? [] : '';
   });
   
-  // 每道题估算 2 分钟，最少 10 分钟，最多 60 分钟
-  const mins = Math.max(10, Math.min(60, paper.length * 2));
-  examTotalTime.value = mins * 60;
-  examTimeRemaining.value = mins * 60;
-  hasShownOneMinuteWarning.value = false;
+  examTimeElapsed.value = 0;
   examConfirmVisible.value = false;
+  isExamSubmitted.value = false;
+  reportAnalysisVisible.value = {};
   
   activeView.value = 'exam';
   
-  // 启动倒计时定时器
+  // 启动正向计时定时器
   if (timerId) clearInterval(timerId);
   timerId = window.setInterval(() => {
-    if (examTimeRemaining.value > 0) {
-      examTimeRemaining.value--;
-      if (examTimeRemaining.value === 60 && !hasShownOneMinuteWarning.value) {
-        hasShownOneMinuteWarning.value = true;
-        ElMessage.warning({
-          message: '考试仅剩 1 分钟，请尽快完成并检查答案。',
-          duration: 5000
-        });
-      }
-    } else {
-      clearInterval(timerId!);
-      examConfirmVisible.value = false;
-      ElMessageBox.alert('答题时间已到，系统已自动帮您交卷。', '考试结束', {
-        confirmButtonText: '查看报告',
-        callback: () => {
-          submitExam();
-        }
-      });
+    if (!isExamSubmitted.value) {
+      examTimeElapsed.value++;
     }
   }, 1000);
   
   ElMessage.success({
-    message: `试卷生成成功！共计 ${paper.length} 道题，考试时间为 ${mins} 分钟，请开始答题。`,
+    message: `试卷生成成功！共计 ${paper.length} 道题，请开始答题。`,
     duration: 3500
   });
 };
 
-// 格式化剩余时间
-const formattedTimeRemaining = computed(() => {
-  const m = Math.floor(examTimeRemaining.value / 60);
-  const s = examTimeRemaining.value % 60;
+// 格式化已用时间
+const formattedTimeElapsed = computed(() => {
+  const m = Math.floor(examTimeElapsed.value / 60);
+  const s = examTimeElapsed.value % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 });
 
@@ -1012,7 +1013,7 @@ const submitExam = () => {
   if (timerId) clearInterval(timerId);
   
   // 计算答题用时
-  const spentSec = examTotalTime.value - examTimeRemaining.value;
+  const spentSec = examTimeElapsed.value;
   const m = Math.floor(spentSec / 60);
   const s = spentSec % 60;
   reportTimeSpent.value = m > 0 ? `${m}分${s}秒` : `${s}秒`;
@@ -1034,7 +1035,7 @@ const submitExam = () => {
   // 记录到全局大盘统计
   saveGlobalStats(examPaper.value.length, correct);
   
-  activeView.value = 'report';
+  isExamSubmitted.value = true;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
@@ -1045,6 +1046,7 @@ const isExamAnswerCorrect = (q: Question) => {
 
 const backToBankDashboard = () => {
   activeView.value = 'bank';
+  isExamSubmitted.value = false;
   loadNewRandomQuestion();
 };
 
@@ -1491,6 +1493,12 @@ onUnmounted(() => {
   padding: 10px 20px;
 }
 
+.submit-browser-btn {
+  background: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+  border-radius: 8px;
+}
+
 .feedback-status-row {
   display: flex;
   justify-content: space-between;
@@ -1515,11 +1523,12 @@ onUnmounted(() => {
 
 /* 随机挑战解析面板 */
 .random-analysis-panel {
-  background: #F8FAFC;
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  padding: 16px;
   margin-top: 16px;
+  padding: 16px;
+  border-top: 1px dashed #FCD34D;
+  border-left: 4px solid #F59E0B;
+  background: #FFFDF5;
+  border-radius: 8px;
 }
 
 .analysis-title {
@@ -1688,6 +1697,11 @@ onUnmounted(() => {
   min-width: 150px;
 }
 
+.filter-dropdown-item.search-item {
+  flex: 1.5;
+  min-width: 240px;
+}
+
 .filter-select {
   flex: 1;
 }
@@ -1852,6 +1866,42 @@ onUnmounted(() => {
 .toggle-detail-btn {
   font-size: 0.82rem !important;
   font-weight: 600 !important;
+  color: var(--primary-color) !important;
+  transition: color 0.2s ease !important;
+}
+
+.toggle-detail-btn:hover,
+.toggle-detail-btn:focus {
+  color: #4B42E6 !important;
+}
+
+.next-question-btn {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+  color: #EEF2FF !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  padding: 6px 14px !important;
+}
+
+.next-question-btn:hover {
+  background-color: #4B42E6 !important;
+  border-color: #4B42E6 !important;
+  color: #FFFFFF !important;
+}
+
+.review-toggle-btn {
+  border-color: rgba(90, 82, 255, 0.4) !important;
+  color: var(--primary-color) !important;
+  background: rgba(90, 82, 255, 0.03) !important;
+  transition: all 0.2s ease !important;
+}
+
+.review-toggle-btn:hover,
+.review-toggle-btn:focus {
+  border-color: var(--primary-color) !important;
+  background: rgba(90, 82, 255, 0.08) !important;
+  color: var(--primary-color) !important;
 }
 
 .q-card-detail-analysis {
@@ -1933,16 +1983,35 @@ onUnmounted(() => {
   gap: 16px;
 }
 
+.exam-title-block {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .exam-title-block h2 {
-  margin: 0 0 4px 0;
-  font-size: 1.25rem;
+  margin: 0;
+  font-size: 1.35rem;
   font-weight: 800;
   color: var(--text-dark);
 }
 
 .meta-tags {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.header-meta-tag {
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  height: 28px !important;
+  line-height: 26px !important;
+  padding: 0 12px !important;
+  border-radius: 6px !important;
+  display: inline-flex;
+  align-items: center;
 }
 
 .exam-header-right {
@@ -2025,6 +2094,12 @@ onUnmounted(() => {
   margin-bottom: 14px;
 }
 
+.q-title-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .q-index {
   font-size: 1.1rem;
   font-weight: 850;
@@ -2096,7 +2171,13 @@ onUnmounted(() => {
 
 /* 考试侧栏 */
 .exam-status-sidebar {
-  overflow-y: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.exam-status-sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 .status-sidebar-card {
@@ -2150,13 +2231,18 @@ onUnmounted(() => {
 }
 
 .nav-grid-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
   aspect-ratio: 1;
   border-radius: 8px;
   border: 1px solid #E2E8F0;
   background: #FFFFFF;
   color: var(--text-muted);
   font-weight: bold;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -2265,356 +2351,8 @@ onUnmounted(() => {
   font-weight: 600 !important;
 }
 
-/* ================= 成绩报告视图 ================= */
-.exam-report-view {
-  max-width: 1000px;
-  margin: 0 auto;
-}
-
-.report-header {
-  text-align: center;
-  margin-bottom: 28px;
-}
-
-.report-header h1 {
-  font-size: 2.2rem;
-  font-weight: 850;
-  color: var(--text-dark);
-  margin-bottom: 8px;
-}
-
-.report-header .subtitle {
-  font-size: 1rem;
-  color: var(--text-muted);
-}
-
-.report-summary-grid {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 20px;
-  margin-bottom: 32px;
-}
-
-.score-gauge-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 30px;
-  text-align: center;
-}
-
-.score-display {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-}
-
-.score-val {
-  font-size: 3.5rem;
-  font-weight: 900;
-  color: var(--text-dark);
-}
-
-.score-total {
-  font-size: 0.95rem;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-.score-summary-text h3 {
-  font-size: 1.4rem;
-  font-weight: 850;
-  margin: 12px 0 6px 0;
-  color: var(--primary-color);
-}
-
-.score-summary-text p {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-  margin: 0;
-}
-
-.stats-overview-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.stats-overview-card h3 {
-  font-weight: 800;
-  font-size: 1.15rem;
-  margin-top: 0;
-  margin-bottom: 20px;
-}
-
-.report-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-}
-
-.stat-item {
-  background: #F8FAFC;
-  padding: 16px 20px;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
-}
-
-.stat-item .label {
-  display: block;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-
-.stat-item .val {
-  font-size: 1.45rem;
-  font-weight: 800;
-  color: var(--text-dark);
-}
-
-.stat-item .val.correct {
-  color: var(--success-color);
-}
-
-.stat-item .val.wrong {
-  color: var(--danger-color);
-}
-
-.report-questions-section {
-  margin-bottom: 30px;
-}
-
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 18px;
-  border-bottom: 2px solid var(--border-light);
-  padding-bottom: 10px;
-}
-
-.section-title h2 {
-  font-size: 1.35rem;
-  font-weight: bold;
-  color: var(--text-dark);
-  margin: 0;
-}
-
-.section-title .hint {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.report-questions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.report-q-card {
-  background: #FFFFFF;
-  border: 1px solid var(--border-light);
-  border-radius: 16px;
-  padding: 24px;
-}
-
-.report-q-card.q-correct {
-  border-left: 6px solid var(--success-color);
-}
-
-.report-q-card.q-wrong {
-  border-left: 6px solid var(--danger-color);
-}
-
-.report-q-card .q-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-}
-
-.q-badge-row {
-  display: flex;
-  gap: 6px;
-}
-
-.q-badge-row .index {
-  font-size: 1rem;
-  font-weight: bold;
-  color: var(--text-dark);
-  margin-right: 6px;
-}
-
-.right-status {
-  font-size: 1rem;
-  font-weight: 800;
-}
-
-.right-status .correct {
-  color: var(--success-color);
-}
-
-.right-status .wrong {
-  color: var(--danger-color);
-}
-
-/* 选择题对照 */
-.options-display {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.option-show-item {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  background: #F8FAFC;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  font-size: 0.9rem;
-}
-
-.option-show-item .key {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(15, 23, 42, 0.05);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin-right: 12px;
-  font-size: 0.8rem;
-}
-
-.option-show-item.is-correct {
-  border-color: var(--success-color);
-  background: rgba(16, 185, 129, 0.05);
-  font-weight: 550;
-}
-
-.option-show-item.is-correct .key {
-  background: var(--success-color);
-  color: #FFFFFF;
-}
-
-.option-show-item.user-selected:not(.is-correct) {
-  border-color: var(--danger-color);
-  background: rgba(239, 68, 68, 0.05);
-}
-
-.option-show-item.user-selected:not(.is-correct) .key {
-  background: var(--danger-color);
-  color: #FFFFFF;
-}
-
-.ans-tag {
-  margin-left: auto;
-}
-
-/* 判断题对照 */
-.answer-compare-row {
-  display: flex;
-  gap: 24px;
-  margin-top: 12px;
-  background: #F8FAFC;
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-}
-
-.correct-text {
-  color: var(--success-color);
-}
-
-.wrong-text {
-  color: var(--danger-color);
-}
-
-/* 填空/简答对照 */
-.text-answer-display {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.user-typed-ans,
-.standard-ans {
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  background: #F8FAFC;
-  border: 1px solid var(--border-light);
-}
-
-.user-typed-ans p,
-.standard-ans p {
-  margin: 6px 0 0 0;
-  line-height: 1.5;
-}
-
-.user-typed-ans {
-  border-color: #E2E8F0;
-}
-
-.standard-ans {
-  border-color: rgba(90, 82, 255, 0.2);
-  background: var(--primary-glow);
-}
-
-.typed-text {
-  color: var(--text-dark);
-}
-
-.standard-text {
-  color: var(--text-dark);
-  font-weight: 550;
-}
-
-/* 解析 */
-.analysis-wrapper {
-  margin-top: 16px;
-  background: #F8FAFC;
-  padding: 16px;
-  border-radius: 12px;
-  border-top: 1px dashed var(--border-light);
-  font-size: 0.88rem;
-  color: #475569;
-  line-height: 1.6;
-}
-
-.analysis-wrapper p {
-  margin: 6px 0 12px 0;
-}
-
-.kps-row {
-  display: flex;
-  align-items: center;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.report-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 40px;
-}
-
-.report-actions button {
-  padding: 14px 40px !important;
-  font-weight: bold !important;
-  border-radius: 12px !important;
-}
-
 @media (max-width: 820px) {
   .bank-main-grid {
-    grid-template-columns: 1fr;
-  }
-  .report-summary-grid {
     grid-template-columns: 1fr;
   }
   .exam-main-layout {
@@ -2623,5 +2361,381 @@ onUnmounted(() => {
   .exam-status-sidebar {
     display: none;
   }
+}
+
+/* 解析回顾模式新增样式 */
+.header-accuracy-tag {
+  font-weight: bold;
+}
+
+.back-bank-btn {
+  background: var(--primary-color) !important;
+  color: #FFFFFF !important;
+  font-weight: bold;
+  border-radius: 10px;
+  padding: 10px 20px !important;
+  border: none;
+}
+
+.back-bank-btn:hover {
+  opacity: 0.9;
+}
+
+.exam-option-item.is-correct {
+  border-color: var(--success-color) !important;
+  background-color: rgba(16, 185, 129, 0.08) !important;
+  color: #065F46 !important;
+}
+
+.exam-option-item.is-correct .indicator {
+  background-color: var(--success-color) !important;
+  color: #FFFFFF !important;
+}
+
+.exam-option-item.is-wrong {
+  border-color: var(--danger-color) !important;
+  background-color: rgba(239, 68, 68, 0.08) !important;
+  color: #991B1B !important;
+}
+
+.exam-option-item.is-wrong .indicator {
+  background-color: var(--danger-color) !important;
+  color: #FFFFFF !important;
+}
+
+.exam-option-item.is-disabled {
+  cursor: not-allowed !important;
+}
+
+.exam-option-item.is-disabled:hover {
+  background: inherit;
+}
+
+.exam-option-item.is-disabled.is-correct:hover {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+
+.exam-option-item.is-disabled.is-wrong:hover {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+}
+
+.option-res-tag {
+  margin-left: auto;
+  font-weight: bold;
+  border-radius: 6px;
+}
+
+.exam-text-answer-review {
+  margin-top: 15px;
+  padding: 14px 18px;
+  background: #F8FAFC;
+  border-left: 4px solid var(--primary-color);
+  border-radius: 4px 12px 12px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user-answer-indicator {
+  font-size: 0.92rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.user-answer-indicator.correct {
+  color: var(--success-color);
+}
+
+.user-answer-indicator.wrong {
+  color: var(--danger-color);
+}
+
+.user-answer-indicator .status-icon {
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: bold;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  border: 1px solid currentColor;
+}
+
+.standard-answer-review {
+  font-size: 0.92rem;
+  color: var(--text-dark);
+  background: #F1F5F9;
+  padding: 10px 14px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.review-analysis-toggle-row {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.exam-q-analysis-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border-top: 1px dashed #FCD34D;
+  border-left: 4px solid #F59E0B;
+  background: #FFFDF5;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #78350F;
+  line-height: 1.6;
+}
+
+.exam-q-analysis-panel strong {
+  color: #B45309;
+}
+
+.analysis-body {
+  margin-bottom: 12px;
+}
+
+.analysis-kps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  border-top: 1px dashed var(--border-light);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.legend-item .dot.correct {
+  background: var(--success-color);
+}
+
+.legend-item .dot.wrong {
+  background: var(--danger-color);
+}
+
+.nav-grid-item.review-correct {
+  background: var(--success-color) !important;
+  color: #FFFFFF !important;
+  border-color: var(--success-color) !important;
+}
+
+.nav-grid-item.review-wrong {
+  background: var(--danger-color) !important;
+  color: #FFFFFF !important;
+  border-color: var(--danger-color) !important;
+}
+
+.bottom-report-summary {
+  margin-top: 20px;
+  padding: 16px;
+  background: #F8FAFC;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+}
+
+.review-score-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.review-score-display .score-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.review-score-display .score-num {
+  font-size: 1.8rem;
+  font-weight: 800;
+  display: flex;
+  align-items: baseline;
+}
+
+.review-score-display .score-total {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.review-score-eval {
+  text-align: center;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  margin-bottom: 16px;
+}
+
+.review-score-eval h4 {
+  margin: 0 0 4px 0;
+  font-size: 0.95rem;
+  font-weight: bold;
+  color: var(--text-dark);
+}
+
+.review-score-eval p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.margin-top-12 {
+  margin-top: 12px;
+}
+
+
+
+.review-score-eval {
+  text-align: center;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  margin-bottom: 16px;
+}
+
+.review-score-eval h4 {
+  margin: 0 0 4px 0;
+  font-size: 0.95rem;
+  font-weight: bold;
+  color: var(--text-dark);
+}
+
+.review-score-eval p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.margin-top-12 {
+  margin-top: 12px;
+}
+
+.browser-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 12px;
+}
+
+.browser-header-row .header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: var(--text-dark);
+}
+
+.toggle-filters-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(90, 82, 255, 0.18);
+  background: rgba(90, 82, 255, 0.05);
+  color: var(--primary-color);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  user-select: none;
+  box-shadow: 0 2px 6px rgba(90, 82, 255, 0.02);
+  backdrop-filter: blur(8px);
+}
+
+.toggle-filters-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+  background: rgba(90, 82, 255, 0.09);
+  border-color: rgba(90, 82, 255, 0.32);
+  box-shadow: 0 4px 12px rgba(90, 82, 255, 0.08);
+}
+
+.toggle-filters-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.toggle-filters-btn.is-expanded {
+  background: linear-gradient(135deg, var(--primary-color) 0%, #7C3AED 100%);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(90, 82, 255, 0.16);
+}
+
+.toggle-filters-btn.is-expanded:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 16px rgba(90, 82, 255, 0.24);
+}
+
+.action-toggle-analysis-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(90, 82, 255, 0.18);
+  background: rgba(90, 82, 255, 0.04);
+  color: var(--primary-color);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  user-select: none;
+  box-shadow: 0 2px 4px rgba(90, 82, 255, 0.02);
+  backdrop-filter: blur(4px);
+}
+
+.action-toggle-analysis-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+  background: rgba(90, 82, 255, 0.08);
+  border-color: rgba(90, 82, 255, 0.3);
+  box-shadow: 0 4px 10px rgba(90, 82, 255, 0.08);
+}
+
+.action-toggle-analysis-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.action-toggle-analysis-btn.is-expanded {
+  background: linear-gradient(135deg, var(--primary-color) 0%, #7C3AED 100%);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 4px 10px rgba(90, 82, 255, 0.15);
+}
+
+.action-toggle-analysis-btn.is-expanded:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 14px rgba(90, 82, 255, 0.22);
+}
+
+.arrow-icon {
+  font-size: 0.85rem;
+  transition: transform 0.25s ease;
+}
+
+.arrow-icon.is-active {
+  transform: rotate(180deg);
+}
+
+.feedback-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style>

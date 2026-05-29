@@ -43,6 +43,23 @@ from app.infra.json import parse_first_json_object
 logger = get_logger(__name__)
 
 
+def _iter_json_objects(text: str) -> list[dict[str, Any]]:
+    decoder = json.JSONDecoder()
+    s = (text or "").strip()
+    candidates: list[dict[str, Any]] = []
+    for opener in ("{", "["):
+        idx = s.find(opener)
+        while idx != -1:
+            try:
+                value, _end = decoder.raw_decode(s[idx:])
+                if isinstance(value, dict):
+                    candidates.append(value)
+            except json.JSONDecodeError:
+                pass
+            idx = s.find(opener, idx + 1)
+    return candidates
+
+
 # ============ LLM 管理器 ============
 
 class Llm:
@@ -61,6 +78,7 @@ class Llm:
         self._text_semaphore: asyncio.Semaphore | None = None
         self._vision_semaphore: asyncio.Semaphore | None = None
         self._agent_models: dict[str, ChatOpenAI] = {}
+        self._text_base_url: str = ""
         self._init()
 
     @property
@@ -77,10 +95,11 @@ class Llm:
         text_cfg = {k: v for k, v in text_cfg.items() if k != "vision"}
 
         if text_cfg and "model_name" in text_cfg:
+            self._text_base_url = text_cfg["base_url"].rstrip("/chat/completions").rstrip("/")
             self._text_model = ChatOpenAI(
                 model=text_cfg["model_name"],
                 api_key=text_cfg["api_key"],
-                base_url=text_cfg["base_url"].rstrip("/chat/completions").rstrip("/"),
+                base_url=self._text_base_url,
                 temperature=0.3,
                 streaming=False,
                 max_retries=text_cfg.get("max_retries", 2),
@@ -238,6 +257,39 @@ class Llm:
             }]
 
             errors: list[str] = []
+            prefer_text_json = "spark-api-open.xf-yun.com" in (self._text_base_url or "")
+
+            async def _text_json_fallback() -> Any:
+                schema_hint = json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
+                json_prompt = (
+                    f"{input_data}\n\n"
+                    f"请严格按照以下 JSON Schema 输出，不要输出任何其他内容：\n"
+                    f"```json\n{schema_hint}\n```\n"
+                    f"直接输出 JSON 对象，不要用 Markdown 围栏包裹。"
+                )
+                resp = await model.ainvoke(json_prompt)
+                content = getattr(resp, "content", "") or ""
+                candidates = _iter_json_objects(content)
+                if not candidates:
+                    try:
+                        return schema.model_validate(parse_first_json_object(content))
+                    except Exception as exc:
+                        raise ValueError("无法从 LLM 输出中解析出 JSON 对象") from exc
+                last_error: Exception | None = None
+                for candidate in candidates:
+                    try:
+                        return schema.model_validate(candidate)
+                    except Exception as exc:
+                        last_error = exc
+                        continue
+                raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象") from last_error
+
+            if prefer_text_json:
+                try:
+                    return await _text_json_fallback()
+                except Exception as e:
+                    errors.append(f"text_fallback={type(e).__name__}: {e}")
+                    raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
             # 方式1: 使用 function calling
             try:
@@ -275,19 +327,7 @@ class Llm:
 
             # 方式3: 纯文本生成 + JSON 解析（兼容不支持 function calling 的 API）
             try:
-                schema_hint = json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
-                json_prompt = (
-                    f"{input_data}\n\n"
-                    f"请严格按照以下 JSON Schema 输出，不要输出任何其他内容：\n"
-                    f"```json\n{schema_hint}\n```\n"
-                    f"直接输出 JSON 对象，不要用 Markdown 围栏包裹。"
-                )
-                resp = await model.ainvoke(json_prompt)
-                content = getattr(resp, "content", "") or ""
-                parsed = parse_first_json_object(content)
-                if not parsed:
-                    raise ValueError("无法从 LLM 输出中解析出 JSON 对象")
-                return schema.model_validate(parsed)
+                return await _text_json_fallback()
             except Exception as e:
                 errors.append(f"text_fallback={type(e).__name__}: {e}")
                 raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")

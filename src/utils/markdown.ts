@@ -13,6 +13,16 @@ const knownFenceLanguages = Array.from(new Set([
   'shell', 'sh', 'ts', 'js', 'py', 'go', 'cpp', 'c++', 'c',
 ])).sort((left, right) => right.length - left.length)
 
+const canonicalFenceLanguageMap: Record<string, string> = {
+  py: 'python',
+  js: 'javascript',
+  ts: 'typescript',
+  sh: 'shell',
+  yml: 'yaml',
+  'c++': 'cpp',
+  plain: 'text',
+}
+
 const fencePattern = /(^|\n)(`{3,}|~{3,})/g
 const sectionHeadingPattern = /^([一二三四五六七八九十]+\s*[、.．]|方式\d+[:：]|第\d+[步部分点节][:：]|最后[：:]|总结[：:])/
 
@@ -34,6 +44,12 @@ function escapeHtml(raw: string): string {
 
 function getFenceLanguage(info: string): string {
   return info.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? ''
+}
+
+function getDisplayFenceLanguage(language: string): string {
+  const normalized = language.trim().toLowerCase()
+  if (!normalized) return 'text'
+  return canonicalFenceLanguageMap[normalized] || normalized
 }
 
 function looksLikeFenceCodeStart(fragment: string): boolean {
@@ -66,6 +82,41 @@ function repairMalformedFenceOpeners(text: string): string {
       return line
     })
     .join('\n')
+}
+
+function repairSplitFenceLanguages(text: string): string {
+  if (!text) return text
+
+  const lines = text.split('\n')
+  const repaired: string[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const current = lines[index] ?? ''
+    const matched = current.match(/^(\s*)(`{3,}|~{3,})([A-Za-z+#-]+)?\s*$/)
+    if (!matched) {
+      repaired.push(current)
+      continue
+    }
+
+    const prefix = (matched[3] ?? '').toLowerCase()
+    const nextLine = lines[index + 1] ?? ''
+    if (!prefix || !nextLine.trim()) {
+      repaired.push(current)
+      continue
+    }
+
+    const candidate = `${prefix}${nextLine.trim().toLowerCase()}`
+    const canonical = knownFenceLanguages.find((language) => language === candidate)
+    if (!canonical) {
+      repaired.push(current)
+      continue
+    }
+
+    repaired.push(`${matched[1] ?? ''}${matched[2] ?? '```'}${canonical}`)
+    index += 1
+  }
+
+  return repaired.join('\n')
 }
 
 function renderHighlightedCode(code: string, language: string): string {
@@ -106,11 +157,13 @@ streamingMarkdown.renderer.rules.fence = (tokens, idx, options, _env, self) => {
   const code = token.content || ''
   const highlightedCode = renderHighlightedCode(code, language)
   const languageClass = language ? `language-${escapeHtml(language)} ` : ''
-  const displayLang = language || 'text'
+  const displayLang = getDisplayFenceLanguage(language)
 
   return `<div class="code-block-wrapper">
-  <span class="code-block-lang">${escapeHtml(displayLang)}</span>
-  <button class="code-block-copy-btn">复制</button>
+  <div class="code-block-header">
+    <span class="code-block-lang">${escapeHtml(displayLang)}</span>
+    <button class="code-block-copy-btn">复制</button>
+  </div>
   <pre><code class="${languageClass}hljs">${highlightedCode}</code></pre>
 </div>`
 }
@@ -243,7 +296,13 @@ export function repairCopiedCodeBlocks(text: string): string {
 }
 
 export function normalizeStreamingMarkdown(text: string, isStreaming = false): string {
-  const repaired = repairLooseCodeBlocks(repairMalformedFenceOpeners(repairCopiedCodeBlocks(text)))
+  const repaired = repairLooseCodeBlocks(
+    repairSplitFenceLanguages(
+      repairMalformedFenceOpeners(
+        repairCopiedCodeBlocks(text),
+      ),
+    ),
+  )
   if (!isStreaming || !repaired) return repaired
 
   const fences = repaired.match(fencePattern)
