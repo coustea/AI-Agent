@@ -7,21 +7,26 @@ from __future__ import annotations
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
+from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
-from app.resource.utils import format_learner_profile_for_prompt
 
 logger = get_logger(__name__)
 
 
-class MindmapAgent:
+@register_agent
+class MindmapAgent(BaseResourceAgent):
     """基于教学蓝图生成 Markmap 思维导图。"""
 
-    def __init__(self, emitter: AgentEventEmitter):
-        self.emitter = emitter
+    agent_id = "mindmap"
+    agent_name = "思维导图生成"
+
+    def __init__(self, emitter: AgentEventEmitter | None = None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(self, state: WorkerState) -> WorkerResult:
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
         await self.emitter.emit_agent("mindmap", status="running", message="正在准备思维导图", progress=0)
         await self.emitter.emit_agent_action(
             "mindmap", "extract", detail="正在提取知识要点",
@@ -29,7 +34,6 @@ class MindmapAgent:
         )
 
         prompt = registry.get("resource/mindmap")
-        input_text = self._build_input(state)
 
         await self.emitter.emit_agent_action(
             "mindmap", "generate", detail="正在构建思维导图结构",
@@ -43,7 +47,6 @@ class MindmapAgent:
         content = response.content if hasattr(response, "content") else str(response)
         markdown = self._clean_markdown(content)
 
-        # 提取分支和薄弱点
         branches: list[str] = []
         weak_points: list[str] = []
         for line in markdown.splitlines():
@@ -82,24 +85,8 @@ class MindmapAgent:
             },
         )
 
-    def _build_input(self, state: WorkerState) -> str:
-        parts = [f"## 学习需求\n{state.learning_need}"]
-
-        # 学习者画像（首要依据）
-        profile_text = format_learner_profile_for_prompt(state.profile)
-        if profile_text:
-            parts.append(f"## 学习者画像摘要\n{profile_text}")
-
-        if state.blueprint:
-            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
-
-        if state.instruction:
-            lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]
-            for c in state.instruction.constraints:
-                lines.append(f"- 约束: {c}")
-            parts.append("\n".join(lines))
-
-        # Mindmap-specific config
+    def _build_input_override(self, state: WorkerState) -> str:
+        parts = build_worker_base_context(state)
         config = state.agent_config
         if config:
             cfg_lines = ["## 思维导图配置"]
@@ -115,12 +102,14 @@ class MindmapAgent:
                 "- 包含前置知识节点" if config.get("include_prerequisites", False) else "- 不包含前置知识"
             )
             parts.append("\n".join(cfg_lines))
-
         parts.append("请生成思维导图，只输出 Markdown 内容。")
         return "\n\n".join(parts)
 
+    async def run(self, state: WorkerState) -> WorkerResult:
+        input_text = self._build_input_override(state)
+        return await self._execute(input_text, state)
+
     def _clean_markdown(self, content: str) -> str:
-        """清理 Markdown 外壳。"""
         lines = content.split("\n")
         cleaned = []
         for line in lines:

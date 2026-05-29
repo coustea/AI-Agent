@@ -1,156 +1,99 @@
 """
-代码智能体 — 生成代码示例，支持多种编程语言和案例类型。
+代码智能体 — 生成编程示例 / 练习代码，支持代码块提取和语言检测。
 """
 
 from __future__ import annotations
 
-import json
 import re
-
-from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
+from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
-from app.resource.utils import format_learner_profile_for_prompt
 
 logger = get_logger(__name__)
 
 
-class CodePayload(BaseModel):
-    """代码资源的结构化输出。"""
+@register_agent
+class CodeAgent(BaseResourceAgent):
+    """基于教学蓝图生成编程示例和练习代码。"""
 
-    code: str = Field(description="完整代码内容")
-    explanation: str = Field(default="", description="代码说明")
-    language: str = Field(default="python", description="编程语言")
+    agent_id = "code"
+    agent_name = "代码生成"
 
-
-class CodeAgent:
-    """代码生成 Agent。"""
-
-    def __init__(self, emitter: AgentEventEmitter):
-        self.emitter = emitter
+    def __init__(self, emitter: AgentEventEmitter | None = None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(self, state: WorkerState) -> WorkerResult:
-        await self.emitter.emit_agent("code", status="running", message="正在准备代码案例", progress=0)
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        await self.emitter.emit_agent("code", status="running", message="正在准备代码示例", progress=0)
         await self.emitter.emit_agent_action(
-            "code", "design", detail="正在设计代码示例",
-            current_step=1, total_steps=3, step_label="设计示例", progress=15,
+            "code", "analyze", detail="正在分析代码结构需求",
+            current_step=1, total_steps=3, step_label="分析需求", progress=15,
         )
 
         prompt = registry.get("resource/code")
-        input_text = self._build_input(state)
-        full_prompt = f"{prompt}\n\n{input_text}\n\n请以 JSON 格式输出，包含 code 和 explanation 字段。"
-
-        lang = state.agent_config.get("programming_language", "python")
 
         await self.emitter.emit_agent_action(
-            "code", "generate", detail="正在编写代码与注释",
-            current_step=2, total_steps=3, step_label="编写代码", progress=45,
+            "code", "generate", detail="正在编写代码",
+            current_step=2, total_steps=3, step_label="编写代码", progress=40,
         )
 
-        # 尝试结构化 JSON 输出
-        try:
-            payload = await self.llm.ainvoke_json(
-                CodePayload,
-                full_prompt,
-                temperature=0.2,
-                function_name="generate_code_example",
-                function_description="生成代码示例，包含代码、说明和编程语言",
-            )
-            code_data = payload.model_dump(mode="json")
-        except Exception as exc:
-            logger.warning("[CodeAgent] JSON 输出失败，回退到纯文本: %s", exc)
-            response = await self.llm.ainvoke(
-                f"{prompt}\n\n{input_text}",
-                temperature=0.2,
-            )
-            raw = response.content if hasattr(response, "content") else str(response)
-            code_data = {
-                "code": self._extract_code_from_output(raw),
-                "explanation": "",
-                "language": lang,
-            }
+        response = await self.llm.ainvoke(
+            f"{prompt}\n\n{input_text}",
+            temperature=0.3,
+        )
+        content = response.content if hasattr(response, "content") else str(response)
 
-        content = json.dumps(code_data, ensure_ascii=False, indent=2)
-        case_type = state.agent_config.get("case_type", "basic_demo")
-        difficulty = state.agent_config.get("difficulty", "beginner")
-        include_test = state.agent_config.get("include_test", True)
+        code_blocks = re.findall(r"```(\w+)?\s*\n(.*?)```", content, re.DOTALL)
+        languages: list[str] = []
+        for lang, _ in code_blocks:
+            if lang:
+                languages.append(lang.lower())
+
+        primary_lang = languages[0] if languages else state.agent_config.get("language", "python")
 
         await self.emitter.emit_agent_action(
-            "code", "done", detail=f"{lang} 代码案例生成完成",
+            "code", "done", detail=f"已生成 {len(code_blocks)} 个代码示例",
             current_step=3, total_steps=3, step_label="生成完成", progress=100,
         )
-        await self.emitter.emit_agent("code", status="success", message=f"{lang} 代码案例生成完成", progress=100)
+        await self.emitter.emit_agent("code", status="success", message="代码示例生成完成", progress=100)
         return WorkerResult(
             success=True,
             content=content,
-            file_type="json",
+            file_type="markdown",
             title=f"{state.learning_need[:32]} - 代码示例",
-            summary=f"生成 {lang} 代码示例",
-            summary_data={
-                "language": lang,
-                "case_type": case_type,
-                "difficulty": difficulty,
-                "include_test": include_test,
-            },
+            summary=f"生成 {len(code_blocks)} 个代码示例",
+            summary_data={"code_count": len(code_blocks), "language": primary_lang},
             metadata={
-                "engine": "code_json",
-                "language": lang,
-                "case_type": case_type,
+                "engine": "code_md",
+                "language": primary_lang,
+                "code_count": len(code_blocks),
                 "agent_id": "code",
             },
         )
 
-    def _build_input(self, state: WorkerState) -> str:
-        parts = [f"## 学习需求\n{state.learning_need}"]
-
-        # 学习者画像（首要依据）
-        profile_text = format_learner_profile_for_prompt(state.profile)
-        if profile_text:
-            parts.append(f"## 学习者画像摘要\n{profile_text}")
-
-        if state.blueprint:
-            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
-
-        if state.instruction:
-            lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]
-            for c in state.instruction.constraints:
-                lines.append(f"- 约束: {c}")
-            parts.append("\n".join(lines))
-
-        # Code-specific config
+    def _build_input_override(self, state: WorkerState) -> str:
+        parts = build_worker_base_context(state)
         config = state.agent_config
-        lang = config.get("programming_language", "python")
-        case_type = config.get("case_type", "basic_demo")
-        comment_level = config.get("comment_level", "standard")
-        include_test = config.get("include_test", True)
-        difficulty = config.get("difficulty", "beginner")
-
-        code_lines = [
-            "## 代码要求",
-            f"- 编程语言: {lang}",
-            f"- 案例类型: {case_type}",
-            f"- 注释级别: {comment_level}",
-            f"- 难度: {difficulty}",
-        ]
-        if include_test:
-            code_lines.append("- 包含测试用例")
-        if comment_level == "verbose":
-            code_lines.append("- 每行关键代码都需要注释")
-        elif comment_level == "minimal":
-            code_lines.append("- 仅在关键逻辑处添加注释")
-        parts.append("\n".join(code_lines))
-
+        if config:
+            cfg_lines = ["## 代码配置"]
+            cfg_lines.append(f"- 编程语言: {config.get('language', 'python')}")
+            cfg_lines.append(f"- 项目类型: {config.get('project_type', 'script')}")
+            cfg_lines.append(f"- 难度: {config.get('difficulty', 'beginner')}")
+            cfg_lines.append(
+                "- 包含运行说明和注释" if config.get("include_comments", True) else "- 不包含注释"
+            )
+            cfg_lines.append(
+                "- 包含错误处理" if config.get("include_error_handling", False) else "- 不包含错误处理"
+            )
+            parts.append("\n".join(cfg_lines))
+        parts.append("请生成代码示例和练习，输出 Markdown 格式。")
         return "\n\n".join(parts)
 
-    def _extract_code_from_output(self, content: str) -> str:
-        """从纯文本输出中提取代码。"""
-        pattern = r"```(?:\w+)?\s*\n(.*?)```"
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return content.strip()
+    async def run(self, state: WorkerState) -> WorkerResult:
+        input_text = self._build_input_override(state)
+        return await self._execute(input_text, state)

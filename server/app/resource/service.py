@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -25,7 +27,7 @@ from app.resource.schemas import (
     ReviewResult,
     WorkerResult,
 )
-from app.resource.workflow import ResourceGenerationWorkflow
+from app.resource.agents import AGENT_REGISTRY
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -139,7 +141,7 @@ class ResourceUsecases:
             resource = await self.session.get(GeneratedResource, resource_id)
             if resource is None:
                 return
-            personalization = dict(resource.personalization or {})
+            personalization = deepcopy(resource.personalization or {})
             progress = personalization.get("workflow_progress")
             if not isinstance(progress, dict):
                 progress = self._initial_workflow_progress(list(resource.selected_agents or []))
@@ -166,6 +168,7 @@ class ResourceUsecases:
             progress["agents"] = agents
             personalization["workflow_progress"] = progress
             resource.personalization = personalization
+            self._mark_json_modified(resource, "personalization")
             if task_status and resource.status not in {"completed", "partial_completed", "failed"}:
                 resource.status = task_status
             resource.updated_at = datetime.now(timezone.utc)
@@ -180,10 +183,17 @@ class ResourceUsecases:
         progress = personalization.get("workflow_progress")
         if not isinstance(progress, dict):
             progress = self._initial_workflow_progress(list(resource.selected_agents or []))
+        db_items: list[GeneratedResourceItemModel] = []
+        if hasattr(self.session, "exec"):
+            db_items = await self.list_resource_items(user_id, resource_id)
         return {
             "resource_id": resource_id,
             "status": resource.status,
             "progress": progress,
+            "resources": [
+                self._db_item_to_resource_item(item).model_dump(mode="json")
+                for item in db_items
+            ],
         }
 
     async def update_resource_status(
@@ -233,6 +243,14 @@ class ResourceUsecases:
             await self.session.rollback()
             raise exc
         await self.session.refresh(obj)
+
+    def _mark_json_modified(self, obj: Any, field_name: str) -> None:
+        """Mark SQLAlchemy JSON/JSONB fields dirty after nested snapshot rewrites."""
+        try:
+            flag_modified(obj, field_name)
+        except Exception:
+            # Unit-test fakes and simple namespace objects are not SQLAlchemy-mapped.
+            return
 
     def _content_envelope(self, result: WorkerResult) -> tuple[dict[str, Any] | None, str | None]:
         """根据格式拆分 WorkerResult 内容为 content_json 和 content_text。"""
@@ -511,34 +529,129 @@ async def bg_gen_task(
     resource_id: int,
     node_id: int | None = None,
 ) -> None:
-    """在后台执行资源包生成任务。
+    """在后台执行多智能体资源生成任务。
 
-    根据工作流返回结果和实际保存的资源条目数量决定最终状态。
-    只有成功且有条目时才将路径节点标记为 ready。
+    流程：PlanningAgent → 并行 Worker Agents → ReviewAgent → 保存。
     """
     from app.infra.database import session_scope
+    from app.resource.agents import AGENT_REGISTRY
+    from app.resource.schemas import WorkerState, LearningBlueprint, AgentInstruction
 
     async with session_scope() as session:
         usecases = ResourceUsecases(session)
-        await usecases.initialize_generation_progress(resource_id, request.enabled_agent_ids())
+        enabled_agents = request.enabled_agent_ids()
+        await usecases.initialize_generation_progress(resource_id, enabled_agents)
 
         async def persist_event(event: ResourceGenerateEvent) -> None:
             await usecases.record_generation_event(resource_id, event)
 
         emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
-        workflow = ResourceGenerationWorkflow(
-            emitter=emitter,
-            resource_service=usecases,
-        )
 
         success = False
         try:
-            result = await workflow.run(
-                user_id=user_id,
-                request=request,
+            # 1. PlanningAgent
+            planning_state = WorkerState(
+                learning_need=request.learning_need,
+                learning_scenario=request.learning_scenario,
                 profile=profile,
-                resource_id=resource_id,
+                agent_config={"enabled_agents": enabled_agents},
             )
+            planning_result = await AGENT_REGISTRY["planning"](emitter).run(planning_state)
+
+            # Extract blueprint and instructions from planning result
+            blueprint = None
+            instruction_map: dict[str, AgentInstruction] = {}
+            if planning_result.success and planning_result.metadata:
+                blueprint_data = planning_result.metadata.get("blueprint")
+                if blueprint_data:
+                    blueprint = LearningBlueprint.model_validate(blueprint_data)
+                instructions_data = planning_result.metadata.get("instructions", {})
+                for aid, inst_data in instructions_data.items():
+                    if isinstance(inst_data, dict):
+                        instruction_map[aid] = AgentInstruction.model_validate(inst_data)
+
+            # 2. Parallel worker agents
+            await emitter.emit_workflow("generating", "并行生成资源", progress=20)
+            results: dict[str, WorkerResult] = {}
+
+            async def run_one(agent_id: str) -> None:
+                try:
+                    state = WorkerState(
+                        resource_id=resource_id,
+                        learning_need=request.learning_need,
+                        learning_scenario=request.learning_scenario,
+                        agent_name=agent_id,
+                        agent_config=request.agent_configs.get(agent_id, {}),
+                        blueprint=blueprint,
+                        instruction=instruction_map.get(agent_id),
+                        profile=profile,
+                    )
+                    agent = AGENT_REGISTRY[agent_id](emitter)
+                    result = await agent.run(state)
+                    results[agent_id] = result
+                    if result.success and result.content:
+                        await usecases.save_worker_result(
+                            user_id=user_id,
+                            resource_id=resource_id,
+                            result=result,
+                        )
+                        await emitter.emit_resource(
+                            agent_id=agent_id,
+                            title=result.title,
+                            file_type=result.file_type,
+                            content=result.content,
+                            summary=result.summary,
+                            summary_data=result.summary_data,
+                            metadata=result.metadata,
+                        )
+                except Exception as exc:
+                    logger.exception("[bg_gen_task] Agent %s 异常", agent_id)
+                    results[agent_id] = WorkerResult(
+                        success=False,
+                        error=str(exc),
+                        metadata={"agent_id": agent_id},
+                    )
+
+            worker_agents = [a for a in enabled_agents if a in AGENT_REGISTRY and a not in ("planning", "review")]
+            await asyncio.gather(*(run_one(agent_id) for agent_id in worker_agents))
+
+            # 3. ReviewAgent
+            await emitter.emit_workflow("reviewing", "质量审查中", progress=85)
+            if "review" in AGENT_REGISTRY:
+                failed_results = {aid: r for aid, r in results.items() if not r.success}
+                review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
+                review_state = WorkerState(
+                    learning_need=request.learning_need,
+                    profile=profile,
+                    blueprint=blueprint,
+                    agent_config={"worker_results": [r.model_dump(mode="json") for r in review_results.values()]},
+                )
+                review_result = await AGENT_REGISTRY["review"](emitter).run(review_state)
+            else:
+                from app.resource.schemas import ReviewResult
+                review_result = ReviewResult(passed=True, overall_score=100)
+
+            # 4. Save final results
+            await usecases.save_generation_results(
+                user_id=user_id,
+                resource_id=resource_id,
+                request=request,
+                results=results,
+                review_result=review_result,
+                plan=ExecutionPlan(
+                    blueprint=blueprint or LearningBlueprint(topic=request.learning_need),
+                    agent_instructions=list(instruction_map.values()),
+                ) if blueprint else ExecutionPlan(
+                    blueprint=LearningBlueprint(topic=request.learning_need),
+                    agent_instructions=[],
+                ),
+            )
+
+            bundle = await usecases.get_resource_bundle(user_id, resource_id)
+            if bundle:
+                await emitter.emit_bundle(bundle, progress=99)
+            await emitter.emit_done(bundle=bundle)
+
             saved_items = await usecases.list_resource_items(user_id, resource_id)
             resource = await usecases.get_resource(user_id, resource_id)
             current_status = resource.status if resource else "failed"
@@ -553,6 +666,135 @@ async def bg_gen_task(
                 session, node_id, "ready" if success else "failed",
                 resource_id if success else None, user_id,
             )
+
+
+async def bg_single_gen_task(
+    user_id: int,
+    resource_id: int,
+    agent_id: str,
+    learning_need: str,
+    profile: dict[str, Any],
+    node_id: int | None = None,
+) -> None:
+    """在后台执行单智能体资源生成任务（路径规划 / 即调即用）。"""
+    from app.infra.database import session_scope
+    from app.resource.agents import AGENT_REGISTRY
+    from app.resource.schemas import WorkerState
+
+    async with session_scope() as session:
+        usecases = ResourceUsecases(session)
+        await usecases.initialize_generation_progress(resource_id, [agent_id])
+
+        async def persist_event(event: ResourceGenerateEvent) -> None:
+            await usecases.record_generation_event(resource_id, event)
+
+        emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
+
+        success = False
+        try:
+            state = WorkerState(
+                learning_need=learning_need,
+                profile=profile,
+            )
+            result = await AGENT_REGISTRY[agent_id](emitter).run(state)
+
+            if result.success and result.content:
+                await usecases.save_worker_result(
+                    user_id=user_id,
+                    resource_id=resource_id,
+                    result=result,
+                )
+                await emitter.emit_resource(
+                    agent_id=agent_id,
+                    title=result.title,
+                    file_type=result.file_type,
+                    content=result.content,
+                    summary=result.summary,
+                    summary_data=result.summary_data,
+                    metadata=result.metadata,
+                )
+                success = True
+
+            await emitter.emit_done(bundle=None)
+        except Exception:
+            logger.exception("后台单智能体生成任务异常")
+
+        if not success:
+            await usecases.update_resource_status(resource_id, "failed")
+        else:
+            await usecases.update_resource_status(resource_id, "completed")
+        if node_id:
+            await _update_node_resource_status(
+                session, node_id, "ready" if success else "failed",
+                resource_id if success else None, user_id,
+            )
+
+
+async def start_single_resource_task(
+    *,
+    user_id: int,
+    agent_id: str,
+    learning_need: str,
+    profile: dict[str, Any],
+    node_id: int | None = None,
+) -> dict[str, Any]:
+    """创建单智能体资源任务记录。
+
+    实际后台任务调度由 API 层负责（需要 FastAPI BackgroundTasks）。
+    """
+    resource = GeneratedResource(
+        user_id=user_id,
+        learning_need=learning_need,
+        personalization={},
+        selected_agents=[agent_id],
+        agent_configs={},
+        status="pending",
+    )
+    session = None
+    resource_id = 0
+
+    from app.infra.database import session_scope
+    async with session_scope() as s:
+        session = s
+        session.add(resource)
+        await session.flush()
+        resource_id = int(getattr(resource, "id", 0) or 0)
+
+        if node_id is not None:
+            from app.infra.models import CoursePathNode, CoursePathResourceBinding
+
+            node = await session.get(CoursePathNode, node_id)
+            if node is None or node.user_id != user_id:
+                raise ValueError("路径节点不存在或不属于当前用户")
+            node.resource_status = "generating"
+            binding_stmt = (
+                select(CoursePathResourceBinding)
+                .where(
+                    CoursePathResourceBinding.node_id == node_id,
+                    CoursePathResourceBinding.user_id == user_id,
+                )
+                .order_by(col(CoursePathResourceBinding.created_at).desc())
+            )
+            binding = (await session.exec(binding_stmt)).first()
+            if binding:
+                binding.resource_id = resource_id
+                binding.resource_item_id = None
+            else:
+                session.add(
+                    CoursePathResourceBinding(
+                        user_id=user_id,
+                        node_id=node_id,
+                        resource_id=resource_id,
+                    )
+                )
+        await session.commit()
+
+    return {
+        "resource_id": resource_id,
+        "status": "pending",
+        "node_id": node_id,
+        "source": "single_agent",
+    }
 
 
 async def _update_node_resource_status(

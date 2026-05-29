@@ -1,116 +1,80 @@
 """
-审查智能体 — 质量审查 + 学习路径规划。
+审核智能体 — 校验各 Worker Agent 的生成结果，输出评审意见和修改建议。
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import BaseModel, Field
-
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
+from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
-from app.resource.schemas import (
-    LearningBlueprint,
-    ReviewResult,
-    StudyPathStep,
-    WorkerResult,
-)
-from app.resource.utils import format_learner_profile_for_prompt
+from app.resource.schemas import WorkerResult, WorkerState
 
 logger = get_logger(__name__)
 
 
-class _ReviewOutput(BaseModel):
-    """LLM 结构化输出格式。"""
+@register_agent
+class ReviewAgent(BaseResourceAgent):
+    """审核各 Agent 生成结果，确保质量。"""
 
-    overall_score: int = Field(default=100, ge=0, le=100)
-    consistency_score: int = Field(default=100, ge=0, le=100)
-    personalization_score: int = Field(default=100, ge=0, le=100)
-    issues: list[str] = Field(default_factory=list)
-    suggestions: list[str] = Field(default_factory=list)
-    study_path: list[StudyPathStep] = Field(default_factory=list)
+    agent_id = "review"
+    agent_name = "审核"
 
-
-class ReviewAgent:
-    """审查所有资源质量并生成个性化学习路径。"""
-
-    def __init__(self, emitter: AgentEventEmitter):
-        self.emitter = emitter
+    def __init__(self, emitter: AgentEventEmitter | None = None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(
-        self,
-        results: dict[str, WorkerResult],
-        blueprint: LearningBlueprint,
-        profile: dict[str, Any],
-        learning_need: str,
-    ) -> ReviewResult:
-        await self.emitter.emit_agent("review", status="running", message="正在审查资源质量", progress=0)
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        await self.emitter.emit_agent("review", status="running", message="正在审核生成结果", progress=0)
         await self.emitter.emit_agent_action(
-            "review", "check", detail="正在检查内容完整性",
-            current_step=1, total_steps=3, step_label="完整性检查", progress=20,
+            "review", "inspect", detail="正在检查内容质量",
+            current_step=1, total_steps=3, step_label="检查质量", progress=20,
         )
 
         prompt = registry.get("resource/review")
-        input_text = self._build_input(results, blueprint, profile, learning_need)
 
         await self.emitter.emit_agent_action(
-            "review", "evaluate", detail="正在评估个性化匹配度",
-            current_step=2, total_steps=3, step_label="匹配度评估", progress=55,
+            "review", "evaluate", detail="正在评估与大纲一致性",
+            current_step=2, total_steps=3, step_label="评估一致性", progress=60,
         )
 
-        output = await self.llm.ainvoke_json(
-            _ReviewOutput,
+        response = await self.llm.ainvoke(
             f"{prompt}\n\n{input_text}",
             temperature=0.2,
         )
-
-        review = ReviewResult(
-            passed=output.overall_score >= 60,
-            overall_score=output.overall_score,
-            consistency_score=output.consistency_score,
-            personalization_score=output.personalization_score,
-            issues=output.issues,
-            suggestions=output.suggestions,
-            study_path=output.study_path,
-        )
+        content = response.content if hasattr(response, "content") else str(response)
 
         await self.emitter.emit_agent_action(
-            "review", "done", detail="质量审查完成",
-            current_step=3, total_steps=3, step_label="审查完成", progress=100,
+            "review", "done", detail="审核完成",
+            current_step=3, total_steps=3, step_label="审核完成", progress=100,
         )
-        review_status = "success" if review.passed else "failed"
-        review_message = "质量审查完成" if review.passed else "质量审查未通过，已保留可用资源"
-        await self.emitter.emit_agent("review", status=review_status, message=review_message, progress=100)
-        return review
+        await self.emitter.emit_agent("review", status="success", message="审核完成", progress=100)
+        return WorkerResult(
+            success=True,
+            content=content,
+            file_type="markdown",
+            title="审核意见",
+            summary="审核各 Agent 生成结果",
+            metadata={"agent_id": "review"},
+        )
 
-    def _build_input(
-        self,
-        results: dict[str, WorkerResult],
-        blueprint: LearningBlueprint,
-        profile: dict[str, Any],
-        learning_need: str,
-    ) -> str:
-        parts = [f"## 学习需求\n{learning_need}"]
+    def _build_input_override(self, state: WorkerState) -> str:
+        parts = build_worker_base_context(state)
 
-        # 教学蓝图
-        parts.append(f"## 教学蓝图\n{blueprint.model_dump_json(indent=2)}")
+        worker_results = state.agent_config.get("worker_results", [])
+        if worker_results:
+            parts.append("## 待审核内容")
+            for wr in worker_results:
+                agent_name = wr.get("agent_name", wr.get("agent_id", "unknown"))
+                parts.append(f"### {agent_name}")
+                parts.append(wr.get("content", "")[:2000])
+                parts.append("")
 
-        # 各资源摘要
-        parts.append("## 已生成的资源")
-        for agent_id, result in results.items():
-            if not result.success:
-                parts.append(f"### {agent_id} (失败)\n错误: {result.error}")
-                continue
-            preview = result.content[:500] if result.content else "(无内容)"
-            parts.append(f"### {agent_id}\n- 标题: {result.title}\n- 格式: {result.file_type}\n- 内容预览:\n{preview}")
-
-        # 学习者画像
-        profile_text = format_learner_profile_for_prompt(profile)
-        if profile_text:
-            parts.append(f"## 学习者画像\n{profile_text}")
-
+        parts.append("请审核以上内容，指出问题和修改建议。")
         return "\n\n".join(parts)
+
+    async def run(self, state: WorkerState) -> WorkerResult:
+        input_text = self._build_input_override(state)
+        return await self._execute(input_text, state)

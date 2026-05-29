@@ -12,14 +12,14 @@ from pydantic import BaseModel, Field
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
+from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
-from app.resource.utils import format_learner_profile_for_prompt
 
 logger = get_logger(__name__)
 
 
-# 习题结构化 Schema
 class QuizOption(BaseModel):
     label: str = Field(description="选项标签，如 A/B/C/D")
     content: str = Field(description="选项内容")
@@ -49,14 +49,18 @@ class QuizPayload(BaseModel):
     questions: list[QuizQuestion] = Field(default_factory=list, description="题目列表")
 
 
-class QuizAgent:
+@register_agent
+class QuizAgent(BaseResourceAgent):
     """习题生成 Agent。"""
 
-    def __init__(self, emitter: AgentEventEmitter):
-        self.emitter = emitter
+    agent_id = "quiz"
+    agent_name = "习题生成"
+
+    def __init__(self, emitter: AgentEventEmitter | None = None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(self, state: WorkerState) -> WorkerResult:
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
         await self.emitter.emit_agent("quiz", status="running", message="正在准备习题", progress=0)
         await self.emitter.emit_agent_action(
             "quiz", "analyze", detail="正在分析考点分布",
@@ -64,7 +68,6 @@ class QuizAgent:
         )
 
         prompt = registry.get("resource/quiz")
-        input_text = self._build_input(state)
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
         await self.emitter.emit_agent_action(
@@ -72,7 +75,6 @@ class QuizAgent:
             current_step=2, total_steps=4, step_label="出题", progress=30,
         )
 
-        # 尝试结构化输出
         try:
             result = await self.llm.ainvoke_json(
                 QuizPayload,
@@ -108,7 +110,6 @@ class QuizAgent:
             current_step=3, total_steps=4, step_label="编写解析", progress=75,
         )
 
-        # 统计难度分布
         questions = quiz_data.get("questions", [])
         difficulty_dist: dict[str, int] = {}
         for q in questions:
@@ -141,24 +142,8 @@ class QuizAgent:
             },
         )
 
-    def _build_input(self, state: WorkerState) -> str:
-        parts = [f"## 学习需求\n{state.learning_need}"]
-
-        # 学习者画像（首要依据）
-        profile_text = format_learner_profile_for_prompt(state.profile)
-        if profile_text:
-            parts.append(f"## 学习者画像摘要\n{profile_text}")
-
-        if state.blueprint:
-            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
-
-        if state.instruction:
-            lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]
-            for c in state.instruction.constraints:
-                lines.append(f"- 约束: {c}")
-            parts.append("\n".join(lines))
-
-        # Quiz-specific config
+    def _build_input_override(self, state: WorkerState) -> str:
+        parts = build_worker_base_context(state)
         config = state.agent_config
         if config:
             cfg_lines = ["## 习题配置"]
@@ -170,11 +155,13 @@ class QuizAgent:
                 "- 每题包含详细解析" if config.get("include_analysis", True) else "- 不包含解析"
             )
             parts.append("\n".join(cfg_lines))
-
         return "\n\n".join(parts)
 
+    async def run(self, state: WorkerState) -> WorkerResult:
+        input_text = self._build_input_override(state)
+        return await self._execute(input_text, state)
+
     def _salvage_quiz_payload(self, raw: str) -> dict | None:
-        """从原始文本中抢救 JSON 数据。"""
         try:
             data = json.loads(raw)
             if isinstance(data, dict) and "questions" in data:

@@ -94,7 +94,7 @@ class QuizConfig(BaseModel):
 
 class CodeConfig(BaseModel):
     """代码 Agent 配置。"""
-    programming_language: Literal["python", "cpp", "java", "go", "javascript"] = "python"
+    programming_language: Literal["python", "c", "cpp", "java", "go", "javascript", "typescript"] = "python"
     case_type: Literal["basic_demo", "algorithm_template", "debug_demo"] = "basic_demo"
     comment_level: Literal["minimal", "standard", "verbose"] = "standard"
     include_test: bool = True
@@ -366,6 +366,22 @@ class ResourceDetailResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class SingleResourceRequest(BaseModel):
+    """Request for single-agent resource generation (path planning / on-demand use)."""
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: ResourceAgentId
+    learning_need: str
+
+    @field_validator("learning_need")
+    @classmethod
+    def validate_learning_need(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("学习需求不能为空")
+        return value
+
+
 class ResourceListResponse(BaseModel):
     """Resource list response."""
 
@@ -379,6 +395,7 @@ __all__ = [
     "AGENT_DEFAULT_ENABLED",
     # Request models
     "ResourceGenerationRequest",
+    "SingleResourceRequest",
     # Learning blueprint & planning
     "LearningBlueprint",
     "AgentInstruction",

@@ -9,27 +9,27 @@ from typing import Any
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
+from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.events import AgentEventEmitter
-from app.resource.schemas import ExecutionPlan
+from app.resource.schemas import ExecutionPlan, WorkerResult, WorkerState
 from app.resource.utils import format_learner_profile_for_prompt
 
 logger = get_logger(__name__)
 
 
-class PlanningAgent:
+@register_agent
+class PlanningAgent(BaseResourceAgent):
     """分析学习需求和画像，生成教学蓝图和各 Agent 的个性化指令。"""
 
-    def __init__(self, emitter: AgentEventEmitter):
-        self.emitter = emitter
+    agent_id = "planning"
+    agent_name = "规划"
+
+    def __init__(self, emitter: AgentEventEmitter | None = None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(
-        self,
-        learning_need: str,
-        learning_scenario: str,
-        profile: dict[str, Any],
-        enabled_agents: list[str],
-    ) -> ExecutionPlan:
+    async def run(self, state: WorkerState) -> WorkerResult:
+        """PlanningAgent uses its own run() because it has a different input/output contract."""
         await self.emitter.emit_agent("planning", status="running", message="正在分析你的学习需求")
         await self.emitter.emit_agent_action(
             "planning", "analyze", detail="正在分析你的学习需求",
@@ -37,7 +37,12 @@ class PlanningAgent:
         )
 
         prompt = registry.get("resource/planning")
-        input_text = self._build_input(learning_need, learning_scenario, profile, enabled_agents)
+        input_text = self._build_planning_input(
+            state.learning_need,
+            state.learning_scenario if hasattr(state, 'learning_scenario') else "self_study",
+            state.profile,
+            list(state.agent_config.get("enabled_agents", [])) if state.agent_config else [],
+        )
 
         await self.emitter.emit_agent_action(
             "planning", "plan", detail="正在梳理知识点结构",
@@ -55,9 +60,21 @@ class PlanningAgent:
             current_step=3, total_steps=3, step_label="规划完成", progress=100,
         )
         await self.emitter.emit_agent("planning", status="success", message="教学蓝图规划完成", progress=100)
-        return plan
 
-    def _build_input(
+        return WorkerResult(
+            success=True,
+            content=plan.model_dump_json(indent=2),
+            file_type="json",
+            title="教学蓝图与执行计划",
+            summary="PlanningAgent 生成了教学蓝图和各 Agent 个性化指令",
+            metadata={"agent_id": "planning", "blueprint": plan.blueprint.model_dump(mode="json"), "instructions": {inst.agent_id: inst.model_dump(mode="json") for inst in plan.agent_instructions}},
+        )
+
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        """Fallback — PlanningAgent uses run() directly."""
+        return await self.run(state)
+
+    def _build_planning_input(
         self,
         need: str,
         scenario: str,

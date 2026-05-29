@@ -11,17 +11,21 @@ API 端点：
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
-from app.infra.database import get_session
+from app.infra.database import get_session, session_scope
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.resource.schemas import ResourceGenerationRequest
-from app.resource.service import ResourceUsecases, bg_gen_task
+from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest
+from app.resource.service import ResourceUsecases, bg_gen_task, bg_single_gen_task
 from app.memory.service import MemoryService
 from app.infra.response import HttpResponse
 
@@ -65,7 +69,48 @@ async def gen_task(
     return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"})
 
 
-@router.get("/generate/task/{resource_id}/status")
+@router.post("/generate/single")
+async def gen_single(
+    req: SingleResourceRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """启动单智能体资源生成后台任务（路径规划 / 即调即用）。"""
+    logger.info(
+        "[ResourceAPI] 收到单智能体生成请求: user_id=%s agent_id=%s",
+        current_user.id,
+        req.agent_id.value,
+    )
+
+    memory_service = MemoryService(module="mentor")
+    profile_record = await memory_service.get_profile(user_id=current_user.id)
+    profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
+
+    usecases = ResourceUsecases(session)
+    result = await usecases.start_resource_task(
+        user_id=current_user.id,
+        request=ResourceGenerationRequest(
+            learning_need=req.learning_need,
+            selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
+        ),
+        source="single_agent",
+    )
+    resource_id = result["resource_id"]
+
+    background_tasks.add_task(
+        bg_single_gen_task,
+        user_id=current_user.id,
+        resource_id=resource_id,
+        agent_id=req.agent_id.value,
+        learning_need=req.learning_need,
+        profile=profile_dict,
+    )
+
+    return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value})
+
+
+from app.resource.schemas import AgentSelection
 async def get_generation_status(
     resource_id: int,
     current_user: User = Depends(get_current_user),
@@ -78,6 +123,50 @@ async def get_generation_status(
         return HttpResponse.error(code=404, message="资源不存在或无权限")
 
     return HttpResponse.success(data=status_data)
+
+
+@router.get("/generate/task/{resource_id}/events")
+async def stream_generation_events(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    """以 SSE 推送资源任务快照，让前端动画和阶段产物接近实时更新。"""
+    return StreamingResponse(
+        _stream_generation_snapshots(current_user.id, resource_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _stream_generation_snapshots(
+    user_id: int,
+    resource_id: int,
+) -> AsyncGenerator[str, None]:
+    previous_payload = ""
+    while True:
+        async with session_scope() as session:
+            usecases = ResourceUsecases(session)
+            status_data = await usecases.get_generation_status(user_id=user_id, resource_id=resource_id)
+
+        if status_data is None:
+            payload = {"message": "资源不存在或无权限"}
+            yield f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            return
+
+        payload_text = json.dumps(status_data, ensure_ascii=False)
+        if payload_text != previous_payload:
+            yield f"event: snapshot\ndata: {payload_text}\n\n"
+            previous_payload = payload_text
+
+        if status_data.get("status") in {"completed", "partial_completed", "failed"}:
+            yield f"event: done\ndata: {payload_text}\n\n"
+            return
+
+        await asyncio.sleep(1)
 
 
 @router.get("/agents")

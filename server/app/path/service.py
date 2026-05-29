@@ -11,6 +11,7 @@ from app.path.schemas import (
     CoursePathResponse,
     GeneratePathRequest,
     PathGenerationTaskResponse,
+    PathPlanFeedbackRequest,
 )
 from app.resource.schemas import AgentConfigs, AgentSelection, OutputOptions, ResourceGenerationRequest
 
@@ -39,6 +40,92 @@ class CoursePathService:
         plan = await self.agent.generate_plan(request, profile_dict)
         db_path, db_nodes = await self._persist_generated_path(user_id, request, plan)
         return self._build_path_response(db_path, db_nodes)
+
+    async def _get_active_path_record(self, user_id: int, module: str = "mentor") -> CoursePath | None:
+        statement = select(CoursePath).where(
+            CoursePath.user_id == user_id,
+            CoursePath.module == module,
+            CoursePath.status == "active"
+        ).order_by(CoursePath.created_at.desc())
+        return (await self.session.exec(statement)).first()
+
+    async def adjust_path(self, user_id: int, request: PathPlanFeedbackRequest) -> CoursePathResponse:
+        """根据反馈和画像动态微调未完成的路径节点。"""
+        logger.info(f"Adjusting course path for user_id={user_id}, module=mentor")
+
+        # 1. 获取当前活跃路径
+        active_path = await self._get_active_path_record(user_id, "mentor")
+        if not active_path:
+            raise ValueError("当前没有活跃的学习路径")
+
+        # 2. 读取所有节点并分类
+        all_nodes = await self._get_nodes_for_path(active_path.id)
+        completed_nodes = [n for n in all_nodes if n.status in ("completed", "in_progress")]
+        remaining_nodes = [n for n in all_nodes if n.status not in ("completed", "in_progress")]
+
+        # 3. 读取画像
+        profile_dict = await self._get_profile_dict(user_id)
+
+        # 4. 调用 Agent 重新规划后续节点
+        plan = await self.agent.adjust_plan(
+            active_path=active_path,
+            completed_nodes=completed_nodes,
+            remaining_nodes=remaining_nodes,
+            profile=profile_dict,
+            feedback=request.feedback
+        )
+
+        # 5. 更新数据库
+        # 删除所有未完成节点
+        for r_node in remaining_nodes:
+            await self.session.delete(r_node)
+        await self.session.flush()
+
+        # 插入新的规划节点
+        completed_node_ids = {n.node_id for n in completed_nodes}
+        db_nodes = list(completed_nodes)
+
+        for agent_node in plan.nodes:
+            # 过滤掉已经完成的节点（由 completed_node_ids 判定，防止大模型重复输出已完成的）
+            if agent_node.node_id in completed_node_ids:
+                continue
+
+            db_node = CoursePathNode(
+                path_id=active_path.id,
+                user_id=user_id,
+                node_id=agent_node.node_id,
+                stage_id=agent_node.stage_id,
+                title=agent_node.title,
+                prerequisites=agent_node.prerequisites,
+                mastery_target=agent_node.mastery_target,
+                estimated_minutes=agent_node.estimated_minutes,
+                difficulty=agent_node.difficulty,
+                recommendation_reason=agent_node.recommendation_reason,
+                priority=agent_node.priority,
+                status="locked",
+                resource_status="not_started",
+            )
+
+            # 若前置条件全满足，解锁为 available
+            if not agent_node.prerequisites or set(agent_node.prerequisites).issubset(completed_node_ids):
+                db_node.status = "available"
+
+            db_nodes.append(db_node)
+            self.session.add(db_node)
+
+        # 更新路径主表的元数据
+        active_path.title = plan.title
+        active_path.eta_days = plan.eta_days
+        active_path.confidence = plan.confidence
+        active_path.stages_json = [s.model_dump() for s in plan.stages]
+        active_path.adjustment_rationale = plan.adjustment_rationale
+        active_path.updated_at = datetime.now(timezone.utc)
+
+        await self.session.commit()
+
+        # 6. 返回新的 CoursePathResponse
+        resource_map = await self._get_node_resource_ids([n.id for n in db_nodes if n.id is not None])
+        return self._build_path_response(active_path, db_nodes, resource_map)
 
     async def start_generation_task(
         self,
@@ -367,7 +454,7 @@ class CoursePathService:
 
         await self.session.commit()
         resource_map = await self._get_node_resource_ids([item.id for item in nodes if item.id is not None])
-        return self._build_path_response(path, nodes, resource_map)
+        return await self._build_path_response_async(path, nodes, resource_map)
 
     def _build_node_learning_need(self, node: CoursePathNode, path: CoursePath | None) -> str:
         """从节点和路径信息组装 learning_need 文本。"""
@@ -399,7 +486,7 @@ class CoursePathService:
         node_ids = [n.id for n in nodes if n.id is not None]
         resource_map = await self._get_node_resource_ids(node_ids)
 
-        return self._build_path_response(db_path, nodes, resource_map)
+        return await self._build_path_response_async(db_path, nodes, resource_map)
 
     async def _get_owned_node_for_update(self, *, user_id: int, node_id: int) -> CoursePathNode:
         statement = (
@@ -426,7 +513,7 @@ class CoursePathService:
     async def _response_for_path(self, path: CoursePath) -> CoursePathResponse:
         nodes = await self._get_nodes_for_path(path.id)
         resource_map = await self._get_node_resource_ids([node.id for node in nodes if node.id is not None])
-        return self._build_path_response(path, nodes, resource_map)
+        return await self._build_path_response_async(path, nodes, resource_map)
 
     async def _archive_active_paths(self, user_id: int, module: str) -> None:
         """将用户已有的活跃路径状态设为 archived。"""
@@ -464,11 +551,90 @@ class CoursePathService:
             resource_map.setdefault(binding.node_id, binding.resource_id)
         return resource_map
 
+    async def _check_optimization_needs(
+        self,
+        user_id: int,
+        path: CoursePath,
+        nodes: Sequence[CoursePathNode],
+    ) -> tuple[bool, list[str]]:
+        """分析最近的学习事件，检测是否存在掌握程度不佳或对当前路径反馈不佳的诊断信号。"""
+        from app.infra.models import LearningEvent
+
+        # 查找该路径创建以来的学习事件
+        stmt = (
+            select(LearningEvent)
+            .where(
+                LearningEvent.user_id == user_id,
+                LearningEvent.created_at >= path.created_at,
+            )
+            .order_by(LearningEvent.created_at.desc())
+            .limit(50)
+        )
+        result = await self.session.exec(stmt)
+        events = list(result.all())
+
+        needs_opt = False
+        tips = []
+
+        # 1. 检查测验成绩不及格 (score < 65)
+        low_score_events = [e for e in events if e.event_type == "quiz_submitted" and e.score is not None and e.score < 65]
+        if low_score_events:
+            needs_opt = True
+            for e in low_score_events[:2]:
+                topic_str = e.topic or e.course or "相关知识点"
+                tips.append(f"检测到您在「{topic_str}」测验中得分偏低（{e.score:.0f}分），建议优化路径并添加巩固练习。")
+
+        # 2. 检查用户负面反馈 (反馈含 难/看不懂/不会 等关键字)
+        negative_feedback_events = [
+            e for e in events
+            if e.event_type in ("path_feedback", "resource_feedback")
+            and e.feedback
+            and any(kw in e.feedback for kw in ("太难", "看不懂", "不会", "卡住", "薄弱", "偏难", "跟不上"))
+        ]
+        if negative_feedback_events:
+            needs_opt = True
+            for e in negative_feedback_events[:2]:
+                topic_str = e.topic or "当前内容"
+                tips.append(f"您在学习「{topic_str}」时反馈表示“{e.feedback}”，建议微调难度。")
+
+        # 3. 检查是否有用户反馈提及想要更多实操/图解
+        pref_feedback_events = [
+            e for e in events
+            if e.event_type in ("path_feedback", "resource_feedback")
+            and e.feedback
+            and any(kw in e.feedback for kw in ("喜欢", "希望", "更想", "图解", "案例", "代码", "视频"))
+        ]
+        if pref_feedback_events:
+            for e in pref_feedback_events[:2]:
+                tips.append(f"已识别您的学习偏好反馈：“{e.feedback}”，可点击优化更新教学重点。")
+
+        # 去重
+        seen = set()
+        unique_tips = []
+        for t in tips:
+            if t not in seen:
+                seen.add(t)
+                unique_tips.append(t)
+
+        return needs_opt, unique_tips
+
+    async def _build_path_response_async(
+        self,
+        path: CoursePath,
+        nodes: Sequence[CoursePathNode],
+        resource_map: dict[int, int | None] | None = None,
+    ) -> CoursePathResponse:
+        """异步构建学习路径 DTO，同时注入诊断反馈。"""
+        needs_opt, tips = await self._check_optimization_needs(path.user_id, path, nodes)
+        return self._build_path_response(path, nodes, resource_map, needs_optimization=needs_opt, optimization_tips=tips)
+
     def _build_path_response(
         self,
         path: CoursePath,
         nodes: Sequence[CoursePathNode],
         resource_map: dict[int, int | None] | None = None,
+        needs_optimization: bool = False,
+        optimization_tips: list[str] | None = None,
     ) -> CoursePathResponse:
         """将 ORM 模型转换为 API DTO。"""
         if resource_map is None:
@@ -507,6 +673,8 @@ class CoursePathService:
             status=path.status,
             stages=path.stages_json or [],
             nodes=node_dtos,
+            needs_optimization=needs_optimization,
+            optimization_tips=optimization_tips or [],
             created_at=path.created_at.isoformat() if path.created_at else ""
         )
 

@@ -7,21 +7,26 @@ from __future__ import annotations
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.prompts import registry
+from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
-from app.resource.utils import format_learner_profile_for_prompt
 
 logger = get_logger(__name__)
 
 
-class ContentAgent:
+@register_agent
+class ContentAgent(BaseResourceAgent):
     """基于教学蓝图生成课程讲解文档。"""
 
-    def __init__(self, emitter: AgentEventEmitter):
-        self.emitter = emitter
+    agent_id = "content"
+    agent_name = "内容生成"
+
+    def __init__(self, emitter: AgentEventEmitter | None = None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(self, state: WorkerState) -> WorkerResult:
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
         await self.emitter.emit_agent("content", status="running", message="正在准备课程讲解", progress=0)
         await self.emitter.emit_agent_action(
             "content", "prepare", detail="正在梳理核心概念",
@@ -29,7 +34,7 @@ class ContentAgent:
         )
 
         prompt = registry.get("resource/content")
-        input_text = self._build_input(state)
+        full_input = f"{prompt}\n\n{input_text}"
 
         await self.emitter.emit_agent_action(
             "content", "generate", detail="正在编写知识讲解",
@@ -37,7 +42,7 @@ class ContentAgent:
         )
 
         response = await self.llm.ainvoke(
-            f"{prompt}\n\n{input_text}",
+            full_input,
             temperature=0.3,
         )
 
@@ -64,28 +69,10 @@ class ContentAgent:
             metadata={"agent_id": "content"},
         )
 
-    def _build_input(self, state: WorkerState) -> str:
-        parts = [f"## 学习需求\n{state.learning_need}"]
+    def _build_input_override(self, state: WorkerState) -> str:
+        """Content-specific input building with config."""
+        parts = build_worker_base_context(state)
 
-        # 学习者画像（首要依据）
-        profile_text = format_learner_profile_for_prompt(state.profile)
-        if profile_text:
-            parts.append(f"## 学习者画像摘要\n{profile_text}")
-
-        if state.blueprint:
-            parts.append(f"## 教学蓝图\n{state.blueprint.model_dump_json(indent=2)}")
-
-        if state.instruction:
-            lines = [f"## 规划师指令\n- 重点: {state.instruction.focus}"]
-            if state.instruction.difficulty:
-                lines.append(f"- 难度: {state.instruction.difficulty}")
-            if state.instruction.personalization_notes:
-                lines.append(f"- 个性化建议: {state.instruction.personalization_notes}")
-            for c in state.instruction.constraints:
-                lines.append(f"- 约束: {c}")
-            parts.append("\n".join(lines))
-
-        # Content-specific config
         config = state.agent_config
         if config:
             cfg_lines = ["## 内容配置"]
@@ -102,6 +89,11 @@ class ContentAgent:
 
         parts.append("请生成专业课程讲解文档，只输出 Markdown 内容。")
         return "\n\n".join(parts)
+
+    async def run(self, state: WorkerState) -> WorkerResult:
+        """Override run() to use content-specific input building."""
+        input_text = self._build_input_override(state)
+        return await self._execute(input_text, state)
 
     def _clean_content(self, content: str) -> str:
         """清理内容中的常见问题。"""
