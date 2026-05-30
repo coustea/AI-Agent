@@ -111,6 +111,8 @@ async def gen_single(
 
 
 from app.resource.schemas import AgentSelection
+
+@router.get("/generate/task/{resource_id}/status")
 async def get_generation_status(
     resource_id: int,
     current_user: User = Depends(get_current_user),

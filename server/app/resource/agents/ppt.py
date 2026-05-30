@@ -8,7 +8,7 @@ import json
 import re
 import time
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
@@ -103,6 +103,14 @@ class PptPayload(BaseModel):
     config: PPTConfig = Field(default_factory=PPTConfig, description="PPT配置")
     slides: list[PPTSlide] = Field(default_factory=list, description="幻灯片列表")
 
+    @model_validator(mode="after")
+    def validate_playable_layout(self) -> PptPayload:
+        if len(self.slides) < 3:
+            raise ValueError("PPT 至少需要封面、目录和一页正文")
+        if self.slides[0].layout != "cover" or self.slides[1].layout != "agenda":
+            raise ValueError("PPT 必须以 cover、agenda 开始")
+        return self
+
 
 @register_agent
 class PptAgent(BaseResourceAgent):
@@ -141,7 +149,7 @@ class PptAgent(BaseResourceAgent):
                 function_name="generate_ppt",
                 function_description="生成 PPT 幻灯片内容",
             )
-            ppt_data = result.model_dump(mode="json")
+            ppt_data = result.model_dump(mode="json", by_alias=True)
             content = json.dumps(ppt_data, ensure_ascii=False, indent=2)
 
             elapsed = time.perf_counter() - start
@@ -168,6 +176,13 @@ class PptAgent(BaseResourceAgent):
             content = json.dumps(ppt_data, ensure_ascii=False, indent=2)
 
         slide_count = len(ppt_data.get("slides", []))
+        requested_page_count = (state.agent_config or {}).get("page_count") or (state.agent_config or {}).get("slide_count") or 10
+        if slide_count != requested_page_count:
+            logger.warning("Agent[ppt] 失败: slide_count (%d) != requested_page_count (%d)", slide_count, requested_page_count)
+            return WorkerResult(
+                success=False,
+                error=f"PPT 页面数量不符合配置: 期望 {requested_page_count} 页，实际 {slide_count} 页",
+            )
 
         await self.emitter.emit_agent_action(
             "ppt", "done", detail=f"已生成 {slide_count} 页幻灯片",
@@ -189,18 +204,25 @@ class PptAgent(BaseResourceAgent):
                 "engine": "ppt_json",
                 "slide_count": slide_count,
                 "agent_id": "ppt",
+                "delivery_mode": (state.agent_config or {}).get("output_format") or "preview",
+                "template_id": "theme-logic-blue",
+                "page_count": requested_page_count,
+                "difficulty": (state.agent_config or {}).get("difficulty") or "intermediate",
             },
         )
 
     def _build_input_override(self, state: WorkerState) -> str:
         parts = build_worker_base_context(state)
-        config = state.agent_config
-        if config:
-            cfg_lines = ["## PPT配置"]
-            cfg_lines.append(f"- 幻灯片数量: {config.get('slide_count', 10)}")
-            cfg_lines.append(f"- 风格: {config.get('style', 'teaching')}")
-            cfg_lines.append(f"- 主题: {config.get('theme', 'education')}")
-            parts.append("\n".join(cfg_lines))
+        config = state.agent_config or {}
+        page_count = config.get("page_count") or config.get("slide_count") or 10
+        difficulty = config.get("difficulty") or "intermediate"
+
+        cfg_lines = ["## PPT配置"]
+        cfg_lines.append(f"- 总页数必须严格等于 {page_count} 页")
+        cfg_lines.append(f"- 仅允许使用 theme-logic-blue 模板")
+        cfg_lines.append(f"- 在线预览格式 (output_format=preview)")
+        cfg_lines.append(f"- 教学难度: {difficulty}")
+        parts.append("\n".join(cfg_lines))
         parts.append("请生成 PPT 幻灯片内容。")
         return "\n\n".join(parts)
 
