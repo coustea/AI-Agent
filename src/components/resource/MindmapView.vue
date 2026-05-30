@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { Transformer } from 'markmap-lib'
 import { Markmap } from 'markmap-view'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
@@ -83,6 +83,9 @@ const markdownContent = computed<string>(() => {
 const renderMarkmap = async (content: string) => {
   if (!content.trim() || !markmapRef.value) return
 
+  // Wait for container to have layout so SVG can resolve relative lengths
+  await nextTick()
+
   try {
     const { root } = transformer.transform(content)
 
@@ -90,8 +93,13 @@ const renderMarkmap = async (content: string) => {
     let svg = markmapRef.value.querySelector('svg')
     if (!svg) {
       svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      svg.style.width = '100%'
-      svg.style.height = props.compact ? '240px' : '500px'
+      // Use explicit pixel width from container to avoid "Could not resolve relative length" error
+      const containerWidth = markmapRef.value.clientWidth || 800
+      const height = props.compact ? 240 : 500
+      svg.setAttribute('width', String(containerWidth))
+      svg.setAttribute('height', String(height))
+      svg.style.width = `${containerWidth}px`
+      svg.style.height = `${height}px`
       markmapRef.value.appendChild(svg)
     }
 
