@@ -1,18 +1,31 @@
 <template>
   <div class="logic-blue-slide logic-blue-cover">
-    <div class="cover-content">
-      <div class="accent-bar"></div>
-      <h1 class="main-title">{{ data.main_title }}</h1>
-      <h2 class="sub-title" v-if="data.sub_title">{{ data.sub_title }}</h2>
-      <div class="footer">
-        <span class="lecturer" v-if="data.lecturer">{{ data.lecturer }}</span>
+    <!-- 学术栅格背景线 -->
+    <div class="grid-background"></div>
+    
+    <div class="cover-layout">
+      <div class="cover-content-left animate-slide-up">
+        <div class="title-indicator"></div>
+        <h1 class="main-title">{{ data.main_title }}</h1>
+        <h2 class="sub-title" v-if="data.sub_title">{{ data.sub_title }}</h2>
+      </div>
+      
+      <div class="cover-content-right animate-fade-in">
+        <div class="meta-card">
+          <div class="meta-item" v-if="data.lecturer">
+            <span class="meta-label">PRESENTER</span>
+            <span class="meta-value">{{ data.lecturer }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">COURSEWARE</span>
+            <span class="meta-value">学枢 AI 学习规划</span>
+          </div>
+        </div>
       </div>
     </div>
     
-    <!-- 装饰元素 -->
-    <div class="decoration circle-1"></div>
-    <div class="decoration circle-2"></div>
-    <div class="decoration dots"></div>
+    <!-- 极简装饰性横线 -->
+    <div class="bottom-axis"></div>
   </div>
 </template>
 
@@ -28,92 +41,151 @@ defineProps<{
 .logic-blue-slide {
   width: 100%;
   height: 100%;
-  background-color: #0F172A;
+  background-color: #0B0F19; /* 更沉稳的深黛色 */
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
+  box-sizing: border-box;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
 }
 
-.cover-content {
-  position: relative;
-  z-index: 10;
-  width: 80%;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.accent-bar {
-  width: 120px;
-  height: 8px;
-  background-color: #3B82F6;
-  margin-bottom: 40px;
-  border-radius: 4px;
-}
-
-.main-title {
-  font-size: 80px;
-  color: #FFFFFF;
-  font-weight: 800;
-  letter-spacing: -1px;
-  margin-bottom: 24px;
-  line-height: 1.2;
-}
-
-.sub-title {
-  font-size: 36px;
-  color: #94A3B8;
-  font-weight: 400;
-  margin-bottom: 60px;
-}
-
-.footer {
-  margin-top: 40px;
-  padding-top: 40px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  width: 60%;
-}
-
-.lecturer {
-  font-size: 28px;
-  color: #CBD5E1;
-  font-weight: 500;
-}
-
-/* 装饰背景 */
-.decoration {
+/* 严谨的背景网络格线，保持超低可见度 */
+.grid-background {
   position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
   z-index: 1;
 }
 
-.circle-1 {
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(37,99,235,0.15) 0%, rgba(15,23,42,0) 70%);
-  top: -200px;
-  right: -200px;
+.cover-layout {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  padding: 80px 100px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.circle-2 {
-  width: 800px;
-  height: 800px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(56,189,248,0.1) 0%, rgba(15,23,42,0) 70%);
-  bottom: -400px;
-  left: -200px;
+.cover-content-left {
+  flex: 1;
+  max-width: 60%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+  padding-left: 28px;
 }
 
-.dots {
-  width: 200px;
-  height: 200px;
-  background-image: radial-gradient(#334155 2px, transparent 2px);
-  background-size: 20px 20px;
-  top: 100px;
+/* 精致的左侧垂直指示线条 */
+.title-indicator {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  background: #3B82F6; /* 蔚蓝色 */
+  border-radius: 2px;
+}
+
+.main-title {
+  font-size: 52px;
+  color: #F8FAFC;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 0 0 16px 0;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.sub-title {
+  font-size: 22px;
+  color: #64748B; /* 柔和暗灰 */
+  font-weight: 400;
+  margin: 0;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.cover-content-right {
+  width: 30%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.meta-card {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding-left: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.meta-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #3B82F6;
+  letter-spacing: 1.5px;
+}
+
+.meta-value {
+  font-size: 18px;
+  color: #E2E8F0;
+  font-weight: 500;
+}
+
+/* 底部极细刻度基准线，增强结构感 */
+.bottom-axis {
+  position: absolute;
   left: 100px;
-  opacity: 0.3;
+  right: 100px;
+  bottom: 80px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  z-index: 5;
+}
+
+/* 入场动画 */
+.animate-slide-up {
+  animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+  opacity: 0;
+}
+
+@keyframes slideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 </style>

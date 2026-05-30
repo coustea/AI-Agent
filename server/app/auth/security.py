@@ -13,9 +13,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET
 from app.infra.database import session_scope
+from app.infra.logging import get_logger
 from app.infra.models import ActiveToken, User
 from app.infra.response import HttpResponse
 
+logger = get_logger(__name__)
 bearer_scheme = HTTPBearer()
 optional_bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -58,6 +60,7 @@ async def create_token(user_id: int, session: AsyncSession) -> str:
     )
     session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))
     await session.commit()
+    logger.debug("[Auth] Token 创建: user_id=%s expires=%s", user_id, expire.isoformat())
     return token
 
 
@@ -70,8 +73,10 @@ def decode_token(token: str) -> int:
         )
         return int(payload["sub"])
     except jwt.ExpiredSignatureError as exc:
+        logger.warning("[Auth] Token 已过期")
         raise AuthError("Token 已过期") from exc
     except jwt.InvalidTokenError as exc:
+        logger.warning("[Auth] 无效 Token")
         raise AuthError("无效 Token") from exc
 
 

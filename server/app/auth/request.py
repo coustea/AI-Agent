@@ -20,3 +20,4 @@ class UserUpdate(BaseModel):
     username: str | None = None
     email: str | None = None
     avatar: str | None = None
+    is_first_login: bool | None = None

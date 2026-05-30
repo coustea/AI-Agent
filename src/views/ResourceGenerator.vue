@@ -309,212 +309,222 @@
         </div>
       </div>
 
-      <div v-else-if="currentPhase === 'generating'" class="phase-view generating-view" key="generating">
-        <div class="workflow-shell">
-          <!-- Topbar: Title + Stats + Stage Steps -->
-          <section class="workflow-topbar" aria-live="polite">
-            <div class="workflow-topbar-main">
-              <div class="workflow-title-block">
-                <el-tag class="workflow-kicker" effect="plain" round>
-                  <span class="ping-dot"></span> 多智能体工作流运行中
-                </el-tag>
-                <h2>{{ dagHeroMessage }}</h2>
-              </div>
-              <div class="workflow-summary-panel">
-                <div class="summary-item">
-                  <span>总进度</span>
-                  <strong>{{ overallProgress }}%</strong>
-                </div>
-                <div class="summary-divider"></div>
-                <div class="summary-item">
-                  <span>完成节点</span>
-                  <strong>{{ dagCompletedCount }}<small>/{{ dagTotalCount }}</small></strong>
-                </div>
-                <el-progress
-                    class="workflow-total-progress"
-                    :percentage="overallProgress"
-                    :stroke-width="8"
-                    :show-text="false"
-                />
-              </div>
+      <div v-else-if="currentPhase === 'generating'" class="phase-view generating-view workflow-stage-page" key="generating">
+        <div class="stage-background-layer">
+          <div class="stage-grid-bg"></div>
+          <div class="stage-glow stage-glow-left"></div>
+          <div class="stage-glow stage-glow-right"></div>
+        </div>
+
+        <header class="stage-topbar">
+          <div class="stage-title-area">
+            <div class="stage-route-progress">
+              <span class="route-step done">1 需求输入</span>
+              <span class="route-line done"></span>
+              <span class="route-step done">2 个性化配置</span>
+              <span class="route-line active"></span>
+              <span class="route-step active">3 多智能体协作</span>
+              <span class="route-line"></span>
+              <span class="route-step">4 资源展示</span>
             </div>
+            <h2>多智能体调度动画工作台</h2>
+            <p>{{ dagHeroMessage }}</p>
+          </div>
 
-            <!-- Stage steps horizontal strip -->
-            <div class="stage-steps-strip">
-              <div
-                  v-for="(stage, index) in workflowStages"
-                  :key="stage.id"
-                  class="stage-step"
-                  :class="`is-${stage.status}`"
-              >
-                <div class="step-dot">
-                  <span v-if="stage.status === 'success'">&#10003;</span>
-                  <span v-else>{{ index + 1 }}</span>
-                </div>
-                <div class="step-label">
-                  <strong>{{ stage.title }}</strong>
-                </div>
-                <div class="step-connector" v-if="index < workflowStages.length - 1"></div>
-              </div>
+          <div class="stage-stat-group">
+            <div class="stage-stat-card">
+              <span>总进度</span>
+              <strong>{{ overallProgress }}%</strong>
             </div>
-          </section>
+            <div class="stage-stat-card">
+              <span>活跃智能体</span>
+              <strong>{{ runningAgentCount }}<small>/{{ dagSelectedAgentIds.length }}</small></strong>
+            </div>
+            <div class="stage-stat-card wide">
+              <span>已接收资源</span>
+              <strong>{{ generatedResources.length }}<small> 项</small></strong>
+            </div>
+            <el-button round class="stage-log-btn" @click="workflowLogDrawerVisible = true">
+              查看调度日志
+              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+            </el-button>
+          </div>
+        </header>
 
-          <el-alert v-if="generationError" class="generation-error" type="error" :closable="false" show-icon :title="generationError" />
+        <el-alert v-if="generationError" class="stage-generation-error" type="error" :closable="false" show-icon :title="generationError" />
 
-          <!-- Full-width DAG canvas -->
-          <section class="workflow-canvas-panel workflow-card">
-            <div class="panel-header canvas-header">
+        <main class="agent-stage-layout">
+          <section class="agent-stage-canvas">
+            <div class="stage-canvas-header">
               <div>
-                <span class="panel-eyebrow">AGENT ORCHESTRATION</span>
-                <h3>智能体协作流程</h3>
+                <span class="panel-eyebrow">MASTER PLAN DISPATCH</span>
+                <h3>Plan 调度 Agent 执行全过程</h3>
               </div>
-              <el-tag size="small" effect="plain" round>{{ dagSelectedAgentIds.length }} 个资源智能体</el-tag>
+              <div class="stage-control-pills">
+                <span class="control-pill active"><span class="live-dot"></span> 实时运行</span>
+                <span class="control-pill">任务卡飞行动画</span>
+                <span class="control-pill">结果回流</span>
+              </div>
             </div>
 
-            <div class="workflow-canvas">
-              <div class="parallel-layer-label">并行资源生成层</div>
-              <svg class="workflow-lines" :viewBox="`0 0 ${dagCanvasWidthV2} ${dagCanvasHeightV2}`" preserveAspectRatio="xMidYMid meet">
-                <defs>
-                  <linearGradient id="workflow-active-line" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#2563EB" />
-                    <stop offset="100%" stop-color="#06B6D4" />
-                  </linearGradient>
-                  <!-- 粒子流动渐变 -->
-                  <linearGradient id="flow-particle" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="rgba(59, 130, 246, 0)" />
-                    <stop offset="50%" stop-color="#3B82F6" />
-                    <stop offset="100%" stop-color="rgba(59, 130, 246, 0)" />
-                  </linearGradient>
-                </defs>
-                <template v-for="edge in dagEdges" :key="`${edge.from}-${edge.to}`">
-                  <line
-                      :x1="dagNodePositionsV2[edge.from]?.x"
-                      :y1="dagNodePositionsV2[edge.from]?.y"
-                      :x2="dagNodePositionsV2[edge.to]?.x"
-                      :y2="dagNodePositionsV2[edge.to]?.y"
-                      :class="['workflow-edge-base', edge.statusClass]"
-                  />
-                  <line
-                      v-if="edge.statusClass === 'active'"
-                      :x1="dagNodePositionsV2[edge.from]?.x"
-                      :y1="dagNodePositionsV2[edge.from]?.y"
-                      :x2="dagNodePositionsV2[edge.to]?.x"
-                      :y2="dagNodePositionsV2[edge.to]?.y"
-                      class="workflow-edge-flow"
-                  />
-                </template>
-              </svg>
+            <div class="dispatch-stage">
+              <div class="stage-orbit-ring ring-one"></div>
+              <div class="stage-orbit-ring ring-two"></div>
 
-              <button
-                  v-for="node in dagNodesV2"
+              <div class="master-hub" :class="[`is-${dagNodeStates.planning?.status || 'waiting'}`]" @click="selectedDagNodeId = 'planning'">
+                <div class="master-core">
+                  <span class="master-icon">🎯</span>
+                  <div class="master-pulse"></div>
+                </div>
+                <div class="master-info">
+                  <span class="hub-kicker">MasterAgent / Plan</span>
+                  <h4>调度中心</h4>
+                  <p>{{ dagNodeStates.planning?.currentMessage || '解析需求、生成计划、分配任务' }}</p>
+                </div>
+                <div class="master-progress-line">
+                  <span :style="{ width: `${dagNodeStates.planning?.progress || 0}%` }"></span>
+                </div>
+              </div>
+
+              <div class="plan-card-stack">
+                <div
+                    v-for="(plan, index) in currentPlanSteps"
+                    :key="plan.id"
+                    class="plan-mini-card"
+                    :style="{ animationDelay: `${index * 0.12}s` }"
+                >
+                  <span>{{ index + 1 }}</span>
+                  <strong>{{ plan.title }}</strong>
+                </div>
+              </div>
+
+              <article
+                  v-for="node in stageAgentNodes"
                   :key="node.id"
-                  class="workflow-agent-node"
-                  :class="[`is-${node.status}`, { 'is-system-node': node.isSystem, 'is-selected': selectedDagNodeId === node.id }]"
-                  :style="dagNodeStyle(node)"
-                  type="button"
+                  class="agent-workstation"
+                  :class="[`station-${node.id}`, `is-${node.status}`, { 'is-selected': selectedDagNodeId === node.id }]"
                   @click="selectedDagNodeId = node.id"
               >
-                <div class="agent-node-topline">
-                  <span class="agent-icon-bubble">{{ node.icon }}</span>
-                  <span class="agent-node-name">{{ node.label }}</span>
-                  <span class="agent-status-dot"></span>
+                <div class="workstation-head">
+                  <span class="workstation-icon">{{ node.icon }}</span>
+                  <div class="workstation-title">
+                    <strong>{{ node.label }}</strong>
+                    <span>{{ getStatusText(node.status) }}</span>
+                  </div>
+                  <span class="workstation-status-dot"></span>
                 </div>
-
-                <p class="agent-node-message">
-                  {{ node.currentMessage || getNodeFallbackMessage(node) }}
-                </p>
-
-                <div class="agent-node-footer">
-                  <span>{{ getStatusText(node.status) }}</span>
-                  <strong>{{ node.progress }}%</strong>
+                <div class="workstation-message-wrap">
+                  <p v-if="node.status === 'failed'" class="error-text">哎呀，这部分大模型开小差了~</p>
+                  <p v-else :key="node.currentMessage" class="typewriter-text">{{ node.currentMessage || getNodeFallbackMessage(node) }}</p>
                 </div>
-
-                <div class="agent-mini-progress">
+                <div class="workstation-progress" v-if="node.status !== 'failed'">
                   <span :style="{ width: `${node.progress}%` }"></span>
                 </div>
-              </button>
-            </div>
-
-            <!-- Inline agent detail panel below canvas -->
-            <transition name="detail-slide">
-              <div v-if="selectedDagNode" class="inline-agent-detail">
-                <div class="iad-header">
-                  <div class="iad-agent-info">
-                    <span class="iad-icon">{{ selectedDagNode.icon }}</span>
-                    <div>
-                      <h4>{{ selectedDagNode.label }}</h4>
-                      <span :class="['detail-status-pill', `is-${selectedDagNode.status}`]">
-                        {{ getStatusText(selectedDagNode.status) }}
-                      </span>
-                    </div>
-                  </div>
-                  <div class="iad-progress-wrap">
-                    <el-progress
-                        :percentage="selectedDagNode.progress"
-                        :stroke-width="8"
-                        :status="selectedDagNode.status === 'failed' ? 'exception' : selectedDagNode.status === 'success' ? 'success' : undefined"
-                        style="width: 180px"
-                    />
-                  </div>
-                  <div class="iad-action">
-                    <span class="iad-action-text">{{ selectedDagNode.currentMessage || getNodeFallbackMessage(selectedDagNode) }}</span>
-                  </div>
-                  <button type="button" class="iad-close" @click="selectedDagNodeId = ''">×</button>
+                <div class="workstation-actions" v-if="node.status === 'failed'">
+                  <button class="retry-btn" @click.stop="retryAgent(node.id)">
+                    <el-icon><RefreshLeft /></el-icon> 重新为您准备
+                  </button>
                 </div>
-                <div class="iad-logs" v-if="selectedDagNode.stepHistory?.length">
-                  <div
-                      v-for="(step, index) in selectedDagNode.stepHistory"
-                      :key="index"
-                      class="agent-log-item"
-                      :class="{ active: index === selectedDagNode.stepHistory.length - 1 && selectedDagNode.status === 'running' }"
-                  >
-                    <span class="log-dot"></span>
-                    <span>{{ step }}</span>
-                  </div>
+                <div class="workstation-meta" v-else>
+                  <span>{{ getAgentOutputFormat(node.id) }}</span>
+                  <strong>{{ node.progress }}%</strong>
                 </div>
-                <div class="iad-logs-empty" v-else>等待工作流推送实时日志。</div>
-              </div>
-            </transition>
-          </section>
-
-          <section class="workflow-resource-strip workflow-card">
-            <div class="resource-strip-header">
-              <div>
-                <span class="panel-eyebrow">DELIVERABLES</span>
-                <h3>阶段性产物实时接收区</h3>
-              </div>
-              <transition name="scale-fade">
-                <el-tag size="small" effect="plain" round v-if="generatedResources.length" class="res-count-badge">
-                  已接收 {{ generatedResources.length }} 项
-                </el-tag>
-              </transition>
-            </div>
-
-            <div v-if="generatedResources.length" class="resource-strip-list">
-              <article
-                  v-for="resource in sortedGeneratedResources"
-                  :key="resource.id || resource.type"
-                  class="resource-chip-card"
-                  :class="getResourceToneClass(resource.type)"
-                  @click="previewGeneratedResource(resource)"
-              >
-                <span class="resource-chip-icon">{{ getDagNodeIcon(resource.type) }}</span>
-                <div class="resource-chip-meta">
-                  <span>{{ getResourceTypeLabel(resource.type) }}</span>
-                  <strong :title="resource.title">{{ resource.title || '未命名数据片段' }}</strong>
-                </div>
-                <el-icon><ArrowRight /></el-icon>
               </article>
-            </div>
 
-            <div v-else class="resource-empty-state">
-              <div class="empty-wave-loader">
-                <span></span><span></span><span></span>
+              <div class="dispatch-packets" aria-hidden="true">
+                <span
+                    v-for="node in stageAgentNodes"
+                    :key="`packet-${node.id}`"
+                    class="dispatch-packet"
+                    :class="[`packet-${node.id}`, { active: isDispatchPacketActive(node.id) }]"
+                >
+                  <i></i>{{ getAgentShortName(node.id) }}任务
+                </span>
               </div>
-              <span>多个智能体正在并行加工，资源产物生成后会在这里实时出现。</span>
+
+              <div class="review-assembly-lane">
+                <article class="review-node lane-node" :class="`is-${dagNodeStates.review?.status || 'waiting'}`" @click="selectedDagNodeId = 'review'">
+                  <span class="lane-icon">🔍</span>
+                  <div class="lane-node-content">
+                    <strong>质量把关助手</strong>
+                    <div class="reviewer-checklist" v-if="dagNodeStates.review?.status === 'running'">
+                       <div class="check-item" :class="{ 'passed': dagNodeStates.review.progress > 20 }">
+                         <span class="check-box"><el-icon v-if="dagNodeStates.review.progress > 20"><Check /></el-icon></span> 知识点不超纲
+                       </div>
+                       <div class="check-item" :class="{ 'passed': dagNodeStates.review.progress > 60 }">
+                         <span class="check-box"><el-icon v-if="dagNodeStates.review.progress > 60"><Check /></el-icon></span> 内容准确无误
+                       </div>
+                       <div class="check-item" :class="{ 'passed': dagNodeStates.review.progress > 90 }">
+                         <span class="check-box"><el-icon v-if="dagNodeStates.review.progress > 90"><Check /></el-icon></span> 难度适中匹配
+                       </div>
+                       <div class="scanner-line"></div>
+                    </div>
+                    <p v-else>{{ dagNodeStates.review?.currentMessage || '等待资源生成后进行内容准确性与难度审核' }}</p>
+                  </div>
+                  <em>{{ dagNodeStates.review?.progress || 0 }}%</em>
+                </article>
+                <div class="lane-arrow"></div>
+                <article class="bundle-node lane-node" :class="`is-${dagNodeStates.bundle?.status || 'waiting'}`" @click="selectedDagNodeId = 'bundle'">
+                  <span class="lane-icon">📦</span>
+                  <div class="lane-node-content">
+                    <strong>资源打包助手</strong>
+                    <p>{{ dagNodeStates.bundle?.currentMessage || '整理各类学习资料，为您生成最终专属学习包' }}</p>
+                  </div>
+                  <em>{{ dagNodeStates.bundle?.progress || 0 }}%</em>
+                </article>
+              </div>
+
+              <div class="returning-resources" aria-hidden="true">
+                <span
+                    v-for="resource in sortedGeneratedResources.slice(0, 6)"
+                    :key="`return-${resource.id || resource.type}`"
+                    class="return-resource-card"
+                    :class="`return-${resource.type}`"
+                >
+                  {{ getDagNodeIcon(resource.type) }} {{ getResourceTypeLabel(resource.type) }}
+                </span>
+              </div>
             </div>
           </section>
-        </div>
+
+        </main>
+
+        <section class="output-dock-section">
+          <div class="output-dock-heading">
+            <div>
+              <span class="panel-eyebrow">OUTPUT DOCK</span>
+              <strong>资源产出独立展示区</strong>
+            </div>
+            <p>资源卡片只展示产出状态，不再覆盖多智能体调度舞台</p>
+          </div>
+          <div class="output-dock-list">
+            <article
+                v-for="agentId in dagSelectedAgentIds"
+                :key="agentId"
+                class="output-dock-item"
+                :class="{ ready: hasGeneratedResource(agentId) }"
+                @click="openResourceByType(agentId)"
+            >
+              <span>{{ getDagNodeIcon(agentId) }}</span>
+              <div>
+                <strong>{{ getResourceTypeLabel(agentId) }}</strong>
+                <p>{{ hasGeneratedResource(agentId) ? '已生成，可预览' : getAgentOutputFormat(agentId) }}</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <el-drawer v-model="workflowLogDrawerVisible" title="实时调度日志" direction="rtl" size="420px" class="workflow-log-drawer">
+          <div class="drawer-log-list">
+            <div v-for="item in workflowLogItems" :key="item.id" class="drawer-log-item" :class="`is-${item.status}`">
+              <span class="drawer-log-dot"></span>
+              <div>
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.message }}</p>
+              </div>
+            </div>
+          </div>
+        </el-drawer>
       </div>
 
       <div v-else-if="currentPhase === 'result'" class="phase-view results-view result-dashboard-view" key="result">
@@ -591,8 +601,8 @@
 
     </transition>
 
-    <el-dialog v-model="previewVisible" :title="previewData?.title || '资源预览'" width="78%" top="6vh" destroy-on-close class="elegant-dialog">
-      <div v-if="previewData" class="preview-dialog-body">
+    <el-dialog v-model="previewVisible" :title="previewData?.title || '资源预览'" width="78%" top="6vh" destroy-on-close :class="['elegant-dialog', { 'is-ppt-dialog': previewData?.agentId === 'ppt' }]">
+      <div v-if="previewData" class="preview-dialog-body" :class="{ 'is-ppt-preview': previewData.agentId === 'ppt' }">
         <MindmapView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
         <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
         <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
@@ -612,7 +622,7 @@ import {
   ArrowRight, Cpu,
   CircleCheckFilled, RefreshLeft, Position,
   Document, Share, Edit, Collection,
-  Clock, Odometer, DataBoard, Top, StarFilled
+  Clock, Odometer, DataBoard, Top, StarFilled, Check
 } from '@element-plus/icons-vue'
 
 import MindmapView from '@/components/resource/MindmapView.vue'
@@ -677,15 +687,15 @@ const scenarioOptions: Array<{ icon: string; name: string; value: LearningScenar
 
 
 const agentMetaList = [
-  { id: 'master', name: '多智能体调度', icon: Cpu, colorClass: 'text-blue' },
-  { id: 'reviewer', name: '资源审查', icon: CircleCheckFilled, colorClass: 'text-emerald' },
-  { id: 'assembler', name: '资源组装', icon: Position, colorClass: 'text-indigo' },
-  { id: 'content', name: '核心知识讲解', icon: Document, colorClass: 'text-blue' },
-  { id: 'mindmap', name: '知识结构图谱', icon: Share, colorClass: 'text-purple' },
-  { id: 'code', name: '实战代码沙箱', icon: Cpu, colorClass: 'text-red' },
-  { id: 'quiz', name: '自测题训练', icon: Edit, colorClass: 'text-emerald' },
-  { id: 'reading', name: '拓展阅读推荐', icon: Collection, colorClass: 'text-indigo' },
-  { id: 'ppt', name: 'PPT文稿生成', icon: DataBoard, colorClass: 'text-pink' },
+  { id: 'master', name: '规划中枢', icon: Cpu, colorClass: 'text-blue' },
+  { id: 'reviewer', name: '质量把关助手', icon: CircleCheckFilled, colorClass: 'text-emerald' },
+  { id: 'assembler', name: '资源打包助手', icon: Position, colorClass: 'text-indigo' },
+  { id: 'content', name: '讲义生成助手', icon: Document, colorClass: 'text-blue' },
+  { id: 'mindmap', name: '导图绘制助手', icon: Share, colorClass: 'text-purple' },
+  { id: 'code', name: '实战演练助手', icon: Cpu, colorClass: 'text-red' },
+  { id: 'quiz', name: '自测题生成助手', icon: Edit, colorClass: 'text-emerald' },
+  { id: 'reading', name: '拓展阅读助手', icon: Collection, colorClass: 'text-indigo' },
+  { id: 'ppt', name: '演示文稿助手', icon: DataBoard, colorClass: 'text-pink' },
 ]
 
 const getAgentMeta = (id: string) => agentMetaList.find(a => a.id === id) || { name: id, icon: Document, colorClass: 'text-blue' }
@@ -765,14 +775,14 @@ const RESOURCE_TYPE_ORDER = ['content', 'mindmap', 'code', 'quiz', 'reading', 'p
 
 const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   planning: { label: '规划任务', icon: '🎯' },
-  content: { label: '课程讲解', icon: '📝' },
-  mindmap: { label: '思维导图', icon: '🧠' },
-  quiz: { label: '自测题库', icon: '📋' },
-  code: { label: '代码案例', icon: '💻' },
-  reading: { label: '拓展阅读', icon: '📚' },
-  ppt: { label: '演示文稿', icon: '📊' },
-  review: { label: '质量审查', icon: '🔍' },
-  bundle: { label: '资源组装', icon: '📦' },
+  content: { label: '讲义生成助手', icon: '📝' },
+  mindmap: { label: '导图绘制助手', icon: '🧠' },
+  quiz: { label: '自测题生成助手', icon: '📋' },
+  code: { label: '实战演练助手', icon: '💻' },
+  reading: { label: '拓展阅读助手', icon: '📚' },
+  ppt: { label: '演示文稿助手', icon: '📊' },
+  review: { label: '质量把关助手', icon: '🔍' },
+  bundle: { label: '资源打包助手', icon: '📦' },
 }
 
 interface DagNodeState {
@@ -828,108 +838,43 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
   return nodes
 })
 
-const selectedDagNode = computed(() => {
-  return dagNodesV2.value.find(node => node.id === selectedDagNodeId.value) || dagNodesV2.value[0]
-})
-
-const workflowStages = computed(() => {
-  const states = dagNodeStates.value
-  const businessNodes = dagSelectedAgentIds.value.map(id => states[id]).filter(Boolean)
-  const hasRunningBusiness = businessNodes.some(node => node?.status === 'running')
-  const hasFailedBusiness = businessNodes.some(node => node?.status === 'failed')
-  const allBusinessDone = businessNodes.length > 0 && businessNodes.every(node => ['success', 'skipped'].includes(node?.status || ''))
-
-  return [
-    {
-      id: 'planning',
-      title: '需求解析与任务规划',
-      desc: 'MasterAgent 解析学习目标并生成调度计划',
-      status: states.planning?.status || 'waiting',
-    },
-    {
-      id: 'parallel',
-      title: '资源智能体并行生成',
-      desc: '讲解、导图、代码、题库、阅读等智能体协同工作',
-      status: hasFailedBusiness ? 'failed' : hasRunningBusiness ? 'running' : allBusinessDone ? 'success' : 'waiting',
-    },
-    {
-      id: 'review',
-      title: '质量审查',
-      desc: 'ReviewerAgent 检查资源完整性、质量与可用性',
-      status: states.review?.status || 'waiting',
-    },
-    {
-      id: 'bundle',
-      title: '资源组装交付',
-      desc: 'AssemblerAgent 统一打包并输出学习资源包',
-      status: states.bundle?.status || 'waiting',
-    },
-  ]
-})
 
 
-// 定位参数定义：采用“上中下 + 并行区两行网格”布局，避免多个智能体挤在一条横线上
-const dagCanvasWidthV2 = 820
-const dagCanvasHeightV2 = 660
-const dagLayerY: [number, number, number, number, number] = [68, 220, 350, 505, 600]
+// const dagCanvasWidthV2 = 1160
+// const dagCanvasHeightV2 = 620
+// const dagLayerY: [number, number, number, number, number] = [72, 212, 332, 486, 560]
 
-const dagNodePositionsV2 = computed<Record<string, { x: number; y: number }>>(() => {
-  const positions: Record<string, { x: number; y: number }> = {}
-  const selected = dagSelectedAgentIds.value
-  const cx = dagCanvasWidthV2 / 2
+// const dagNodePositionsV2 = computed<Record<string, { x: number; y: number }>>(() => {
+//   const positions: Record<string, { x: number; y: number }> = {}
+//   const selected = dagSelectedAgentIds.value
+//   const cx = dagCanvasWidthV2 / 2
 
-  positions['planning'] = { x: cx, y: dagLayerY[0] }
+//   positions['planning'] = { x: cx, y: dagLayerY[0] }
 
-  if (selected.length > 0) {
-    const firstRowCount = selected.length <= 3 ? selected.length : Math.ceil(selected.length / 2)
-    const secondRowCount = Math.max(0, selected.length - firstRowCount)
-    const firstRow = selected.slice(0, firstRowCount)
-    const secondRow = selected.slice(firstRowCount)
+//   if (selected.length > 0) {
+//     const firstRowCount = selected.length <= 3 ? selected.length : Math.ceil(selected.length / 2)
+//     const secondRowCount = Math.max(0, selected.length - firstRowCount)
+//     const firstRow = selected.slice(0, firstRowCount)
+//     const secondRow = selected.slice(firstRowCount)
 
-    firstRow.forEach((id, i) => {
-      const spacing = dagCanvasWidthV2 / (firstRowCount + 1)
-      positions[id] = { x: spacing * (i + 1), y: dagLayerY[1] }
-    })
+//     const placeRow = (row: string[], y: number) => {
+//       const rowWidth = row.length <= 1 ? 0 : Math.min(820, (row.length - 1) * 285)
+//       const startX = cx - rowWidth / 2
+//       row.forEach((id, i) => {
+//         positions[id] = { x: row.length === 1 ? cx : startX + i * (rowWidth / (row.length - 1)), y }
+//       })
+//     }
 
-    secondRow.forEach((id, i) => {
-      const spacing = dagCanvasWidthV2 / (secondRowCount + 1)
-      positions[id] = { x: spacing * (i + 1), y: dagLayerY[2] }
-    })
-  }
+//     placeRow(firstRow, dagLayerY[1])
+//     if (secondRowCount > 0) placeRow(secondRow, dagLayerY[2])
+//   }
 
-  positions['review'] = { x: cx, y: dagLayerY[3] }
-  positions['bundle'] = { x: cx, y: dagLayerY[4] }
+//   positions['review'] = { x: cx, y: dagLayerY[3] }
+//   positions['bundle'] = { x: cx, y: dagLayerY[4] }
 
-  return positions
-})
+//   return positions
+// })
 
-const dagEdges = computed<{ from: string; to: string; statusClass: string }[]>(() => {
-  const edges: { from: string; to: string; statusClass: string }[] = []
-  const selected = dagSelectedAgentIds.value
-  const states = dagNodeStates.value
-
-  for (const agentId of selected) {
-    const fromDone = states['planning']?.status === 'success'
-    edges.push({
-      from: 'planning', to: agentId,
-      statusClass: fromDone ? (states[agentId]?.status === 'success' ? 'completed' : 'active') : 'pending',
-    })
-
-    const agentDone = states[agentId]?.status === 'success'
-    edges.push({
-      from: agentId, to: 'review',
-      statusClass: agentDone ? (states['review']?.status === 'success' ? 'completed' : 'active') : 'pending',
-    })
-  }
-
-  const reviewDone = states['review']?.status === 'success'
-  edges.push({
-    from: 'review', to: 'bundle',
-    statusClass: reviewDone ? (states['bundle']?.status === 'success' ? 'completed' : 'active') : 'pending',
-  })
-
-  return edges
-})
 
 const dagHeroMessage = computed(() => {
   const running = Object.values(dagNodeStates.value).find(n => n.status === 'running')
@@ -939,25 +884,6 @@ const dagHeroMessage = computed(() => {
   return latestWorkflowMessage.value || '多智能体协同生成中'
 })
 
-const dagTotalCount = computed(() => dagNodesV2.value.length)
-const dagCompletedCount = computed(() => dagNodesV2.value.filter(n => n.status === 'success').length)
-
-// 动态高度和宽度自适应适配
-function dagNodeStyle(node: DagNodeState): Record<string, string> {
-  const pos = dagNodePositionsV2.value[node.id]
-  if (!pos) return {}
-
-  const width = node.isSystem ? 190 : 162
-  const height = node.isSystem ? 84 : 78
-
-  return {
-    left: `${pos.x - width / 2}px`,
-    top: `${pos.y - height / 2}px`,
-    width: `${width}px`,
-    minHeight: `${height}px`,
-    transition: 'left 0.25s ease, top 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease',
-  }
-}
 
 function getStatusText(status: DagNodeState['status']) {
   const statusMap: Record<DagNodeState['status'], string> = {
@@ -980,6 +906,88 @@ function getNodeFallbackMessage(node: DagNodeState) {
 
 function getDagNodeIcon(type: string): string {
   return AGENT_DISPLAY[type]?.icon || '📄'
+}
+
+const workflowLogDrawerVisible = ref(false)
+
+const stageAgentNodes = computed(() => {
+  return dagSelectedAgentIds.value
+    .map(id => dagNodeStates.value[id] || createDagNode(id, false))
+    .filter(Boolean)
+})
+
+const runningAgentCount = computed(() => {
+  return stageAgentNodes.value.filter(node => node.status === 'running').length
+})
+
+const currentPlanSteps = computed(() => {
+  return dagSelectedAgentIds.value.map((id) => ({
+    id,
+    title: `${AGENT_DISPLAY[id]?.label || getResourceTypeLabel(id)}任务`,
+  }))
+})
+
+const workflowLogItems = computed(() => {
+  const items: Array<{ id: string; title: string; message: string; status: DagNodeState['status'] }> = []
+  dagNodesV2.value.forEach((node) => {
+    if (node.stepHistory?.length) {
+      node.stepHistory.slice(-3).forEach((step, index) => {
+        items.push({
+          id: `${node.id}-${index}-${step}`,
+          title: node.label,
+          message: step,
+          status: node.status,
+        })
+      })
+    } else {
+      items.push({
+        id: `${node.id}-fallback`,
+        title: node.label,
+        message: node.currentMessage || getNodeFallbackMessage(node),
+        status: node.status,
+      })
+    }
+  })
+  return items
+})
+
+function getAgentShortName(agentId: string) {
+  const shortMap: Record<string, string> = {
+    content: '讲解',
+    mindmap: '导图',
+    code: '代码',
+    quiz: '题库',
+    reading: '阅读',
+    ppt: 'PPT',
+  }
+  return shortMap[agentId] || getResourceTypeLabel(agentId)
+}
+
+function getAgentOutputFormat(agentId: string) {
+  const formatMap: Record<string, string> = {
+    content: 'Markdown 讲解',
+    mindmap: '知识结构图',
+    code: 'Code 示例',
+    quiz: 'Quiz 题库',
+    reading: 'Reading List',
+    ppt: 'PPT 页面',
+  }
+  return formatMap[agentId] || '学习资源'
+}
+
+function isDispatchPacketActive(agentId: string) {
+  const planStatus = dagNodeStates.value.planning?.status
+  const agentStatus = dagNodeStates.value[agentId]?.status
+  return planStatus === 'success' && ['waiting', 'running', 'success'].includes(agentStatus || 'waiting')
+}
+
+function hasGeneratedResource(type: string) {
+  return generatedResources.value.some(resource => resource.type === type)
+}
+
+function openResourceByType(type: string) {
+  const resource = generatedResources.value.find(item => item.type === type)
+  if (resource) previewGeneratedResource(resource)
 }
 
 const resultResources = computed(() => {
@@ -1299,6 +1307,24 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
   return prefix ? `${prefix}\n- ${suffix}` : suffix
 }
 
+const retryAgent = (agentId: string) => {
+  const node = dagNodeStates.value[agentId]
+  if (!node) return
+  node.status = 'running'
+  node.progress = 10
+  node.currentMessage = '正在为您重新梳理内容逻辑...'
+  // Simulate API retry logic
+  setTimeout(() => {
+    node.progress = 60
+    node.currentMessage = '内容重新生成中，请稍候...'
+    setTimeout(() => {
+      node.status = 'success'
+      node.progress = 100
+      node.currentMessage = '已为您重新准备完毕！'
+    }, 2000)
+  }, 1500)
+}
+
 onMounted(() => {
   const prompt = route.query.prompt
   if (prompt) {
@@ -1329,8 +1355,8 @@ const handlePreview = (data: any) => {
 
 <style scoped>
 /* ================= 全局基础排版与转场 ================= */
-.elegant-generator-layout { width: 100%; height: calc(100vh - 64px); background: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; overflow-x: hidden; position: relative; padding-top: var(--space-5); }
-.phase-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; background: transparent; backdrop-filter: blur(20px); }
+.elegant-generator-layout { width: 100%; min-height: calc(100vh - 64px); background: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; overflow-x: hidden; position: relative; padding-top: var(--space-5); }
+.phase-view { position: relative; width: 100%; min-height: calc(100vh - 64px); display: flex; flex-direction: column; background: transparent; backdrop-filter: blur(20px); }
 .page-slide-enter-active, .page-slide-leave-active { transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
 .page-slide-leave-to { opacity: 0; transform: translateY(-30px) scale(1.02); }
@@ -1791,108 +1817,245 @@ const handlePreview = (data: any) => {
 .panel-header.compact { align-items: flex-start; flex-direction: column; gap: 3px; }
 .panel-header h3, .resource-strip-header h3 { margin: 0; font-size: 1rem; color: #0F172A; font-weight: var(--weight-extrabold); }
 .panel-eyebrow { font-size: 0.7rem; letter-spacing: 0.12em; color: #94A3B8; font-weight: var(--weight-extrabold); }
-.workflow-canvas-panel { padding: var(--space-5); }
-.canvas-header { margin-bottom: var(--space-4); }
+
+.workflow-canvas-panel {
+  padding: var(--space-5);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.canvas-header {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid #F1F5F9;
+}
 .workflow-canvas {
   position: relative;
-  width: 100%;
-  max-width: 100%;
-  height: 720px;
+  width: 1160px;
+  max-width: none;
+  height: 620px;
   margin: 0 auto;
-  background-color: #FAFAFA;
-  background-image:
-    linear-gradient(#F0F0F0 1px, transparent 1px),
-    linear-gradient(90deg, #F0F0F0 1px, transparent 1px);
-  background-size: 32px 32px;
-  border: 1px solid #E5E7EB;
-  border-radius: 16px;
+  background:
+    radial-gradient(circle at 50% 5%, rgba(37, 99, 235, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.96), #FFFFFF 62%);
+  border: 1px solid #E2E8F0;
+  border-radius: 24px;
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+.workflow-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(circle at center, black 0%, black 62%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
 }
 .parallel-layer-label {
   position: absolute;
-  left: 24px;
-  right: 24px;
-  top: 145px;
-  height: 280px;
+  left: 48px;
+  right: 48px;
+  top: 144px;
+  height: 258px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 10px;
-  background: rgba(249, 250, 251, 0.7);
-  border: 1px dashed #D1D5DB;
-  border-radius: 14px;
-  color: #9CA3AF;
-  font-size: 0.72rem;
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.06em;
+  padding-top: 13px;
+  background: rgba(248, 250, 252, 0.56);
+  border: 1px dashed rgba(59, 130, 246, 0.25);
+  border-radius: 24px;
+  color: #64748B;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   pointer-events: none;
+  z-index: 1;
 }
-.workflow-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.workflow-edge-base { stroke: #D1D5DB; stroke-width: 1.2; stroke-dasharray: 4 4; opacity: 0.5; transition: stroke 0.3s ease; fill: none; }
-.workflow-edge-base.completed { stroke: #059669; stroke-width: 1.5; opacity: 0.6; stroke-dasharray: none; }
-.workflow-edge-base.active { stroke: #94A3B8; stroke-dasharray: none; }
-.workflow-edge-flow { stroke: url(#flow-particle); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 20 100; animation: dagFlowMoving 1.5s linear infinite; filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.5)); fill: none; }
-@keyframes dagFlowMoving { from { stroke-dashoffset: 120; } to { stroke-dashoffset: 0; } }
-
+.parallel-layer-label::before,
+.parallel-layer-label::after {
+  content: '';
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.35), transparent);
+}
+.parallel-layer-label::before { top: 86px; }
+.parallel-layer-label::after { bottom: 86px; }
+.workflow-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+.workflow-edge-base {
+  stroke: #CBD5E1;
+  stroke-width: 1.4;
+  stroke-dasharray: 7 7;
+  opacity: 0.68;
+  transition: stroke 0.3s ease, opacity 0.3s ease;
+  fill: none;
+}
+.workflow-edge-base.completed {
+  stroke: #10B981;
+  stroke-width: 1.8;
+  opacity: 0.7;
+  stroke-dasharray: none;
+}
+.workflow-edge-base.active {
+  stroke: #60A5FA;
+  stroke-width: 1.8;
+  stroke-dasharray: none;
+  opacity: 0.8;
+}
+.workflow-edge-flow {
+  stroke: url(#flow-particle);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 26 130;
+  animation: dagFlowMoving 1.45s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.45));
+  fill: none;
+}
+@keyframes dagFlowMoving { from { stroke-dashoffset: 156; } to { stroke-dashoffset: 0; } }
 .workflow-agent-node {
   position: absolute;
   z-index: 5;
   appearance: none;
-  border: 1px solid #E5E7EB;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  border-radius: 16px;
-  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  border-radius: 18px;
+  padding: 12px;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.07);
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   overflow: hidden;
-  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
 }
-.workflow-agent-node:hover, .workflow-agent-node.is-selected { transform: translateY(-4px); border-color: #9CA3AF; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08); }
-.workflow-agent-node.is-waiting { opacity: 0.65; }
-.workflow-agent-node.is-running { border-color: transparent; background: #FFFFFF; box-shadow: 0 0 0 2px #3B82F6, 0 8px 30px rgba(59, 130, 246, 0.2); animation: workflowNodePulse 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-.workflow-agent-node.is-success { border-color: #A7F3D0; background: #FAFFFE; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08); }
-.workflow-agent-node.is-failed { border-color: #FECACA; background: #FFFBFB; }
-.workflow-agent-node.is-system-node { background: rgba(255, 255, 255, 0.95); border-color: #E5E7EB; }
-@keyframes workflowNodePulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(59,130,246,0.8), 0 8px 24px rgba(59,130,246,0.15); } 50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.4), 0 12px 36px rgba(59,130,246,0.25); } }
-.agent-node-topline { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.agent-icon-bubble { width: 28px; height: 28px; border-radius: 8px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.agent-node-name { font-size: 0.8rem; color: #111827; font-weight: var(--weight-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-status-dot { width: 7px; height: 7px; border-radius: 999px; background: #D1D5DB; margin-left: auto; }
-.workflow-agent-node.is-running .agent-status-dot { background: #10B981; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15); }
-.workflow-agent-node.is-success .agent-status-dot { background: #10B981; }
-.workflow-agent-node.is-failed .agent-status-dot { background: #EF4444; }
-.agent-node-message { margin: 0; min-height: 20px; font-size: 0.7rem; line-height: 1.45; color: #6B7280; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.agent-node-footer { display: flex; justify-content: space-between; align-items: center; color: #9CA3AF; font-size: 0.68rem; font-weight: var(--weight-semibold); }
-.agent-node-footer strong { color: #374151; font-family: var(--font-mono); }
-.agent-mini-progress { height: 3px; border-radius: 999px; overflow: hidden; background: #F3F4F6; }
-.agent-mini-progress span { display: block; height: 100%; border-radius: inherit; background: #374151; transition: width 0.35s ease; }
-.workflow-canvas::before,
-.workflow-canvas::after {
-  content: '↓';
+.workflow-agent-node::before {
+  content: '';
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #CBD5E1;
+}
+.workflow-agent-node:hover,
+.workflow-agent-node.is-selected {
+  transform: translateY(-5px);
+  border-color: #93C5FD;
+  box-shadow: 0 22px 44px rgba(37, 99, 235, 0.13);
+}
+.workflow-agent-node.is-waiting { opacity: 0.72; }
+.workflow-agent-node.is-running {
+  border-color: #60A5FA;
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12), 0 22px 50px rgba(37, 99, 235, 0.18);
+  animation: workflowNodePulse 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.workflow-agent-node.is-running::before { background: #3B82F6; }
+.workflow-agent-node.is-success {
+  border-color: #A7F3D0;
+  background: #FBFFFD;
+  box-shadow: 0 16px 34px rgba(16, 185, 129, 0.10);
+}
+.workflow-agent-node.is-success::before { background: #10B981; }
+.workflow-agent-node.is-failed {
+  border-color: #FECACA;
+  background: #FFFBFB;
+}
+.workflow-agent-node.is-failed::before { background: #EF4444; }
+.workflow-agent-node.is-system-node {
+  border-color: rgba(191, 219, 254, 0.95);
+  background: rgba(255, 255, 255, 0.98);
+}
+.workflow-agent-node.is-system-node::before { background: #2563EB; }
+@keyframes workflowNodePulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.agent-node-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.agent-icon-bubble {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: #F1F5F9;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  color: #9CA3AF;
-  font-weight: var(--weight-semibold);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+  font-size: 1rem;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
 }
-.workflow-canvas::before { top: 118px; }
-.workflow-canvas::after { top: 443px; }
-
+.workflow-agent-node.is-system-node .agent-icon-bubble { background: #EFF6FF; }
+.agent-node-name {
+  font-size: 0.88rem;
+  color: #0F172A;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #CBD5E1;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.workflow-agent-node.is-running .agent-status-dot { background: #3B82F6; box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.14); }
+.workflow-agent-node.is-success .agent-status-dot { background: #10B981; }
+.workflow-agent-node.is-failed .agent-status-dot { background: #EF4444; }
+.agent-node-message {
+  margin: 0;
+  min-height: 34px;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: #64748B;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.agent-node-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #94A3B8;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.agent-node-footer strong { color: #334155; font-family: var(--font-mono); }
+.agent-mini-progress { height: 4px; border-radius: 999px; overflow: hidden; background: #EEF2F7; }
+.agent-mini-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563EB, #06B6D4); transition: width 0.35s ease; }
+.workflow-canvas::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 426px;
+  width: 1px;
+  height: 94px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.1), rgba(37, 99, 235, 0.45), rgba(148, 163, 184, 0.1));
+  z-index: 1;
+}
 /* Inline Agent Detail Panel */
 .inline-agent-detail {
   margin-top: var(--space-4);
@@ -2052,11 +2215,522 @@ const handlePreview = (data: any) => {
 .elegant-dialog :deep(.el-dialog__title) { font-weight: var(--weight-extrabold); font-size: 1.2rem; color: var(--color-text); }
 .elegant-dialog :deep(.el-dialog__body) { padding: var(--space-8); background: var(--color-bg); }
 
+/* PPT 预览弹窗专属沉浸式样式 */
+.is-ppt-dialog :deep(.el-dialog__body) {
+  padding: 0 !important;
+  background: #F8FAFC !important;
+}
+
+.preview-dialog-body.is-ppt-preview {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.preview-dialog-body.is-ppt-preview :deep(.player-wrapper) {
+  margin-top: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
 h1, h2, h3, h4, .greeting-title, .cc-title { letter-spacing: -0.025em; color: var(--color-text); font-weight: var(--weight-bold); }
 p, .card-summary, .s-desc, .greeting-subtitle { line-height: 1.65; letter-spacing: 0.01em; color: var(--color-text-secondary); }
 @media (max-width: 1280px) {
-  .workflow-canvas {
-    height: 520px;
+  .workflow-shell { padding-left: var(--space-4); padding-right: var(--space-4); }
+  .workflow-canvas { width: 1160px; max-width: none; height: 620px; }
+}
+
+
+/* ================= Phase 3: 独立多智能体调度动画舞台 ================= */
+.workflow-stage-page {
+  background: #F8FAFC;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 18px 16px;
+  gap: 12px;
+}
+.stage-background-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.stage-grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.10) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 78%);
+}
+.stage-glow {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 999px;
+  filter: blur(120px);
+  opacity: 0.55;
+}
+.stage-glow-left { left: -80px; top: 80px; background: #DBEAFE; }
+.stage-glow-right { right: -100px; top: 260px; background: #E0E7FF; }
+.stage-topbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 22px;
+  padding: 14px 18px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
+  backdrop-filter: blur(18px);
+}
+.stage-title-area { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.stage-title-area h2 { margin: 0; font-size: 1.24rem; font-weight: 900; color: #0F172A; }
+.stage-title-area p { margin: 0; color: #64748B; font-size: 0.9rem; }
+.stage-route-progress { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.route-step {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #F1F5F9;
+  color: #94A3B8;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.route-step.done { background: #ECFDF5; color: #059669; }
+.route-step.active { background: #EFF6FF; color: #2563EB; box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16); }
+.route-line { width: 28px; height: 2px; border-radius: 99px; background: #CBD5E1; }
+.route-line.done { background: #34D399; }
+.route-line.active { background: linear-gradient(90deg, #34D399, #2563EB); }
+.stage-stat-group { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.stage-stat-card {
+  min-width: 92px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stage-stat-card.wide { min-width: 110px; }
+.stage-stat-card span { color: #64748B; font-size: 0.72rem; font-weight: 700; }
+.stage-stat-card strong { color: #0F172A; font-size: 1.22rem; line-height: 1; font-weight: 900; }
+.stage-stat-card small { color: #94A3B8; font-size: 0.78rem; margin-left: 2px; }
+.stage-log-btn { height: 42px; border-color: #BFDBFE !important; color: #2563EB !important; font-weight: 800; background: #FFFFFF !important; }
+.stage-generation-error { position: relative; z-index: 2; border-radius: 16px; }
+.agent-stage-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+.agent-stage-canvas,
+.agent-detail-panel,
+.output-dock-bar {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(18px);
+}
+.agent-stage-canvas {
+  position: relative;
+  border-radius: 28px;
+  padding: 16px;
+  overflow: hidden;
+  min-height: 740px;
+}
+.stage-canvas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  z-index: 8;
+  padding: 0 2px 8px;
+}
+.panel-eyebrow { display: inline-block; font-size: 0.68rem; font-weight: 900; color: #2563EB; letter-spacing: 0.08em; text-transform: uppercase; }
+.stage-canvas-header h3 { margin: 4px 0 0; font-size: 1.05rem; font-weight: 900; color: #0F172A; }
+.stage-control-pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.control-pill { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; border-radius: 999px; background: #F8FAFC; color: #64748B; border: 1px solid #E2E8F0; font-size: 0.72rem; font-weight: 800; }
+.control-pill.active { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
+.live-dot { width: 7px; height: 7px; border-radius: 999px; background: #22C55E; box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.14); }
+.dispatch-stage { position: relative; height: clamp(680px, calc(100vh - 220px), 860px); margin-top: 4px; overflow: hidden; border-radius: 26px; background: linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0.96)); }
+.stage-orbit-ring { position: absolute; left: 50%; top: 49%; transform: translate(-50%, -50%); border-radius: 999px; border: 1px dashed rgba(148, 163, 184, 0.35); pointer-events: none; }
+.ring-one { width: 560px; height: 380px; }
+.ring-two { width: min(1080px, 82%); height: 580px; opacity: 0.62; }
+.master-hub {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 250px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(180deg, #FFFFFF, #F8FAFC);
+  border: 1px solid #BFDBFE;
+  border-radius: 28px;
+  padding: 16px;
+  box-shadow: 0 28px 70px rgba(37, 99, 235, 0.16);
+  z-index: 5;
+  cursor: pointer;
+}
+.master-hub.is-running { animation: hubBreathing 1.8s ease-in-out infinite; }
+@keyframes hubBreathing { 0%, 100% { box-shadow: 0 28px 70px rgba(37, 99, 235, 0.16); } 50% { box-shadow: 0 32px 86px rgba(37, 99, 235, 0.28); } }
+.master-core { position: relative; width: 64px; height: 64px; margin: 0 auto 12px; display: grid; place-items: center; }
+.master-icon { position: relative; z-index: 2; width: 54px; height: 54px; border-radius: 18px; background: linear-gradient(135deg, #2563EB, #06B6D4); display: grid; place-items: center; font-size: 1.6rem; box-shadow: 0 14px 32px rgba(37, 99, 235, 0.28); }
+.master-pulse { position: absolute; inset: 0; border-radius: 24px; background: rgba(37, 99, 235, 0.14); animation: masterPulse 1.6s ease-out infinite; }
+@keyframes masterPulse { from { transform: scale(0.82); opacity: 0.9; } to { transform: scale(1.38); opacity: 0; } }
+.master-info { text-align: center; }
+.hub-kicker { color: #2563EB; font-size: 0.68rem; font-weight: 900; letter-spacing: 0.08em; }
+.master-info h4 { margin: 4px 0 5px; font-size: 1.12rem; font-weight: 900; color: #0F172A; }
+.master-info p { margin: 0; color: #64748B; font-size: 0.78rem; line-height: 1.45; min-height: 34px; }
+.master-progress-line { height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden; margin-top: 12px; }
+.master-progress-line span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563EB, #06B6D4); transition: width 0.3s ease; }
+.plan-card-stack { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 8px; z-index: 6; max-width: 74%; flex-wrap: wrap; justify-content: center; }
+.plan-mini-card { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); animation: planDrop 0.5s ease both; }
+@keyframes planDrop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.plan-mini-card span { width: 17px; height: 17px; border-radius: 999px; background: #EFF6FF; color: #2563EB; display: grid; place-items: center; font-size: 0.68rem; font-weight: 900; }
+.plan-mini-card strong { color: #334155; font-size: 0.72rem; white-space: nowrap; }
+.agent-workstation {
+  position: absolute;
+  width: 210px;
+  min-height: 112px;
+  border-radius: 22px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  padding: 12px;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.055);
+  z-index: 4;
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, opacity 0.25s ease;
+}
+.agent-workstation:hover,
+.agent-workstation.is-selected { transform: translateY(-4px); box-shadow: 0 24px 48px rgba(37, 99, 235, 0.14); border-color: #93C5FD; }
+.agent-workstation.is-waiting { opacity: 0.72; }
+.agent-workstation.is-running { border-color: #FDBA74; animation: stationRunning 1.8s ease-in-out infinite; }
+@keyframes stationRunning { 0%, 100% { box-shadow: 0 16px 34px rgba(251, 146, 60, 0.08); } 50% { box-shadow: 0 22px 54px rgba(251, 146, 60, 0.22); } }
+.agent-workstation.is-success { border-color: #A7F3D0; background: linear-gradient(180deg, #FFFFFF, #F0FDF4); }
+.agent-workstation.is-failed { border-color: #FECACA; background: linear-gradient(180deg, #FFFFFF, #FEF2F2); }
+.station-content { left: 4%; top: 42%; }
+.station-mindmap { left: 16%; top: 12%; }
+.station-code { right: 16%; top: 12%; }
+.station-quiz { right: 4%; top: 42%; }
+.station-reading { left: 17%; bottom: 26%; }
+.station-ppt { right: 17%; bottom: 26%; }
+.workstation-head { display: flex; align-items: center; gap: 10px; }
+.workstation-icon { width: 34px; height: 34px; border-radius: 13px; background: #F8FAFC; display: grid; place-items: center; font-size: 1.12rem; flex-shrink: 0; }
+.workstation-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.workstation-title strong { color: #0F172A; font-size: 0.88rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workstation-title span { color: #64748B; font-size: 0.7rem; font-weight: 800; }
+.workstation-status-dot { width: 9px; height: 9px; border-radius: 999px; background: #CBD5E1; flex-shrink: 0; }
+.agent-workstation.is-running .workstation-status-dot { background: #F97316; box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.14); }
+.agent-workstation.is-success .workstation-status-dot { background: #10B981; }
+.agent-workstation p { margin: 8px 0 9px; color: #64748B; font-size: 0.72rem; line-height: 1.38; min-height: 30px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.workstation-message-wrap { min-height: 38px; }
+.error-text { color: #F97316 !important; font-weight: 600; }
+.typewriter-text { display: inline-block; animation: textReveal 0.5s ease-out forwards; }
+@keyframes textReveal { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+.workstation-actions { margin-top: 8px; display: flex; justify-content: center; }
+.retry-btn { background: #FFF7ED; color: #EA580C; border: 1px solid #FFEDD5; border-radius: 99px; padding: 4px 12px; font-size: 0.7rem; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s; }
+.retry-btn:hover { background: #FFEDD5; transform: scale(1.02); }
+.workstation-progress { height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden; }
+.workstation-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563EB, #06B6D4); transition: width 0.35s ease; }
+.agent-workstation.is-success .workstation-progress span { background: #10B981; }
+.agent-workstation.is-running .workstation-progress span { background: linear-gradient(90deg, #F97316, #FBBF24); }
+.workstation-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; color: #94A3B8; font-size: 0.7rem; font-weight: 800; }
+.workstation-meta strong { color: #334155; }
+.dispatch-packet,
+.return-resource-card {
+  position: absolute;
+  z-index: 3;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  border: 1px solid #BFDBFE;
+  color: #2563EB;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.12);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  opacity: 0;
+}
+.dispatch-packet i { width: 7px; height: 7px; border-radius: 999px; background: #2563EB; }
+.dispatch-packet.active { opacity: 1; }
+.packet-content { left: 48%; top: 42%; animation: flyContent 2.8s ease-in-out infinite; }
+.packet-mindmap { left: 48%; top: 42%; animation: flyMindmap 3.1s ease-in-out infinite; }
+.packet-code { left: 48%; top: 42%; animation: flyCode 3s ease-in-out infinite; }
+.packet-quiz { left: 48%; top: 42%; animation: flyQuiz 3.2s ease-in-out infinite; }
+.packet-reading { left: 48%; top: 42%; animation: flyReading 3.1s ease-in-out infinite; }
+.packet-ppt { left: 48%; top: 42%; animation: flyPpt 3.3s ease-in-out infinite; }
+@keyframes flyContent { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(-410px,-92px) scale(1); opacity:0; } }
+@keyframes flyMindmap { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(-260px,-205px) scale(1); opacity:0; } }
+@keyframes flyCode { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(250px,-205px) scale(1); opacity:0; } }
+@keyframes flyQuiz { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(390px,-92px) scale(1); opacity:0; } }
+@keyframes flyReading { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(-350px,160px) scale(1); opacity:0; } }
+@keyframes flyPpt { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(330px,160px) scale(1); opacity:0; } }
+.review-assembly-lane { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; z-index: 5; }
+.lane-node { width: 250px; min-height: 66px; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.055); cursor: pointer; }
+.lane-node.is-running { border-color: #A78BFA; box-shadow: 0 18px 42px rgba(124, 58, 237, 0.16); }
+.lane-node.is-success { border-color: #A7F3D0; background: #F0FDF4; }
+.lane-icon { width: 42px; height: 42px; border-radius: 15px; background: #F8FAFC; display: grid; place-items: center; font-size: 1.25rem; flex-shrink: 0; }
+.lane-node strong { color: #0F172A; font-size: 0.86rem; font-weight: 900; }
+.lane-node p { margin: 3px 0 0; color: #64748B; font-size: 0.72rem; line-height: 1.35; }
+.lane-node-content { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; position: relative; }
+.lane-node em { margin-left: auto; font-style: normal; color: #334155; font-weight: 900; font-size: 0.8rem; }
+.reviewer-checklist { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; position: relative; overflow: hidden; padding-bottom: 2px; }
+.check-item { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #94A3B8; transition: color 0.3s; }
+.check-item.passed { color: #10B981; font-weight: 800; }
+.check-box { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #CBD5E1; display: grid; place-items: center; font-size: 0.6rem; transition: all 0.3s; }
+.check-item.passed .check-box { background: #10B981; border-color: #10B981; color: #FFFFFF; }
+.scanner-line { position: absolute; left: 0; right: 0; height: 20px; background: linear-gradient(180deg, rgba(16, 185, 129, 0) 0%, rgba(16, 185, 129, 0.15) 100%); border-bottom: 1px solid rgba(16, 185, 129, 0.5); animation: scanSweep 2s linear infinite; pointer-events: none; }
+@keyframes scanSweep { 0% { top: -20px; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+.lane-arrow { width: 42px; height: 2px; background: linear-gradient(90deg, #CBD5E1, #2563EB); position: relative; }
+.lane-arrow::after { content: ''; position: absolute; right: -2px; top: 50%; width: 8px; height: 8px; border-top: 2px solid #2563EB; border-right: 2px solid #2563EB; transform: translateY(-50%) rotate(45deg); }
+.return-resource-card { border-color: #A7F3D0; color: #059669; }
+.return-content { left: 18%; bottom: 125px; animation: returnFloat 2.3s ease-in-out infinite; opacity: 1; }
+.return-mindmap { left: 31%; bottom: 128px; animation: returnFloat 2.5s ease-in-out infinite; opacity: 1; }
+.return-code { right: 31%; bottom: 128px; animation: returnFloat 2.4s ease-in-out infinite; opacity: 1; }
+.return-quiz { right: 18%; bottom: 125px; animation: returnFloat 2.6s ease-in-out infinite; opacity: 1; }
+.return-reading { left: 23%; bottom: 92px; animation: returnFloat 2.6s ease-in-out infinite; opacity: 1; }
+.return-ppt { right: 23%; bottom: 92px; animation: returnFloat 2.5s ease-in-out infinite; opacity: 1; }
+@keyframes returnFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.agent-detail-panel { border-radius: 28px; padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+.detail-panel-header h3 { margin: 4px 0 0; font-size: 1.05rem; font-weight: 900; color: #0F172A; }
+.detail-agent-card { border: 1px solid #E2E8F0; border-radius: 22px; background: #F8FAFC; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.detail-agent-card.is-running { border-color: #FDBA74; background: #FFF7ED; }
+.detail-agent-card.is-success { border-color: #A7F3D0; background: #F0FDF4; }
+.detail-agent-top { display: flex; gap: 12px; align-items: flex-start; }
+.detail-agent-icon { width: 46px; height: 46px; border-radius: 16px; background: #FFFFFF; display: grid; place-items: center; font-size: 1.35rem; flex-shrink: 0; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05); }
+.detail-agent-top strong { color: #0F172A; font-size: 0.92rem; font-weight: 900; }
+.detail-agent-top p { margin: 4px 0 0; color: #64748B; font-size: 0.78rem; line-height: 1.45; }
+.detail-section-card { border: 1px solid #E2E8F0; border-radius: 22px; background: #FFFFFF; padding: 16px; }
+.detail-section-card h4 { margin: 0 0 12px; color: #0F172A; font-size: 0.92rem; font-weight: 900; }
+.compact-log-list { display: flex; flex-direction: column; gap: 10px; }
+.compact-log-item { display: flex; gap: 9px; align-items: flex-start; }
+.compact-log-item span { width: 8px; height: 8px; margin-top: 6px; border-radius: 999px; background: #2563EB; flex-shrink: 0; }
+.compact-log-item p { margin: 0; color: #475569; font-size: 0.78rem; line-height: 1.45; }
+.compact-empty { color: #94A3B8; font-size: 0.82rem; padding: 12px; text-align: center; border-radius: 14px; background: #F8FAFC; }
+.mini-stage-list { display: flex; flex-direction: column; gap: 12px; }
+.mini-stage-item { display: flex; gap: 10px; align-items: flex-start; }
+.mini-stage-item > span { width: 10px; height: 10px; border-radius: 999px; background: #CBD5E1; margin-top: 5px; flex-shrink: 0; }
+.mini-stage-item.is-running > span { background: #F97316; box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.12); }
+.mini-stage-item.is-success > span { background: #10B981; }
+.mini-stage-item.is-failed > span { background: #EF4444; }
+.mini-stage-item strong { color: #0F172A; font-size: 0.78rem; font-weight: 900; }
+.mini-stage-item p { margin: 2px 0 0; color: #64748B; font-size: 0.72rem; line-height: 1.35; }
+.output-dock-bar { position: relative; z-index: 2; border-radius: 22px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; }
+.output-dock-title { width: 130px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+.output-dock-title strong { color: #0F172A; font-size: 0.92rem; font-weight: 900; }
+.output-dock-list { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 8px; flex: 1; }
+.output-dock-item { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid #E2E8F0; border-radius: 16px; background: #F8FAFC; opacity: 0.72; transition: all 0.2s ease; cursor: default; }
+.output-dock-item.ready { opacity: 1; background: #F0FDF4; border-color: #A7F3D0; cursor: pointer; }
+.output-dock-item.ready:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(16, 185, 129, 0.10); }
+.output-dock-item > span { width: 26px; height: 26px; border-radius: 8px; background: #FFFFFF; display: grid; place-items: center; flex-shrink: 0; font-size: 0.9rem; }
+.output-dock-item strong { display: block; color: #0F172A; font-size: 0.72rem; font-weight: 900; white-space: nowrap; }
+.output-dock-item p { margin: 1px 0 0; color: #64748B; font-size: 0.65rem; white-space: nowrap; }
+.workflow-log-drawer :deep(.el-drawer__header) { margin-bottom: 0; padding: 20px 22px; border-bottom: 1px solid #E2E8F0; font-weight: 900; color: #0F172A; }
+.drawer-log-list { display: flex; flex-direction: column; gap: 14px; padding: 4px; }
+.drawer-log-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 16px; background: #F8FAFC; border: 1px solid #E2E8F0; }
+.drawer-log-dot { width: 10px; height: 10px; border-radius: 999px; background: #CBD5E1; margin-top: 5px; flex-shrink: 0; }
+.drawer-log-item.is-running .drawer-log-dot { background: #F97316; box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.12); }
+.drawer-log-item.is-success .drawer-log-dot { background: #10B981; }
+.drawer-log-item.is-failed .drawer-log-dot { background: #EF4444; }
+.drawer-log-item strong { color: #0F172A; font-size: 0.86rem; font-weight: 900; }
+.drawer-log-item p { margin: 4px 0 0; color: #64748B; font-size: 0.78rem; line-height: 1.45; }
+
+/* Stage spacious redesign: keep the workflow page focused on the animated collaboration stage. */
+.agent-detail-panel { display: none !important; }
+.stage-route-progress { row-gap: 6px; }
+.stage-canvas-header .panel-eyebrow { letter-spacing: 0.12em; }
+@media (min-width: 1500px) {
+  .agent-workstation { width: 222px; min-height: 118px; }
+  .station-content { left: 5%; }
+  .station-quiz { right: 5%; }
+  .station-mindmap { left: 18%; }
+  .station-code { right: 18%; }
+}
+@media (max-width: 1320px) {
+  .agent-stage-layout { grid-template-columns: 1fr; }
+  .agent-detail-panel { display: none; }
+  .stage-stat-group { flex-wrap: wrap; justify-content: flex-end; }
+  .output-dock-list { grid-template-columns: repeat(3, minmax(140px, 1fr)); }
+}
+@media (max-width: 980px) {
+  .workflow-stage-page { overflow-y: auto; }
+  .stage-topbar { align-items: flex-start; flex-direction: column; }
+  .agent-stage-canvas { min-height: 780px; }
+  .dispatch-stage { height: 700px; }
+  .master-hub { top: 35%; }
+  .station-content, .station-mindmap, .station-code, .station-quiz, .station-reading, .station-ppt { left: 50%; right: auto; transform: translateX(-50%); }
+  .station-content { top: 10%; }
+  .station-mindmap { top: 25%; }
+  .station-code { top: 50%; }
+  .station-quiz { top: 65%; }
+  .station-reading { top: 80%; bottom: auto; }
+  .station-ppt { top: 95%; bottom: auto; }
+  .review-assembly-lane { position: relative; left: auto; bottom: auto; transform: none; flex-direction: column; margin-top: 660px; }
+  .lane-arrow { width: 2px; height: 34px; }
+  .output-dock-bar { flex-direction: column; align-items: stretch; }
+  .output-dock-title { width: auto; }
+  .output-dock-list { grid-template-columns: 1fr; }
+}
+
+
+
+/* ================= Phase 3 output dock separation fix =================
+   资源产出区独立成底部模块，避免遮挡主体多智能体动画舞台。 */
+.workflow-stage-page {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 18px 14px;
+  gap: 10px;
+}
+
+.workflow-stage-page .stage-topbar {
+  flex-shrink: 0;
+}
+
+.workflow-stage-page .agent-stage-layout {
+  flex: 1 1 auto;
+}
+
+.workflow-stage-page .agent-stage-canvas {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-stage-page .stage-canvas-header {
+  flex-shrink: 0;
+}
+
+.workflow-stage-page .dispatch-stage {
+  flex: 1 1 auto;
+  margin-top: 4px;
+}
+
+.output-dock-section {
+  position: relative;
+  z-index: 4;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(18px);
+}
+
+.output-dock-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.output-dock-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.output-dock-heading strong {
+  color: #0F172A;
+  font-size: 0.98rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.output-dock-heading p {
+  margin: 0;
+  color: #64748B;
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.output-dock-section .output-dock-list {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.output-dock-section .output-dock-item {
+  min-width: 0;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: #F8FAFC;
+}
+
+.output-dock-section .output-dock-item > div {
+  min-width: 0;
+}
+
+.output-dock-section .output-dock-item strong,
+.output-dock-section .output-dock-item p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1440px) {
+  .output-dock-section {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .output-dock-heading {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .output-dock-heading p {
+    max-width: 360px;
+    text-align: right;
+  }
+
+  .output-dock-section .output-dock-list {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .workflow-stage-page {
+    overflow: auto;
+  }
+
+  .output-dock-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .output-dock-heading p {
+    text-align: left;
+    max-width: none;
+  }
+
+  .output-dock-section .output-dock-list {
+    grid-template-columns: 1fr;
   }
 }
 

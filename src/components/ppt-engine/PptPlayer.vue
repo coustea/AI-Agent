@@ -67,14 +67,33 @@ const currentIndex = ref(0);
 const containerRef = ref<HTMLElement | null>(null);
 const scale = ref(1);
 
-// 将 layout 名称转为 PascalCase (如 'grid_cards' -> 'GridCards')
+const themeModules = import.meta.glob('./themes/**/*.vue');
+let resizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  calculateScale();
+  
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      calculateScale();
+    });
+    resizeObserver.observe(containerRef.value);
+  }
+  
+  window.addEventListener('keydown', handleKeyDown);
+});
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  window.removeEventListener('keydown', handleKeyDown);
+});
+
 const toComponentName = (str: string) => {
   return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
 };
-
-// 使用 Vite 的 import.meta.glob 批量注册组件
-// 注意：由于我们在组合式 API 中使用，确保它能解析当前目录的 themes 文件夹
-const themeModules = import.meta.glob('./themes/**/*.vue');
 
 const getLayoutComponent = (theme: string, layout: string) => {
   const componentName = toComponentName(layout);
@@ -96,42 +115,36 @@ const nextSlide = () => {
   if (currentIndex.value < props.documentData.slides.length - 1) currentIndex.value++;
 };
 
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.key === 'ArrowRight' || e.key === 'PageDown') nextSlide();
+  if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
+};
+
 const calculateScale = () => {
   if (!containerRef.value || props.isExportMode) return;
   const { width, height } = containerRef.value.getBoundingClientRect();
   
-  // 给周围留一点边距 (比如 padding 40px)
-  const availableWidth = width - 40;
-  const availableHeight = height - 100; // 留给底部控制条的空间
+  if (width <= 32 || height <= 32) {
+    scale.value = 0.1;
+    return;
+  }
+
+  // 给周围留极小的均匀边距 (16px)
+  const availableWidth = width - 32;
+  const availableHeight = height - 32;
 
   const scaleX = availableWidth / 1280;
   const scaleY = availableHeight / 720;
   
-  // 保持 16:9 比例缩放
-  scale.value = Math.min(scaleX, scaleY);
+  // 保持 16:9 比例缩放，并保证缩放比例为正数且合理
+  scale.value = Math.max(0.05, Math.min(scaleX, scaleY));
 };
-
-onMounted(() => {
-  calculateScale();
-  window.addEventListener('resize', calculateScale);
-  
-  // 监听键盘左右键翻页
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' || e.key === 'PageDown') nextSlide();
-    if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
-  });
-});
-
-onUnmounted(() => {
-  window.removeEventListener('resize', calculateScale);
-});
 </script>
 
 <style scoped>
 .ppt-player-container {
   width: 100%;
   height: 100%;
-  min-height: 500px;
   display: flex;
   flex-direction: column;
   align-items: center;

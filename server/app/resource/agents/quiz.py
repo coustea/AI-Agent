@@ -6,18 +6,19 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
-from app.infra.logging import get_logger
+from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
-logger = get_logger(__name__)
+logger = get_module_logger("resource", sub="quiz")
 
 
 class QuizOption(BaseModel):
@@ -61,6 +62,9 @@ class QuizAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        start = time.perf_counter()
+        logger.info("Agent[quiz] 启动: learning_need=%s", state.learning_need[:50])
+
         await self.emitter.emit_agent("quiz", status="running", message="正在准备习题", progress=0)
         await self.emitter.emit_agent_action(
             "quiz", "analyze", detail="正在分析考点分布",
@@ -85,8 +89,11 @@ class QuizAgent(BaseResourceAgent):
             )
             quiz_data = result.model_dump(mode="json")
             content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
+
+            elapsed = time.perf_counter() - start
+            logger.debug("Agent[quiz] LLM 调用完成: %.2fs", elapsed)
         except Exception as exc:
-            logger.warning("[QuizAgent] 结构化输出失败，尝试 JSON 文本解析: %s", exc)
+            logger.warning("Agent[quiz] 结构化输出失败，尝试 fallback: %s", exc)
 
             await self.emitter.emit_agent_action(
                 "quiz", "fallback", detail="正在重新整理习题格式",
@@ -94,9 +101,15 @@ class QuizAgent(BaseResourceAgent):
             )
 
             response = await self.llm.ainvoke(full_prompt, temperature=0.3)
+
+            elapsed = time.perf_counter() - start
+            logger.debug("Agent[quiz] LLM fallback 调用完成: %.2fs", elapsed)
+
             raw = response.content if hasattr(response, "content") else str(response)
             quiz_data = self._salvage_quiz_payload(raw)
             if quiz_data is None:
+                elapsed = time.perf_counter() - start
+                logger.warning("Agent[quiz] 失败: %.2fs, error=习题 JSON 解析失败", elapsed)
                 return WorkerResult(success=False, error=f"习题 JSON 解析失败: {exc}")
             try:
                 validated = QuizPayload.model_validate(quiz_data)
@@ -127,6 +140,10 @@ class QuizAgent(BaseResourceAgent):
             current_step=4, total_steps=4, step_label="生成完成", progress=100,
         )
         await self.emitter.emit_agent("quiz", status="success", message=f"已生成 {len(questions)} 道习题", progress=100)
+
+        elapsed = time.perf_counter() - start
+        logger.info("Agent[quiz] 完成: %.2fs", elapsed)
+
         return WorkerResult(
             success=True,
             content=content,

@@ -127,6 +127,46 @@ def get_logger(name: str) -> LoguruLoggerProxy:
     return LoguruLoggerProxy(name)
 
 
+# Module-level logger factory for structured [Module][Sub] prefixes
+def get_module_logger(module: str, *, sub: str = "") -> LoguruLoggerProxy:
+    """Get a logger with [Module][Sub] prefix format.
+
+    Usage:
+        logger = get_module_logger("resource", sub="workflow")
+        logger.info("启动资源生成")  # outputs: [Resource][Workflow] 启动资源生成
+
+    The prefix is embedded in the logger name so it appears in the {extra[logger_name]} field.
+    """
+    if sub:
+        name = f"[{module.capitalize()}][{sub.capitalize()}]"
+    else:
+        name = f"[{module.capitalize()}]"
+    return LoguruLoggerProxy(name)
+
+
+# Global flag for debug mode
+_APP_DEBUG_MODE: bool = False
+
+
+def is_debug_mode() -> bool:
+    """Check if the application is running in debug mode."""
+    return _APP_DEBUG_MODE
+
+
+def configure_logging(*, debug: bool = False) -> None:
+    """Configure logging based on APP_DEBUG flag.
+
+    Must be called once at application startup (in main.py lifespan).
+    - debug=True (development): log level = INFO, all module logs visible
+    - debug=False (production): log level = INFO, step details and LLM calls at DEBUG
+    """
+    global _APP_DEBUG_MODE
+    _APP_DEBUG_MODE = debug
+
+    level = "DEBUG" if debug else "INFO"
+    setup_logging(level=level, force=True)
+
+
 def get_loguru_logger(name: str):
     """可选：直接拿 loguru logger（新代码可用），带上 logger_name。"""
     return _loguru_logger.bind(logger_name=name)
@@ -185,21 +225,23 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
 
     log_level = _parse_level(level or ("DEBUG" if _debug_logging_enabled() else LOG_LEVEL))
 
-    # 1) 配置 loguru sinks（enqueue=True 异步写入）
+    # 1) 配置 loguru sinks
+    # 控制台用 enqueue=False 保证实时输出（dev reload 场景下 enqueue 线程可能丢失）
+    # 文件用 enqueue=True 异步写入避免阻塞业务
     _loguru_logger.remove()
     _loguru_logger.configure(extra={"logger_name": "root"})
 
-    # 控制台
+    # 控制台（实时输出，不用 enqueue）
     _loguru_logger.add(
         sys.stdout,
         level=log_level,
         format=_LOGURU_FORMAT,
         backtrace=True,
         diagnose=False,
-        enqueue=True,
+        enqueue=False,
     )
 
-    # 全量日志：按天轮转，保留 30 天
+    # 全量日志：按天轮转，保留 30 天（异步写入）
     _loguru_logger.add(
         str(LOG_DIR / "app.log"),
         level=log_level,
@@ -212,7 +254,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
         enqueue=True,
     )
 
-    # 错误日志：按大小轮转，最多 10 份
+    # 错误日志：按大小轮转，最多 10 份（异步写入）
     _loguru_logger.add(
         str(LOG_DIR / "error.log"),
         level="ERROR",

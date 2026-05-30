@@ -4,17 +4,19 @@
 
 from __future__ import annotations
 
+import time
+
 from typing import Any
 
 from app.infra.llm import get_llm
-from app.infra.logging import get_logger
+from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import ExecutionPlan, WorkerResult, WorkerState
 from app.resource.utils import format_learner_profile_for_prompt
 
-logger = get_logger(__name__)
+logger = get_module_logger("resource", sub="planning")
 
 
 @register_agent
@@ -30,6 +32,9 @@ class PlanningAgent(BaseResourceAgent):
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """PlanningAgent uses its own run() because it has a different input/output contract."""
+        start = time.perf_counter()
+        logger.info("Agent[planning] 启动: learning_need=%s", state.learning_need[:50])
+
         await self.emitter.emit_agent("planning", status="running", message="正在分析你的学习需求")
         await self.emitter.emit_agent_action(
             "planning", "analyze", detail="正在分析你的学习需求",
@@ -55,11 +60,17 @@ class PlanningAgent(BaseResourceAgent):
             temperature=0.3,
         )
 
+        elapsed = time.perf_counter() - start
+        logger.debug("Agent[planning] LLM 调用完成: %.2fs", elapsed)
+
         await self.emitter.emit_agent_action(
             "planning", "done", detail="教学蓝图规划完成",
             current_step=3, total_steps=3, step_label="规划完成", progress=100,
         )
         await self.emitter.emit_agent("planning", status="success", message="教学蓝图规划完成", progress=100)
+
+        elapsed = time.perf_counter() - start
+        logger.info("Agent[planning] 完成: %.2fs", elapsed)
 
         return WorkerResult(
             success=True,

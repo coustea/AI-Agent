@@ -195,8 +195,10 @@ class CoursePathService:
 
     async def execute_generation_task(self, task_id: int) -> None:
         """在后台执行路径规划，并在每个真实边界持久化进度。"""
+        logger.info("[PathService] 开始执行路径规划任务: task_id=%s", task_id)
         task = await self.session.get(CoursePathGenerationTask, task_id)
         if task is None or task.status not in ACTIVE_GENERATION_STATUSES:
+            logger.warning("[PathService] 任务不存在或状态不匹配: task_id=%s", task_id)
             return
 
         try:
@@ -211,6 +213,7 @@ class CoursePathService:
             )
             await self._set_task_progress(task, "planning", 30, "路径规划智能体正在编排学习节点")
             plan = await self.agent.generate_plan(request, profile_dict)
+            logger.info("[PathService] 规划完成: task_id=%s nodes=%d", task_id, len(plan.nodes))
             await self._set_task_progress(task, "validating", 80, "正在校验依赖关系并保存学习地图")
             db_path, _ = await self._persist_generated_path(user_id=task.user_id, request=request, plan=plan, commit=False)
             task.generated_path_id = db_path.id
@@ -221,6 +224,7 @@ class CoursePathService:
             task.completed_at = datetime.now(timezone.utc)
             task.updated_at = task.completed_at
             await self.session.commit()
+            logger.info("[PathService] 路径规划任务完成: task_id=%s path_id=%s", task_id, db_path.id)
         except Exception as exc:
             await self.session.rollback()
             failed_task = await self.session.get(CoursePathGenerationTask, task_id)
@@ -231,7 +235,7 @@ class CoursePathService:
                 failed_task.completed_at = datetime.now(timezone.utc)
                 failed_task.updated_at = failed_task.completed_at
                 await self.session.commit()
-            logger.exception("后台路径规划任务异常 task_id=%s", task_id)
+            logger.exception("[PathService] 路径规划任务失败: task_id=%s err=%s", task_id, exc)
 
     async def _get_profile_dict(self, user_id: int) -> dict[str, Any]:
         profile = await self.memory_layer.get_or_create_profile(user_id)

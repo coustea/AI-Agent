@@ -58,13 +58,17 @@ def make_memory_tools(reader: DefaultMemoryReader) -> list:
         """读取当前用户的学习画像（基础水平、学习目标、偏好、薄弱点等）。
         如果想获取特定维度，传入维度的英文关键字（如 knowledge_foundation, weakness_points）。
         不传则返回完整画像概要。"""
-        return await reader.get_user_profile(dimension)
+        result = await reader.get_user_profile(dimension)
+        logger.debug("[MemoryTool] get_user_profile: dimension=%s len=%d", dimension, len(result))
+        return result
 
     @tool("get_long_term_memory")
     async def get_long_term_memory(category: str = None) -> str:
         """获取当前用户的长期学习记忆（历史偏好、有效辅导策略、纠正记录等）。
         如果想获取特定分类，传入分类的英文关键字（如 effective_strategies, stable_weaknesses）。
         不传则返回完整记忆概要。"""
-        return await reader.get_long_term_memory(category)
+        result = await reader.get_long_term_memory(category)
+        logger.debug("[MemoryTool] get_long_term_memory: category=%s len=%d", category, len(result))
+        return result
 
     return [get_user_profile, get_long_term_memory]

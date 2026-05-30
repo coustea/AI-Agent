@@ -4,15 +4,17 @@
 
 from __future__ import annotations
 
+import time
+
 from app.infra.llm import get_llm
-from app.infra.logging import get_logger
+from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
-logger = get_logger(__name__)
+logger = get_module_logger("resource", sub="content")
 
 
 @register_agent
@@ -27,6 +29,9 @@ class ContentAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        start = time.perf_counter()
+        logger.info("Agent[content] 启动: learning_need=%s", state.learning_need[:50])
+
         await self.emitter.emit_agent("content", status="running", message="正在准备课程讲解", progress=0)
         await self.emitter.emit_agent_action(
             "content", "prepare", detail="正在梳理核心概念",
@@ -46,6 +51,9 @@ class ContentAgent(BaseResourceAgent):
             temperature=0.3,
         )
 
+        elapsed = time.perf_counter() - start
+        logger.debug("Agent[content] LLM 调用完成: %.2fs", elapsed)
+
         await self.emitter.emit_agent_action(
             "content", "refine", detail="正在补充易错点解析",
             current_step=3, total_steps=4, step_label="补充解析", progress=70,
@@ -59,6 +67,10 @@ class ContentAgent(BaseResourceAgent):
             current_step=4, total_steps=4, step_label="生成完成", progress=100,
         )
         await self.emitter.emit_agent("content", status="success", message="课程讲解生成完成", progress=100)
+
+        elapsed = time.perf_counter() - start
+        logger.info("Agent[content] 完成: %.2fs", elapsed)
+
         return WorkerResult(
             success=True,
             content=content,

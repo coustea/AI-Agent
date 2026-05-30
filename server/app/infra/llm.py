@@ -108,6 +108,7 @@ class Llm:
             limit = text_cfg.get("concurrency", 10)
             if limit > 0:
                 self._text_semaphore = asyncio.Semaphore(limit)
+            logger.info("[LLM] 文本模型初始化: model=%s base_url=%s concurrency=%s", text_cfg["model_name"], self._text_base_url, limit)
 
         # 图片理解模型配置
         vision_cfg = get("models.vision", {})
@@ -124,6 +125,7 @@ class Llm:
             limit = vision_cfg.get("concurrency", 10)
             if limit > 0:
                 self._vision_semaphore = asyncio.Semaphore(limit)
+            logger.info("[LLM] 视觉模型初始化: model=%s concurrency=%s", vision_cfg["model_name"], limit)
 
     async def _acquire(self, sem: asyncio.Semaphore | None) -> asyncio.Semaphore | None:
         """获取并发槽位。"""
@@ -132,6 +134,7 @@ class Llm:
         try:
             await asyncio.wait_for(sem.acquire(), timeout=300)
         except asyncio.TimeoutError as e:
+            logger.error("[LLM] 并发超限，获取信号量超时")
             raise ServiceError("并发超限") from e
         return sem
 
@@ -181,7 +184,9 @@ class Llm:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            return await runnable.ainvoke(input_data)
+            result = await runnable.ainvoke(input_data)
+            logger.debug("[LLM] ainvoke 完成: model=%s", getattr(runnable, "model_name", "?"))
+            return result
         finally:
             if sem:
                 sem.release()
@@ -286,9 +291,12 @@ class Llm:
 
             if prefer_text_json:
                 try:
-                    return await _text_json_fallback()
+                    result = await _text_json_fallback()
+                    logger.debug("[LLM] ainvoke_json(text_fallback) 成功: schema=%s", schema.__name__)
+                    return result
                 except Exception as e:
                     errors.append(f"text_fallback={type(e).__name__}: {e}")
+                    logger.warning("[LLM] ainvoke_json(text_fallback) 失败: schema=%s err=%s", schema.__name__, e)
                     raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
             # 方式1: 使用 function calling
@@ -305,6 +313,7 @@ class Llm:
                     if args:
                         if isinstance(args, str):
                             args = json.loads(args)
+                        logger.debug("[LLM] ainvoke_json(tool_call) 成功: schema=%s", schema.__name__)
                         return schema.model_validate(args)
 
                 # 尝试从 content 解析
@@ -321,15 +330,19 @@ class Llm:
                 fallback = model.bind(response_format={"type": "json_object"})
                 resp = await fallback.ainvoke(input_data)
                 parsed = parse_first_json_object(getattr(resp, "content", "") or "")
+                logger.debug("[LLM] ainvoke_json(response_format) 成功: schema=%s", schema.__name__)
                 return schema.model_validate(parsed)
             except Exception as e:
                 errors.append(f"fallback={type(e).__name__}: {e}")
 
             # 方式3: 纯文本生成 + JSON 解析（兼容不支持 function calling 的 API）
             try:
-                return await _text_json_fallback()
+                result = await _text_json_fallback()
+                logger.debug("[LLM] ainvoke_json(text_fallback) 成功: schema=%s", schema.__name__)
+                return result
             except Exception as e:
                 errors.append(f"text_fallback={type(e).__name__}: {e}")
+                logger.error("[LLM] ainvoke_json 全部失败: schema=%s errors=%s", schema.__name__, "; ".join(errors))
                 raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
         finally:
@@ -359,7 +372,9 @@ class Llm:
             model = self._vision_model
             if temperature != 0.3:
                 model = model.bind(temperature=temperature)
-            return await model.ainvoke(input_data)
+            result = await model.ainvoke(input_data)
+            logger.debug("[LLM] vision 完成")
+            return result
         finally:
             if sem:
                 sem.release()

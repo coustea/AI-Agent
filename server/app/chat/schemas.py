@@ -89,7 +89,7 @@ class TutorState(TypedDict, total=False):
 # 教学图解 Schema
 # ===================================================================
 
-TeachingDiagramType = Literal["contrast", "journey", "anatomy", "simulation"]
+TeachingDiagramType = Literal["node_graph", "sequence_timeline", "grid_timeline"]
 
 
 class TeachingDiagramModel(BaseModel):
@@ -98,60 +98,82 @@ class TeachingDiagramModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ContrastSide(TeachingDiagramModel):
-    label: str = Field(min_length=1, max_length=30)
-    definition: str = Field(min_length=1, max_length=160)
-    signals: list[str] = Field(min_length=1, max_length=4)
-    example: str = Field(min_length=1, max_length=160)
+# 1. 拓扑图谱原语 (Node Graph Primitive)
+NodeShapeType = Literal["circle", "rect", "diamond", "capsule", "actor", "cylinder", "uml_class"]
+EdgeArrowType = Literal["association", "dependency", "inheritance", "aggregation", "composition", "none"]
 
 
-class ContrastPayload(TeachingDiagramModel):
-    decision_rule: str = Field(min_length=1, max_length=240)
-    left: ContrastSide
-    right: ContrastSide
-    scenario_conclusion: str = Field(min_length=1, max_length=240)
+class GraphNode(TeachingDiagramModel):
+    id: str = Field(description="节点唯一ID，用于边连接")
+    label: str = Field(description="节点显示的标题文本")
+    x: int = Field(description="布局百分比 X坐标 (0-100)，指导前端对齐排版")
+    y: int = Field(description="布局百分比 Y坐标 (0-100)，指导前端对齐排版")
+    shape: NodeShapeType = Field(default="circle", description="节点形状")
+    state: Literal["unvisited", "active", "visited"] = Field(default="unvisited", description="遍历状态")
+    fields: Optional[list[str]] = Field(default=None, description="分栏字段列表。UML类图显示属性/方法，E-R显示属性")
+    tooltip: Optional[str] = Field(default=None, description="Hover 时展示的辅助教学气泡说明")
 
 
-class JourneyStep(TeachingDiagramModel):
-    title: str = Field(min_length=1, max_length=40)
-    action: str = Field(min_length=1, max_length=180)
-    rationale: str = Field(min_length=1, max_length=180)
-    output: str = Field(min_length=1, max_length=180)
-    warning: Optional[str] = Field(default=None, max_length=160)
+class GraphEdge(TeachingDiagramModel):
+    source: str = Field(description="源节点 ID")
+    target: str = Field(description="目标节点 ID")
+    label: Optional[str] = Field(default=None, description="连线上显示的文本说明")
+    arrow_type: EdgeArrowType = Field(default="association", description="线型与 UML 箭头关系类型")
+    is_flowing: bool = Field(default=False, description="是否处于流动状态（如数据流向）")
+    is_backtrack: bool = Field(default=False, description="是否为算法回溯边")
 
 
-class JourneyPayload(TeachingDiagramModel):
-    goal: str = Field(min_length=1, max_length=200)
-    steps: list[JourneyStep] = Field(min_length=3, max_length=6)
-    result: str = Field(min_length=1, max_length=240)
+class NodeGraphPayload(TeachingDiagramModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
 
 
-class AnatomyPart(TeachingDiagramModel):
-    name: str = Field(min_length=1, max_length=40)
-    responsibility: str = Field(min_length=1, max_length=180)
-    detail: str = Field(min_length=1, max_length=220)
-    interaction_cue: Optional[str] = Field(default=None, max_length=160)
+# 2. 时序轨原语 (Sequence Timeline Primitive)
+class SequenceMessage(TeachingDiagramModel):
+    sender: str = Field(description="发送方参与者")
+    receiver: str = Field(description="接收方参与者")
+    label: str = Field(description="消息主标签（如 SYN）")
+    details: Optional[str] = Field(default=None, description="详细字段或交互细节")
+    highlight: bool = Field(default=False, description="是否高亮显示本条交互线")
 
 
-class AnatomyPayload(TeachingDiagramModel):
-    subject: str = Field(min_length=1, max_length=80)
-    parts: list[AnatomyPart] = Field(min_length=3, max_length=7)
-    interaction_summary: str = Field(min_length=1, max_length=240)
+class SequenceParticipantState(TeachingDiagramModel):
+    participant: str = Field(description="参与者实体名")
+    state_label: str = Field(description="此时该实体的内部状态机状态（如 ESTABLISHED）")
 
 
-class SimulationFrame(TeachingDiagramModel):
-    stage: str = Field(min_length=1, max_length=40)
-    state: str = Field(min_length=1, max_length=200)
-    changed: str = Field(min_length=1, max_length=200)
-    reason: str = Field(min_length=1, max_length=200)
-    learner_focus: str = Field(min_length=1, max_length=160)
+class SequenceStep(TeachingDiagramModel):
+    step_index: int = Field(description="步骤序号")
+    message: SequenceMessage = Field(description="传输的报文数据")
+    active_states: list[SequenceParticipantState] = Field(default_factory=list, description="此步后参与者的状态机变化")
 
 
-class SimulationPayload(TeachingDiagramModel):
-    scenario: str = Field(min_length=1, max_length=200)
-    initial_state: str = Field(min_length=1, max_length=200)
-    frames: list[SimulationFrame] = Field(min_length=2, max_length=6)
-    result: str = Field(min_length=1, max_length=240)
+class SequenceTimelinePayload(TeachingDiagramModel):
+    participants: list[str] = Field(description="参与者列表，如 ['Client', 'Server']")
+    steps: list[SequenceStep] = Field(description="步骤时序列表")
+    final_state: str = Field(description="状态交互的终极总结描述")
+
+
+# 3. 时空网格原语 (Grid Timeline Primitive)
+GridCellState = Literal["running", "ready", "blocked", "allocated", "free", "pointer", "highlight"]
+
+
+class GridCell(TeachingDiagramModel):
+    row_label: str = Field(description="行标识，如 P1, Stack, Heap, Page0")
+    col_label: str = Field(description="列/刻度标识，如 0ms, 0x00, Offset")
+    state: GridCellState = Field(default="highlight", description="单元格显示状态")
+    label: str = Field(description="单元格内文字")
+    pointer_target: Optional[str] = Field(default=None, description="指针指向的目标（若有，写 row_label/col_label 格式）")
+    tooltip: Optional[str] = Field(default=None, description="单元格详细说明")
+
+
+class GridTimelinePayload(TeachingDiagramModel):
+    orientation: Literal["horizontal", "vertical"] = Field(default="horizontal", description="排布方向")
+    rows: list[str] = Field(description="行轴集合")
+    cols: list[str] = Field(description="列/时间轴集合")
+    cells: list[GridCell] = Field(description="单元格数据")
+    call_stack: Optional[list[str]] = Field(default=None, description="相关的函数调用栈帧快照（如展示递归）")
+    timeline_summary: str = Field(description="时空排布的总结性描述")
 
 
 class InsightCanvas(TeachingDiagramModel):
@@ -165,15 +187,14 @@ class InsightCanvas(TeachingDiagramModel):
     pitfall: Optional[str] = Field(default=None, max_length=240)
     try_it: str = Field(min_length=1, max_length=240)
     personalization_note: Optional[str] = Field(default=None, max_length=240)
-    payload: Union[ContrastPayload, JourneyPayload, AnatomyPayload, SimulationPayload]
+    payload: Union[NodeGraphPayload, SequenceTimelinePayload, GridTimelinePayload]
 
     @model_validator(mode="after")
     def validate_payload_type(self) -> "InsightCanvas":
         expected_type = {
-            "contrast": ContrastPayload,
-            "journey": JourneyPayload,
-            "anatomy": AnatomyPayload,
-            "simulation": SimulationPayload,
+            "node_graph": NodeGraphPayload,
+            "sequence_timeline": SequenceTimelinePayload,
+            "grid_timeline": GridTimelinePayload,
         }[self.type]
         if not isinstance(self.payload, expected_type):
             raise ValueError("teaching diagram payload must match diagram type")

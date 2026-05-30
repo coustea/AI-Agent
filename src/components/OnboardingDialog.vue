@@ -25,7 +25,21 @@
               </div>
             </div>
           </div>
-          <div class="header-right"></div>
+          <div class="header-right">
+            <el-dropdown trigger="click" @command="handleHeaderCommand" class="more-dropdown">
+              <el-button class="header-action-btn" circle>
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="never" class="never-prompt-item">不再弹出</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button class="header-action-btn close-btn" circle @click="handleHeaderCommand('skip')" title="稍后完善">
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
         </div>
       </header>
 
@@ -85,18 +99,6 @@
                 </template>
               </el-input>
             </div>
-
-            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
-              <div class="action-bar-left">
-                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
-                  <el-icon><Clock /></el-icon>稍后完善
-                </el-button>
-                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
-                  <el-icon><Close /></el-icon>不再弹出
-                </el-button>
-              </div>
-              <div class="action-bar-right"></div>
-            </div>
           </div>
 
           <div v-else-if="currentQuestion === 'courses' && !isTyping && !isStreaming" class="action-panel" key="courses">
@@ -142,14 +144,6 @@
             </div>
 
             <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.3s">
-              <div class="action-bar-left">
-                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
-                  <el-icon><Clock /></el-icon>稍后完善
-                </el-button>
-                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
-                  <el-icon><Close /></el-icon>不再弹出
-                </el-button>
-              </div>
               <div class="action-bar-right">
                 <el-button type="primary" class="primary-send-btn" @click="submitCourses">
                   确认并继续 <el-icon class="ml-1"><Position/></el-icon>
@@ -183,14 +177,6 @@
             </div>
 
             <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.2s">
-              <div class="action-bar-left">
-                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
-                  <el-icon><Clock /></el-icon>稍后完善
-                </el-button>
-                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
-                  <el-icon><Close /></el-icon>不再弹出
-                </el-button>
-              </div>
               <div class="action-bar-right">
                 <el-button type="primary" class="primary-send-btn" @click="submitSchool">
                   确认发送 <el-icon class="ml-1"><Position/></el-icon>
@@ -215,14 +201,6 @@
             </div>
 
             <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
-              <div class="action-bar-left">
-                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
-                  <el-icon><Clock /></el-icon>稍后完善
-                </el-button>
-                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
-                  <el-icon><Close /></el-icon>不再弹出
-                </el-button>
-              </div>
               <div class="action-bar-right">
                 <el-button type="primary" class="primary-send-btn" @click="submitGrade">
                   确认发送 <el-icon class="ml-1"><Position/></el-icon>
@@ -247,14 +225,6 @@
             </div>
 
             <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
-              <div class="action-bar-left">
-                <el-button plain round class="outline-action-btn" @click="handleHeaderCommand('skip')">
-                  <el-icon><Clock /></el-icon>稍后完善
-                </el-button>
-                <el-button plain round class="outline-action-btn danger-outline" @click="handleHeaderCommand('never')">
-                  <el-icon><Close /></el-icon>不再弹出
-                </el-button>
-              </div>
               <div class="action-bar-right">
                 <el-button type="primary" class="primary-send-btn finish-btn" :loading="submitting" @click="submitGoal">
                   <span class="finish-text">生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
@@ -279,10 +249,11 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Service, Position, Search, Clock, Close, Check, Plus } from '@element-plus/icons-vue'
+import { User, Service, Position, Search, Close, Check, Plus, MoreFilled } from '@element-plus/icons-vue'
 
 import { getProfileOnboarding, updateProfileOnboarding, searchSchools } from '@/api/ai'
 import type { ProfileOnboardingUpdate, SchoolItem } from '@/api/ai'
+import { updateMe } from '@/api/auth'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -323,8 +294,8 @@ const isAllStepsFinished = computed(() => {
 })
 
 // 优化：删除了原本列表末尾的 '其他' 选项
-const PRESET_MAJORS = ['计算机科学', '软件工程', '人工智能', '数据科学', '网络安全', '电子信息']
-const PRESET_COURSES = ['数据结构', '操作系统', '计算机网络', '数据库原理', '算法', '机器学习']
+const PRESET_MAJORS = ['计算机科学与技术', '软件工程', '人工智能', '数据科学与大数据技术', '网络空间安全', '电子信息工程']
+const PRESET_COURSES = ['数据结构与算法', '操作系统', '计算机网络', '数据库系统概论', '编译原理', '机器学习']
 const PRESET_GOALS = [
   '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
   '系统学习进阶', '零基础快速入门', '竞赛夺奖', '兴趣拓展', '行业证书考取'
@@ -570,7 +541,15 @@ const submitForm = async () => {
   }
 }
 
-const handleHeaderCommand = (cmd: string) => {
+const handleHeaderCommand = async (cmd: string) => {
+  if (cmd === 'never') {
+    try {
+      await updateMe({ is_first_login: false })
+      ElMessage.success('画像引导已关闭，不再弹出。')
+    } catch (e) {
+      console.error('Failed to update onboarding status', e)
+    }
+  }
   if (cmd === 'skip' || cmd === 'never') {
     visible.value = false;
     emit('success');
@@ -684,7 +663,40 @@ const handleHeaderCommand = (cmd: string) => {
   font-weight: var(--weight-medium);
 }
 
-.header-right { width: 24px; height: 10px; }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.header-action-btn {
+  border: none !important;
+  background: transparent !important;
+  color: #86868b !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 16px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base) !important;
+  padding: 0 !important;
+}
+
+.header-action-btn:hover {
+  background: #f5f5f7 !important;
+  color: #1d1d1f !important;
+}
+
+.header-action-btn.close-btn:hover {
+  background: #fef2f2 !important;
+  color: #ef4444 !important;
+}
+
+:deep(.never-prompt-item) {
+  color: #ef4444 !important;
+  font-weight: 500;
+}
 
 /* Messages Area */
 .chat-messages {

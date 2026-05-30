@@ -127,6 +127,7 @@ class ChatUseCases:
     async def create_session(self, user_id: int, title: str = "新对话") -> dict[str, Any]:
         """创建新会话。"""
         session = await self._memory_service.create_session(user_id=user_id, title=title)
+        logger.info("[ChatUseCases] 创建会话: user_id=%s session_id=%s", user_id, session.id)
         return {"id": session.id, "title": session.title}
 
     async def archive_session(self, user_id: int, session_id: str) -> bool:
@@ -439,6 +440,10 @@ class ChatUseCases:
         """流式对话事件生成器，供 SSE 和 avatar bridge 共用。"""
         effective_session = session_id or self.default_session_id(user_id)
         merged_attachments = list(dict.fromkeys(attachments or []))
+        logger.info(
+            "[ChatUseCases] 开始对话: user_id=%s session_id=%s msg_len=%d attachments=%d search=%s diagram=%s",
+            user_id, effective_session, len(user_message or ""), len(merged_attachments), enable_search, need_teaching_diagram,
+        )
         normalized_history = list(history or [])
         if not normalized_history and (user_message or "").strip():
             normalized_history = [

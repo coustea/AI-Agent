@@ -51,6 +51,18 @@ export function getMe() {
   return http.get<ApiResponse<LoginData['user']>>('/users/me')
 }
 
+export interface UserUpdateParams {
+  username?: string
+  email?: string
+  avatar?: string
+  is_first_login?: boolean
+}
+
+export function updateMe(params: UserUpdateParams) {
+  return http.patch<ApiResponse<LoginData['user']>>('/users/me', params)
+}
+
+
 export interface AvatarUploadData {
   avatar: string
 }

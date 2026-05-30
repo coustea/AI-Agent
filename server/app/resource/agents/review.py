@@ -4,15 +4,17 @@
 
 from __future__ import annotations
 
+import time
+
 from app.infra.llm import get_llm
-from app.infra.logging import get_logger
+from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
-logger = get_logger(__name__)
+logger = get_module_logger("resource", sub="review")
 
 
 @register_agent
@@ -27,6 +29,9 @@ class ReviewAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        start = time.perf_counter()
+        logger.info("Agent[review] 启动: learning_need=%s", state.learning_need[:50])
+
         await self.emitter.emit_agent("review", status="running", message="正在审核生成结果", progress=0)
         await self.emitter.emit_agent_action(
             "review", "inspect", detail="正在检查内容质量",
@@ -44,6 +49,10 @@ class ReviewAgent(BaseResourceAgent):
             f"{prompt}\n\n{input_text}",
             temperature=0.2,
         )
+
+        elapsed = time.perf_counter() - start
+        logger.debug("Agent[review] LLM 调用完成: %.2fs", elapsed)
+
         content = response.content if hasattr(response, "content") else str(response)
 
         await self.emitter.emit_agent_action(
@@ -51,6 +60,10 @@ class ReviewAgent(BaseResourceAgent):
             current_step=3, total_steps=3, step_label="审核完成", progress=100,
         )
         await self.emitter.emit_agent("review", status="success", message="审核完成", progress=100)
+
+        elapsed = time.perf_counter() - start
+        logger.info("Agent[review] 完成: %.2fs", elapsed)
+
         return WorkerResult(
             success=True,
             content=content,

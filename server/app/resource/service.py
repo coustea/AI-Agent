@@ -18,7 +18,6 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
-from app.resource import schemas
 from app.resource.events import AgentEventEmitter, ResourceGenerateEvent
 from app.resource.schemas import (
     ExecutionPlan,
@@ -28,7 +27,6 @@ from app.resource.schemas import (
     ReviewResult,
     WorkerResult,
 )
-from app.resource.agents import AGENT_REGISTRY
 from app.infra.logging import get_module_logger
 
 logger = get_module_logger("resource", sub="workflow")
@@ -549,8 +547,8 @@ async def bg_gen_task(
         emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
 
         success = False
+        start_time = time.perf_counter()
         try:
-            start_time = time.perf_counter()
             logger.info("启动资源生成: user_id=%s, resource_id=%s, agents=%s", user_id, resource_id, enabled_agents)
             # 1. PlanningAgent
             planning_state = WorkerState(
@@ -585,8 +583,8 @@ async def bg_gen_task(
             results: dict[str, WorkerResult] = {}
 
             async def run_one(agent_id: str) -> None:
+                agent_start = time.perf_counter()
                 try:
-                    agent_start = time.perf_counter()
                     logger.info("Agent[%s] 启动", agent_id)
                     state = WorkerState(
                         resource_id=resource_id,
@@ -723,8 +721,8 @@ async def bg_single_gen_task(
         emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
 
         success = False
+        start_time = time.perf_counter()
         try:
-            start_time = time.perf_counter()
             logger.info("启动单智能体生成: user_id=%s, resource_id=%s, agent=%s", user_id, resource_id, agent_id)
             state = WorkerState(
                 learning_need=learning_need,

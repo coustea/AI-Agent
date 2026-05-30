@@ -10,12 +10,14 @@ from app.auth.schemas import UserLogin, UserRead, UserRegister, UserUpdate
 from app.auth.security import get_current_user
 from app.auth.service import auth_usecases
 from app.infra.database import get_session
+from app.infra.logging import get_logger
 from app.infra.models import User
 from app.infra.paths import AVATAR_DIR
 from app.infra.response import HttpResponse
 
 router = APIRouter()
 bearer_scheme = HTTPBearer()
+logger = get_logger(__name__)
 
 
 @router.post("")
@@ -25,7 +27,9 @@ async def create_user(
 ):
     result = await auth_usecases.register(session, data)
     if not result:
+        logger.warning("[AuthAPI] 注册失败，用户名已存在: %s", data.username)
         return HttpResponse.error(code=400, message="用户名已存在")
+    logger.info("[AuthAPI] 注册成功: user_id=%s username=%s", result["user"].id, data.username)
     return HttpResponse.success(data=result)
 
 
@@ -36,7 +40,9 @@ async def login(
 ):
     result = await auth_usecases.login(session, data)
     if not result:
+        logger.warning("[AuthAPI] 登录失败: username=%s", data.username)
         return HttpResponse.error(code=401, message="用户名或密码错误")
+    logger.info("[AuthAPI] 登录成功: user_id=%s username=%s", result["user"].id, data.username)
     return HttpResponse.success(data=result)
 
 
@@ -48,6 +54,7 @@ async def logout(
     session: AsyncSession = Depends(get_session),
 ):
     await auth_usecases.logout(session, credentials.credentials)
+    logger.info("[AuthAPI] 登出成功: user_id=%s", current_user.id)
     background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)
     return HttpResponse.success(message="退出登录成功")
 

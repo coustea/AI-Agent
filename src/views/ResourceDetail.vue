@@ -114,9 +114,9 @@
         width="78%"
         top="6vh"
         destroy-on-close
-        class="resource-preview-dialog"
+        :class="['resource-preview-dialog', { 'is-ppt-dialog': previewItem?.type === 'ppt' }]"
     >
-      <div v-if="previewItem" class="preview-dialog-body">
+      <div v-if="previewItem" class="preview-dialog-body" :class="{ 'is-ppt-preview': previewItem.type === 'ppt' }">
         <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem" />
         <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem" />
         <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
@@ -701,8 +701,27 @@ const formatTime = (time: string | null) => {
 
 .resource-preview-dialog :deep(.el-dialog) { border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25); }
 .resource-preview-dialog :deep(.el-dialog__header) { padding: 24px 32px 20px; margin-right: 0; border-bottom: 1px solid #F1F5F9; }
-.resource-preview-dialog :deep(.el-dialog__title) { font-size: 1.25rem; font-weight: 800; color: #0F172A; }
 .resource-preview-dialog :deep(.el-dialog__body) { background: #F8FAFC; padding: 24px 32px 32px; }
+
+/* PPT 预览弹窗专属沉浸式样式 */
+.is-ppt-dialog :deep(.el-dialog__body) {
+  padding: 0 !important;
+  background: #F8FAFC !important;
+}
+
+.preview-dialog-body.is-ppt-preview {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  max-height: none !important;
+}
+
+.preview-dialog-body.is-ppt-preview :deep(.player-wrapper) {
+  margin-top: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
 
 .preview-dialog-body {
   max-height: 70vh; overflow-y: auto; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px;

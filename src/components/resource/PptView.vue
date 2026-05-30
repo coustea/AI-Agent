@@ -54,6 +54,13 @@ const pptDocument = computed<PPTDocument | null>(() => {
   transition: all 0.3s ease;
 }
 
+.technical-frame.ppt-item {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .compact .technical-frame {
   padding: 0;
   background: transparent;
@@ -89,7 +96,8 @@ const pptDocument = computed<PPTDocument | null>(() => {
 .player-wrapper {
   margin-top: 10px;
   width: 100%;
-  height: 500px;
+  aspect-ratio: 16 / 9;
+  max-height: 75vh;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #E2E8F0;
@@ -97,7 +105,9 @@ const pptDocument = computed<PPTDocument | null>(() => {
 }
 
 .compact .player-wrapper {
-  height: 200px;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  max-height: 25vh;
   margin-top: 0;
 }
 

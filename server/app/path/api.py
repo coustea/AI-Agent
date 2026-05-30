@@ -3,6 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
 from app.infra.database import get_session
+from app.infra.logging import get_logger
 from app.infra.models import User
 from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest, PathPlanFeedbackRequest
 from app.path.service import CoursePathService, bg_generate_path_task
@@ -10,6 +11,7 @@ from app.resource.service import bg_gen_task
 from app.infra.response import HttpResponse
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
+logger = get_logger(__name__)
 
 
 @router.post("/generate")
@@ -20,6 +22,7 @@ async def generate_path(
     session: AsyncSession = Depends(get_session),
 ):
     """创建异步路径规划任务，避免慢速模型调用阻塞 HTTP 请求。"""
+    logger.info("[PathAPI] 路径规划请求: user_id=%s topic=%s", current_user.id, request.topic)
     service = CoursePathService(session)
     result = await service.start_generation_task(user_id=current_user.id, request=request)
     if result["should_schedule"]:
@@ -80,6 +83,7 @@ async def generate_node_resources(
     session: AsyncSession = Depends(get_session),
 ):
     """为路径节点生成学习资源。后端根据节点内容自动构造 learning_need。"""
+    logger.info("[PathAPI] 节点资源生成: user_id=%s node_id=%s", current_user.id, node_id)
     service = CoursePathService(session)
 
     try:
@@ -147,6 +151,7 @@ async def adjust_path(
     session: AsyncSession = Depends(get_session),
 ):
     """根据用户反馈或当前画像，动态纠偏并重新编排后续学习节点。"""
+    logger.info("[PathAPI] 路径纠偏: user_id=%s", current_user.id)
     service = CoursePathService(session)
     try:
         updated_path = await service.adjust_path(user_id=current_user.id, request=request)

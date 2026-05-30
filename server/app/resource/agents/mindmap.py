@@ -4,15 +4,17 @@
 
 from __future__ import annotations
 
+import time
+
 from app.infra.llm import get_llm
-from app.infra.logging import get_logger
+from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
-logger = get_logger(__name__)
+logger = get_module_logger("resource", sub="mindmap")
 
 
 @register_agent
@@ -27,6 +29,9 @@ class MindmapAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        start = time.perf_counter()
+        logger.info("Agent[mindmap] 启动: learning_need=%s", state.learning_need[:50])
+
         await self.emitter.emit_agent("mindmap", status="running", message="正在准备思维导图", progress=0)
         await self.emitter.emit_agent_action(
             "mindmap", "extract", detail="正在提取知识要点",
@@ -44,6 +49,10 @@ class MindmapAgent(BaseResourceAgent):
             f"{prompt}\n\n{input_text}",
             temperature=0.3,
         )
+
+        elapsed = time.perf_counter() - start
+        logger.debug("Agent[mindmap] LLM 调用完成: %.2fs", elapsed)
+
         content = response.content if hasattr(response, "content") else str(response)
         markdown = self._clean_markdown(content)
 
@@ -70,6 +79,10 @@ class MindmapAgent(BaseResourceAgent):
             current_step=3, total_steps=3, step_label="生成完成", progress=100,
         )
         await self.emitter.emit_agent("mindmap", status="success", message="思维导图生成完成", progress=100)
+
+        elapsed = time.perf_counter() - start
+        logger.info("Agent[mindmap] 完成: %.2fs", elapsed)
+
         return WorkerResult(
             success=True,
             content=markdown,

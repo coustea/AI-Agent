@@ -9,10 +9,12 @@ from app.auth.security import get_current_user, get_current_user_flexible
 from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import evaluation_service
 from app.infra.database import get_session
+from app.infra.logging import get_logger
 from app.infra.models import User
 from app.infra.response import HttpResponse
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.post("/evaluation/events")
@@ -26,6 +28,7 @@ async def record_learning_event(
         user_id=current_user.id,
         payload=payload,
     )
+    logger.info("[EvalAPI] 学习事件记录: user_id=%s event_type=%s", current_user.id, payload.event_type)
     return HttpResponse.success(data={"id": event.id if event else None})
 
 

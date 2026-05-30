@@ -10,8 +10,11 @@ from typing import TYPE_CHECKING, AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
+from app.infra.database import get_session
+from app.infra.logging import get_logger
 from app.infra.models import User
 from app.chat.request import ChatHistoryMessage
 from app.chat.runtime import latest_user_message
@@ -24,6 +27,7 @@ if TYPE_CHECKING:
 
 # 路由器实例
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 def _get_memory_service() -> "MemoryService":
@@ -92,6 +96,11 @@ async def mentor_chat_stream(
 
     effective_session = session_id or uc.default_session_id(current_user.id)
 
+    logger.info(
+        "[ChatAPI] 流式对话请求: user_id=%s session_id=%s msg_len=%d attachments=%d",
+        current_user.id, effective_session, len(effective_message), len(parsed_attachments),
+    )
+
     # 返回 SSE 流式响应
     return StreamingResponse(
         _sse_wrap(uc.stream_chat(
@@ -135,6 +144,7 @@ async def upload_file(
         return HttpResponse.error(code=400, message="文件名不能为空")
     uc = get_chat_usecases()
     content = await file.read()
+    logger.info("[ChatAPI] 文件上传: user_id=%s session_id=%s filename=%s size=%d", current_user.id, session_id, file.filename, len(content))
     try:
         saved = await uc.save_upload(
             filename=file.filename,
@@ -425,6 +435,7 @@ async def get_profile_onboarding(
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
 ):
     """更新首次登录数据。"""
     memory = _get_memory_service()
@@ -436,7 +447,13 @@ async def update_profile_onboarding(
             onboarding=student_profile,
             reason="onboarding",
         )
+        #画像引导成功后，标记用户的 is_first_login 为 False
+        current_user.is_first_login = False
+        db.add(current_user)
+        await db.commit()
+        logger.info("[ChatAPI] 画像引导完成: user_id=%s", current_user.id)
     except ValueError as e:
+        logger.warning("[ChatAPI] 画像引导失败: user_id=%s err=%s", current_user.id, e)
         return HttpResponse.error(code=400, message=str(e))
 
     onboarding_data = await memory.get_onboarding(user_id=current_user.id)

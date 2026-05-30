@@ -1,172 +1,232 @@
 <template>
   <div class="logic-blue-slide logic-blue-comparison">
-    <h2 class="slide-title">{{ data.title }}</h2>
+    <header class="slide-header animate-slide-up">
+      <div class="header-indicator"></div>
+      <h2 class="slide-title">{{ data.title }}</h2>
+    </header>
     
-    <div class="comparison-container">
-      <!-- 左侧栏 -->
-      <div class="compare-col left-col">
-        <div class="col-header">{{ data.left_label }}</div>
-        <ul class="col-list">
-          <li v-for="(item, index) in data.left_content" :key="`left-${index}`">
-            <span class="marker marker-left"></span>
-            {{ item }}
-          </li>
-        </ul>
+    <div class="comparison-container animate-fade-in">
+      <!-- 比较栏表头 -->
+      <div class="comparison-headers">
+        <div class="compare-header left-header">
+          <span class="header-label">{{ data.left_label }}</span>
+        </div>
+        <div class="compare-header right-header">
+          <span class="header-label">{{ data.right_label }}</span>
+        </div>
       </div>
       
-      <!-- VS 分隔 -->
-      <div class="vs-divider">
-        <div class="vs-circle">VS</div>
-      </div>
-      
-      <!-- 右侧栏 -->
-      <div class="compare-col right-col">
-        <div class="col-header">{{ data.right_label }}</div>
-        <ul class="col-list">
-          <li v-for="(item, index) in data.right_content" :key="`right-${index}`">
-            <span class="marker marker-right"></span>
-            {{ item }}
-          </li>
-        </ul>
+      <!-- 核心对比表格（对齐斑马纹） -->
+      <div class="comparison-table">
+        <div 
+          v-for="(_, index) in maxRows" 
+          :key="index" 
+          class="table-row"
+          :class="{ 'zebra-row': index % 2 === 1 }"
+        >
+          <!-- 左侧内容 -->
+          <div class="table-cell left-cell">
+            <span class="row-marker marker-left">•</span>
+            <span class="cell-text">{{ data.left_content[index] || '—' }}</span>
+          </div>
+          
+          <!-- 中间渐变虚线分隔 -->
+          <div class="row-divider"></div>
+          
+          <!-- 右侧内容 -->
+          <div class="table-cell right-cell">
+            <span class="row-marker marker-right">•</span>
+            <span class="cell-text">{{ data.right_content[index] || '—' }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { ComparisonData } from '../../types/ppt';
 
-defineProps<{
+const props = defineProps<{
   data: ComparisonData
 }>();
+
+const maxRows = computed(() => {
+  const leftLen = props.data.left_content?.length || 0;
+  const rightLen = props.data.right_content?.length || 0;
+  return Math.max(leftLen, rightLen);
+});
 </script>
 
 <style scoped>
 .logic-blue-slide {
   width: 100%;
   height: 100%;
-  padding: 80px 100px;
-  background-color: #FFFFFF;
+  padding: 60px 80px;
+  background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+}
+
+.slide-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.header-indicator {
+  width: 6px;
+  height: 32px;
+  background: #3B82F6;
+  border-radius: 3px;
 }
 
 .slide-title {
-  font-size: 52px;
+  font-size: 38px;
   color: #0F172A;
-  margin-bottom: 60px;
-  text-align: center;
+  margin: 0;
   font-weight: 800;
+  letter-spacing: -0.5px;
 }
 
 .comparison-container {
-  display: flex;
   flex: 1;
-  position: relative;
-  gap: 80px;
-}
-
-.compare-col {
-  flex: 1;
-  background: #F8FAFC;
-  border-radius: 24px;
-  padding: 40px;
-  border: 2px solid #E2E8F0;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-}
-
-.left-col {
-  border-top: 8px solid #94A3B8;
-}
-
-.right-col {
-  border-top: 8px solid #3B82F6;
-  background: #EFF6FF;
-  border-color: #BFDBFE;
-}
-
-.col-header {
-  font-size: 36px;
-  font-weight: 700;
-  text-align: center;
-  margin-bottom: 40px;
-  color: #1E293B;
-}
-
-.right-col .col-header {
-  color: #1D4ED8;
-}
-
-.col-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
 }
 
-.col-list li {
-  font-size: 26px;
-  color: #475569;
-  line-height: 1.6;
+.comparison-headers {
+  display: flex;
+  background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+  position: relative;
+}
+
+.compare-header {
+  flex: 1;
+  padding: 20px 40px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.left-header {
+  border-right: 1px dashed #E2E8F0;
+}
+
+.header-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.right-header .header-label {
+  color: #2563EB; /* 右侧重点栏颜色 */
+}
+
+.comparison-table {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.table-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #F1F5F9;
+  position: relative;
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.zebra-row {
+  background-color: #F8FAFC;
+}
+
+.table-cell {
+  flex: 1;
+  padding: 20px 40px;
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
+  text-align: left;
 }
 
-.marker {
-  margin-top: 10px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
+.left-cell {
+  border-right: 1px dashed #E2E8F0;
+}
+
+.row-marker {
+  font-size: 24px;
+  line-height: 18px;
+  font-weight: bold;
   flex-shrink: 0;
 }
 
 .marker-left {
-  background-color: #94A3B8;
+  color: #94A3B8;
 }
 
 .marker-right {
-  background-color: #3B82F6;
+  color: #3B82F6;
 }
 
-.vs-divider {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
+.cell-text {
+  font-size: 18px;
+  color: #475569;
+  line-height: 1.55;
+  font-weight: 500;
 }
 
-.vs-divider::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background-color: #E2E8F0;
-  z-index: 0;
+.right-cell .cell-text {
+  color: #334155;
 }
 
-.vs-circle {
-  width: 80px;
-  height: 80px;
-  background: #1E293B;
-  color: #FFFFFF;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  font-weight: 900;
-  font-style: italic;
-  z-index: 1;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 4px solid #FFFFFF;
+.table-row:hover {
+  background-color: #EFF6FF;
+}
+
+/* 动效 */
+.animate-slide-up {
+  animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+  opacity: 0;
+}
+
+@keyframes slideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 </style>

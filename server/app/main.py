@@ -18,11 +18,14 @@ from app.resource.api import router as resource_router
 from app.avatar.api import router as avatar_router
 from app.avatar.bridge.manager import avatar_bridge_manager
 from app.infra.database import init_db
+from app.infra.logging import configure_logging
 from app.infra.response import HttpResponse
+from app.config import DEBUG
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging(debug=DEBUG)
     await init_db()
     yield
 
@@ -83,7 +86,6 @@ async def avatar_websocket(websocket: WebSocket) -> None:
 
 if __name__ == "__main__":
     import uvicorn
-
 
     from app.config import DEBUG, HOST, PORT
 

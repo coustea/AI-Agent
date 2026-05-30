@@ -56,6 +56,9 @@ class LongTermMemoryExtractor:
         if not signal_detected and not periodic_trigger:
             return False
 
+        trigger_reason = "signal" if signal_detected else "periodic"
+        logger.info("[LongTermMemory] 触发更新: user_id=%s session_id=%s reason=%s turn=%d", user_id, session_id, trigger_reason, turn_count)
+
         try:
             existing = (
                 await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
@@ -104,6 +107,7 @@ class LongTermMemoryExtractor:
                 temperature=0.1,
             )
             if not resp.need_update or not resp.memory_markdown:
+                logger.debug("[LongTermMemory] LLM 判断无需更新: user_id=%s", user_id)
                 return False
 
             if not existing:
@@ -118,6 +122,7 @@ class LongTermMemoryExtractor:
             memory.source_summary_ids = [latest_summary.id] if latest_summary and latest_summary.id else None
             memory.updated_at = now()
             db.add(memory)
+            logger.info("[LongTermMemory] 更新成功: user_id=%s session_id=%s version=%d reason=%s", user_id, session_id, memory.version, memory.updated_reason)
             return True
         except Exception as exc:
             logger.error("[LongTermMemory] 更新失败 user=%s session=%s err=%s", user_id, session_id, exc)
