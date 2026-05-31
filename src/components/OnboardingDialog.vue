@@ -576,7 +576,7 @@ const handleHeaderCommand = async (cmd: string) => {
 .chat-wrapper {
   display: flex;
   flex-direction: column;
-  height: 680px;
+  height: 540px;
   background: var(--color-surface);
   position: relative;
   overflow: hidden;

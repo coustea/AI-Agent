@@ -138,12 +138,12 @@ const form = reactive({
 
 const rules = {
   username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 50, message: '用户名长度需为 3-50 个字符', trigger: 'blur' },
+    { required: true, message: '请输入用户名', trigger: 'manual' },
+    { min: 3, max: 50, message: '用户名长度需为 3-50 个字符', trigger: 'manual' },
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 50, message: '密码长度需为 6-50 个字符', trigger: 'blur' },
+    { required: true, message: '请输入密码', trigger: 'manual' },
+    { min: 6, max: 50, message: '密码长度需为 6-50 个字符', trigger: 'manual' },
   ]
 }
 
