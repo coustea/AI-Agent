@@ -151,6 +151,7 @@ class TutorAgent:
         if self.graph is not None:
             return
 
+        # 使用异步锁保证 LangGraph 状态图只被编译和初始化一次
         async with self._init_lock:
             if self.graph is not None:
                 return
@@ -225,12 +226,14 @@ class TutorAgent:
         has_attachments = bool(attachments)
 
         with node_timer("classify", user=user_id, session=session_id):
+            # 判断是否需要请求画图
             need_diagram = need_teaching_diagram or explicit_diagram_requested(user_message)
             
             state_updates: dict[str, Any] = {}
             if need_diagram != need_teaching_diagram:
                 state_updates["need_teaching_diagram"] = need_diagram
 
+            # 根据附件情况、搜索开关以及是否只要画图，决定路由去向
             if has_attachments:
                 route = "attachment_needed"
                 execution_mode = "attachment_search" if enable_search else "attachment"
@@ -338,7 +341,9 @@ class TutorAgent:
 
         await self._ensure_graph()
 
+        # 将前端传入的历史消息与 Agent 初始化 Context 合并，生成 LangGraph 初始状态
         initial_state = prepare_tutor_state(context, history)
+        initial_msg_count = len(initial_state.get("messages", []))
 
         full_reply = ""
         runtime_state: dict[str, Any] = dict(initial_state)
@@ -349,11 +354,12 @@ class TutorAgent:
 
         try:
             with chat_runtime_context(context.user_id, context.session_id):
+                # 监听 LangGraph 运行过程中发出的各类事件，并转换为 SSE 数据流给前端
                 async for event in self.graph.astream_events(initial_state, **_graph_stream_kwargs()):
                     kind = event.get("event", "")
                     name = event.get("name", "")
 
-                    # 节点开始事件
+                    # 节点开始事件：给前端发送状态更新信息，展示“正在思考...”等提示语
                     if kind == "on_chain_start" and name in GRAPH_NODE_NAMES:
                         active_node = name
                         if name == "classify":
@@ -400,7 +406,7 @@ class TutorAgent:
                                 else:
                                     runtime_state[key] = value
 
-                    # 自定义 answer_token 事件处理
+                    # 自定义 answer_token 事件处理：接收大模型流式生成的每一个 Token，透传给前端做到打字机效果
                     if kind == "on_custom_event" and name == "answer_token":
                         payload = event.get("data", {})
                         node_name = payload.get("node") if isinstance(payload, dict) else active_node
@@ -462,7 +468,33 @@ class TutorAgent:
         teaching_diagram = runtime_state.get("teaching_diagram")
         knowledge_sources = runtime_state.get("knowledge_sources")
 
-        if not isinstance(teaching_diagram, dict) and is_unusable_reply_text(full_reply):
+        # 从大模型生成的所有新消息中提取并聚合本轮产生的 Tool Calls 和 Token 消耗数据
+        tool_calls = []
+        usage_metadata = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        has_usage = False
+        messages_list = runtime_state.get("messages", [])
+        if isinstance(messages_list, list) and len(messages_list) > initial_msg_count:
+            for msg in messages_list[initial_msg_count:]:
+                if isinstance(msg, AIMessage):
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        tool_calls.extend(msg.tool_calls)
+                    if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                        has_usage = True
+                        usage_metadata["input_tokens"] += msg.usage_metadata.get("input_tokens", 0)
+                        usage_metadata["output_tokens"] += msg.usage_metadata.get("output_tokens", 0)
+                        usage_metadata["total_tokens"] += msg.usage_metadata.get("total_tokens", 0)
+        
+        final_usage_metadata = usage_metadata if has_usage else None
+
+        # 打印关键单行日志，方便观察本轮会话的工具调用和 Token 消耗情况
+        logger.info(
+            "[TutorAgent] 会话 %s 回答生成完毕 | 提取到 ToolCalls: %d 个 | Token使用量: %s",
+            context.session_id,
+            len(tool_calls),
+            final_usage_metadata,
+        )
+
+        if not isinstance(teaching_diagram, dict) and is_unusable_reply_text(full_reply) and not tool_calls:
             yield stream_event("error", "模型未返回有效内容，请重试。")
             yield stream_event("done", {"session_id": context.session_id, "error": True})
             return
@@ -470,6 +502,7 @@ class TutorAgent:
         if isinstance(teaching_diagram, dict):
             yield stream_event("diagram", teaching_diagram)
 
+        # 最后一并发出 done 事件，将完整的响应和工具消耗元数据传给 service 层落库
         yield stream_event(
             "done",
             {
@@ -480,5 +513,7 @@ class TutorAgent:
                 "resource": None,
                 "teaching_diagram": teaching_diagram,
                 "resources": {"teaching_diagram": teaching_diagram, "video": None},
+                "tool_calls": tool_calls,
+                "usage_metadata": final_usage_metadata,
             },
         )

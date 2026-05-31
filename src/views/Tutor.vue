@@ -14,8 +14,9 @@
               class="collapse-toggle-btn"
               @click="sessionSidebarCollapsed = !sessionSidebarCollapsed"
               :title="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+              :aria-label="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="4" y="4" width="16" height="16" rx="4" ry="4"></rect>
               <line x1="9" y1="4" x2="9" y2="20"></line>
             </svg>
@@ -221,9 +222,15 @@
 
                 <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
                   <a v-for="att in msg.attachments" :key="att.url" :href="att.url" target="_blank" class="attachment-link">
-                    <el-icon v-if="att.type === 'image'"><Picture /></el-icon>
-                    <el-icon v-else><Document /></el-icon>
-                    <span>{{ att.name }}</span>
+                    <template v-if="att.type === 'image'">
+                      <el-image :src="att.url" :alt="att.name || '图片附件'" fit="cover" class="attachment-img-preview" lazy />
+                    </template>
+                    <template v-else>
+                      <div class="file-icon-box" :style="{ backgroundColor: getDocumentIconColor(getDocumentType(att.name)) }">
+                        <el-icon aria-hidden="true"><Document /></el-icon>
+                      </div>
+                      <span class="attachment-name" :title="att.name">{{ att.name }}</span>
+                    </template>
                   </a>
                 </div>
 
@@ -264,10 +271,16 @@
           <div class="minimal-input-panel">
             <div v-if="pendingFiles.length > 0" class="minimal-attachments-preview">
               <div v-for="(f, idx) in pendingFiles" :key="idx" class="minimal-attachment-chip">
-                <el-icon v-if="f.fileType === 'image'"><Picture /></el-icon>
-                <el-icon v-else><Document /></el-icon>
-                <span class="attachment-name">{{ f.name }}</span>
-                <el-icon class="close-icon" @click="removeAttachment(idx)"><Close /></el-icon>
+                <template v-if="f.fileType === 'image'">
+                  <el-image :src="f.localUrl || f.url" :alt="f.name || '图片预览'" fit="cover" class="attachment-img-preview" />
+                </template>
+                <template v-else>
+                  <div class="file-icon-box" :style="{ backgroundColor: getDocumentIconColor(getDocumentType(f.name)) }">
+                    <el-icon aria-hidden="true"><Document /></el-icon>
+                  </div>
+                </template>
+                <span class="attachment-name" :title="f.name">{{ f.name }}</span>
+                <button class="remove-attachment-btn" @click="removeAttachment(idx)" aria-label="移除附件"><el-icon aria-hidden="true"><Close /></el-icon></button>
               </div>
             </div>
 
@@ -283,14 +296,14 @@
               <div class="minimal-action-bar">
                 <div class="action-left">
                   <el-tooltip content="上传附件" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload">
-                      <el-icon><Paperclip /></el-icon>
+                    <button class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload" aria-label="上传附件">
+                      <el-icon aria-hidden="true"><Paperclip /></el-icon>
                     </button>
                   </el-tooltip>
 
                   <el-tooltip content="联网搜索" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch">
-                      <el-icon>
+                    <button class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch" :aria-label="enableWebSearch ? '关闭联网搜索' : '开启联网搜索'">
+                      <el-icon aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <circle cx="12" cy="12" r="10"></circle>
                           <ellipse cx="12" cy="12" rx="5" ry="10"></ellipse>
@@ -302,8 +315,8 @@
                   </el-tooltip>
 
                   <el-tooltip content="知识库检索" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-amber': enableKnowledgeBase }" @click="enableKnowledgeBase = !enableKnowledgeBase">
-                      <el-icon>
+                    <button class="minimal-icon-btn" :class="{ 'is-active-amber': enableKnowledgeBase }" @click="enableKnowledgeBase = !enableKnowledgeBase" :aria-label="enableKnowledgeBase ? '关闭知识库检索' : '开启知识库检索'">
+                      <el-icon aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
@@ -313,14 +326,14 @@
                   </el-tooltip>
 
                   <el-tooltip content="生成图解说明" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle">
-                      <el-icon><DataLine /></el-icon>
+                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭图解说明' : '生成图解说明'">
+                      <el-icon aria-hidden="true"><DataLine /></el-icon>
                     </button>
                   </el-tooltip>
 
                   <el-tooltip content="生成视频" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': generateVideo }" @click="handleVideoToggle">
-                      <el-icon><VideoCamera /></el-icon>
+                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': generateVideo }" @click="handleVideoToggle" :aria-label="generateVideo ? '关闭视频生成' : '生成视频'">
+                      <el-icon aria-hidden="true"><VideoCamera /></el-icon>
                     </button>
                   </el-tooltip>
                 </div>
@@ -350,21 +363,22 @@
                         class="minimal-icon-btn voice-chat-btn"
                         :class="{ 'is-active': isVoiceChatting }"
                         @click="handleVoiceChatToggle"
+                        :aria-label="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
                     >
-                      <div class="voice-bars-icon">
+                      <div class="voice-bars-icon" aria-hidden="true">
                         <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
                       </div>
                     </button>
                   </el-tooltip>
 
                   <el-tooltip :content="isRecording ? '结束录音' : '语音提问'" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn voice" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle">
-                      <el-icon><Microphone /></el-icon>
+                    <button class="minimal-icon-btn voice" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle" :aria-label="isRecording ? '结束录音' : '语音提问'">
+                      <el-icon aria-hidden="true"><Microphone /></el-icon>
                     </button>
                   </el-tooltip>
 
-                  <button class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend">
-                    <el-icon><Top /></el-icon>
+                  <button class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend" aria-label="发送消息">
+                    <el-icon aria-hidden="true"><Top /></el-icon>
                   </button>
                 </div>
               </div>
@@ -489,6 +503,7 @@ defineOptions({ name: 'Tutor' })
 interface PendingFile {
   file?: File;
   url?: string;
+  localUrl?: string;
   fileType: string;
   name: string
 }
@@ -515,6 +530,21 @@ const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): 
   if (!['contrast', 'journey', 'anatomy', 'simulation'].includes(diagram.type)) return null
   if (!diagram.title || !diagram.payload || typeof diagram.payload !== 'object') return null
   return diagram
+}
+
+const getDocumentType = (filename: string) => {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  if (['doc', 'docx'].includes(ext)) return 'word'
+  if (['xls', 'xlsx'].includes(ext)) return 'excel'
+  if (['pdf'].includes(ext)) return 'pdf'
+  return 'other'
+}
+
+const getDocumentIconColor = (type: string) => {
+  if (type === 'word') return '#2563EB'
+  if (type === 'excel') return '#16A34A'
+  if (type === 'pdf') return '#DC2626'
+  return '#64748B'
 }
 
 const buildStreamHistory = (): StreamChatHistoryItem[] => {
@@ -1424,15 +1454,21 @@ const onCombinedFileSelected = async (event: Event) => {
 
   const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name)
   const fileType = isImage ? 'image' : 'document'
+  const localUrl = isImage ? URL.createObjectURL(file) : undefined
   pendingFiles.value.push({
     file,
     fileType,
     name: file.name,
+    localUrl,
   })
   input.value = ''
 }
 
 const removeAttachment = (idx: number) => {
+  const removed = pendingFiles.value[idx]
+  if (removed?.localUrl) {
+    URL.revokeObjectURL(removed.localUrl)
+  }
   pendingFiles.value.splice(idx, 1)
 }
 
@@ -1624,6 +1660,9 @@ const handleSend = async () => {
         type: item.fileType,
         name: item.name,
       })
+    })
+    pendingFiles.value.forEach(f => {
+      if (f.localUrl) URL.revokeObjectURL(f.localUrl)
     })
     pendingFiles.value = []
   } catch {
@@ -1829,6 +1868,9 @@ onBeforeUnmount(() => {
   isStreamDone = false
   streamingMsgRef.value = null
   abortController?.abort()
+  pendingFiles.value.forEach(f => {
+    if (f.localUrl) URL.revokeObjectURL(f.localUrl)
+  })
   if (dimTimer) clearTimeout(dimTimer)
   document.removeEventListener('mousedown', handleGlobalClick)
   document.removeEventListener('touchstart', handleGlobalClick)
@@ -3469,5 +3511,51 @@ onBeforeUnmount(() => {
 .item-arrow {
   color: var(--color-text-faint);
   font-size: 14px;
+}
+
+.attachment-img-preview {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.minimal-attachment-chip .attachment-img-preview {
+  width: 40px;
+  height: 40px;
+}
+.file-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+.minimal-attachment-chip .file-icon-box {
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+}
+.remove-attachment-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+}
+.remove-attachment-btn:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
 }
 </style>

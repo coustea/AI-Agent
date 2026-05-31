@@ -127,7 +127,6 @@ class ChatUseCases:
     async def create_session(self, user_id: int, title: str = "新对话") -> dict[str, Any]:
         """创建新会话。"""
         session = await self._memory_service.create_session(user_id=user_id, title=title)
-        logger.info("[ChatUseCases] 创建会话: user_id=%s session_id=%s", user_id, session.id)
         return {"id": session.id, "title": session.title}
 
     async def archive_session(self, user_id: int, session_id: str) -> bool:
@@ -188,6 +187,7 @@ class ChatUseCases:
         attachments: list[dict[str, Any]] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         teaching_diagram: dict[str, Any] | None = None,
+        usage_metadata: dict[str, Any] | None = None,
     ) -> None:
         """保存消息到短期记忆。"""
         await self._memory_service.save_message(
@@ -198,6 +198,7 @@ class ChatUseCases:
             attachments=attachments,
             tool_calls=tool_calls,
             teaching_diagram=teaching_diagram,
+            usage_metadata=usage_metadata,
         )
 
     async def count_messages(self, user_id: int, session_id: str) -> int:
@@ -515,6 +516,10 @@ class ChatUseCases:
             yield event
 
         has_assistant_output = bool(full_answer.strip()) or teaching_diagram is not None
+        
+        tool_calls = completion_event.get("data", {}).get("tool_calls") if completion_event else None
+        usage_metadata = completion_event.get("data", {}).get("usage_metadata") if completion_event else None
+
         if persist and has_assistant_output and not stream_failed:
             yield {
                 "event": "status",
@@ -525,7 +530,9 @@ class ChatUseCases:
                 session_id=effective_session,
                 role="assistant",
                 content=full_answer,
+                tool_calls=tool_calls,
                 teaching_diagram=teaching_diagram,
+                usage_metadata=usage_metadata,
             )
 
         if persist and full_answer.strip() and not stream_failed:
@@ -534,7 +541,8 @@ class ChatUseCases:
                     user_id=user_id,
                     session_id=effective_session,
                     user_message=current_message,
-                    assistant_reply=full_answer
+                    assistant_reply=full_answer,
+                    usage_metadata=usage_metadata,
                 ),
                 label="memory_pipeline",
             )

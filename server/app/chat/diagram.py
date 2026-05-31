@@ -89,7 +89,6 @@ async def teaching_diagram_generate_node(agent: Any, state: TutorState) -> Tutor
                 question, answer = previous_teaching_exchange(list(state.get("messages") or []))
                 state["termination_reason"] = "teaching_diagram_only_done"
             if not question or not answer:
-                logger.warning("[Diagram] 跳过图解生成: 缺少问题或回答 user_id=%s", user_id)
                 state["teaching_diagram"] = None
                 state["teaching_diagram_error"] = "缺少问题或文字回答，跳过图解说明生成"
                 return state

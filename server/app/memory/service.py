@@ -145,6 +145,7 @@ class MemoryService:
         attachments: list[dict[str, Any]] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         teaching_diagram: dict[str, Any] | None = None,
+        usage_metadata: dict[str, Any] | None = None,
     ) -> None:
         async with session_scope() as db:
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
@@ -165,6 +166,7 @@ class MemoryService:
                     attachments=attachments,
                     tool_calls=tool_calls,
                     teaching_diagram=teaching_diagram,
+                    usage_metadata=usage_metadata,
                 )
             )
             await db.commit()
@@ -397,9 +399,13 @@ class MemoryService:
         user_id: int,
         session_id: str,
         user_message: str,
-        assistant_reply: str
+        assistant_reply: str,
+        usage_metadata: dict[str, Any] | None = None,
     ) -> None:
-        delta = estimate_token_count(user_message) + estimate_token_count(assistant_reply)
+        if usage_metadata and "total_tokens" in usage_metadata:
+            delta = usage_metadata["total_tokens"]
+        else:
+            delta = estimate_token_count(user_message) + estimate_token_count(assistant_reply)
         try:
             async with session_scope() as db:
                 chat_session = (

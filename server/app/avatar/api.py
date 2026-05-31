@@ -9,12 +9,10 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.auth.security import get_current_user
 from app.chat.service import get_avatar_chat_usecases, get_chat_usecases
-from app.infra.logging import get_logger
 from app.infra.models import User
 from app.infra.response import HttpResponse
 
 router = APIRouter()
-logger = get_logger(__name__)
 
 
 @router.get("/avatar/status")
@@ -24,7 +22,6 @@ async def get_avatar_status(
     """获取数字人连接状态"""
     from app.avatar.bridge.manager import avatar_bridge_manager
     status = await avatar_bridge_manager.get_status(user.id)
-    logger.debug("[AvatarAPI] 查询状态: user_id=%s connected=%s", user.id, status.get("connected"))
     return HttpResponse.success(data=status)
 
 
@@ -36,7 +33,6 @@ async def get_avatar_stream(
     from app.avatar.bridge.manager import avatar_bridge_manager
     stream_info = await avatar_bridge_manager.get_stream_info(user.id)
     if not stream_info:
-        logger.warning("[AvatarAPI] 视频流未就绪: user_id=%s", user.id)
         return HttpResponse.error(message="数字人视频流未就绪", code=404)
     return HttpResponse.success(data=stream_info)
 
@@ -47,7 +43,6 @@ async def stop_avatar(
 ):
     """停止数字人说话"""
     from app.avatar.bridge.manager import avatar_bridge_manager
-    logger.info("[AvatarAPI] 停止说话: user_id=%s", user.id)
     await avatar_bridge_manager.stop(user.id)
     return HttpResponse.success(data={"status": "stopped"})
 

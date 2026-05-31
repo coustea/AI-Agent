@@ -235,23 +235,28 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .reading-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
 }
 
 .reading-item {
-  padding: 20px;
+  padding: 24px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: white;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: #FFFFFF;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
 }
 
 .reading-item:hover {
-  border-color: var(--primary);
-  box-shadow: none;
-  transform: translateX(4px);
+  border-color: #CBD5E1;
+  border-left-color: #4F46E5;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
 }
 
 .reading-header {

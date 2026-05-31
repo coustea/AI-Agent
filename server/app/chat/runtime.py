@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.chat.request import ChatHistoryMessage
 from app.chat.schemas import TutorAgentContext, TutorState
@@ -116,14 +116,14 @@ def history_to_langchain_messages(history: list[ChatHistoryMessage]) -> list[Any
     messages: list[AnyMessage] = []
     for item in history:
         content = (item.content or "").strip()
-        if not content:
-            continue
-        if item.role == "user":
+        if item.role == "user" and content:
             messages.append(HumanMessage(content=content))
-        elif item.role in {"assistant", "ai"}:
-            messages.append(AIMessage(content=content))
-        elif item.role == "system":
+        elif item.role in {"assistant", "ai"} and (content or item.tool_calls):
+            messages.append(AIMessage(content=content, tool_calls=item.tool_calls or []))
+        elif item.role == "system" and content:
             messages.append(SystemMessage(content=content))
+        elif item.role == "tool" and item.tool_call_id:
+            messages.append(ToolMessage(content=content, tool_call_id=item.tool_call_id))
     return messages
 
 

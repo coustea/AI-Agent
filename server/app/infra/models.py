@@ -130,6 +130,7 @@ class ChatMessage(SQLModel, table=True):
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
     teaching_diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 教学图解数据
+    usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 记录该条消息消耗的精准 Token
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)

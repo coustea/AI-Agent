@@ -388,8 +388,45 @@ watch(pureCode, performHighlight)
 :deep(code), .pure-code-block code {
   font-family: 'Fira Code', monospace;
   font-size: 0.85em;
-  color: var(--fg);
   background: transparent !important;
+}
+
+/* 优化代码高亮对比度，拒绝灰色和浅色 */
+:deep(.hljs-comment), .pure-code-block .hljs-comment,
+:deep(.hljs-quote), .pure-code-block .hljs-quote {
+  color: #475569 !important; /* 深蓝灰色，提高对比度 */
+  font-style: italic;
+}
+
+:deep(.hljs-keyword), .pure-code-block .hljs-keyword,
+:deep(.hljs-selector-tag), .pure-code-block .hljs-selector-tag {
+  color: #9333EA !important; /* 深紫色 */
+  font-weight: bold;
+}
+
+:deep(.hljs-string), .pure-code-block .hljs-string,
+:deep(.hljs-title), .pure-code-block .hljs-title,
+:deep(.hljs-section), .pure-code-block .hljs-section,
+:deep(.hljs-attribute), .pure-code-block .hljs-attribute,
+:deep(.hljs-literal), .pure-code-block .hljs-literal,
+:deep(.hljs-template-tag), .pure-code-block .hljs-template-tag,
+:deep(.hljs-template-variable), .pure-code-block .hljs-template-variable,
+:deep(.hljs-type), .pure-code-block .hljs-type,
+:deep(.hljs-addition), .pure-code-block .hljs-addition {
+  color: #0284C7 !important; /* 深蓝色 */
+  font-weight: 600;
+}
+
+:deep(.hljs-string), .pure-code-block .hljs-string {
+  color: #16A34A !important; /* 深绿色 */
+  font-weight: normal;
+}
+
+:deep(.hljs-number), .pure-code-block .hljs-number,
+:deep(.hljs-built_in), .pure-code-block .hljs-built_in,
+:deep(.hljs-builtin-name), .pure-code-block .hljs-builtin-name,
+:deep(.hljs-literal), .pure-code-block .hljs-literal {
+  color: #D97706 !important; /* 深橙色 */
 }
 
 /* 页脚扩展信息 */

@@ -2149,8 +2149,8 @@ const handlePreview = (data: any) => {
 .hero-subtitle-compact { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); }
 .hero-actions-right { display: flex; gap: var(--space-3); align-items: center; }
 .results-body-bento { max-width: 1440px; margin: 0 auto; padding: var(--space-10) 60px; display: flex; flex-direction: column; gap: var(--space-10); position: relative; z-index: 1; }
-.premium-resource-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--space-8); align-items: stretch; }
-.premium-res-card { grid-column: span 3; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-5); position: relative; overflow: hidden; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer; animation: fadeSlideUp 0.6s ease-out backwards; }
+.premium-resource-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; align-items: stretch; }
+.premium-res-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px; position: relative; overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03); cursor: pointer; animation: fadeSlideUp 0.6s ease-out backwards; }
 @keyframes fadeSlideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
 .premium-res-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-color: #D1D5DB; }
 .card-bg-glow { display: none; }
@@ -2177,8 +2177,7 @@ const handlePreview = (data: any) => {
 /* ================= 媒体查询与响应式适配 ================= */
 @media (max-width: 1200px) {
   .agent-configs-grid { grid-template-columns: repeat(2, 1fr); }
-  .premium-resource-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .premium-res-card { grid-column: span 2 !important; }
+  .premium-resource-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
   .results-body-bento { padding: var(--space-6) var(--space-8); }
   .dag-canvas { min-height: 380px; }
 }

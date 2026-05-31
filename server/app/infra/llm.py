@@ -33,6 +33,7 @@ import json
 from typing import Any, AsyncIterator
 
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from pydantic import ValidationError
 
 from app.config import get
@@ -185,7 +186,6 @@ class Llm:
                 max_tokens=max_tokens,
             )
             result = await runnable.ainvoke(input_data)
-            logger.debug("[LLM] ainvoke 完成: model=%s", getattr(runnable, "model_name", "?"))
             return result
         finally:
             if sem:
@@ -223,6 +223,52 @@ class Llm:
             if sem:
                 sem.release()
 
+    def _prepare_messages_for_json(self, input_data: Any, schema: type) -> list[BaseMessage]:
+        """将不同格式的输入安全转换为 BaseMessage 列表，并强行注入 JSON 格式指令。
+        
+        为什么需要这个方法？
+        当模型无法使用 API 原生 Tool Calling 时，如果不将数据包装成标准的对话消息 (Message)，
+        而是直接进行 f"{input_data}" 字符串拼接，会导致多轮对话历史变成 Python 对象的乱码，
+        从而使模型产生严重的“格式幻觉”。此方法会安全地保留对话历史，只在最后一条消息注入指令。
+        """
+        # 1. 统一转成 Message 列表
+        if isinstance(input_data, str):
+            messages = [HumanMessage(content=input_data)]
+        elif isinstance(input_data, BaseMessage):
+            messages = [input_data]
+        elif isinstance(input_data, list):
+            # 浅拷贝避免修改外部传入的原始对话列表
+            messages = list(input_data)
+        else:
+            raise ValueError(f"Unsupported input_data type: {type(input_data)}")
+
+        # 2. 构造必须带有 "JSON" 字眼的强制指令（适配类似 Qwen 这种强规则模型）
+        schema_hint = json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
+        instruction = (
+            f"\n\n[FORMAT INSTRUCTION]\n"
+            f"You must return the response as a valid JSON object matching the JSON Schema below.\n"
+            f"Do not include any explanation, markdown code fence blocks (like ```json), or extra text outside the JSON object.\n"
+            f"JSON Schema:\n{schema_hint}\n"
+        )
+
+        # 3. 倒序查找，将指令拼接到最后一条人类或系统消息的末尾
+        inserted = False
+        for i in range(len(messages) - 1, -1, -1):
+            msg = messages[i]
+            if isinstance(msg, (HumanMessage, SystemMessage)):
+                from copy import copy
+                new_msg = copy(msg)
+                new_msg.content = str(msg.content or "") + instruction
+                messages[i] = new_msg
+                inserted = True
+                break
+                
+        # 4. 如果没找到合适的消息（比如全是 AI 回复），直接插在开头
+        if not inserted:
+            messages.insert(0, SystemMessage(content=instruction.strip()))
+            
+        return messages
+
     async def ainvoke_json(
         self,
         schema: type,
@@ -232,79 +278,43 @@ class Llm:
         function_name: str | None = None,
         function_description: str | None = None,
     ) -> Any:
-        """异步结构化 JSON 输出。
-
-        Args:
-            schema: Pydantic 模型类。
-            input_data: 输入数据。
-            temperature: 温度参数。
-            function_name: 函数名（可选，默认使用 schema 类名）。
-            function_description: 函数描述（可选）。
-
-        Returns:
-            验证后的 schema 实例。
+        """异步结构化 JSON 输出核心调度器（“三段式瀑布”容错降级机制）。
+        
+        由于不同厂商大模型对 OpenAI API 的兼容度不一，此方法依次尝试三种提取策略，
+        上层策略报错时自动跌入下一层，确保最终拿到 Pydantic 校验通过的 JSON。
+        
+        执行优先级：
+        1. [首选] Tool Calling: 利用大模型的函数调用能力提取（性能最好，支持嵌套数组）。
+        2. [降级] JSON Mode: 开启 json_object 模式，要求模型直接吐出原生 JSON。
+        3. [兜底] Text Prompt: 关闭高级功能，纯靠正则匹配和大括号清洗兜底提取。
         """
         sem = await self._acquire(self._text_semaphore)
         try:
             model = self._bind_text_model(temperature=temperature)
-
             name = function_name or schema.__name__
             desc = function_description or f"Return {schema.__name__}"
+            errors: list[str] = []
 
+            # ============ Tier 1: Tool Calling (函数调用) ============
             tools = [{
                 "type": "function",
                 "function": {
                     "name": name,
                     "description": desc,
-                    "strict": True,
+                    # 注意：为了最大化适配星火、Qwen等第三方模型，这里去掉了 "strict": True
                     "parameters": schema.model_json_schema(),
                 },
             }]
-
-            errors: list[str] = []
-            prefer_text_json = "spark-api-open.xf-yun.com" in (self._text_base_url or "")
-
-            async def _text_json_fallback() -> Any:
-                schema_hint = json.dumps(schema.model_json_schema(), ensure_ascii=False, indent=2)
-                json_prompt = (
-                    f"{input_data}\n\n"
-                    f"请严格按照以下 JSON Schema 输出，不要输出任何其他内容：\n"
-                    f"```json\n{schema_hint}\n```\n"
-                    f"直接输出 JSON 对象，不要用 Markdown 围栏包裹。"
-                )
-                resp = await model.ainvoke(json_prompt)
-                content = getattr(resp, "content", "") or ""
-                candidates = _iter_json_objects(content)
-                if not candidates:
-                    try:
-                        return schema.model_validate(parse_first_json_object(content))
-                    except Exception as exc:
-                        raise ValueError("无法从 LLM 输出中解析出 JSON 对象") from exc
-                last_error: Exception | None = None
-                for candidate in candidates:
-                    try:
-                        return schema.model_validate(candidate)
-                    except Exception as exc:
-                        last_error = exc
-                        continue
-                raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象") from last_error
-
-            if prefer_text_json:
-                try:
-                    result = await _text_json_fallback()
-                    logger.debug("[LLM] ainvoke_json(text_fallback) 成功: schema=%s", schema.__name__)
-                    return result
-                except Exception as e:
-                    errors.append(f"text_fallback={type(e).__name__}: {e}")
-                    logger.warning("[LLM] ainvoke_json(text_fallback) 失败: schema=%s err=%s", schema.__name__, e)
-                    raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
-
-            # 方式1: 使用 function calling
             try:
-                runnable = model.bind_tools(tools, tool_choice="required")
+                # 使用最高兼容性的 tool_choice 格式：精准定向具体的工具名称，防止模型自由发挥
+                runnable = model.bind_tools(
+                    tools, 
+                    tool_choice={"type": "function", "function": {"name": name}}
+                )
                 resp = await runnable.ainvoke(input_data)
+                
+                # 检查是否按预期返回了 tool_calls
                 tool_calls = getattr(resp, "tool_calls", []) or []
-
                 for tool_call in tool_calls:
                     call_name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
                     if call_name and call_name != name:
@@ -313,35 +323,56 @@ class Llm:
                     if args:
                         if isinstance(args, str):
                             args = json.loads(args)
-                        logger.debug("[LLM] ainvoke_json(tool_call) 成功: schema=%s", schema.__name__)
                         return schema.model_validate(args)
 
-                # 尝试从 content 解析
+                # 特殊情况处理：有些奇葩模型即使用 bind_tools 也会把 JSON 塞在普通文本(content)里
                 content = getattr(resp, "content", "") or ""
                 if content:
                     parsed = parse_first_json_object(content)
-                    if parsed:
-                        return schema.model_validate(parsed)
+                    return schema.model_validate(parsed)
             except Exception as exc:
-                errors.append(f"tool_call={type(exc).__name__}: {exc}")
+                errors.append(f"tier1(tool_calling)={type(exc).__name__}: {exc}")
+                logger.debug("[LLM] Tool Calling 失败: %s", exc)
 
-            # 方式2: 使用 response_format fallback
+            # ============ 准备兜底用消息（注入强制 Schema 指令） ============
+            fallback_messages = self._prepare_messages_for_json(input_data, schema)
+
+            # ============ Tier 2: JSON Mode (原生 JSON 模式) ============
             try:
-                fallback = model.bind(response_format={"type": "json_object"})
-                resp = await fallback.ainvoke(input_data)
-                parsed = parse_first_json_object(getattr(resp, "content", "") or "")
-                logger.debug("[LLM] ainvoke_json(response_format) 成功: schema=%s", schema.__name__)
+                # 开启 json_object 强校验模式（如果 API 支持的话）
+                fallback_model = model.bind(response_format={"type": "json_object"})
+                resp = await fallback_model.ainvoke(fallback_messages)
+                content = getattr(resp, "content", "") or ""
+                parsed = parse_first_json_object(content)
                 return schema.model_validate(parsed)
-            except Exception as e:
-                errors.append(f"fallback={type(e).__name__}: {e}")
+            except Exception as exc:
+                errors.append(f"tier2(json_mode)={type(exc).__name__}: {exc}")
+                logger.debug("[LLM] JSON Mode 失败: %s", exc)
 
-            # 方式3: 纯文本生成 + JSON 解析（兼容不支持 function calling 的 API）
+            # ============ Tier 3: Text Prompting (纯文本解析兜底) ============
+            # 如果前面两层全挂了（比如本地老模型），直接当做普通对话聊天，然后我们自己清洗
             try:
-                result = await _text_json_fallback()
-                logger.debug("[LLM] ainvoke_json(text_fallback) 成功: schema=%s", schema.__name__)
-                return result
-            except Exception as e:
-                errors.append(f"text_fallback={type(e).__name__}: {e}")
+                resp = await model.ainvoke(fallback_messages)
+                content = getattr(resp, "content", "") or ""
+                
+                # _iter_json_objects 能在混杂各种解释文本（甚至 Markdown 语法）的内容中找出所有的 JSON 块
+                candidates = _iter_json_objects(content)
+                if not candidates:
+                    parsed = parse_first_json_object(content)
+                    return schema.model_validate(parsed)
+                
+                last_error: Exception | None = None
+                # 如果找出了多个 JSON 块，依次试探，看哪个能通过 Pydantic 校验
+                for candidate in candidates:
+                    try:
+                        return schema.model_validate(candidate)
+                    except Exception as e:
+                        last_error = e
+                        continue
+                raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象") from last_error
+
+            except Exception as exc:
+                errors.append(f"tier3(text_prompt)={type(exc).__name__}: {exc}")
                 logger.error("[LLM] ainvoke_json 全部失败: schema=%s errors=%s", schema.__name__, "; ".join(errors))
                 raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
@@ -373,7 +404,6 @@ class Llm:
             if temperature != 0.3:
                 model = model.bind(temperature=temperature)
             result = await model.ainvoke(input_data)
-            logger.debug("[LLM] vision 完成")
             return result
         finally:
             if sem:

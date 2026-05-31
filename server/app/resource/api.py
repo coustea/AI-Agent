@@ -174,7 +174,6 @@ async def _stream_generation_snapshots(
 @router.get("/agents")
 async def list_agents():
     """查询可用 Agent 列表。"""
-    logger.info("[ResourceAPI] 查询可用 Agent 列表")
     from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER
 
     agents: list[dict[str, Any]] = []
@@ -198,8 +197,6 @@ async def list_resources(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源列表。"""
-    logger.info("[ResourceAPI] 查询资源列表: user_id=%s limit=%s", current_user.id, limit)
-
     usecases = ResourceUsecases(session)
     resources = await usecases.list_resources(current_user.id, limit)
     type_summary = await usecases.list_resource_type_summary(
@@ -230,11 +227,8 @@ async def get_resource(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源详情。"""
-    logger.info("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
-
     usecases = ResourceUsecases(session)
     bundle = await usecases.get_resource_bundle(current_user.id, resource_id)
     if bundle is None:
-        logger.warning("[ResourceAPI] 资源不存在或无权限: user_id=%s resource_id=%s", current_user.id, resource_id)
         return HttpResponse.error(code=404, message="资源不存在")
     return HttpResponse.success(data=bundle.model_dump(mode="json"))

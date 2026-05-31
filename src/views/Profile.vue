@@ -607,7 +607,6 @@ import type {
   ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem,
   SchoolItem, ProfileScoreData, LearningTimeStats
 } from '@/api/ai'
-import { getMockResourceHistory } from '@/utils/mockResourceData'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
@@ -661,7 +660,7 @@ const profileForm = reactive<ProfileOnboardingUpdate>({
   preferred_language: '',
 })
 
-const resourceHistory = ref<GeneratedResourceItem[]>(getMockResourceHistory())
+const resourceHistory = ref<GeneratedResourceItem[]>([])
 
 const PRESET_MAJORS = [
   '计算机科学与技术', '软件工程', '人工智能', '数据科学', '网络安全',
@@ -704,33 +703,7 @@ const profileHeadline = computed(() => {
   return parts.length ? parts.join(' · ') : '学习资料待完善'
 })
 
-const getFallbackSummary = (key: string): string => {
-  const summaries: Record<string, string> = {
-    knowledge_foundation: "已掌握扎实的学科基础，对核心定理和典型算法理解透彻，具备解决常规问题的能力。",
-    learning_goal: "当前学习以工程实践和面试准备为主，专注提升实战项目经验和高频算法。",
-    cognitive_style: "偏好直观的视觉图形与图表，喜欢由浅入深的渐进式学习结构，习惯通过实际代码验证理论。",
-    weakness_points: "在复杂算法的边界条件处理和系统级并发设计上存在小幅短板，需要更多自测题加固。",
-    mistake_preference: "易在多线程死锁分析和数组边界溢出问题上产生细微疏忽，习惯查看对比解析。",
-    practice_ability: "工程开发动手能力强，能熟练使用 Python/Java 编写完整模块并配套编写单元测试。",
-    interaction_preference: "积极参与智能导师互动，乐于探讨实现细节，偏好系统自动生成的图谱式讲解。",
-    learning_history: "近期保持稳定的每日学习节奏，平均单次学习时长 1.2 小时，已累计完成 10+ 门微课程。",
-  }
-  return summaries[key] || '暂无该维度分析。'
-}
-
-const getFallbackEvidence = (key: string): string[] => {
-  const evidence: Record<string, string[]> = {
-    knowledge_foundation: ["数据结构与算法测验正确率 85%", "计算机网络三次握手练习满分通过"],
-    learning_goal: ["设置求职面试为核心目标", "主动将操作系统与编译原理加入学习路线"],
-    cognitive_style: ["频繁浏览知识图谱卡片", "在 Resource Engine 中配置思维导图"],
-    weakness_points: ["自测题中并发控制相关错误率 35%", "多次查看二叉树平衡调整相关解析"],
-    mistake_preference: ["在死锁四个必要条件选择题中产生过重复错误", "对复杂递归调用的深度有调试记录"],
-    practice_ability: ["自主运行并提交 Python 沙箱代码案例 4 次", "完成二叉树遍历算法模板编写"],
-    interaction_preference: ["智能导师提问对话轮次超 15 次", "标记了多处 AI 讲解为‘非常有帮助’"],
-    learning_history: ["近七天学习时长增长 25%", "累计生成多项定制化学习资源包"],
-  }
-  return evidence[key] || []
-}
+// Fallback text generators removed as per user request to only show authentic data.
 
 const getDimIcon = (key: string): string => {
   const map: Record<string, string> = {
@@ -802,59 +775,39 @@ const dimensionsData = computed(() => {
   }
 
   const scores = profileScoreData.value?.metrics?.dimension_scores || {}
-  const defaultScores: Record<string, number> = {
-    knowledge_foundation: 75,
-    learning_goal: 85,
-    cognitive_style: 68,
-    weakness_points: 60,
-    mistake_preference: 72,
-    practice_ability: 82,
-    interaction_preference: 90,
-    learning_history: 65,
-  }
 
   let prevScores: Record<string, number> = {}
   if (profileHistory.value && profileHistory.value.length > 1) {
     const currentVer = profileMetadata.value?.version || 1
     const prevItem = profileHistory.value.find(item => item.version === currentVer - 1) || profileHistory.value[1]
     const prevScoresRaw = prevItem?.profile_score_json?.metrics?.dimension_scores || prevItem?.metrics?.dimension_scores || {}
-    for (const k of Object.keys(defaultScores)) {
-      prevScores[k] = prevScoresRaw[k] !== undefined && prevScoresRaw[k] !== null ? prevScoresRaw[k] : defaultScores[k]
+    for (const k of Object.keys(dimensionNames)) {
+      prevScores[k] = prevScoresRaw[k] !== undefined && prevScoresRaw[k] !== null ? prevScoresRaw[k] : 0
     }
   }
 
   const dimensionsJson = profileData.value?.profile_json?.dimensions || {}
 
-  return Object.entries(defaultScores).map(([key, defScore]) => {
-    const name = dimensionNames[key] || key
-    const score = scores[key] !== undefined && scores[key] !== null ? scores[key] : defScore
+  return Object.entries(dimensionNames).map(([key, name]) => {
+    const dimJson = dimensionsJson[key] || {}
+    const isAuthentic = (dimJson.confidence || 0) >= 0.7
+    const rawScore = scores[key] !== undefined && scores[key] !== null ? scores[key] : 0
+    const score = isAuthentic ? rawScore : 0
 
     let trend: 'up' | 'down' | 'stable' = 'stable'
-    if (prevScores[key] !== undefined) {
+    if (prevScores[key] !== undefined && isAuthentic) {
       if (score > prevScores[key]) trend = 'up'
       else if (score < prevScores[key]) trend = 'down'
-    } else {
-      const fallbacks: Record<string, 'up' | 'down' | 'stable'> = {
-        knowledge_foundation: 'up',
-        learning_goal: 'up',
-        cognitive_style: 'stable',
-        weakness_points: 'down',
-        mistake_preference: 'stable',
-        practice_ability: 'up',
-        interaction_preference: 'up',
-        learning_history: 'stable',
-      }
-      trend = fallbacks[key] || 'stable'
     }
 
-    const dimJson = dimensionsJson[key] || {}
     return {
       key,
       name,
       score,
       trend,
-      summary: dimJson.summary || getFallbackSummary(key),
-      evidence: dimJson.evidence || getFallbackEvidence(key),
+      summary: isAuthentic ? (dimJson.summary || '暂无描述') : '数据仍在采集中，暂无确切的评估结论。',
+      evidence: isAuthentic ? (dimJson.evidence || []) : [],
+      isAuthentic
     }
   })
 })
@@ -875,22 +828,11 @@ const compareScoresList = computed(() => {
   const currentScores = profileScoreData.value?.metrics?.dimension_scores || {}
   const histScores = compareVersionData.value?.profile_score_json?.metrics?.dimension_scores || compareVersionData.value?.metrics?.dimension_scores || {}
 
-  const defaultScores: Record<string, number> = {
-    knowledge_foundation: 75,
-    learning_goal: 85,
-    cognitive_style: 68,
-    weakness_points: 60,
-    mistake_preference: 72,
-    practice_ability: 82,
-    interaction_preference: 90,
-    learning_history: 65,
-  }
-
-  return Object.entries(defaultScores).map(([key, defVal]) => {
-    const currentVal = currentScores[key] !== undefined && currentScores[key] !== null ? currentScores[key] : defVal
-    const historicalVal = histScores[key] !== undefined && histScores[key] !== null ? histScores[key] : defVal - 5
+  return Object.entries(dimensionNames).map(([key, name]) => {
+    const currentVal = currentScores[key] !== undefined && currentScores[key] !== null ? currentScores[key] : 0
+    const historicalVal = histScores[key] !== undefined && histScores[key] !== null ? histScores[key] : 0
     return {
-      name: dimensionNames[key] || key,
+      name: name || key,
       current: currentVal,
       historical: historicalVal,
     }
@@ -1007,6 +949,16 @@ watch(() => route.query.action, () => {
 
 watch(timeRange, () => {
   loadLearningStats()
+})
+
+watch(() => route.path, (newPath) => {
+  if (newPath === '/profile') {
+    Promise.all([
+      loadProfileInfo(),
+      loadResourceHistory(),
+      loadLearningStats()
+    ]).catch(console.error)
+  }
 })
 
 onMounted(async () => {
@@ -1137,66 +1089,6 @@ const loadProfileInfo = async () => {
     console.warn('加载数据失败：', e)
   } finally {
     fillProfileForm(studentProfile.value)
-
-    // Fallback profile data if not retrieved
-    if (!profileData.value) {
-      profileData.value = {
-        version: 2,
-        confidence: 0.85,
-        updated_reason: '学习操作系统死锁发生状态变化，系统重新诊断画像',
-        updated_at: new Date().toISOString(),
-        profile_json: {
-          dimensions: {}
-        }
-      }
-    }
-    // Fallback profile history list if empty
-    if (!profileHistory.value || profileHistory.value.length === 0) {
-      profileHistory.value = [
-        {
-          version: 2,
-          created_at: new Date().toISOString(),
-          change_reason: '学习操作系统死锁发生状态变化，系统重新诊断画像',
-          profile_score_json: {
-            score: 78,
-            confidence: 0.85,
-            metrics: {
-              dimension_scores: {
-                knowledge_foundation: 75,
-                learning_goal: 85,
-                cognitive_style: 68,
-                weakness_points: 60,
-                mistake_preference: 72,
-                practice_ability: 82,
-                interaction_preference: 90,
-                learning_history: 65,
-              }
-            }
-          }
-        },
-        {
-          version: 1,
-          created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-          change_reason: '完成首次多维测验建立初始特征画像',
-          profile_score_json: {
-            score: 72,
-            confidence: 0.78,
-            metrics: {
-              dimension_scores: {
-                knowledge_foundation: 70,
-                learning_goal: 80,
-                cognitive_style: 65,
-                weakness_points: 50,
-                mistake_preference: 68,
-                practice_ability: 75,
-                interaction_preference: 85,
-                learning_history: 60,
-              }
-            }
-          }
-        }
-      ]
-    }
   }
 }
 
@@ -1217,14 +1109,10 @@ const loadResourceHistory = async () => {
   resourceHistoryLoading.value = true
   try {
     const res = await getGeneratedResources(20)
-    if (res.data.data && res.data.data.length > 0) {
-      resourceHistory.value = res.data.data
-    } else {
-      resourceHistory.value = getMockResourceHistory()
-    }
+    resourceHistory.value = res.data.data || []
   } catch (e) {
-    console.warn('后端 API 未连接，资源历史已使用前端 Mock 数据。')
-    resourceHistory.value = getMockResourceHistory()
+    console.warn('后端资源历史加载失败：', e)
+    resourceHistory.value = []
   } finally {
     resourceHistoryLoading.value = false
   }
@@ -1297,11 +1185,9 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
     profileEditorVisible.value = false
     ElMessage.success('学习画像资料已更新')
     await loadProfileInfo()
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to update profile onboarding', e)
-    ElMessage.error('保存失败，当前为无后端演示模式')
-    Object.assign(studentProfile.value, profileForm)
-    profileEditorVisible.value = false
+    ElMessage.error(e.response?.data?.message || '保存失败，请稍后重试')
   } finally {
     profileSubmitting.value = false
   }

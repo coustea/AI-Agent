@@ -98,6 +98,7 @@ import { logout } from '@/api/auth'
 import OnboardingDialog from '@/components/OnboardingDialog.vue'
 import GlobalProfileDialog from '@/components/GlobalProfileDialog.vue'
 import { isGlobalProfileVisible } from '@/composables/useGlobalProfile'
+import { useAuthPolling } from '@/composables/useAuthPolling'
 
 const route = useRoute()
 const router = useRouter()
@@ -110,6 +111,8 @@ const navItems = [
   { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
   { path: '/evaluation', label: '多维评估', icon: DataLine },
 ]
+
+useAuthPolling(60000)
 
 const activePath = computed(() => route.path)
 

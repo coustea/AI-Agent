@@ -528,9 +528,23 @@ async def bg_gen_task(
     resource_id: int,
     node_id: int | None = None,
 ) -> None:
-    """在后台执行多智能体资源生成任务。
+    """【核心编排引擎】在后台执行多智能体资源生成任务 (Multi-Agent DAG Workflow)。
 
-    流程：PlanningAgent → 并行 Worker Agents → ReviewAgent → 保存。
+    此函数是整个多智能体系统的“总导演”，它按以下 DAG (有向无环图) 流程调度各个智能体：
+    
+    [ 阶段 1 ] : PlanningAgent (规划智能体)
+                 ↓
+                 生成蓝图 (Blueprint) 和 指令分发表 (Instructions)
+                 ↓
+    [ 阶段 2 ] : 并行调度所有启用的 Worker Agents (如 PPT, Quiz, Code, Mindmap 等)
+                 (各个 Worker 会拿着专属的 Instruction 并行干活)
+                 ↓
+                 收集所有 Worker 的生成结果
+                 ↓
+    [ 阶段 3 ] : ReviewAgent (审阅智能体)
+                 (检查所有生成结果的一致性和质量)
+                 ↓
+    [ 阶段 4 ] : 组装并落库 (Assembler / Save)
     """
     from app.infra.database import session_scope
     from app.resource.agents import AGENT_REGISTRY
@@ -539,18 +553,26 @@ async def bg_gen_task(
     async with session_scope() as session:
         usecases = ResourceUsecases(session)
         enabled_agents = request.enabled_agent_ids()
+        
+        # 初始化前端能够轮询到的进度骨架
         await usecases.initialize_generation_progress(resource_id, enabled_agents)
 
         async def persist_event(event: ResourceGenerateEvent) -> None:
+            # 事件回调：将任意 Agent 内部发出的状态变更写入数据库，供前端 SSE 推送
             await usecases.record_generation_event(resource_id, event)
 
+        # 实例化事件发射器，贯穿所有 Agent 的生命周期
         emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
 
         success = False
         start_time = time.perf_counter()
         try:
             logger.info("启动资源生成: user_id=%s, resource_id=%s, agents=%s", user_id, resource_id, enabled_agents)
-            # 1. PlanningAgent
+            
+            # ==========================================
+            # 阶段 1: 规划阶段 (Planning Agent)
+            # 职责: 拆解用户需求，生成整体教学蓝图，并为每个下游 Agent 分发具体指令
+            # ==========================================
             planning_state = WorkerState(
                 learning_need=request.learning_need,
                 learning_scenario=request.learning_scenario,
@@ -559,13 +581,14 @@ async def bg_gen_task(
             )
             planning_result = await AGENT_REGISTRY["planning"](emitter).run(planning_state)
 
-            # Extract blueprint and instructions from planning result
             blueprint = None
             instruction_map: dict[str, AgentInstruction] = {}
             if planning_result.success and planning_result.metadata:
+                # 提取总蓝图
                 blueprint_data = planning_result.metadata.get("blueprint")
                 if blueprint_data:
                     blueprint = LearningBlueprint.model_validate(blueprint_data)
+                # 提取下游 Agent 的“锦囊”指令
                 instructions_data = planning_result.metadata.get("instructions", {})
                 for aid, inst_data in instructions_data.items():
                     if isinstance(inst_data, dict):
@@ -577,39 +600,48 @@ async def bg_gen_task(
             else:
                 logger.warning("Planning 失败: %.2fs, error=%s", planning_elapsed, planning_result.error)
 
-            # 2. Parallel worker agents
+            # ==========================================
+            # 阶段 2: 并行生成阶段 (Parallel Worker Agents)
+            # 职责: 各领域专家并发执行任务，极大提升整体资源生成速度
+            # ==========================================
             worker_start = time.perf_counter()
             await emitter.emit_workflow("generating", "并行生成资源", progress=20)
             results: dict[str, WorkerResult] = {}
 
             async def run_one(agent_id: str) -> None:
+                """独立运行单个 Worker Agent 的协程函数"""
                 agent_start = time.perf_counter()
                 try:
                     logger.info("Agent[%s] 启动", agent_id)
+                    # 组装属于该 Agent 的执行上下文
                     state = WorkerState(
                         resource_id=resource_id,
                         learning_need=request.learning_need,
                         learning_scenario=request.learning_scenario,
                         agent_name=agent_id,
                         agent_config=request.agent_configs.get(agent_id, {}),
-                        blueprint=blueprint,
-                        instruction=instruction_map.get(agent_id),
-                        profile=profile,
+                        blueprint=blueprint,                         # 共享总蓝图
+                        instruction=instruction_map.get(agent_id),   # 独享专属指令
+                        profile=profile,                             # 共享用户画像
                     )
                     agent = AGENT_REGISTRY[agent_id](emitter)
                     result = await agent.run(state)
                     results[agent_id] = result
+                    
                     agent_elapsed = time.perf_counter() - agent_start
                     if result.success:
                         logger.info("Agent[%s] 完成: %.2fs", agent_id, agent_elapsed)
                     else:
                         logger.warning("Agent[%s] 失败: %.2fs, error=%s", agent_id, agent_elapsed, result.error)
+                        
+                    # 如果该 Worker 成功，立刻将其成果独立保存入库，避免阻塞
                     if result.success and result.content:
                         await usecases.save_worker_result(
                             user_id=user_id,
                             resource_id=resource_id,
                             result=result,
                         )
+                        # 发送资源就绪事件给前端
                         await emitter.emit_resource(
                             agent_id=agent_id,
                             title=result.title,
@@ -628,8 +660,11 @@ async def bg_gen_task(
                         metadata={"agent_id": agent_id},
                     )
 
+            # 筛选出所有真正的 Worker (排除掉 planning 和 review)
             worker_agents = [a for a in enabled_agents if a in AGENT_REGISTRY and a not in ("planning", "review")]
             logger.info("开始并行 Worker 生成: agents=%s", worker_agents)
+            
+            # 使用 asyncio.gather 实现高并发执行
             await asyncio.gather(*(run_one(agent_id) for agent_id in worker_agents))
 
             worker_elapsed = time.perf_counter() - worker_start
@@ -637,7 +672,10 @@ async def bg_gen_task(
             fail_count = sum(1 for r in results.values() if not r.success)
             logger.info("Worker 全部完成: 成功=%s, 失败=%s, 耗时=%.2fs", success_count, fail_count, worker_elapsed)
 
-            # 3. ReviewAgent
+            # ==========================================
+            # 阶段 3: 质量审查阶段 (Review Agent)
+            # 职责: 拿取所有 Worker 的成果，检查连贯性和缺失项，生成总结性点评
+            # ==========================================
             await emitter.emit_workflow("reviewing", "质量审查中", progress=85)
             if "review" in AGENT_REGISTRY:
                 failed_results = {aid: r for aid, r in results.items() if not r.success}
@@ -646,6 +684,7 @@ async def bg_gen_task(
                     learning_need=request.learning_need,
                     profile=profile,
                     blueprint=blueprint,
+                    # 将前面所有的生成成果打包发给审查员
                     agent_config={"worker_results": [r.model_dump(mode="json") for r in review_results.values()]},
                 )
                 review_worker_result = await AGENT_REGISTRY["review"](emitter).run(review_state)
@@ -658,7 +697,10 @@ async def bg_gen_task(
             else:
                 review_result = ReviewResult(passed=True, overall_score=100)
 
-            # 4. Save final results
+            # ==========================================
+            # 阶段 4: 持久化与打包 (Save Final Results)
+            # 职责: 将整个生成周期的数据打包落库，并通知前端完成
+            # ==========================================
             await usecases.save_generation_results(
                 user_id=user_id,
                 resource_id=resource_id,
@@ -674,6 +716,7 @@ async def bg_gen_task(
                 ),
             )
 
+            # 组装最终 Bundle 发送结束事件
             bundle = await usecases.get_resource_bundle(user_id, resource_id)
             if bundle:
                 await emitter.emit_bundle(bundle, progress=99)
@@ -706,16 +749,32 @@ async def bg_single_gen_task(
     profile: dict[str, Any],
     node_id: int | None = None,
 ) -> None:
-    """在后台执行单智能体资源生成任务（路径规划 / 即调即用）。"""
+    """【轻量级独立执行引擎】在后台执行单智能体资源生成任务。
+    
+    适用场景：
+    - 路径规划中单独生成某个特定知识点的资源 (Course Path Node Generation)
+    - 用户在界面上点击“即调即用”单独唤醒某一个领域的专家 (如：仅生成 PPT)
+
+    工作流程：
+    [ 准备 ] : 初始化 SSE 进度条和事件发射器
+                 ↓
+    [ 执行 ] : 实例化指定的 Agent (通过 AGENT_REGISTRY) 并直接运行
+                 ↓
+    [ 落库 ] : 成功后立刻将生成的资源内容持久化
+                 ↓
+    [ 结束 ] : 发送 done 事件，更新数据库最终状态
+    """
     from app.infra.database import session_scope
     from app.resource.agents import AGENT_REGISTRY
     from app.resource.schemas import WorkerState
 
     async with session_scope() as session:
         usecases = ResourceUsecases(session)
+        # 初始化数据库中的任务进度骨架，只包含当前这唯一的一个 Agent
         await usecases.initialize_generation_progress(resource_id, [agent_id])
 
         async def persist_event(event: ResourceGenerateEvent) -> None:
+            # 实时回调，将 Agent 输出的打字机文本或进度状态记录到数据库
             await usecases.record_generation_event(resource_id, event)
 
         emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
@@ -724,6 +783,11 @@ async def bg_single_gen_task(
         start_time = time.perf_counter()
         try:
             logger.info("启动单智能体生成: user_id=%s, resource_id=%s, agent=%s", user_id, resource_id, agent_id)
+            
+            # ==========================================
+            # 执行阶段: 独立唤醒特定 Agent
+            # 注意：单 Agent 模式下没有 PlanningAgent 派发的蓝图，全靠自身的 System Prompt
+            # ==========================================
             state = WorkerState(
                 learning_need=learning_need,
                 profile=profile,
@@ -736,12 +800,17 @@ async def bg_single_gen_task(
             else:
                 logger.warning("Agent[%s] 失败: %.2fs, error=%s", agent_id, agent_elapsed, result.error)
 
+            # ==========================================
+            # 持久化阶段: 保存并推送结果
+            # ==========================================
             if result.success and result.content:
+                # 1. 结果立刻落库
                 await usecases.save_worker_result(
                     user_id=user_id,
                     resource_id=resource_id,
                     result=result,
                 )
+                # 2. 通过 SSE 推送给前端（触发前端界面的卡片渲染）
                 await emitter.emit_resource(
                     agent_id=agent_id,
                     title=result.title,
@@ -753,16 +822,23 @@ async def bg_single_gen_task(
                 )
                 success = True
 
+            # 发送全局结束信号
             await emitter.emit_done(bundle=None)
         except Exception:
             logger.error("单智能体生成异常: agent=%s, resource_id=%s", agent_id, resource_id, exc_info=True)
 
+        # ==========================================
+        # 善后阶段: 标记总状态并更新路径节点（如果是路径任务）
+        # ==========================================
         if not success:
             await usecases.update_resource_status(resource_id, "failed")
         else:
             await usecases.update_resource_status(resource_id, "completed")
+            
         total_elapsed = time.perf_counter() - start_time
         logger.info("单智能体生成结束: agent=%s, success=%s, 耗时=%.2fs", agent_id, success, total_elapsed)
+        
+        # 如果这个任务关联了某个具体的学习路径节点，通知该节点状态已就绪
         if node_id:
             await _update_node_resource_status(
                 session, node_id, "ready" if success else "failed",

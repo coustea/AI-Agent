@@ -44,7 +44,6 @@ def _validate_database_settings() -> None:
         raise RuntimeError(
             "DB_URL is required. Set it in config.yaml before starting the app."
         )
-    logger.debug("[Database] 使用 DB_URL: %s", DB_URL[:50] + "...")
 
 
 _validate_database_settings()
@@ -107,20 +106,26 @@ async def init_db() -> None:
     import_all_models()
 
     async def _run_once() -> None:
-        if DEBUG:
-            logger.warning("[Database] DEBUG=true，将删除并重建所有表！")
-            async with engine.begin() as conn:
-                # PostgreSQL requires CASCADE to drop tables with foreign key dependencies
-                # Get all table names and drop them with CASCADE
-                result = await conn.execute(
-                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-                )
-                table_names = [row[0] for row in result.fetchall()]
-                if table_names:
-                    for table_name in table_names:
-                        await conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))
-                    logger.info("[Database] 已删除 %d 个表", len(table_names))
         async with engine.begin() as conn:
+            if DEBUG:
+                logger.warning("[Database] DEBUG=true，将删除并重建所有表！")
+                # 先终止所有其他连接，避免 DROP SCHEMA 被阻塞
+                result = await conn.execute(
+                    text(
+                        "SELECT pid, pg_terminate_backend(pid) "
+                        "FROM pg_stat_activity "
+                        "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+                    )
+                )
+                terminated = [row[0] for row in result.fetchall()]
+                if terminated:
+                    logger.info(
+                        "[Database] 已终止 %d 个阻塞连接: pids=%s",
+                        len(terminated), terminated,
+                    )
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+                logger.info("[Database] 已删除并重建 public schema")
             await conn.run_sync(SQLModel.metadata.create_all)
 
     for attempt in range(1, max_retries + 1):

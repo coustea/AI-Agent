@@ -74,11 +74,44 @@ const normalizedContent = computed(() => normalizeStreamingMarkdown(props.conten
 .app-markdown-preview :deep(.md-editor-preview pre),
 .app-markdown-preview :deep(.md-editor-preview pre code),
 .app-markdown-preview :deep(.md-editor-preview figure.md-editor-code) {
-  background-color: var(--color-surface) !important;
+  background-color: #FFFFFF !important;
+  color: #1E293B !important;
 }
 
 /* 确保内置代码的外部容器也无背景色 */
 .app-markdown-preview :deep(.md-editor-preview .default-theme pre) {
-  background-color: var(--color-surface) !important;
+  background-color: #FFFFFF !important;
+}
+
+/* 优化语法高亮，拒绝浅色和灰色，提高对比度 */
+.app-markdown-preview :deep(.md-editor-preview pre .title),
+.app-markdown-preview :deep(.md-editor-preview pre .attribute) {
+  color: #0284C7 !important; /* 深蓝色 */
+  font-weight: 600;
+}
+
+.app-markdown-preview :deep(.md-editor-preview pre .string),
+.app-markdown-preview :deep(.md-editor-preview pre .value) {
+  color: #16A34A !important; /* 深绿色 */
+}
+
+.app-markdown-preview :deep(.md-editor-preview pre .keyword) {
+  color: #9333EA !important; /* 深紫色 */
+  font-weight: bold;
+}
+
+.app-markdown-preview :deep(.md-editor-preview pre .comment) {
+  color: #475569 !important; /* 深蓝灰色，不再是浅灰 */
+  font-style: italic;
+}
+
+.app-markdown-preview :deep(.md-editor-preview pre .number) {
+  color: #D97706 !important; /* 深橙色 */
+}
+
+.app-markdown-preview :deep(.md-editor-preview pre .built_in),
+.app-markdown-preview :deep(.md-editor-preview pre .type) {
+  color: #B91C1C !important; /* 深红色 */
+  font-weight: 600;
 }
 </style>

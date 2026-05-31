@@ -47,6 +47,10 @@ export function logout() {
   return http.delete<ApiResponse>('/users/auth')
 }
 
+export function getAuthStatus() {
+  return http.get<ApiResponse>('/users/auth/status')
+}
+
 export function getMe() {
   return http.get<ApiResponse<LoginData['user']>>('/users/me')
 }

@@ -151,7 +151,6 @@ async def adjust_path(
     session: AsyncSession = Depends(get_session),
 ):
     """根据用户反馈或当前画像，动态纠偏并重新编排后续学习节点。"""
-    logger.info("[PathAPI] 路径纠偏: user_id=%s", current_user.id)
     service = CoursePathService(session)
     try:
         updated_path = await service.adjust_path(user_id=current_user.id, request=request)

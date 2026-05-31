@@ -107,7 +107,6 @@ class LongTermMemoryExtractor:
                 temperature=0.1,
             )
             if not resp.need_update or not resp.memory_markdown:
-                logger.debug("[LongTermMemory] LLM 判断无需更新: user_id=%s", user_id)
                 return False
 
             if not existing:

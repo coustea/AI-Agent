@@ -60,7 +60,6 @@ async def create_token(user_id: int, session: AsyncSession) -> str:
     )
     session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))
     await session.commit()
-    logger.debug("[Auth] Token 创建: user_id=%s expires=%s", user_id, expire.isoformat())
     return token
 
 

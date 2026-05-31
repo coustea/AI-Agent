@@ -109,7 +109,6 @@ class AgentEventEmitter:
         agent: str | None = "coordinator",
     ) -> None:
         """发送工作流事件。"""
-        logger.debug("[EventEmitter] workflow: stage=%s status=%s progress=%d task_id=%s", stage, status, progress, task_id or self.task_id)
         await self._publish(self._make_event(
             event_type="workflow",
             stage=stage,
@@ -285,7 +284,6 @@ class AgentEventEmitter:
         message: str = "资源生成完成",
     ) -> None:
         """发送完成事件。"""
-        logger.info("[EventEmitter] done: resource_id=%s task_id=%s progress=%d", self.resource_id, task_id or self.task_id, progress)
         bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
         await self._publish(self._make_event(
             event_type="done",

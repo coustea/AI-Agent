@@ -27,6 +27,29 @@ from app.infra.paths import LOGS_DIR as LOG_DIR
 # 输出格式尽量与旧 logging 版保持一致，便于 grep/排障。
 _LOGURU_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {extra[logger_name]} | {message}"
 
+# 终端过滤：DEBUG 模式下只输出关键日志，过滤第三方噪音
+_CONSOLE_NOISY_PREFIXES = (
+    "httpcore",
+    "httpx",
+    "openai",
+    "sqlalchemy",
+    "asyncpg",
+    "uvicorn.access",
+)
+
+
+def _console_filter(record: "loguru.Message") -> bool:
+    """DEBUG 模式终端过滤器：只保留业务日志，过滤第三方 DEBUG 噪音。"""
+    name = record["extra"].get("logger_name", "")
+    # LLM 调用只输出失败（WARNING+），成功太频繁
+    if name == "app.infra.llm" and record["level"].name == "DEBUG":
+        return False
+    # 过滤第三方库噪音
+    for prefix in _CONSOLE_NOISY_PREFIXES:
+        if name.startswith(prefix) or name == prefix:
+            return False
+    return True
+
 
 class _InterceptHandler(logging.Handler):
     """把标准 logging.Record 转发到 loguru。"""
@@ -216,6 +239,15 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
     """初始化 Loguru + 标准库 logging 拦截。
 
     在应用启动时调用一次即可（FastAPI lifespan）。
+
+    DEBUG 模式：
+      - 终端：INFO+（业务操作、Agent 流程、LLM 失败）
+      - error.log：ERROR+，异步写入
+      - app.log：不写
+    生产模式：
+      - 终端：WARNING+（只看错误和警告）
+      - app.log：INFO+，异步写入
+      - error.log：ERROR+，异步写入
     """
     global _CONFIGURED
     if _CONFIGURED and not force:
@@ -226,35 +258,43 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
     log_level = _parse_level(level or ("DEBUG" if _debug_logging_enabled() else LOG_LEVEL))
 
     # 1) 配置 loguru sinks
-    # 控制台用 enqueue=False 保证实时输出（dev reload 场景下 enqueue 线程可能丢失）
-    # 文件用 enqueue=True 异步写入避免阻塞业务
     _loguru_logger.remove()
     _loguru_logger.configure(extra={"logger_name": "root"})
 
-    # 控制台（实时输出，不用 enqueue）
-    _loguru_logger.add(
-        sys.stdout,
-        level=log_level,
-        format=_LOGURU_FORMAT,
-        backtrace=True,
-        diagnose=False,
-        enqueue=False,
-    )
+    if _APP_DEBUG_MODE:
+        # DEBUG 模式：终端输出关键日志，不写 app.log
+        _loguru_logger.add(
+            sys.stderr,
+            level="INFO",
+            format=_LOGURU_FORMAT,
+            filter=_console_filter,
+            backtrace=True,
+            diagnose=False,
+            enqueue=True,
+        )
+    else:
+        # 生产模式：终端只看 WARNING+，app.log 写 INFO+
+        _loguru_logger.add(
+            sys.stderr,
+            level="WARNING",
+            format=_LOGURU_FORMAT,
+            backtrace=True,
+            diagnose=False,
+            enqueue=True,
+        )
+        _loguru_logger.add(
+            str(LOG_DIR / "app.log"),
+            level="INFO",
+            format=_LOGURU_FORMAT,
+            rotation="00:00",
+            retention="30 days",
+            encoding="utf-8",
+            backtrace=True,
+            diagnose=False,
+            enqueue=True,
+        )
 
-    # 全量日志：按天轮转，保留 30 天（异步写入）
-    _loguru_logger.add(
-        str(LOG_DIR / "app.log"),
-        level=log_level,
-        format=_LOGURU_FORMAT,
-        rotation="00:00",
-        retention="30 days",
-        encoding="utf-8",
-        backtrace=True,
-        diagnose=False,
-        enqueue=True,
-    )
-
-    # 错误日志：按大小轮转，最多 10 份（异步写入）
+    # error.log：两种模式都写
     _loguru_logger.add(
         str(LOG_DIR / "error.log"),
         level="ERROR",
@@ -288,14 +328,11 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
     _configure_external_logger_levels()
 
     _loguru_logger.bind(logger_name="root").info(
-        "[Logging] 日志系统初始化完成: log_dir={log_dir} level={level} async_enqueue={enqueue} langchain_debug={langchain_debug} langchain_verbose={langchain_verbose} langgraph_debug={langgraph_debug} deepagents_debug={deepagents_debug}",
-        log_dir=str(LOG_DIR),
+        "[Logging] 日志系统初始化完成: mode={mode} console={console} file={file} level={level}",
+        mode="DEBUG(终端+error.log)" if _APP_DEBUG_MODE else "PROD(终端WARNING+app.log+error.log)",
+        console="INFO(filtered)" if _APP_DEBUG_MODE else "WARNING+",
+        file="error.log" if _APP_DEBUG_MODE else "app.log+error.log",
         level=log_level,
-        enqueue=True,
-        langchain_debug=LANGCHAIN_DEBUG,
-        langchain_verbose=LANGCHAIN_VERBOSE,
-        langgraph_debug=LANGGRAPH_DEBUG,
-        deepagents_debug=DEEPAGENTS_DEBUG,
     )
 
     _CONFIGURED = True

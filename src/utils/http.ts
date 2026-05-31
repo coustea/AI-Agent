@@ -72,7 +72,9 @@ http.interceptors.response.use(
     const isAuthRequest = url.includes('/users/auth') || url === '/users'
     if (status === 401 && !isAuthRequest) {
       localStorage.removeItem('token')
-      window.location.href = '/login'
+      // 不再硬跳转，由 useAuthPolling 轮询或 router.beforeEach 统一处理
+      // 派发自定义事件通知 token 失效
+      window.dispatchEvent(new CustomEvent('auth:expired'))
     }
     return Promise.reject(error)
   },

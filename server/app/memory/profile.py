@@ -218,7 +218,6 @@ class ProfileBuilder:
         else:
             success, updated, profile_json = await self._build_from_dialogue(db=db, user_id=user_id, session_id=session_id, old_json=old_json)
             if not success or not updated:
-                logger.info("[ProfileBuilder] 对话画像无需更新: user_id=%s success=%s updated=%s", user_id, success, updated)
                 return None
             updated_reason = "基于近期对话更新画像"
 
@@ -377,9 +376,8 @@ class ProfileBuilder:
             return False, False, old_json
         new_json = self._merge_with_old_profile(self._parse_response(resp.model_dump()), old_json)
         if self._is_same(new_json, old_json):
-            logger.debug("[ProfileBuilder] 对话画像内容无变化: user_id=%s", user_id)
             return True, False, old_json
-        logger.info("[ProfileBuilder] 对话画像更新完成: user_id=%s version=%d", user_id, (old.version or 1) + 1 if old else 1)
+        logger.info("[ProfileBuilder] 对话画像更新完成: user_id=%s", user_id)
         return True, True, new_json
 
     async def _build_recent_dialogue(self, *, db: AsyncSession, user_id: int, session_id: str | None, limit: int = 40) -> str:

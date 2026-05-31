@@ -192,8 +192,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import {
   ArrowRight,
   ChatDotRound,
@@ -223,6 +223,7 @@ import { getProfileOnboarding, getGeneratedResources, getPathPlan, getProfileSco
 use([CanvasRenderer, RadarChart, GridComponent, TooltipComponent])
 
 const router = useRouter()
+const route = useRoute()
 
 const goTo = (path: string) => {
   router.push(path)
@@ -309,7 +310,7 @@ const radarValuesList = computed(() => {
   }
 
   const scores = profileScoreData.value?.metrics?.dimension_scores || {}
-  const vals = [75, 85, 68, 60, 82, 90] // Fallbacks
+  const vals = [0, 0, 0, 0, 0, 0] // No fallbacks, start at 0
 
   for (const [key, index] of Object.entries(dimensionMap)) {
     const score = scores[key]
@@ -353,12 +354,12 @@ const radarOption = computed(() => {
 // Computes the top 3 prominent dimensions
 const prominentDimensions = computed(() => {
   const dimensions = [
-    { name: '知识基础', score: radarValuesList.value[0] ?? 75, key: 'knowledge_foundation' },
-    { name: '学习目标', score: radarValuesList.value[1] ?? 85, key: 'learning_goal' },
-    { name: '认知风格', score: radarValuesList.value[2] ?? 68, key: 'cognitive_style' },
-    { name: '薄弱点', score: radarValuesList.value[3] ?? 60, key: 'weakness_points' },
-    { name: '实践能力', score: radarValuesList.value[4] ?? 82, key: 'practice_ability' },
-    { name: '交互偏好', score: radarValuesList.value[5] ?? 90, key: 'interaction_preference' },
+    { name: '知识基础', score: radarValuesList.value[0] ?? 0, key: 'knowledge_foundation' },
+    { name: '学习目标', score: radarValuesList.value[1] ?? 0, key: 'learning_goal' },
+    { name: '认知风格', score: radarValuesList.value[2] ?? 0, key: 'cognitive_style' },
+    { name: '薄弱点', score: radarValuesList.value[3] ?? 0, key: 'weakness_points' },
+    { name: '实践能力', score: radarValuesList.value[4] ?? 0, key: 'practice_ability' },
+    { name: '交互偏好', score: radarValuesList.value[5] ?? 0, key: 'interaction_preference' },
   ]
   // Sort descending by score
   const sorted = [...dimensions].sort((a, b) => b.score - a.score)
@@ -500,6 +501,12 @@ const loadDashboardData = async () => {
     console.error('Failed to load dashboard data:', error)
   }
 }
+
+watch(() => route.path, (newPath) => {
+  if (newPath === '/' || newPath === '/home') {
+    loadDashboardData()
+  }
+})
 
 onMounted(() => {
   loadDashboardData()

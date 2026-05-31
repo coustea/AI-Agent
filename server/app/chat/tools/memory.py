@@ -11,13 +11,10 @@ from typing import TYPE_CHECKING
 
 from langchain_core.tools import tool
 
-from app.infra.logging import get_logger
 from app.memory.service import MemoryService
 
 if TYPE_CHECKING:
     from app.chat.tools.memory import DefaultMemoryReader
-
-logger = get_logger(__name__)
 
 
 class MemoryReader(ABC):
@@ -59,7 +56,6 @@ def make_memory_tools(reader: DefaultMemoryReader) -> list:
         如果想获取特定维度，传入维度的英文关键字（如 knowledge_foundation, weakness_points）。
         不传则返回完整画像概要。"""
         result = await reader.get_user_profile(dimension)
-        logger.debug("[MemoryTool] get_user_profile: dimension=%s len=%d", dimension, len(result))
         return result
 
     @tool("get_long_term_memory")
@@ -68,7 +64,6 @@ def make_memory_tools(reader: DefaultMemoryReader) -> list:
         如果想获取特定分类，传入分类的英文关键字（如 effective_strategies, stable_weaknesses）。
         不传则返回完整记忆概要。"""
         result = await reader.get_long_term_memory(category)
-        logger.debug("[MemoryTool] get_long_term_memory: category=%s len=%d", category, len(result))
         return result
 
     return [get_user_profile, get_long_term_memory]
