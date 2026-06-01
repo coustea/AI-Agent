@@ -253,7 +253,7 @@ async def get_chat_file(
     Returns:
         文件响应。
     """
-    from app.infra.paths import CHAT_DIR
+    from app.config import CHAT_DIR
 
     # 权限校验：只允许所有者访问
     if current_user.id != owner_id:
@@ -389,6 +389,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         "module": profile.module,
         "profile_json": profile.profile_json,
         "profile_score_json": profile.profile_score_json,
+        "profile_markdown": profile.profile_markdown,
         "version": profile.version,
         "confidence": profile.confidence,
         "updated_reason": profile.updated_reason,

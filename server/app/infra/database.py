@@ -1,4 +1,4 @@
-"""Database engine and session factory.
+"""Database engine, session factory, and startup health check.
 
 This is the single database bootstrap implementation used by the application.
 Environment loading is handled in ``app.main`` only.
@@ -7,13 +7,16 @@ Environment loading is handled in ``app.main`` only.
   - 校验数据库配置完整性
   - 创建全局异步引擎（连接池）
   - 提供表自动创建（init_db）和会话工厂（get_session）
+  - 启动健康检测（check_all）
 """
 
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, DBAPIError
@@ -38,6 +41,46 @@ from app.infra.models import import_all_models
 logger = get_logger(__name__)
 
 
+# ============ Health check data structures ============
+
+
+@dataclass
+class ServiceStatus:
+    name: str
+    ok: bool = False
+    latency_ms: int = 0
+    error: str = ""
+
+
+@dataclass
+class HealthReport:
+    services: list[ServiceStatus] = field(default_factory=list)
+
+    @property
+    def status(self) -> str:
+        if all(s.ok for s in self.services):
+            return "ok"
+        if any(s.ok for s in self.services):
+            return "degraded"
+        return "error"
+
+    def to_dict(self) -> dict:
+        return {
+            "status": self.status,
+            "services": {
+                s.name: {
+                    "status": "ok" if s.ok else "error",
+                    **({"latency_ms": s.latency_ms} if s.ok else {}),
+                    **({"error": s.error} if s.error else {}),
+                }
+                for s in self.services
+            },
+        }
+
+
+# ============ Config validation ============
+
+
 def _validate_database_settings() -> None:
     """校验数据库配置必填项。"""
     if not DB_URL:
@@ -57,6 +100,9 @@ engine = create_async_engine(
     pool_recycle=DB_POOL_RECYCLE,
     pool_timeout=DB_POOL_TIMEOUT,
 )
+
+
+# ============ Connection test & health check ============
 
 
 async def _test_connection() -> bool:
@@ -85,6 +131,31 @@ async def _test_connection() -> bool:
             exc,
         )
         return False
+
+
+async def check_all() -> HealthReport:
+    """检测数据库服务，返回健康报告。在应用启动时由 lifespan 调用。"""
+    t0 = time.monotonic()
+    try:
+        ok = await _test_connection()
+        ms = int((time.monotonic() - t0) * 1000)
+        result = ServiceStatus("database", ok=ok, latency_ms=ms if ok else 0,
+                               error="" if ok else "连接测试失败")
+    except Exception as exc:
+        result = ServiceStatus("database", error=f"{type(exc).__name__}: {exc}")
+
+    report = HealthReport([result])
+
+    for s in report.services:
+        if s.ok:
+            logger.info("[Health] %s: ok (%dms)", s.name, s.latency_ms)
+        else:
+            logger.error("[Health] %s: FAIL - %s", s.name, s.error)
+
+    return report
+
+
+# ============ Database initialization ============
 
 
 async def init_db() -> None:
@@ -140,7 +211,7 @@ async def init_db() -> None:
             await _run_once()
 
             # 导入学校数据
-            from app.infra.school_import import import_schools
+            from app.auth.school_import import import_schools
             async with AsyncSession(engine, expire_on_commit=False) as session:
                 await import_schools(session)
 
@@ -170,6 +241,9 @@ async def init_db() -> None:
                 exc,
             )
             await asyncio.sleep(retry_delay_sec)
+
+
+# ============ Session factories ============
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

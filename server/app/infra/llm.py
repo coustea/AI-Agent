@@ -37,9 +37,8 @@ from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from pydantic import ValidationError
 
 from app.config import get
-from app.infra.errors import ServiceError
+from app.infra.utils import ServiceError, parse_first_json_object
 from app.infra.logging import get_logger
-from app.infra.json import parse_first_json_object
 
 logger = get_logger(__name__)
 

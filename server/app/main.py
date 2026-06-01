@@ -17,8 +17,7 @@ from app.path.api import router as path_router
 from app.resource.api import router as resource_router
 from app.avatar.api import router as avatar_router
 from app.avatar.bridge.manager import avatar_bridge_manager
-from app.infra.database import init_db
-from app.infra.health import check_all
+from app.infra.database import init_db, check_all
 from app.infra.logging import configure_logging
 from app.infra.response import HttpResponse
 from app.config import DEBUG

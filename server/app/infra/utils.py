@@ -1,17 +1,44 @@
-"""JSON 解析辅助工具（不使用正则）。
+"""共享工具：异常定义与 JSON 解析。
 
-本模块用于处理"模型输出 JSON 结构化结果"的解析与兼容：
-- 优先直接 json.loads
-- 兼容常见的 Markdown code fence（```json ...```），用行级过滤去掉围栏
-- 兼容模型在 JSON 前后夹杂少量说明文字：使用 JSONDecoder.raw_decode 扫描解析首个 JSON 值
+异常层级：
+- AppError → ServiceError / NotFoundError / ForbiddenError
 
-注意：本模块刻意不使用正则，避免通过 regex "抠 JSON"。
+JSON 工具（用于 LLM 输出解析）：
+- parse_first_json_object(): 从文本中提取首个 JSON 对象
+- strip_markdown_code_fences(): 去掉 Markdown 代码围栏
+- preview_for_log(): 日志摘要
 """
 
 from __future__ import annotations
 
 import json
 from typing import Any
+
+
+# ============ 异常定义 ============
+
+
+class AppError(Exception):
+    """应用异常基类。"""
+
+    def __init__(self, message: str = ""):
+        self.message = message
+        super().__init__(message)
+
+
+class ServiceError(AppError):
+    """外部服务不可用（LLM、数据库等）。"""
+
+
+class NotFoundError(AppError):
+    """资源不存在。"""
+
+
+class ForbiddenError(AppError):
+    """权限不足。"""
+
+
+# ============ JSON 解析 ============
 
 
 def strip_markdown_code_fences(text: str) -> str:
@@ -21,7 +48,6 @@ def strip_markdown_code_fences(text: str) -> str:
     raw = text.strip()
     if not raw.startswith("```"):
         return raw
-    # 兼容 ```json / ``` / ```md 等任意 fence 标记：只去掉以 ``` 开头的行
     lines = [line for line in raw.splitlines() if not line.strip().startswith("```")]
     return "\n".join(lines).strip()
 
@@ -38,7 +64,6 @@ def parse_first_json_value(text: str) -> Any:
     if not cleaned:
         raise json.JSONDecodeError("empty input", "", 0)
 
-    # 先尝试"整体就是 JSON"
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
@@ -46,7 +71,6 @@ def parse_first_json_value(text: str) -> Any:
 
     decoder = json.JSONDecoder()
     s = cleaned.strip()
-    # 扫描潜在 JSON 起点（对象/数组）。不解析标量起点是因为多数结构化输出为对象/数组。
     candidates: list[int] = []
     idx = s.find("{")
     while idx != -1:
@@ -64,7 +88,6 @@ def parse_first_json_value(text: str) -> Any:
         except json.JSONDecodeError:
             continue
 
-    # 最后一次：让异常信息更贴近原始输入
     raise json.JSONDecodeError("no JSON value found", s, 0)
 
 

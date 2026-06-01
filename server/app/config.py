@@ -54,9 +54,18 @@ JWT_ALGO = get("jwt.algorithm", "HS256")
 JWT_EXPIRE = get("jwt.expire_days", 7)
 
 # ============ Paths ============
-WORKPLACE_DIR = get("paths.workplace", "workplace")
-LOGS_DIR = get("paths.logs", "logs")
-KB_DIR = get("paths.knowledge", "data")
+WORKPLACE_DIR_NAME = get("paths.workplace", "workplace")
+LOGS_DIR_NAME = get("paths.logs", "logs")
+KB_DIR_NAME = get("paths.knowledge", "data")
+
+# ============ Path objects ============
+SERVER_DIR = Path(__file__).resolve().parents[1]
+WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
+LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
+KNOWLEDGE_BASE_DIR = SERVER_DIR / KB_DIR_NAME
+RESOURCE_DIR = WORKPLACE_DIR / "resource"
+CHAT_DIR = WORKPLACE_DIR / "chat"
+AVATAR_DIR = WORKPLACE_DIR / "avatars"
 
 # ============ Knowledge Base ============
 KB_ENABLED = get("knowledge.enabled", True)
@@ -75,6 +84,7 @@ DEEPAGENTS_DEBUG = False
 # ============ Search ============
 TAVILY_KEY = get("search.tavily_key", "")
 SERPAPI_KEY = ""
+SPARK_SEARCH_KEY = get("search.spark_key", "")
 
 # ============ Avatar ============
 AVATAR_APP_ID = get("avatar.app_id", "")

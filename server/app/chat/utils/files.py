@@ -11,7 +11,7 @@ from typing import Optional
 from langchain_core.messages import HumanMessage
 
 from app.infra.logging import get_logger
-from app.infra.paths import CHAT_DIR
+from app.config import CHAT_DIR
 
 logger = get_logger(__name__)
 
