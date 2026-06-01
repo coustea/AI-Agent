@@ -1,15 +1,15 @@
 <template>
   <el-dialog
       v-model="visible"
-      width="640px"
+      width="800px"
       :show-close="false"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
       class="ai-native-dialog-light"
       align-center
   >
-    <div class="chat-wrapper">
-      <header class="chat-header">
+    <div class="ai-chat-wrapper">
+        <header class="chat-header">
         <div class="header-content">
           <div class="header-left">
             <div class="bot-avatar-container">
@@ -45,11 +45,105 @@
 
       <main class="chat-messages" ref="messagesRef">
         <transition-group name="msg-list">
-          <div v-for="msg in messages" :key="msg.id" class="message-row" :class="msg.role">
+          <div v-for="(msg, index) in messages" :key="msg.id" class="message-row" :class="msg.role">
             <div class="avatar" v-if="msg.role === 'bot'">
               <el-icon><Service /></el-icon>
             </div>
-            <div class="bubble" v-html="msg.content"></div>
+            
+            <div class="message-content" style="display: flex; flex-direction: column; align-items: flex-start; max-width: 100%;">
+              <div class="bubble" v-html="msg.content"></div>
+              
+              <!-- INLINE WIDGETS -->
+              <div v-if="msg.role === 'bot' && index === messages.length - 1 && !isTyping && !isStreaming && currentQuestion" class="inline-action-panel mt-3 w-full">
+                <transition name="panel-slide" mode="out-in">
+                  
+                  <!-- Major Options -->
+                  <div v-if="currentQuestion === 'major'" class="action-card" key="major">
+                    <div class="chips-container stagger-animation">
+                      <div v-for="(major, idx) in PRESET_MAJORS" :key="major" class="ai-chip" :style="{ animationDelay: `${idx * 0.03}s` }" @click="submitMajor(major)">
+                        {{ major }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Courses Options -->
+                  <div v-else-if="currentQuestion === 'courses'" class="action-card" key="courses">
+                    <div class="chips-container stagger-animation">
+                      <div v-for="(course, idx) in PRESET_COURSES" :key="course" class="ai-chip" :class="{ active: onboardingForm.courses.includes(course) }" :style="{ animationDelay: `${idx * 0.03}s` }" @click="toggleCourse(course)">
+                        {{ course }}
+                      </div>
+                      <div v-for="customCourse in customAddedCourses" :key="customCourse" class="ai-chip active pop-in" @click="toggleCourse(customCourse)">
+                        {{ customCourse }}
+                      </div>
+                    </div>
+                    <div class="mt-3">
+                       <el-button type="primary" class="primary-send-btn" @click="submitCourses">
+                         确认并继续 <el-icon class="ml-1"><Position/></el-icon>
+                       </el-button>
+                    </div>
+                  </div>
+
+                  <!-- School Form -->
+                  <div v-else-if="currentQuestion === 'school'" class="action-card form-panel" key="school">
+                    <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+                      <el-autocomplete v-model="onboardingForm.school" :fetch-suggestions="querySearchSchool" placeholder="搜索并选择院校名称" clearable class="glass-select w-full" @select="handleSchoolSelect" placement="top-start">
+                        <template #prefix><el-icon><Search /></el-icon></template>
+                        <template #default="{ item }">
+                          <div class="autocomplete-item">
+                            <span>{{ item.value }}</span>
+                            <span v-if="item.level" class="school-tag">{{ item.level }}</span>
+                          </div>
+                        </template>
+                      </el-autocomplete>
+                    </div>
+                    <div class="mt-3 slide-up-anim" style="animation-delay: 0.2s">
+                       <el-button type="primary" class="primary-send-btn" @click="submitSchool">
+                         确认发送 <el-icon class="ml-1"><Position/></el-icon>
+                       </el-button>
+                    </div>
+                  </div>
+
+                  <!-- Grade Form -->
+                  <div v-else-if="currentQuestion === 'grade'" class="action-card form-panel" key="grade">
+                    <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+                      <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" class="glass-select w-full" filterable placement="top-start">
+                        <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
+                      </el-select>
+                    </div>
+                    <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
+                      <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option placeholder="请选择当前年级" class="glass-select w-full" placement="top-start">
+                        <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
+                      </el-select>
+                    </div>
+                    <div class="mt-3 slide-up-anim" style="animation-delay: 0.25s">
+                       <el-button type="primary" class="primary-send-btn" @click="submitGrade">
+                         确认发送 <el-icon class="ml-1"><Position/></el-icon>
+                       </el-button>
+                    </div>
+                  </div>
+
+                  <!-- Goal Form -->
+                  <div v-else-if="currentQuestion === 'goal'" class="action-card form-panel" key="goal">
+                    <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+                      <el-select v-model="onboardingForm.learning_goal" filterable allow-create default-first-option placeholder="请选择核心学习目标" class="glass-select w-full" placement="top-start">
+                        <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
+                      </el-select>
+                    </div>
+                    <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
+                      <el-select v-model="onboardingForm.preferred_language" filterable allow-create default-first-option clearable placeholder="常用编程语言 (选填)" class="glass-select w-full" placement="top-start">
+                        <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
+                      </el-select>
+                    </div>
+                    <div class="mt-3 slide-up-anim" style="animation-delay: 0.25s">
+                       <el-button type="primary" class="primary-send-btn finish-btn" :loading="submitting" @click="submitGoal">
+                         <span class="finish-text">生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
+                       </el-button>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+
             <div class="avatar" v-if="msg.role === 'user'">
               <el-icon><User /></el-icon>
             </div>
@@ -68,178 +162,21 @@
         </transition-group>
       </main>
 
-      <footer class="chat-footer" :class="{ 'is-collapsed-panel': isAllStepsFinished }">
-        <transition name="panel-slide" mode="out-in">
-          <div v-if="currentQuestion === 'major' && !isTyping && !isStreaming" class="action-panel" key="major">
-            <div class="panel-header">
-              <span class="panel-tip">✨ 请选择或输入您的专业</span>
-            </div>
-            <div class="chips-container stagger-animation">
-              <div
-                  v-for="(major, idx) in PRESET_MAJORS"
-                  :key="major"
-                  class="ai-chip"
-                  :style="{ animationDelay: `${idx * 0.03}s` }"
-                  @click="submitMajor(major)"
-              >
-                {{ major }}
-              </div>
-            </div>
-            <div class="ai-input-wrap mt-3 slide-up-anim" style="animation-delay: 0.2s">
-              <el-input
-                  v-model="customInputs.major"
-                  placeholder="直接输入其他专业..."
-                  @keyup.enter="submitMajor(customInputs.major)"
-                  class="pill-input"
-              >
-                <template #suffix>
-                  <el-button @click="submitMajor(customInputs.major)" class="inside-action-btn" circle>
-                    <el-icon><Position/></el-icon>
-                  </el-button>
-                </template>
-              </el-input>
-            </div>
-          </div>
-
-          <div v-else-if="currentQuestion === 'courses' && !isTyping && !isStreaming" class="action-panel" key="courses">
-            <div class="panel-header">
-              <span class="panel-tip">📚 可多选当前正在学习的课程</span>
-              <span class="selected-count" v-if="onboardingForm.courses.length">
-                已选 {{ onboardingForm.courses.length }} 项
-              </span>
-            </div>
-            <div class="chips-container stagger-animation">
-              <div
-                  v-for="(course, idx) in PRESET_COURSES"
-                  :key="course"
-                  class="ai-chip"
-                  :class="{ active: onboardingForm.courses.includes(course) }"
-                  :style="{ animationDelay: `${idx * 0.03}s` }"
-                  @click="toggleCourse(course)"
-              >
-                {{ course }}
-              </div>
-              <div
-                  v-for="customCourse in customAddedCourses"
-                  :key="customCourse"
-                  class="ai-chip active pop-in"
-                  @click="toggleCourse(customCourse)"
-              >
-                {{ customCourse }}
-              </div>
-            </div>
-            <div class="ai-input-wrap mt-3 slide-up-anim" style="animation-delay: 0.2s">
-              <el-input
-                  v-model="customInputs.course"
-                  placeholder="直接输入其他课程..."
-                  @keyup.enter="addCustomCourse"
-                  class="pill-input"
-              >
-                <template #suffix>
-                  <el-button @click="addCustomCourse" class="inside-action-btn ghost-circle" circle>
-                    <el-icon><Plus/></el-icon>
-                  </el-button>
-                </template>
-              </el-input>
-            </div>
-
-            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.3s">
-              <div class="action-bar-right">
-                <el-button type="primary" class="primary-send-btn" @click="submitCourses">
-                  确认并继续 <el-icon class="ml-1"><Position/></el-icon>
-                </el-button>
-              </div>
-            </div>
-          </div>
-
-          <div v-else-if="currentQuestion === 'school' && !isTyping && !isStreaming" class="action-panel form-panel" key="school">
-            <div class="panel-header">
-              <span class="panel-tip">🏫 完善院校信息</span>
-            </div>
-            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
-              <el-autocomplete
-                  v-model="onboardingForm.school"
-                  :fetch-suggestions="querySearchSchool"
-                  placeholder="搜索并选择院校名称"
-                  clearable
-                  class="glass-select w-full"
-                  @select="handleSchoolSelect"
-                  placement="top-start"
-              >
-                <template #prefix><el-icon><Search /></el-icon></template>
-                <template #default="{ item }">
-                  <div class="autocomplete-item">
-                    <span>{{ item.value }}</span>
-                    <span v-if="item.level" class="school-tag">{{ item.level }}</span>
-                  </div>
-                </template>
-              </el-autocomplete>
-            </div>
-
-            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.2s">
-              <div class="action-bar-right">
-                <el-button type="primary" class="primary-send-btn" @click="submitSchool">
-                  确认发送 <el-icon class="ml-1"><Position/></el-icon>
-                </el-button>
-              </div>
-            </div>
-          </div>
-
-          <div v-else-if="currentQuestion === 'grade' && !isTyping && !isStreaming" class="action-panel form-panel" key="grade">
-            <div class="panel-header">
-              <span class="panel-tip">🎓 你的学习阶段</span>
-            </div>
-            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
-              <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" class="glass-select w-full" filterable placement="top-start">
-                <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
-              </el-select>
-            </div>
-            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
-              <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option placeholder="请选择当前年级" class="glass-select w-full" placement="top-start">
-                <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
-              </el-select>
-            </div>
-
-            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
-              <div class="action-bar-right">
-                <el-button type="primary" class="primary-send-btn" @click="submitGrade">
-                  确认发送 <el-icon class="ml-1"><Position/></el-icon>
-                </el-button>
-              </div>
-            </div>
-          </div>
-
-          <div v-else-if="currentQuestion === 'goal' && !isTyping && !isStreaming" class="action-panel form-panel" key="goal">
-            <div class="panel-header">
-              <span class="panel-tip">🎯 设定目标，开始启航</span>
-            </div>
-            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
-              <el-select v-model="onboardingForm.learning_goal" filterable allow-create default-first-option placeholder="请选择核心学习目标" class="glass-select w-full" placement="top-start">
-                <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
-              </el-select>
-            </div>
-            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
-              <el-select v-model="onboardingForm.preferred_language" filterable allow-create default-first-option clearable placeholder="常用编程语言 (选填)" class="glass-select w-full" placement="top-start">
-                <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
-              </el-select>
-            </div>
-
-            <div class="footer-action-bar mt-4 slide-up-anim" style="animation-delay: 0.25s">
-              <div class="action-bar-right">
-                <el-button type="primary" class="primary-send-btn finish-btn" :loading="submitting" @click="submitGoal">
-                  <span class="finish-text">生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
-                </el-button>
-              </div>
-            </div>
-          </div>
-
-          <div class="action-panel empty-panel" key="empty" v-else>
-            <div v-if="isTyping || isStreaming" class="status-pulse">
-              <div class="pulse-ring"></div>
-              <span>AI 规划师正在思考与输出...</span>
-            </div>
-          </div>
-        </transition>
+      <footer class="command-bar-wrapper">
+        <div class="ai-input-wrap slide-up-anim">
+          <el-input
+              v-model="universalInput"
+              placeholder="直接回复，或输入补充细节..."
+              @keyup.enter="handleUniversalSubmit"
+              class="glass-command-bar"
+          >
+            <template #suffix>
+              <el-button @click="handleUniversalSubmit" class="inside-action-btn" circle :disabled="!universalInput.trim()">
+                <el-icon><Position/></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+        </div>
       </footer>
     </div>
   </el-dialog>
@@ -249,7 +186,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Service, Position, Search, Close, Check, Plus, MoreFilled } from '@element-plus/icons-vue'
+import { User, Service, Position, Search, Close, Check, MoreFilled } from '@element-plus/icons-vue'
 
 import { getProfileOnboarding, updateProfileOnboarding, searchSchools } from '@/api/ai'
 import type { ProfileOnboardingUpdate, SchoolItem } from '@/api/ai'
@@ -289,17 +226,10 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-const isAllStepsFinished = computed(() => {
-  return isFinishedState.value
-})
-
 // 优化：删除了原本列表末尾的 '其他' 选项
 const PRESET_MAJORS = ['计算机科学与技术', '软件工程', '人工智能', '数据科学与大数据技术', '网络空间安全', '电子信息工程']
 const PRESET_COURSES = ['数据结构与算法', '操作系统', '计算机网络', '数据库系统概论', '编译原理', '机器学习']
-const PRESET_GOALS = [
-  '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
-  '系统学习进阶', '零基础快速入门', '竞赛夺奖', '兴趣拓展', '行业证书考取'
-]
+const PRESET_GOALS = ['考研升学', '求职就业', '竞赛科研', '保研/出国', '期末满绩']
 const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
 const PRESET_GRADES = [
   '大一', '大二', '大三', '大四', '大五',
@@ -307,9 +237,24 @@ const PRESET_GRADES = [
   '博一', '博二', '博三',
   '高职一年级', '二年级', '三年级'
 ]
-const PRESET_LANGUAGES = [
-  'Python', 'Java', 'C/C++', 'Go', 'Rust', 'JavaScript', 'TypeScript', 'SQL', 'Swift'
-]
+const PRESET_LANGUAGES = ['Python', 'Java', 'C++', 'JavaScript', 'Go', 'Rust']
+
+const universalInput = ref('')
+
+const handleUniversalSubmit = () => {
+  const val = universalInput.value.trim()
+  if (!val) return
+  
+  if (currentQuestion.value === 'major') {
+    submitMajor(val)
+  } else if (currentQuestion.value === 'courses') {
+    customInputs.course = val
+    addCustomCourse()
+  } else {
+    ElMessage.info('请在上方卡片中完成选择')
+  }
+  universalInput.value = ''
+}
 
 watch(() => onboardingForm.school, (newVal) => {
   if (!newVal) { onboardingForm.school_level = ''; return; }
@@ -573,14 +518,27 @@ const handleHeaderCommand = async (cmd: string) => {
   font-family: var(--font-sans);
 }
 
-.chat-wrapper {
+.ai-chat-wrapper {
   display: flex;
   flex-direction: column;
-  height: 540px;
+  height: 640px;
   background: var(--color-surface);
   position: relative;
   overflow: hidden;
   color: #1d1d1f;
+}
+
+.command-bar-wrapper {
+  background: transparent;
+  padding: var(--space-2) var(--space-6) 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  z-index: 10;
+}
+
+.quick-reply-area {
+  width: 100%;
 }
 
 /* Header */
@@ -784,6 +742,27 @@ const handleHeaderCommand = async (cmd: string) => {
   font-weight: var(--weight-medium);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
+
+.inline-action-panel {
+  background: transparent;
+  width: 100%;
+}
+
+.glass-command-bar {
+  --el-input-border-radius: 24px;
+  --el-input-bg-color: #ffffff;
+  --el-input-border-color: rgba(0,0,0,0.1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  border-radius: 24px;
+}
+.glass-command-bar :deep(.el-input__wrapper) {
+  padding: 8px 16px;
+  box-shadow: none !important;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.glass-command-bar :deep(.el-input__inner) {
+  font-size: 15px;
+}
 .user .bubble :deep(span) {
   color: rgba(255, 255, 255, 0.85) !important;
 }
@@ -814,25 +793,7 @@ const handleHeaderCommand = async (cmd: string) => {
 }
 
 /* Footer / Action Area */
-.chat-footer {
-  background: var(--color-surface);
-  border-top: 1px solid #e5e5ea;
-  padding: var(--space-5) var(--space-6) 24px;
-  min-height: 160px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.chat-footer.is-collapsed-panel {
-  min-height: 0;
-  height: 0;
-  padding: 0;
-  border-top-color: transparent;
-  overflow: hidden;
-  pointer-events: none;
-}
+/* (Action Area is now .right-action-pane, keeping some inner layout classes intact) */
 
 .action-panel {
   display: flex;
@@ -870,20 +831,27 @@ const handleHeaderCommand = async (cmd: string) => {
 }
 
 .ai-chip {
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-2xl);
-  font-size: 14px;
-  font-weight: var(--weight-normal);
-  background: var(--color-surface);
-  color: #1d1d1f;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  background: #ffffff;
+  color: #1e293b;
   cursor: pointer;
-  border: 1px solid #e5e5ea;
-  transition: all var(--transition-base);
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  transition: all 0.2s ease;
   user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 0;
+  text-align: center;
 }
 
 .ai-chip:hover {
-  background: var(--color-primary-soft, #EEF2FF);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   border-color: var(--color-primary-border, #C7D2FE);
   color: var(--color-primary, #4F46E5);
 }
@@ -1086,8 +1054,8 @@ const handleHeaderCommand = async (cmd: string) => {
 .flex-1 { flex: 1; }
 
 @media (max-width: 640px) {
-  .chat-wrapper { height: 100vh; border-radius: 0; }
-  .ai-native-dialog-light :deep(.el-dialog) { margin-top: 0 !important; border-radius: 0; }
+  .ai-chat-wrapper { height: 100vh; border-radius: 0; }
+  .ai-native-dialog-light :deep(.el-dialog) { margin-top: 0 !important; border-radius: 0; width: 100% !important; }
   .bubble { max-width: 85%; }
 }
 </style>
