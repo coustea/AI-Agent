@@ -122,6 +122,16 @@ class RealtimeBridge:
                 "type": "stream_info",
                 "data": data,
             })
+        elif event_type == "tts_start":
+            await self._send_to_frontend({
+                "type": "avatar_speaking",
+                "data": data,
+            })
+        elif event_type == "tts_end":
+            await self._send_to_frontend({
+                "type": "avatar_stopped",
+                "data": data,
+            })
 
     async def handle_frontend(self, ws):
         """处理前端 WebSocket 连接。"""
@@ -229,7 +239,7 @@ class RealtimeBridge:
             rate = float(raw)
         except (TypeError, ValueError):
             rate = 1.0
-        self._speech_rate = max(0.5, min(2.0, rate))
+        self._speech_rate = max(0.8, min(1.5, rate))
 
     def _handle_set_need_diagram(self, data: dict):
         """Handle default need_diagram flag for ASR-driven turns."""
@@ -342,6 +352,7 @@ class RealtimeBridge:
         """Stop avatar speaking."""
         if self._avatar_controller:
             await self._avatar_controller.stop()
+        await self._send_to_frontend({"type": "avatar_stopped"})
 
     async def _handle_clear_history(self):
         """Clear current session chat history."""

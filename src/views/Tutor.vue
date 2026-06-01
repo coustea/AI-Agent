@@ -197,7 +197,7 @@
 
                 <div
                     v-if="msg.role === 'user' || getDisplayContent(msg) || (!msg.teachingDiagramGenerating && (msg.searchStage || !msg.teachingDiagram))"
-                    class="bubble markdown-body"
+                    :class="['bubble', 'markdown-body', { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' }]"
                 >
                   <template v-if="msg.role === 'user'">
                     <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
@@ -343,9 +343,10 @@
                     <span class="rate-label">语速</span>
                     <el-slider
                       v-model="avatarSpeechRate"
-                      :min="0.5"
-                      :max="2"
+                      :min="0.8"
+                      :max="1.5"
                       :step="0.1"
+                      :disabled="isAvatarSpeaking"
                       :show-tooltip="false"
                       @change="handleAvatarSpeechRateChange"
                       class="rate-slider"
@@ -618,6 +619,7 @@ const {
       const aiMsgId = Date.now() + 1
       messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
       streamingMsgId.value = aiMsgId
+      streamingMsgRef.value = messages.value[messages.value.length - 1] || null
       isAIThinking.value = true
     }
     if (streamingMsgId.value !== null) {
@@ -687,6 +689,7 @@ const {
         const aiMsgId = Date.now() + 1
         messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
         streamingMsgId.value = aiMsgId
+        streamingMsgRef.value = messages.value[messages.value.length - 1] || null
       }
       if (needTeachingDiagram.value) {
         const aiMsg = streamingMsgId.value !== null
@@ -745,6 +748,7 @@ const pendingFiles = ref<PendingFile[]>([])
 
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
+const digitalHumanSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
 const currentUserId = ref<string | number | null>(null)
 const searchPopoverVisible = ref(false)
@@ -840,6 +844,9 @@ const STREAM_BACKLOG_BURST_THRESHOLD = 320
 const STREAM_BASE_DELAY_MS = 14
 const STREAM_MIN_DELAY_MS = 6
 const STREAM_MAX_DELAY_MS = 44
+const DIGITAL_HUMAN_STREAM_BASE_DELAY_MS = 40
+const DIGITAL_HUMAN_STREAM_MIN_DELAY_MS = 22
+const DIGITAL_HUMAN_STREAM_MAX_DELAY_MS = 90
 const STREAM_SCROLL_INTERVAL_MS = 64
 const STREAM_AUTO_SCROLL_BOTTOM_GAP_PX = 96
 
@@ -860,6 +867,17 @@ const getDisplayContent = (msg: ChatMsg) => {
   }
   return msg.content
 }
+
+const isDigitalHumanPacedStream = () => chatMode.value === 'digital_human'
+
+const getDigitalHumanUnitsPerTick = (streamDone: boolean): number => {
+  const rate = Math.max(0.8, Math.min(1.5, Number(avatarSpeechRate.value) || 1.0))
+  if (streamDone) return rate >= 1.25 ? 3 : 2
+  if (rate <= 0.95) return 1
+  if (rate >= 1.2) return 2
+  return 1
+}
+
 type VoiceAsrStage = 'idle' | 'no_voice' | 'heard_voice' | 'transcribing'
 const voiceAsrStage = computed<VoiceAsrStage>(() => {
   if (isAIThinking.value || isAvatarSpeaking.value) return 'idle'
@@ -1033,6 +1051,10 @@ const takeNextStreamUnit = (text: string, inCodeBlock: boolean): number => {
 }
 
 const getUnitsPerTick = (backlogChars: number, inCodeBlock: boolean, streamDone: boolean): number => {
+  if (isDigitalHumanPacedStream()) {
+    const pacedUnits = getDigitalHumanUnitsPerTick(streamDone)
+    return inCodeBlock ? pacedUnits + 1 : pacedUnits
+  }
   if (streamDone) {
     if (backlogChars >= STREAM_BACKLOG_BURST_THRESHOLD) return STREAM_DONE_UNITS_PER_TICK + 1
     return STREAM_DONE_UNITS_PER_TICK
@@ -1052,6 +1074,34 @@ const getNextStreamDelay = (
   inCodeBlock: boolean,
   streamDone: boolean,
 ): number => {
+  if (isDigitalHumanPacedStream()) {
+    const rate = Math.max(0.8, Math.min(1.5, Number(avatarSpeechRate.value) || 1.0))
+    let delay = DIGITAL_HUMAN_STREAM_BASE_DELAY_MS - Math.round((rate - 1.0) * 18)
+
+    if (/[。！？.!?]\s*$/.test(emittedText)) {
+      delay += 40
+    } else if (/[,，；;：:]\s*$/.test(emittedText)) {
+      delay += 18
+    } else if (/\n\s*$/.test(emittedText)) {
+      delay += 24
+    } else if (/[A-Za-z0-9_]\s$/.test(emittedText)) {
+      delay += 8
+    }
+
+    if (streamDone) {
+      delay -= 10
+    } else if (backlogChars >= 180) {
+      delay -= 8
+    } else if (backlogChars >= 80) {
+      delay -= 4
+    }
+
+    return Math.max(
+      DIGITAL_HUMAN_STREAM_MIN_DELAY_MS,
+      Math.min(DIGITAL_HUMAN_STREAM_MAX_DELAY_MS, delay),
+    )
+  }
+
   let delay = inCodeBlock ? 8 : STREAM_BASE_DELAY_MS
 
   if (/[。！？.!?]\s*$/.test(emittedText)) {
@@ -1473,7 +1523,7 @@ const removeAttachment = (idx: number) => {
 }
 
 const getAvatarCapabilities = () => ({
-  session_id: currentSessionId.value,
+  session_id: digitalHumanSessionId.value,
   history: buildStreamHistory().map(item => ({ role: item.role, content: item.content })),
   enable_search: enableWebSearch.value,
   generate_video: generateVideo.value,
@@ -1499,12 +1549,13 @@ const handleVideoToggle = () => {
   }
 }
 
-const ensureCurrentSession = async () => {
-  if (currentSessionId.value) return true
+const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standard') => {
+  const sessionRef = mode === 'digital_human' ? digitalHumanSessionId : currentSessionId
+  if (sessionRef.value) return true
   try {
     const res = await createSession()
     const session = res.data.data
-    currentSessionId.value = session.id
+    sessionRef.value = session.id
     sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
     return true
   } catch {
@@ -1521,7 +1572,7 @@ const handleVoiceToggle = async () => {
       hasSpeechDetected.value = true
       startAsrProcessing(8000)
     } else {
-      if (!await ensureCurrentSession()) return
+      if (!await ensureCurrentSession('digital_human')) return
       await startVad(needTeachingDiagram.value, getAvatarCapabilities())
       isRecording.value = isVadListening.value
       clearAsrProcessing()
@@ -1538,7 +1589,7 @@ const handleVoiceToggle = async () => {
 
 const handleVoiceChatToggle = async () => {
   if (!isVoiceChatting.value) {
-    if (!await ensureCurrentSession()) return
+    if (!await ensureCurrentSession('digital_human')) return
     isVoiceChatting.value = true
     chatMode.value = 'digital_human'
     await connectAvatar()
@@ -1580,23 +1631,25 @@ const handleSend = async () => {
   const hasFiles = pendingFiles.value.length > 0
   if ((!text && !hasFiles) || isAIThinking.value) return
   const shouldGenerateTeachingDiagram = needTeachingDiagram.value
+  const sessionMode = chatMode.value === 'digital_human' ? 'digital_human' : 'standard'
 
   if (chatMode.value === 'digital_human' && !isAvatarConnected.value) {
     ElMessage.warning({ message: '数字人连接已断开，请先点击“重新连接”后再发送', plain: true })
     return
   }
 
-  if (!await ensureCurrentSession()) return
+  if (!await ensureCurrentSession(sessionMode)) return
+  const activeSessionId = sessionMode === 'digital_human' ? digitalHumanSessionId.value : currentSessionId.value
 
-  if (currentSessionId.value && text) {
-    const session = sessions.value.find(s => s.id === currentSessionId.value)
+  if (activeSessionId && text) {
+    const session = sessions.value.find(s => s.id === activeSessionId)
     if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
       // 使用用户消息的前20字符作为临时标题
       const tempTitle = text.length > 20 ? text.slice(0, 20) + '...' : text
       session.title = tempTitle
       // 调用后端API更新标题
       try {
-        await updateSessionTitle(currentSessionId.value, tempTitle)
+        await updateSessionTitle(activeSessionId, tempTitle)
       } catch (err) {
         console.warn('更新会话标题失败:', err)
       }
@@ -1642,10 +1695,11 @@ const handleSend = async () => {
               name: pending.name,
             }
           }
-          if (!pending.file || !currentSessionId.value) {
+          const uploadSessionId = sessionMode === 'digital_human' ? digitalHumanSessionId.value : currentSessionId.value
+          if (!pending.file || !uploadSessionId) {
             throw new Error('会话不存在，无法上传附件')
           }
-          const res = await uploadFile(pending.file, currentSessionId.value)
+          const res = await uploadFile(pending.file, uploadSessionId)
           const data = res.data.data
           return {
             url: data.url,
@@ -1824,6 +1878,10 @@ const handleSend = async () => {
 watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
     sessionSidebarCollapsed.value = true
+    digitalHumanSessionId.value = undefined
+    messages.value = []
+    pendingFiles.value = []
+    if (!await ensureCurrentSession('digital_human')) return
     await connectAvatar()
     setAvatarNeedDiagram(needTeachingDiagram.value)
     nextTick(() => {
@@ -1835,6 +1893,12 @@ watch(chatMode, async (newMode) => {
   } else if (newMode === 'standard') {
     sessionSidebarCollapsed.value = false
     disconnectAvatar()
+    pendingFiles.value = []
+    if (currentSessionId.value) {
+      await switchSession(currentSessionId.value)
+    } else {
+      messages.value = []
+    }
   }
 })
 
@@ -2614,6 +2678,82 @@ onBeforeUnmount(() => {
   word-break: break-word;
   overflow-wrap: anywhere;
   max-width: 100%;
+}
+
+.mode-digital_human .message-row {
+  max-width: min(820px, 92%);
+}
+
+.mode-digital_human .message-row.ai {
+  align-self: center;
+  width: min(820px, 92%);
+  gap: 0.75rem;
+}
+
+.mode-digital_human .message-row.ai .msg-avatar {
+  display: none;
+}
+
+.mode-digital_human .message-row.ai .bubble-wrapper {
+  width: 100%;
+  align-items: stretch;
+}
+
+.mode-digital_human .message-row.ai .msg-meta {
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.mode-digital_human .message-row.ai .sender {
+  color: #475569;
+}
+
+.digital-human-bubble {
+  padding: 18px 22px;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9)),
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent 55%);
+  box-shadow:
+    0 10px 28px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(10px);
+}
+
+.mode-digital_human .digital-human-bubble :deep(.tutor-message-content) {
+  align-items: center;
+}
+
+.mode-digital_human .digital-human-bubble :deep(.stream-markdown) {
+  font-size: 1.08rem;
+  line-height: 1.9;
+  letter-spacing: 0.01em;
+  color: #0f172a;
+  text-align: left;
+}
+
+.mode-digital_human .digital-human-bubble :deep(.markdown-body p) {
+  margin: 0 0 0.72rem 0;
+}
+
+.mode-digital_human .digital-human-bubble :deep(.markdown-body > :last-child) {
+  margin-bottom: 0;
+}
+
+.mode-digital_human .digital-human-bubble :deep(h1),
+.mode-digital_human .digital-human-bubble :deep(h2),
+.mode-digital_human .digital-human-bubble :deep(h3),
+.mode-digital_human .digital-human-bubble :deep(h4) {
+  text-align: left;
+  color: #0f172a;
+}
+
+.mode-digital_human .digital-human-bubble :deep(ul),
+.mode-digital_human .digital-human-bubble :deep(ol) {
+  padding-left: 1.25rem;
 }
 
 /* AI 气泡：柔和浮动悬浮卡片 */

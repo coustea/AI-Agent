@@ -63,6 +63,8 @@ SERVER_DIR = Path(__file__).resolve().parents[1]
 WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
 LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
 KNOWLEDGE_BASE_DIR = SERVER_DIR / KB_DIR_NAME
+# Backward-compatible alias for older knowledge modules.
+KB_DIR = KNOWLEDGE_BASE_DIR
 RESOURCE_DIR = WORKPLACE_DIR / "resource"
 CHAT_DIR = WORKPLACE_DIR / "chat"
 AVATAR_DIR = WORKPLACE_DIR / "avatars"

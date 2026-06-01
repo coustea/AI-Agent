@@ -10,7 +10,14 @@ import uuid
 import websockets
 
 from app.avatar.services import xfyun_auth
-from app.config import AVATAR_ANCHOR, AVATAR_API_KEY, AVATAR_API_SECRET, AVATAR_APP_ID, AVATAR_URL, AVATAR_VCN
+from app.config import (
+    AVATAR_ANCHOR,
+    AVATAR_API_KEY,
+    AVATAR_API_SECRET,
+    AVATAR_APP_ID,
+    AVATAR_URL,
+    AVATAR_VCN,
+)
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,12 +26,11 @@ logger = get_logger(__name__)
 class AvatarController:
     """Xfyun virtual human controller."""
 
-    MAX_RETRIES = 3  # Maximum retry attempts
-    RETRY_DELAY = 0.5  # Retry delay in seconds
-    KEEPALIVE_INTERVAL = 10  # Heartbeat interval in seconds
+    MAX_RETRIES = 3
+    RETRY_DELAY = 0.5
+    KEEPALIVE_INTERVAL = 10
 
     def __init__(self):
-        """Initialize avatar controller."""
         self.ws = None
         self.is_ready = False
         self.is_speaking = False
@@ -37,40 +43,30 @@ class AvatarController:
 
     @property
     def _ws_closed(self) -> bool:
-        """检查 WebSocket 是否已关闭（兼容 websockets 12+ / 16+）"""
+        """Check whether the websocket is closed across websockets versions."""
         if self.ws is None:
             return True
-        # websockets 16+ 使用 state 属性
-        if hasattr(self.ws, 'state'):
+        if hasattr(self.ws, "state"):
             from websockets.protocol import State
+
             return self.ws.state != State.OPEN
-        # 旧版使用 closed 属性
-        return getattr(self.ws, 'closed', True)
+        return getattr(self.ws, "closed", True)
 
     async def connect(self, on_reconnect_callback=None):
-        """
-        Connect to avatar service.
-
-        Args:
-            on_reconnect_callback: Async callback after reconnection with signature async def callback(stream_info)
-
-        Raises:
-            RuntimeError: If connection fails
-        """
+        """Connect to avatar service."""
         self._on_reconnect_callback = on_reconnect_callback
 
         try:
             auth_url = xfyun_auth.assemble_auth_url(
-                AVATAR_URL, 'GET', AVATAR_API_KEY, AVATAR_API_SECRET
+                AVATAR_URL, "GET", AVATAR_API_KEY, AVATAR_API_SECRET
             )
             self.ws = await websockets.connect(auth_url)
 
-            # Send start message
             start_msg = {
                 "header": {
                     "app_id": AVATAR_APP_ID,
                     "request_id": str(uuid.uuid4()),
-                    "ctrl": "start"
+                    "ctrl": "start",
                 },
                 "parameter": {
                     "tts": {"vcn": AVATAR_VCN},
@@ -78,14 +74,13 @@ class AvatarController:
                         "stream": {"protocol": "xrtc"},
                         "avatar_id": AVATAR_ANCHOR,
                         "width": 720,
-                        "height": 1280
-                    }
-                }
+                        "height": 1280,
+                    },
+                },
             }
             await self.ws.send(json.dumps(start_msg))
             logger.info("Avatar service connected")
 
-            # Start heartbeat keepalive task
             if self._keepalive_task is None or self._keepalive_task.done():
                 self._keepalive_task = asyncio.create_task(self._keepalive_loop())
 
@@ -94,15 +89,7 @@ class AvatarController:
             raise RuntimeError(f"Failed to connect to avatar service: {e}")
 
     async def receive_messages(self, callback):
-        """
-        Receive messages from avatar service.
-
-        Args:
-            callback: Async callback with signature async def callback(event_type, data)
-
-        Raises:
-            RuntimeError: If receiving messages fails
-        """
+        """Receive messages from avatar service."""
         if not self.ws:
             raise RuntimeError("Avatar not connected")
 
@@ -114,32 +101,38 @@ class AvatarController:
                 data = json.loads(message)
                 logger.debug(f"Received avatar message: {data.get('header', {})}")
 
-                if data['header']['code'] != 0:
+                if data["header"]["code"] != 0:
                     logger.error(f"Avatar error: {data}")
                     continue
 
-                payload = data.get('payload', {})
-                if 'avatar' not in payload:
+                payload = data.get("payload", {})
+                if "avatar" not in payload:
                     continue
 
-                avatar_data = payload['avatar']
-                event_type = avatar_data.get('event_type')
+                avatar_data = payload["avatar"]
+                event_type = avatar_data.get("event_type")
 
-                if event_type == 'stream_info':
+                if event_type == "stream_info":
                     self.is_ready = True
                     self._last_stream_info = avatar_data
-                    await callback('stream_info', avatar_data)
-                    logger.info(f"Avatar video stream ready: {avatar_data.get('stream_url')}")
-                    if (not self.sentence_queue.empty()) and (self._playback_task is None or self._playback_task.done()):
+                    await callback("stream_info", avatar_data)
+                    logger.info(
+                        f"Avatar video stream ready: {avatar_data.get('stream_url')}"
+                    )
+                    if (not self.sentence_queue.empty()) and (
+                        self._playback_task is None or self._playback_task.done()
+                    ):
                         logger.info("Avatar ready: resume queued speech playback")
                         self._playback_task = asyncio.create_task(self._process_queue())
 
-                elif event_type == 'tts_start':
+                elif event_type == "tts_start":
                     self.is_speaking = True
+                    await callback("tts_start", avatar_data)
                     logger.debug("Avatar started speaking")
 
-                elif event_type == 'tts_end':
+                elif event_type == "tts_end":
                     self.is_speaking = False
+                    await callback("tts_end", avatar_data)
                     logger.debug("Avatar finished speaking")
 
             logger.warning("Avatar message loop exited normally (connection closed)")
@@ -151,32 +144,26 @@ class AvatarController:
             raise RuntimeError(f"Failed to receive avatar messages: {e}")
 
     async def speak(self, text: str, speech_rate: float = 1.0):
-        """
-        Queue text for avatar to speak (non-blocking).
-
-        Args:
-            text: Text to speak
-        """
+        """Queue text for avatar to speak."""
         if not text:
             logger.warning("Empty text, skipping speech")
             return
 
-        # Add to queue (even if not ready, wait for reconnection)
-        safe_rate = max(0.5, min(2.0, float(speech_rate)))
+        safe_rate = max(0.8, min(1.5, float(speech_rate)))
         await self.sentence_queue.put((text, safe_rate))
-        logger.debug(f"Sentence queued: {text[:30]}... (queue size: {self.sentence_queue.qsize()})")
+        logger.debug(
+            f"Sentence queued: {text[:30]}... (queue size: {self.sentence_queue.qsize()})"
+        )
 
-        # If not ready, wait for reconnection
         if not self.is_ready:
             logger.debug("Avatar not ready, sentence queued for later")
             return
 
-        # Start queue processor if not running
         if self._playback_task is None or self._playback_task.done():
             self._playback_task = asyncio.create_task(self._process_queue())
 
     async def _process_queue(self):
-        """Process sentence queue sequentially with retry mechanism."""
+        """Process sentence queue sequentially."""
         logger.info("Starting to process sentence queue")
 
         while not self.sentence_queue.empty():
@@ -184,81 +171,64 @@ class AvatarController:
             success = await self._speak_with_retry(sentence, speech_rate)
 
             if not success:
-                logger.error(f"Sentence failed after {self.MAX_RETRIES} retries: {sentence[:30]}...")
+                logger.error(
+                    f"Sentence failed after {self.MAX_RETRIES} retries: {sentence[:30]}..."
+                )
                 continue
 
-            # 等待一小段时间，让讯飞服务开始处理
             await asyncio.sleep(0.5)
-            
-            # 如果讯飞发了 tts_start，等待 tts_end
+
+            logger.debug(f"Avatar speech dispatched: {sentence[:30]}...")
+            wait_end_timeout = 300
+            while self.is_speaking and wait_end_timeout > 0:
+                await asyncio.sleep(0.1)
+                wait_end_timeout -= 1
+
             if self.is_speaking:
-                logger.debug(f"Avatar started speaking: {sentence[:30]}...")
-                wait_end_timeout = 300  # 300 * 0.1 = 30 seconds
-                while self.is_speaking and wait_end_timeout > 0:
-                    await asyncio.sleep(0.1)
-                    wait_end_timeout -= 1
-                
-                if self.is_speaking:
-                    logger.warning(f"Avatar speech timeout (30s), forcing end: {sentence[:30]}...")
-                    self.is_speaking = False
-                
-                logger.debug(f"Sentence completed: {sentence[:30]}...")
-            else:
-                # 讯飞没发 tts_start，直接继续（可能在后台播报）
-                logger.debug(f"Sentence sent (no tts_start): {sentence[:30]}...")
+                logger.warning(
+                    f"Avatar speech timeout (30s), forcing end: {sentence[:30]}..."
+                )
+                self.is_speaking = False
+
+            logger.debug(f"Sentence completed: {sentence[:30]}...")
 
         logger.info("Sentence queue processing completed")
 
     async def _speak_with_retry(self, text: str, speech_rate: float = 1.0) -> bool:
-        """
-        Speak with retry mechanism (internal method).
-
-        Args:
-            text: Text to speak
-
-        Returns:
-            bool: True if successful
-        """
+        """Speak with retry mechanism."""
         for attempt in range(self.MAX_RETRIES):
             try:
                 await self._speak_immediate(text, speech_rate)
                 return True
             except Exception as e:
-                logger.warning(f"Speech failed (attempt {attempt + 1}/{self.MAX_RETRIES}): {e}")
+                logger.warning(
+                    f"Speech failed (attempt {attempt + 1}/{self.MAX_RETRIES}): {e}"
+                )
                 if attempt < self.MAX_RETRIES - 1:
                     await asyncio.sleep(self.RETRY_DELAY)
 
         return False
 
     async def _speak_immediate(self, text: str, speech_rate: float = 1.0):
-        """
-        Send speech command immediately (internal method with connection check).
-
-        Args:
-            text: Text to speak
-
-        Raises:
-            RuntimeError: If sending speech command fails
-        """
-        # Check connection, reconnect if needed
+        """Send speech command immediately."""
         if not self.ws or self._ws_closed:
             logger.warning("Avatar connection lost, skipping speech (no auto-reconnect)")
             raise RuntimeError("Avatar connection lost, cannot send speech command")
 
-        # Send speech command
         text_msg = {
             "header": {
                 "app_id": AVATAR_APP_ID,
                 "request_id": str(uuid.uuid4()),
-                "ctrl": "text_driver"
+                "ctrl": "text_driver",
             },
             "parameter": {
-                "tts": {"vcn": AVATAR_VCN, "speed": int(max(0.5, min(2.0, speech_rate)) * 50)},
-                "avatar_dispatch": {"interactive_mode": 1}  # Enable interactive mode (gesture linkage)
+                "tts": {
+                    "vcn": AVATAR_VCN,
+                    "speed": int(max(0.8, min(1.5, speech_rate)) * 50),
+                },
+                "avatar_dispatch": {"interactive_mode": 1},
             },
-            "payload": {
-                "text": {"content": text}
-            }
+            "payload": {"text": {"content": text}},
         }
 
         try:
@@ -266,21 +236,18 @@ class AvatarController:
             logger.info(f"Avatar speaking: {text[:50]}...")
         except Exception as e:
             logger.error(f"Failed to send speech command: {e}")
-            # 连接已断开，清空 ws 引用
             self.ws = None
             self.is_ready = False
             raise RuntimeError(f"Failed to send speech command: {e}")
 
     async def stop(self):
         """Stop avatar speech and clear queue."""
-        # Clear queue
         while not self.sentence_queue.empty():
             try:
                 self.sentence_queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
 
-        # Cancel queue processing task
         if self._playback_task and not self._playback_task.done():
             self._playback_task.cancel()
 
@@ -291,7 +258,7 @@ class AvatarController:
             "header": {
                 "app_id": AVATAR_APP_ID,
                 "request_id": str(uuid.uuid4()),
-                "ctrl": "stop"
+                "ctrl": "stop",
             }
         }
 
@@ -300,7 +267,6 @@ class AvatarController:
             self.is_speaking = False
             logger.info("Avatar stopped, queue cleared")
         except websockets.exceptions.ConnectionClosedOK:
-            # Peer already closed gracefully, treat as idempotent stop.
             self.is_speaking = False
             logger.debug("Avatar stop skipped: websocket already closed normally")
         except Exception as e:
@@ -308,7 +274,6 @@ class AvatarController:
 
     async def close(self):
         """Close avatar connection."""
-        # Stop heartbeat task
         if self._keepalive_task and not self._keepalive_task.done():
             self._keepalive_task.cancel()
 
@@ -317,14 +282,13 @@ class AvatarController:
             logger.info("Avatar connection closed")
 
     async def _keepalive_loop(self):
-        """Heartbeat keepalive loop (using WebSocket ping)."""
+        """Heartbeat keepalive loop using websocket ping."""
         try:
             while True:
                 await asyncio.sleep(self.KEEPALIVE_INTERVAL)
 
                 if self.ws and not self._ws_closed:
                     try:
-                        # Use native WebSocket ping to keep connection alive
                         pong = await self.ws.ping()
                         await asyncio.wait_for(pong, timeout=10)
                         logger.debug("Heartbeat successful")

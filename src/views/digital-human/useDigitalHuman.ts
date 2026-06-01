@@ -63,6 +63,17 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // --- 实时生成缓存 (应对不可抗力断开) ---
     const CACHE_KEY = 'dh_current_generation_cache'
     const generationCache = ref(localStorage.getItem(CACHE_KEY) || '')
+    let bufferedAssistantText = ''
+    let pendingAssistantComplete = false
+    let assistantFlushFallbackTimer: ReturnType<typeof setTimeout> | null = null
+    let assistantRevealTimer: ReturnType<typeof setTimeout> | null = null
+    let revealingAssistantText = false
+    let assistantRevealBudget = 0
+    let assistantRevealLastTickAt = 0
+    let currentSpeechStartedAt = 0
+    let currentSpeechReleasedCost = 0
+    let calibratedRevealCharsPerSecond = 0
+    let targetRevealCharsPerSecond = 0
 
     function updateCache(text: string, append = true) {
         if (append) {
@@ -227,6 +238,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         audioEnabled.value = false
         error.value = null
         pendingStreamData = null
+        bufferedAssistantText = ''
+        pendingAssistantComplete = false
+        clearAssistantFlushFallbackTimer()
+        clearAssistantRevealTimer()
         callbacks?.onConnectionChange?.(false)
     }
 
@@ -243,24 +258,57 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         } else if (type === 'asr_result') {
             asrText.value = data.content || ''
             updateCache('', false) // 开始新一轮对话前清理上一轮残留
+            bufferedAssistantText = ''
+            pendingAssistantComplete = false
+            clearAssistantFlushFallbackTimer()
+            clearAssistantRevealTimer()
             callbacks?.onAsrResult?.(data.content || '')
         } else if (type === 'assistant_chunk') {
-            isSpeaking.value = true
             updateCache(data.content || '', true) // 实时追加到缓存
-            callbacks?.onAssistantChunk?.(data.content || '')
+            bufferedAssistantText += data.content || ''
+            if (isSpeaking.value) {
+                startAssistantReveal()
+            }
         } else if (type === 'status') {
             callbacks?.onStatus?.(data.data || {})
         } else if (type === 'assistant_complete') {
-            isSpeaking.value = false
-            try {
-                callbacks?.onAssistantComplete?.()
-            } finally {
-                updateCache('', false) // 每一次数字人生成展示完成后删除该缓存
-            }
+            pendingAssistantComplete = true
+            clearAssistantFlushFallbackTimer()
+            assistantFlushFallbackTimer = setTimeout(() => {
+                if (!isSpeaking.value) {
+                    startAssistantReveal()
+                }
+            }, 1200)
+        } else if (type === 'avatar_speaking') {
+            isSpeaking.value = true
+            currentSpeechStartedAt = Date.now()
+            currentSpeechReleasedCost = 0
+            const estimatedCost = estimateBufferedTextCost(bufferedAssistantText)
+            const baselineRate = calibratedRevealCharsPerSecond > 0
+                ? calibratedRevealCharsPerSecond
+                : (3.1 + (Math.max(0.8, Math.min(1.5, Number(speechRate.value) || 1.0)) - 0.8) * 2.6)
+            const estimatedDurationSec = Math.max(1.2, estimatedCost / Math.max(2.2, baselineRate))
+            targetRevealCharsPerSecond = Math.max(2.2, Math.min(7.5, estimatedCost / estimatedDurationSec))
+            startAssistantReveal()
         } else if (type === 'diagram') {
             callbacks?.onDiagram?.(data.data)
         } else if (type === 'avatar_stopped') {
             isSpeaking.value = false
+            if (currentSpeechStartedAt > 0 && currentSpeechReleasedCost > 0) {
+                const elapsedSec = Math.max(0.25, (Date.now() - currentSpeechStartedAt) / 1000)
+                const actualRate = currentSpeechReleasedCost / elapsedSec
+                const clampedActualRate = Math.max(2.2, Math.min(7.5, actualRate))
+                if (calibratedRevealCharsPerSecond <= 0) {
+                    calibratedRevealCharsPerSecond = clampedActualRate
+                } else {
+                    calibratedRevealCharsPerSecond =
+                        calibratedRevealCharsPerSecond * 0.7 + clampedActualRate * 0.3
+                }
+            }
+            currentSpeechStartedAt = 0
+            currentSpeechReleasedCost = 0
+            targetRevealCharsPerSecond = 0
+            finalizeBufferedAssistantTurn()
         } else if (type === 'vad_state') {
             const state = data.data?.listening ?? (data.state === 'listening' || data.state === 'speaking')
             backendVadReady = !!state
@@ -614,11 +662,186 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     }
 
     function setSpeechRate(rate: number): void {
-        const clamped = Math.max(0.5, Math.min(2.0, Number(rate) || 1.0))
+        const clamped = Math.max(0.8, Math.min(1.5, Number(rate) || 1.0))
         speechRate.value = clamped
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'set_speech_rate', speech_rate: clamped }))
         }
+    }
+
+    function clearAssistantFlushFallbackTimer(): void {
+        if (assistantFlushFallbackTimer) {
+            clearTimeout(assistantFlushFallbackTimer)
+            assistantFlushFallbackTimer = null
+        }
+    }
+
+    function clearAssistantRevealTimer(): void {
+        if (assistantRevealTimer) {
+            clearTimeout(assistantRevealTimer)
+            assistantRevealTimer = null
+        }
+        revealingAssistantText = false
+        assistantRevealBudget = 0
+        assistantRevealLastTickAt = 0
+        currentSpeechReleasedCost = 0
+        targetRevealCharsPerSecond = 0
+    }
+
+    function isCjkCharacter(char: string): boolean {
+        return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(char)
+    }
+
+    function takeNextRevealUnit(text: string): string {
+        if (!text) return ''
+        if (text.startsWith('\r\n')) return '\r\n'
+        if (text.startsWith('\n')) return '\n'
+
+        const first = text[0] || ''
+        if (isCjkCharacter(first) || /[，。！？；：、“”‘’（）《》【】]/.test(first)) {
+            return first
+        }
+
+        const word = text.match(/^[A-Za-z0-9_]+(?:['-][A-Za-z0-9_]+)*/)
+        if (word) {
+            let unit = word[0]
+            let idx = unit.length
+            while (idx < text.length && /\s/.test(text[idx] || '')) {
+                unit += text[idx]
+                idx += 1
+            }
+            return unit
+        }
+
+        return first
+    }
+
+    function getRevealCharsPerSecond(): number {
+        const rate = Math.max(0.8, Math.min(1.5, Number(speechRate.value) || 1.0))
+        const estimated = 1.7 + (rate - 0.8) * 3.2
+        if (targetRevealCharsPerSecond > 0) {
+            return Math.max(1.2, Math.min(7.2, targetRevealCharsPerSecond * (0.78 + (rate - 0.8) * 0.95)))
+        }
+        if (calibratedRevealCharsPerSecond > 0) {
+            return Math.max(1.2, Math.min(7.2, calibratedRevealCharsPerSecond * (0.78 + (rate - 0.8) * 0.95)))
+        }
+        return estimated
+    }
+
+    function getRevealUnitCost(unit: string): number {
+        const trimmed = unit.trim()
+        if (!trimmed) return 0.55
+        if (/^[。！？!?]$/.test(trimmed)) return 5.4
+        if (/^[，,；;：:]$/.test(trimmed)) return 5.4
+        if (/^[A-Za-z0-9_]+(?:['-][A-Za-z0-9_]+)*$/.test(trimmed)) {
+            return Math.max(1.5, Math.min(2.8, trimmed.length * 0.38 + 0.9))
+        }
+        return 1
+    }
+
+    function getRevealTickDelayMs(): number {
+        return 64
+    }
+
+    function estimateBufferedTextCost(text: string): number {
+        let remaining = text
+        let total = 0
+        while (remaining) {
+            const unit = takeNextRevealUnit(remaining)
+            if (!unit) break
+            total += getRevealUnitCost(unit)
+            remaining = remaining.slice(unit.length)
+        }
+        return total
+    }
+
+    function revealBufferedAssistantTextStep(): void {
+        assistantRevealTimer = null
+
+        if (!bufferedAssistantText) {
+            revealingAssistantText = false
+            if (pendingAssistantComplete && !isSpeaking.value) {
+                pendingAssistantComplete = false
+                callbacks?.onAssistantComplete?.()
+                updateCache('', false)
+            }
+            return
+        }
+
+        const now = Date.now()
+        if (!assistantRevealLastTickAt) {
+            assistantRevealLastTickAt = now
+        }
+        const elapsedMs = Math.max(0, now - assistantRevealLastTickAt)
+        assistantRevealLastTickAt = now
+        assistantRevealBudget += getRevealCharsPerSecond() * (elapsedMs / 1000)
+
+        let emitted = ''
+        while (bufferedAssistantText) {
+            const nextUnit = takeNextRevealUnit(bufferedAssistantText)
+            const unitCost = getRevealUnitCost(nextUnit)
+            if (emitted && assistantRevealBudget < unitCost) {
+                break
+            }
+            if (!emitted && assistantRevealBudget < unitCost) {
+                assistantRevealBudget += 0.45
+                break
+            }
+            bufferedAssistantText = bufferedAssistantText.slice(nextUnit.length)
+            assistantRevealBudget = Math.max(0, assistantRevealBudget - unitCost)
+            currentSpeechReleasedCost += unitCost
+            emitted += nextUnit
+        }
+
+        if (emitted) {
+            callbacks?.onAssistantChunk?.(emitted)
+        }
+
+        if (bufferedAssistantText) {
+            revealingAssistantText = true
+            assistantRevealTimer = setTimeout(revealBufferedAssistantTextStep, getRevealTickDelayMs())
+            return
+        }
+
+        revealingAssistantText = false
+        assistantRevealBudget = 0
+        assistantRevealLastTickAt = 0
+        if (pendingAssistantComplete && !isSpeaking.value) {
+            pendingAssistantComplete = false
+            callbacks?.onAssistantComplete?.()
+            updateCache('', false)
+        }
+    }
+
+    function startAssistantReveal(): void {
+        if (revealingAssistantText || !bufferedAssistantText) return
+        revealingAssistantText = true
+        assistantRevealLastTickAt = Date.now()
+        assistantRevealBudget = Math.max(assistantRevealBudget, 0.2)
+        assistantRevealTimer = setTimeout(revealBufferedAssistantTextStep, getRevealTickDelayMs() + 180)
+    }
+
+    function flushBufferedAssistantTextImmediately(): void {
+        if (!bufferedAssistantText) return
+        callbacks?.onAssistantChunk?.(bufferedAssistantText)
+        bufferedAssistantText = ''
+    }
+
+    function finalizeBufferedAssistantTurn(forceImmediate = false): void {
+        if (forceImmediate) {
+            clearAssistantRevealTimer()
+            flushBufferedAssistantTextImmediately()
+        } else if (bufferedAssistantText && !revealingAssistantText) {
+            startAssistantReveal()
+            return
+        }
+
+        if (pendingAssistantComplete) {
+            pendingAssistantComplete = false
+            callbacks?.onAssistantComplete?.()
+            updateCache('', false)
+        }
+        clearAssistantFlushFallbackTimer()
     }
 
     function setNeedDiagram(enabled: boolean): void {
