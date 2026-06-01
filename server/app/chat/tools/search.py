@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import serpapi
 import re
+import requests
 from langchain_community.tools import DuckDuckGoSearchRun, TavilySearchResults
 from langchain_core.tools import tool
+from sympy import false
 
-from app.config import SERPAPI_KEY, TAVILY_KEY
+from app.config import SERPAPI_KEY, TAVILY_KEY,SPARK_SEARCH_KEY
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -36,7 +38,6 @@ def duckduckgo_search(query: str) -> str:
     except Exception as exc:
         logger.warning("[duckduckgo_search] failed: query=%r error=%s", query, exc)
         return f"DuckDuckGo 搜索失败: {exc}"
-
 
 @tool("tavily_search")
 def tavily_search(query: str) -> str:
@@ -107,3 +108,71 @@ def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str 
         error = _redact_url_query_secrets(exc)
         logger.warning("[serp_search] failed: query=%r error=%s", query, error)
         return f"SerpApi 搜索失败: {error}"
+
+
+@tool("spark_search")
+def spark_search(query: str):
+    """
+    讯飞搜索封装函数
+    """
+    url = "https://search-api-open.cn-huabei-1.xf-yun.com/v2/search"
+    if not query or not query.strip():
+        raise ValueError("query 不能为空")
+
+    payload = {
+        "search_params": {
+            "query": query,
+            "limit": 10,
+            "enhance": {
+                "open_rerank": True,
+                "open_full_text": False
+            }
+        }
+    }
+
+    headers = {
+        "Authorization": f"Bearer {SPARK_SEARCH_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(
+        url,
+        headers=headers,
+        json=payload,
+        timeout=60
+    )
+
+    response.raise_for_status()
+    data = response.json()
+
+    if not data.get("success"):
+        raise RuntimeError(f"讯飞搜索失败: {data}")
+
+    documents = (
+        data
+        .get("data", {})
+        .get("search_results", {})
+        .get("documents", [])
+    )
+
+    results = []
+
+    for doc in documents:
+        item = {
+            "title": doc.get("name", ""),
+            "summary": doc.get("summary", ""),
+            "url": doc.get("url", ""),
+            "published_date": doc.get("published_date", "")
+        }
+
+        content = doc.get("content", "")
+        if content:
+            item["content"] = content
+
+        results.append(item)
+
+    return {
+        "query": query,
+        "results": results
+    }
+

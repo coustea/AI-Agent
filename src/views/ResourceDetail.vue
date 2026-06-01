@@ -211,6 +211,7 @@ const goBack = () => {
 
 const getStatusType = (status: string) => {
   if (status === 'completed') return 'success'
+  if (status === 'partial_completed') return 'warning'
   if (status === 'pending' || status === 'processing') return 'primary'
   if (status === 'failed') return 'danger'
   return 'info'
@@ -219,6 +220,7 @@ const getStatusType = (status: string) => {
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
     completed: '已完成',
+    partial_completed: '部分完成',
     pending: '生成中',
     processing: '生成中',
     failed: '失败',
@@ -228,6 +230,7 @@ const getStatusText = (status: string) => {
 
 const getStatusTypeClass = (status: string) => {
   if (status === 'completed') return 'success-glow'
+  if (status === 'partial_completed') return 'warning-glow'
   if (status === 'pending' || status === 'processing') return 'processing-glow'
   if (status === 'failed') return 'danger-glow'
   return 'info-glow'

@@ -26,11 +26,18 @@ from app.resource.schemas import (
     ResourceBundle,
     ResourceGenerationRequest,
     ReviewResult,
-    WorkerResult,
+    WorkerResult, WorkerState,
 )
 from app.infra.logging import get_module_logger
 
 logger = get_module_logger("resource", sub="workflow")
+
+SOURCE_AUDIT_AGENT_IDS = ("content", "reading")
+COMPLETENESS_ONLY_AGENT_IDS = ("quiz", "mindmap", "code")
+PPT_AGENT_ID = "ppt"
+PRE_REVIEW_AGENT_ID = "pre_review"
+PPT_REVIEW_AGENT_ID = "ppt_review"
+REVIEW_CONTENT_LIMIT = 12_000
 
 
 class ResourceUsecases:
@@ -107,7 +114,12 @@ class ResourceUsecases:
         }
 
     def _initial_workflow_progress(self, selected_agents: list[str]) -> dict[str, Any]:
-        nodes = ["planning", *selected_agents, "review", "bundle"]
+        selected = [agent_id for agent_id in selected_agents if agent_id not in {"planning", "review"}]
+        base_agents = [agent_id for agent_id in selected if agent_id != PPT_AGENT_ID]
+        nodes = ["planning", *base_agents, PRE_REVIEW_AGENT_ID]
+        if PPT_AGENT_ID in selected:
+            nodes.extend([PPT_AGENT_ID, PPT_REVIEW_AGENT_ID])
+        nodes.append("bundle")
         return {
             "stage": "pending",
             "progress": 0,
@@ -212,12 +224,18 @@ class ResourceUsecases:
     def _resolve_progress_node(self, event: ResourceGenerateEvent) -> str | None:
         if event.event_type == "bundle" or event.agent == "assembler":
             return "bundle"
+        if event.agent in {PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID}:
+            return event.agent
         if event.agent and event.agent != "coordinator":
             return event.agent
         if event.stage.startswith("planning"):
             return "planning"
+        if event.stage == "pre_reviewing":
+            return PRE_REVIEW_AGENT_ID
+        if event.stage == "ppt_reviewing":
+            return PPT_REVIEW_AGENT_ID
         if event.stage == "reviewing":
-            return "review"
+            return PRE_REVIEW_AGENT_ID
         return None
 
     def _resolve_progress_stage(self, event: ResourceGenerateEvent) -> tuple[str | None, str | None]:
@@ -225,7 +243,7 @@ class ResourceUsecases:
             return "completed", None
         if event.event_type == "bundle":
             return "assembling", None
-        if event.stage == "reviewing" or event.agent == "review":
+        if event.stage in {"reviewing", "pre_reviewing", "ppt_reviewing"} or event.agent in {"review", PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID}:
             return "reviewing", "reviewing"
         if event.stage == "generating" or (
             event.agent and event.agent not in {"coordinator", "planning", "review", "assembler"}
@@ -251,6 +269,213 @@ class ResourceUsecases:
         except Exception:
             # Unit-test fakes and simple namespace objects are not SQLAlchemy-mapped.
             return
+
+    @staticmethod
+    def _has_generated_content(result: WorkerResult | None) -> bool:
+        if result is None or not result.success:
+            return False
+        content = result.content
+        if content is None:
+            return False
+        if isinstance(content, str):
+            return bool(content.strip())
+        return True
+
+    @staticmethod
+    def _bounded_content(content: Any) -> str:
+        if isinstance(content, str):
+            text = content
+        else:
+            text = json.dumps(content, ensure_ascii=False)
+        if len(text) <= REVIEW_CONTENT_LIMIT:
+            return text
+        return f"{text[:REVIEW_CONTENT_LIMIT]}\n\n[内容已截断用于审核上下文控制]"
+
+    @staticmethod
+    def _profile_summary(profile: dict[str, Any]) -> str:
+        for key in ("profile_markdown", "summary", "profile_summary"):
+            value = profile.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        profile_data = profile.get("profile_data")
+        if isinstance(profile_data, dict):
+            return json.dumps(profile_data, ensure_ascii=False)
+        return ""
+
+    @staticmethod
+    def _request_context(
+        *,
+        request: ResourceGenerationRequest,
+        profile: dict[str, Any],
+        blueprint: Any | None,
+    ) -> dict[str, Any]:
+        return {
+            "learning_need": request.learning_need,
+            "learning_scenario": request.learning_scenario,
+            "profile_summary": ResourceUsecases._profile_summary(profile),
+            "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
+        }
+
+    @staticmethod
+    def _audit_resource_item(agent_id: str, result: WorkerResult) -> dict[str, Any]:
+        return {
+            "agent_id": agent_id,
+            "title": result.title,
+            "summary": result.summary,
+            "audit_content": ResourceUsecases._bounded_content(result.content),
+        }
+
+    @staticmethod
+    def _source_reference_item(agent_id: str, result: WorkerResult) -> dict[str, Any]:
+        return {
+            "agent_id": agent_id,
+            "title": result.title,
+            "summary": result.summary,
+            "source_content": ResourceUsecases._bounded_content(result.content),
+        }
+
+    @staticmethod
+    def _completeness_item(agent_id: str, result: WorkerResult | None) -> dict[str, Any]:
+        return {
+            "agent_id": agent_id,
+            "title": result.title if result else "",
+            "summary": result.summary if result else "",
+            "has_content": ResourceUsecases._has_generated_content(result),
+        }
+
+    @staticmethod
+    def build_pre_audit_envelope(
+        *,
+        request: ResourceGenerationRequest,
+        results: dict[str, WorkerResult],
+        profile: dict[str, Any],
+        blueprint: Any | None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        selected_agents = request.enabled_agent_ids()
+        checked_agents = [
+            agent_id
+            for agent_id in selected_agents
+            if agent_id in SOURCE_AUDIT_AGENT_IDS or agent_id in COMPLETENESS_ONLY_AGENT_IDS
+        ]
+        missing_resources = [
+            agent_id
+            for agent_id in checked_agents
+            if not ResourceUsecases._has_generated_content(results.get(agent_id))
+        ]
+        deep_audit_resources = [
+            ResourceUsecases._audit_resource_item(agent_id, results[agent_id])
+            for agent_id in selected_agents
+            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceUsecases._has_generated_content(results.get(agent_id))
+        ]
+        completeness_only = [
+            ResourceUsecases._completeness_item(agent_id, results.get(agent_id))
+            for agent_id in selected_agents
+            if agent_id in COMPLETENESS_ONLY_AGENT_IDS
+        ]
+        return {
+            "mode": "pre_audit",
+            "request_context": ResourceUsecases._request_context(
+                request=request,
+                profile=profile,
+                blueprint=blueprint,
+            ),
+            "deep_audit_resources": deep_audit_resources,
+            "completeness_only": completeness_only,
+        }, missing_resources
+
+    @staticmethod
+    def build_ppt_audit_envelope(
+        *,
+        request: ResourceGenerationRequest,
+        results: dict[str, WorkerResult],
+        profile: dict[str, Any],
+        blueprint: Any | None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        selected_agents = request.enabled_agent_ids()
+        missing_resources: list[str] = []
+        ppt_result = results.get(PPT_AGENT_ID)
+        if PPT_AGENT_ID in selected_agents and not ResourceUsecases._has_generated_content(ppt_result):
+            missing_resources.append(PPT_AGENT_ID)
+        approved_sources = [
+            ResourceUsecases._source_reference_item(agent_id, results[agent_id])
+            for agent_id in selected_agents
+            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceUsecases._has_generated_content(results.get(agent_id))
+        ]
+        ppt_resource = (
+            ResourceUsecases._audit_resource_item(PPT_AGENT_ID, ppt_result)
+            if ResourceUsecases._has_generated_content(ppt_result)
+            else None
+        )
+        return {
+            "mode": "ppt_audit",
+            "request_context": ResourceUsecases._request_context(
+                request=request,
+                profile=profile,
+                blueprint=blueprint,
+            ),
+            "approved_sources": approved_sources,
+            "ppt_resource": ppt_resource,
+        }, missing_resources
+
+    @staticmethod
+    def failed_review_result(
+        *,
+        status: str,
+        message: str,
+        revision_targets: list[str],
+        review_mode: str,
+    ) -> ReviewResult:
+        payload = {
+            "status": status,
+            "checks": {
+                "need_alignment": "not_checked",
+                "content_completeness": "fail",
+                "factuality": "not_checked",
+                "hallucination": "not_checked",
+                "safety": "not_checked",
+                "grounding": "not_checked",
+            },
+            "violations": [{"type": "missing_or_failed_resource", "resources": revision_targets}],
+            "revision_targets": revision_targets,
+            "mode": review_mode,
+        }
+        return ReviewResult(
+            passed=False,
+            overall_score=0,
+            consistency_score=0,
+            personalization_score=0,
+            issues=[message],
+            suggestions=[json.dumps(payload, ensure_ascii=False)],
+            failed_agents=revision_targets,
+        )
+
+    @staticmethod
+    def review_result_from_worker(result: WorkerResult) -> ReviewResult:
+        parsed = result.metadata.get("parsed_review")
+        status = result.metadata.get("review_status") or ("pass" if result.success else "blocked")
+        issues: list[str] = []
+        failed_agents: list[str] = []
+        if isinstance(parsed, dict):
+            violations = parsed.get("violations")
+            if isinstance(violations, list):
+                issues = [
+                    item if isinstance(item, str) else json.dumps(item, ensure_ascii=False)
+                    for item in violations
+                ]
+            revision_targets = parsed.get("revision_targets")
+            if isinstance(revision_targets, list):
+                failed_agents = [str(item) for item in revision_targets]
+        if not result.success and not issues:
+            issues = [result.error or f"review status: {status}"]
+        return ReviewResult(
+            passed=result.success,
+            overall_score=100 if result.success else 0,
+            consistency_score=100 if result.success else 0,
+            personalization_score=100 if result.success else 0,
+            issues=issues,
+            suggestions=[result.content] if result.content else [],
+            failed_agents=failed_agents,
+        )
 
     def _content_envelope(self, result: WorkerResult) -> tuple[dict[str, Any] | None, str | None]:
         """根据格式拆分 WorkerResult 内容为 content_json 和 content_text。"""
@@ -393,6 +618,9 @@ class ResourceUsecases:
         """保存审阅元数据和终态；Worker 结果已在完成节点逐条入库。"""
         saved_items = await self.list_resource_items(user_id, resource_id)
         failed_agents = [agent_id for agent_id, result in results.items() if not result.success]
+        for agent_id in review_result.failed_agents:
+            if agent_id and agent_id not in failed_agents:
+                failed_agents.append(agent_id)
         if not review_result.passed and "review" not in failed_agents:
             failed_agents.append("review")
         successful = len(saved_items)
@@ -644,25 +872,28 @@ async def bg_gen_task(
                 logger.warning("Planning 失败: %.2fs, error=%s", planning_elapsed, planning_result.error)
 
             # ==========================================
-            # 阶段 2: 并行生成阶段 (Parallel Worker Agents)
-            # 职责: 各领域专家并发执行任务，极大提升整体资源生成速度
+            # 阶段 2: 基础资源并行生成阶段 (Parallel Worker Agents)
+            # 职责: 先生成非 PPT 资源，PPT 必须等待 source pre-audit 通过后再生成
             # ==========================================
             worker_start = time.perf_counter()
-            await emitter.emit_workflow("generating", "并行生成资源", progress=20)
+            await emitter.emit_workflow("generating", "并行生成基础资源", progress=20)
             results: dict[str, WorkerResult] = {}
 
-            async def run_one(agent_id: str) -> None:
+            async def run_one(agent_id: str, agent_config_extra: dict[str, Any] | None = None) -> None:
                 """独立运行单个 Worker Agent 的协程函数"""
                 agent_start = time.perf_counter()
                 try:
                     logger.info("Agent[%s] 启动", agent_id)
+                    agent_config = request.agent_configs.get(agent_id, {})
+                    if agent_config_extra:
+                        agent_config = {**agent_config, **agent_config_extra}
                     # 组装属于该 Agent 的执行上下文
                     state = WorkerState(
                         resource_id=resource_id,
                         learning_need=request.learning_need,
                         learning_scenario=request.learning_scenario,
                         agent_name=agent_id,
-                        agent_config=request.agent_configs.get(agent_id, {}),
+                        agent_config=agent_config,
                         blueprint=blueprint,                         # 共享总蓝图
                         instruction=instruction_map.get(agent_id),   # 独享专属指令
                         profile=profile,                             # 共享用户画像
@@ -703,9 +934,13 @@ async def bg_gen_task(
                         metadata={"agent_id": agent_id},
                     )
 
-            # 筛选出所有真正的 Worker (排除掉 planning 和 review)
-            worker_agents = [a for a in enabled_agents if a in AGENT_REGISTRY and a not in ("planning", "review")]
-            logger.info("开始并行 Worker 生成: agents=%s", worker_agents)
+            # 筛选出基础 Worker：PPT 需要在 source pre-audit 后串行生成。
+            worker_agents = [
+                a
+                for a in enabled_agents
+                if a in AGENT_REGISTRY and a not in ("planning", "review", PPT_AGENT_ID)
+            ]
+            logger.info("开始并行基础 Worker 生成: agents=%s", worker_agents)
             
             # 使用 asyncio.gather 实现高并发执行
             await asyncio.gather(*(run_one(agent_id) for agent_id in worker_agents))
@@ -713,32 +948,175 @@ async def bg_gen_task(
             worker_elapsed = time.perf_counter() - worker_start
             success_count = sum(1 for r in results.values() if r.success)
             fail_count = sum(1 for r in results.values() if not r.success)
-            logger.info("Worker 全部完成: 成功=%s, 失败=%s, 耗时=%.2fs", success_count, fail_count, worker_elapsed)
+            logger.info("基础 Worker 完成: 成功=%s, 失败=%s, 耗时=%.2fs", success_count, fail_count, worker_elapsed)
 
             # ==========================================
-            # 阶段 3: 质量审查阶段 (Review Agent)
-            # 职责: 拿取所有 Worker 的成果，检查连贯性和缺失项，生成总结性点评
+            # 阶段 3: 前置审核 + PPT 生成 + PPT 单独审核
+            # 职责: source 先过安全/事实性审核，PPT 只在通过后生成并单独审核
             # ==========================================
-            await emitter.emit_workflow("reviewing", "质量审查中", progress=85)
-            if "review" in AGENT_REGISTRY:
-                failed_results = {aid: r for aid, r in results.items() if not r.success}
-                review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
-                review_state = WorkerState(
+            await emitter.emit_workflow("pre_reviewing", "前置内容安全审核中", progress=70)
+            pre_review_result = ReviewResult(passed=True, overall_score=100)
+            review_result = pre_review_result
+            review_passed = True
+
+            failed_results = {aid: r for aid, r in results.items() if not r.success}
+            review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
+            pre_audit_envelope, missing_resources = ResourceUsecases.build_pre_audit_envelope(
+                request=request,
+                results=review_results,
+                profile=profile,
+                blueprint=blueprint,
+            )
+            source_audit_required = bool(pre_audit_envelope["deep_audit_resources"])
+
+            if missing_resources:
+                review_result = ResourceUsecases.failed_review_result(
+                    status="needs_revision",
+                    message=f"资源生成不完整: {', '.join(missing_resources)}",
+                    revision_targets=missing_resources,
+                    review_mode="pre_audit",
+                )
+                review_passed = False
+                await emitter.emit_agent(
+                    PRE_REVIEW_AGENT_ID,
+                    status="failed",
+                    message="前置审核未通过：资源生成不完整",
+                    progress=100,
+                )
+                logger.warning("前置审核跳过: missing_resources=%s", missing_resources)
+            elif source_audit_required and "review" in AGENT_REGISTRY:
+                pre_review_state = WorkerState(
                     learning_need=request.learning_need,
+                    learning_scenario=request.learning_scenario,
                     profile=profile,
                     blueprint=blueprint,
-                    # 将前面所有的生成成果打包发给审查员
-                    agent_config={"worker_results": [r.model_dump(mode="json") for r in review_results.values()]},
+                    agent_config={
+                        "review_envelope": pre_audit_envelope,
+                        "progress_agent_id": PRE_REVIEW_AGENT_ID,
+                    },
                 )
-                review_worker_result = await AGENT_REGISTRY["review"](emitter).run(review_state)
-                logger.info("Review 完成: success=%s", review_worker_result.success)
-                review_result = ReviewResult(
-                    passed=review_worker_result.success,
-                    overall_score=100 if review_worker_result.success else 0,
-                    suggestions=[review_worker_result.content] if review_worker_result.content else [],
+                pre_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(pre_review_state)
+                pre_review_result = ResourceUsecases.review_result_from_worker(pre_review_worker_result)
+                review_result = pre_review_result
+                review_passed = pre_review_result.passed
+                logger.info(
+                    "Pre Review 完成: success=%s, status=%s",
+                    pre_review_worker_result.success,
+                    pre_review_worker_result.metadata.get("review_status"),
+                )
+            elif source_audit_required:
+                review_result = ResourceUsecases.failed_review_result(
+                    status="blocked",
+                    message="审核智能体不可用，无法完成前置安全审核",
+                    revision_targets=["review"],
+                    review_mode="pre_audit",
+                )
+                review_passed = False
+                await emitter.emit_agent(
+                    PRE_REVIEW_AGENT_ID,
+                    status="failed",
+                    message="审核智能体不可用，前置安全审核已阻断",
+                    progress=100,
                 )
             else:
-                review_result = ReviewResult(passed=True, overall_score=100)
+                await emitter.emit_agent(
+                    PRE_REVIEW_AGENT_ID,
+                    status="skipped",
+                    message="未选择需要深度审核的内容，跳过前置 LLM 审核",
+                    progress=100,
+                )
+                logger.info("未选择 content/reading 或 review agent 不可用，跳过前置 LLM 审核")
+
+            if review_passed and PPT_AGENT_ID in enabled_agents:
+                await emitter.emit_workflow("generating", "正在生成 PPT", progress=82)
+                approved_sources = [
+                    {
+                        "agent_id": item["agent_id"],
+                        "title": item.get("title", ""),
+                        "summary": item.get("summary", ""),
+                        "source_content": item.get("audit_content", ""),
+                    }
+                    for item in pre_audit_envelope["deep_audit_resources"]
+                ]
+                if PPT_AGENT_ID in AGENT_REGISTRY:
+                    await run_one(PPT_AGENT_ID, {"approved_sources": approved_sources})
+
+                await emitter.emit_workflow("ppt_reviewing", "PPT 内容安全审核中", progress=90)
+                failed_results = {aid: r for aid, r in results.items() if not r.success}
+                review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
+                ppt_audit_envelope, ppt_missing_resources = ResourceUsecases.build_ppt_audit_envelope(
+                    request=request,
+                    results=review_results,
+                    profile=profile,
+                    blueprint=blueprint,
+                )
+                if ppt_missing_resources:
+                    review_result = ResourceUsecases.failed_review_result(
+                        status="needs_revision",
+                        message=f"PPT 生成不完整: {', '.join(ppt_missing_resources)}",
+                        revision_targets=ppt_missing_resources,
+                        review_mode="ppt_audit",
+                    )
+                    review_passed = False
+                    await emitter.emit_agent(
+                        PPT_REVIEW_AGENT_ID,
+                        status="failed",
+                        message="PPT 审核未通过：PPT 生成不完整",
+                        progress=100,
+                    )
+                    logger.warning("PPT 审核跳过: missing_resources=%s", ppt_missing_resources)
+                elif "review" in AGENT_REGISTRY:
+                    ppt_review_state = WorkerState(
+                        learning_need=request.learning_need,
+                        learning_scenario=request.learning_scenario,
+                        profile=profile,
+                        blueprint=blueprint,
+                        agent_config={
+                            "review_envelope": ppt_audit_envelope,
+                            "progress_agent_id": PPT_REVIEW_AGENT_ID,
+                        },
+                    )
+                    ppt_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(ppt_review_state)
+                    ppt_review_result = ResourceUsecases.review_result_from_worker(ppt_review_worker_result)
+                    if pre_review_result.suggestions:
+                        ppt_review_result.suggestions = [
+                            *pre_review_result.suggestions,
+                            *ppt_review_result.suggestions,
+                        ]
+                    review_result = ppt_review_result
+                    review_passed = ppt_review_result.passed
+                    logger.info(
+                        "PPT Review 完成: success=%s, status=%s",
+                        ppt_review_worker_result.success,
+                        ppt_review_worker_result.metadata.get("review_status"),
+                    )
+                else:
+                    review_result = ResourceUsecases.failed_review_result(
+                        status="blocked",
+                        message="审核智能体不可用，无法完成 PPT 安全审核",
+                        revision_targets=["review"],
+                        review_mode="ppt_audit",
+                    )
+                    review_passed = False
+                    await emitter.emit_agent(
+                        PPT_REVIEW_AGENT_ID,
+                        status="failed",
+                        message="审核智能体不可用，PPT 安全审核已阻断",
+                        progress=100,
+                    )
+            elif PPT_AGENT_ID in enabled_agents:
+                await emitter.emit_agent(
+                    PPT_AGENT_ID,
+                    status="skipped",
+                    message="前置审核未通过，已跳过 PPT 生成",
+                    progress=100,
+                )
+                await emitter.emit_agent(
+                    PPT_REVIEW_AGENT_ID,
+                    status="skipped",
+                    message="PPT 未生成，已跳过 PPT 审核",
+                    progress=100,
+                )
 
             # ==========================================
             # 阶段 4: 持久化与打包 (Save Final Results)

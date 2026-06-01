@@ -223,6 +223,11 @@ class PptAgent(BaseResourceAgent):
         cfg_lines.append(f"- 在线预览格式 (output_format=preview)")
         cfg_lines.append(f"- 教学难度: {difficulty}")
         parts.append("\n".join(cfg_lines))
+        approved_sources = config.get("approved_sources")
+        if isinstance(approved_sources, list) and approved_sources:
+            parts.append("## 已通过审核的内容来源")
+            parts.append(json.dumps(approved_sources, ensure_ascii=False, indent=2))
+            parts.append("PPT 的核心事实、概念解释和案例应基于以上已审核来源展开，不要引入无依据的新结论。")
         parts.append("请生成 PPT 幻灯片内容。")
         return "\n\n".join(parts)
 

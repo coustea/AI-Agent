@@ -39,6 +39,7 @@
               <button
                   class="omni-submit-btn"
                   :disabled="!naturalInput.trim()"
+                  aria-label="进入参数配置"
                   @click="goToPersonalize"
               >
                 <el-icon><Top /></el-icon>
@@ -362,128 +363,131 @@
               </div>
               <div class="stage-control-pills">
                 <span class="control-pill active"><span class="live-dot"></span> 实时运行</span>
-                <span class="control-pill">任务卡飞行动画</span>
-                <span class="control-pill">结果回流</span>
+                <span class="control-pill">顺序入场</span>
+                <span class="control-pill">审核流水线</span>
               </div>
             </div>
 
-            <div class="dispatch-stage">
-              <div class="stage-orbit-ring ring-one"></div>
-              <div class="stage-orbit-ring ring-two"></div>
-
-              <div class="master-hub" :class="[`is-${dagNodeStates.planning?.status || 'waiting'}`]" @click="selectedDagNodeId = 'planning'">
-                <div class="master-core">
-                  <span class="master-icon">🎯</span>
-                  <div class="master-pulse"></div>
-                </div>
-                <div class="master-info">
-                  <span class="hub-kicker">MasterAgent / Plan</span>
-                  <h4>调度中心</h4>
-                  <p>{{ dagNodeStates.planning?.currentMessage || '解析需求、生成计划、分配任务' }}</p>
-                </div>
-                <div class="master-progress-line">
-                  <span :style="{ width: `${dagNodeStates.planning?.progress || 0}%` }"></span>
-                </div>
-              </div>
-
-              <div class="plan-card-stack">
-                <div
-                    v-for="(plan, index) in currentPlanSteps"
-                    :key="plan.id"
-                    class="plan-mini-card"
-                    :style="{ animationDelay: `${index * 0.12}s` }"
+            <div class="dispatch-stage workflow-timeline-stage">
+              <section class="workflow-phase phase-planning">
+                <div class="phase-spine-node">01</div>
+                <article
+                    class="agent-workstation plan-controller"
+                    :class="[`is-${dagNodeStates.planning?.status || 'waiting'}`, { 'is-selected': selectedDagNodeId === 'planning' }]"
+                    @click="selectedDagNodeId = 'planning'"
                 >
-                  <span>{{ index + 1 }}</span>
-                  <strong>{{ plan.title }}</strong>
-                </div>
-              </div>
-
-              <article
-                  v-for="node in stageAgentNodes"
-                  :key="node.id"
-                  class="agent-workstation"
-                  :class="[`station-${node.id}`, `is-${node.status}`, { 'is-selected': selectedDagNodeId === node.id }]"
-                  @click="selectedDagNodeId = node.id"
-              >
-                <div class="workstation-head">
-                  <span class="workstation-icon">{{ node.icon }}</span>
-                  <div class="workstation-title">
-                    <strong>{{ node.label }}</strong>
-                    <span>{{ getStatusText(node.status) }}</span>
-                  </div>
-                  <span class="workstation-status-dot"></span>
-                </div>
-                <div class="workstation-message-wrap">
-                  <p v-if="node.status === 'failed'" class="error-text">哎呀，这部分大模型开小差了~</p>
-                  <p v-else :key="node.currentMessage" class="typewriter-text">{{ node.currentMessage || getNodeFallbackMessage(node) }}</p>
-                </div>
-                <div class="workstation-progress" v-if="node.status !== 'failed'">
-                  <span :style="{ width: `${node.progress}%` }"></span>
-                </div>
-                <div class="workstation-actions" v-if="node.status === 'failed'">
-                  <button class="retry-btn" @click.stop="retryAgent(node.id)">
-                    <el-icon><RefreshLeft /></el-icon> 重新为您准备
-                  </button>
-                </div>
-                <div class="workstation-meta" v-else>
-                  <span>{{ getAgentOutputFormat(node.id) }}</span>
-                  <strong>{{ node.progress }}%</strong>
-                </div>
-              </article>
-
-              <div class="dispatch-packets" aria-hidden="true">
-                <span
-                    v-for="node in stageAgentNodes"
-                    :key="`packet-${node.id}`"
-                    class="dispatch-packet"
-                    :class="[`packet-${node.id}`, { active: isDispatchPacketActive(node.id) }]"
-                >
-                  <i></i>{{ getAgentShortName(node.id) }}任务
-                </span>
-              </div>
-
-              <div class="review-assembly-lane">
-                <article class="review-node lane-node" :class="`is-${dagNodeStates.review?.status || 'waiting'}`" @click="selectedDagNodeId = 'review'">
-                  <span class="lane-icon">🔍</span>
-                  <div class="lane-node-content">
-                    <strong>质量把关助手</strong>
-                    <div class="reviewer-checklist" v-if="dagNodeStates.review?.status === 'running'">
-                       <div class="check-item" :class="{ 'passed': dagNodeStates.review.progress > 20 }">
-                         <span class="check-box"><el-icon v-if="dagNodeStates.review.progress > 20"><Check /></el-icon></span> 知识点不超纲
-                       </div>
-                       <div class="check-item" :class="{ 'passed': dagNodeStates.review.progress > 60 }">
-                         <span class="check-box"><el-icon v-if="dagNodeStates.review.progress > 60"><Check /></el-icon></span> 内容准确无误
-                       </div>
-                       <div class="check-item" :class="{ 'passed': dagNodeStates.review.progress > 90 }">
-                         <span class="check-box"><el-icon v-if="dagNodeStates.review.progress > 90"><Check /></el-icon></span> 难度适中匹配
-                       </div>
-                       <div class="scanner-line"></div>
+                  <div class="workstation-head">
+                    <span class="workstation-icon">🎯</span>
+                    <div class="workstation-title">
+                      <strong>规划任务</strong>
+                      <span>MasterAgent / Plan</span>
                     </div>
-                    <p v-else>{{ dagNodeStates.review?.currentMessage || '等待资源生成后进行内容准确性与难度审核' }}</p>
+                    <span class="workstation-status-badge">{{ getStatusText(dagNodeStates.planning?.status || 'waiting') }}</span>
                   </div>
-                  <em>{{ dagNodeStates.review?.progress || 0 }}%</em>
-                </article>
-                <div class="lane-arrow"></div>
-                <article class="bundle-node lane-node" :class="`is-${dagNodeStates.bundle?.status || 'waiting'}`" @click="selectedDagNodeId = 'bundle'">
-                  <span class="lane-icon">📦</span>
-                  <div class="lane-node-content">
-                    <strong>资源打包助手</strong>
-                    <p>{{ dagNodeStates.bundle?.currentMessage || '整理各类学习资料，为您生成最终专属学习包' }}</p>
+                  <div class="workstation-message-wrap">
+                    <p :key="dagNodeStates.planning?.currentMessage" class="typewriter-text">
+                      {{ dagNodeStates.planning?.currentMessage || '解析需求、生成计划、分配任务' }}
+                    </p>
                   </div>
-                  <em>{{ dagNodeStates.bundle?.progress || 0 }}%</em>
+                  <div class="workstation-progress">
+                    <span :style="{ width: `${dagNodeStates.planning?.progress || 0}%` }"></span>
+                  </div>
                 </article>
-              </div>
 
-              <div class="returning-resources" aria-hidden="true">
-                <span
-                    v-for="resource in sortedGeneratedResources.slice(0, 6)"
-                    :key="`return-${resource.id || resource.type}`"
-                    class="return-resource-card"
-                    :class="`return-${resource.type}`"
-                >
-                  {{ getDagNodeIcon(resource.type) }} {{ getResourceTypeLabel(resource.type) }}
-                </span>
-              </div>
+                <transition-group name="plan-card-arrival" tag="div" class="plan-card-stack sequenced-plan-stack">
+                  <div
+                      v-for="(plan, index) in visiblePlanSteps"
+                      :key="plan.id"
+                      class="plan-mini-card"
+                      :style="{ animationDelay: `${index * 0.08}s` }"
+                  >
+                    <span>{{ index + 1 }}</span>
+                    <strong>{{ plan.title }}</strong>
+                  </div>
+                </transition-group>
+              </section>
+
+              <section class="workflow-phase phase-parallel">
+                <div class="phase-spine-node">02</div>
+                <div class="workflow-phase-header">
+                  <span class="phase-label">基础资源并行生成</span>
+                  <h4>Worker Agents</h4>
+                  <p>非 PPT 资源先并行生成，content / reading 会进入前置内容安全审核。</p>
+                </div>
+                <transition-group name="agent-arrival" tag="div" class="parallel-agent-grid">
+                  <article
+                      v-for="node in stageAgentNodes"
+                      :key="node.id"
+                      class="agent-workstation"
+                      :class="[`is-${node.status}`, { 'is-selected': selectedDagNodeId === node.id }]"
+                      @click="selectedDagNodeId = node.id"
+                  >
+                    <div class="workstation-head">
+                      <span class="workstation-icon">{{ node.icon }}</span>
+                      <div class="workstation-title">
+                        <strong>{{ node.label }}</strong>
+                        <span>{{ getAgentOutputFormat(node.id) }}</span>
+                      </div>
+                      <span class="workstation-status-badge">{{ getStatusText(node.status) }}</span>
+                    </div>
+                    <div class="workstation-message-wrap">
+                      <p v-if="node.status === 'failed'" class="error-text">执行未通过，请查看日志</p>
+                      <p v-else :key="node.currentMessage" class="typewriter-text">{{ node.currentMessage || getNodeFallbackMessage(node) }}</p>
+                    </div>
+                    <div class="workstation-progress" v-if="node.status !== 'failed'">
+                      <span :style="{ width: `${node.progress}%` }"></span>
+                    </div>
+                    <div class="workstation-actions" v-if="node.status === 'failed'">
+                      <span class="retry-btn">需要重新发起生成</span>
+                    </div>
+                    <div class="workstation-meta" v-else>
+                      <span>{{ getAgentShortName(node.id) }} 输出</span>
+                      <strong>{{ node.progress }}%</strong>
+                    </div>
+                  </article>
+                </transition-group>
+                <div v-if="stageAgentNodes.length === 0" class="phase-empty-state">等待基础资源智能体被调用</div>
+              </section>
+
+              <section class="workflow-phase phase-review">
+                <div class="phase-spine-node">03</div>
+                <div class="workflow-phase-header">
+                  <span class="phase-label">审核与下游资源</span>
+                  <h4>Pre Review → PPT → PPT Review → Bundle</h4>
+                  <p>基础内容通过前置审核后，PPT 才会生成；PPT 完成后单独进行内容安全审核。</p>
+                </div>
+                <transition-group name="lane-arrival" tag="div" class="review-assembly-lane">
+                  <div
+                      v-for="(node, index) in reviewPipelineNodes"
+                      :key="node.id"
+                      class="lane-step"
+                  >
+                    <article class="lane-node" :class="[`is-${node.status}`, `lane-${node.id}`]" @click="selectedDagNodeId = node.id">
+                      <span class="lane-icon">{{ node.icon }}</span>
+                      <div class="lane-node-content">
+                        <strong>{{ node.label }}</strong>
+                        <span class="lane-status">{{ getStatusText(node.status) }}</span>
+                        <div class="reviewer-checklist" v-if="isAuditNode(node.id) && node.status === 'running'">
+                           <div class="check-item" :class="{ 'passed': node.progress > 20 }">
+                             <span class="check-box"><el-icon v-if="node.progress > 20"><Check /></el-icon></span> 需求对齐
+                           </div>
+                           <div class="check-item" :class="{ 'passed': node.progress > 60 }">
+                             <span class="check-box"><el-icon v-if="node.progress > 60"><Check /></el-icon></span> 事实与安全
+                           </div>
+                           <div class="check-item" :class="{ 'passed': node.progress > 90 }">
+                             <span class="check-box"><el-icon v-if="node.progress > 90"><Check /></el-icon></span> 防幻觉检查
+                           </div>
+                           <div class="scanner-line"></div>
+                        </div>
+                        <p v-else>{{ node.currentMessage || getPipelineFallbackMessage(node.id) }}</p>
+                      </div>
+                      <em>{{ node.progress }}%</em>
+                    </article>
+                    <div v-if="index < reviewPipelineNodes.length - 1" class="lane-arrow"></div>
+                  </div>
+                </transition-group>
+                <div v-if="reviewPipelineNodes.length === 0" class="phase-empty-state">等待基础资源完成后进入审核流水线</div>
+              </section>
             </div>
           </section>
 
@@ -499,7 +503,7 @@
           </div>
           <div class="output-dock-list">
             <article
-                v-for="agentId in dagSelectedAgentIds"
+                v-for="agentId in visibleOutputAgentIds"
                 :key="agentId"
                 class="output-dock-item"
                 :class="{ ready: hasGeneratedResource(agentId) }"
@@ -511,6 +515,9 @@
                 <p>{{ hasGeneratedResource(agentId) ? '已生成，可预览' : getAgentOutputFormat(agentId) }}</p>
               </div>
             </article>
+            <div v-if="visibleOutputAgentIds.length === 0" class="output-dock-empty">
+              等待第一个智能体完成调用
+            </div>
           </div>
         </section>
 
@@ -771,7 +778,10 @@ const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const resourceStreamController = ref<AbortController | null>(null)
 const generationFinalized = ref(false)
 
-const RESOURCE_TYPE_ORDER = ['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt']
+const PPT_AGENT_ID = 'ppt'
+const PRE_REVIEW_AGENT_ID = 'pre_review'
+const PPT_REVIEW_AGENT_ID = 'ppt_review'
+const SYSTEM_AGENT_IDS = ['planning', PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, 'review', 'bundle']
 
 const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   planning: { label: '规划任务', icon: '🎯' },
@@ -781,6 +791,8 @@ const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   code: { label: '实战演练助手', icon: '💻' },
   reading: { label: '拓展阅读助手', icon: '📚' },
   ppt: { label: '演示文稿助手', icon: '📊' },
+  pre_review: { label: '前置安全审核', icon: '🛡️' },
+  ppt_review: { label: 'PPT 安全审核', icon: '🔍' },
   review: { label: '质量把关助手', icon: '🔍' },
   bundle: { label: '资源打包助手', icon: '📦' },
 }
@@ -803,6 +815,10 @@ const dagSelectedAgentIds = computed(() => {
   return enabledAgentIds.value.filter(id => !['master', 'reviewer', 'assembler'].includes(id))
 })
 
+const baseGenerationAgentIds = computed(() => {
+  return dagSelectedAgentIds.value.filter(id => id !== PPT_AGENT_ID)
+})
+
 const dagNodesV2 = computed<DagNodeState[]>(() => {
   const selected = dagSelectedAgentIds.value
   const nodes: DagNodeState[] = []
@@ -813,8 +829,8 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
     status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
 
-  // 2. 选中的业务子智能体群组
-  for (const agentId of selected) {
+  // 2. 基础资源子智能体群组
+  for (const agentId of baseGenerationAgentIds.value) {
     const display = AGENT_DISPLAY[agentId]
     if (!display) continue
     nodes.push(dagNodeStates.value[agentId] || {
@@ -823,11 +839,22 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
     })
   }
 
-  // 3. 质量审查节点
-  nodes.push(dagNodeStates.value['review'] || {
-    id: 'review', label: '质量审查', icon: '🔍',
+  // 3. 前置审核节点
+  nodes.push(dagNodeStates.value[PRE_REVIEW_AGENT_ID] || {
+    id: PRE_REVIEW_AGENT_ID, label: '前置安全审核', icon: '🛡️',
     status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
+
+  if (selected.includes(PPT_AGENT_ID)) {
+    nodes.push(dagNodeStates.value[PPT_AGENT_ID] || {
+      id: PPT_AGENT_ID, label: '演示文稿助手', icon: '📊',
+      status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: false,
+    })
+    nodes.push(dagNodeStates.value[PPT_REVIEW_AGENT_ID] || {
+      id: PPT_REVIEW_AGENT_ID, label: 'PPT 安全审核', icon: '🔍',
+      status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
+    })
+  }
 
   // 4. 打包输出节点
   nodes.push(dagNodeStates.value['bundle'] || {
@@ -838,43 +865,19 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
   return nodes
 })
 
+function hasNodeEntered(node?: DagNodeState) {
+  if (!node) return false
+  if (node.id === 'planning') return true
+  return node.status !== 'waiting'
+      || node.progress > 0
+      || Boolean(node.currentMessage)
+      || (node.stepHistory?.length || 0) > 0
+      || hasGeneratedResource(node.id)
+}
 
-
-// const dagCanvasWidthV2 = 1160
-// const dagCanvasHeightV2 = 620
-// const dagLayerY: [number, number, number, number, number] = [72, 212, 332, 486, 560]
-
-// const dagNodePositionsV2 = computed<Record<string, { x: number; y: number }>>(() => {
-//   const positions: Record<string, { x: number; y: number }> = {}
-//   const selected = dagSelectedAgentIds.value
-//   const cx = dagCanvasWidthV2 / 2
-
-//   positions['planning'] = { x: cx, y: dagLayerY[0] }
-
-//   if (selected.length > 0) {
-//     const firstRowCount = selected.length <= 3 ? selected.length : Math.ceil(selected.length / 2)
-//     const secondRowCount = Math.max(0, selected.length - firstRowCount)
-//     const firstRow = selected.slice(0, firstRowCount)
-//     const secondRow = selected.slice(firstRowCount)
-
-//     const placeRow = (row: string[], y: number) => {
-//       const rowWidth = row.length <= 1 ? 0 : Math.min(820, (row.length - 1) * 285)
-//       const startX = cx - rowWidth / 2
-//       row.forEach((id, i) => {
-//         positions[id] = { x: row.length === 1 ? cx : startX + i * (rowWidth / (row.length - 1)), y }
-//       })
-//     }
-
-//     placeRow(firstRow, dagLayerY[1])
-//     if (secondRowCount > 0) placeRow(secondRow, dagLayerY[2])
-//   }
-
-//   positions['review'] = { x: cx, y: dagLayerY[3] }
-//   positions['bundle'] = { x: cx, y: dagLayerY[4] }
-
-//   return positions
-// })
-
+const visibleWorkflowNodes = computed(() => {
+  return dagNodesV2.value.filter(node => hasNodeEntered(node))
+})
 
 const dagHeroMessage = computed(() => {
   const running = Object.values(dagNodeStates.value).find(n => n.status === 'running')
@@ -904,6 +907,20 @@ function getNodeFallbackMessage(node: DagNodeState) {
   return '正在处理任务'
 }
 
+function getPipelineFallbackMessage(agentId: string) {
+  const messageMap: Record<string, string> = {
+    [PRE_REVIEW_AGENT_ID]: '基础资源生成后，检查内容完整性、事实性与安全风险',
+    [PPT_AGENT_ID]: '前置审核通过后，根据已审内容生成在线演示文稿',
+    [PPT_REVIEW_AGENT_ID]: 'PPT 生成后，仅审核演示文稿内容安全与事实一致性',
+    bundle: '整理各类学习资料，为您生成最终专属学习包',
+  }
+  return messageMap[agentId] || '等待上游节点完成'
+}
+
+function isAuditNode(agentId: string) {
+  return agentId === PRE_REVIEW_AGENT_ID || agentId === PPT_REVIEW_AGENT_ID || agentId === 'review'
+}
+
 function getDagNodeIcon(type: string): string {
   return AGENT_DISPLAY[type]?.icon || '📄'
 }
@@ -911,13 +928,24 @@ function getDagNodeIcon(type: string): string {
 const workflowLogDrawerVisible = ref(false)
 
 const stageAgentNodes = computed(() => {
-  return dagSelectedAgentIds.value
+  return baseGenerationAgentIds.value
     .map(id => dagNodeStates.value[id] || createDagNode(id, false))
+    .filter(node => hasNodeEntered(node))
     .filter(Boolean)
 })
 
+const reviewPipelineNodes = computed(() => {
+  return dagNodesV2.value.filter(node => {
+    const inPipeline = node.id === PRE_REVIEW_AGENT_ID
+        || node.id === PPT_AGENT_ID
+        || node.id === PPT_REVIEW_AGENT_ID
+        || node.id === 'bundle'
+    return inPipeline && hasNodeEntered(node)
+  })
+})
+
 const runningAgentCount = computed(() => {
-  return stageAgentNodes.value.filter(node => node.status === 'running').length
+  return visibleWorkflowNodes.value.filter(node => node.status === 'running').length
 })
 
 const currentPlanSteps = computed(() => {
@@ -927,9 +955,13 @@ const currentPlanSteps = computed(() => {
   }))
 })
 
+const visiblePlanSteps = computed(() => {
+  return currentPlanSteps.value.filter(plan => hasNodeEntered(dagNodeStates.value[plan.id]))
+})
+
 const workflowLogItems = computed(() => {
   const items: Array<{ id: string; title: string; message: string; status: DagNodeState['status'] }> = []
-  dagNodesV2.value.forEach((node) => {
+  visibleWorkflowNodes.value.forEach((node) => {
     if (node.stepHistory?.length) {
       node.stepHistory.slice(-3).forEach((step, index) => {
         items.push({
@@ -949,6 +981,13 @@ const workflowLogItems = computed(() => {
     }
   })
   return items
+})
+
+const visibleOutputAgentIds = computed(() => {
+  return dagSelectedAgentIds.value.filter((agentId) => {
+    const node = dagNodeStates.value[agentId]
+    return hasGeneratedResource(agentId) || hasNodeEntered(node)
+  })
 })
 
 function getAgentShortName(agentId: string) {
@@ -973,12 +1012,6 @@ function getAgentOutputFormat(agentId: string) {
     ppt: 'PPT 页面',
   }
   return formatMap[agentId] || '学习资源'
-}
-
-function isDispatchPacketActive(agentId: string) {
-  const planStatus = dagNodeStates.value.planning?.status
-  const agentStatus = dagNodeStates.value[agentId]?.status
-  return planStatus === 'success' && ['waiting', 'running', 'success'].includes(agentStatus || 'waiting')
 }
 
 function hasGeneratedResource(type: string) {
@@ -1068,17 +1101,6 @@ const getResourceToneClass = (type: string) => {
   return toneMap[type] || 'tone-blue'
 }
 
-const sortedGeneratedResources = computed(() => {
-  return [...generatedResources.value].sort((a, b) => {
-    const aOrder = typeof a.displayOrder === 'number' ? a.displayOrder : -1
-    const bOrder = typeof b.displayOrder === 'number' ? b.displayOrder : -1
-    if (aOrder !== bOrder) return bOrder - aOrder
-    const aIdx = RESOURCE_TYPE_ORDER.indexOf(a.type)
-    const bIdx = RESOURCE_TYPE_ORDER.indexOf(b.type)
-    return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx)
-  })
-})
-
 const getBentoCardGridStyle = (index: number, total: number) => {
   const baseCols = 4
   const totalRows = Math.ceil(total / baseCols)
@@ -1118,8 +1140,11 @@ function createDagNode(id: string, isSystem: boolean): DagNodeState {
 function initializeWaitingNodes() {
   const nodes: Record<string, DagNodeState> = {
     planning: createDagNode('planning', true),
-    review: createDagNode('review', true),
+    [PRE_REVIEW_AGENT_ID]: createDagNode(PRE_REVIEW_AGENT_ID, true),
     bundle: createDagNode('bundle', true),
+  }
+  if (enabledAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId)) {
+    nodes[PPT_REVIEW_AGENT_ID] = createDagNode(PPT_REVIEW_AGENT_ID, true)
   }
   enabledAgentIds.value.forEach((agentId) => {
     nodes[agentId] = createDagNode(agentId, false)
@@ -1134,7 +1159,7 @@ function applyProgressSnapshot(progress: ResourceTaskStatus['progress']) {
   Object.entries(progress.agents).forEach(([agentId, snapshot]) => {
     const node = dagNodeStates.value[agentId] || createDagNode(
         agentId,
-        ['planning', 'review', 'bundle'].includes(agentId),
+        SYSTEM_AGENT_IDS.includes(agentId),
     )
     node.status = snapshot.status
     node.progress = snapshot.progress
@@ -1305,24 +1330,6 @@ const formatBentoTitle = (title: string | undefined, type: string): string => {
   const suffix = matched[1] || ''
   const prefix = raw.replace(suffixPattern, '').trim()
   return prefix ? `${prefix}\n- ${suffix}` : suffix
-}
-
-const retryAgent = (agentId: string) => {
-  const node = dagNodeStates.value[agentId]
-  if (!node) return
-  node.status = 'running'
-  node.progress = 10
-  node.currentMessage = '正在为您重新梳理内容逻辑...'
-  // Simulate API retry logic
-  setTimeout(() => {
-    node.progress = 60
-    node.currentMessage = '内容重新生成中，请稍候...'
-    setTimeout(() => {
-      node.status = 'success'
-      node.progress = 100
-      node.currentMessage = '已为您重新准备完毕！'
-    }, 2000)
-  }, 1500)
 }
 
 onMounted(() => {
@@ -2364,147 +2371,268 @@ p, .card-summary, .s-desc, .greeting-subtitle { line-height: 1.65; letter-spacin
 .control-pill { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; border-radius: 999px; background: #F8FAFC; color: #64748B; border: 1px solid #E2E8F0; font-size: 0.72rem; font-weight: 800; }
 .control-pill.active { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
 .live-dot { width: 7px; height: 7px; border-radius: 999px; background: #22C55E; box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.14); }
-.dispatch-stage { position: relative; height: clamp(680px, calc(100vh - 220px), 860px); margin-top: 4px; overflow: hidden; border-radius: 26px; background: linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0.96)); }
-.stage-orbit-ring { position: absolute; left: 50%; top: 49%; transform: translate(-50%, -50%); border-radius: 999px; border: 1px dashed rgba(148, 163, 184, 0.35); pointer-events: none; }
-.ring-one { width: 560px; height: 380px; }
-.ring-two { width: min(1080px, 82%); height: 580px; opacity: 0.62; }
-.master-hub {
-  position: absolute;
-  left: 50%;
-  top: 45%;
-  width: 250px;
-  transform: translate(-50%, -50%);
-  background: linear-gradient(180deg, #FFFFFF, #F8FAFC);
-  border: 1px solid #BFDBFE;
-  border-radius: 28px;
-  padding: 16px;
-  box-shadow: 0 28px 70px rgba(37, 99, 235, 0.16);
-  z-index: 5;
-  cursor: pointer;
+.dispatch-stage {
+  position: relative;
+  min-height: clamp(680px, calc(100vh - 220px), 860px);
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 26px;
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.08) 0 1px, transparent 1px 100%),
+    linear-gradient(180deg, rgba(37, 99, 235, 0.05) 0 1px, transparent 1px 100%),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.78), rgba(255, 255, 255, 0.98));
+  background-size: 44px 44px, 44px 44px, auto;
 }
-.master-hub.is-running { animation: hubBreathing 1.8s ease-in-out infinite; }
-@keyframes hubBreathing { 0%, 100% { box-shadow: 0 28px 70px rgba(37, 99, 235, 0.16); } 50% { box-shadow: 0 32px 86px rgba(37, 99, 235, 0.28); } }
-.master-core { position: relative; width: 64px; height: 64px; margin: 0 auto 12px; display: grid; place-items: center; }
-.master-icon { position: relative; z-index: 2; width: 54px; height: 54px; border-radius: 18px; background: linear-gradient(135deg, #2563EB, #06B6D4); display: grid; place-items: center; font-size: 1.6rem; box-shadow: 0 14px 32px rgba(37, 99, 235, 0.28); }
-.master-pulse { position: absolute; inset: 0; border-radius: 24px; background: rgba(37, 99, 235, 0.14); animation: masterPulse 1.6s ease-out infinite; }
-@keyframes masterPulse { from { transform: scale(0.82); opacity: 0.9; } to { transform: scale(1.38); opacity: 0; } }
-.master-info { text-align: center; }
-.hub-kicker { color: #2563EB; font-size: 0.68rem; font-weight: 900; letter-spacing: 0.08em; }
-.master-info h4 { margin: 4px 0 5px; font-size: 1.12rem; font-weight: 900; color: #0F172A; }
-.master-info p { margin: 0; color: #64748B; font-size: 0.78rem; line-height: 1.45; min-height: 34px; }
-.master-progress-line { height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden; margin-top: 12px; }
-.master-progress-line span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563EB, #06B6D4); transition: width 0.3s ease; }
-.plan-card-stack { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 8px; z-index: 6; max-width: 74%; flex-wrap: wrap; justify-content: center; }
-.plan-mini-card { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); animation: planDrop 0.5s ease both; }
-@keyframes planDrop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-.plan-mini-card span { width: 17px; height: 17px; border-radius: 999px; background: #EFF6FF; color: #2563EB; display: grid; place-items: center; font-size: 0.68rem; font-weight: 900; }
-.plan-mini-card strong { color: #334155; font-size: 0.72rem; white-space: nowrap; }
-.agent-workstation {
+.workflow-timeline-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 22px 28px;
+}
+.workflow-timeline-stage::before {
+  content: '';
   position: absolute;
-  width: 210px;
+  left: 42px;
+  top: 38px;
+  bottom: 36px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #2563EB, #14B8A6 48%, #94A3B8);
+  opacity: 0.42;
+}
+.workflow-phase {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.phase-spine-node {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: #FFFFFF;
+  border: 1px solid #BFDBFE;
+  color: #2563EB;
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  font-weight: 900;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.12);
+  font-variant-numeric: tabular-nums;
+}
+.workflow-phase-header {
+  min-width: 0;
+  margin-bottom: 12px;
+  padding: 2px 0 0;
+}
+.phase-label {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #ECFEFF;
+  color: #0E7490;
+  border: 1px solid #CFFAFE;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+.workflow-phase-header h4 {
+  margin: 7px 0 3px;
+  color: #0F172A;
+  font-size: 1rem;
+  font-weight: 900;
+  text-wrap: balance;
+}
+.workflow-phase-header p {
+  margin: 0;
+  color: #64748B;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.phase-planning {
+  grid-template-columns: 44px minmax(280px, 430px) minmax(0, 1fr);
+  align-items: center;
+}
+.plan-card-stack {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.sequenced-plan-stack {
+  padding: 4px 0;
+}
+.plan-mini-card { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 6px 10px; border-radius: 999px; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); animation: planDrop 0.5s ease both; }
+@keyframes planDrop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.plan-card-arrival-enter-active,
+.plan-card-arrival-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.plan-card-arrival-enter-from,
+.plan-card-arrival-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.94);
+}
+.plan-mini-card span { width: 17px; height: 17px; border-radius: 999px; background: #EFF6FF; color: #2563EB; display: grid; place-items: center; font-size: 0.68rem; font-weight: 900; }
+.plan-mini-card strong { color: #334155; font-size: 0.72rem; overflow-wrap: anywhere; }
+.parallel-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.agent-workstation {
+  position: relative;
+  width: 100%;
   min-height: 112px;
-  border-radius: 22px;
+  border-radius: 16px;
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
   padding: 12px;
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.055);
   z-index: 4;
   cursor: pointer;
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, opacity 0.25s ease;
+  overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, opacity 0.25s ease, background-color 0.25s ease;
+}
+.agent-workstation::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #CBD5E1;
+}
+.plan-controller {
+  min-height: 132px;
+}
+.agent-arrival-enter-active,
+.agent-arrival-leave-active {
+  transition: opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1), transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.agent-arrival-enter-from,
+.agent-arrival-leave-to {
+  opacity: 0;
+  transform: translateY(18px) scale(0.98);
 }
 .agent-workstation:hover,
 .agent-workstation.is-selected { transform: translateY(-4px); box-shadow: 0 24px 48px rgba(37, 99, 235, 0.14); border-color: #93C5FD; }
 .agent-workstation.is-waiting { opacity: 0.72; }
-.agent-workstation.is-running { border-color: #FDBA74; animation: stationRunning 1.8s ease-in-out infinite; }
-@keyframes stationRunning { 0%, 100% { box-shadow: 0 16px 34px rgba(251, 146, 60, 0.08); } 50% { box-shadow: 0 22px 54px rgba(251, 146, 60, 0.22); } }
-.agent-workstation.is-success { border-color: #A7F3D0; background: linear-gradient(180deg, #FFFFFF, #F0FDF4); }
-.agent-workstation.is-failed { border-color: #FECACA; background: linear-gradient(180deg, #FFFFFF, #FEF2F2); }
-.station-content { left: 4%; top: 42%; }
-.station-mindmap { left: 16%; top: 12%; }
-.station-code { right: 16%; top: 12%; }
-.station-quiz { right: 4%; top: 42%; }
-.station-reading { left: 17%; bottom: 26%; }
-.station-ppt { right: 17%; bottom: 26%; }
+.agent-workstation.is-running { border-color: #93C5FD; background: #EFF6FF; animation: stationRunning 1.8s ease-in-out infinite; }
+.agent-workstation.is-running::before { background: #2563EB; }
+@keyframes stationRunning { 0%, 100% { box-shadow: 0 16px 34px rgba(37, 99, 235, 0.08); } 50% { box-shadow: 0 22px 54px rgba(37, 99, 235, 0.2); } }
+.agent-workstation.is-success { border-color: #A7F3D0; background: #F0FDF4; }
+.agent-workstation.is-success::before { background: #10B981; }
+.agent-workstation.is-failed { border-color: #FCA5A5; background: #FEF2F2; }
+.agent-workstation.is-failed::before { background: #EF4444; }
+.agent-workstation.is-skipped { border-color: #CBD5E1; background: #F8FAFC; opacity: 0.78; }
 .workstation-head { display: flex; align-items: center; gap: 10px; }
 .workstation-icon { width: 34px; height: 34px; border-radius: 13px; background: #F8FAFC; display: grid; place-items: center; font-size: 1.12rem; flex-shrink: 0; }
 .workstation-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .workstation-title strong { color: #0F172A; font-size: 0.88rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .workstation-title span { color: #64748B; font-size: 0.7rem; font-weight: 800; }
-.workstation-status-dot { width: 9px; height: 9px; border-radius: 999px; background: #CBD5E1; flex-shrink: 0; }
-.agent-workstation.is-running .workstation-status-dot { background: #F97316; box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.14); }
-.agent-workstation.is-success .workstation-status-dot { background: #10B981; }
+.workstation-status-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 0.68rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.agent-workstation.is-running .workstation-status-badge { background: #DBEAFE; color: #1D4ED8; }
+.agent-workstation.is-success .workstation-status-badge { background: #D1FAE5; color: #047857; }
+.agent-workstation.is-failed .workstation-status-badge { background: #FEE2E2; color: #DC2626; }
 .agent-workstation p { margin: 8px 0 9px; color: #64748B; font-size: 0.72rem; line-height: 1.38; min-height: 30px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .workstation-message-wrap { min-height: 38px; }
-.error-text { color: #F97316 !important; font-weight: 600; }
+.error-text { color: #DC2626 !important; font-weight: 700; }
 .typewriter-text { display: inline-block; animation: textReveal 0.5s ease-out forwards; }
 @keyframes textReveal { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 .workstation-actions { margin-top: 8px; display: flex; justify-content: center; }
-.retry-btn { background: #FFF7ED; color: #EA580C; border: 1px solid #FFEDD5; border-radius: 99px; padding: 4px 12px; font-size: 0.7rem; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s; }
+.retry-btn { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; border-radius: 99px; padding: 4px 12px; font-size: 0.7rem; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: background-color 0.2s ease, transform 0.2s ease; }
 .retry-btn:hover { background: #FFEDD5; transform: scale(1.02); }
 .workstation-progress { height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden; }
 .workstation-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563EB, #06B6D4); transition: width 0.35s ease; }
 .agent-workstation.is-success .workstation-progress span { background: #10B981; }
-.agent-workstation.is-running .workstation-progress span { background: linear-gradient(90deg, #F97316, #FBBF24); }
+.agent-workstation.is-running .workstation-progress span { background: linear-gradient(90deg, #2563EB, #06B6D4); }
 .workstation-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; color: #94A3B8; font-size: 0.7rem; font-weight: 800; }
 .workstation-meta strong { color: #334155; }
-.dispatch-packet,
-.return-resource-card {
-  position: absolute;
-  z-index: 3;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: #FFFFFF;
-  border: 1px solid #BFDBFE;
-  color: #2563EB;
-  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.12);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.7rem;
-  font-weight: 900;
-  opacity: 0;
+.review-assembly-lane { display: flex; align-items: stretch; gap: 12px; min-width: 0; overflow-x: auto; padding: 2px 2px 8px; overscroll-behavior-x: contain; }
+.lane-step { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.lane-arrival-enter-active,
+.lane-arrival-leave-active {
+  transition: opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1), transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.dispatch-packet i { width: 7px; height: 7px; border-radius: 999px; background: #2563EB; }
-.dispatch-packet.active { opacity: 1; }
-.packet-content { left: 48%; top: 42%; animation: flyContent 2.8s ease-in-out infinite; }
-.packet-mindmap { left: 48%; top: 42%; animation: flyMindmap 3.1s ease-in-out infinite; }
-.packet-code { left: 48%; top: 42%; animation: flyCode 3s ease-in-out infinite; }
-.packet-quiz { left: 48%; top: 42%; animation: flyQuiz 3.2s ease-in-out infinite; }
-.packet-reading { left: 48%; top: 42%; animation: flyReading 3.1s ease-in-out infinite; }
-.packet-ppt { left: 48%; top: 42%; animation: flyPpt 3.3s ease-in-out infinite; }
-@keyframes flyContent { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(-410px,-92px) scale(1); opacity:0; } }
-@keyframes flyMindmap { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(-260px,-205px) scale(1); opacity:0; } }
-@keyframes flyCode { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(250px,-205px) scale(1); opacity:0; } }
-@keyframes flyQuiz { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(390px,-92px) scale(1); opacity:0; } }
-@keyframes flyReading { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(-350px,160px) scale(1); opacity:0; } }
-@keyframes flyPpt { 0% { transform: translate(0,0) scale(.9); opacity:0; } 15%,70% { opacity:1; } 100% { transform: translate(330px,160px) scale(1); opacity:0; } }
-.review-assembly-lane { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; z-index: 5; }
-.lane-node { width: 250px; min-height: 66px; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.055); cursor: pointer; }
-.lane-node.is-running { border-color: #A78BFA; box-shadow: 0 18px 42px rgba(124, 58, 237, 0.16); }
+.lane-arrival-enter-from,
+.lane-arrival-leave-to {
+  opacity: 0;
+  transform: translateY(18px) scale(0.96);
+}
+.lane-node { width: 260px; min-height: 90px; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.055); cursor: pointer; position: relative; overflow: hidden; }
+.lane-node::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: #CBD5E1; }
+.lane-node.is-running { border-color: #93C5FD; background: #EFF6FF; box-shadow: 0 18px 42px rgba(37, 99, 235, 0.14); }
+.lane-node.is-running::before { background: #2563EB; }
 .lane-node.is-success { border-color: #A7F3D0; background: #F0FDF4; }
+.lane-node.is-success::before { background: #10B981; }
+.lane-node.is-failed { border-color: #FCA5A5; background: #FEF2F2; }
+.lane-node.is-failed::before { background: #EF4444; }
+.lane-node.is-skipped { border-color: #CBD5E1; background: #F8FAFC; opacity: 0.78; }
 .lane-icon { width: 42px; height: 42px; border-radius: 15px; background: #F8FAFC; display: grid; place-items: center; font-size: 1.25rem; flex-shrink: 0; }
 .lane-node strong { color: #0F172A; font-size: 0.86rem; font-weight: 900; }
 .lane-node p { margin: 3px 0 0; color: #64748B; font-size: 0.72rem; line-height: 1.35; }
 .lane-node-content { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; position: relative; }
+.lane-status { color: #64748B; font-size: 0.68rem; font-weight: 900; }
+.lane-node.is-running .lane-status { color: #1D4ED8; }
+.lane-node.is-success .lane-status { color: #047857; }
+.lane-node.is-failed .lane-status { color: #DC2626; }
 .lane-node em { margin-left: auto; font-style: normal; color: #334155; font-weight: 900; font-size: 0.8rem; }
 .reviewer-checklist { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; position: relative; overflow: hidden; padding-bottom: 2px; }
-.check-item { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #94A3B8; transition: color 0.3s; }
+.check-item { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #94A3B8; transition: color 0.3s ease; }
 .check-item.passed { color: #10B981; font-weight: 800; }
-.check-box { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #CBD5E1; display: grid; place-items: center; font-size: 0.6rem; transition: all 0.3s; }
+.check-box { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #CBD5E1; display: grid; place-items: center; font-size: 0.6rem; transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
 .check-item.passed .check-box { background: #10B981; border-color: #10B981; color: #FFFFFF; }
-.scanner-line { position: absolute; left: 0; right: 0; height: 20px; background: linear-gradient(180deg, rgba(16, 185, 129, 0) 0%, rgba(16, 185, 129, 0.15) 100%); border-bottom: 1px solid rgba(16, 185, 129, 0.5); animation: scanSweep 2s linear infinite; pointer-events: none; }
-@keyframes scanSweep { 0% { top: -20px; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+.scanner-line { position: absolute; left: 0; right: 0; top: 0; height: 20px; background: linear-gradient(180deg, rgba(16, 185, 129, 0) 0%, rgba(16, 185, 129, 0.15) 100%); border-bottom: 1px solid rgba(16, 185, 129, 0.5); animation: scanSweep 2s linear infinite; pointer-events: none; transform: translateY(-100%); }
+@keyframes scanSweep { 0% { transform: translateY(-100%); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(520%); opacity: 0; } }
 .lane-arrow { width: 42px; height: 2px; background: linear-gradient(90deg, #CBD5E1, #2563EB); position: relative; }
 .lane-arrow::after { content: ''; position: absolute; right: -2px; top: 50%; width: 8px; height: 8px; border-top: 2px solid #2563EB; border-right: 2px solid #2563EB; transform: translateY(-50%) rotate(45deg); }
-.return-resource-card { border-color: #A7F3D0; color: #059669; }
-.return-content { left: 18%; bottom: 125px; animation: returnFloat 2.3s ease-in-out infinite; opacity: 1; }
-.return-mindmap { left: 31%; bottom: 128px; animation: returnFloat 2.5s ease-in-out infinite; opacity: 1; }
-.return-code { right: 31%; bottom: 128px; animation: returnFloat 2.4s ease-in-out infinite; opacity: 1; }
-.return-quiz { right: 18%; bottom: 125px; animation: returnFloat 2.6s ease-in-out infinite; opacity: 1; }
-.return-reading { left: 23%; bottom: 92px; animation: returnFloat 2.6s ease-in-out infinite; opacity: 1; }
-.return-ppt { right: 23%; bottom: 92px; animation: returnFloat 2.5s ease-in-out infinite; opacity: 1; }
-@keyframes returnFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.phase-empty-state {
+  min-height: 76px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #CBD5E1;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.78);
+  color: #64748B;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-mini-card,
+  .agent-workstation.is-running,
+  .typewriter-text,
+  .scanner-line {
+    animation: none;
+  }
+
+  .plan-card-arrival-enter-active,
+  .plan-card-arrival-leave-active,
+  .agent-arrival-enter-active,
+  .agent-arrival-leave-active,
+  .lane-arrival-enter-active,
+  .lane-arrival-leave-active,
+  .agent-workstation,
+  .lane-node,
+  .output-dock-item {
+    transition-duration: 0.01ms;
+  }
+}
 .agent-detail-panel { border-radius: 28px; padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
 .detail-panel-header h3 { margin: 4px 0 0; font-size: 1.05rem; font-weight: 900; color: #0F172A; }
 .detail-agent-card { border: 1px solid #E2E8F0; border-radius: 22px; background: #F8FAFC; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
@@ -2533,7 +2661,7 @@ p, .card-summary, .s-desc, .greeting-subtitle { line-height: 1.65; letter-spacin
 .output-dock-title { width: 130px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
 .output-dock-title strong { color: #0F172A; font-size: 0.92rem; font-weight: 900; }
 .output-dock-list { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 8px; flex: 1; }
-.output-dock-item { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid #E2E8F0; border-radius: 16px; background: #F8FAFC; opacity: 0.72; transition: all 0.2s ease; cursor: default; }
+.output-dock-item { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid #E2E8F0; border-radius: 16px; background: #F8FAFC; opacity: 0.72; transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; cursor: default; }
 .output-dock-item.ready { opacity: 1; background: #F0FDF4; border-color: #A7F3D0; cursor: pointer; }
 .output-dock-item.ready:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(16, 185, 129, 0.10); }
 .output-dock-item > span { width: 26px; height: 26px; border-radius: 8px; background: #FFFFFF; display: grid; place-items: center; flex-shrink: 0; font-size: 0.9rem; }
@@ -2554,33 +2682,33 @@ p, .card-summary, .s-desc, .greeting-subtitle { line-height: 1.65; letter-spacin
 .stage-route-progress { row-gap: 6px; }
 .stage-canvas-header .panel-eyebrow { letter-spacing: 0.12em; }
 @media (min-width: 1500px) {
-  .agent-workstation { width: 222px; min-height: 118px; }
-  .station-content { left: 5%; }
-  .station-quiz { right: 5%; }
-  .station-mindmap { left: 18%; }
-  .station-code { right: 18%; }
+  .parallel-agent-grid { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .agent-workstation { min-height: 118px; }
 }
 @media (max-width: 1320px) {
   .agent-stage-layout { grid-template-columns: 1fr; }
   .agent-detail-panel { display: none; }
   .stage-stat-group { flex-wrap: wrap; justify-content: flex-end; }
   .output-dock-list { grid-template-columns: repeat(3, minmax(140px, 1fr)); }
+  .phase-planning { grid-template-columns: 44px minmax(260px, 1fr); }
+  .sequenced-plan-stack { grid-column: 2; }
 }
 @media (max-width: 980px) {
   .workflow-stage-page { overflow-y: auto; }
   .stage-topbar { align-items: flex-start; flex-direction: column; }
-  .agent-stage-canvas { min-height: 780px; }
-  .dispatch-stage { height: 700px; }
-  .master-hub { top: 35%; }
-  .station-content, .station-mindmap, .station-code, .station-quiz, .station-reading, .station-ppt { left: 50%; right: auto; transform: translateX(-50%); }
-  .station-content { top: 10%; }
-  .station-mindmap { top: 25%; }
-  .station-code { top: 50%; }
-  .station-quiz { top: 65%; }
-  .station-reading { top: 80%; bottom: auto; }
-  .station-ppt { top: 95%; bottom: auto; }
-  .review-assembly-lane { position: relative; left: auto; bottom: auto; transform: none; flex-direction: column; margin-top: 660px; }
+  .agent-stage-canvas { min-height: 760px; }
+  .dispatch-stage { min-height: 700px; }
+  .workflow-timeline-stage { padding: 18px 14px 22px; }
+  .workflow-timeline-stage::before { left: 34px; }
+  .workflow-phase,
+  .phase-planning { grid-template-columns: 38px minmax(0, 1fr); gap: 12px; }
+  .phase-spine-node { width: 36px; height: 36px; border-radius: 12px; font-size: 0.72rem; }
+  .parallel-agent-grid { grid-template-columns: 1fr; }
+  .review-assembly-lane { flex-direction: column; overflow-x: visible; padding-bottom: 2px; }
+  .lane-step { flex-direction: column; }
+  .lane-node { width: 100%; }
   .lane-arrow { width: 2px; height: 34px; }
+  .lane-arrow::after { right: 50%; top: auto; bottom: -2px; transform: translateX(50%) rotate(135deg); }
   .output-dock-bar { flex-direction: column; align-items: stretch; }
   .output-dock-title { width: auto; }
   .output-dock-list { grid-template-columns: 1fr; }
@@ -2687,6 +2815,19 @@ p, .card-summary, .s-desc, .greeting-subtitle { line-height: 1.65; letter-spacin
 .output-dock-section .output-dock-item p {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.output-dock-empty {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #CBD5E1;
+  border-radius: 12px;
+  color: #64748B;
+  background: #F8FAFC;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 @media (max-width: 1440px) {

@@ -222,9 +222,9 @@ const fetchProfile = async () => {
       const dim = dimensions[key]
       if (!dim) continue
       const dimData = dim as { name?: string; summary?: string; evidence?: string[]; confidence?: number }
-      const confidenceValue = dimData.confidence ?? 0
       
-      if (confidenceValue >= 0.7 && (dimData.summary || (dimData.evidence && dimData.evidence.length > 0))) {
+      
+      if (dimData.summary || (dimData.evidence && dimData.evidence.length > 0)) {
         const title = dimensionNames[key] || key
         const content = dimData.summary || '暂无详细描述'
         const evidence = dimData.evidence || []

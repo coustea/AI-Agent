@@ -469,7 +469,7 @@
 import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
-  Picture, Microphone, Document, ChatDotRound, ChatLineSquare,
+  Microphone, Document, ChatDotRound, ChatLineSquare,
   Delete, Close, Top, Paperclip,
   EditPen, Search, Timer, VideoCamera, DataLine,
   CircleCheckFilled
@@ -3553,9 +3553,5 @@ onBeforeUnmount(() => {
 .remove-attachment-btn:hover {
   color: var(--color-text);
   background: var(--color-surface-hover);
-}
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
-  outline: 2px solid var(--color-primary) !important;
-  outline-offset: 2px !important;
 }
 </style>

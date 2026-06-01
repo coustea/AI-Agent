@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from typing import Any
@@ -23,7 +24,7 @@ from app.chat.utils import (
     normalize_message_content,
     truncate,
 )
-from app.chat.tools.search import duckduckgo_search, serp_search, tavily_search
+from app.chat.tools.search import duckduckgo_search, serp_search, tavily_search, spark_search
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -275,7 +276,7 @@ async def collect_search_context(
     full_messages = build_messages(system_prompt, list(messages) + [search_instruction])
 
     llm_with_tools = agent.llm.model.bind_tools(
-        [duckduckgo_search, tavily_search, serp_search],
+        [duckduckgo_search, tavily_search, serp_search, spark_search],
     )
 
     response = None
@@ -305,24 +306,34 @@ async def collect_search_context(
 
     tool_calls = getattr(response, "tool_calls", []) if response else []
     tool_results = []
+    
+    async def invoke_search_tool(tool_call):
+        tool_name = tool_call.get("name", "")
+        tool_args = tool_call.get("args", {})
+        try:
+            if tool_name == "duckduckgo_search":
+                result = await duckduckgo_search.ainvoke(tool_args)
+            elif tool_name == "tavily_search":
+                result = await tavily_search.ainvoke(tool_args)
+            elif tool_name == "serp_search":
+                result = await serp_search.ainvoke(tool_args)
+            elif tool_name == "spark_search":
+                result = await spark_search.ainvoke(tool_args)
+            else:
+                result = ""
+            if result:
+                return f"【{tool_name}】\n{result}"
+        except Exception as exc:
+            logger.warning("[TutorAgent] 搜索工具 %s 失败: %s", tool_name, exc)
+            return f"【{tool_name}】搜索失败"
+        return ""
+
     if tool_calls:
-        for tool_call in tool_calls:
-            tool_name = tool_call.get("name", "")
-            tool_args = tool_call.get("args", {})
-            try:
-                if tool_name == "duckduckgo_search":
-                    result = await duckduckgo_search.ainvoke(tool_args)
-                elif tool_name == "tavily_search":
-                    result = await tavily_search.ainvoke(tool_args)
-                elif tool_name == "serp_search":
-                    result = await serp_search.ainvoke(tool_args)
-                else:
-                    result = ""
-                if result:
-                    tool_results.append(f"【{tool_name}】\n{result}")
-            except Exception as exc:
-                logger.warning("[TutorAgent] 搜索工具 %s 失败: %s", tool_name, exc)
-                tool_results.append(f"【{tool_name}】搜索失败")
+        tasks = [invoke_search_tool(tc) for tc in tool_calls]
+        results = await asyncio.gather(*tasks)
+        for res in results:
+            if res:
+                tool_results.append(res)
 
     if not tool_results:
         logger.info("[TutorAgent] 搜索节点未触发工具调用或无结果，启动自动兜底搜索")
@@ -407,14 +418,13 @@ async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> 
             
             full_messages = build_messages(scoped_prompt, list(messages))
             
-            # 搜索 + 记忆全套工具
+            # 仅记忆工具
             from app.chat.tools.memory import make_memory_tools
             memory_tools = []
             if agent.context.memory_reader:
                 memory_tools = make_memory_tools(agent.context.memory_reader)
             
-            from app.chat.tools.knowledge import search_knowledge_base
-            tools = memory_tools + [search_knowledge_base, duckduckgo_search, tavily_search, serp_search]
+            tools = memory_tools
             fallback_text = "抱歉，我暂时无法回答这个问题，请稍后重试。"
             retry_prompt = "请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。"
 
