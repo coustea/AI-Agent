@@ -18,6 +18,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
+from app.resource.agents.base import AGENT_REGISTRY
 from app.resource.events import AgentEventEmitter, ResourceGenerateEvent
 from app.resource.schemas import (
     ExecutionPlan,
@@ -519,6 +520,48 @@ class ResourceUsecases:
         )
         result = await self.session.exec(statement)
         return list(result.all())
+
+    async def execute_single_agent(
+        self,
+        agent_id: str,
+        state: WorkerState,
+        emitter: AgentEventEmitter | None = None,
+    ) -> WorkerResult:
+        """单点运行指定的 Agent。"""
+        agent_cls = AGENT_REGISTRY.get(agent_id)
+        if not agent_cls:
+            return WorkerResult(success=False, error=f"Unknown agent: {agent_id}")
+            
+        agent = agent_cls(emitter=emitter)
+        try:
+            return await agent.run(state)
+        except Exception as exc:
+            return WorkerResult(success=False, error=str(exc))
+
+    async def execute_parallel_agents(
+        self,
+        agent_ids: list[str],
+        state: WorkerState,
+        emitter: AgentEventEmitter | None = None,
+    ) -> dict[str, WorkerResult]:
+        """并行运行多个 Agent 并隔离错误。"""
+        async def run_safe(aid: str) -> tuple[str, WorkerResult]:
+            res = await self.execute_single_agent(aid, state, emitter)
+            return aid, res
+            
+        tasks = [run_safe(aid) for aid in agent_ids]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        final_results = {}
+        for idx, res in enumerate(results):
+            aid = agent_ids[idx]
+            if isinstance(res, Exception):
+                final_results[aid] = WorkerResult(success=False, error=f"Parallel execution exception: {str(res)}")
+            else:
+                returned_aid, worker_result = res
+                final_results[returned_aid] = worker_result
+                
+        return final_results
 
 
 async def bg_gen_task(
