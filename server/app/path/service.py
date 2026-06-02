@@ -420,7 +420,7 @@ class CoursePathService:
         4. 从节点内容构造 learning_need
         5. 调用统一 start_resource_task
         """
-        from app.resource.service import ResourceUsecases
+        from app.resource.service import ResourceService
 
         # 1 & 2: 验证节点存在且属于当前用户
         node_stmt = (
@@ -486,7 +486,7 @@ class CoursePathService:
         )
 
         # Use unified start_resource_task
-        usecases = ResourceUsecases(self.session)
+        usecases = ResourceService(self.session)
         result = await usecases.start_resource_task(
             user_id=user_id,
             request=request,

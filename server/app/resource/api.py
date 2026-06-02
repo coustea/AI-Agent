@@ -27,7 +27,7 @@ from app.infra.database import get_session, session_scope
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
-from app.resource.service import ResourceUsecases, bg_gen_task, bg_single_gen_task
+from app.resource.service import ResourceService, run_multi_agent_generation, run_single_agent_generation
 from app.memory.service import MemoryService
 from app.infra.response import HttpResponse
 
@@ -36,7 +36,7 @@ logger = get_logger(__name__)
 
 
 @router.post("/resources")
-async def gen_task(
+async def create_resource_task(
     req: ResourceGenerationRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
@@ -48,7 +48,7 @@ async def gen_task(
         current_user.id,
         req.enabled_agent_ids(),
     )
-    usecases = ResourceUsecases(session)
+    usecases = ResourceService(session)
     result = await usecases.start_resource_task(
         user_id=current_user.id,
         request=req,
@@ -61,7 +61,7 @@ async def gen_task(
     profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
 
     background_tasks.add_task(
-        bg_gen_task,
+        run_multi_agent_generation,
         user_id=current_user.id,
         request=req,
         profile=profile_dict,
@@ -72,7 +72,7 @@ async def gen_task(
 
 
 @router.post("/resources/single")
-async def gen_single(
+async def create_single_resource_task(
     req: SingleResourceRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
@@ -89,7 +89,7 @@ async def gen_single(
     profile_record = await memory_service.get_profile(user_id=current_user.id)
     profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
 
-    usecases = ResourceUsecases(session)
+    usecases = ResourceService(session)
     result = await usecases.start_resource_task(
         user_id=current_user.id,
         request=ResourceGenerationRequest(
@@ -101,7 +101,7 @@ async def gen_single(
     resource_id = result["resource_id"]
 
     background_tasks.add_task(
-        bg_single_gen_task,
+        run_single_agent_generation,
         user_id=current_user.id,
         resource_id=resource_id,
         agent_id=req.agent_id.value,
@@ -119,7 +119,7 @@ async def get_generation_status(
     session: AsyncSession = Depends(get_session),
 ):
     """查询后台生成任务的状态。"""
-    usecases = ResourceUsecases(session)
+    usecases = ResourceService(session)
     status_data = await usecases.get_generation_status(user_id=current_user.id, resource_id=resource_id)
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
@@ -151,7 +151,7 @@ async def _stream_generation_snapshots(
     previous_payload = ""
     while True:
         async with session_scope() as session:
-            usecases = ResourceUsecases(session)
+            usecases = ResourceService(session)
             status_data = await usecases.get_generation_status(user_id=user_id, resource_id=resource_id)
 
         if status_data is None:
@@ -197,7 +197,7 @@ async def list_resources(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源列表。"""
-    usecases = ResourceUsecases(session)
+    usecases = ResourceService(session)
     resources = await usecases.list_resources(current_user.id, limit)
     type_summary = await usecases.list_resource_type_summary(
         user_id=current_user.id,
@@ -227,7 +227,7 @@ async def get_resource(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源详情。"""
-    usecases = ResourceUsecases(session)
+    usecases = ResourceService(session)
     bundle = await usecases.get_resource_bundle(current_user.id, resource_id)
     if bundle is None:
         return HttpResponse.error(code=404, message="资源不存在")

@@ -84,13 +84,13 @@ class AgentEventEmitter:
             payload=payload or {},
         )
 
-    def _enqueue(self, event: ResourceGenerateEvent) -> None:
+    def _queue_event(self, event: ResourceGenerateEvent) -> None:
         """将事件放入队列。"""
         self._queue.put_nowait(event)
 
     async def _publish(self, event: ResourceGenerateEvent) -> None:
         """发布事件，并等待数据库快照已反映这一真实状态。"""
-        self._enqueue(event)
+        self._queue_event(event)
         if self._event_sink:
             await self._event_sink(event)
 
@@ -109,7 +109,7 @@ class AgentEventEmitter:
         agent: str | None = "coordinator",
     ) -> None:
         """发送工作流事件。"""
-        await self._publish(self._make_event(
+        await self._publish(self._create_event(
             event_type="workflow",
             stage=stage,
             agent=agent,
@@ -138,7 +138,7 @@ class AgentEventEmitter:
         progress: int = 0,
     ) -> None:
         """发送 Agent 动作事件。"""
-        event = self._make_event(
+        event = self._create_event(
             event_type="agent_step",
             stage=f"layer_{layer}",
             agent=agent_name,
@@ -173,7 +173,7 @@ class AgentEventEmitter:
     ) -> None:
         """发送 Agent 状态事件。"""
         resolved_agent = agent_name or agent or ""
-        await self._publish(self._make_event(
+        await self._publish(self._create_event(
             event_type="agent",
             stage=stage,
             agent=resolved_agent,
@@ -197,7 +197,12 @@ class AgentEventEmitter:
         task_id: str | None = None,
         progress: int = 0,
     ) -> None:
-        """发送资源生成完成事件。"""
+        """发送资源生成完成事件。
+
+        Args:
+            content: 生成的资源内容（str / dict / list）。
+            resource: 可选的 GeneratedResourceItem 实例，提供则自动序列化。
+        """
         resource_payload = resource.model_dump(mode="json") if hasattr(resource, "model_dump") else resource
         if resource_payload is None:
             resource_payload = {
@@ -210,7 +215,7 @@ class AgentEventEmitter:
                 "summary_data": summary_data or {},
                 "metadata": metadata or {},
             }
-        await self._publish(self._make_event(
+        await self._publish(self._create_event(
             event_type="resource",
             agent=agent_id,
             status="success",
@@ -235,7 +240,7 @@ class AgentEventEmitter:
         payload: dict | None = None,
     ) -> None:
         """发送审核事件。"""
-        await self._publish(self._make_event(
+        await self._publish(self._create_event(
             event_type="review",
             stage="reviewing",
             message=message,
@@ -248,14 +253,18 @@ class AgentEventEmitter:
         bundle: Any = None,
         progress: int = 0,
     ) -> None:
-        """发送组装事件。"""
+        """发送组装事件。
+
+        Args:
+            bundle: ResourceBundle 实例或包含资源列表的字典，提供则自动序列化。
+        """
         bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
         item_count = 0
         if isinstance(bundle_payload, list):
             item_count = len(bundle_payload)
         elif isinstance(bundle_payload, dict) and isinstance(bundle_payload.get("resources"), list):
             item_count = len(bundle_payload["resources"])
-        await self._publish(self._make_event(
+        await self._publish(self._create_event(
             event_type="bundle",
             stage="assembling",
             agent="assembler",
@@ -268,7 +277,7 @@ class AgentEventEmitter:
     async def emit_error(self, message: str) -> None:
         """发送错误事件。"""
         logger.error("[EventEmitter] error: resource_id=%s task_id=%s message=%s", self.resource_id, self.task_id, message)
-        await self._publish(self._make_event(
+        await self._publish(self._create_event(
             event_type="error",
             status="failed",
             message=message,
@@ -283,7 +292,7 @@ class AgentEventEmitter:
     ) -> None:
         """发送完成事件。"""
         bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
-        await self._publish(self._make_event(
+        await self._publish(self._create_event(
             event_type="done",
             stage="completed",
             status="success",

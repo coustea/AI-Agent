@@ -316,7 +316,7 @@ ResourceGenerationRequest.model_rebuild()
 # ======================================================================
 
 class SingleResourceRequest(BaseModel):
-    """Request for single-agent resource generation (path planning / on-demand use)."""
+    """单智能体资源生成请求（路径规划 / 即调即用）。"""
     model_config = ConfigDict(extra="forbid")
 
     agent_id: ResourceAgentId
@@ -351,5 +351,4 @@ __all__ = [
     "ReviewResult",
     "ResourceBundle",
     # Response models
-    "ResourceListResponse",
 ]
