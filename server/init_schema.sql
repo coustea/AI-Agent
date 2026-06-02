@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS ix_schools_name ON schools (name);
 -- 4. chat_sessions
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_sessions (
-    id                      VARCHAR          PRIMARY KEY,
+    id                      UUID             PRIMARY KEY,
     user_id                 INTEGER          NOT NULL,
     module                  VARCHAR,
     title                   VARCHAR(100),
@@ -320,7 +320,54 @@ CREATE INDEX IF NOT EXISTS ix_generated_resource_items_weak_points_covered_gin
     ON generated_resource_items USING GIN (weak_points_covered);
 
 -- ============================================================
--- 12. learning_events
+-- 12. quiz_questions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS quiz_questions (
+    id                  SERIAL          PRIMARY KEY,
+    question_id         VARCHAR(255)    NOT NULL UNIQUE,
+    source              VARCHAR(255),
+    subject             VARCHAR(255)    NOT NULL,
+    subject_en          VARCHAR(255),
+    question_type       VARCHAR(100)    NOT NULL,
+    difficulty          VARCHAR(100),
+    bloom_level         VARCHAR(100),
+    content             TEXT            NOT NULL,
+    options_json        JSONB,
+    answer              TEXT,
+    analysis            TEXT,
+    knowledge_points    JSONB,
+    tags                JSONB,
+    language            VARCHAR(32),
+    split               VARCHAR(64),
+    source_file         VARCHAR(500),
+    raw_record          JSONB,
+    created_at          TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_question_id ON quiz_questions (question_id);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_source ON quiz_questions (source);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject ON quiz_questions (subject);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_en ON quiz_questions (subject_en);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_question_type ON quiz_questions (question_type);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_difficulty ON quiz_questions (difficulty);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_language ON quiz_questions (language);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_split ON quiz_questions (split);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_type
+    ON quiz_questions (subject, question_type);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_en_type
+    ON quiz_questions (subject_en, question_type);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_options_json_gin
+    ON quiz_questions USING GIN (options_json);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_knowledge_points_gin
+    ON quiz_questions USING GIN (knowledge_points);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_tags_gin
+    ON quiz_questions USING GIN (tags);
+CREATE INDEX IF NOT EXISTS ix_quiz_questions_raw_record_gin
+    ON quiz_questions USING GIN (raw_record);
+
+-- ============================================================
+-- 13. learning_events
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learning_events (
     id                  SERIAL          PRIMARY KEY,
@@ -362,7 +409,7 @@ CREATE INDEX IF NOT EXISTS ix_learning_events_metadata_json_gin
     ON learning_events USING GIN (metadata_json);
 
 -- ============================================================
--- 13. course_paths (must come before course_path_generation_tasks due to FK)
+-- 14. course_paths (must come before course_path_generation_tasks due to FK)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS course_paths (
     id                      SERIAL          PRIMARY KEY,
@@ -405,7 +452,7 @@ CREATE INDEX IF NOT EXISTS ix_course_paths_learning_signal_snapshot_gin
     ON course_paths USING GIN (learning_signal_snapshot);
 
 -- ============================================================
--- 14. course_path_generation_tasks (FK → course_paths)
+-- 15. course_path_generation_tasks (FK → course_paths)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS course_path_generation_tasks (
     id                  SERIAL          PRIMARY KEY,
@@ -440,7 +487,7 @@ CREATE INDEX IF NOT EXISTS ix_course_path_generation_tasks_user_module_status
     ON course_path_generation_tasks (user_id, module, status);
 
 -- ============================================================
--- 15. course_path_nodes
+-- 16. course_path_nodes
 -- ============================================================
 CREATE TABLE IF NOT EXISTS course_path_nodes (
     id                      SERIAL          PRIMARY KEY,
@@ -480,7 +527,7 @@ CREATE INDEX IF NOT EXISTS ix_course_path_nodes_prerequisites_gin
     ON course_path_nodes USING GIN (prerequisites);
 
 -- ============================================================
--- 16. course_path_resource_bindings
+-- 17. course_path_resource_bindings
 -- ============================================================
 CREATE TABLE IF NOT EXISTS course_path_resource_bindings (
     id                  SERIAL          PRIMARY KEY,

@@ -21,7 +21,7 @@
                   <div class="random-question-inner">
                     <div class="question-meta-row">
                       <el-tag size="small" type="info" effect="plain">{{ randomQuestion.subject }}</el-tag>
-                      <el-tag size="small" :type="getDifficultyType(randomQuestion.difficulty)" effect="light">{{ randomQuestion.difficulty }}</el-tag>
+                      <el-tag size="small" :type="getDifficultyType(randomQuestion.difficulty)" effect="light">{{ randomQuestion.difficulty || '未标注' }}</el-tag>
                       <el-tag size="small" type="warning" effect="light">{{ randomQuestion.type }}</el-tag>
                       <el-tag v-if="randomQuestion.type === '多选题'" size="small" type="primary" effect="plain">可多选</el-tag>
                     </div>
@@ -43,7 +43,8 @@
                         }]"
                           @click="selectRandomOption(randomQuestion, key)"
                       >
-                        <strong>{{ key }}:</strong> {{ val }}
+                        <strong>{{ key }}:</strong>
+                        <span class="option-markdown markdown-body" v-html="renderMarkdown(val)"></span>
                       </div>
                     </div>
 
@@ -188,7 +189,7 @@
                 </div>
                 <div class="stat-info">
                   <span class="stat-label">题库总数</span>
-                  <strong class="stat-value">{{ mockQuestions.length }} <span class="unit">道</span></strong>
+                  <strong class="stat-value">{{ totalQuestions }} <span class="unit">道</span></strong>
                 </div>
               </div>
               <div class="left-stat-item">
@@ -293,126 +294,108 @@
               </div>
             </transition>
 
-            <!-- 题目列表与分步切换容器 -->
-            <div class="browser-questions-wrapper">
-              <div class="browser-questions-list" ref="browserScrollContainer">
-                <div v-if="paginatedQuestions.length === 0" class="empty-state">
-                  <el-icon class="empty-icon"><FolderOpened /></el-icon>
-                  <p>未找到匹配的题目，请尝试调整筛选条件</p>
-                </div>
-                <div
-                    v-for="q in paginatedQuestions"
-                    :key="q.id"
-                    class="browser-question-card"
-                >
-                  <div class="q-card-header">
-                    <div class="tags-left">
-                      <el-tag size="small" type="info" effect="plain">{{ q.subject }}</el-tag>
-                      <el-tag size="small" :type="getDifficultyType(q.difficulty)" effect="light">{{ q.difficulty }}</el-tag>
-                      <el-tag size="small" type="warning" effect="light">{{ q.type }}</el-tag>
-                      <el-tag v-if="q.type === '多选题'" size="small" type="primary" effect="plain">可多选</el-tag>
-                      <el-tag
-                          v-if="browserSubmitted[q.id] && !browserCorrect[q.id]"
-                          size="small"
-                          type="danger"
-                          effect="dark"
-                          class="wrong-question-tag"
-                      >
-                        错题
-                      </el-tag>
-                    </div>
-                  </div>
-                  <div class="q-card-body">
-                    <div class="q-content markdown-body" v-html="renderMarkdown(q.content)"></div>
-
-                    <div v-if="isOptionQuestion(q)" class="q-browser-options">
-                      <div
-                          v-for="(val, key) in getQuestionOptions(q)"
-                          :key="key"
-                          :class="['mini-option', {
-                          'selected': isAnswerSelected(browserAnswers[q.id], key),
-                          'correct': browserSubmitted[q.id] && isCorrectOption(q, key),
-                          'wrong': browserSubmitted[q.id] && isAnswerSelected(browserAnswers[q.id], key) && !isCorrectOption(q, key)
-                        }]"
-                          @click="selectBrowserOption(q, key)"
-                      >
-                        <strong>{{ key }}:</strong> {{ val }}
-                      </div>
-                    </div>
-                    <div class="browser-answer-input" v-else>
-                      <el-input
-                          v-model="browserAnswers[q.id]"
-                          :disabled="browserSubmitted[q.id]"
-                          type="textarea"
-                          :rows="3"
-                          :placeholder="q.type === '填空题' ? '请输入填空答案...' : '请输入您的回答...'"
-                      />
-                    </div>
-                  </div>
-                  <div class="q-card-footer">
-                    <div
-                        v-if="browserSubmitted[q.id]"
-                        class="result-indicator browser-result"
-                        :class="browserCorrect[q.id] ? 'correct' : 'wrong'"
-                    >
-                      <el-icon v-if="browserCorrect[q.id]"><CircleCheck /></el-icon>
-                      <el-icon v-else><CircleClose /></el-icon>
-                      <span>{{ browserCorrect[q.id] ? '回答正确！' : '回答错误' }}</span>
-                    </div>
-                    <el-button
-                        type="primary"
-                        size="small"
-                        :disabled="browserSubmitted[q.id] || !hasAnswer(browserAnswers[q.id])"
-                        class="submit-browser-btn"
-                        @click="submitBrowserAnswer(q)"
-                    >
-                      提交答案
-                    </el-button>
-                    <el-button
-                        link
-                        type="primary"
-                        size="small"
-                        class="toggle-detail-btn"
-                        @click="toggleQuestionDetail(q.id)"
-                    >
-                      {{ isDetailExpanded(q.id) ? '收起答案解析' : '查看答案解析' }}
-                    </el-button>
-                  </div>
-
-                  <transition name="el-collapse-transition">
-                    <div v-if="isDetailExpanded(q.id)" class="q-card-detail-analysis">
-                      <div class="detail-ans">参考答案: <span class="ans-label">{{ formatAnswer(q.answer) }}</span></div>
-                      <div class="detail-anal markdown-body">
-                        <strong>解析：</strong>
-                        <div v-html="renderMarkdown(q.analysis)"></div>
-                      </div>
-                      <div class="detail-kps">
-                        <span>知识点：</span>
-                        <el-tag v-for="kp in q.knowledge_points" :key="kp" size="small" type="info" class="mr-1">{{ kp }}</el-tag>
-                      </div>
-                    </div>
-                  </transition>
-                </div>
+            <!-- 题目列表 -->
+            <div class="browser-questions-list">
+              <div v-if="quizBankLoading" class="empty-state">
+                <p>题库加载中...</p>
               </div>
+              <div v-else-if="filteredQuestions.length === 0" class="empty-state">
+                <el-icon class="empty-icon"><FolderOpened /></el-icon>
+                <p>未找到匹配的题目，请尝试调整筛选条件</p>
+              </div>
+              <div
+                v-for="q in filteredQuestions"
+                :key="q.id"
+                class="browser-question-card"
+              >
+                <div class="q-card-header">
+                  <div class="tags-left">
+                    <el-tag size="small" type="info" effect="plain">{{ q.subject }}</el-tag>
+                    <el-tag size="small" :type="getDifficultyType(q.difficulty)" effect="light">{{ q.difficulty || '未标注' }}</el-tag>
+                    <el-tag size="small" type="warning" effect="light">{{ q.type }}</el-tag>
+                    <el-tag v-if="q.type === '多选题'" size="small" type="primary" effect="plain">可多选</el-tag>
+                    <el-tag
+                      v-if="browserSubmitted[q.id] && !browserCorrect[q.id]"
+                      size="small"
+                      type="danger"
+                      effect="dark"
+                      class="wrong-question-tag"
+                    >
+                      错题
+                    </el-tag>
+                  </div>
+                </div>
+                <div class="q-card-body">
+                  <div class="q-content markdown-body" v-html="renderMarkdown(q.content)"></div>
 
-              <!-- 精简 Slot 页数控制栏舱 -->
-              <div class="browser-pagination-container" v-if="filteredQuestions.length > 0">
-                <el-pagination
-                    v-model:current-page="currentPage"
-                    v-model:page-size="pageSize"
-                    :page-sizes="[3, 5, 10, 15]"
-                    layout="sizes, prev, slot, next"
-                    :total="filteredQuestions.length"
-                    @current-change="scrollToTopBrowser"
-                    @size-change="handleSizeChange"
-                    class="custom-premium-pagination"
-                >
-                  <template #default>
-                    <span class="custom-pager-slot-indicator">
-                      {{ currentPage }} <small>/</small> {{ totalPages }}
-                    </span>
-                  </template>
-                </el-pagination>
+                  <div v-if="isOptionQuestion(q)" class="q-browser-options">
+                    <div
+                      v-for="(val, key) in getQuestionOptions(q)"
+                      :key="key"
+                      :class="['mini-option', {
+                        'selected': isAnswerSelected(browserAnswers[q.id], key),
+                        'correct': browserSubmitted[q.id] && isCorrectOption(q, key),
+                        'wrong': browserSubmitted[q.id] && isAnswerSelected(browserAnswers[q.id], key) && !isCorrectOption(q, key)
+                      }]"
+                      @click="selectBrowserOption(q, key)"
+                    >
+                      <strong>{{ key }}:</strong>
+                      <span class="option-markdown markdown-body" v-html="renderMarkdown(val)"></span>
+                    </div>
+                  </div>
+                  <div v-else class="browser-answer-input">
+                    <el-input
+                      v-model="browserAnswers[q.id]"
+                      :disabled="browserSubmitted[q.id]"
+                      type="textarea"
+                      :rows="3"
+                      :placeholder="q.type === '填空题' ? '请输入填空答案...' : '请输入您的回答...'"
+                    />
+                  </div>
+                </div>
+                <div class="q-card-footer">
+                  <div
+                    v-if="browserSubmitted[q.id]"
+                    class="result-indicator browser-result"
+                    :class="browserCorrect[q.id] ? 'correct' : 'wrong'"
+                  >
+                    <el-icon v-if="browserCorrect[q.id]"><CircleCheck /></el-icon>
+                    <el-icon v-else><CircleClose /></el-icon>
+                    <span>{{ browserCorrect[q.id] ? '回答正确！' : '回答错误' }}</span>
+                  </div>
+                  <el-button
+                    type="primary"
+                    size="small"
+                    :disabled="browserSubmitted[q.id] || !hasAnswer(browserAnswers[q.id])"
+                    class="submit-browser-btn"
+                    @click="submitBrowserAnswer(q)"
+                  >
+                    提交答案
+                  </el-button>
+                  <el-button 
+                    link 
+                    type="primary" 
+                    size="small" 
+                    class="toggle-detail-btn"
+                    @click="toggleQuestionDetail(q.id)"
+                  >
+                    {{ isDetailExpanded(q.id) ? '收起答案解析' : '查看答案解析' }}
+                  </el-button>
+                </div>
+                
+                <transition name="el-collapse-transition">
+                  <div v-if="isDetailExpanded(q.id)" class="q-card-detail-analysis">
+                    <div class="detail-ans">参考答案: <span class="ans-label">{{ formatAnswer(q.answer) }}</span></div>
+                    <div class="detail-anal markdown-body">
+                      <strong>解析：</strong>
+                      <div v-html="renderMarkdown(q.analysis)"></div>
+                    </div>
+                    <div class="detail-kps">
+                      <span>知识点：</span>
+                      <el-tag v-for="kp in q.knowledge_points" :key="kp" size="small" type="info" class="mr-1">{{ kp }}</el-tag>
+                    </div>
+                  </div>
+                </transition>
               </div>
             </div>
           </div>
@@ -472,7 +455,7 @@
                   <el-tag size="small" type="info">{{ q.subject }}</el-tag>
                   <el-tag size="small" type="warning">{{ q.type }}</el-tag>
                   <el-tag v-if="q.type === '多选题'" size="small" type="primary">可多选</el-tag>
-                  <el-tag size="small" :type="getDifficultyType(q.difficulty)">{{ q.difficulty }}</el-tag>
+                  <el-tag size="small" :type="getDifficultyType(q.difficulty)">{{ q.difficulty || '未标注' }}</el-tag>
                 </div>
               </div>
               <div v-if="isExamSubmitted" class="result-indicator" :class="isExamAnswerCorrect(q) ? 'correct' : 'wrong'">
@@ -498,7 +481,7 @@
                   @click="!isExamSubmitted && selectExamOption(q, key)"
               >
                 <span class="indicator">{{ key }}</span>
-                <span class="text">{{ val }}</span>
+                <span class="text option-markdown markdown-body" v-html="renderMarkdown(val)"></span>
                 <el-tag v-if="isExamSubmitted && isCorrectOption(q, key)" size="small" type="success" class="option-res-tag">正确答案</el-tag>
                 <el-tag v-if="isExamSubmitted && isAnswerSelected(examAnswers[q.id], key) && !isCorrectOption(q, key)" size="small" type="danger" class="option-res-tag">您的选项</el-tag>
               </div>
@@ -689,6 +672,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, reactive, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   Collection, Cpu,
@@ -696,21 +680,43 @@ import {
   Opportunity, Finished, DataLine, WarningFilled, DocumentChecked,
   ArrowDown, Filter, Search, FolderOpened
 } from '@element-plus/icons-vue';
-import { mockQuestions } from '@/utils/mockQuestions';
-import type { Question } from '@/utils/mockQuestions';
+import { getProfileOnboarding } from '@/api/ai';
+import { fetchQuizBankQuestions } from '@/api/quizBank';
 import { renderStreamingMarkdownHtml } from '@/utils/markdown';
+
+interface Question {
+  id: string;
+  subject: string;
+  subject_en?: string | null;
+  type: string;
+  difficulty?: string | null;
+  content: string;
+  options?: Record<string, string> | null;
+  answer: string;
+  analysis: string;
+  knowledge_points: string[];
+  tags?: string[];
+  language?: string | null;
+  split?: string | null;
+}
 
 // 全局状态与基本选项数据
 // ------------------------------
 const activeView = ref<'bank' | 'exam'>('bank');
 const activeSidebarTab = ref('challenge');
+const allQuestions = ref<Question[]>([]);
+const quizBankLoading = ref(false);
+const learnerCourses = ref<string[]>([]);
+const totalQuestions = ref(0);
+const currentPage = ref(1);
+const pageSize = ref(200);
 
 const renderMarkdown = (text: string) => {
   return renderStreamingMarkdownHtml(text || '');
 };
-const subjects = ['数据结构与算法', '操作系统', '计算机网络', 'Python编程', '机器学习', '高等数学'];
-const difficulties = ['简单', '中等', '困难'];
-const types = ['选择题', '多选题', '判断题', '填空题', '简答题'];
+const subjects = ref<string[]>([]);
+const difficulties = ref<string[]>([]);
+const types = ref<string[]>([]);
 
 // 题库右侧检索逻辑分页控制变量
 // ------------------------------
@@ -756,8 +762,40 @@ const saveGlobalStats = (newAttempted: number, newCorrect: number) => {
 
 onMounted(() => {
   loadGlobalStats();
-  loadNewRandomQuestion();
+  void initializeQuizBank();
 });
+
+const initializeQuizBank = async () => {
+  quizBankLoading.value = true;
+  try {
+    try {
+      const profileRes = await getProfileOnboarding();
+      learnerCourses.value = profileRes.data.data.student_profile.courses || [];
+    } catch {
+      learnerCourses.value = [];
+    }
+    const result = await fetchQuizBankQuestions({
+      subjects: learnerCourses.value.length ? learnerCourses.value : undefined,
+      page: currentPage.value,
+      page_size: pageSize.value,
+    });
+    allQuestions.value = result.items;
+    totalQuestions.value = result.total;
+    subjects.value = result.subjects;
+    difficulties.value = result.difficulties;
+    types.value = result.types;
+    if (!smartForm.subject && learnerCourses.value.length > 0) {
+      smartForm.subject = learnerCourses.value[0] || '';
+    } else if (!smartForm.subject && subjects.value.length > 0) {
+      smartForm.subject = subjects.value[0] || '';
+    }
+    loadNewRandomQuestion();
+  } catch {
+    ElMessage.error('题库加载失败，请稍后重试');
+  } finally {
+    quizBankLoading.value = false;
+  }
+};
 
 // ------------------------------
 // 随机挑战 (每日一练) 模块逻辑
@@ -773,10 +811,13 @@ const loadNewRandomQuestion = () => {
   randomSubmitted.value = false;
   randomIsCorrect.value = false;
   challengeAnalysisVisible.value = false;
-
-  if (mockQuestions.length > 0) {
-    const idx = Math.floor(Math.random() * mockQuestions.length);
-    randomQuestion.value = mockQuestions[idx] || null;
+  
+  // 随机取一道题
+  if (allQuestions.value.length > 0) {
+    const idx = Math.floor(Math.random() * allQuestions.value.length);
+    randomQuestion.value = allQuestions.value[idx] || null;
+  } else {
+    randomQuestion.value = null;
   }
 };
 
@@ -820,17 +861,36 @@ const filters = reactive({
   type: ''
 });
 
-const filteredQuestions = computed(() => {
-  return mockQuestions.filter(q => {
-    const matchQuery = !filters.query ||
-        q.content.toLowerCase().includes(filters.query.toLowerCase()) ||
-        q.knowledge_points.some(kp => kp.toLowerCase().includes(filters.query.toLowerCase()));
-    const matchSubject = !filters.subject || q.subject === filters.subject;
-    const matchDifficulty = !filters.difficulty || q.difficulty === filters.difficulty;
-    const matchType = !filters.type || q.type === filters.type;
-    return matchQuery && matchSubject && matchDifficulty && matchType;
-  });
-});
+const filteredQuestions = computed(() => allQuestions.value);
+
+const reloadFilteredQuestions = async () => {
+  quizBankLoading.value = true;
+  try {
+    const result = await fetchQuizBankQuestions({
+      query: filters.query || undefined,
+      subject: filters.subject || undefined,
+      subjects: !filters.subject && learnerCourses.value.length ? learnerCourses.value : undefined,
+      difficulty: filters.difficulty || undefined,
+      type: filters.type || undefined,
+      page: currentPage.value,
+      page_size: pageSize.value,
+    });
+    allQuestions.value = result.items;
+    totalQuestions.value = result.total;
+  } catch {
+    ElMessage.error('题库筛选失败，请稍后重试');
+  } finally {
+    quizBankLoading.value = false;
+  }
+};
+
+watch(
+  () => [filters.query, filters.subject, filters.difficulty, filters.type],
+  () => {
+    currentPage.value = 1;
+    void reloadFilteredQuestions();
+  }
+);
 
 // 计算总页数数据，供极简 Slot 显示所用
 const totalPages = computed(() => {
@@ -897,7 +957,7 @@ const submitBrowserAnswer = (question: Question) => {
 // 智能规则组卷逻辑
 // ------------------------------
 const smartForm = reactive({
-  subject: '数据结构与算法',
+  subject: '',
   difficulty: '混合',
   choiceCount: 5,
   multipleCount: 1,
@@ -907,7 +967,8 @@ const smartForm = reactive({
 });
 
 const generateSmartExam = () => {
-  let pool = mockQuestions.filter(q => q.subject === smartForm.subject);
+  // 从大题库筛选对应学科的题目
+  let pool = allQuestions.value.filter(q => q.subject === smartForm.subject);
   if (smartForm.difficulty !== '混合') {
     pool = pool.filter(q => q.difficulty === smartForm.difficulty);
   }
@@ -1094,7 +1155,10 @@ const backToBankDashboard = () => {
   loadNewRandomQuestion();
 };
 
-const getDifficultyType = (diff: string) => {
+// ------------------------------
+// 视觉工具方法 (难度颜色、评语等)
+// ------------------------------
+const getDifficultyType = (diff?: string | null) => {
   if (diff === '简单') return 'success';
   if (diff === '中等') return 'warning';
   return 'danger';
@@ -1876,6 +1940,28 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
+.question-text:deep(.katex-display),
+.q-content:deep(.katex-display),
+.q-text-body:deep(.katex-display) {
+  margin: 0.8rem 0;
+  padding: 0.35rem 0.2rem 0.45rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  font-size: 1.12em;
+}
+
+.question-text:deep(.katex),
+.q-content:deep(.katex),
+.q-text-body:deep(.katex) {
+  line-height: 1.45;
+}
+
+.question-text:deep(p),
+.q-content:deep(p),
+.q-text-body:deep(p) {
+  margin: 0.4rem 0;
+}
+
 .q-browser-options {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1936,6 +2022,31 @@ onUnmounted(() => {
   transition: all 0.2s ease;
 }
 
+.option-markdown {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.option-markdown:deep(p) {
+  margin: 0;
+}
+
+.option-markdown:deep(.katex-display) {
+  margin: 0.45rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.1rem;
+}
+
+.option-markdown:deep(pre) {
+  margin: 0.45rem 0 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .mini-option:hover {
   border-color: var(--primary-color);
   background: var(--primary-glow);
@@ -1944,6 +2055,8 @@ onUnmounted(() => {
 .mini-option strong {
   color: var(--primary-color);
   font-weight: 700;
+  flex-shrink: 0;
+  padding-top: 0.15rem;
 }
 
 .mini-option.selected {
@@ -2263,7 +2376,7 @@ onUnmounted(() => {
 
 .exam-option-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 14px 18px;
   background: #F8FAFC;
   border: 1px solid var(--border-light);
@@ -2302,6 +2415,19 @@ onUnmounted(() => {
 
 .exam-option-item .text {
   font-size: 0.95rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.mini-option:deep(.katex),
+.exam-option-item:deep(.katex) {
+  font-size: 1.02em;
+}
+
+.mini-option:deep(.katex-display),
+.exam-option-item:deep(.katex-display) {
+  margin: 0.35rem 0;
+  text-align: left;
 }
 
 /* 考试侧栏 */

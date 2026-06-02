@@ -1,5 +1,7 @@
 import hljs from 'highlight.js'
 import MarkdownIt from 'markdown-it'
+import markdownItKatex from 'markdown-it-katex'
+import 'katex/dist/katex.min.css'
 
 const copiedCodeLanguages = new Set([
   'bash', 'c', 'cpp', 'c++', 'css', 'go', 'html', 'java', 'javascript',
@@ -26,12 +28,21 @@ const canonicalFenceLanguageMap: Record<string, string> = {
 const fencePattern = /(^|\n)(`{3,}|~{3,})/g
 const sectionHeadingPattern = /^([一二三四五六七八九十]+\s*[、.．]|方式\d+[:：]|第\d+[步部分点节][:：]|最后[：:]|总结[：:])/
 
+const baseMarkdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: false,
+  typographer: false,
+})
+
 const streamingMarkdown = new MarkdownIt({
   html: false,
   linkify: true,
   breaks: false,
   typographer: false,
 })
+
+streamingMarkdown.use(markdownItKatex)
 
 function escapeHtml(raw: string): string {
   return raw
@@ -139,6 +150,18 @@ const defaultLinkOpen
   = streamingMarkdown.renderer.rules.link_open
   || ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
 
+function patchLinkOpen(renderer: MarkdownIt['renderer']) {
+  const currentLinkOpen = renderer.rules.link_open
+    || ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+
+  renderer.rules.link_open = (tokens, idx, options, _env, self) => {
+    tokens[idx]?.attrSet('target', '_blank')
+    tokens[idx]?.attrSet('rel', 'noopener noreferrer nofollow')
+    return currentLinkOpen(tokens, idx, options, _env, self)
+  }
+}
+
+patchLinkOpen(baseMarkdown.renderer)
 streamingMarkdown.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
   tokens[idx]?.attrSet('target', '_blank')
   tokens[idx]?.attrSet('rel', 'noopener noreferrer nofollow')
@@ -268,6 +291,65 @@ function repairLooseCodeBlocks(text: string): string {
   return repaired.join('\n')
 }
 
+function shouldPromoteInlineMath(content: string): boolean {
+  const normalized = content.replace(/\s+/g, ' ').trim()
+  if (!normalized) return false
+
+  if (/\\begin\{|\\end\{|\\sum|\\int|\\lim|\\prod|\\frac|\\sqrt|\\displaystyle|\\left|\\right/.test(normalized)) {
+    return true
+  }
+
+  if ((normalized.match(/\^|_/g) || []).length >= 3) {
+    return true
+  }
+
+  return normalized.length >= 40
+}
+
+function promoteComplexInlineMath(text: string): string {
+  if (!text) return text
+
+  return text.replace(/\$([^$\n]+)\$/g, (matched, content: string) => {
+    if (!shouldPromoteInlineMath(content)) return matched
+    return `\n$$\n${content.trim()}\n$$\n`
+  })
+}
+
+function repairBrokenMultilineInlineMath(text: string): string {
+  if (!text) return text
+
+  return text.replace(
+    /\$([^$]*?(?:\n[^$]*?)*)\n\s*\$(?=\s|$)/g,
+    (_matched, content: string) => `$$\n${content.trim()}\n$$`,
+  )
+}
+
+function normalizeMathBlocks(text: string): string {
+  if (!text) return text
+
+  return text
+    .replace(/[ \t]*\$\$[ \t]*/g, '\n$$\n')
+    .replace(/\$\$\n+_{2,}/g, '$$\n\n____')
+    .replace(/([^\n])(\$\$)/g, '$1\n$2')
+    .replace(/(\$\$)([^\n])/g, '$1\n$2')
+    .replace(/([^\n])(\$[^$\n]+\$)/g, '$1 $2')
+    .replace(/(\$[^$\n]+\$)([^\s\n])/g, '$1 $2')
+    .replace(/([^\n])(\\begin\{(?:cases|aligned|array|matrix|pmatrix|bmatrix)\})/g, '$1\n$2')
+    .replace(/(\\end\{(?:cases|aligned|array|matrix|pmatrix|bmatrix)\})([^\n])/g, '$1\n$2')
+    .replace(/([^\n])(\\\[)/g, '$1\n$2')
+    .replace(/(\\\])([^\n])/g, '$1\n$2')
+    .replace(/(\\begin\{cases\})/g, '$$\n$1')
+    .replace(/(\\end\{cases\})/g, '$1\n$$')
+    .replace(/(\$\$\n)(\s*\n)+/g, '$1')
+    .replace(/(\n\$\$)([ \t]*)(\n\$\$)/g, '$1\n$3')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
+function containsMathSyntax(text: string): boolean {
+  if (!text) return false
+  return /(^|[^\\])\$(?!\s)|\\\(|\\\[|\\begin\{(?:cases|aligned|array|matrix|pmatrix|bmatrix)\}/.test(text)
+}
+
 export function repairCopiedCodeBlocks(text: string): string {
   if (!text) return text
   const lines = text.split('\n')
@@ -296,10 +378,32 @@ export function repairCopiedCodeBlocks(text: string): string {
 }
 
 export function normalizeStreamingMarkdown(text: string, isStreaming = false): string {
-  const repaired = repairLooseCodeBlocks(
-    repairSplitFenceLanguages(
-      repairMalformedFenceOpeners(
-        repairCopiedCodeBlocks(text),
+  if (!containsMathSyntax(text)) {
+    const repaired = repairLooseCodeBlocks(
+      repairSplitFenceLanguages(
+        repairMalformedFenceOpeners(
+          repairCopiedCodeBlocks(text),
+        ),
+      ),
+    )
+    if (!isStreaming || !repaired) return repaired
+
+    const fences = repaired.match(fencePattern)
+    if (!fences || fences.length % 2 === 0) return repaired
+
+    return `${repaired}\n\`\`\``
+  }
+
+  const repaired = normalizeMathBlocks(
+    promoteComplexInlineMath(
+      repairBrokenMultilineInlineMath(
+        repairLooseCodeBlocks(
+          repairSplitFenceLanguages(
+            repairMalformedFenceOpeners(
+              repairCopiedCodeBlocks(text),
+            ),
+          ),
+        ),
       ),
     ),
   )
@@ -314,5 +418,13 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
 export function renderStreamingMarkdownHtml(text: string): string {
   const normalized = normalizeStreamingMarkdown(text, true)
   if (!normalized.trim()) return ''
-  return streamingMarkdown.render(normalized)
+  if (!containsMathSyntax(normalized)) {
+    return baseMarkdown.render(normalized)
+  }
+
+  try {
+    return streamingMarkdown.render(normalized)
+  } catch {
+    return baseMarkdown.render(text || '')
+  }
 }
