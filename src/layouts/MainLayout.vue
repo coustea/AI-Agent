@@ -15,6 +15,7 @@
               :key="item.path"
               :class="['nav-item', { active: activePath === item.path }]"
               @click="router.push(item.path)"
+              :title="item.label"
           >
             <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
             <span class="nav-label">{{ item.label }}</span>
@@ -54,10 +55,6 @@
                 <el-icon><User /></el-icon>个人中心
               </div>
 
-              <div class="dropdown-header-block" @click="router.push('/question-bank')">
-                <el-icon><Collection /></el-icon>学习题库
-              </div>
-
               <div class="dropdown-divider"></div>
 
               <el-dropdown-item command="logout" class="logout-item">
@@ -87,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Menu, Connection, Cpu, DataLine, ChatDotRound,
@@ -109,6 +106,7 @@ const navItems = [
   { path: '/resource-generator', label: '资源引擎', icon: Cpu },
   { path: '/path-planner', label: '路径规划', icon: Connection },
   { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
+  { path: '/question-bank', label: '学习题库', icon: Collection },
   { path: '/evaluation', label: '多维评估', icon: DataLine },
 ]
 
@@ -125,6 +123,17 @@ const loadOnboardingStatus = () => {
     onboardingDialogVisible.value = true
   }
 }
+
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.query.onboarding === 'true') {
+      onboardingDialogVisible.value = true
+    } else {
+      onboardingDialogVisible.value = false
+    }
+  }
+)
 
 onMounted(() => {
   const updateTime = () => {
@@ -271,7 +280,7 @@ const handleCommand = async (command: string) => {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  width: 200px;
+  flex-shrink: 0;
 }
 
 .brand-logo {
@@ -291,14 +300,16 @@ const handleCommand = async (command: string) => {
   font-weight: var(--weight-bold);
   color: var(--color-text);
   letter-spacing: -0.02em;
+  transition: all var(--transition-base);
 }
 
 .navbar-center {
-  position: absolute;
-  left: 42%;
-  transform: translateX(-50%);
+  flex: 1;
   display: flex;
   justify-content: center;
+  min-width: 0;
+  padding: 0 var(--space-4);
+  transition: all var(--transition-base);
 }
 
 .nav-menu {
@@ -509,5 +520,60 @@ const handleCommand = async (command: string) => {
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* ================== 响应式媒体查询 ================== */
+
+/* 1350px 以下：隐藏系统同步状态 */
+@media (max-width: 1350px) {
+  .system-status {
+    display: none !important;
+  }
+}
+
+/* 1200px 以下：隐藏时间显示，微调导航菜单间距 */
+@media (max-width: 1200px) {
+  .time-display {
+    display: none !important;
+  }
+  .nav-item {
+    padding: var(--space-2) var(--space-3);
+    gap: 6px;
+    font-size: 0.9rem;
+  }
+  .nav-menu {
+    gap: 6px;
+  }
+}
+
+/* 1024px 以下：隐藏系统品牌文字，隐藏动态特征文字（仅保留图标），收缩右侧间距 */
+@media (max-width: 1024px) {
+  .brand-name {
+    display: none !important;
+  }
+  .profile-text {
+    display: none !important;
+  }
+  .profile-trigger-btn {
+    padding: 8px;
+    border-radius: 50%;
+  }
+  .navbar-right {
+    gap: var(--space-3);
+  }
+}
+
+/* 768px 以下：隐藏导航项的文字标签，仅保留图标，使整体紧凑适应小屏幕 */
+@media (max-width: 768px) {
+  .nav-label {
+    display: none !important;
+  }
+  .nav-item {
+    padding: 10px;
+    border-radius: var(--radius-md);
+  }
+  .top-navbar {
+    padding: 0 var(--space-3);
+  }
 }
 </style>

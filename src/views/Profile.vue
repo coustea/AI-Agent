@@ -33,129 +33,145 @@
             <el-icon><Edit /></el-icon> 编辑资料
           </el-button>
         </div>
-        <div class="user-stats">
-          <div class="stat-item">
-            <el-icon class="text-blue"><Clock /></el-icon>
-            <div class="stat-val">
-              {{ formatDurationValue(studentProfile.learning_duration_total) }}<small>{{ formatDurationUnit(studentProfile.learning_duration_total) }}</small>
+        <div class="user-divider"></div>
+        <div class="profile-info-grid">
+          <div class="info-mini-card">
+            <div class="info-icon-box"><el-icon><Search /></el-icon></div>
+            <div class="info-content-box">
+              <span class="info-label">学校</span>
+              <div class="info-value school-info-strong">
+                <span v-if="studentProfile.school_level" class="school-level-badge">{{ studentProfile.school_level }}</span>
+                <span class="school-name-text" :title="studentProfile.school || undefined">{{ studentProfile.school || '未填写' }}</span>
+              </div>
             </div>
-            <div class="stat-label">累计学习时长</div>
           </div>
-          <div class="stat-item">
-            <el-icon class="text-indigo"><Reading /></el-icon>
-            <div class="stat-val">{{ dynamicStats.completedCourses }}</div>
-            <div class="stat-label">已完成课程</div>
+          <div class="info-mini-card">
+            <div class="info-icon-box"><el-icon><Reading /></el-icon></div>
+            <div class="info-content-box">
+              <span class="info-label">学历层次</span>
+              <span class="info-value">{{ studentProfile.education_level || '未填写' }}</span>
+            </div>
           </div>
-          <div class="stat-item">
-            <el-icon class="text-green"><DocumentCopy /></el-icon>
-            <div class="stat-val">{{ dynamicStats.generatedResources }}</div>
-            <div class="stat-label">生成资源数</div>
+          <div class="info-mini-card">
+            <div class="info-icon-box"><el-icon><Checked /></el-icon></div>
+            <div class="info-content-box">
+              <span class="info-label">年级</span>
+              <span class="info-value">{{ studentProfile.grade || '未填写' }}</span>
+            </div>
           </div>
-          <div class="stat-item">
-            <el-icon class="text-orange"><StarFilled /></el-icon>
-            <div class="stat-val">{{ dynamicStats.compositeScore }}<small>分</small></div>
-            <div class="stat-label">综合评分</div>
+          <div class="info-mini-card">
+            <div class="info-icon-box"><el-icon><UserFilled /></el-icon></div>
+            <div class="info-content-box">
+              <span class="info-label">专业</span>
+              <span class="info-value" :title="studentProfile.major || undefined">{{ studentProfile.major || '未填写' }}</span>
+            </div>
+          </div>
+          <div class="info-mini-card">
+            <div class="info-icon-box"><el-icon><Cpu /></el-icon></div>
+            <div class="info-content-box">
+              <span class="info-label">常用语言</span>
+              <span class="info-value">{{ studentProfile.preferred_language || '未填写' }}</span>
+            </div>
+          </div>
+          <div class="info-mini-card">
+            <div class="info-icon-box"><el-icon><VideoPlay /></el-icon></div>
+            <div class="info-content-box">
+              <span class="info-label">正在学习</span>
+              <div class="info-value">
+                <div v-if="studentProfile.courses && studentProfile.courses.length > 0" class="course-display-wrapper">
+                  <strong class="course-single-title" :title="studentProfile.courses[0]">{{ studentProfile.courses[0] }}</strong>
+                  <el-popover
+                      v-if="studentProfile.courses.length > 1"
+                      placement="top"
+                      :width="220"
+                      trigger="hover"
+                      popper-class="course-popover"
+                  >
+                    <template #reference>
+                      <el-button link type="primary" class="view-all-courses-btn">
+                        (共{{ studentProfile.courses.length }}门)
+                      </el-button>
+                    </template>
+                    <div class="all-courses-popover-content">
+                      <div class="popover-title">
+                        <el-icon><VideoPlay /></el-icon> 正在学习的全部课程
+                      </div>
+                      <div class="popover-course-list">
+                        <div v-for="(c, idx) in studentProfile.courses" :key="c" class="popover-course-item">
+                          <span class="course-number">{{ idx + 1 }}.</span>
+                          <span class="course-name">{{ c }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </el-popover>
+                </div>
+                <span v-else>未填写</span>
+              </div>
+            </div>
+          </div>
+          <div class="info-mini-card span-2">
+            <div class="info-icon-box"><el-icon><Aim /></el-icon></div>
+            <div class="info-content-box">
+              <span class="info-label">学习目标</span>
+              <span class="info-value" :title="studentProfile.learning_goal || undefined">{{ studentProfile.learning_goal || '未填写' }}</span>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="bento-card bento-span-3 combined-profile-card">
         <div class="card-header-flex main-card-header">
-          <h4 class="card-title"><el-icon><User /></el-icon> 学习画像</h4>
-          <div class="profile-meta-tags" v-if="profileMetadata">
-            <el-tooltip content="学习时间越久等级越高" placement="top">
-              <el-tag size="small" type="success" style="cursor: help">V{{ profileMetadata.version }}</el-tag>
+          <h4 class="card-title">
+            <el-icon><User /></el-icon> 学习画像
+            <el-tooltip v-if="profileMetadata" content="学习时间越久等级越高" placement="top">
+              <el-tag size="small" type="success" style="cursor: help; margin-left: 8px;">V{{ profileMetadata.version }}</el-tag>
             </el-tooltip>
+          </h4>
+          <div class="custom-tab-switcher">
+            <button
+              class="switcher-btn"
+              :class="{ active: profileTab === 'dimensions' }"
+              @click="profileTab = 'dimensions'"
+            >
+              能力维度
+            </button>
+            <button
+              class="switcher-btn"
+              :class="{ active: profileTab === 'weaknesses' }"
+              @click="profileTab = 'weaknesses'"
+            >
+              薄弱环节
+            </button>
+            <button
+              class="switcher-btn"
+              :class="{ active: profileTab === 'history' }"
+              @click="profileTab = 'history'"
+            >
+              画像变更日志
+            </button>
           </div>
         </div>
-        <div class="combined-profile-layout">
-          <div class="combined-left-pane">
-        <div class="profile-info-list">
-          <div class="profile-info-row">
-            <span><el-icon><Reading /></el-icon> 学历层次</span>
-            <strong>{{ studentProfile.education_level || '未填写' }}</strong>
-          </div>
-          <div class="profile-info-row">
-            <span><el-icon><UserFilled /></el-icon> 专业</span>
-            <strong>{{ studentProfile.major || '未填写' }}</strong>
-          </div>
-          <div class="profile-info-row">
-            <span><el-icon><Search /></el-icon> 院校</span>
-            <strong class="school-info-strong">
-              <span v-if="studentProfile.school_level" class="school-level-tag">{{ studentProfile.school_level }}</span>
-              {{ studentProfile.school || '未填写' }}
-            </strong>
-          </div>
-          <div class="profile-info-row">
-            <span><el-icon><Checked /></el-icon> 年级</span>
-            <strong>{{ studentProfile.grade || '未填写' }}</strong>
-          </div>
-          <div class="profile-info-row">
-            <span><el-icon><Cpu /></el-icon> 常用语言</span>
-            <strong>{{ studentProfile.preferred_language || '未填写' }}</strong>
-          </div>
-          <div class="profile-info-row">
-            <span><el-icon><Aim /></el-icon> 学习目标</span>
-            <strong>{{ studentProfile.learning_goal || '未填写' }}</strong>
-          </div>
 
-          <div class="profile-info-row course-display-row">
-            <span><el-icon><VideoPlay /></el-icon> 正在学习</span>
-            <div v-if="studentProfile.courses && studentProfile.courses.length > 0" class="course-display-wrapper">
-              <strong class="course-single-title" :title="studentProfile.courses[0]">{{ studentProfile.courses[0] }}</strong>
-              <el-popover
-                v-if="studentProfile.courses.length > 1"
-                placement="top"
-                :width="220"
-                trigger="hover"
-                popper-class="course-popover"
-              >
-                <template #reference>
-                  <el-button link type="primary" class="view-all-courses-btn">
-                    (共{{ studentProfile.courses.length }}门)
-                  </el-button>
-                </template>
-                <div class="all-courses-popover-content">
-                  <div class="popover-title">
-                    <el-icon><VideoPlay /></el-icon> 正在学习的全部课程
-                  </div>
-                  <div class="popover-course-list">
-                    <div v-for="(c, idx) in studentProfile.courses" :key="c" class="popover-course-item">
-                      <span class="course-number">{{ idx + 1 }}.</span>
-                      <span class="course-name">{{ c }}</span>
-                    </div>
-                  </div>
-                </div>
-              </el-popover>
-            </div>
-            <strong v-else>未填写</strong>
-          </div>
-        </div>
-          </div>
-
-          <div class="combined-divider"></div>
-
-          <div class="combined-right-pane">
-            <el-tabs v-model="profileTab" class="profile-tabs-modern">
-          <el-tab-pane label="能力维度" name="dimensions">
+        <div class="profile-tabs-content">
+          <div v-show="profileTab === 'dimensions'" class="tab-pane-content">
             <div class="dimensions-layout">
               <div class="dimensions-list">
                 <div
-                  v-for="dim in dimensionsData"
-                  :key="dim.key"
-                  class="dimension-item"
-                  :class="{ 'is-active': activeDimensionKey === dim.key }"
-                  @click="activeDimensionKey = activeDimensionKey === dim.key ? null : dim.key"
+                    v-for="dim in dimensionsData"
+                    :key="dim.key"
+                    class="dimension-item"
+                    :class="{ 'is-active': activeDimensionKey === dim.key }"
+                    @click="activeDimensionKey = activeDimensionKey === dim.key ? null : dim.key"
                 >
                   <div class="dim-main-row">
                     <span class="dim-icon"><el-icon><component :is="getDimIcon(dim.key)" /></el-icon></span>
                     <span class="dim-name">{{ dim.name }}</span>
                     <span class="dim-score">{{ dim.score }}分</span>
                     <span class="dim-trend" :class="dim.trend">
-                      <el-icon v-if="dim.trend === 'up'"><Top /></el-icon>
-                      <el-icon v-else-if="dim.trend === 'down'"><Bottom /></el-icon>
-                      <el-icon v-else><Right /></el-icon>
-                    </span>
+                  <el-icon v-if="dim.trend === 'up'"><Top /></el-icon>
+                  <el-icon v-else-if="dim.trend === 'down'"><Bottom /></el-icon>
+                  <el-icon v-else><Right /></el-icon>
+                </span>
                   </div>
                   <div class="dim-progress-track">
                     <div class="dim-progress-bar" :style="{ width: dim.score + '%' }" :class="dim.key"></div>
@@ -175,9 +191,9 @@
                 </div>
               </div>
             </div>
-          </el-tab-pane>
+          </div>
 
-          <el-tab-pane label="薄弱环节" name="weaknesses">
+          <div v-show="profileTab === 'weaknesses'" class="tab-pane-content">
             <div class="weakness-details-list">
               <div class="section-title-bar">
                 <span>诊断薄弱点 (共 {{ (studentProfile.weakness_points || []).length }} 项)</span>
@@ -198,17 +214,17 @@
                 暂无明显薄弱点记录，继续保持当前学习节奏。
               </div>
             </div>
-          </el-tab-pane>
+          </div>
 
-          <el-tab-pane label="画像变更日志" name="history">
+          <div v-show="profileTab === 'history'" class="tab-pane-content">
             <div class="profile-history-timeline">
               <el-timeline v-if="profileHistory.length > 0">
                 <el-timeline-item
-                  v-for="(item, index) in profileHistory"
-                  :key="item.version"
-                  :timestamp="formatTime(item.created_at || item.scored_at)"
-                  placement="top"
-                  :type="index === 0 ? 'primary' : 'info'"
+                    v-for="(item, index) in profileHistory"
+                    :key="item.version"
+                    :timestamp="formatTime(item.created_at || item.scored_at)"
+                    placement="top"
+                    :type="index === 0 ? 'primary' : 'info'"
                 >
                   <el-card class="history-log-card" :class="{ 'is-selected': selectedHistoryVersion === item.version }" @click="selectHistoryItem(item)">
                     <div class="log-header">
@@ -226,10 +242,9 @@
                 暂无历史版本变更记录。
               </div>
             </div>
-          </el-tab-pane>
-        </el-tabs>
+          </div>
+        </div>
 
-        <!-- History Compare Panel -->
         <div class="history-compare-panel" v-if="compareVersionData">
           <div class="compare-hdr">
             <span>对比历史版本 V{{ compareVersionData.version }} ({{ formatTime(compareVersionData.created_at || compareVersionData.scored_at) }})</span>
@@ -249,17 +264,6 @@
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div class="profile-card-footer" v-if="profileMetadata">
-          <div class="meta-footer-item">
-            <span>更新时间：</span><strong>{{ formatTime(profileMetadata.updated_at) }}</strong>
-          </div>
-          <div class="meta-footer-item">
-            <span>更新原因：</span><strong>{{ profileMetadata.updated_reason || '系统诊断生成' }}</strong>
-          </div>
-        </div>
           </div>
         </div>
       </div>
@@ -285,15 +289,11 @@
                 :class="getStatusClass(item.rawStatus)"
                 @click="viewResourceDetail(item)"
             >
-              <!-- 左侧状态线 -->
               <div class="status-bar"></div>
-
-              <!-- 类型图标 -->
               <div class="item-icon-wrapper">
                 <el-icon><component :is="getHistoryIcon(item.rawStatus)" /></el-icon>
               </div>
 
-              <!-- 主体信息 -->
               <div class="item-main-info">
                 <span class="item-title" :title="item.title">{{ item.title }}</span>
                 <div class="item-sub-meta">
@@ -305,7 +305,6 @@
                 </div>
               </div>
 
-              <!-- 动作 -->
               <div class="item-action-btn">
                 <span>查看</span>
                 <el-icon class="action-arrow"><ArrowRight /></el-icon>
@@ -317,7 +316,7 @@
 
       <div class="bento-card bento-span-2 performance-card">
         <div class="card-header-flex">
-          <h4>近期表现</h4>
+          <h4>近期任务</h4>
           <el-select v-model="timeRange" size="small" style="width: 90px" aria-label="时间范围">
             <el-option label="近 7 天" value="7" />
             <el-option label="近 30 天" value="30" />
@@ -327,30 +326,30 @@
           <div class="perf-box">
             <div class="perf-icon bg-blue-light"><el-icon class="text-blue"><Timer /></el-icon></div>
             <div class="perf-data">
-              <span class="label">区间学习时长</span>
+              <span class="label">累计学习时长</span>
               <span class="value">
                 {{ formatDurationValue(learningStats?.total_seconds || 45600) }}<small>{{ formatDurationUnit(learningStats?.total_seconds || 45600) }}</small>
               </span>
             </div>
           </div>
           <div class="perf-box">
-            <div class="perf-icon bg-green-light"><el-icon class="text-green"><Checked /></el-icon></div>
+            <div class="perf-icon bg-indigo-light"><el-icon class="text-indigo"><Reading /></el-icon></div>
             <div class="perf-data">
-              <span class="label">完成任务</span>
-              <span class="value">{{ dynamicStats.completedTasks }} <small>个</small></span>
+              <span class="label">已完成课程</span>
+              <span class="value">{{ dynamicStats.completedCourses }} <small>门</small></span>
             </div>
           </div>
           <div class="perf-box">
-            <div class="perf-icon bg-orange-light"><el-icon class="text-orange"><Calendar /></el-icon></div>
+            <div class="perf-icon bg-green-light"><el-icon class="text-green"><DocumentCopy /></el-icon></div>
             <div class="perf-data">
-              <span class="label">活跃天数</span>
-              <span class="value">{{ dynamicStats.activeDays }} <small>天</small></span>
+              <span class="label">生成资源数</span>
+              <span class="value">{{ dynamicStats.generatedResources }} <small>个</small></span>
             </div>
           </div>
           <div class="perf-box">
             <div class="perf-icon bg-purple-light"><el-icon class="text-purple"><ChatDotRound /></el-icon></div>
             <div class="perf-data">
-              <span class="label">互动次数</span>
+              <span class="label">AI互动次数</span>
               <span class="value">{{ dynamicStats.interactions }} <small>次</small></span>
             </div>
           </div>
@@ -459,11 +458,11 @@
                     <div v-if="profileForm.courses.length > 0" class="editor-course-selection">
                       <strong class="course-single-title" :title="profileForm.courses[0]">{{ profileForm.courses[0] }}</strong>
                       <el-popover
-                        v-if="profileForm.courses.length > 1"
-                        placement="top"
-                        :width="220"
-                        trigger="hover"
-                        popper-class="course-popover"
+                          v-if="profileForm.courses.length > 1"
+                          placement="top"
+                          :width="220"
+                          trigger="hover"
+                          popper-class="course-popover"
                       >
                         <template #reference>
                           <el-button link type="primary" class="view-all-courses-btn" @click.stop>
@@ -595,8 +594,8 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import {
   InfoFilled, Timer, Checked, VideoPlay, Search, Check, ArrowRight, ArrowLeft,
-  Reading, UserFilled, Clock, Cpu, StarFilled, DocumentCopy, Aim,
-  Top, Bottom, Right, User, Calendar, ChatDotRound
+  Reading, UserFilled, Clock, Cpu, DocumentCopy, Aim,
+  Top, Bottom, Right, User, ChatDotRound
 } from '@element-plus/icons-vue'
 import { getMe, uploadAvatar } from '@/api/auth'
 import {
@@ -843,8 +842,8 @@ const dynamicStats = computed(() => {
   const scores = profileScoreData.value?.metrics?.dimension_scores || {}
   const scoreVals = Object.values(scores).filter((v): v is number => typeof v === 'number')
   const avgScore = scoreVals.length > 0
-    ? Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length)
-    : 0
+      ? Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length)
+      : 0
   const completedResourcesCount = resourceHistory.value.filter(r => r.status === 'completed').length
   const totalCourses = studentProfile.value.courses?.length || 0
   const activeDays = learningStats.value?.daily_breakdown?.filter((item) => item.seconds > 0).length || 0
@@ -1255,31 +1254,159 @@ const getStatusClass = (status: string) => {
 .no-course-text { font-size: 12px; color: var(--color-text-muted); }
 
 /* User Card */
-.user-header { display: flex; align-items: center; gap: var(--space-5); margin-bottom: var(--space-6); position: relative; }
+.user-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: var(--space-6);
+  background: linear-gradient(135deg, var(--color-surface) 0%, rgba(79, 70, 229, 0.02) 100%);
+  transition: all var(--transition-slow);
+  min-height: 300px;
+}
+.user-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-primary-border);
+}
+.user-divider {
+  width: 100%;
+  height: 1px;
+  border-top: 1px dashed var(--color-border);
+  margin: var(--space-4) 0;
+}
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-2);
+}
+.info-mini-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-bg);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+  transition: all var(--transition-fast);
+}
+.info-mini-card:hover {
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
+}
+.info-mini-card.span-2 {
+  grid-column: span 2;
+}
+.info-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(79, 70, 229, 0.06);
+  color: var(--color-primary);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.info-content-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+.info-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+.info-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: left;
+}
+.info-value .school-info-strong {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+.info-value .school-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.user-card .course-display-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-start;
+  width: 100%;
+  margin-left: 0 !important;
+}
+.user-card .course-single-title {
+  color: var(--color-text-strong);
+  font-size: 0.85rem;
+  font-weight: 700;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+.user-card .view-all-courses-btn {
+  font-size: 0.72rem !important;
+  color: var(--color-primary) !important;
+  padding: 0 !important;
+  margin-left: 2px !important;
+  height: auto !important;
+}
+.user-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  margin-bottom: 0;
+  position: relative;
+  text-align: left;
+  width: 100%;
+}
 .avatar-uploader { cursor: pointer; }
-.avatar-box { width: 72px; height: 72px; background: var(--color-primary-soft); border-radius: var(--radius-pill); display: flex; align-items: center; justify-content: center; font-size: 2.2rem; color: var(--color-primary); position: relative; overflow: hidden; transition: background-color var(--transition-slow); }
-.avatar-box:hover { background: var(--color-primary-soft); }
+.avatar-box { width: 72px; height: 72px; background: var(--color-primary-soft); border-radius: var(--radius-pill); display: flex; align-items: center; justify-content: center; font-size: 2.2rem; color: var(--color-primary); position: relative; overflow: hidden; transition: background-color var(--transition-slow), transform var(--transition-slow); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1); }
+.avatar-box:hover { background: var(--color-primary-soft); transform: scale(1.05); }
 .avatar-box.has-avatar { background: transparent; }
 .avatar-image { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-pill); }
 .avatar-upload-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity var(--transition-slow); border-radius: var(--radius-pill); }
 .avatar-box:hover .avatar-upload-overlay { opacity: 1; }
 .avatar-upload-overlay .el-icon { color: white; font-size: 1.5rem; }
-.user-info { flex: 1; }
+.user-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
 .name-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
-.name-row h3 { margin: 0; font-size: 1.5rem; color: var(--color-text); font-weight: 700; }
-.verify-icon { color: var(--color-primary); font-size: 1.1rem; }
-.email-text { color: var(--color-text-light); font-size: 0.95rem; margin: 0 0 var(--space-2) 0; }
-.major { font-size: 1rem; color: var(--color-text); margin: 0 0 var(--space-3) 0; }
+.name-row h3 { margin: 0; font-size: 1.4rem; color: var(--color-text); font-weight: 800; letter-spacing: -0.02em; }
+.verify-icon { color: var(--color-primary); font-size: 1.15rem; }
+.email-text { color: var(--color-text-muted); font-size: 0.82rem; margin: 0 0 var(--space-1) 0; }
+.major { font-size: 0.88rem; color: var(--color-text-secondary); margin: 0 0 var(--space-2) 0; font-weight: 500; }
 .tags { display: flex; gap: var(--space-2); }
-.tag { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; background: var(--color-bg); color: var(--color-text); }
-.tag.outline { background: transparent; border: 1px solid var(--color-border); }
-.edit-btn { position: absolute; right: 0; top: 0; }
+.tag { padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; background: var(--color-primary-soft); color: var(--color-primary); border: 1px solid transparent; }
+.tag.outline { background: transparent; border: 1px solid var(--color-primary-border); color: var(--color-primary-text); }
+.user-card .edit-btn { position: absolute; right: 0; top: 0; border-radius: var(--radius-md); font-weight: 600; }
 .w-full { width: 100%; }
-
-.user-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--color-surface-hover); margin-top: var(--space-6); }
-.stat-item { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
-.stat-val { font-size: 1.4rem; font-weight: var(--weight-extrabold); color: var(--color-text); }
-.stat-label { font-size: 0.75rem; color: var(--color-text-faint); margin-top: 2px; }
 
 /* Radar & Trend */
 .radar-container { height: 220px; width: 100%; flex: 1; }
@@ -1290,10 +1417,12 @@ const getStatusClass = (status: string) => {
 .perf-box { display: flex; align-items: center; gap: 15px; background: var(--color-bg); padding: var(--space-4); border-radius: var(--radius-xl); }
 .perf-icon { width: 44px; height: 44px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
 .bg-blue-light { background: var(--color-info-soft); }
+.bg-indigo-light { background: var(--color-primary-soft); }
 .bg-green-light { background: var(--color-success-soft); }
 .bg-orange-light { background: #fff2e8; }
 .bg-purple-light { background: #f3e8ff; }
 .text-blue { color: var(--color-info); }
+.text-indigo { color: var(--color-primary); }
 .text-green { color: var(--color-success); }
 .text-orange { color: #fa8c16; }
 .text-purple { color: #9333ea; }
@@ -1517,24 +1646,45 @@ const getStatusClass = (status: string) => {
 
 /* Complete Learner Profile styles */
 .combined-profile-card {
-  min-height: 380px;
+  min-height: 300px;
+  align-self: start;
 }
 .profile-meta-tags {
   display: flex;
   gap: 6px;
   align-items: center;
 }
-.profile-tabs-modern {
-  margin-top: 10px;
+.custom-tab-switcher {
+  display: flex;
+  background: var(--color-bg);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
 }
-.profile-tabs-modern :deep(.el-tabs__item) {
-  font-weight: 700;
-  font-size: 0.9rem;
+.switcher-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
-.profile-tabs-modern :deep(.el-tabs__content) {
-  height: 290px;
+.switcher-btn:hover {
+  color: var(--color-text-strong);
+}
+.switcher-btn.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+.profile-tabs-content {
+  height: 280px;
   overflow-y: auto;
   padding-right: 4px;
+  margin-top: var(--space-4);
 }
 .dimensions-list {
   display: flex;
@@ -1814,7 +1964,7 @@ const getStatusClass = (status: string) => {
   gap: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--color-border);
-  margin-top: 12px;
+  margin-top: auto;
   font-size: 0.75rem;
   color: var(--color-text-muted);
 }
