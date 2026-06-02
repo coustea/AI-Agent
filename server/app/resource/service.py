@@ -1260,6 +1260,6 @@ async def _update_node_resource_status(
 # ---------------------------------------------------------------------------
 # 向后兼容别名（逐步迁移后移除）
 # ---------------------------------------------------------------------------
-ResourceUsecases = ResourceService
+ResourceService = ResourceUsecases
 bg_gen_task = run_multi_agent_generation
 bg_single_gen_task = run_single_agent_generation

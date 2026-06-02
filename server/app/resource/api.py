@@ -27,7 +27,7 @@ from app.infra.database import get_session, session_scope
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
-from app.resource.service import ResourceUsecases, run_multi_agent_generation, bg_single_gen_task
+from app.resource.service import ResourceService, run_multi_agent_generation, run_single_agent_generation
 from app.memory.service import MemoryService
 from app.infra.response import HttpResponse
 

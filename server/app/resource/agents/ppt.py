@@ -13,7 +13,7 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import extract_json_from_llm_output
+from app.resource.agents.common import salvage_json_from_llm
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
@@ -231,7 +231,7 @@ class PptAgent(BaseResourceAgent):
 
     def _salvage_ppt_payload(self, raw: str) -> dict | None:
         """Try to parse raw LLM output as PPT JSON; convert old format if needed."""
-        data = extract_json_from_llm_output(raw, require_key="slides")
+        data = salvage_json_from_llm(raw, require_key="slides")
         if data is None:
             return None
 

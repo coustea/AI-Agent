@@ -1,10 +1,10 @@
 <template>
   <div class="markdown-resource" :class="{ compact }">
     <div v-if="content" class="technical-frame">
-      
+
 
       <MarkdownPreview class="markdown-shell" :content="content" />
-      
+
       <div class="frame-footer">
         <span class="mono-tag">EOF_READY</span>
         <div class="footer-line"></div>
@@ -29,80 +29,33 @@ const props = defineProps<{
 
 const content = computed(() => getMarkdownContent(props.resultData))
 </script>
-
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
 
 .markdown-resource {
   min-width: 0;
   width: 100%;
-  --primary: #475569; /* Slate 600 */
-  --bg: #FFFFFF;
-  --fg: #334155; /* Slate 700 */
-  --border: #E2E8F0;
-  --accent: #6366F1; /* Indigo 500 */
+
+  --primary: #475569;
+  --bg: #ffffff;
+  --fg: #334155;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --soft-bg: #f8fafc;
+  --code-bg: #f9fafb;
+  --inline-code-bg: #eef2ff;
+  --accent: #6366f1;
 }
 
-/* 技术框架样式 */
 .technical-frame {
   position: relative;
   background: var(--bg);
-  border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 24px 32px 32px;
   box-shadow: none;
   transition: all 0.3s ease;
 }
 
-/* 拐角装饰 */
-.frame-corners {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--primary);
-  pointer-events: none;
-}
-
-.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
-.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
-.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
-
-/* 头部 HUD */
-.frame-header {
-  position: absolute;
-  top: 12px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-indicator {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: none;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.2); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.technical-label {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.7rem;
-  color: var(--primary);
-  letter-spacing: 1px;
-  opacity: 0.8;
-}
-
-/* 底部 HUD */
 .frame-footer {
   margin-top: 24px;
   display: flex;
@@ -114,9 +67,9 @@ const content = computed(() => getMarkdownContent(props.resultData))
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
   color: var(--primary);
-  background: rgba(0, 0, 0, 0.1);
+  background: #f1f5f9;
   padding: 2px 6px;
-  border-radius: 2px;
+  border-radius: 4px;
 }
 
 .footer-line {
@@ -125,26 +78,32 @@ const content = computed(() => getMarkdownContent(props.resultData))
   background: linear-gradient(to right, var(--border), transparent);
 }
 
-/* Markdown 内容样式 */
+/* Markdown 主体 */
 .markdown-shell {
   color: var(--fg);
-  line-height: 1.7;
+  line-height: 1.75;
   overflow-wrap: anywhere;
-  font-family: 'Fira Code', monospace;
+  font-family:
+      'Fira Code',
+      Consolas,
+      Monaco,
+      'Courier New',
+      monospace;
   font-size: 0.95rem;
+  background: #ffffff;
 }
 
-/* 标题优化 */
+/* 标题 */
 .markdown-shell :deep(h1),
 .markdown-shell :deep(h2),
 .markdown-shell :deep(h3) {
   font-family: 'Share Tech Mono', monospace;
-  color: var(--fg);
+  color: #1e293b;
   border-bottom: 1px dashed var(--border);
   padding-bottom: 0.5em;
   margin-top: 2em;
   margin-bottom: 1em;
-  font-weight: normal;
+  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -153,44 +112,134 @@ const content = computed(() => getMarkdownContent(props.resultData))
 .markdown-shell :deep(h1)::before,
 .markdown-shell :deep(h2)::before {
   content: '>';
-  color: var(--primary);
+  color: var(--accent);
   font-weight: bold;
 }
 
-/* 代码块优化 */
+/* 段落 */
+.markdown-shell :deep(p) {
+  color: var(--fg);
+  margin: 1em 0;
+}
+
+/* 列表 */
+.markdown-shell :deep(ul),
+.markdown-shell :deep(ol) {
+  padding-left: 1.5em;
+  margin: 1em 0;
+}
+
+.markdown-shell :deep(li) {
+  margin-bottom: 0.5em;
+}
+
+/* 引用块：浅色背景 */
+.markdown-shell :deep(blockquote) {
+  border-left: 4px solid #c7d2fe;
+  background: #f8fafc;
+  padding: 12px 20px;
+  margin: 1.5em 0;
+  border-radius: 6px;
+  color: #475569;
+  font-style: normal;
+}
+
+/* 表格 */
+.markdown-shell :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+.markdown-shell :deep(th),
+.markdown-shell :deep(td) {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  color: var(--fg);
+}
+
+.markdown-shell :deep(th) {
+  background: #f1f5f9;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.markdown-shell :deep(tr:nth-child(even)) {
+  background: #f8fafc;
+}
+
+/* 代码块：浅色背景，禁止黑色背景 */
 .markdown-shell :deep(pre) {
-  border-radius: 8px;
-  background: #FFFFFF !important; /* 深色终端背景 */
-  border: 1px solid #334155;
+  position: relative;
+  border-radius: 10px;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0;
   padding: 20px;
   margin: 1.5em 0;
   overflow: auto;
-  position: relative;
+  color: #334155;
 }
 
-/* 终端装饰点 */
+/* 代码块内部 code */
+.markdown-shell :deep(pre code) {
+  display: block;
+  font-family:
+      'Fira Code',
+      Consolas,
+      Monaco,
+      'Courier New',
+      monospace;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  background: transparent !important;
+  color: inherit;
+  padding: 0;
+}
+
+/* 行内代码：浅色背景 */
+.markdown-shell :deep(p > code),
+.markdown-shell :deep(li > code),
+.markdown-shell :deep(td > code) {
+  font-family:
+      'Fira Code',
+      Consolas,
+      Monaco,
+      'Courier New',
+      monospace;
+  background: #eef2ff !important;
+  color: #4338ca;
+  padding: 0.18em 0.4em;
+  border-radius: 5px;
+  font-size: 0.86em;
+  font-weight: 500;
+}
+
+/* 代码块语言标签 */
 .markdown-shell :deep(pre)::before {
-  content: '•••';
+  content: 'CODE';
   position: absolute;
   top: 8px;
-  left: 12px;
-  color: #334155;
-  font-size: 14px;
-  letter-spacing: 2px;
+  right: 12px;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  font-family: 'Share Tech Mono', monospace;
 }
 
-/* 复制按钮样式 */
+/* 复制按钮：浅色风格 */
 .markdown-shell :deep(.copy-code-btn) {
   position: absolute;
   top: 10px;
   right: 12px;
-  background: rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  color: var(--primary);
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
   transition: all 0.2s;
   z-index: 10;
@@ -202,52 +251,73 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 .markdown-shell :deep(.copy-code-btn:hover) {
-  background: var(--primary);
-  color: white;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
 }
 
 .markdown-shell :deep(.copy-code-btn.copied) {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
 }
 
-.markdown-shell :deep(code) {
-  font-family: 'Fira Code', monospace;
-  font-size: 0.85em;
+/* highlight.js 浅色语法高亮覆盖 */
+.markdown-shell :deep(.hljs) {
   background: transparent !important;
-  padding: 0;
+  color: #334155 !important;
 }
 
-.markdown-shell :deep(p > code),
-.markdown-shell :deep(li > code) {
-  background: rgba(0, 0, 0, 0.1);
-  padding: 0.2em 0.4em;
-  border-radius: 4px;
-  color: var(--primary);
-  font-weight: 500;
+.markdown-shell :deep(.hljs-keyword),
+.markdown-shell :deep(.hljs-selector-tag),
+.markdown-shell :deep(.hljs-title.function_) {
+  color: #7c3aed;
 }
 
-/* 引用样式 */
-.markdown-shell :deep(blockquote) {
-  border-left: 3px solid var(--primary);
-  background: rgba(0, 0, 0, 0.03);
-  padding: 12px 20px;
-  margin: 1.5em 0;
-  border-radius: 2px;
-  color: #475569;
+.markdown-shell :deep(.hljs-string),
+.markdown-shell :deep(.hljs-attr),
+.markdown-shell :deep(.hljs-symbol) {
+  color: #059669;
+}
+
+.markdown-shell :deep(.hljs-number),
+.markdown-shell :deep(.hljs-literal),
+.markdown-shell :deep(.hljs-boolean) {
+  color: #ea580c;
+}
+
+.markdown-shell :deep(.hljs-comment) {
+  color: #94a3b8;
   font-style: italic;
 }
 
-/* 列表样式 */
-.markdown-shell :deep(ul),
-.markdown-shell :deep(ol) {
-  padding-left: 1.5em;
-  margin: 1em 0;
+.markdown-shell :deep(.hljs-built_in),
+.markdown-shell :deep(.hljs-type),
+.markdown-shell :deep(.hljs-class .hljs-title) {
+  color: #2563eb;
 }
 
-.markdown-shell :deep(li) {
-  margin-bottom: 0.5em;
+.markdown-shell :deep(.hljs-variable),
+.markdown-shell :deep(.hljs-template-variable) {
+  color: #be123c;
+}
+
+/* Shiki 浅色主题兜底 */
+.markdown-shell :deep(.shiki) {
+  background: #f8fafc !important;
+  color: #334155 !important;
+}
+
+.markdown-shell :deep(.shiki code) {
+  background: transparent !important;
+}
+
+/* 防止第三方 Markdown 样式带入黑色背景 */
+.markdown-shell :deep(pre),
+.markdown-shell :deep(code),
+.markdown-shell :deep(.hljs),
+.markdown-shell :deep(.shiki) {
+  text-shadow: none !important;
 }
 
 /* 紧凑模式 */
@@ -258,7 +328,6 @@ const content = computed(() => getMarkdownContent(props.resultData))
   box-shadow: none;
 }
 
-.compact .frame-header,
 .compact .frame-footer {
   display: none;
 }
@@ -267,6 +336,7 @@ const content = computed(() => getMarkdownContent(props.resultData))
   max-height: 300px;
   overflow: hidden;
   font-size: 0.85rem;
+  background: transparent;
   mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
 }
 
@@ -277,11 +347,12 @@ const content = computed(() => getMarkdownContent(props.resultData))
   border-bottom: 0;
 }
 
+/* 空状态 */
 .markdown-empty {
   padding: 48px;
   border: 1px dashed var(--border);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  background: #f8fafc;
   color: var(--primary);
   text-align: center;
   display: flex;
@@ -302,4 +373,3 @@ const content = computed(() => getMarkdownContent(props.resultData))
   letter-spacing: 1px;
 }
 </style>
-

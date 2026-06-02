@@ -197,7 +197,12 @@ class AgentEventEmitter:
         task_id: str | None = None,
         progress: int = 0,
     ) -> None:
-        """发送资源生成完成事件。"""
+        """发送资源生成完成事件。
+
+        Args:
+            content: 生成的资源内容（str / dict / list）。
+            resource: 可选的 GeneratedResourceItem 实例，提供则自动序列化。
+        """
         resource_payload = resource.model_dump(mode="json") if hasattr(resource, "model_dump") else resource
         if resource_payload is None:
             resource_payload = {
@@ -248,7 +253,11 @@ class AgentEventEmitter:
         bundle: Any = None,
         progress: int = 0,
     ) -> None:
-        """发送组装事件。"""
+        """发送组装事件。
+
+        Args:
+            bundle: ResourceBundle 实例或包含资源列表的字典，提供则自动序列化。
+        """
         bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
         item_count = 0
         if isinstance(bundle_payload, list):
