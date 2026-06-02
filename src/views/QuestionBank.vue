@@ -30,18 +30,18 @@
 
                     <!-- 客观题选项 -->
                     <div
-                      v-if="isOptionQuestion(randomQuestion)"
-                      :class="['q-browser-options', 'challenge-options', { 'is-binary': randomQuestion.type === '判断题' }]"
+                        v-if="isOptionQuestion(randomQuestion)"
+                        :class="['q-browser-options', 'challenge-options', { 'is-binary': randomQuestion.type === '判断题' }]"
                     >
-                      <div 
-                        v-for="(val, key) in getQuestionOptions(randomQuestion)"
-                        :key="key"
-                        :class="['mini-option', {
+                      <div
+                          v-for="(val, key) in getQuestionOptions(randomQuestion)"
+                          :key="key"
+                          :class="['mini-option', {
                           'selected': isAnswerSelected(randomUserAnswer, key),
                           'correct': randomSubmitted && isCorrectOption(randomQuestion, key),
                           'wrong': randomSubmitted && isAnswerSelected(randomUserAnswer, key) && !isCorrectOption(randomQuestion, key)
                         }]"
-                        @click="selectRandomOption(randomQuestion, key)"
+                          @click="selectRandomOption(randomQuestion, key)"
                       >
                         <strong>{{ key }}:</strong>
                         <span class="option-markdown markdown-body" v-html="renderMarkdown(val)"></span>
@@ -51,22 +51,22 @@
                     <!-- 填空或问答 -->
                     <div v-else class="text-answer-input">
                       <el-input
-                        v-model="randomUserAnswer"
-                        :placeholder="randomQuestion.type === '填空题' ? '请输入填空答案' : '请在此简要作答，提交后可对照解析自我打分...'"
-                        :disabled="randomSubmitted"
-                        type="textarea"
-                        :rows="2"
+                          v-model="randomUserAnswer"
+                          :placeholder="randomQuestion.type === '填空题' ? '请输入填空答案' : '请在此简要作答，提交后可对照解析自我打分...'"
+                          :disabled="randomSubmitted"
+                          type="textarea"
+                          :rows="2"
                       />
                     </div>
 
                     <!-- 提交按钮 -->
                     <div class="action-footer">
-                      <el-button 
-                        v-if="!randomSubmitted" 
-                        type="primary" 
-                        :disabled="!hasAnswer(randomUserAnswer)"
-                        class="submit-challenge-btn"
-                        @click="submitRandomAnswer"
+                      <el-button
+                          v-if="!randomSubmitted"
+                          type="primary"
+                          :disabled="!hasAnswer(randomUserAnswer)"
+                          class="submit-challenge-btn"
+                          @click="submitRandomAnswer"
                       >
                         提交答案
                       </el-button>
@@ -77,11 +77,11 @@
                           <span>{{ randomIsCorrect ? '回答正确！' : '回答错误' }}</span>
                         </div>
                         <div class="feedback-actions">
-                          <el-button 
-                            type="primary" 
-                            size="small" 
-                            class="next-question-btn"
-                            @click="loadNewRandomQuestion"
+                          <el-button
+                              type="primary"
+                              size="small"
+                              class="next-question-btn"
+                              @click="loadNewRandomQuestion"
                           >
                             下一题
                           </el-button>
@@ -99,12 +99,12 @@
                         </div>
                         <div class="analysis-tags">
                           <span class="tag-title">知识点：</span>
-                          <el-tag 
-                            v-for="kp in randomQuestion.knowledge_points" 
-                            :key="kp" 
-                            size="small" 
-                            type="info"
-                            class="kp-tag"
+                          <el-tag
+                              v-for="kp in randomQuestion.knowledge_points"
+                              :key="kp"
+                              size="small"
+                              type="info"
+                              class="kp-tag"
                           >
                             {{ kp }}
                           </el-tag>
@@ -125,7 +125,7 @@
 
                 <div class="smart-assembly-body">
                   <p class="desc">算法将为您从题库中随机抽取题目，生成一份标准模拟考试试卷。</p>
-                  
+
                   <div class="form-row-2">
                     <div class="form-item">
                       <label>选择科目</label>
@@ -224,10 +224,10 @@
                 <el-icon class="icon-accent"><Search /></el-icon>
                 <span>题库检索</span>
               </div>
-              <button 
-                class="toggle-filters-btn" 
-                :class="{ 'is-expanded': isFiltersExpanded }" 
-                @click="toggleFilters"
+              <button
+                  class="toggle-filters-btn"
+                  :class="{ 'is-expanded': isFiltersExpanded }"
+                  @click="toggleFilters"
               >
                 <el-icon><Filter /></el-icon>
                 <span>{{ isFiltersExpanded ? '隐藏筛选' : '高级筛选' }}</span>
@@ -243,10 +243,10 @@
                   <div class="filter-dropdown-item search-item">
                     <span class="filter-label">搜索</span>
                     <el-input
-                      v-model="filters.query"
-                      placeholder="搜索题目/知识点..."
-                      clearable
-                      class="filter-select"
+                        v-model="filters.query"
+                        placeholder="搜索题目/知识点..."
+                        clearable
+                        class="filter-select"
                     >
                       <template #prefix>
                         <el-icon><Search /></el-icon>
@@ -256,10 +256,10 @@
                   <div class="filter-dropdown-item">
                     <span class="filter-label">科目</span>
                     <el-select
-                      v-model="filters.subject"
-                      placeholder="全部科目"
-                      clearable
-                      class="filter-select"
+                        v-model="filters.subject"
+                        placeholder="全部科目"
+                        clearable
+                        class="filter-select"
                     >
                       <el-option v-for="subj in subjects" :key="subj" :label="subj" :value="subj" />
                     </el-select>
@@ -267,10 +267,10 @@
                   <div class="filter-dropdown-item">
                     <span class="filter-label">难度</span>
                     <el-select
-                      v-model="filters.difficulty"
-                      placeholder="全部难度"
-                      clearable
-                      class="filter-select"
+                        v-model="filters.difficulty"
+                        placeholder="全部难度"
+                        clearable
+                        class="filter-select"
                     >
                       <el-option v-for="diff in difficulties" :key="diff" :label="diff" :value="diff" />
                     </el-select>
@@ -278,10 +278,10 @@
                   <div class="filter-dropdown-item">
                     <span class="filter-label">题型</span>
                     <el-select
-                      v-model="filters.type"
-                      placeholder="全部题型"
-                      clearable
-                      class="filter-select"
+                        v-model="filters.type"
+                        placeholder="全部题型"
+                        clearable
+                        class="filter-select"
                     >
                       <el-option v-for="t in types" :key="t" :label="t" :value="t" />
                     </el-select>
@@ -299,10 +299,10 @@
                 <el-icon class="empty-icon"><FolderOpened /></el-icon>
                 <p>未找到匹配的题目，请尝试调整筛选条件</p>
               </div>
-              <div 
-                v-for="q in filteredQuestions" 
-                :key="q.id" 
-                class="browser-question-card"
+              <div
+                  v-for="q in filteredQuestions"
+                  :key="q.id"
+                  class="browser-question-card"
               >
                 <div class="q-card-header">
                   <div class="tags-left">
@@ -311,11 +311,11 @@
                     <el-tag size="small" type="warning" effect="light">{{ q.type }}</el-tag>
                     <el-tag v-if="q.type === '多选题'" size="small" type="primary" effect="plain">可多选</el-tag>
                     <el-tag
-                      v-if="browserSubmitted[q.id] && !browserCorrect[q.id]"
-                      size="small"
-                      type="danger"
-                      effect="dark"
-                      class="wrong-question-tag"
+                        v-if="browserSubmitted[q.id] && !browserCorrect[q.id]"
+                        size="small"
+                        type="danger"
+                        effect="dark"
+                        class="wrong-question-tag"
                     >
                       错题
                     </el-tag>
@@ -323,17 +323,17 @@
                 </div>
                 <div class="q-card-body">
                   <div class="q-content markdown-body" v-html="renderMarkdown(q.content)"></div>
-                  
+
                   <div v-if="isOptionQuestion(q)" class="q-browser-options">
                     <div
-                      v-for="(val, key) in getQuestionOptions(q)"
-                      :key="key"
-                      :class="['mini-option', {
+                        v-for="(val, key) in getQuestionOptions(q)"
+                        :key="key"
+                        :class="['mini-option', {
                         'selected': isAnswerSelected(browserAnswers[q.id], key),
                         'correct': browserSubmitted[q.id] && isCorrectOption(q, key),
                         'wrong': browserSubmitted[q.id] && isAnswerSelected(browserAnswers[q.id], key) && !isCorrectOption(q, key)
                       }]"
-                      @click="selectBrowserOption(q, key)"
+                        @click="selectBrowserOption(q, key)"
                     >
                       <strong>{{ key }}:</strong>
                       <span class="option-markdown markdown-body" v-html="renderMarkdown(val)"></span>
@@ -341,44 +341,44 @@
                   </div>
                   <div v-else class="browser-answer-input">
                     <el-input
-                      v-model="browserAnswers[q.id]"
-                      :disabled="browserSubmitted[q.id]"
-                      type="textarea"
-                      :rows="3"
-                      :placeholder="q.type === '填空题' ? '请输入填空答案...' : '请输入您的回答...'"
+                        v-model="browserAnswers[q.id]"
+                        :disabled="browserSubmitted[q.id]"
+                        type="textarea"
+                        :rows="3"
+                        :placeholder="q.type === '填空题' ? '请输入填空答案...' : '请输入您的回答...'"
                     />
                   </div>
                 </div>
                 <div class="q-card-footer">
                   <div
-                    v-if="browserSubmitted[q.id]"
-                    class="result-indicator browser-result"
-                    :class="browserCorrect[q.id] ? 'correct' : 'wrong'"
+                      v-if="browserSubmitted[q.id]"
+                      class="result-indicator browser-result"
+                      :class="browserCorrect[q.id] ? 'correct' : 'wrong'"
                   >
                     <el-icon v-if="browserCorrect[q.id]"><CircleCheck /></el-icon>
                     <el-icon v-else><CircleClose /></el-icon>
                     <span>{{ browserCorrect[q.id] ? '回答正确！' : '回答错误' }}</span>
                   </div>
                   <el-button
-                    type="primary"
-                    size="small"
-                    :disabled="browserSubmitted[q.id] || !hasAnswer(browserAnswers[q.id])"
-                    class="submit-browser-btn"
-                    @click="submitBrowserAnswer(q)"
+                      type="primary"
+                      size="small"
+                      :disabled="browserSubmitted[q.id] || !hasAnswer(browserAnswers[q.id])"
+                      class="submit-browser-btn"
+                      @click="submitBrowserAnswer(q)"
                   >
                     提交答案
                   </el-button>
-                  <el-button 
-                    link 
-                    type="primary" 
-                    size="small" 
-                    class="toggle-detail-btn"
-                    @click="toggleQuestionDetail(q.id)"
+                  <el-button
+                      link
+                      type="primary"
+                      size="small"
+                      class="toggle-detail-btn"
+                      @click="toggleQuestionDetail(q.id)"
                   >
                     {{ isDetailExpanded(q.id) ? '收起答案解析' : '查看答案解析' }}
                   </el-button>
                 </div>
-                
+
                 <transition name="el-collapse-transition">
                   <div v-if="isDetailExpanded(q.id)" class="q-card-detail-analysis">
                     <div class="detail-ans">参考答案: <span class="ans-label">{{ formatAnswer(q.answer) }}</span></div>
@@ -437,12 +437,12 @@
       <div class="exam-main-layout">
         <!-- 试卷主体 -->
         <main class="exam-paper-content">
-          <div 
-            v-for="(q, index) in examPaper" 
-            :key="q.id" 
-            :id="'exam-question-' + index"
-            :class="['exam-question-card', { 'active-question': currentExamIndex === index }]"
-            @click="currentExamIndex = index"
+          <div
+              v-for="(q, index) in examPaper"
+              :key="q.id"
+              :id="'exam-question-' + index"
+              :class="['exam-question-card', { 'active-question': currentExamIndex === index }]"
+              @click="currentExamIndex = index"
           >
             <div class="q-title-row">
               <div class="q-title-left">
@@ -465,16 +465,16 @@
 
             <!-- 客观题选项 -->
             <div v-if="isOptionQuestion(q)" class="q-options-area">
-              <div 
-                v-for="(val, key) in getQuestionOptions(q)"
-                :key="key"
-                :class="['exam-option-item', { 
+              <div
+                  v-for="(val, key) in getQuestionOptions(q)"
+                  :key="key"
+                  :class="['exam-option-item', {
                   'selected': isAnswerSelected(examAnswers[q.id], key),
                   'is-correct': isExamSubmitted && isCorrectOption(q, key),
                   'is-wrong': isExamSubmitted && isAnswerSelected(examAnswers[q.id], key) && !isCorrectOption(q, key),
                   'is-disabled': isExamSubmitted
                 }]"
-                @click="!isExamSubmitted && selectExamOption(q, key)"
+                  @click="!isExamSubmitted && selectExamOption(q, key)"
               >
                 <span class="indicator">{{ key }}</span>
                 <span class="text option-markdown markdown-body" v-html="renderMarkdown(val)"></span>
@@ -485,15 +485,15 @@
 
             <!-- 填空题 -->
             <div v-else-if="q.type === '填空题'" class="q-textarea-area">
-              <el-input 
-                v-model="examAnswers[q.id]" 
-                type="textarea"
-                :rows="4"
-                placeholder="请输入填空答案..."
-                class="answer-textarea"
-                :disabled="isExamSubmitted"
+              <el-input
+                  v-model="examAnswers[q.id]"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="请输入填空答案..."
+                  class="answer-textarea"
+                  :disabled="isExamSubmitted"
               />
-              
+
               <div v-if="isExamSubmitted" class="exam-text-answer-review">
                 <div class="user-answer-indicator" :class="isExamAnswerCorrect(q) ? 'correct' : 'wrong'">
                   <strong>您的回答：</strong>{{ examAnswers[q.id] || '(未作答)' }}
@@ -511,15 +511,15 @@
 
             <!-- 简答题 -->
             <div v-else-if="q.type === '简答题'" class="q-textarea-area">
-              <el-input 
-                v-model="examAnswers[q.id]" 
-                type="textarea" 
-                :rows="4"
-                placeholder="请详细描述您的解答步骤与答案..."
-                class="answer-textarea"
-                :disabled="isExamSubmitted"
+              <el-input
+                  v-model="examAnswers[q.id]"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="请详细描述您的解答步骤与答案..."
+                  class="answer-textarea"
+                  :disabled="isExamSubmitted"
               />
-              
+
               <div v-if="isExamSubmitted" class="exam-text-answer-review">
                 <div class="user-answer-indicator" :class="isExamAnswerCorrect(q) ? 'correct' : 'wrong'">
                   <strong>您的回答：</strong>{{ examAnswers[q.id] || '(未作答)' }}
@@ -537,17 +537,17 @@
 
             <!-- 查看解析按钮与面板 -->
             <div v-if="isExamSubmitted" class="review-analysis-toggle-row">
-              <el-button 
-                type="primary" 
-                plain 
-                size="small" 
-                class="review-toggle-btn"
-                @click="toggleReviewAnalysis(q.id)"
+              <el-button
+                  type="primary"
+                  plain
+                  size="small"
+                  class="review-toggle-btn"
+                  @click="toggleReviewAnalysis(q.id)"
               >
                 {{ isReviewAnalysisVisible(q.id) ? '收起答案解析' : '查看答案解析' }}
               </el-button>
             </div>
-            
+
             <transition name="el-collapse-transition">
               <div v-if="isExamSubmitted && isReviewAnalysisVisible(q.id)" class="exam-q-analysis-panel">
                 <div class="analysis-body markdown-body">
@@ -575,19 +575,19 @@
               <span class="legend-item"><span class="dot correct"></span> 正确</span>
               <span class="legend-item"><span class="dot wrong"></span> 错误</span>
             </div>
-            
+
             <div class="navigator-grid">
-              <button 
-                v-for="(q, idx) in examPaper" 
-                :key="q.id"
-                type="button"
-                :class="['nav-grid-item', { 
+              <button
+                  v-for="(q, idx) in examPaper"
+                  :key="q.id"
+                  type="button"
+                  :class="['nav-grid-item', {
                   'has-answered': !isExamSubmitted && isQuestionAnswered(q),
                   'active-item': currentExamIndex === idx,
                   'review-correct': isExamSubmitted && isExamAnswerCorrect(q),
                   'review-wrong': isExamSubmitted && !isExamAnswerCorrect(q)
                 }]"
-                @click="scrollToQuestion(idx)"
+                  @click="scrollToQuestion(idx)"
               >
                 {{ idx + 1 }}
               </button>
@@ -598,10 +598,10 @@
                 <span>答题进度</span>
                 <span>{{ answeredCount }} / {{ examPaper.length }}</span>
               </div>
-              <el-progress 
-                :percentage="Math.round((answeredCount / examPaper.length) * 100)" 
-                :show-text="false" 
-                color="#5A52FF"
+              <el-progress
+                  :percentage="Math.round((answeredCount / examPaper.length) * 100)"
+                  :show-text="false"
+                  color="#5A52FF"
               />
             </div>
 
@@ -631,12 +631,12 @@
     </div>
 
     <el-dialog
-      v-model="examConfirmVisible"
-      width="420px"
-      :show-close="false"
-      :close-on-click-modal="false"
-      align-center
-      class="exam-confirm-dialog"
+        v-model="examConfirmVisible"
+        width="420px"
+        :show-close="false"
+        :close-on-click-modal="false"
+        align-center
+        class="exam-confirm-dialog"
     >
       <div class="exam-confirm-content" :class="{ 'is-quit': examConfirmAction === 'quit' }">
         <div class="exam-confirm-icon">
@@ -652,9 +652,9 @@
             {{ examConfirmAction === 'quit' ? '继续作答' : '继续检查' }}
           </el-button>
           <el-button
-            :type="examConfirmAction === 'quit' ? 'danger' : 'primary'"
-            class="confirm-action-btn"
-            @click="handleExamConfirm"
+              :type="examConfirmAction === 'quit' ? 'danger' : 'primary'"
+              class="confirm-action-btn"
+              @click="handleExamConfirm"
           >
             {{ examConfirmAction === 'quit' ? '确认退出' : '确认交卷' }}
           </el-button>
@@ -669,9 +669,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { 
+import {
   Collection, Cpu,
-  Close, Checked, Timer, CircleCheck, CircleClose, 
+  Close, Checked, Timer, CircleCheck, CircleClose,
   Opportunity, Finished, DataLine, WarningFilled, DocumentChecked,
   ArrowDown, Filter, Search
 } from '@element-plus/icons-vue';
@@ -727,9 +727,9 @@ const loadGlobalStats = () => {
       const parsed = JSON.parse(saved);
       stats.totalAttempted = parsed.totalAttempted || 0;
       stats.totalCorrect = parsed.totalCorrect || 0;
-      stats.avgAccuracy = parsed.totalAttempted > 0 
-        ? Math.round((parsed.totalCorrect / parsed.totalAttempted) * 100)
-        : 80;
+      stats.avgAccuracy = parsed.totalAttempted > 0
+          ? Math.round((parsed.totalCorrect / parsed.totalAttempted) * 100)
+          : 80;
     } catch {
       // ignore
     }
@@ -739,10 +739,10 @@ const loadGlobalStats = () => {
 const saveGlobalStats = (newAttempted: number, newCorrect: number) => {
   stats.totalAttempted += newAttempted;
   stats.totalCorrect += newCorrect;
-  stats.avgAccuracy = stats.totalAttempted > 0 
-    ? Math.round((stats.totalCorrect / stats.totalAttempted) * 100)
-    : 80;
-  
+  stats.avgAccuracy = stats.totalAttempted > 0
+      ? Math.round((stats.totalCorrect / stats.totalAttempted) * 100)
+      : 80;
+
   localStorage.setItem('qb_global_stats', JSON.stringify({
     totalAttempted: stats.totalAttempted,
     totalCorrect: stats.totalCorrect
@@ -800,7 +800,7 @@ const loadNewRandomQuestion = () => {
   randomSubmitted.value = false;
   randomIsCorrect.value = false;
   challengeAnalysisVisible.value = false;
-  
+
   // 随机取一道题
   if (allQuestions.value.length > 0) {
     const idx = Math.floor(Math.random() * allQuestions.value.length);
@@ -817,16 +817,16 @@ const selectRandomOption = (question: Question, key: string) => {
 
 const submitRandomAnswer = () => {
   if (!randomQuestion.value || randomSubmitted.value) return;
-  
+
   randomSubmitted.value = true;
   const correct = evaluateAnswer(randomQuestion.value, randomUserAnswer.value);
-  
+
   randomIsCorrect.value = correct;
   challengeAnalysisVisible.value = true;
-  
+
   // 记录到全局统计
   saveGlobalStats(1, correct ? 1 : 0);
-  
+
   ElMessage({
     type: correct ? 'success' : 'error',
     message: correct ? '回答正确！知识点掌握牢固。' : '回答有误，看看下方的解析吧！',
@@ -875,11 +875,11 @@ const reloadFilteredQuestions = async () => {
 };
 
 watch(
-  () => [filters.query, filters.subject, filters.difficulty, filters.type],
-  () => {
-    currentPage.value = 1;
-    void reloadFilteredQuestions();
-  }
+    () => [filters.query, filters.subject, filters.difficulty, filters.type],
+    () => {
+      currentPage.value = 1;
+      void reloadFilteredQuestions();
+    }
 );
 
 // 展开/收起解析状态记录
@@ -930,26 +930,26 @@ const generateSmartExam = () => {
   if (smartForm.difficulty !== '混合') {
     pool = pool.filter(q => q.difficulty === smartForm.difficulty);
   }
-  
+
   if (pool.length === 0) {
     ElMessage.warning('当前题库中暂无可用的匹配题目，请重新配置！');
     return;
   }
-  
+
   // 按照题型分类抽题
   const choices = shuffleArray(pool.filter(q => q.type === '选择题')).slice(0, smartForm.choiceCount);
   const multiples = shuffleArray(pool.filter(q => q.type === '多选题')).slice(0, smartForm.multipleCount);
   const judges = shuffleArray(pool.filter(q => q.type === '判断题')).slice(0, smartForm.judgeCount);
   const fills = shuffleArray(pool.filter(q => q.type === '填空题')).slice(0, smartForm.fillCount);
   const analysis = shuffleArray(pool.filter(q => q.type === '简答题')).slice(0, smartForm.analysisCount);
-  
+
   const generatedPaper = [...choices, ...multiples, ...judges, ...fills, ...analysis];
-  
+
   if (generatedPaper.length === 0) {
     ElMessage.warning('组卷数量不能全为 0，请合理设置题目数量！');
     return;
   }
-  
+
   // 初始化考试状态
   startExam(generatedPaper, `智能组卷：${smartForm.subject}模拟测试`);
 };
@@ -993,19 +993,19 @@ const startExam = (paper: Question[], title: string) => {
   examTitle.value = title;
   examAnswers.value = {};
   currentExamIndex.value = 0;
-  
+
   // 试题初始化答案结构
   paper.forEach(q => {
     examAnswers.value[q.id] = q.type === '多选题' ? [] : '';
   });
-  
+
   examTimeElapsed.value = 0;
   examConfirmVisible.value = false;
   isExamSubmitted.value = false;
   reportAnalysisVisible.value = {};
-  
+
   activeView.value = 'exam';
-  
+
   // 启动正向计时定时器
   if (timerId) clearInterval(timerId);
   timerId = window.setInterval(() => {
@@ -1013,7 +1013,7 @@ const startExam = (paper: Question[], title: string) => {
       examTimeElapsed.value++;
     }
   }, 1000);
-  
+
   ElMessage.success({
     message: `试卷生成成功！共计 ${paper.length} 道题，请开始答题。`,
     duration: 3500
@@ -1091,13 +1091,13 @@ const reportTimeSpent = ref('');
 
 const submitExam = () => {
   if (timerId) clearInterval(timerId);
-  
+
   // 计算答题用时
   const spentSec = examTimeElapsed.value;
   const m = Math.floor(spentSec / 60);
   const s = spentSec % 60;
   reportTimeSpent.value = m > 0 ? `${m}分${s}秒` : `${s}秒`;
-  
+
   // 计分逻辑
   let correct = 0;
   examPaper.value.forEach(q => {
@@ -1105,16 +1105,16 @@ const submitExam = () => {
       correct++;
     }
   });
-  
+
   reportCorrectCount.value = correct;
   reportWrongCount.value = examPaper.value.length - correct;
-  
+
   // 计算百分比分数
   reportScore.value = Math.round((correct / examPaper.value.length) * 100);
-  
+
   // 记录到全局大盘统计
   saveGlobalStats(examPaper.value.length, correct);
-  
+
   isExamSubmitted.value = true;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
@@ -1177,8 +1177,8 @@ const updateOptionAnswer = (question: Question, answer: any, key: string) => {
   const selected = normalizeAnswers(answer);
   const normalizedValue = String(value).toUpperCase();
   return selected.includes(normalizedValue)
-    ? selected.filter(option => option !== normalizedValue)
-    : [...selected, normalizedValue];
+      ? selected.filter(option => option !== normalizedValue)
+      : [...selected, normalizedValue];
 };
 
 const evaluateAnswer = (question: Question, answer: any) => {
@@ -1231,7 +1231,7 @@ onUnmounted(() => {
   --text-dark: #0F172A;
   --text-muted: #64748B;
   --border-light: #E2E8F0;
-  
+
   height: calc(100vh - 64px);
   padding: 24px;
   background-color: #F8FAFC;

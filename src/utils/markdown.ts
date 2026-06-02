@@ -42,6 +42,7 @@ const streamingMarkdown = new MarkdownIt({
   typographer: false,
 })
 
+baseMarkdown.use(markdownItKatex)
 streamingMarkdown.use(markdownItKatex)
 
 function escapeHtml(raw: string): string {
@@ -315,6 +316,150 @@ function promoteComplexInlineMath(text: string): string {
   })
 }
 
+function repairSingleLineDelimitedMathBlocks(text: string): string {
+  if (!text) return text
+
+  const lines = text.split('\n')
+  const repaired: string[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const current = lines[index] ?? ''
+    if (current.trim() !== '$') {
+      repaired.push(current)
+      continue
+    }
+
+    let probe = index + 1
+    const mathLines: string[] = []
+    let foundClosing = false
+
+    while (probe < lines.length) {
+      const line = lines[probe] ?? ''
+      if (line.trim() === '$') {
+        foundClosing = true
+        break
+      }
+      mathLines.push(line)
+      probe += 1
+    }
+
+    if (!foundClosing || !mathLines.some((line) => line.trim())) {
+      repaired.push(current)
+      continue
+    }
+
+    repaired.push('$$')
+    repaired.push(...mathLines)
+    repaired.push('$$')
+    index = probe
+  }
+
+  return repaired.join('\n')
+}
+
+function repairEscapedMathDelimiters(text: string): string {
+  if (!text) return text
+
+  return text
+    .replace(/\\\$/g, '$')
+    .replace(/\\([()[\]])/g, '\\$1')
+}
+
+function normalizeLatexDelimiters(text: string): string {
+  if (!text) return text
+
+  return text
+    .replace(/\\\[((?:.|\n)*?)\\\]/g, (_matched, content: string) => `\n$$\n${content.trim()}\n$$\n`)
+    .replace(/\\\(((?:.|\n)*?)\\\)/g, (_matched, content: string) => `$${content.trim()}$`)
+}
+
+function repairMissingLatexCommands(text: string): string {
+  if (!text) return text
+
+  return text
+    .replace(/(^|[^\\a-zA-Z])(int_|iint_|iiint_|oint_|sum_|prod_|lim_)/g, '$1\\$2')
+    .replace(/(^|[^\\a-zA-Z])(frac|sqrt|sin|cos|tan|cot|sec|csc|ln|log|exp|to|rightarrow|infty|cdots|ldots|mathrm|mathbf|boldsymbol|operatorname\*?)\b/g, '$1\\$2')
+    .replace(/(^|[^\\a-zA-Z])(left|right)(?=\s*[\(\)\[\]\{\}|])/g, '$1\\$2')
+}
+
+function repairBrokenDelimiterCommands(text: string): string {
+  if (!text) return text
+
+  return text
+    .replace(/\\left\{/g, '\\left\\{')
+    .replace(/\\right\}(?![\])}])/g, '\\right\\}')
+    .replace(/\\right\\(?=\s|$)/g, '\\right\\}')
+    .replace(/\\left\[/g, '\\left[')
+    .replace(/\\right\]/g, '\\right]')
+    .replace(/\\left\(/g, '\\left(')
+    .replace(/\\right\)/g, '\\right)')
+}
+
+function repairIsolatedDollarBlocks(text: string): string {
+  if (!text) return text
+
+  const lines = text.split('\n')
+  const repaired: string[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const current = lines[index] ?? ''
+    if (current.trim() !== '$') {
+      repaired.push(current)
+      continue
+    }
+
+    let probe = index + 1
+    while (probe < lines.length && !(lines[probe] ?? '').trim()) {
+      probe += 1
+    }
+
+    const contentLine = lines[probe] ?? ''
+    if (!contentLine.trim()) {
+      repaired.push(current)
+      continue
+    }
+
+    let closing = probe + 1
+    while (closing < lines.length && !(lines[closing] ?? '').trim()) {
+      closing += 1
+    }
+
+    if ((lines[closing] ?? '').trim() !== '$') {
+      repaired.push(current)
+      continue
+    }
+
+    const normalized = repairMissingLatexCommands(contentLine.trim())
+    const isDisplayMath = /\\(?:int_|iint_|iiint_|oint_|sum_|prod_|lim_|frac|sqrt|begin|left|right)/.test(normalized)
+
+    repaired.push(isDisplayMath ? '$$' : '$')
+    repaired.push(normalized)
+    repaired.push(isDisplayMath ? '$$' : '$')
+    index = closing
+  }
+
+  return repaired.join('\n')
+}
+
+function repairCommonBrokenMathSyntax(text: string): string {
+  if (!text) return text
+
+  return text
+    .replace(/\\\$(?=\s*$)/gm, '$')
+    .replace(/\$\$(?=\S)/g, '$$\n')
+    .replace(/(?<=\S)\$\$/g, '\n$$')
+    .replace(/\$([^\n$]+?)\}\$/g, (_matched, content: string) => {
+      const opens = (content.match(/\{/g) || []).length
+      const closes = (content.match(/\}/g) || []).length
+      if (opens >= closes) return `$${content}$`
+      return `$${content.replace(/\}+$/g, '')}$`
+    })
+    .replace(/\$\$([^\n$]*?)\}\s*=\s*____/g, (_matched, content: string) => `$$${content}=____`)
+    .replace(/\$([^\n$]*?)\}\s*=\s*____/g, (_matched, content: string) => `$${content}=____`)
+    .replace(/\\left\(/g, '\\left(')
+    .replace(/\\right\)/g, '\\right)')
+}
+
 function repairBrokenMultilineInlineMath(text: string): string {
   if (!text) return text
 
@@ -347,7 +492,8 @@ function normalizeMathBlocks(text: string): string {
 
 function containsMathSyntax(text: string): boolean {
   if (!text) return false
-  return /(^|[^\\])\$(?!\s)|\\\(|\\\[|\\begin\{(?:cases|aligned|array|matrix|pmatrix|bmatrix)\}/.test(text)
+  const normalized = repairSingleLineDelimitedMathBlocks(text)
+  return /(^|[^\\])\$(?!\s)|^\s*\$\$\s*$|\\\(|\\\[|\\begin\{(?:cases|aligned|array|matrix|pmatrix|bmatrix)\}/m.test(normalized)
 }
 
 export function repairCopiedCodeBlocks(text: string): string {
@@ -378,14 +524,16 @@ export function repairCopiedCodeBlocks(text: string): string {
 }
 
 export function normalizeStreamingMarkdown(text: string, isStreaming = false): string {
-  if (!containsMathSyntax(text)) {
-    const repaired = repairLooseCodeBlocks(
-      repairSplitFenceLanguages(
-        repairMalformedFenceOpeners(
-          repairCopiedCodeBlocks(text),
-        ),
+  const repairedBase = repairLooseCodeBlocks(
+    repairSplitFenceLanguages(
+      repairMalformedFenceOpeners(
+        repairCopiedCodeBlocks(text),
       ),
-    )
+    ),
+  )
+
+  if (!containsMathSyntax(repairedBase)) {
+    const repaired = repairedBase
     if (!isStreaming || !repaired) return repaired
 
     const fences = repaired.match(fencePattern)
@@ -397,10 +545,16 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
   const repaired = normalizeMathBlocks(
     promoteComplexInlineMath(
       repairBrokenMultilineInlineMath(
-        repairLooseCodeBlocks(
-          repairSplitFenceLanguages(
-            repairMalformedFenceOpeners(
-              repairCopiedCodeBlocks(text),
+        repairCommonBrokenMathSyntax(
+          repairBrokenDelimiterCommands(
+            repairMissingLatexCommands(
+              normalizeLatexDelimiters(
+                repairIsolatedDollarBlocks(
+                  repairSingleLineDelimitedMathBlocks(
+                    repairEscapedMathDelimiters(repairedBase),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -418,13 +572,10 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
 export function renderStreamingMarkdownHtml(text: string): string {
   const normalized = normalizeStreamingMarkdown(text, true)
   if (!normalized.trim()) return ''
-  if (!containsMathSyntax(normalized)) {
-    return baseMarkdown.render(normalized)
-  }
 
   try {
     return streamingMarkdown.render(normalized)
   } catch {
-    return baseMarkdown.render(text || '')
+    return baseMarkdown.render(normalized || text || '')
   }
 }
