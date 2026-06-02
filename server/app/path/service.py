@@ -486,7 +486,7 @@ class CoursePathService:
         )
 
         # Use unified start_resource_task
-        usecases = ResourceUsecases(self.session)
+        usecases = ResourceService(self.session)
         result = await usecases.start_resource_task(
             user_id=user_id,
             request=request,

@@ -23,15 +23,17 @@ jwt:
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
   # 文本模型（修改以下三项即可切换本地/云端）
-  base_url: "https://spark-api-open.xf-yun.com/v1"
-  api_key: "hpsPlkflXyCLIrMxjSDk:RmSfDFfHtnSCmgtlCtiC"
-  model_name: "4.0Ultra"
+  # 本地大模型配置 (端口 10000)
+  base_url: "http://127.0.0.1:10000/v1"
+  api_key: "local"
+  model_name: "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
   concurrency: 10
 
-  #  base_url: https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
-  #  api_key: 6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx
-  #  model_name: astron-code-latest
-  #  concurrency: 10
+  # 云端配置（备用）
+  # base_url: "https://spark-api-open.xf-yun.com/v1"
+  # api_key: "hpsPlkflXyCLIrMxjSDk:RmSfDFfHtnSCmgtlCtiC"
+  # model_name: "4.0Ultra"
+  # concurrency: 10
 
   # 图片理解模型（独立配置）
   vision:

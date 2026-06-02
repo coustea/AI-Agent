@@ -105,7 +105,7 @@ class QuizAgent(BaseResourceAgent):
             logger.debug("Agent[quiz] LLM fallback 调用完成: %.2fs", elapsed)
 
             raw = response.content if hasattr(response, "content") else str(response)
-            quiz_data = salvage_json_from_llm(raw, require_key="questions")
+            quiz_data = extract_json_from_llm_output(raw, require_key="questions")
             if quiz_data is None:
                 elapsed = time.perf_counter() - start
                 logger.warning("Agent[quiz] 失败: %.2fs, error=习题 JSON 解析失败", elapsed)

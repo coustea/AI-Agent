@@ -58,7 +58,7 @@ class ReadingAgent(BaseResourceAgent):
 
         # The prompt instructs JSON output, but LLM often wraps in ```json```.
         # Parse it so the backend stores as content_json for frontend consumption.
-        parsed = salvage_json_from_llm(content)
+        parsed = extract_json_from_llm_output(content)
         if parsed is not None:
             content = json.dumps(parsed, ensure_ascii=False, indent=2)
             file_type = "json"

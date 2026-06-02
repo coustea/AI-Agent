@@ -99,7 +99,7 @@ async def generate_node_resources(
 
     if result["should_schedule"]:
         background_tasks.add_task(
-            bg_gen_task,
+            run_multi_agent_generation,
             user_id=current_user.id,
             request=result["request"],
             profile=result["profile"],

@@ -261,7 +261,7 @@ class ResourceUsecases:
         await self.session.refresh(obj)
 
     def _mark_json_modified(self, obj: Any, field_name: str) -> None:
-        """Mark SQLAlchemy JSON/JSONB fields dirty after nested snapshot rewrites."""
+        """标记 SQLAlchemy JSON/JSONB 字段为脏数据，确保嵌套快照重写后被持久化。"""
         try:
             flag_modified(obj, field_name)
         except Exception:
@@ -310,7 +310,7 @@ class ResourceUsecases:
         return {
             "learning_need": request.learning_need,
             "learning_scenario": request.learning_scenario,
-            "profile_summary": ResourceUsecases._profile_summary(profile),
+            "profile_summary": ResourceService._profile_summary(profile),
             "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
         }
 
@@ -320,7 +320,7 @@ class ResourceUsecases:
             "agent_id": agent_id,
             "title": result.title,
             "summary": result.summary,
-            "audit_content": ResourceUsecases._bounded_content(result.content),
+            "audit_content": ResourceService._bounded_content(result.content),
         }
 
     @staticmethod
@@ -329,7 +329,7 @@ class ResourceUsecases:
             "agent_id": agent_id,
             "title": result.title,
             "summary": result.summary,
-            "source_content": ResourceUsecases._bounded_content(result.content),
+            "source_content": ResourceService._bounded_content(result.content),
         }
 
     @staticmethod
@@ -338,7 +338,7 @@ class ResourceUsecases:
             "agent_id": agent_id,
             "title": result.title if result else "",
             "summary": result.summary if result else "",
-            "has_content": ResourceUsecases._has_generated_content(result),
+            "has_content": ResourceService._has_generated_content(result),
         }
 
     @staticmethod
@@ -358,21 +358,21 @@ class ResourceUsecases:
         missing_resources = [
             agent_id
             for agent_id in checked_agents
-            if not ResourceUsecases._has_generated_content(results.get(agent_id))
+            if not ResourceService._has_generated_content(results.get(agent_id))
         ]
         deep_audit_resources = [
-            ResourceUsecases._audit_resource_item(agent_id, results[agent_id])
+            ResourceService._audit_resource_item(agent_id, results[agent_id])
             for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceUsecases._has_generated_content(results.get(agent_id))
+            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
         ]
         completeness_only = [
-            ResourceUsecases._completeness_item(agent_id, results.get(agent_id))
+            ResourceService._completeness_item(agent_id, results.get(agent_id))
             for agent_id in selected_agents
             if agent_id in COMPLETENESS_ONLY_AGENT_IDS
         ]
         return {
             "mode": "pre_audit",
-            "request_context": ResourceUsecases._request_context(
+            "request_context": ResourceService._request_context(
                 request=request,
                 profile=profile,
                 blueprint=blueprint,
@@ -392,21 +392,21 @@ class ResourceUsecases:
         selected_agents = request.enabled_agent_ids()
         missing_resources: list[str] = []
         ppt_result = results.get(PPT_AGENT_ID)
-        if PPT_AGENT_ID in selected_agents and not ResourceUsecases._has_generated_content(ppt_result):
+        if PPT_AGENT_ID in selected_agents and not ResourceService._has_generated_content(ppt_result):
             missing_resources.append(PPT_AGENT_ID)
         approved_sources = [
-            ResourceUsecases._source_reference_item(agent_id, results[agent_id])
+            ResourceService._source_reference_item(agent_id, results[agent_id])
             for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceUsecases._has_generated_content(results.get(agent_id))
+            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
         ]
         ppt_resource = (
-            ResourceUsecases._audit_resource_item(PPT_AGENT_ID, ppt_result)
-            if ResourceUsecases._has_generated_content(ppt_result)
+            ResourceService._audit_resource_item(PPT_AGENT_ID, ppt_result)
+            if ResourceService._has_generated_content(ppt_result)
             else None
         )
         return {
             "mode": "ppt_audit",
-            "request_context": ResourceUsecases._request_context(
+            "request_context": ResourceService._request_context(
                 request=request,
                 profile=profile,
                 blueprint=blueprint,
@@ -748,7 +748,7 @@ class ResourceUsecases:
         return list(result.all())
 
 
-async def bg_gen_task(
+async def run_multi_agent_generation(
     user_id: int,
     request: ResourceGenerationRequest,
     profile: dict[str, Any],
@@ -917,7 +917,7 @@ async def bg_gen_task(
 
             failed_results = {aid: r for aid, r in results.items() if not r.success}
             review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
-            pre_audit_envelope, missing_resources = ResourceUsecases.build_pre_audit_envelope(
+            pre_audit_envelope, missing_resources = ResourceService.build_pre_audit_envelope(
                 request=request,
                 results=review_results,
                 profile=profile,
@@ -926,7 +926,7 @@ async def bg_gen_task(
             source_audit_required = bool(pre_audit_envelope["deep_audit_resources"])
 
             if missing_resources:
-                review_result = ResourceUsecases.failed_review_result(
+                review_result = ResourceService.failed_review_result(
                     status="needs_revision",
                     message=f"资源生成不完整: {', '.join(missing_resources)}",
                     revision_targets=missing_resources,
@@ -952,7 +952,7 @@ async def bg_gen_task(
                     },
                 )
                 pre_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(pre_review_state)
-                pre_review_result = ResourceUsecases.review_result_from_worker(pre_review_worker_result)
+                pre_review_result = ResourceService.review_result_from_worker(pre_review_worker_result)
                 review_result = pre_review_result
                 review_passed = pre_review_result.passed
                 logger.info(
@@ -961,7 +961,7 @@ async def bg_gen_task(
                     pre_review_worker_result.metadata.get("review_status"),
                 )
             elif source_audit_required:
-                review_result = ResourceUsecases.failed_review_result(
+                review_result = ResourceService.failed_review_result(
                     status="blocked",
                     message="审核智能体不可用，无法完成前置安全审核",
                     revision_targets=["review"],
@@ -1000,14 +1000,14 @@ async def bg_gen_task(
                 await emitter.emit_workflow("ppt_reviewing", "PPT 内容安全审核中", progress=90)
                 failed_results = {aid: r for aid, r in results.items() if not r.success}
                 review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
-                ppt_audit_envelope, ppt_missing_resources = ResourceUsecases.build_ppt_audit_envelope(
+                ppt_audit_envelope, ppt_missing_resources = ResourceService.build_ppt_audit_envelope(
                     request=request,
                     results=review_results,
                     profile=profile,
                     blueprint=blueprint,
                 )
                 if ppt_missing_resources:
-                    review_result = ResourceUsecases.failed_review_result(
+                    review_result = ResourceService.failed_review_result(
                         status="needs_revision",
                         message=f"PPT 生成不完整: {', '.join(ppt_missing_resources)}",
                         revision_targets=ppt_missing_resources,
@@ -1033,7 +1033,7 @@ async def bg_gen_task(
                         },
                     )
                     ppt_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(ppt_review_state)
-                    ppt_review_result = ResourceUsecases.review_result_from_worker(ppt_review_worker_result)
+                    ppt_review_result = ResourceService.review_result_from_worker(ppt_review_worker_result)
                     if pre_review_result.suggestions:
                         ppt_review_result.suggestions = [
                             *pre_review_result.suggestions,
@@ -1047,7 +1047,7 @@ async def bg_gen_task(
                         ppt_review_worker_result.metadata.get("review_status"),
                     )
                 else:
-                    review_result = ResourceUsecases.failed_review_result(
+                    review_result = ResourceService.failed_review_result(
                         status="blocked",
                         message="审核智能体不可用，无法完成 PPT 安全审核",
                         revision_targets=["review"],
@@ -1118,7 +1118,7 @@ async def bg_gen_task(
             )
 
 
-async def bg_single_gen_task(
+async def run_single_agent_generation(
     user_id: int,
     resource_id: int,
     agent_id: str,
@@ -1232,7 +1232,7 @@ async def _update_node_resource_status(
     resource_id: int | None,
     user_id: int,
 ) -> None:
-    """Update a path node's resource_status and optionally bind resource."""
+    """更新路径节点的资源状态，可选绑定资源 ID。"""
     from app.infra.models import CoursePathNode, CoursePathResourceBinding
 
     node = await session.get(CoursePathNode, node_id)
@@ -1255,3 +1255,11 @@ async def _update_node_resource_status(
             session.add(binding)
 
     await session.commit()
+
+
+# ---------------------------------------------------------------------------
+# 向后兼容别名（逐步迁移后移除）
+# ---------------------------------------------------------------------------
+ResourceUsecases = ResourceService
+bg_gen_task = run_multi_agent_generation
+bg_single_gen_task = run_single_agent_generation

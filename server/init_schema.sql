@@ -76,7 +76,7 @@ CREATE INDEX IF NOT EXISTS ix_chat_sessions_attachment_analyses
 CREATE TABLE IF NOT EXISTS chat_messages (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
-    session_id          VARCHAR         NOT NULL REFERENCES chat_sessions(id),
+    session_id          UUID            NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
     module              VARCHAR,
     role                VARCHAR,
     content             TEXT,
@@ -112,7 +112,7 @@ CREATE INDEX IF NOT EXISTS ix_chat_messages_usage_metadata_gin
 CREATE TABLE IF NOT EXISTS chat_session_summaries (
     id                          SERIAL          PRIMARY KEY,
     user_id                     INTEGER         NOT NULL,
-    session_id                  VARCHAR         NOT NULL REFERENCES chat_sessions(id),
+    session_id                  UUID            NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
     module                      VARCHAR,
     summary_markdown            TEXT,
     summary_type                VARCHAR(50)     DEFAULT 'incremental',
@@ -262,12 +262,16 @@ CREATE TABLE IF NOT EXISTS generated_resources (
 CREATE INDEX IF NOT EXISTS ix_generated_resources_user_id
     ON generated_resources (user_id);
 
+-- GIN index for personalization (stores workflow_progress for polling)
+CREATE INDEX IF NOT EXISTS ix_generated_resources_personalization_gin
+    ON generated_resources USING GIN (personalization);
+
 -- ============================================================
 -- 11. generated_resource_items
 -- ============================================================
 CREATE TABLE IF NOT EXISTS generated_resource_items (
     id                              SERIAL          PRIMARY KEY,
-    resource_id                     INTEGER         NOT NULL REFERENCES generated_resources(id),
+    resource_id                     INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
     user_id                         INTEGER         NOT NULL,
     agent_type                      VARCHAR(50),
     content_format                  VARCHAR(50)     DEFAULT 'json',
@@ -415,7 +419,7 @@ CREATE TABLE IF NOT EXISTS course_path_generation_tasks (
     progress            INTEGER         DEFAULT 0,
     latest_message      TEXT,
     error_message       TEXT,
-    generated_path_id   INTEGER         REFERENCES course_paths(id),
+    generated_path_id   INTEGER         REFERENCES course_paths(id) ON DELETE SET NULL,
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
     started_at          TIMESTAMPTZ,
     completed_at        TIMESTAMPTZ,
@@ -440,7 +444,7 @@ CREATE INDEX IF NOT EXISTS ix_course_path_generation_tasks_user_module_status
 -- ============================================================
 CREATE TABLE IF NOT EXISTS course_path_nodes (
     id                      SERIAL          PRIMARY KEY,
-    path_id                 INTEGER         NOT NULL REFERENCES course_paths(id),
+    path_id                 INTEGER         NOT NULL REFERENCES course_paths(id) ON DELETE CASCADE,
     user_id                 INTEGER         NOT NULL,
     node_id                 VARCHAR(50),
     stage_id                VARCHAR(50),
@@ -481,8 +485,8 @@ CREATE INDEX IF NOT EXISTS ix_course_path_nodes_prerequisites_gin
 CREATE TABLE IF NOT EXISTS course_path_resource_bindings (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
-    node_id             INTEGER         NOT NULL REFERENCES course_path_nodes(id),
-    resource_id         INTEGER         NOT NULL REFERENCES generated_resources(id),
+    node_id             INTEGER         NOT NULL REFERENCES course_path_nodes(id) ON DELETE CASCADE,
+    resource_id         INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
     resource_item_id    INTEGER,
     created_at          TIMESTAMPTZ     DEFAULT NOW()
 );
