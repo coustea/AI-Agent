@@ -1,0 +1,7288 @@
+[
+  {
+    "id": "se_zju_0001",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个问题不再是现代软件工程师关注的重点？\n",
+    "options": {
+      "A": "为什么计算机硬件价格如此昂贵？\n",
+      "B": "软件开发需要花费较长时间的原因是什么？\n",
+      "C": "为什么开发一个软件需要花费这么多费用？\n",
+      "D": "为什么软件错误不能在产品交付前被移除？\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第1章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_1"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0003",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件会退化，而不是像机械设备那样磨损，因为",
+    "options": {
+      "A": "软件容易受到恶劣环境的影响",
+      "B": "软件使用频率越高，出现缺陷的可能性越大。",
+      "C": "多次修改请求导致组件交互出现错误",
+      "D": "软件零部件的订购变得更加困难"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第1章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_1"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0008",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下选项中，哪一个不是软件工程的层级？\n",
+    "options": {
+      "A": "流程\n",
+      "B": "制造\n",
+      "C": "方法\n",
+      "D": "工具\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第2章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_2"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0010",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是 5 个通用软件工程框架活动？\n",
+    "options": {
+      "A": "沟通、规划、建模、构建、部署",
+      "B": "沟通、风险管理、测量、生产、审查",
+      "C": "分析、设计、编程、调试、维护\n",
+      "D": "分析、规划、设计、编程、测试\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第2章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_2"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0016",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种流程类型是被认可的？\n",
+    "options": {
+      "A": "并发进程流程\n",
+      "B": "迭代过程流程\n",
+      "C": "线性流程\n",
+      "D": "螺旋式流程",
+      "E": "A 和 C\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第3章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_3"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0020",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是评估软件过程的标准？\n",
+    "options": {
+      "A": "SEI",
+      "B": "SPICE\n\n\n\n",
+      "C": "ISO 9000",
+      "D": "ISO 9001",
+      "E": "b 和 d\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第3章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_3"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0021",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "瀑布模型是软件开发的一种方法，其主要特点是：",
+    "options": {
+      "A": "在需求明确的情况下，采用合理的策略。\n",
+      "B": "在需要快速获得可运行程序的场景下，一个好的方法是：\n",
+      "C": "适用于大型开发团队的项目，最佳方法是什么？\n",
+      "D": "一种陈旧的型号，现在很少使用。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0022",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "增量软件开发模型是",
+    "options": {
+      "A": "在需求明确的情况下，采用合理的策略。\n",
+      "B": "在需要快速开发可用的核心产品时，一个好的方法是：",
+      "C": "适用于大型开发团队的项目，最佳方法是什么？\n",
+      "D": "一种革命性的模型，不应用于商业产品。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0023",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "进化型软件过程模型",
+    "options": {
+      "A": "具有迭代性质。\n",
+      "B": "可以轻松适应产品需求的变化。",
+      "C": "通常不应创建用于一次性测试的系统。",
+      "D": "以上所有。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0024",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件开发原型模型是",
+    "options": {
+      "A": "在需求明确的情况下，采用合理的策略。\n",
+      "B": "一种有用的方法，当客户无法明确定义需求时。",
+      "C": "适用于大型开发团队的项目，最佳方法是什么？\n",
+      "D": "一种高风险的模型，很少产生有意义的结果。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0025",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "螺旋模型软件开发\n",
+    "options": {
+      "A": "以软件产品的交付为结束。",
+      "B": "比增量模型更加混乱。\n",
+      "C": "在每个迭代中，包含项目风险评估。",
+      "D": "以上所有。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0026",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "并行开发模型是",
+    "options": {
+      "A": "另一个名称是：并行工程。\n",
+      "B": "定义触发工程活动状态转换的事件。",
+      "C": "仅用于并行或分布式系统的开发。",
+      "D": "适用于预见到需要大量变更请求的情况。",
+      "E": "A 和 B\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0027",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于组件的开发模型是",
+    "options": {
+      "A": "仅适用于计算机硬件设计。",
+      "B": "无法支持可重用组件的开发。",
+      "C": "依赖于对象技术进行支持。",
+      "D": "不符合已知的可量化软件指标。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0028",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "正式方法在软件开发中的应用，利用数学方法来……\n",
+    "options": {
+      "A": "定义计算机系统规范。\n",
+      "B": "开发无缺陷的计算机系统。",
+      "C": "验证计算机系统是否正确。",
+      "D": "以上所有。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0029",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是统一过程模型中定义的状态名称？\n",
+    "options": {
+      "A": "启动阶段\n",
+      "B": "展开阶段\n",
+      "C": "施工阶段\n",
+      "D": "验证阶段\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0030",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是个人软件过程的特征？\n",
+    "options": {
+      "A": "强调对工作成果的个人评估。",
+      "B": "实践者需要项目经理的仔细指导和监督。\n",
+      "C": "个人从业者负责估算和安排。",
+      "D": "实践者有权控制软件工作成果的质量。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0031",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是 Team Software Process 的目标？\n\n\n\n\n",
+    "options": {
+      "A": "加速软件流程改进",
+      "B": "通过高素质专业人士，实现更有效的时管理。",
+      "C": "建立自主型软件团队",
+      "D": "向管理者展示如何降低成本并保持质量",
+      "E": "b 和 c\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第4章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_4"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0035",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项不是在软件流程中应用敏捷方法的必要条件？\n",
+    "options": {
+      "A": "消除项目规划和测试的使用",
+      "B": "仅生产必要的工作成果。",
+      "C": "该流程使团队能够优化任务流程。",
+      "D": "采用分阶段产品交付策略"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第5章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_5"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0036",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如何创建敏捷流程来应对不可预测性？\n",
+    "options": {
+      "A": "需求收集必须非常仔细地进行。",
+      "B": "风险分析必须在制定计划之前进行。",
+      "C": "软件更新必须在短时间内交付。",
+      "D": "软件程序必须逐步适应变化。",
+      "E": "c 和 d\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第5章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_5"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0039",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在极限编程 (XP) 的过程模型中，有哪些四种框架活动？\n",
+    "options": {
+      "A": "分析、设计、编码、测试\n",
+      "B": "规划、分析、设计、编码\n",
+      "C": "规划、分析、编码、测试\n",
+      "D": "规划、设计、编码、测试\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第5章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_5"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0041",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是每个团队成员在每日 Scrum 会议中需要回答的关键问题？\n\n\n\n\n",
+    "options": {
+      "A": "自上次会议以来，您做了什么？\n",
+      "B": "您遇到了哪些问题？\n",
+      "C": "您遇到了哪些问题？\n",
+      "D": "在下一次团队会议上，您计划实现什么目标？\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第5章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_5"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0043",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "敏捷建模 (AM) 为实践者在以下软件任务中提供指导：",
+    "options": {
+      "A": "分析\n",
+      "B": "设计\n",
+      "C": "编码\n",
+      "D": "测试\n",
+      "E": "A 和 B\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第5章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_5"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0046",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是一个有效软件工程师的重要特征？\n",
+    "options": {
+      "A": "注重细节",
+      "B": "极直白",
+      "C": "严格遵循流程规则\n",
+      "D": "抗压能力\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第6章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_6"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0049",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项可能导致团队出现负面氛围？\n",
+    "options": {
+      "A": "狂热的工作氛围\n",
+      "B": "预算不足",
+      "C": "软件流程协调性差",
+      "D": "团队角色定义不明确",
+      "E": "a, b, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第6章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_6"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0056",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些因素会使全球软件团队的决策变得复杂？\n",
+    "options": {
+      "A": "问题复杂度",
+      "B": "不同对问题的看法",
+      "C": "意外后果的规律\n",
+      "D": "决策相关的风险",
+      "E": "以上所有。"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第6章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_6"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0058",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是软件工程实践的核心原则？\n",
+    "options": {
+      "A": "所有设计都应尽可能简化，但不能过于简化。\n",
+      "B": "一个软件系统仅存在于为了向其用户提供价值。",
+      "C": "帕累托原则（任何产品中，20%的要素需要投入80%的精力）。\n",
+      "D": "请记住，你所创造的内容，最终会被他人使用。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第7章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_7"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0061",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个让软件团队所有成员参与规划活动的理由是：\n",
+    "options": {
+      "A": "调整计划的粒度",
+      "B": "控制功能蔓延\n",
+      "C": "让所有团队成员“参与”到该计划中",
+      "D": "理解问题范围\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第7章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_7"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0063",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "需求模型描述的软件，涉及三个领域？\n",
+    "options": {
+      "A": "架构，接口，组件\n",
+      "B": "成本、风险、进度",
+      "C": "信息、功能、行为\n",
+      "D": "以上均不正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第7章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_7"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0066",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是良好编码的原则？\n",
+    "options": {
+      "A": "在开始编写代码之前，请创建单元测试。",
+      "B": "在开始编写代码之前，请创建单元测试。",
+      "C": "在完成第一次编码后，请对代码进行重构。",
+      "D": "编写具有自我文档功能的代码，而不是程序文档。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第7章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_7"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0068",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是收集客户对已交付软件的反馈的有效理由？\n",
+    "options": {
+      "A": "允许开发者修改已交付的增量版本。",
+      "B": "交货时间表可以根据实际情况进行修改。",
+      "C": "开发者可以识别并纳入下一次迭代中进行更改。",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第7章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_7"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0071",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在项目启动阶段，任务的目标是确定",
+    "options": {
+      "A": "基本问题理解",
+      "B": "所需解的性质\n",
+      "C": "寻求解决方案的人\n",
+      "D": "以上都不是\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第8章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_8"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0072",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下三个因素使得需求收集变得困难：\n",
+    "options": {
+      "A": "预算",
+      "B": "作用域\n",
+      "C": "理解",
+      "D": "波动性\n",
+      "E": "b, c, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第8章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_8"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0075",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是在项目启动阶段使用的，不依赖上下文的常见问题？\n",
+    "options": {
+      "A": "一个好的解决方案将带来哪些经济效益？\n",
+      "B": "谁是发起工作请求的人？\n",
+      "C": "谁将支付费用？\n",
+      "D": "谁将使用该解决方案？\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第8章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_8"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0077",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在协作式需求收集中，主持人应",
+    "options": {
+      "A": "安排会议地点",
+      "B": "不能是客户",
+      "C": "控制会议",
+      "D": "必须是外人"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第8章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_8"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0078",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是质量功能展开（QFD）中使用的需求分类？\n",
+    "options": {
+      "A": "令人兴奋\n",
+      "B": "预期",
+      "C": "必须",
+      "D": "正常\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第8章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_8"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0079",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在需求收集过程中产生的成果，会因以下因素而有所不同：\n",
+    "options": {
+      "A": "预算规模。\n",
+      "B": "产品所构建的尺寸。\n",
+      "C": "使用的软件开发流程。\n",
+      "D": "利益相关者的需求。\n",
+      "E": "A 和 B\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第8章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_8"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0083",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "需求工程任务的结果是一个分析模型，该模型定义了以下哪些问题领域？\n",
+    "options": {
+      "A": "信息\n",
+      "B": "功能性\n",
+      "C": "行为\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第8章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_8"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0089",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是需求模型中的组成部分？\n",
+    "options": {
+      "A": "行为要素\n",
+      "B": "基于类的元素\n",
+      "C": "数据元素\n",
+      "D": "情景元素\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第9章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_9"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0090",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是构建需求模型的目标？\n",
+    "options": {
+      "A": "定义一套可验证的软件需求集",
+      "B": "描述客户需求\n",
+      "C": "设计一个简化的解决方案来解决该问题\n",
+      "D": "建立软件设计的基础\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第9章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_9"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0097",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "UML 活动图在哪些分析模型元素方面有应用？\n",
+    "options": {
+      "A": "行为要素\n",
+      "B": "基于类的元素\n",
+      "C": "流程元素\n",
+      "D": "情景元素\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第9章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_9"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0099",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项应该被视为问题空间中的候选对象？\n",
+    "options": {
+      "A": "事件\n",
+      "B": "人\n",
+      "C": "结构\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第10章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_10"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0102",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不是用于对操作进行分类的常用类别？\n",
+    "options": {
+      "A": "计算\n",
+      "B": "数据处理\n",
+      "C": "事件监控",
+      "D": "变换器\n\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第10章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_10"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0104",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不出现在 CRC 卡上？\n",
+    "options": {
+      "A": "class collaborators",
+      "B": "class name",
+      "C": "class reliability",
+      "D": "class responsibilities"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第10章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_10"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0105",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "课程职责由以下内容定义：",
+    "options": {
+      "A": "其属性",
+      "B": "其合作者\n",
+      "C": "其操作仅限于",
+      "D": "其属性和操作"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第10章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_10"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0109",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为了行为建模，当某个事件发生时，则：",
+    "options": {
+      "A": "状态和过程交换信息。\n",
+      "B": "系统中的参与者进行信息交换。\n",
+      "C": "两位演员进行信息交流。\n",
+      "D": "两个对象进行信息交换。\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第11章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_11"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0110",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为了行为建模，状态可以定义为任何",
+    "options": {
+      "A": "数据消费者或生产者。\n",
+      "B": "数据对象层级结构。\n",
+      "C": "可观察的行为模式。\n",
+      "D": "明确的流程。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第11章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_11"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0111",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "状态转换图\n",
+    "options": {
+      "A": "描述数据对象之间的关系",
+      "B": "描述了用于转换数据流的功能。",
+      "C": "指示系统如何转换数据\n",
+      "D": "表示系统对外部事件的反应"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第11章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_11"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0115",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不是用于构建完整分析模型的分析活动？\n",
+    "options": {
+      "A": "配置分析\n",
+      "B": "内容分析\n",
+      "C": "功能分析\n",
+      "D": "市场分析\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第11章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_11"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0117",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Web应用交互模型包含哪些要素？\n",
+    "options": {
+      "A": "活动图、序列图、状态图、界面原型",
+      "B": "活动图、协作图、序列图、状态图",
+      "C": "用例、序列图、状态图、界面原型",
+      "D": "用例、序列图、状态图、序列图"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第11章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_11"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0120",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是设计模型中的潜在问题？\n",
+    "options": {
+      "A": "建筑设计\n",
+      "B": "数据\n",
+      "C": "接口\n",
+      "D": "项目范围\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0121",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件设计的重要性可以用一个词来概括",
+    "options": {
+      "A": "准确性\n",
+      "B": "复杂度\n",
+      "C": "效率\n",
+      "D": "质量\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0122",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是优秀设计的特征？\n",
+    "options": {
+      "A": "表现出其模块之间强烈的耦合关系。",
+      "B": "实现分析模型的所有要求",
+      "C": "包含所有组件的测试用例",
+      "D": "提供对软件的全面了解",
+      "E": "b and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0123",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不是所有设计方法都具有的特征？\n",
+    "options": {
+      "A": "配置管理\n",
+      "B": "函数式组件的表示\n",
+      "C": "质量评估指南\n",
+      "D": "优化启发式"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0124",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件设计中使用了哪些抽象类型？\n",
+    "options": {
+      "A": "控制\n",
+      "B": "数据\n",
+      "C": "环境",
+      "D": "过程式",
+      "E": "a, b, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0125",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项可以用来表示软件的架构设计？\n",
+    "options": {
+      "A": "动态模型\n",
+      "B": "功能模型\n",
+      "C": "结构模型\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0129",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "连贯性是一种定性的指标，用于衡量一个模块的……\n",
+    "options": {
+      "A": "可以更简洁地表达。\n",
+      "B": "专注于一个特定方面。\n",
+      "C": "能够及时完成其功能。",
+      "D": "它与其他模块以及外部世界连接。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0130",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "耦合是一种定性的衡量模块之间相互依赖程度的方法。",
+    "options": {
+      "A": "可以更简洁地表达。\n",
+      "B": "专注于一个特定方面。\n",
+      "C": "能够及时完成其功能。",
+      "D": "它与其他模块以及外部世界连接。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0133",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Which of the following is not one of the five design class types",
+    "options": {
+      "A": "业务领域类",
+      "B": "实体类",
+      "C": "流程类",
+      "D": "用户界面类"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0134",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种设计模型元素用于描述从用户角度呈现的信息模型？\n",
+    "options": {
+      "A": "建筑设计元素\n",
+      "B": "元件级设计元素\n",
+      "C": "数据设计元素\n",
+      "D": "界面设计元素\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0135",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种设计方案与房屋的平面图等效？\n",
+    "options": {
+      "A": "建筑设计\n",
+      "B": "元件级设计\n",
+      "C": "数据设计\n",
+      "D": "界面设计\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0136",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种设计模型与住宅的接入点和外部设备的详细图纸相对应？\n",
+    "options": {
+      "A": "建筑设计\n",
+      "B": "元件级设计\n",
+      "C": "数据设计\n",
+      "D": "界面设计\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0137",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种设计模型与一套详细的房屋每个房间图纸等价？\n",
+    "options": {
+      "A": "建筑设计\n",
+      "B": "元件级设计\n",
+      "C": "数据设计\n",
+      "D": "界面设计\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第12章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_12"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0144",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一种建筑风格包含以下哪些元素？\n",
+    "options": {
+      "A": "约束",
+      "B": "元件集合\n",
+      "C": "语义模型\n",
+      "D": "句法模型\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第13章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_13"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0145",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为了确定最适合所提出的系统的建筑风格或风格组合，采用需求工程来识别",
+    "options": {
+      "A": "算法复杂度\n",
+      "B": "特点和限制\n",
+      "C": "控制与数据\n",
+      "D": "设计模式\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第13章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_13"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0147",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "评估建筑设计质量的标准应基于以下要素：系统",
+    "options": {
+      "A": "可访问性\n",
+      "B": "控制\n",
+      "C": "数据\n",
+      "D": "实现\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第13章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_13"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0150",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在对系统进行建模时，与目标系统交互的系统应被表示为",
+    "options": {
+      "A": "同级系统",
+      "B": "从属系统\n",
+      "C": "上位系统\n",
+      "D": "运行系统\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第13章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_13"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0152",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是需要集成到软件架构中的基础设施组件？\n",
+    "options": {
+      "A": "通信组件\n",
+      "B": "数据库组件\n",
+      "C": "接口组件\n",
+      "D": "内存管理组件\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第13章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_13"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0153",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在建筑风格选择分析方法中，应使用以下方式描述建筑风格：\n",
+    "options": {
+      "A": "数据流视图\n",
+      "B": "模块 view\n\n\n\n\n",
+      "C": "流程视图\n",
+      "D": "用户视角\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第13章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_13"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0154",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个有用的技术，用于评估所提出的架构的总体复杂度，是分析其组成部分。",
+    "options": {
+      "A": "凝聚力\n",
+      "B": "流程依赖\n",
+      "C": "共享依赖",
+      "D": "尺寸\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第13章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_13"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0160",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在面向对象软件工程的语境下，一个组件包含：\n",
+    "options": {
+      "A": "属性和操作",
+      "B": "每个类的实例",
+      "C": "每个参与者的角色（设备或用户）",
+      "D": "协作类集合"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0161",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在传统软件工程中，模块必须在以下哪些角色中发挥作用？\n",
+    "options": {
+      "A": "控制元件\n",
+      "B": "基础设施组件\n",
+      "C": "问题域组件\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0163",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项不是指导组件级设计的四种原则之一？\n",
+    "options": {
+      "A": "依赖倒置原则\n",
+      "B": "接口隔离原则\n",
+      "C": "开放封闭原则\n",
+      "D": "精益设计原则\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0167",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在组件设计中，以下哪些元素需要详细描述？\n",
+    "options": {
+      "A": "算法\n",
+      "B": "属性\n",
+      "C": "接口\n",
+      "D": "运算\n",
+      "E": "b, c, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0168",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在组件级设计中，持久数据源指的是：\n",
+    "options": {
+      "A": "组件库\n",
+      "B": "数据库\n",
+      "C": "文件\n",
+      "D": "以上所有",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0172",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种结构体用于结构化编程？\n",
+    "options": {
+      "A": "分支\n",
+      "B": "条件\n",
+      "C": "重复\n",
+      "D": "序列\n",
+      "E": "b, c, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0174",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是域名工程的主要活动？\n",
+    "options": {
+      "A": "分析\n",
+      "B": "建造\n",
+      "C": "传播\n",
+      "D": "验证\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0175",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些因素在元件合格评定时不会被考虑？\n",
+    "options": {
+      "A": "应用程序编程接口 (API)\n",
+      "B": "所需开发和集成工具\n",
+      "C": "异常处理\n",
+      "D": "所需测试设备\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0176",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种技术用于组件封装？\n",
+    "options": {
+      "A": "黑盒包装\n",
+      "B": "清晰包装",
+      "C": "灰盒封装\n",
+      "D": "白盒封装\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0177",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项不是构成“面向重用设计”的基础问题？\n",
+    "options": {
+      "A": "面向对象编程\n",
+      "B": "程序模板\n",
+      "C": "标准数据\n",
+      "D": "标准接口协议\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0178",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在重用环境中，库查询通常被描述为 3C 模型的 ________ 元素。\n",
+    "options": {
+      "A": "概念\n",
+      "B": "内容\n",
+      "C": "上下文\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第14章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_14"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0179",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项界面设计原则**不**允许用户控制与计算机的交互？\n",
+    "options": {
+      "A": "允许交互可以被中断",
+      "B": "允许操作可撤销\n",
+      "C": "隐藏技术细节，避免普通用户理解",
+      "D": "仅提供一种明确定义的、用于完成任务的方法。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0180",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种界面设计原则可以减少用户的记忆负担？\n",
+    "options": {
+      "A": "定义直观快捷键",
+      "B": "逐步披露信息",
+      "C": "建立有意义的默认值\n",
+      "D": "提供在线教程\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0182",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "接口的一致性意味着",
+    "options": {
+      "A": "每个应用程序都应具有独特的视觉风格和用户体验。",
+      "B": "输入机制在整个应用程序中保持一致。",
+      "C": "导航方法具有上下文敏感性",
+      "D": "视觉信息按照设计标准进行组织。",
+      "E": "b and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0184",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个模型描述了计算机系统的最终用户的画像？\n",
+    "options": {
+      "A": "设计模型\n",
+      "B": "实施模型\n",
+      "C": "用户模型\n",
+      "D": "用户模型\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0185",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个模型描述了用户在脑海中构建的系统的形象？\n",
+    "options": {
+      "A": "设计模型\n",
+      "B": "用户模型\n",
+      "C": "系统模型\n",
+      "D": "系统感知\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0186",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪个模型最能体现用户界面的外观和感觉，以及所有相关信息？\n",
+    "options": {
+      "A": "实施模型\n",
+      "B": "用户模型\n",
+      "C": "用户模型\n",
+      "D": "系统感知\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0187",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个框架活动通常不与用户界面设计流程相关联？\n",
+    "options": {
+      "A": "成本估算\n",
+      "B": "接口构建\n",
+      "C": "接口验证\n",
+      "D": "用户和任务分析\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0188",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种(种)用户任务分析方法在用户界面设计中可能是有用的？\n",
+    "options": {
+      "A": "让用户在问卷中表明他们的偏好",
+      "B": "依赖经验丰富的程序员的判断",
+      "C": "研究现有的基于计算机的解决方案",
+      "D": "观察用户手动执行任务\n",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0194",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下是一些常见的用户界面设计问题，几乎适用于所有用户界面：",
+    "options": {
+      "A": "自适应用户档案\n",
+      "B": "错误处理\n",
+      "C": "图形显示器的分辨率",
+      "D": "系统响应时间\n",
+      "E": "b and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0196",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下是一些在观察用户与计算机系统交互时可以收集到的可用性指标：",
+    "options": {
+      "A": "应用程序的停机时间\n",
+      "B": "用户错误数量\n",
+      "C": "软件可靠性\n",
+      "D": "花费在查阅帮助材料上的时间\n",
+      "E": "b and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第15章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_15"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0197",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是设计模式的组成部分？\n",
+    "options": {
+      "A": "上下文\n",
+      "B": "环境\n",
+      "C": "问题\n",
+      "D": "解答\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0201",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一种模式语言\n",
+    "options": {
+      "A": "涵盖一系列模式",
+      "B": "使用超文本实现",
+      "C": "与自然语言的结构相似",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0202",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "所讨论的概念和技术，也可以与基于模式的方法结合使用。\n",
+    "options": {
+      "A": "建筑设计\n",
+      "B": "元件级设计\n",
+      "C": "用户界面设计\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0205",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种问题类型用于在模式化的表中标记列？\n",
+    "options": {
+      "A": "商业",
+      "B": "背景\n",
+      "C": "数据库\n",
+      "D": "基础设施\n",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0209",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "大多数用户界面设计模式属于以下哪种类别？",
+    "options": {
+      "A": "5",
+      "B": "10",
+      "C": "25",
+      "D": "100"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0210",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Web 应用程序设计模式可以根据以下维度进行分类？\n",
+    "options": {
+      "A": "美学\n",
+      "B": "设计重点\n",
+      "C": "粒度\n",
+      "D": "可用性\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0211",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是用于对 WebApp 模式进行分类的设计关注层面？\n\n\n\n",
+    "options": {
+      "A": "行为模式\n",
+      "B": "功能模式\n",
+      "C": "布局模式\n",
+      "D": "导航模式\n",
+      "E": "b and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0212",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些粒度可以用来描述 WebApp 模式？\n\n\n\n",
+    "options": {
+      "A": "建筑模式",
+      "B": "组件模式\n",
+      "C": "设计模式\n",
+      "D": "交互模式\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第16章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_16"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0214",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些特征不应用于评估 Web 应用程序的质量？\n",
+    "options": {
+      "A": "美学",
+      "B": "可靠性\n",
+      "C": "可维护性\n",
+      "D": "可用性\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0215",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是每个 Web 应用程序的设计目标？\n",
+    "options": {
+      "A": "简洁\n",
+      "B": "一致性\n",
+      "C": "可访问性\n",
+      "D": "视觉吸引力\n",
+      "E": "以上所有。\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0216",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项不属于 WebE 设计的“设计金字塔”？\n\n\n\n",
+    "options": {
+      "A": "建筑设计\n",
+      "B": "商业案例设计\n",
+      "C": "内容设计\n",
+      "D": "导航设计\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0218",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是 Web 应用程序交互机制？\n\n\n\n",
+    "options": {
+      "A": "图形图标\n",
+      "B": "图形图像\n",
+      "C": "导航菜单\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0221",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "内容设计由…负责",
+    "options": {
+      "A": "文案撰写员和平面设计师\n",
+      "B": "网络工程师\n",
+      "C": "A 和 B\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0225",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不是网页工程师所使用的内容架构结构之一？\n",
+    "options": {
+      "A": "线性\n",
+      "B": "网格\n",
+      "C": "层级\n",
+      "D": "并行\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0226",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "MVC 是一种三层架构，包含一个\n",
+    "options": {
+      "A": "机器、视图、内容对象\n",
+      "B": "模型、视图和内容对象",
+      "C": "模型、视图和控制器",
+      "D": "机器，视图，控制器\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0230",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不是面向对象超媒体设计相关的设计活动？\n",
+    "options": {
+      "A": "抽象接口设计\n",
+      "B": "概念设计\n",
+      "C": "内容设计\n",
+      "D": "导航设计\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第17章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_17"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0238",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是常见的移动应用程序设计错误？\n",
+    "options": {
+      "A": "不一致",
+      "B": "互操作性\n",
+      "C": "精益设计\n",
+      "D": "过度设计\n",
+      "E": "a and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第18章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_18"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0244",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是软件质量的属性？\n",
+    "options": {
+      "A": "为开发者和用户提供增值功能\n",
+      "B": "有效的软件流程能够建立基础设施。",
+      "C": "消除需要考虑性能问题的需求",
+      "D": "有用的产品满足相关方的需求。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第19章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_19"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0247",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是 ISO 9126 软件质量因素？\n",
+    "options": {
+      "A": "功能",
+      "B": "便携性\n",
+      "C": "可靠性\n",
+      "D": "视觉吸引力\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第19章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_19"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0252",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是质量成本中最可能昂贵的方面？\n",
+    "options": {
+      "A": "评估成本\n",
+      "B": "外部故障成本\n",
+      "C": "内部故障成本\n",
+      "D": "预防成本\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第19章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_19"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0256",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些管理决策可能影响软件质量？\n",
+    "options": {
+      "A": "估算决策",
+      "B": "风险导向的决策",
+      "C": "排程决策",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第19章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_19"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0257",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "项目计划应明确包含用于 _______ 和 _______ 管理的具体技术。",
+    "options": {
+      "A": "更改\n",
+      "B": "成本\n",
+      "C": "错误\n",
+      "D": "质量\n",
+      "E": "a and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第19章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_19"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0266",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "审查的正式程度由以下哪一项决定？\n",
+    "options": {
+      "A": "准备工作量\n",
+      "B": "审核员跟进",
+      "C": "项目预算规模",
+      "D": "审查结构",
+      "E": "a, b, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第20章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_20"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0267",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "非正式审查可能包括以下哪些内容？\n",
+    "options": {
+      "A": "非正式会议\n",
+      "B": "桌面检查\n",
+      "C": "检查\n",
+      "D": "两人协同编程\n",
+      "E": "a and b"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第20章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_20"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0268",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是正式的技术评审的目标？\n",
+    "options": {
+      "A": "允许高级员工纠正错误",
+      "B": "评估程序员的生产力",
+      "C": "确定程序中引入错误的责任人",
+      "D": "发现软件工作成果中的错误"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第20章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_20"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0269",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在正式的技术审查结束后，所有参与者可以决定：\n",
+    "options": {
+      "A": "接受未经修改的成果",
+      "B": "修改工作成果并继续进行审查。",
+      "C": "由于风格不一致，拒绝该产品",
+      "D": "由于严重错误，拒绝该产品",
+      "E": "a and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第20章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_20"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0270",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一份总结报告，主要回答以下三个问题：",
+    "options": {
+      "A": "终止项目，更换生产商，申请延期",
+      "B": "发现了哪些缺陷？导致缺陷的原因是什么？谁负责？\n",
+      "C": "被审查的内容是什么？\n谁进行了审查？\n审查结果是什么？\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第20章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_20"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0276",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪项活动不是独立质量保证（SQA）小组推荐执行的活动？\n",
+    "options": {
+      "A": "准备项目质量保证（SQA）计划",
+      "B": "审查软件工程活动，以验证流程合规性",
+      "C": "请向高级管理层报告任何不符合规定的证据。",
+      "D": "作为任何软件开发的唯一测试团队。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第21章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_21"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0279",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "统计质量保证包括",
+    "options": {
+      "A": "使用抽样测试代替全面测试软件",
+      "B": "调查客户，了解他们对产品质量的看法。",
+      "C": "追踪每个缺陷的根本原因，识别出“关键少数”的原因，并着手解决它们。\n",
+      "D": "逐一追踪每个缺陷的根本原因，并运用帕累托原则来解决每个发现的问题。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第21章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_21"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0280",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "六西格玛方法论定义了三个核心步骤。",
+    "options": {
+      "A": "分析、改进、控制\n",
+      "B": "分析、设计、验证\n",
+      "C": "定义、测量、分析\n",
+      "D": "定义、测量、控制\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第21章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_21"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0281",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件可靠性问题几乎总是可以追溯到以下原因：",
+    "options": {
+      "A": "准确性误差",
+      "B": "设计中的错误",
+      "C": "实现中的错误",
+      "D": "操作过程中出现的错误",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第21章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_21"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0282",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件安全是一种质量保证活动，它侧重于潜在的危险。",
+    "options": {
+      "A": "影响软件组件的可靠性\n",
+      "B": "可能导致整个系统崩溃。\n",
+      "C": "可能由用户输入错误引起",
+      "D": "防止对最终产品的有利营销"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第21章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_21"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0283",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "符合软件工程的ISO质量保证标准是：\n",
+    "options": {
+      "A": "ISO 9000",
+      "B": "ISO 9001",
+      "C": "ISO 9002",
+      "D": "ISO 9003"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第21章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_21"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0284",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是IEEE推荐的SQA计划标准中的一部分？\n\n\n",
+    "options": {
+      "A": "预算\n",
+      "B": "文档\n",
+      "C": "审查和审计",
+      "D": "测试\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第21章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_21"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0286",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "使用独立软件测试团队的最佳理由是：\n",
+    "options": {
+      "A": "软件开发人员无需进行任何测试。",
+      "B": "陌生人会无情地测试该软件。\n",
+      "C": "测试人员在测试开始前不参与项目。",
+      "D": "开发人员和测试人员之间的利益冲突得到减少。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0287",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "传统软件测试中，活动通常按照什么顺序进行？\n",
+    "options": {
+      "A": "集成测试、系统测试、单元测试、验证测试。\n",
+      "B": "单元测试、验证测试、系统测试、集成测试\n",
+      "C": "单元测试、集成测试、验证测试、系统测试\n",
+      "D": "验证测试、系统测试、集成测试、单元测试\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0289",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些战略问题需要在成功的软件测试过程中得到解决？\n",
+    "options": {
+      "A": "在测试之前，进行正式的技术审查。",
+      "B": "明确要求，并以可量化的方式进行描述\n",
+      "C": "使用独立的测试团队",
+      "D": "在编写代码之前，先编写测试计划。\n",
+      "E": "a and b"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0290",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些内容需要在单元测试中进行评估？\n",
+    "options": {
+      "A": "算法性能\n",
+      "B": "代码稳定性\n",
+      "C": "错误处理\n",
+      "D": "执行路径\n",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0292",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "顶层集成测试的主要优势是：",
+    "options": {
+      "A": "低层模块通常不需要进行测试。",
+      "B": "主要决策点在早期进行测试\n",
+      "C": "无需编写任何驱动程序。\n",
+      "D": "无需编写任何代码片段。\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0293",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "自底向上集成测试的主要优势是：",
+    "options": {
+      "A": "主要决策点在早期进行测试\n",
+      "B": "无需编写任何驱动程序。\n",
+      "C": "无需编写任何代码片段。\n",
+      "D": "回归测试是不需要的。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0294",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "回归测试应作为集成测试的常规部分，因为当新的模块添加到系统中时，需要进行。",
+    "options": {
+      "A": "控制逻辑被调用\n",
+      "B": "数据流路径已建立\n",
+      "C": "驾驶员需要进行测试。\n",
+      "D": "以上所有",
+      "E": "a and b"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0295",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "烟雾测试最准确的描述是：\n",
+    "options": {
+      "A": "防弹软件，使用塑料薄膜包装",
+      "B": "滚动集成测试\n",
+      "C": "测试，用于隐藏实现错误",
+      "D": "小型程序的单元测试"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0297",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "OO 测试集成策略包括：测试",
+    "options": {
+      "A": "一组课程，它们之间存在某种协作或沟通关系。",
+      "B": "single operations as they are added to the evolving class implementation",
+      "C": "基于用例场景开发的运算符程序",
+      "D": "以上均不成立\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0303",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "验收测试通常由……进行。",
+    "options": {
+      "A": "开发者\n",
+      "B": "最终用户\n",
+      "C": "测试团队\n",
+      "D": "系统工程师\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0309",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种方法是调试的？\n",
+    "options": {
+      "A": "回溯\n",
+      "B": "暴力破解\n",
+      "C": "原因排除\n",
+      "D": "代码重构\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第22章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_22"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0311",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是可测试的软件的特征？\n",
+    "options": {
+      "A": "可观测性\n",
+      "B": "简洁\n",
+      "C": "稳定性\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0312",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一种测试技术，要求设计测试用例来证明每个程序函数的功能正常，被称为：\n",
+    "options": {
+      "A": "黑盒测试\n",
+      "B": "玻璃盒测试\n",
+      "C": "灰盒测试\n",
+      "D": "白盒测试\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0313",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一种测试技术，要求设计测试用例来验证软件模块的内部逻辑，被称为：\n",
+    "options": {
+      "A": "行为测试\n",
+      "B": "黑盒测试\n",
+      "C": "灰盒测试\n",
+      "D": "白盒测试\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0314",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种类型的错误，黑盒测试无法发现，但白盒测试可以发现？\n",
+    "options": {
+      "A": "行为错误\n",
+      "B": "逻辑错误\n",
+      "C": "性能错误\n",
+      "D": "排版错误\n",
+      "E": "b and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0316",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "“环数复杂度指标为设计师提供关于以下内容的资讯：”\n",
+    "options": {
+      "A": "程序中的循环",
+      "B": "程序中的错误",
+      "C": "程序中的独立逻辑路径\n",
+      "D": "程序中的陈述\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0318",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "条件测试是一种控制结构测试技术，其设计测试用例的标准是：",
+    "options": {
+      "A": "依赖基础路径测试",
+      "B": "在程序模块中运用逻辑条件",
+      "C": "根据变量的位置和用途，选择测试路径。",
+      "D": "重点测试循环结构的有效性"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0319",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "数据流测试是一种控制结构测试技术，其设计测试用例的标准是：",
+    "options": {
+      "A": "依赖基础路径测试",
+      "B": "在程序模块中运用逻辑条件",
+      "C": "根据变量的位置和用途，选择测试路径。",
+      "D": "重点测试循环结构的有效性"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0320",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "循环测试是一种控制结构测试技术，其设计测试用例的标准是：",
+    "options": {
+      "A": "依赖，基础，路径，测试",
+      "B": "在程序模块中运用逻辑条件",
+      "C": "根据变量的位置和用途，选择测试路径。",
+      "D": "重点测试循环结构的有效性"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0321",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "黑盒测试旨在找出以下类别中的错误：\n",
+    "options": {
+      "A": "错误的或缺失的函数\n",
+      "B": "接口错误",
+      "C": "性能错误\n",
+      "D": "以上均不成立\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0326",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Test derived from behavioral class models should be based on the",
+    "options": {
+      "A": "数据流程图\n",
+      "B": "对象-关系图\n",
+      "C": "状态转换图\n",
+      "D": "用例图\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0328",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "实时应用给测试带来了新的、可能也比较复杂的挑战。\n",
+    "options": {
+      "A": "性能\n",
+      "B": "可靠性\n",
+      "C": "安全",
+      "D": "时间\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第23章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_23"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0333",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "面向对象软件的集成测试可以通过以下哪种测试策略来实现？\n",
+    "options": {
+      "A": "集群测试\n",
+      "B": "玻璃盒测试\n",
+      "C": "基于线程的测试",
+      "D": "基于使用测试",
+      "E": "a, c, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第24章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_24"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0337",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于错误的测试，最适合用于：\n",
+    "options": {
+      "A": "传统软件测试\n",
+      "B": "关键或可疑的操作和类",
+      "C": "用例验证\n",
+      "D": "操作员算法的白盒测试"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第24章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_24"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0338",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "情景测试",
+    "options": {
+      "A": "侧重于演员与软件的交互\n",
+      "B": "未能发现规格中的错误",
+      "C": "未能发现子系统交互中的错误",
+      "D": "A 和 B\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第24章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_24"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0340",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Which of these techniques is not useful for partition testing at the class level",
+    "options": {
+      "A": "基于属性的分区",
+      "B": "按类别划分",
+      "C": "equivalence class partitioning",
+      "D": "基于状态的分区"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第24章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_24"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0343",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是评估 Web 应用程序时使用的质量维度之一？\n\n",
+    "options": {
+      "A": "内容\n",
+      "B": "可维护性\n",
+      "C": "可访问性\n",
+      "D": "可用性\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0347",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 Web 应用程序架构构建时，哪些类型的测试被用于集成测试？\n\n",
+    "options": {
+      "A": "组件测试\n",
+      "B": "内容测试\n",
+      "C": "导航测试\n",
+      "D": "可用性测试\n",
+      "E": "A 和 C\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0348",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是 WebApp 内容测试的目标？\n\n\n",
+    "options": {
+      "A": "找出组织或结构上的错误\n",
+      "B": "找出链接错误",
+      "C": "找出语义错误",
+      "D": "找出语法错误"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0350",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "整体接口测试策略是发现错误。",
+    "options": {
+      "A": "在导航语义方面\n",
+      "B": "在整体可用性方面",
+      "C": "与特定接口机制相关",
+      "D": "A 和 C\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0351",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是 WebApp 界面的机制？\n\n\n",
+    "options": {
+      "A": "浏览器\n",
+      "B": "饼干\n",
+      "C": "表格\n",
+      "D": "链接\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0355",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种测试用例设计技术最适用于 WebApp 组件级别的测试？\n\n\n",
+    "options": {
+      "A": "边界值分析\n",
+      "B": "等价分区\n",
+      "C": "路径测试\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0358",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是在构建 WebApp 服务器端配置测试时需要考虑的要素？\n\n\n",
+    "options": {
+      "A": "浏览器兼容性\n",
+      "B": "数据库软件集成",
+      "C": "操作系统兼容性",
+      "D": "系统安全措施\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0360",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是可测试的 Web 应用程序安全元素？\n",
+    "options": {
+      "A": "身份验证\n",
+      "B": "加密\n",
+      "C": "防火墙\n",
+      "D": "渗透"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0361",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "WebApp 性能测试的目标是：\n\n",
+    "options": {
+      "A": "评估 Web 应用程序的可使用性",
+      "B": "评估页面加载时间",
+      "C": "模拟真实世界的加载情况",
+      "D": "测试网络连接"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0362",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "负载测试涉及确定以下 3 个变量的输入：\n",
+    "options": {
+      "A": "N, T, D",
+      "B": "N, T, P",
+      "C": "T, D, P",
+      "D": "N, D, P"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第25章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_25"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0370",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是“在真实环境中测试”的原因？\n",
+    "options": {
+      "A": "评估生产环境的影响",
+      "B": "未能创建测试用例\n",
+      "C": "未能理解用户的人口统计信息",
+      "D": "测试用户设备上的变量性能",
+      "E": "A 和 D\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第26章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_26"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0372",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项增加了移动应用程序手势测试的难度？\n",
+    "options": {
+      "A": "自动工具的使用存在困难",
+      "B": "创建函数来模拟事件",
+      "C": "屏幕尺寸变化",
+      "D": "使用纸质原型",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第26章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_26"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0377",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些因素使得实时测试变得困难？\n",
+    "options": {
+      "A": "有限的设备处理能力\n",
+      "B": "设备功率限制",
+      "C": "独特的移动网络基础设施\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第26章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_26"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0386",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是安全模型中的组成部分？\n",
+    "options": {
+      "A": "犯罪记录调查",
+      "B": "外部接口要求\n",
+      "C": "操作规则\n",
+      "D": "安全策略目标\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第27章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_27"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0387",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "安全指标和措施需要评估以下哪些属性？\n",
+    "options": {
+      "A": "可靠性\n",
+      "B": "生存能力\n",
+      "C": "可靠性\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第27章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_27"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0388",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些活动应该包含在安全正确性检查中？\n",
+    "options": {
+      "A": "审计",
+      "B": "部署\n",
+      "C": "检查",
+      "D": "测试\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第27章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_27"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0389",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是安全事件的组成部分？\n",
+    "options": {
+      "A": "参数\n",
+      "B": "缺陷报告\n",
+      "C": "声明",
+      "D": "证据\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第27章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_27"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0393",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "清洁室策略基于 ________ 软件流程模型。\n",
+    "options": {
+      "A": "进化",
+      "B": "逐步\n",
+      "C": "革命性的\n",
+      "D": "螺旋"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0394",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "清洁室策略依赖于：",
+    "options": {
+      "A": "全面测试\n",
+      "B": "对所有模块进行全面的单元测试\n",
+      "C": "测试，旨在模拟软件的实际使用场景。\n",
+      "D": "白盒测试策略"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0397",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "本规格说明描述了一个抽象概念、刺激和反应。\n",
+    "options": {
+      "A": "黑盒\n",
+      "B": "清空框\n",
+      "C": "状态框\n",
+      "D": "白色箱子\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0398",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "本规格说明描述了某些系统组件的建筑设计。",
+    "options": {
+      "A": "黑盒\n",
+      "B": "清空框\n",
+      "C": "状态框\n",
+      "D": "白色箱子\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0399",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "此规格与过程式设计和结构化编程密切相关。",
+    "options": {
+      "A": "黑盒\n",
+      "B": "清空框\n",
+      "C": "状态框\n",
+      "D": "白色箱子\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0400",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在洁净室软件工程中，采用结构化编程方法。",
+    "options": {
+      "A": "优化数据设计\n",
+      "B": "优化函数设计",
+      "C": "优化使用测试用例",
+      "D": "A 和 B\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0402",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不是使用对清晰盒设计每个迭代进行严格正确性验证的优点？\n",
+    "options": {
+      "A": "提高代码性能",
+      "B": "产生比单元测试更好的代码\n",
+      "C": "减少验证工作量\n",
+      "D": "导致缺陷率接近于零"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0403",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "统计应用测试依赖于基于概率分布的理论。",
+    "options": {
+      "A": "程序中使用的控制结构混合",
+      "B": "模块执行的顺序",
+      "C": "软件的实际使用方式\n",
+      "D": "用户界面设计标准\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0405",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个模型是洁净室认证流程的一部分？\n",
+    "options": {
+      "A": "组件模型\n",
+      "B": "抽样模型\n",
+      "C": "A 和 B\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0407",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在某些正式语言中，系统访问和修改的数据被称为：\n",
+    "options": {
+      "A": "属性\n",
+      "B": "数据结构\n",
+      "C": "状态\n",
+      "D": "变体\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0408",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在形式方法中，对状态进行读取或写入数据的操作被称为：\n",
+    "options": {
+      "A": "演员\n",
+      "B": "事件\n",
+      "C": "不变性",
+      "D": "操作\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0409",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个因素决定了特定操作的有效性？\n",
+    "options": {
+      "A": "数据不变性",
+      "B": "前提条件\n",
+      "C": "后置条件\n",
+      "D": "状态\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第28章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_28"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0411",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是有效的软件配置项？\n",
+    "options": {
+      "A": "开发工具\n",
+      "B": "文档\n",
+      "C": "可执行程序\n",
+      "D": "测试数据\n",
+      "E": "以上所有。\n"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0412",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项不被认为是配置管理系统开发时应存在的四个重要要素之一？\n",
+    "options": {
+      "A": "组件元素\n",
+      "B": "人类因素\n",
+      "C": "处理元素\n",
+      "D": "验证元素\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0414",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种配置对象通常不会出现在项目数据库中？\n",
+    "options": {
+      "A": "设计规范\n",
+      "B": "市场数据\n",
+      "C": "组织结构描述\n",
+      "D": "测试计划\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0416",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "使用数据仓库元模型来确定……\n",
+    "options": {
+      "A": "信息存储在仓库中",
+      "B": "数据完整性可以得到维护。",
+      "C": "现有模型可以轻松扩展",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0419",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪项任务不属于软件配置管理？\n",
+    "options": {
+      "A": "变更控制\n",
+      "B": "报告",
+      "C": "统计质量控制\n",
+      "D": "版本控制\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0420",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个基本配置对象是指由软件工程师在软件开发过程的某个阶段创建的__________。\n",
+    "options": {
+      "A": "程序数据结构\n",
+      "B": "硬件驱动程序\n",
+      "C": "信息单位\n",
+      "D": "以上所有"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0423",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "当软件配置管理是一个正式活动时，软件配置审计由……进行。",
+    "options": {
+      "A": "开发团队\n",
+      "B": "质量保证小组\n",
+      "C": "高级管理人员\n",
+      "D": "测试专家"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0424",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "主要目的是报告配置状态",
+    "options": {
+      "A": "允许项目经理修改项目进度计划和成本估算",
+      "B": "评估软件开发人员和组织的绩效",
+      "C": "请确保变更信息已传达给所有相关方。\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0425",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在开发 Web 和移动应用程序时，需要考虑的配置问题包括：",
+    "options": {
+      "A": "内容\n",
+      "B": "成本\n",
+      "C": "人\n",
+      "D": "政治\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0426",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Web 和移动应用程序的配置对象，与传统软件配置对象类似，可以以相同的方式进行管理，但需要注意以下区别：",
+    "options": {
+      "A": "内容项\n",
+      "B": "功能性项目\n",
+      "C": "图形元素\n",
+      "D": "用户物品\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第29章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_29"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0432",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是使用技术产品措施在软件开发中的原因？\n",
+    "options": {
+      "A": "大量的科学证据支持其使用。",
+      "B": "为软件工程师提供一种客观的评估软件质量的机制。",
+      "C": "它们允许将所有软件质量相关信息以单一数字形式明确表达。",
+      "D": "以上所有"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0433",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项测量活动未出现在列表中？\n",
+    "options": {
+      "A": "设计\n",
+      "B": "反馈\n",
+      "C": "测量\n",
+      "D": "量化"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0435",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个重要的软件产品指标属性是：它应该具备……\n",
+    "options": {
+      "A": "易于计算\n",
+      "B": "具有定性的性质",
+      "C": "长期可靠\n",
+      "D": "广泛适用\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0438",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "戴维斯提出的规范指标，主要针对软件需求的哪些两个方面？\n",
+    "options": {
+      "A": "功能和性能\n",
+      "B": "性能和完整性\n",
+      "C": "具体性和完整性\n",
+      "D": "具体性和功能性\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0439",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "建筑设计指标主要关注：",
+    "options": {
+      "A": "建筑结构\n",
+      "B": "数据结构之间的关系\n",
+      "C": "内部模块复杂性",
+      "D": "模块有效性\n",
+      "E": "a and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0440",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是面向对象设计的可衡量特征？\n",
+    "options": {
+      "A": "完整性\n",
+      "B": "效率\n",
+      "C": "尺寸\n",
+      "D": "波动性\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0441",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "深度继承树（DIT）指标可以帮助面向对象软件设计师了解…\n",
+    "options": {
+      "A": "每个类的所需属性",
+      "B": "系统实施所需的时间\n",
+      "C": "complexity of the class hierarchy",
+      "D": "实现的目标对象可重用程度\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0443",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "If you encounter a class with a large responsibility (large class size or CS value) you should consider",
+    "options": {
+      "A": "将其作为基类",
+      "B": "将其作为子类",
+      "C": "分组\n",
+      "D": "starting a new class hierarchy"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0444",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "组件级指标包括以下内容：\n",
+    "options": {
+      "A": "复杂度\n",
+      "B": "耦合",
+      "C": "模块连贯性\n",
+      "D": "性能\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0448",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哈尔斯德的源代码指标基于以下内容：\n",
+    "options": {
+      "A": "程序中的模块\n",
+      "B": "程序中的操作数\n",
+      "C": "程序中的运算符\n",
+      "D": "程序中的体积元素\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0449",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件测试指标可以分为两大类",
+    "options": {
+      "A": "关注缺陷移除有效性的指标",
+      "B": "关注测试覆盖的指标",
+      "C": "衡量测试过程持续时间的指标",
+      "D": "衡量指标，用于预测所需的测试用例数量\n",
+      "E": "b and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0450",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IEEE 软件成熟度指数 (SMI) 是一种用于衡量软件成熟度的指标。\n",
+    "options": {
+      "A": "基于可用性的，软件产品的可维护性",
+      "B": "一个正在考虑退役的软件产品的相对年龄",
+      "C": "软件产品的可靠性，在回归测试后的评估",
+      "D": "软件产品在维护期间的稳定性"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第30章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_30"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0451",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "有效的软件项目管理侧重于：\n",
+    "options": {
+      "A": "人员、绩效、回报、产品\n",
+      "B": "人员、产品、绩效、流程\n",
+      "C": "人员、产品、流程、项目\n",
+      "D": "人员、流程、收益、产品\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0453",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在项目规划的第一步中，需要……\n",
+    "options": {
+      "A": "确定预算。\n",
+      "B": "选择一种团队组织模型。\n",
+      "C": "确定项目限制条件。\n",
+      "D": "确定目标和范围。\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0454",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "流程框架活动内容将被填充。",
+    "options": {
+      "A": "里程碑\n",
+      "B": "工作成果\n",
+      "C": "质量评估分数\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0456",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项不被认为是软件开发过程中的利益相关者？\n",
+    "options": {
+      "A": "客户\n",
+      "B": "最终用户\n",
+      "C": "项目经理\n",
+      "D": "销售人员\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0458",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在处理极度复杂问题时，最合适的项目团队组织模型是：\n",
+    "options": {
+      "A": "封闭范式\n",
+      "B": "开放范式\n",
+      "C": "随机范式\n",
+      "D": "同步范式\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0459",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在选择软件团队的组织结构时，应考虑哪些因素？\n",
+    "options": {
+      "A": "所需沟通程度\n",
+      "B": "预测结果程序的大小",
+      "C": "交货日期上的严格性\n",
+      "D": "项目预算的规模\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0460",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一种有效的方法是，在软件开发过程中，尽量避免因各种问题而产生的挫败感。",
+    "options": {
+      "A": "给予团队成员更多对流程和技术决策的控制权。\n",
+      "B": "减少团队成员对流程和技术决策的控制权。\n",
+      "C": "在项目团队成员面前，暂时隐瞒坏消息，直到情况好转。",
+      "D": "根据程序员的生产力来给予奖励。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0462",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项软件特性不是导致项目协调困难的因素？\n",
+    "options": {
+      "A": "互操作性\n",
+      "B": "性能\n",
+      "C": "比例\n",
+      "D": "不确定性\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0463",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些软件特性被用于确定软件项目的范围？\n",
+    "options": {
+      "A": "上下文、代码行数、函数",
+      "B": "上下文、函数、通信要求",
+      "C": "信息目标、功能、性能",
+      "D": "通信需求、性能、信息目标"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0464",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在项目范围确定阶段，主要的分解问题领域包括：",
+    "options": {
+      "A": "客户流程\n",
+      "B": "需要交付的功能",
+      "C": "用于提供功能的流程",
+      "D": "软件流程模型\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0466",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在流程分解时，哪些常用的流程框架活动可以被省略？\n",
+    "options": {
+      "A": "当项目规模非常小时",
+      "B": "在软件处于关键时刻时",
+      "C": "快速原型设计不需要使用它们。",
+      "D": "活动永远不会保持不变。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0467",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件项目经理需要采取哪些措施，以最大限度地降低软件失败的风险？\n",
+    "options": {
+      "A": "将项目团队规模扩大一倍\n",
+      "B": "申请大额预算",
+      "C": "从一开始就走好路",
+      "D": "跟踪进度\n",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0468",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "W5HH 原则包含以下哪些问题？\n",
+    "options": {
+      "A": "系统正在开发的原因是什么？\n",
+      "B": "谁将执行什么？\n",
+      "C": "他们在组织结构上位于哪个部门？\n",
+      "D": "每个资源需要多少？\n",
+      "E": "a, c d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0469",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是基于绩效的项目管理的关键实践？\n",
+    "options": {
+      "A": "评估产品可用性",
+      "B": "缺陷跟踪与质量目标\n",
+      "C": "经验性成本估算\n",
+      "D": "正式风险管理\n",
+      "E": "b, c, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第31章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_31"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0470",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是衡量软件流程、产品和资源的有效理由？\n",
+    "options": {
+      "A": "为了对其进行描述",
+      "B": "为了评估它们",
+      "C": "确定价格",
+      "D": "为了改进它们\n",
+      "E": "a, b, d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0471",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "流程指示符使软件项目经理能够：\n",
+    "options": {
+      "A": "评估正在进行项目的状态",
+      "B": "识别潜在风险",
+      "C": "调整工作流程或任务\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0472",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "公共指标被使用",
+    "options": {
+      "A": "为了评估软件开发团队的绩效。",
+      "B": "为了评估团队成员的个人表现。\n",
+      "C": "为了进行战略性的软件流程调整。\n",
+      "D": "为了在软件项目期间进行战术调整。\n",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0473",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些项目指标不用于衡量软件项目？\n",
+    "options": {
+      "A": "输入\n",
+      "B": "市场",
+      "C": "输出\n",
+      "D": "结果\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0475",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项是使用LOC（代码行数）作为衡量指标的优点？\n",
+    "options": {
+      "A": "LOC 很容易计算。\n",
+      "B": "LOC 是一种依赖于特定语言的指标。",
+      "C": "LOC 是一种与语言无关的指标。",
+      "D": "LOC 可以在使用设计完成之前进行计算。\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0476",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是使用功能点（FP）作为衡量软件应用程序功能交付量的优势？\n",
+    "options": {
+      "A": "FP 很容易计算。\n",
+      "B": "FP 是一种语言依赖的指标。\n",
+      "C": "FP 是一种语言无关的指标。\n",
+      "D": "FP可以在设计完成之前进行计算。",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0480",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是可以从 Web 应用程序项目中收集的数据？\n",
+    "options": {
+      "A": "定制化指数\n",
+      "B": "动态对象的数量\n",
+      "C": "内部页面链接数量\n",
+      "D": "静态网页数量\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0481",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个软件质量因素最有可能受到计算架构的根本性变化的影响？\n",
+    "options": {
+      "A": "操作\n",
+      "B": "过渡\n",
+      "C": "修改\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0482",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项提供有用的软件质量衡量标准？\n",
+    "options": {
+      "A": "正确性、性能、完整性、可用性\n",
+      "B": "可靠性、可维护性、完整性、销售额\n",
+      "C": "正确性、可维护性、大小、满意度\n",
+      "D": "正确性、可维护性、完整性、可用性\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0484",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为什么测量软件工程过程以及它所产出的软件至关重要？\n",
+    "options": {
+      "A": "除非项目极其复杂，否则通常不需要。",
+      "B": "为了确定成本并设定利润空间。\n",
+      "C": "为了确定一个软件组是否在进步。\n",
+      "D": "为了使软件工程更接近其他工程过程。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0485",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为了有效地支持流程改进，所使用的基准数据必须：\n",
+    "options": {
+      "A": "基于过去项目的合理估算",
+      "B": "在不同项目中保持一致",
+      "C": "从类似项目中提取",
+      "D": "基于之前所有已完成的项目",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第32章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_32"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0490",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件项目规划的目标是：\n",
+    "options": {
+      "A": "说服客户，证明该项目是可行的。\n",
+      "B": "充分利用历史项目数据。\n",
+      "C": "帮助管理者合理地估算成本和时间表。",
+      "D": "在投标项目之前，确定可能的利润率。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0491",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "项目范围定义为一种手段，用于界定系统。",
+    "options": {
+      "A": "功能",
+      "B": "性能\n",
+      "C": "成本\n",
+      "D": "时间表\n",
+      "E": "a and b"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0492",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件的可行性取决于以下哪个选项？\n",
+    "options": {
+      "A": "商业和市场营销相关问题\n",
+      "B": "范围、限制、市场",
+      "C": "技术、金融、时间、资源\n",
+      "D": "开发人员的技术能力\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0493",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "确定软件项目所需的人员数量取决于以下因素：\n",
+    "options": {
+      "A": "在完成开发工作量估算后。\n",
+      "B": "根据项目预算的大小。\n",
+      "C": "根据对系统的技术复杂性的评估。\n",
+      "D": "以上所有"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0494",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "可重用软件组件必须是\n",
+    "options": {
+      "A": "已归档，方便查阅。\n",
+      "B": "标准化，便于应用。",
+      "C": "已验证，方便集成。",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0495",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件工程环境（SEE）包括以下哪些内容？\n",
+    "options": {
+      "A": "客户\n",
+      "B": "开发者\n",
+      "C": "硬件平台\n",
+      "D": "软件工具\n",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0496",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件项目估算技术可以大致分为以下哪种类别？\n",
+    "options": {
+      "A": "自动化流程\n",
+      "B": "分解技术\n",
+      "C": "经验模型\n",
+      "D": "回归模型\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0498",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于问题的估算方法，基于问题分解，侧重于",
+    "options": {
+      "A": "信息域值\n",
+      "B": "项目进度计划\n",
+      "C": "软件功能\n",
+      "D": "流程活动\n",
+      "E": "a and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0499",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于LOC（代码行数）估算方法的，需要根据以下原则进行问题分解：\n",
+    "options": {
+      "A": "信息域值\n",
+      "B": "项目进度计划\n",
+      "C": "软件功能\n",
+      "D": "流程活动\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0500",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于FP（函数程序）的估算技术需要根据以下原则进行问题分解：",
+    "options": {
+      "A": "信息域值\n",
+      "B": "项目进度计划\n",
+      "C": "软件功能\n",
+      "D": "流程活动\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0501",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于过程的估算方法需要根据以下内容进行问题分解：",
+    "options": {
+      "A": "信息域值\n",
+      "B": "项目进度计划\n",
+      "C": "软件功能\n",
+      "D": "流程活动\n",
+      "E": "c and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0504",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "经验估计模型通常基于以下内容：",
+    "options": {
+      "A": "根据以往项目经验进行专业判断",
+      "B": "预期值估计的改进",
+      "C": "基于历史项目数据的回归模型",
+      "D": "通过尝试和错误确定参数和系数"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0505",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "COCOMO II 是一种现代的经验估算模型套件，需要以以下格式提供大小信息：",
+    "options": {
+      "A": "函数 points\n\n\n",
+      "B": "代码行数\n",
+      "C": "物体点",
+      "D": "以上任一\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0508",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在敏捷软件开发中，估算技术侧重于完成每个任务所需的时间。",
+    "options": {
+      "A": "递增\n",
+      "B": "情景",
+      "C": "任务\n",
+      "D": "用例\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第33章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_33"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0514",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是软件项目计划的指导原则？\n",
+    "options": {
+      "A": "模块化\n",
+      "B": "市场评估\n",
+      "C": "时间分配\n",
+      "D": "验证投入\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0516",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "该软件方程可以用来证明，如果略微延长项目截止日期，",
+    "options": {
+      "A": "所需人数减少",
+      "B": "您可以保证按时完成任务。\n",
+      "C": "可以生成更多代码行\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0517",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "40-20-40 规则建议，应该投入最少的开发工作量用于…\n",
+    "options": {
+      "A": "估算与规划\n",
+      "B": "分析与设计\n",
+      "C": "编码\n",
+      "D": "测试\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0518",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "任务集是由以下内容组成的集合：",
+    "options": {
+      "A": "工程项目任务、里程碑、成果",
+      "B": "任务分配、成本估算、指标",
+      "C": "里程碑、成果、指标\n",
+      "D": "职责、里程碑、文件"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0519",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "任务（活动）网络是一种有用的机制，用于……\n",
+    "options": {
+      "A": "计算总工作量估算",
+      "B": "检测任务间的依赖关系\n",
+      "C": "确定关键路径\n",
+      "D": "向客户明确说明任务目标",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0521",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下是两种用于计算关键路径和项目完成时间的工具，这些工具基于活动网络：",
+    "options": {
+      "A": "CPM",
+      "B": "DRE",
+      "C": "FP",
+      "D": "PERT\n\n\n",
+      "E": "a and d"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "en",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0523",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "衡量软件项目进展的最佳指标是完成度。",
+    "options": {
+      "A": "一个已定义的工程活动任务",
+      "B": "在规定时间内成功完成预算审查会议",
+      "C": "以及对已定义的软件产物的成功审查",
+      "D": "以及客户对项目原型方案的成功验收"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0526",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "获得价值分析的目的在于：\n",
+    "options": {
+      "A": "确定根据开发人员的生产力如何进行补偿。",
+      "B": "提供一种量化的方法来评估软件项目进展。",
+      "C": "提供一种定性评估软件项目进展的方法。",
+      "D": "根据软件产品的开发投入，确定价格点。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第34章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_34"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0529",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件风险总是包含两个特征。",
+    "options": {
+      "A": "消防和危机管理\n",
+      "B": "已知风险与未知风险\n",
+      "C": "不确定性和损失\n",
+      "D": "人员配置和预算"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0530",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "三种类型的风险是",
+    "options": {
+      "A": "商业风险、人员风险、预算风险\n",
+      "B": "项目风险、技术风险、商业风险",
+      "C": "规划风险、技术风险、人员风险\n",
+      "D": "管理风险、技术风险、设计风险\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0532",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一份风险清单应包含已知的、可预测的风险，这些风险属于以下哪一类？\n",
+    "options": {
+      "A": "产品尺寸\n",
+      "B": "开发环境\n",
+      "C": "员工人数\n",
+      "D": "流程定义\n",
+      "E": "以上所有"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0533",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下问题应被提出，以评估项目的整体风险：\n",
+    "options": {
+      "A": "高层管理人员是否正式承诺支持该项目？\n",
+      "B": "最终用户是否对正在开发的项目和系统持积极态度？\n",
+      "C": "开发团队和客户是否完全理解需求？\n",
+      "D": "拟定的预算方案是否包含用于营销的资金安排？\n",
+      "E": "a, b, c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0534",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件风险影响评估应侧重于对以下方面的影响：",
+    "options": {
+      "A": "规划、资源、成本、时间表\n",
+      "B": "市场价值、成本、人员\n",
+      "C": "商业、技术、流程\n",
+      "D": "性能、支持、成本、时间表\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0535",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "风险评估旨在对每个风险进行以下两种评估：",
+    "options": {
+      "A": "可能性和成本\n",
+      "B": "可能性和影响",
+      "C": "可能性和后果\n",
+      "D": "可能性和暴露"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0536",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "风险表按以下方式排序：\n",
+    "options": {
+      "A": "概率与成本\n",
+      "B": "概率与影响",
+      "C": "概率与后果\n",
+      "D": "概率与暴露"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0538",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪些因素会影响风险发生后可能造成的后果？\n",
+    "options": {
+      "A": "风险成本\n",
+      "B": "风险时机\n",
+      "C": "风险范围\n",
+      "D": "风险资源\n",
+      "E": "b and c"
+    },
+    "answer": "E",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0540",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "有效的风险管理计划需要解决以下哪些问题？\n",
+    "options": {
+      "A": "风险规避\n",
+      "B": "风险监测\n",
+      "C": "应急预案",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0542",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "风险分析侧重于识别和评估可能导致\n",
+    "options": {
+      "A": "项目终止\n",
+      "B": "时间表延误\n",
+      "C": "成本超支\n",
+      "D": "整个系统崩溃\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第35章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_35"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0544",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个软件组织通常在软件维护方面投入多少精力？\n",
+    "options": {
+      "A": "20%\n",
+      "B": "40%\n",
+      "C": "60%\n",
+      "D": "80%\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0547",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是一项业务流程？\n",
+    "options": {
+      "A": "设计新产品\n",
+      "B": "招聘员工\n",
+      "C": "购买服务",
+      "D": "软件测试"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0549",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪项活动不属于软件重构过程模型？\n",
+    "options": {
+      "A": "前向工程",
+      "B": "库存分析\n",
+      "C": "原型设计\n",
+      "D": "逆向工程\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0550",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "软件重构过程模型包括对以下哪些工作项进行重构活动？\n",
+    "options": {
+      "A": "代码\n",
+      "B": "文档\n",
+      "C": "数据\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0551",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是在逆向工程时需要考虑的问题？\n",
+    "options": {
+      "A": "抽象层次\n",
+      "B": "完整性\n",
+      "C": "连接性\n",
+      "D": "方向性\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0552",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "反向工程的数据分析主要关注：\n",
+    "options": {
+      "A": "数据库结构\n",
+      "B": "内部数据结构\n",
+      "C": "A 和 B\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0553",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "第一步的反向工程活动是，尝试理解",
+    "options": {
+      "A": "数据\n",
+      "B": "处理\n",
+      "C": "用户界面\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0555",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些好处可以通过对软件进行重构来实现？\n",
+    "options": {
+      "A": "更高质量的程序\n",
+      "B": "减少维护工作量\n",
+      "C": "软件更容易进行测试\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  },
+  {
+    "id": "se_zju_0557",
+    "source": "ZJU-SE-Exercise",
+    "subject": "软件工程",
+    "subject_en": "software_engineering",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是数据重构的例子？\n",
+    "options": {
+      "A": "数据分析\n",
+      "B": "数据名称： 理由说明\n",
+      "C": "数据记录标准化",
+      "D": "以上均不成立\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "第36章"
+    ],
+    "tags": [
+      "software_engineering",
+      "chapter_36"
+    ],
+    "language": "zh",
+    "split": "train"
+  }
+]

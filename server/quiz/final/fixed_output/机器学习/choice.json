@@ -1,0 +1,8196 @@
+[
+  {
+    "id": "cmmlu_0385",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "SVM在下列那种情况下表现糟糕",
+    "options": {
+      "A": "以上都不是",
+      "B": "线性可分数据",
+      "C": "清洗过的数据",
+      "D": "含噪声数据与重叠数据点"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_0386",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "从给定的句子、段落中识别人名、组织名的过程称为",
+    "options": {
+      "A": "命名实体识别",
+      "B": "词干提取",
+      "C": "新词发现",
+      "D": "情感分析"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_0387",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "针对“北京 是 中国 的 首都”这一分词结果，不进行预处理，可以生成多少个3-gram短语？\n\n",
+    "options": {
+      "A": "4",
+      "B": "3",
+      "C": "5",
+      "D": "2"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_0388",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "统计模式分类问题中,当先验概率未知时,可以使用",
+    "options": {
+      "A": "最小误判概率准则",
+      "B": "最小最大损失准则",
+      "C": "N-P判决",
+      "D": "最小损失准则"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_0389",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "请选择下面可以应用隐马尔科夫(HMM)模型的选项",
+    "options": {
+      "A": "所有以上",
+      "B": "基因序列数据集",
+      "C": "股票市场数据集",
+      "D": "电影浏览数据集"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "cmmlu_0390",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在二分类问题中，当测试集的正例和负例数量不均衡时，以下评价方案哪个是相对不合理的（假设precision=TP/(TP+FP),recall=TP/(TP+FN)。）",
+    "options": {
+      "A": "F-值:2recallprecision/(recall+precision)",
+      "B": "G-均值：√(精确率 * 召回率)\n",
+      "C": "准确性:(TP+TN)/all",
+      "D": "AUC:ROC曲线下面积"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0391",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "深度学习中遇见过拟合下列哪个处理办法不可取",
+    "options": {
+      "A": "添加 Dropout 层\n",
+      "B": "加深层数",
+      "C": "数据增强",
+      "D": "加正则项"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0392",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设我们有一个数据集,在一个深度为 6 的决策树的帮助下,它可以使用 100% 的精确度被训练。现在考虑一下两点,并基于这两点选择正确的选项。1.深度为 4 时将有高偏差和低方差;2.深度为 4 时将有低偏差和低方差。注意:所有其他超参数是相同的,所有其他因子不受影响。",
+    "options": {
+      "A": "1 和 2",
+      "B": "只有 2",
+      "C": "没有一个",
+      "D": "只有 1"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0393",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪些方法不可以用来对高维数据进行降维",
+    "options": {
+      "A": "LASSO\n\n",
+      "B": "袋式集成学习",
+      "C": "主成分分析法",
+      "D": "聚类分析"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0394",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "机器学习中L1正则化和L2正则化的区别是",
+    "options": {
+      "A": "使用L1可以得到稀疏、平滑的权值",
+      "B": "使用L2可以得到稀疏、平滑的权值",
+      "C": "使用L1可以得到稀疏的权值、使用L2可以得到平滑的权值",
+      "D": "使用L2可以得到稀疏的权值、使用L1可以得到平滑的权值"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0395",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列关于隐马模型和条件随机场模型的说法中错误的是?",
+    "options": {
+      "A": "隐马模型和隐马模型隐可用于命名实体识别、分词和词性标注的任务",
+      "B": "隐马模型和隐马模型都是生成模型",
+      "C": "隐马模型不是概率无向图模型",
+      "D": "特征的选取和优化会严重影响隐马模型的结果"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0396",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个/些超参数的增加可能会造成随机森林数据过拟合",
+    "options": {
+      "A": "学习速率",
+      "B": "树的数量",
+      "C": "树的深度",
+      "D": "以上都不是"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0397",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面关于迭代二叉树3代算法中说法错误的是",
+    "options": {
+      "A": "迭代二叉树3代算法是一个二叉树模型",
+      "B": "信息增益可以用熵来计算，而不是 GINI 系数。",
+      "C": "迭代二叉树3代算法要求特征必须离散化",
+      "D": "选取信息增益最大的特征,作为树的根节点"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0398",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个/些选项对 K 折交叉验证的描述是正确的",
+    "options": {
+      "A": "如果 K=N,那么其称为留一交叉验证,其中 N 为验证集中的样本数量",
+      "B": "更大的 K 值相比于小 K 值将对交叉验证结构有更高的信心",
+      "C": "以上都是",
+      "D": "增大 K 将导致交叉验证结果时需要更多的时间"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0399",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知有m个样本，进行n次（n<=m）采样。什么是Bootstrap数据？\n\n",
+    "options": {
+      "A": "无放回地从总共N个样本中抽样n个样本",
+      "B": "无放回地从总共M个特征中抽样m个特征",
+      "C": "有放回地从总共N个样本中抽样n个样本",
+      "D": "有放回地从总共M个特征中抽样m个特征"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0400",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果以特征向量的相关系数作为模式相似性测度,则影响聚类算法结果的主要因素有",
+    "options": {
+      "A": "量纲",
+      "B": "已知类别样本质量",
+      "C": "以上都不是",
+      "D": "分类准则"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0401",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "模型训练过程中,我们一般将数据分成",
+    "options": {
+      "A": "验证集",
+      "B": "测试集",
+      "C": "训练集",
+      "D": "其他选项均可"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0402",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "你正在使用带有 L1 正则化的逻辑回归进行二分类，其中 C 是正则化参数，w1 和 w2 分别是 x1 和 x2 的系数。当 C 值从 0 增加到非常大的值时，以下哪个选项是正确的？\n",
+    "options": {
+      "A": "第一个 w1 成了 0,接着 w2 也成了 0",
+      "B": "w1 和 w2 同时成了 0",
+      "C": "第一个 w2 成了 0,接着 w1 也成了 0",
+      "D": "即使在 C 成为大值之后,w1 和 w2 都不能成 0"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0403",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列方法中,不可以用于特征降维的方法包括",
+    "options": {
+      "A": "深度学习：稀疏自编码器",
+      "B": "矩阵奇异值分解SVD",
+      "C": "线性判别分析",
+      "D": "主成分分析"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0404",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "贝叶斯定理求得是什么概率?",
+    "options": {
+      "A": "先验概率",
+      "B": "其它选项都不是",
+      "C": "条件概率",
+      "D": "联合概率"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0405",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在机器学习中,解释学习器泛化性能中经常用到偏差-方差分解,下列说法不正确的是",
+    "options": {
+      "A": "方差体现的是学习器预测的稳定性",
+      "B": "偏差体现的是学习器预测的准确度",
+      "C": "泛化性能是由学习算法的能力、数据的充分性以及学习任务本身的难度所共同决定的",
+      "D": "方差指的是预测的期望值与真实值的偏差"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0406",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假如你使用逻辑回归算法来预测电脑销量，并在新的测试集上验证你的假设时，发现预测值存在较大偏差，并且你的假设在训练集上表现也不理想。以下哪些步骤你应该避免采用？\n",
+    "options": {
+      "A": "尝试着减小正则项 λ",
+      "B": "尝试增加交叉特征",
+      "C": "增大样本量",
+      "D": "尝试更小的测试集或者特征"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0407",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以P(w)表示词条w的概率,假设已知P(南京)=0.8,P(市长)=0.6,P(江大桥)=0.4:P(南京市)=0.3,P(长江大桥)=0.5:如果假设前后两个词的出现是独立的,那么分词结果就是",
+    "options": {
+      "A": "南京_市长_江大桥",
+      "B": "南京市_长江_大桥",
+      "C": "南京市长_江大桥",
+      "D": "南京市_长江大桥"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0408",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对数几率回归（logistics regression）与一般回归分析的主要区别是什么？\n\n",
+    "options": {
+      "A": "对数几率回归是设计用来预测事件可能性的",
+      "B": "对数几率回归可以用来估计回归系数",
+      "C": "以上都是",
+      "D": "对数几率回归可以用来度量模型拟合程度"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0409",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是对“类型 1 (Type-1)”和“类型 2 (Type-2)”的描述是错误的？\n",
+    "options": {
+      "A": "类型 1 错误通常在其是正确的情况下拒绝假设而出现",
+      "B": "类型 1 通常称之为假正类,类型 2 通常称之为假负类",
+      "C": "以上都是",
+      "D": "类型 2 通常称之为假正类,类型 1 通常称之为假负类"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0410",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "影响基本K-均值算法的主要因素有",
+    "options": {
+      "A": "初始类中心的选取",
+      "B": "聚类准则",
+      "C": "样本输入顺序",
+      "D": "模式相似性测度"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0411",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "高斯混合模型(GMM)是一种什么模型",
+    "options": {
+      "A": "无监督学习模型",
+      "B": "其他选项都不是",
+      "C": "半监督学习模型",
+      "D": "有监督学习模型"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0412",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于语法规则的方法为",
+    "options": {
+      "A": "条件随机场",
+      "B": "最大熵模型",
+      "C": "句法、语义分析",
+      "D": "最大熵隐马尔科夫模型"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0413",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "有两个样本点,第一个点为正样本,它的特征向量是(0,-1);第二个点为负样本,它的特征向量是(2,3),从这两个样本点组成的训练集构建一个线性SVM分类器的分类面方程是",
+    "options": {
+      "A": "2x-y=0",
+      "B": "x+2y=5",
+      "C": "x+2y=3",
+      "D": "2x+y=4"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0414",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "隐马尔可夫模型，观测空间为 O，状态空间为 S。如果使用维特比算法（Viterbi algorithm）进行解码，时间复杂度为。\n",
+    "options": {
+      "A": "O(NK)",
+      "B": "O(N^2K)",
+      "C": "以上都不是",
+      "D": "O(NK^2)"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0415",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定你使用了一个很大γ值的RBF核,这意味着:",
+    "options": {
+      "A": "模型不会被点到超平面的距离所影响",
+      "B": "以上都不是",
+      "C": "模型仅使用接近超平面的点来建模",
+      "D": "模型将考虑使用远离超平面的点建模"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0416",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "关于 ARMA (自回归滑动平均模型)、AR (自回归模型)、MA (滑动平均模型) 模型的功率谱，以下说法正确的是：\n",
+    "options": {
+      "A": "AR模型在零点接近单位圆时,AR谱是一个尖峰",
+      "B": "MA模型是同一个全通滤波器产生的",
+      "C": "MA模型在极点接近单位圆时,MA谱是一个深谷",
+      "D": "RMA谱既有尖峰又有深谷"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0417",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "变量选择是用来选择最好的判别器子集, 如果要考虑模型效率,我们应该做除了下列哪项的变量选择的考虑",
+    "options": {
+      "A": "交叉验证",
+      "B": "变量对于模型的解释有多大作用",
+      "C": "特征携带的信息",
+      "D": "多个变量其实有相同的用处"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0418",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列时间序列模型中,哪一个模型可以较好地拟合波动性的分析和预测",
+    "options": {
+      "A": "自回归模型 AR模型\n",
+      "B": "自回归滑动平均模型",
+      "C": "滑动平均模型",
+      "D": "广义自回归滑动平均模型"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0419",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "当我们构造线性模型时, 我们注意变量间的相关性. 在相关矩阵中搜索相关系数时, 如果我们发现3对变量的相关系数是(Var1 和Var2, Var2和Var3, Var3和Var1)是-0.98, 0.45, 1.23 . 我们可以得出什么结论",
+    "options": {
+      "A": "以上都是",
+      "B": "因为Var1和Var2是非常相关的, 我们可以去除其中一个",
+      "C": "Var1和Var2是非常相关的",
+      "D": "Var3和Var1的1.23相关系数是不可能的"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0420",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "机器学习中做特征选择时,可能用到的方法有",
+    "options": {
+      "A": "以上都有",
+      "B": "卡方",
+      "C": "信息增益",
+      "D": "期望交叉熵"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0421",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "LSTM与GRU的主要区别在于，GRU将LSTM中的哪些门融合了？\n\n",
+    "options": {
+      "A": "忘记门控和输入门控",
+      "B": "输入门和输出门\n",
+      "C": "忘记门控和输出门",
+      "D": "输出门和重置门"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0422",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "符号集 a 、 b 、 c 、 d ,它们相互独立,相应概率为 1/2 、 1/4 、 1/8/ 、 1/16 ,其中包含信息量最小的符号是",
+    "options": {
+      "A": "d",
+      "B": "b",
+      "C": "a",
+      "D": "c"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0423",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设你使用 log-loss 函数作为评估标准。以下选项，哪些是对作为评估标准的 log-loss 的正确解释？\n\n",
+    "options": {
+      "A": "以上都是",
+      "B": "log-loss 越低，表示模型的预测越准确。",
+      "C": "对于一个特定的观察，分类器将正确的类别分配给极低的概率，从而导致 log-loss 的相应分布非常大。\n",
+      "D": "如果一个分类器对错误的分类表现出极高的置信度，则损失函数（log-loss）会对其进行严厉的惩罚。\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0424",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知一组数据的协方差矩阵P,下面关于主分量说法错误的是",
+    "options": {
+      "A": "主分量分析就是K-L变换",
+      "B": "在经主分量分解后,协方差矩阵成为对角矩阵",
+      "C": "主分量分析的最佳准则是对一组数据进行按一组正交基分解, 在只取相同数量分量的条件下,以均方误差计算截尾误差最小",
+      "D": "主分量是通过求协方差矩阵的特征值得到"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0425",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下关于注意力机制的说法是错误的：\n",
+    "options": {
+      "A": "注意力机制会为序列中的元素分配一个权重系数。",
+      "B": "注意力机制可应用于机器阅读理解、问答对话等场景。",
+      "C": "传统编码器-解码器模型存在长距离依赖问题。",
+      "D": "多头注意力机制的变体，由于其每一步计算依赖于前一步的结果，因此不适合并行计算。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0426",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪项不是降低过拟合的方法",
+    "options": {
+      "A": "收集更多训练数据",
+      "B": "进行数据清洗,减少噪声",
+      "C": "增加神经网络隐藏层节点数",
+      "D": "简化模型假设"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0427",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "给定三个变量 X、Y、Z。\n(X, Y)、(Y, Z) 和 (X, Z) 的皮尔逊相关系数分别为 C1、C2 和 C3。\n\n现在，X 的所有值加上 2（即 X+2），Y 的所有值减 2（即 Y-2），Z 不变。\n那么运算后的 (X, Y)、(Y, Z) 和 (X, Z) 相关系数分别为 D1、D2 和 D3。\n现在，请问 D1、D2、D3 和 C1、C2、C3 之间有什么关系？\n",
+    "options": {
+      "A": "D1 = C1, D2 < C2, D3 < C3",
+      "B": "D1= C1, D2 < C2, D3 > C3",
+      "C": "D1 = C1, D2 = C2, D3 = C3",
+      "D": "D1 = C1, D2 > C2, D3 > C3"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0428",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在决策树中，关于使用信息增益作为分裂节点的说法，哪一项是不正确的？\n",
+    "options": {
+      "A": "信息增益更加倾向于选择有较多取值的属性",
+      "B": "信息增益可以使用熵得到",
+      "C": "较小不纯度的节点需要更多的信息来区分总体",
+      "D": "以上均不是"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0429",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列关于回归分析中的残差表述正确的是",
+    "options": {
+      "A": "残差的平均值总小于零",
+      "B": "残差的平均值总大于零",
+      "C": "残差的平均值总为零",
+      "D": "残差没有此类规律"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0430",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "我们建立一个5000个特征, 100万数据的机器学习模型. 我们怎么有效地应对这样的大数据训练",
+    "options": {
+      "A": "我们随机抽取一些样本, 在这些少量样本之上训练",
+      "B": "以上所有",
+      "C": "我们可以试用在线机器学习算法",
+      "D": "我们应用PCA算法降维, 减少特征数"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0431",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪个不属于条件随机场模型对于隐马尔科夫模型和最大熵隐马尔科夫模型模型的优势",
+    "options": {
+      "A": "速度快",
+      "B": "可容纳较多上下文信息",
+      "C": "全局最优",
+      "D": "特征灵活"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0432",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪项不是基于词典的方法的中文分词的基本方法",
+    "options": {
+      "A": "最大熵模型",
+      "B": "最大概率法",
+      "C": "最大匹配法",
+      "D": "最短路径法"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0433",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定你使用SVM学习数据X,数据X里面有些点存在错误。现在如果你使用一个二次核函数,多项式阶数为2,使用松弛变量C作为超参之一。 如果使用较小的C(C趋于0),则:",
+    "options": {
+      "A": "不确定",
+      "B": "误分类",
+      "C": "正确分类",
+      "D": "以上均不正确"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0434",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种方法属于生成模型",
+    "options": {
+      "A": "条件随机场",
+      "B": "传统神经网络",
+      "C": "朴素贝叶斯",
+      "D": "线性回归"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0435",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在其它条件不变的前提下,以下哪种做法容易引起机器学习中的过拟合问题",
+    "options": {
+      "A": "增加训练集数量",
+      "B": "删除稀疏的特征",
+      "C": "SVM算法中使用高斯核/RBF核代替",
+      "D": "减少神经网络隐藏层节点数"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0436",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对应梯度提升（Gradient Boosting）树算法，以下说法正确的是：\n\n",
+    "options": {
+      "A": "当增加最小样本分裂个数,我们可以抵制过拟合",
+      "B": "当我们减少训练单个学习器的样本个数,我们可以降低偏差",
+      "C": "当增加最小样本分裂个数,会导致过拟合",
+      "D": "当我们增加训练单个学习器的样本个数,我们可以降低方差"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0437",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设你训练SVM后,得到一个线性决策边界,你认为该模型欠拟合。在下次迭代训练模型时,应该考虑",
+    "options": {
+      "A": "减少训练数据",
+      "B": "减少特征",
+      "C": "计算更多变量",
+      "D": "增加训练数据"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0438",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "语音信号由于具有什么特性,所以我们可以将语音信号进行分窗处理?",
+    "options": {
+      "A": "随机单调性",
+      "B": "其他选项都不是",
+      "C": "短时平稳性",
+      "D": "单调不变性"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0439",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于k折交叉验证, 以下对k的说法正确的是",
+    "options": {
+      "A": "选择更大的k, 就会有更小的bias (因为训练集更加接近总数据集)",
+      "B": "k越大, 不一定越好, 选择大的k会加大评估时间",
+      "C": "在选择k时, 要最小化数据集之间的方差",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0440",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下属于欧式距离特性的有",
+    "options": {
+      "A": "尺度缩放不变性",
+      "B": "旋转不变性",
+      "C": "不受量纲影响的特性",
+      "D": "考虑了模式的分布"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0441",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "朴素贝叶斯是一种特殊的贝叶斯分类器,特征变量是X,类别标签是C,它的一个假定是",
+    "options": {
+      "A": "特征变量X的各个维度是类别条件独立随机变量",
+      "B": "P(X|C)是高斯分布",
+      "C": "以0为均值,sqr(2)/2为标准差的正态分布",
+      "D": "各类别的先验概率P(C)是相等的"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0442",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在一个n维的空间中， 最好的检测outlier(离群点)的方法是",
+    "options": {
+      "A": "作盒形图",
+      "B": "作散点图",
+      "C": "作正态分布概率图",
+      "D": "马氏距离"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0443",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于线性回归模型,包括附加变量在内,以下的可能正确的是",
+    "options": {
+      "A": "R-squared 呈现递减趋势，Adjusted R-squared 同样呈现递减趋势。",
+      "B": "R-squared 是一个常数，而 Adjusted R-squared 是一个递增的量。\n",
+      "C": "R-squared 和 Adjusted R-squared 都是递增的。",
+      "D": "以上都不是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0444",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "数据科学家可能会同时使用多个算法(模型)进行预测, 并且最后把这些算法的结果集成起来进行最后的预测(集成学习),以下对集成学习说法正确的是",
+    "options": {
+      "A": "单个模型之间有高相关性",
+      "B": "单个模型都是用的一个算法",
+      "C": "单个模型之间有低相关性",
+      "D": "在集成学习中使用“平均权重”而不是“投票”会比较好"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0445",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "我们想在大数据集上训练决策树, 为了使用较少时间, 我们可以",
+    "options": {
+      "A": "增加学习率 ",
+      "B": "减少树的数量",
+      "C": "增加树的深度",
+      "D": "减少树的深度"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0446",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "我们想要减少数据集中的特征数, 即降维. 选择以下适合的方案",
+    "options": {
+      "A": "以上所有",
+      "B": "我们先把所有特征都使用, 去训练一个模型, 得到测试集上的表现. 然后我们去掉一个特征, 再去训练, 用交叉验证看看测试集上的表现. 如果表现比原来还要好, 我们可以去除这个特征",
+      "C": "使用前向特征选择方法和后向特征排除方法",
+      "D": "查看相关性表, 去除相关性最高的一些特征"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0447",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个激活函数不能解决梯度弥散的问题",
+    "options": {
+      "A": "漏斗-ReLU\n\n\n",
+      "B": "Elu",
+      "C": "Sigmoid 函数\n\n\n",
+      "D": "ReLU\n\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0448",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪个不属于常用的文本分类的特征选择算法",
+    "options": {
+      "A": "主成分分析",
+      "B": "互信息",
+      "C": "信息增益",
+      "D": "卡方检验值"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0449",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "求解 Fisher 线性判别函数的步骤是将 M 维特征向量投影到（ ）中进行求解。\n",
+    "options": {
+      "A": "一维空间",
+      "B": "三维空间",
+      "C": "M-1维空间",
+      "D": "二维空间"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0450",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪一项说明了X,Y之间的较强关系",
+    "options": {
+      "A": "相关系数为0.9",
+      "B": "都不对",
+      "C": "β系数为0的零假设的p值为0.0001",
+      "D": "β系数为0的零假设下的t统计量为30。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0451",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 k-均值算法中,以下哪个选项可用于获得全局最小?",
+    "options": {
+      "A": "以上所有",
+      "B": "找到集群的最佳数量",
+      "C": "调整迭代的次数",
+      "D": "尝试使用不同的质心（centroid）初始化运行算法。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0452",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在统计语言模型中,通常以概率的形式描述任意语句的可能性,利用最大相似度估计进行度量,对于一些低频词,无论如何扩大训练数据,出现的频度仍然很低,下列哪种方法能解决这一问题",
+    "options": {
+      "A": "数据平滑",
+      "B": "N元文法",
+      "C": "一元文法",
+      "D": "一元切分"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0453",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下说法中错误的是",
+    "options": {
+      "A": "给定n个数据点,如果其中一半用于训练,一半用户测试,则训练误差和测试误差之间的差别会随着n的增加而减少的",
+      "B": "Boosting 和 Bagging 都是通过组合多个分类器来进行投票的方法。两者都根据单个分类器的准确率来确定其权重。",
+      "C": "SVM对噪声(如来自其他分部的噪声样本)具备鲁棒性",
+      "D": "在 AdaBoost 算法中，所有被错误分类的样本的权重更新比例是不相同的。\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0454",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个二进制源X发出符号集为{-1,1},经过离散无记忆信道传输,由于信道中噪音的存在,接收端Y收到符号集为{-1,1,0}。已知P(x=-1)=1/4,P(x=1)=3/4,P(y=-1|x=-1)=4/5,P(y=0|x=-1)=1/5,P(y=1|x=1)=3/4,P(y=0|x=1)=1/4,求条件熵H(Y|X)",
+    "options": {
+      "A": "0.5372",
+      "B": "0.2375",
+      "C": "0.5273",
+      "D": "0.3275"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0455",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种技术对于减少数据集的维度会更好?",
+    "options": {
+      "A": "删除数据差异较大的列",
+      "B": "删除缺少值太多的列",
+      "C": "删除不同数据趋势的列",
+      "D": "都不是"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0456",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪些不特别适合用来对高维数据进行降维",
+    "options": {
+      "A": "聚类分析",
+      "B": "LASSO\n\n",
+      "C": "小波分析法",
+      "D": "拉普拉斯特征映射"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0457",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "逻辑回归与多元回归分析有哪些不同?",
+    "options": {
+      "A": "逻辑回归回归系数的评估",
+      "B": "逻辑回归预测某事件发生的概率",
+      "C": "逻辑回归有较高的拟合效果",
+      "D": "以上全选"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0458",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "最常用的降维算法是 PCA 和 t-SNE。分别将这两个算法应用于数据集「X」，得到数据集「X_projected_PCA」和「X_projected_tSNE」。以下哪一项描述「X_projected_PCA」和「X_projected_tSNE」是正确的？\n\n",
+    "options": {
+      "A": "两个都在最近邻空间能得到解释",
+      "B": "X_projected_PCA 在最近邻空间中具有可解释性。",
+      "C": "两个都不能在最近邻空间得到解释",
+      "D": "X_projected_tSNE 在最近邻空间中具有可解释性"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0459",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列关于维特比算法(Viterbi)的说法中错误的是",
+    "options": {
+      "A": "维特比算法中的转移概率是从一个隐含状态转移到另一个隐含状态的概率",
+      "B": "维特比算法是一种贪心算法",
+      "C": "维特比算法可应用于中文分词任务",
+      "D": "维特比算法可得到全局最优解"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0460",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下( )不属于线性分类器最佳准则",
+    "options": {
+      "A": "贝叶斯分类",
+      "B": "感知准则函数",
+      "C": "支持向量机",
+      "D": "费舍尔原则\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0461",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于线性回归,我们应该有以下哪些假设",
+    "options": {
+      "A": "找到离群点很重要, 因为线性回归对离群点很敏感",
+      "B": "线性回归假设数据没有多重线性相关性",
+      "C": "线性回归要求所有变量必须符合正态分布",
+      "D": "以上都不是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0462",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面不是迭代二叉树3代算法对数据的要求",
+    "options": {
+      "A": "所有的训练例的所有属性必须有一个明确的值",
+      "B": "所有属性必须为离散量",
+      "C": "所有属性必须为连续",
+      "D": "相同的因素必须得到相同的结论且训练例必须唯一"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0463",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面的优化算法中,速度最快的是",
+    "options": {
+      "A": "BFGS\n\n",
+      "B": "梯度下降法",
+      "C": "牛顿法",
+      "D": "亚当\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0464",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项关于ALBERT的说法是错误的？\n\n",
+    "options": {
+      "A": "跨层参数共享",
+      "B": "采用词嵌入向量参数的因式分解",
+      "C": "应用在下游任务中预测速度显著提速",
+      "D": "已移除 Dropout\n\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0465",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个属于SVM应用",
+    "options": {
+      "A": "新文章聚类",
+      "B": "文本和超文本分类",
+      "C": "图像分类",
+      "D": "以上均是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0466",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "类域界面方程法中,不能求线性不可分情况下分类问题近似或精确解的方法是",
+    "options": {
+      "A": "基于二次准则的H-K算法",
+      "B": "感知器算法 ",
+      "C": "势函数法",
+      "D": "伪逆法"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0467",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个选项中哪一项属于确定性算法",
+    "options": {
+      "A": "K-均值聚类\n",
+      "B": "PCA",
+      "C": "KNN",
+      "D": "以上都不是"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0468",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些算法, 1. KNN;2. 线性回归;3.对数几率回归。可以用神经网络去构造:",
+    "options": {
+      "A": "2 和 3",
+      "B": "1和 2",
+      "C": "以上都不是",
+      "D": "1, 2 和 3"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0469",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "训练SVM的最小时间复杂度为O(n2),那么一下哪种数据集不适合用SVM?",
+    "options": {
+      "A": "和数据集大小无关",
+      "B": "大数据集",
+      "C": "小数据集",
+      "D": "中等大小数据集"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0470",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果线性回归模型中的随机误差存在异方差性,那么参数的普通最小二乘法估计量是",
+    "options": {
+      "A": "无偏的,非有效的",
+      "B": "无偏的,有效的",
+      "C": "有偏的,非有效的",
+      "D": "有偏的,有效的"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0471",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项关于RoBERTa的说法是错误的？\n\n",
+    "options": {
+      "A": "不做NSP任务",
+      "B": "采用静态掩码机制",
+      "C": "采用更多训练数据",
+      "D": "训练采用更大的批次大小"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0472",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在逻辑回归输出与目标对比的情况下,以下评估指标中哪一项不适用?",
+    "options": {
+      "A": "准确度",
+      "B": "均方误差",
+      "C": "AUC-ROC",
+      "D": "对数损失"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0473",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "语言模型的参数估计经常使用MLE(最大似然估计)。面临的一个问题是没有出现的项概率为0,这样会导致语言模型的效果不好。为了解决这个问题,需要使用()",
+    "options": {
+      "A": "增加白噪音",
+      "B": "平滑",
+      "C": "随机插值",
+      "D": "去噪"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0474",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "建模北京市人口的年龄分布,采用什么分布更合适",
+    "options": {
+      "A": "0-1分布",
+      "B": "正态分布",
+      "C": "泊松分布",
+      "D": "指数分布"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0475",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "SVM中的代价参数表示:",
+    "options": {
+      "A": "误分类与模型复杂性之间的平衡",
+      "B": "以上均不是",
+      "C": "使用的核",
+      "D": "交叉验证的次数"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0476",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "关于SVM泛化误差描述正确的是",
+    "options": {
+      "A": "超平面与支持向量之间距离",
+      "B": "SVM的误差阈值",
+      "C": "以上都不是",
+      "D": "SVM对未知数据的预测能力"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0477",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项关于BERT的说法是错误的？\n\n",
+    "options": {
+      "A": "支持对语义上下文进行建模",
+      "B": "使用激活函数 GELU",
+      "C": "网络一共有20层",
+      "D": "使用 Transformer"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0478",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "模式识别中,不属于马式距离较之于欧式距离的优点的是",
+    "options": {
+      "A": "尺度不变性",
+      "B": "平移不变性",
+      "C": "考虑到各种特性之间的联系",
+      "D": "考虑了模式的分布"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0479",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "描述的机器发生故障的次数,采用什么分布更合适?",
+    "options": {
+      "A": "0-1分布",
+      "B": "指数分布",
+      "C": "正态分布",
+      "D": "泊松分布"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0480",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是LSTM本身的特点？\n\n",
+    "options": {
+      "A": "LSTM 是一种循环神经网络 (RNN) 的变体。\n\n",
+      "B": "防止梯度弥散",
+      "C": "训练时GPU使用率较高",
+      "D": "LSTM 具有遗忘门机制。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0481",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "关于逻辑回归和支持向量机不正确的是",
+    "options": {
+      "A": "逻辑回归本质上是一种根据样本对权值进行极大似然估计的方法,而后验概率正比于先验概率和似然函数的乘积。逻辑仅仅是最大化似然函数,并没有最大化后验概率,更谈不上最小化后验概率",
+      "B": "支持向量机可以通过正则化系数控制模型的复杂度,避免过拟合。",
+      "C": "支持向量机的目标是找到使得训练数据尽可能分开且分类间隔最大的超平面,应该属于结构风险最小化",
+      "D": "逻辑回归的输出就是样本属于正类别的几率,可以计算出概率。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0482",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下不属于影响聚类算法结果的主要因素有",
+    "options": {
+      "A": "特征选取",
+      "B": "已知类别的样本质量",
+      "C": "分类准则",
+      "D": "模式相似性测度"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0483",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "高斯混合模型(GMM)采用什么准则进行训练",
+    "options": {
+      "A": "均方误差最小化",
+      "B": "经验风险最小化",
+      "C": "期望最大化",
+      "D": "其他选项都不是"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0484",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下说法正确的是",
+    "options": {
+      "A": "一个机器学习模型,如果有较高准确率,并不难总是说明这个分类器是好的",
+      "B": "我们不可以使用聚类“类别id”作为一个新的特征项, 然后再用监督学习分别进行学习",
+      "C": "如果增加模型复杂度, 那么模型的测试错误率总是会降低",
+      "D": "如果增加模型复杂度, 那么模型的训练错误率总是会降低"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0485",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在中文同义词替换时，常用Word2Vec模型。以下说法错误的是：",
+    "options": {
+      "A": "Word2Vec结果符合当前预期环境。",
+      "B": "Word2Vec 得到的词语都具有相同的语义含义。\n\n",
+      "C": "Word2Vec 的训练依赖于语料的数量和质量。\n\n",
+      "D": "Word2Vec 建立在概率统计模型之上。\n\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0486",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在以下不同的场景中,使用的分析方法不正确的有",
+    "options": {
+      "A": "根据商家最近一年的经营及服务数据,用聚类算法判断出天猫商家在各自主营类目下所属的商家层级",
+      "B": "根据商家近几年的成交数据,用聚类算法拟合出用户未来一个月可能的消费金额公式",
+      "C": "用关联规则算法分析出购买了汽车坐垫的买家,是否适合推荐汽车脚垫",
+      "D": "根据用户最近购买的商品信息,用决策树算法识别出淘宝买家可能是男还是女"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0487",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在数据清理中,下面哪个不是处理缺失值的方法",
+    "options": {
+      "A": "变量删除",
+      "B": "估算",
+      "C": "整例删除",
+      "D": "成对删除"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0488",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下关于LDA(Latent Dirichlet allocation)的说法错误的是",
+    "options": {
+      "A": "LDA是非监督学习技术",
+      "B": "LDA可通过EM的思想求解",
+      "C": "当选取一篇文档后,对于该文档主题的分布是确定的",
+      "D": "LDA包含词,主题和文档三层结构"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0489",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果我使用数据集的全部特征并且能够达到100%的准确率,但在测试集上仅能达到70%左右,这说明:",
+    "options": {
+      "A": "以上均不正确",
+      "B": "欠拟合",
+      "C": "过拟合",
+      "D": "模型很棒"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0490",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定你使用SVM学习数据X,数据X里面有些点存在错误。现在如果你使用一个二次核函数,多项式阶数为2,使用松弛变量C作为超参之一。 当你使用较大的C(C趋于无穷),则:",
+    "options": {
+      "A": "以上均不正确",
+      "B": "不确定",
+      "C": "不能正确分类",
+      "D": "仍然能正确分类数据"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0491",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于统计的分词方法为",
+    "options": {
+      "A": "正向量最大匹配法",
+      "B": "条件随机场",
+      "C": "最少切分",
+      "D": "逆向量最大匹配法"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0492",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定某同学使用假定某同学使用朴素贝叶斯分类模型时,不小心将训练数据的两个维度搞重复了,那么关于朴素贝叶斯的说法中不正确的是",
+    "options": {
+      "A": "模型效果相比无重复特征的情况下精确度会降低",
+      "B": "模型效果相比无重复特征的情况下精确度会提高",
+      "C": "当两列特征高度相关时,无法用两列特征相同时所得到的结论来分析问题",
+      "D": "如果所有特征都被重复一遍,得到的模型预测结果相对于不重复的情况下的模型预测结果一样"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0493",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下关于word2vec的说法中，哪一项是错误的？\n\n",
+    "options": {
+      "A": "使用词向量可以得到以下等式：King - man + woman = Queen\n\n",
+      "B": "跳跃模型（Skip-gram）：根据给定词窗中的文本，预测当前词的概率。",
+      "C": "word2vec 的假设是词袋模型（bag-of-words model），即词的顺序不重要。\n",
+      "D": "在word2vec训练中，使用了负采样（Negative Sampling）和分层Softmax两种加速算法。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0494",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下描述正确的是",
+    "options": {
+      "A": "聚类分析可以看作是一种非监督的分类。",
+      "B": "在聚类分析当中,簇内的相似性越大,簇间的差别越大,聚类的效果就越差。",
+      "C": "SVM是这样一个分类器,他寻找具有最小边缘的超平面,因此它也经常被称为最小边缘分类器",
+      "D": "在决策树中,随着树中结点数变得太大,即使模型的训练误差还在继续减低,但是检验误差开始增大,这是出现了模型拟合不足的问题。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0495",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列选项中,识别模式与其他不一样的是",
+    "options": {
+      "A": "出行方式判断:步行、骑车、坐车",
+      "B": "用户年龄分布判断:少年、青年、中年、老年",
+      "C": "投递员分拣信件",
+      "D": "医生给病人诊断发病类型"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0496",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列说法不正确的是",
+    "options": {
+      "A": "梯度下降法是利用当前位置的负梯度作为搜索方向的方法",
+      "B": "共轭梯度法仅需利用一阶导数的信息,但是收敛速度高于梯度下降法",
+      "C": "批量梯度下降和随机梯度下降相比,批量梯度下降优势是对于大规模样本效率很高",
+      "D": "牛顿法和梯度下降法相比,一个劣势是求解复杂,一个优势是收敛速度加快"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0497",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在隐马尔科夫模型中,如果已知观察序列和产生观察序列的状态序列,那么可用以下哪种方法直接进行参数估计",
+    "options": {
+      "A": "前向后向算法",
+      "B": "极大似然估计 ",
+      "C": "维特比算法",
+      "D": "EM算法"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0498",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "LDA(Latent Dirichlet allocation)中归属于同一主题下单词分布的先验分布是?",
+    "options": {
+      "A": "正态分布",
+      "B": "狄利克雷分布",
+      "C": "多项分布",
+      "D": "二项分布"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0499",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "线性回归的基本假设不包括哪个",
+    "options": {
+      "A": "对于解释变量的所有观测值,随机误差项有相同的方差",
+      "B": "随机误差项是一个期望值为0的随机变量",
+      "C": "随机误差项服从正态分布",
+      "D": "随机误差项彼此相关"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0500",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列不是SVM核函数的是",
+    "options": {
+      "A": "Sigmoid 激活函数\n\n",
+      "B": "径向基核函数",
+      "C": "多项式核函数",
+      "D": "对数正态分布函数"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0501",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪些是非监督学习方法",
+    "options": {
+      "A": "SVM",
+      "B": "K-均值聚类\n",
+      "C": "KNN",
+      "D": "决策树"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0502",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种方法属于判别式模型",
+    "options": {
+      "A": "贝叶斯网络",
+      "B": "朴素贝叶斯",
+      "C": "隐马模型 ",
+      "D": "支持向量机"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0503",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下交叉验证方法：\ni. 带有替换的 Bootstrap 方法；\nii. 留一个测试样本的交叉验证；\niii. 5折交叉验证；\niv. 两次重复的5折教程验证。\n\n当样本大小为1000时，以下执行时间的顺序，正确的是：\n",
+    "options": {
+      "A": "ii > iv > iii > i",
+      "B": "ii > iii > iv > i",
+      "C": "iv > i > ii > iii",
+      "D": "i > ii > iii > iv"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0504",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Seq2Seq模型在解码时可以选用的方法",
+    "options": {
+      "A": "贪心算法",
+      "B": "二者均可",
+      "C": "光束搜索\n",
+      "D": "二者均不可"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0505",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "解决隐马模型中预测问题的算法是",
+    "options": {
+      "A": "前向算法",
+      "B": "维特比算法",
+      "C": "巴姆-威尔算法\n",
+      "D": "后向算法"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0506",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是对 k-means 聚类算法的正确解释？\n\n",
+    "options": {
+      "A": "能自动识别类的个数,不是随即挑选初始点为中心点计算",
+      "B": "不能自动识别类的个数,不是随即挑选初始点为中心点计算",
+      "C": "不能自动识别类的个数,随即挑选初始点为中心点计算",
+      "D": "能自动识别类的个数,随即挑选初始点为中心点计算"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0507",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一般,k-NN最近邻方法在()的情况下效果较好",
+    "options": {
+      "A": "样本呈团状分布",
+      "B": "样本较多但典型性不好",
+      "C": "样本呈链状分布",
+      "D": "样本较少但典型性好"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0508",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一监狱人脸识别准入系统用来识别待进入人员的身份,此系统一共包括识别4种不同的人员:狱警,小偷,送餐员,其他。下面哪种学习方法最适合此种应用需求",
+    "options": {
+      "A": "多分类问题",
+      "B": "二分类问题",
+      "C": "k-中心点聚类问题",
+      "D": "层次聚类问题"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0509",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为了得到与 SVD 相同的投影，您需要在 PCA 中执行哪些操作？\n",
+    "options": {
+      "A": "将数据转换成零均值",
+      "B": "无法做到",
+      "C": "将数据转换成零众数",
+      "D": "将数据转换成零中位数"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0510",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在统计模式分类问题中,当先验概率未知时,可以使用",
+    "options": {
+      "A": "N-P判决",
+      "B": "最小最大损失准则",
+      "C": "最小损失准则",
+      "D": "最小误判概率准则"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "cmmlu_0511",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些方法不可以直接来对文本分类",
+    "options": {
+      "A": "决策树",
+      "B": "K-均值聚类\n",
+      "C": "支持向量机",
+      "D": "KNN"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_dev_0001",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种图像数据增强方法最常用，用于自然图像？\n",
+    "options": {
+      "A": "随机裁剪和水平翻转\n",
+      "B": "随机裁剪和垂直翻转\n",
+      "C": "分层",
+      "D": "抖动\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "mmlu_machine_learning_dev_0002",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "您正在审核世界最盛大的机器学习会议的论文，您发现以下论文提出了如下主张。您会接受哪些？\n",
+    "options": {
+      "A": "我的方法在所有先前方法中实现了更低的训练误差！\n",
+      "B": "我的方法在测试误差方面优于所有先前的方法！（脚注：当正则化参数 λ 被选择以最小化测试误差时。）",
+      "C": "我的方法在所有先前方法中，测试误差最低！（脚注：当正则化参数 λ 选择为使交叉验证误差最小化时。）\n",
+      "D": "我的方法在所有先前方法中，均实现了更低的交叉验证误差！（脚注：当正则化参数 λ 选择为使交叉验证误差最小化时。）"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "mmlu_machine_learning_dev_0003",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "根据霍夫丁不等式，为了获得一个 0/1 损失估计，其误差小于真实 0/1 损失的 1%，则独立同分布 (IID) 的测试集必须包含多少个样本？",
+    "options": {
+      "A": "大约 10 个例子",
+      "B": "大约 100 个例子\n",
+      "C": "100到500个示例",
+      "D": "超过1000个示例"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "mmlu_machine_learning_dev_0004",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "传统上，在决策树学习中，当我们有实数值属性时，我们会根据属性的值高于或低于某个阈值来进行二元分割。帕特建议，我们应该只进行多向分割，即为每个属性的不同值都设置一个分支。请从以下选项中选择帕特建议的最大问题：",
+    "options": {
+      "A": "计算成本过高。\n",
+      "B": "这可能会导致一个决策树，该树在训练集和测试集上都表现不佳。\n",
+      "C": "这可能会导致一个决策树，在训练集上表现良好，但在测试集上表现不佳。\n",
+      "D": "这可能会导致一个决策树，在测试集上表现良好，但在训练集上表现不佳。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0005",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪条准则适用于全连接神经网络的权重向量初始化？\n",
+    "options": {
+      "A": "不应将其设置为零，否则会导致过拟合。",
+      "B": "不应将其设置为零，因为这样会导致（随机）梯度下降算法探索一个非常小的空间。",
+      "C": "应该设置为零，否则会导致偏差。",
+      "D": "为了保持所有神经元的对称性，应将其设置为零。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0006",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下关于朴素贝叶斯的陈述，哪一个是不正确的？\n",
+    "options": {
+      "A": "属性同样重要。",
+      "B": "属性在给定类值的情况下，彼此之间存在统计依赖关系。",
+      "C": "在已知类别值的情况下，属性之间具有统计独立性。",
+      "D": "属性可以是名义型或数值型"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0007",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 在岭回归中，L2 惩罚与对权重施加的拉普拉斯先验等价。\n陈述 2 | 在 R^3 中，至少存在一组 4 个点，可以被 R^3 中所有 2D 平面的假设集合分割。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0008",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于单参数模型，均方误差 (MSE) 定义如下： 1/(2N) * Σ (y_n − β_0)^2 。 我们在公式前有一个“1/2”项，因为……\n",
+    "options": {
+      "A": "将均方误差（MSE）缩减一半，可以使梯度下降算法更快收敛。",
+      "B": "存在半个元素，使得网格搜索变得容易。",
+      "C": "这并不重要，无论一半是否存在。\n",
+      "D": "以上均不成立\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0009",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 Yann LeCun 的“蛋糕”模型中，最关键的部分是：\n\n\n",
+    "options": {
+      "A": "强化学习\n",
+      "B": "自监督学习\n",
+      "C": "无监督学习\n",
+      "D": "监督学习\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0010",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下矩阵的零空间维度是多少？ A = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]\n",
+    "options": {
+      "A": "0",
+      "B": "1",
+      "C": "2",
+      "D": "3"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0011",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "要获得具有统计意义的结果，所需的测试样本数量应为 _\n",
+    "options": {
+      "A": "如果错误率较高，则增大。\n",
+      "B": "如果错误率较小，则应增加。\n",
+      "C": "如果误差率较小，则选择较小的选项。\n",
+      "D": "无关紧要。\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0012",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "与最大似然估计 (MLE) 的方差相比，最大后验估计 (MAP) 的方差是 ________",
+    "options": {
+      "A": "更高\n",
+      "B": "相同\n",
+      "C": "lower\n\n",
+      "D": "可能是以上任何一种情况。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0013",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项最能描述给定的贝叶斯网络 X <- Y -> Z 中，变量 X、Y、Z 的联合概率分布 P(X, Y, Z)？\n",
+    "options": {
+      "A": "P(X, Y, Z) = P(Y) * P(X|Y) * P(Z|Y)",
+      "B": "P(X, Y, Z) = P(X) * P(Y|X) * P(Z|Y)",
+      "C": "P(X, Y, Z) = P(Z) * P(X|Z) * P(Y|Z)",
+      "D": "P(X, Y, Z) = P(X) * P(Y) * P(Z)"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0014",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在对数据进行线性回归时，您观察到以下现象：随着训练数据的增加，测试误差降低，而训练误差增加。 训练误差非常低（接近预期值），而测试误差远高于训练误差。 您认为这种现象的主要原因是什么？ 请选择最可能的选项。\n",
+    "options": {
+      "A": "高方差\n",
+      "B": "高模型偏差",
+      "C": "高估偏差",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_val_0015",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 如果存在一个由 k 个实例组成的集合，该集合无法被 H 分解，则 VC(H) < k。\n陈述 2 | 如果两个假设集合 H1 和 H2 满足 H1 ⊆ H2，则 VC(H1) ≤ VC(H2)。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0016",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 线性回归估计量在所有无偏估计量中具有最小方差。\n陈述 2 | AdaBoost 算法构建的分类器的系数 α 始终为非负值。\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0017",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | RoBERTa 在一个约 10 倍于 BERT 的预训练语料库上进行预训练。\n\n陈述 2 | 2018 年，ResNeXt 通常使用 tanh 激活函数。\n\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0018",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 支持向量机，如逻辑回归模型，会给出对给定输入样本的可能标签的概率分布。\n陈述 2 | 在从线性核函数到更高阶的多项式核函数时，我们通常会期望支持向量保持不变。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0019",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个机器学习问题涉及四个属性和一个类别。每个属性有 3、2、2 和 2 种可能的值。类别有 3 种可能的值。最多可能有多少不同的例子？\n",
+    "options": {
+      "A": "12",
+      "B": "24",
+      "C": "48",
+      "D": "72"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0020",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "截至2020年，哪种架构最适合对高分辨率图像进行分类？\n",
+    "options": {
+      "A": "卷积神经网络\n",
+      "B": "图网络\n",
+      "C": "全连接网络\n",
+      "D": "径向基函数网络\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0021",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 在期望最大化算法的迭代过程中，数据的对数似然值总是会增加。\n陈述 2 | Q-学习的一个缺点是，它只能在学习者已经了解其行动如何影响其环境时使用。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0022",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设我们已经计算了代价函数的梯度，并将结果存储在向量 g 中。 那么，在给定梯度 g 的情况下，一次梯度下降更新的代价是多少？\n",
+    "options": {
+      "A": "O(D)",
+      "B": "O(N)",
+      "C": "O(ND)",
+      "D": "O(ND^2)"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0023",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 对于连续随机变量 x 和其概率分布函数 p(x)，对于所有 x，都有 0 ≤ p(x) ≤ 1。\n陈述 2 | 决策树是通过最小化信息增益来学习的。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0024",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "请考虑以下贝叶斯网络：H -> U <- P <- W。\n这个贝叶斯网络需要多少个独立的参数？\n",
+    "options": {
+      "A": "2",
+      "B": "4",
+      "C": "8",
+      "D": "16"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0025",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "随着训练样本数量趋向无穷大，您训练的模型将具有：\n",
+    "options": {
+      "A": "较低方差\n",
+      "B": "更高的方差\n",
+      "C": "相同方差\n",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0026",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 在二维平面上，所有矩形（包括非轴对正矩形）可以分割一个包含 5 个点的集合。\n陈述 2 | 当 k = 1 时，k-最近邻分类器的 VC 维是无穷大。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0027",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "\\_ 表示一种模型，它既不能拟合训练数据，也不能泛化到新的数据。",
+    "options": {
+      "A": "良好匹配\n",
+      "B": "过拟合",
+      "C": "欠拟合\n",
+      "D": "以上所有"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0028",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | F1 分数在类别分布不平衡的数据集上尤其有用。\n陈述 2 | ROC 曲线下的面积是评估异常检测器的主要指标之一。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0029",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 反向传播算法学习一个具有隐藏层的全局最优神经网络。\n陈述 2 | 一条线的 VC 维数应最多为 2，因为我能找到至少三个点，这些点无法被任何一条直线分割。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0030",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "高熵意味着分类中的分区具有较高的不确定性。",
+    "options": {
+      "A": "纯",
+      "B": "非纯",
+      "C": "有用的",
+      "D": "无用"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0031",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 层归一化在原始 ResNet 论文中使用，而非批量归一化。\n陈述 2 | DCGAN 利用自注意力机制来稳定训练过程。\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0032",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在构建线性回归模型时，对于特定数据集，你观察到其中一个特征的系数具有相对较高的负值。这表明：\n",
+    "options": {
+      "A": "该功能对模型有显著影响（应保留）。\n",
+      "B": "该功能对模型的影响较小（应被忽略）。\n",
+      "C": "在没有更多信息的情况下，无法评价该功能的价值。",
+      "D": "无法确定任何结果。\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0033",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于神经网络，以下哪种结构假设对偏差（即高偏差模型）与过拟合（即高方差模型）之间的权衡影响最大？\n",
+    "options": {
+      "A": "隐藏节点的数量\n",
+      "B": "学习率\n",
+      "C": "初始权重选择",
+      "D": "使用恒定项单元输入"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0034",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于多项式回归，以下哪种结构性假设对欠拟合和过拟合之间的权衡影响最大？\n",
+    "options": {
+      "A": "多项式次数\n",
+      "B": "我们是通过矩阵逆运算还是梯度下降法来学习权重？\n",
+      "C": "假设的高斯噪声方差",
+      "D": "使用恒定项单元输入"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0035",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 截至 2020 年，某些模型在 CIFAR-10 上的准确率超过 98%。\n\n\n陈述 2 | 原始的 ResNet 并非使用 Adam 优化器进行优化。\n\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0036",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "K-均值算法：\n",
+    "options": {
+      "A": "要求特征空间维度不能大于样本数量。",
+      "B": "当 K = 1 时，目标函数的最小值是多少？",
+      "C": "在给定簇数量的情况下，最小化内部类方差",
+      "D": "收敛到全局最优解的条件是：初始均值必须选择为某些样本本身。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0037",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | VGG 网络的卷积核宽度和高度均小于 AlexNet 的第一层卷积核。\n陈述 2 | 在引入批归一化之前，已经引入了数据依赖的权重初始化方法。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0038",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下矩阵的秩是多少？ A = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]\n",
+    "options": {
+      "A": "0",
+      "B": "1",
+      "C": "2",
+      "D": "3"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0039",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 使用核密度估计等方法进行密度估计，可以用于分类。\n陈述 2 | 逻辑回归与高斯朴素贝叶斯（具有恒等类协方差）之间的对应关系意味着，这两个分类器的参数之间存在一一对应关系。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0040",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设我们想要对空间数据（例如房屋的几何位置）进行聚类分析。我们希望生成不同大小和形状的多个聚类。以下哪种方法最合适？\n",
+    "options": {
+      "A": "决策树\n",
+      "B": "基于密度的聚类",
+      "C": "基于模型的聚类",
+      "D": "K-均值聚类\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0041",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 在 AdaBoost 中，被错误分类的样本的权重以相同的乘数因子增加。\n陈述 2 | 在 AdaBoost 中，第 t 个弱分类器在训练数据上的加权训练误差 e_t，随着 t 的增加，趋向于增大。\n\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0042",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "MLE 估计通常是不理想的，因为",
+    "options": {
+      "A": "他们存在偏见",
+      "B": "它们具有高方差",
+      "C": "它们不是一致的估计方法。",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0043",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "梯度下降的计算复杂度为：",
+    "options": {
+      "A": "线性于 D\n",
+      "B": "线性，与 N 成比例",
+      "C": "多项式在 D 中",
+      "D": "取决于迭代次数\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0044",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "计算多个决策树的输出结果的平均值有助于实现什么？\n",
+    "options": {
+      "A": "增加偏差",
+      "B": "减少偏差\n",
+      "C": "增加方差\n",
+      "D": "降低方差\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0045",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "通过对已识别特征子集进行线性回归建模得到的模型，可能与在识别该子集过程中最终得到的模型不同。",
+    "options": {
+      "A": "最佳子集选择\n",
+      "B": "前向逐步选择法\n",
+      "C": "逐层向前选择\n",
+      "D": "以上所有"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0046",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "神经网络：\n",
+    "options": {
+      "A": "优化一个凸目标函数",
+      "B": "只能使用随机梯度下降进行训练",
+      "C": "可以使用多种不同的激活函数。",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0047",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设某种疾病 D 的发病率为每 100 个人 5 例（即 P(D) = 0.05）。 设 D 为一个布尔随机变量，表示“患者患有疾病 D”，TP 为“检测结果为阳性”的布尔随机变量。 已知对疾病 D 的检测结果非常准确，即在患病时，检测结果为阳性的概率为 0.99，而在未患病时，检测结果为阴性的概率为 0.97。 求 P(TP)，即检测结果为阳性的先验概率。\n",
+    "options": {
+      "A": "0.0368",
+      "B": "0.473",
+      "C": "0.078",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0048",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 通过径向基函数将数据映射到特征空间 Q 后，使用未加权欧几里得距离的 1-NN 算法，可能在原始空间中实现比其他方法更好的分类性能（尽管我们无法保证这一点）。\n陈述 2 | Perceptron 的 VC 维小于简单线性 SVM 的 VC 维。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0049",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "网格搜索的缺点是：\n",
+    "options": {
+      "A": "不能应用于非可微函数。\n",
+      "B": "此方法不适用于非连续函数。\n",
+      "C": "难以实现。\n",
+      "D": "对于多线性回归，运行速度相对较慢。\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0050",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "根据各种线索预测一个区域的降雨量，是一个 ______ 问题。\n",
+    "options": {
+      "A": "监督学习\n",
+      "B": "无监督学习\n",
+      "C": "聚类\n",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0051",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪句话关于回归分析是错误的？\n",
+    "options": {
+      "A": "它将输入与输出相关联。\n",
+      "B": "用于预测。\n",
+      "C": "可以用于解释。\n",
+      "D": "它能够发现因果关系\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0052",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是剪枝决策树的主要原因？\n",
+    "options": {
+      "A": "为了在测试过程中节省计算时间",
+      "B": "为了节省存储决策树的空间",
+      "C": "为了减小训练集误差",
+      "D": "为了避免对训练数据集的过拟合"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0053",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 核密度估计器等价于在原始数据集中的每个点 Xi 上，执行核回归，其中 Yi = 1/n。\n陈述 2 | 学习得到的决策树的深度可能大于用于创建树的训练样本数量。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0054",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设您的模型存在过拟合。以下哪种方法**不是**一种有效的减少过拟合的方法？\n",
+    "options": {
+      "A": "增加训练数据量。\n",
+      "B": "改进用于误差最小化的优化算法。",
+      "C": "降低模型复杂度。\n",
+      "D": "减少训练数据中的噪声。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0055",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Statement 1| The softmax function is commonly used in mutliclass logistic regression. Statement 2| The temperature of a nonuniform softmax distribution affects its entropy.",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0056",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个/哪些陈述关于SVM是正确的？\n",
+    "options": {
+      "A": "对于二维数据点，线性 SVM 学习到的分离超平面将是一个直线。",
+      "B": "理论上，高斯核 SVM 无法拟合任何复杂的分割超平面。",
+      "C": "对于SVM中使用的每一个核函数，都可以得到一个等价的闭式基展开形式。",
+      "D": "在SVM中，过拟合与支持向量的数量无关。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0057",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是根据给定的贝叶斯网络 H -> U <- P <- W 描述的 H、U、P 和 W 的联合概率？ [注意：作为条件概率的乘积]\n",
+    "options": {
+      "A": "P(H, U, P, W) = P(H) * P(W) * P(P) * P(U)",
+      "B": "P(H, U, P, W) = P(H) * P(W) * P(P | W) * P(W | H, P)",
+      "C": "P(H, U, P, W) = P(H) * P(W) * P(P | W) * P(U | H, P)",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0058",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 径向基 SVM 的 VC 维数为无穷大，因此，与具有有限 VC 维的多项式核 SVM 相比，这种 SVM 性能更差。\n\n陈述 2 | 具有线性激活函数的两层神经网络，本质上是基于给定数据集的线性分隔器的加权组合；基于线性分隔器的增广算法也会找到线性分隔器的组合，因此这两个算法将产生相同的结果。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0059",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | ID3 算法保证能够找到最优决策树。\n陈述 2 | 考虑一个非零的连续概率分布，其密度函数为 f(x)。则 x 的概率等于 f(x)。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0060",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "给定一个具有 N 个输入节点、无隐藏层、一个输出节点的神经网络，使用熵损失和Sigmoid激活函数，以下哪种算法（在合适的超参数和初始化下）可以用于找到全局最优解？\n\n",
+    "options": {
+      "A": "随机梯度下降\n",
+      "B": "小批量梯度下降",
+      "C": "批梯度下降\n",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0061",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在线性模型中增加更多基础函数，以下哪个选项最有可能：\n",
+    "options": {
+      "A": "减少模型偏差",
+      "B": "减少估计偏差",
+      "C": "降低方差\n",
+      "D": "不会影响偏差和方差"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0062",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "请考虑以下贝叶斯网络。如果我们不做出任何关于独立或条件独立性的假设（例如 H -> U <- P <- W），我们需要多少个独立的参数？\n",
+    "options": {
+      "A": "3",
+      "B": "4",
+      "C": "7",
+      "D": "15"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0063",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "另一个用于检测超出分布的数据点的术语是？\n",
+    "options": {
+      "A": "异常检测\n",
+      "B": "one-class detection",
+      "C": "训练-测试数据不匹配的鲁棒性",
+      "D": "背景检测\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0064",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 我们通过使用弱学习器 h 来学习分类器 f。分类器 f 的决策边界形式与 h 相同，但参数不同。（例如，如果 h 是一个线性分类器，那么 f 也是一个线性分类器）。\n\n陈述 2 | 交叉验证可用于选择 boosting 中的迭代次数；此过程可能有助于减少过拟合。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0065",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 采用 Highway 网络后，避免使用最大池化，转而使用卷积。\n陈述 2 | 通常情况下，DenseNets 的内存消耗比 ResNets 更多。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0066",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果 N 是训练数据集中的实例数量，则最近邻算法的分类运行时间为：\n",
+    "options": {
+      "A": "O(1)",
+      "B": "O( N )",
+      "C": "O(log N )",
+      "D": "O( N^2 )"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0067",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 原始的 ResNet 和 Transformer 都是前馈神经网络。\n陈述 2 | 原始的 Transformer 使用自注意力机制，但原始的 ResNet 没有。\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0068",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | ReLU 激活函数是非单调的，而 sigmoid 激活函数是单调的。\n陈述 2 | 采用梯度下降训练的神经网络，具有很高的概率会收敛到全局最优解。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0069",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在神经网络中，Sigmoid 节点的数值输出：\n\n",
+    "options": {
+      "A": "涵盖所有实数的，没有界限的。\n",
+      "B": "涵盖所有整数，没有上界。\n",
+      "C": "介于 0 和 1 之间。\n",
+      "D": "范围在 -1 和 1 之间。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0070",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种方法只能在训练数据线性可分时使用？\n",
+    "options": {
+      "A": "线性硬间隔 SVM。\n",
+      "B": "线性逻辑回归。\n",
+      "C": "线性软间隔 SVM。\n",
+      "D": "重心法。\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0071",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些是空间聚类算法？\n",
+    "options": {
+      "A": "基于聚类的分层",
+      "B": "K-均值聚类\n",
+      "C": "基于网格的聚类",
+      "D": "以上所有"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0072",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 支持向量机的最大边际决策边界，具有最低的泛化误差，在所有线性分类器中表现最佳。\n陈述 2 | 任何由具有类条件高斯分布的生成模型获得的决策边界，原则上可以通过支持向量机和度数小于或等于 3 的多项式核函数来重现。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0073",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 线性模型的 L2 正则化倾向于使模型比 L1 正则化更稀疏。\n陈述 2 | 残差连接可以在 ResNets 和 Transformers 中找到。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0074",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设我们想要计算 P(H|E, F)，并且我们没有任何条件独立性信息。以下哪个集合的数字足以进行计算？\n",
+    "options": {
+      "A": "P(E, F), P(H), P(E|H), P(F|H)",
+      "B": "P(E, F), P(H), P(E, F|H)",
+      "C": "P(H), P(E|H), P(F|H)",
+      "D": "P(E, F), P(E|H), P(F|H)"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0075",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在进行分层集成（bagging）时，以下哪种方法可以有效防止过拟合？\n\n",
+    "options": {
+      "A": "使用带替换的抽样作为抽样技术",
+      "B": "弱分类器的使用",
+      "C": "使用不易产生过拟合的分类算法",
+      "D": "对每个训练的分类器的验证实践。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0076",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 主成分分析 (PCA) 和光谱聚类 (例如 Andrew Ng 的方法) 均对两个不同的矩阵进行特征分解。然而，这两个矩阵的大小相同。\n\n陈述 2 | 鉴于分类是回归的特殊情况，因此逻辑回归是线性回归的特殊情况。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0077",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 斯坦福情感树库包含电影评论，而非书籍评论。\n陈述 2 | Penn Treebank 曾被用于语言建模。",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0078",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下矩阵的零空间维数是多少？ A = [[3, 2, −9], [−6, −4, 18], [12, 8, −36]]\n",
+    "options": {
+      "A": "0",
+      "B": "1",
+      "C": "2",
+      "D": "3"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0079",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "什么是支持向量？\n",
+    "options": {
+      "A": "距离决策边界最远的例子。\n",
+      "B": "计算 f(x) 在 SVM 中的唯一必要示例。",
+      "C": "数据中心。\n",
+      "D": "SVM 中，所有具有非零权重 αk 的示例。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0080",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | Word2Vec 参数未使用受限玻尔兹曼机进行初始化。\n\n陈述 2 | `tanh` 函数是一种非线性激活函数。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0081",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果您的训练损失随着训练轮数的增加而增加，以下哪种情况可能是学习过程中的问题？\n",
+    "options": {
+      "A": "正则化强度过低，模型过拟合。",
+      "B": "正则化系数过高，模型欠拟合。",
+      "C": "步长过大",
+      "D": "步长过小"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0083",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 传统的机器学习方法假设训练集和测试集是独立的且服从相同的分布。\n陈述 2 | 通常，在 2017 年，COCO 模型会在 ImageNet 上进行预训练。\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0084",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 使用相同的训练集，两个不同的核函数 K1(x, x0) 和 K2(x, x0) 获得的边距值，并不能告诉我们哪个分类器在测试集上表现更好。\n陈述 2 | BERT 的激活函数为 GELU。\n\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0085",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是机器学习中的聚类算法？\n",
+    "options": {
+      "A": "期望最大化",
+      "B": "CART\n\n",
+      "C": "高斯朴素贝叶斯\n",
+      "D": "Apriori\n\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0086",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "你刚刚完成了一个用于垃圾邮件分类的决策树的训练，但该模型在你的训练集和测试集上表现异常差。你已经确认你的实现代码没有错误，那么可能导致问题的原因是什么？\n",
+    "options": {
+      "A": "您的决策树过于简单。\n",
+      "B": "您需要增加学习率。\n",
+      "C": "您正在进行过拟合。\n",
+      "D": "以上均不正确。\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0087",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "K-折交叉验证是",
+    "options": {
+      "A": "线性于 K\n",
+      "B": "二次函数关于 K",
+      "C": "立方英寸，单位为 K",
+      "D": "K 的指数\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0088",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 工业规模的神经网络通常在 CPU 上进行训练，而不是在 GPU 上。\n陈述 2 | ResNet-50 模型拥有超过 10 亿个参数。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0089",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "给定两个布尔随机变量 A 和 B，其中 P(A) = 1/2, P(B) = 1/3, 以及 P(A | ¬B) = 1/4，求 P(A | B) 的值。\n",
+    "options": {
+      "A": "1/6",
+      "B": "1/4",
+      "C": "3/4",
+      "D": "1"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0090",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪位教授最常被认为是与人工智能带来的存在主义风险相关的？",
+    "options": {
+      "A": "Nando de Frietas\n\n",
+      "B": "扬·勒库恩\n",
+      "C": "斯图尔特·拉塞尔\n",
+      "D": "吉特·马拉克\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0091",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 优化逻辑回归模型的可能性会导致多个局部最优解。\n陈述 2 | 如果已知数据的分布，则任何分类器都无法比朴素贝叶斯分类器表现更好。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0092",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于核回归，以下哪种结构性假设对欠拟合和过拟合之间的权衡影响最大？\n",
+    "options": {
+      "A": "核函数是高斯分布、三角形分布还是箱型分布？\n",
+      "B": "我们使用欧几里得距离、L1 距离还是 L∞ 距离？",
+      "C": "内核宽度\n",
+      "D": "核函数的最大值"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0093",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 支持向量机 (SVM) 学习算法保证能够找到其目标函数下的全局最优假设。\n陈述 2 | 在将数据映射到特征空间 Q 之后，使用径向基函数，感知器可能在新的空间中获得比原始空间更好的分类性能（尽管我们无法保证这一点）。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0094",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于高斯贝叶斯分类器，以下哪种结构性假设对欠拟合和过拟合之间的权衡影响最大？\n",
+    "options": {
+      "A": "Whether we learn the class centers by Maximum Likelihood or Gradient Descent",
+      "B": "Whether we assume full class covariance matrices or diagonal class covariance matrices",
+      "C": "Whether we have equal class priors or priors estimated from the data.",
+      "D": "我们允许不同的类具有不同的均值向量，还是强制它们共享相同的均值向量？\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0095",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 当训练数据集较小时，模型更容易出现过拟合。\n陈述 2 | 当假设空间较小时，模型更容易出现过拟合。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0096",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 除了 EM 算法，梯度下降法也可以用于在高斯混合模型上进行推断或学习。\n陈述 2 | 假设属性数量固定，可以使用基于高斯的方法学习最优贝叶斯分类器，其时间复杂度与数据集记录数量成线性关系。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0097",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 在贝叶斯网络中，朴素贝叶斯算法的推理结果与变量消除算法的推理结果相同。\n陈述 2 | 如果两个随机变量 X 和 Y 在另一个随机变量 Z 的条件下是条件独立，那么在对应的贝叶斯网络中，对于 X 和 Y 的节点在 Z 的条件下是 d-分离的。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0098",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "给定大量来自患有心脏病患者的医疗记录数据集，尝试判断是否存在不同的患者群体，针对这些群体可以制定不同的治疗方案。 这是一个什么样的学习问题？\n",
+    "options": {
+      "A": "监督学习\n",
+      "B": "无监督学习\n",
+      "C": "（a）和（b）\n",
+      "D": "（a）和（b）都不是正确答案。\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0099",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在主成分分析 (PCA) 中，为了获得与奇异值分解 (SVD) 相同的投影，您会采取什么操作？\n",
+    "options": {
+      "A": "将数据转换为零均值",
+      "B": "将数据转换为零中位数",
+      "C": "不可能\n",
+      "D": "以上选项均不正确。\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0100",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 1-最近邻分类器的训练误差为 0。\n陈述 2 | 随着数据点的数量趋向无穷大，MAP 估计会逼近所有可能先验的 MLE 估计。换句话说，在有足够的数据的情况下，先验的选择与否无关紧要。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0101",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "当进行最小二乘回归时，如果假设优化可以精确进行，增加正则化参数 λ 的值会导致测试误差增加。",
+    "options": {
+      "A": "永远不会降低训练误差。\n",
+      "B": "永远不会增加训练误差。",
+      "C": "永远不会降低测试错误。\n",
+      "D": "永远不会增加"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0102",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项最能描述判别式方法试图建模的内容？（w 是模型中的参数）\n",
+    "options": {
+      "A": "p(y|x, w)",
+      "B": "p(y, x)",
+      "C": "p(w|x, w)",
+      "D": "以上选项均不正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0103",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 使用卷积神经网络对 CIFAR-10 分类任务的性能可以达到 95% 以上。\n\n陈述 2 | 神经网络的组合并不能提高分类准确率，因为它们学习到的表示具有高度相关性。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0104",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个点，贝叶斯主义者和频率主义者会意见不一致？\n",
+    "options": {
+      "A": "使用非高斯噪声模型进行概率回归。",
+      "B": "使用概率模型进行回归分析。",
+      "C": "使用先验分布于概率模型中的参数。",
+      "D": "The use of class priors in Gaussian Discriminant Analysis."
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0105",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | BLEU 指标基于精确度，而 ROGUE 指标基于召回率。\n陈述 2 | 隐式马尔可夫模型经常被用于建模英语句子。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0106",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | ImageNet 包含不同分辨率的图像。\n\n陈述 2 | Caltech-101 包含比 ImageNet 更多的图像。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0107",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种方法更适合进行特征选择？\n",
+    "options": {
+      "A": "岭\n",
+      "B": "拉索\n",
+      "C": "（a）和（b）\n",
+      "D": "既不是 (a)，也不是 (b)\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0108",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设您被提供一个EM算法，该算法用于估计具有潜在变量的模型的最大似然估计。您需要修改该算法，使其找到MAP估计。您需要修改哪些步骤或步骤？\n",
+    "options": {
+      "A": "预期",
+      "B": "最大化",
+      "C": "无需修改",
+      "D": "两者\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0110",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 对于任意两个变量 x 和 y，它们具有联合分布 p(x, y)，我们总是满足 H[x, y] ≥ H[x] + H[y]，其中 H 表示熵函数。\n陈述 2 | 对于某些有向图，边数的减少会降低图中的边数。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0111",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项不是监督学习？\n",
+    "options": {
+      "A": "PCA",
+      "B": "决策树\n",
+      "C": "线性回归\n",
+      "D": "朴素贝叶斯\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0112",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 神经网络的收敛性取决于学习率。\n陈述 2 | Dropout 随机选择的激活值乘以 0。\n",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0113",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项等于 P(A, B, C)，其中 A、B 和 C 是布尔随机变量，且没有任何变量之间存在依赖或条件依赖关系？\n",
+    "options": {
+      "A": "P(A | B) * P(B | C) * P(C | A)",
+      "B": "P(C | A, B) * P(A) * P(B)",
+      "C": "P(A, B | C) * P(C)",
+      "D": "P(A | B, C) * P(B | A, C) * P(C | A, B)"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0114",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪项任务最适合使用聚类算法？\n",
+    "options": {
+      "A": "预测降雨量，基于多种线索",
+      "B": "检测欺诈性信用卡交易\n",
+      "C": "训练机器人解决迷宫\n",
+      "D": "以上所有"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0115",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在线性回归中应用正则化惩罚后，您发现某些系数 w 变为零。以下哪种惩罚可能被使用？\n",
+    "options": {
+      "A": "L0 范数\n",
+      "B": "L1范数\n",
+      "C": "L2 范数\n",
+      "D": "（a）或（b）\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0116",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "A 和 B 是两个事件。如果 P(A, B) 减小，而 P(A) 增大，那么以下哪个陈述是正确的？\n",
+    "options": {
+      "A": "P(A|B) decreases",
+      "B": "P(B|A) decreases",
+      "C": "P(B) decreases",
+      "D": "以上所有"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0117",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "陈述 1 | 在学习一个固定观测集的 HMM 时，假设我们不知道隐藏状态的数量（这在实际应用中很常见），我们可以通过允许更多的隐藏状态来提高训练数据的概率。\n陈述 2 | 协同过滤通常是一种有用的模型，用于建模用户的电影偏好。",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0118",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "您正在训练一个线性回归模型，用于简单的估算任务，但注意到模型对数据进行了过拟合。您决定添加正则化项 $\\ell_2$，以惩罚权重。随着 $\\ell_2$ 正则化系数的增加，模型的偏差和方差会发生什么变化？\n",
+    "options": {
+      "A": "偏差增加；方差增加",
+      "B": "偏差增加；方差降低\n",
+      "C": "偏差降低；方差增加",
+      "D": "偏差降低；方差降低"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0119",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Which PyTorch 1.8 command(s) produce $10\\times 5$ Gaussian matrix with each entry i.i.d. sampled from $\\mathcal{N}(\\mu=5,\\sigma^2=16)$ and a $10\\times 10$ uniform matrix with each entry i.i.d. sampled from $U[-1,1)$?",
+    "options": {
+      "A": "\\texttt{5 + torch.randn(10,5) * 16} ; \\texttt{torch.rand(10,10,low=-1,high=1)}",
+      "B": "\\texttt{5 + torch.randn(10,5) * 16} ; \\texttt{(torch.rand(10,10) - 0.5) / 0.5}",
+      "C": "\\texttt{5 + torch.randn(10,5) * 4} ; \\texttt{2 * torch.rand(10,10) - 1}",
+      "D": "\\texttt{torch.normal(torch.ones(10,5)*5,torch.ones(5,5)*16)} ; \\texttt{2 * torch.rand(10,10) - 1}"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0120",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Statement 1| The ReLU's gradient is zero for $x<0$, and the sigmoid gradient $\\sigma(x)(1-\\sigma(x))\\le \\frac{1}{4}$ for all $x$. Statement 2| The sigmoid has a continuous gradient and the ReLU has a discontinuous gradient.",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0121",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "关于批归一化，以下哪个陈述是正确的？\n",
+    "options": {
+      "A": "在应用批量归一化后，该层的激活值将遵循标准高斯分布。",
+      "B": "如果紧接着一个批归一化层，那么仿函数层中的偏差参数就变得多余。\n",
+      "C": "在使用批量归一化时，标准权重初始化方法需要进行修改。\n",
+      "D": "在卷积神经网络中，批归一化与层归一化是等价的。\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0122",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Suppose we have the following objective function: $\\argmin_{w} \\frac{1}{2} \\norm{Xw-y}^2_2 + \\frac{1}{2}\\gamma \\norm{w}^2_2$ What is the gradient of $\\frac{1}{2} \\norm{Xw-y}^2_2 + \\frac{1}{2}\\lambda \\norm{w}^2_2$ with respect to $w$?",
+    "options": {
+      "A": "$\\nabla_w f(w) = (X^\\top X + \\lambda I)w - X^\\top y + \\lambda w$\n\n",
+      "B": "$\\nabla_w f(w) = X^\\top X w - X^\\top y + \\lambda$\n\n",
+      "C": "$\\nabla_w f(w) = X^\\top X w - X^\\top y + \\lambda w$\n\n",
+      "D": "$\\nabla_w f(w) = X^\\top X w - X^\\top y + (\\lambda+1) w$\n\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0123",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个陈述是关于卷积核的正确描述？\n",
+    "options": {
+      "A": "Convolving an image with $\\begin{bmatrix}1 & 0 & 0\\\\ 0 & 1 & 0 \\\\ 0 & 0 & 1 \\end{bmatrix}$ would not change the image",
+      "B": "Convolving an image with $\\begin{bmatrix}0 & 0 & 0\\\\ 0 & 1 & 0 \\\\ 0 & 0 & 0 \\end{bmatrix}$ would not change the image",
+      "C": "Convolving an image with $\\begin{bmatrix}1 & 1 & 1\\\\ 1 & 1 & 1 \\\\ 1 & 1 & 1 \\end{bmatrix}$ would not change the image",
+      "D": "Convolving an image with $\\begin{bmatrix}0 & 0 & 0\\\\ 0 & 0 & 0 \\\\ 0 & 0 & 0 \\end{bmatrix}$ would not change the image"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0124",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个选项是错误的？\n",
+    "options": {
+      "A": "Semantic segmentation models predict the class of each pixel, while multiclass image classifiers predict the class of entire image.",
+      "B": "一个 IoU（交并比）等于 $96\\%$ 的边界框，很可能被认为是真阳性。\n",
+      "C": "当预测的边界框与场景中的任何物体不对应时，则被认为是误判。\n",
+      "D": "一个 IoU（交并比）等于 $3\\%$ 的边界框，很可能被认为是误判（false negative）。\n\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0126",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "我们正在训练一个具有两个隐藏层的全连接网络，用于预测房价。输入是 $100$ 维的，包含多个特征，如房屋面积、家庭平均收入等。第一个隐藏层有 $1000$ 个激活单元。第二个隐藏层有 $10$ 个激活单元。输出是一个标量，表示房屋价格。假设这是一个标准的网络，具有仿函数变换，并且没有批归一化，也没有激活函数中的可学习参数。那么，这个网络有多少个参数？\n",
+    "options": {
+      "A": "111021",
+      "B": "110010",
+      "C": "111110",
+      "D": "110011"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "mmlu_machine_learning_test_0127",
+    "source": "MMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Statement 1| The derivative of the sigmoid $\\sigma(x)=(1+e^{-x})^{-1}$ with respect to $x$ is equal to $\\text{Var}(B)$ where $B\\sim \\text{Bern}(\\sigma(x))$ is a Bernoulli random variable. Statement 2| Setting the bias parameters in each layer of neural network to 0 changes the bias-variance trade-off such that the model's variance increases and the model's bias decreases",
+    "options": {
+      "A": "正确，正确\n",
+      "B": "错误，错误\n",
+      "C": "是，否\n",
+      "D": "错误, 正确\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "machine_learning",
+      "英文题"
+    ],
+    "language": "en",
+    "split": "test"
+  },
+  {
+    "id": "CMMLU_机器学习_1_526b58ff",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在二分类问题中，当测试集的正例和负例数量不均衡时，以下评价方案哪个是相对不合理的（假设precision=TP/(TP+FP),recall=TP/(TP+FN)。）",
+    "options": {
+      "A": "F-值:2recallprecision/(recall+precision)",
+      "B": "G-mean:sqrt(precision*recall)",
+      "C": "准确性:(TP+TN)/all",
+      "D": "AUC:ROC曲线下面积"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_2_2ef3e6f9",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "深度学习中遇见过拟合下列哪个处理办法不可取",
+    "options": {
+      "A": "添加 Dropout 层\n",
+      "B": "加深层数",
+      "C": "数据增强",
+      "D": "加正则项"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_4_f9bf97bc",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪些方法不可以用来对高维数据进行降维",
+    "options": {
+      "A": "LASSO\n\n",
+      "B": "袋式集成学习",
+      "C": "主成分分析法",
+      "D": "聚类分析"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_5_a26b5082",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "机器学习中L1正则化和L2正则化的区别是",
+    "options": {
+      "A": "使用L1可以得到稀疏、平滑的权值",
+      "B": "使用L2可以得到稀疏、平滑的权值",
+      "C": "使用L1可以得到稀疏的权值、使用L2可以得到平滑的权值",
+      "D": "使用L2可以得到稀疏的权值、使用L1可以得到平滑的权值"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_6_c116aa91",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列关于隐马模型和条件随机场模型的说法中错误的是?",
+    "options": {
+      "A": "隐马模型和隐马模型隐可用于命名实体识别、分词和词性标注的任务",
+      "B": "隐马模型和隐马模型都是生成模型",
+      "C": "隐马模型不是概率无向图模型",
+      "D": "特征的选取和优化会严重影响隐马模型的结果"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_7_b6489b90",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个/些超参数的增加可能会造成随机森林数据过拟合",
+    "options": {
+      "A": "学习速率",
+      "B": "树的数量",
+      "C": "树的深度",
+      "D": "以上都不是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_8_9540581b",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面关于迭代二叉树3代算法中说法错误的是",
+    "options": {
+      "A": "迭代二叉树3代算法是一个二叉树模型",
+      "B": "信息增益可以用熵来计算，而不是 GINI 系数。",
+      "C": "迭代二叉树3代算法要求特征必须离散化",
+      "D": "选取信息增益最大的特征,作为树的根节点"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_9_20879077",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个/些选项对 K 折交叉验证的描述是正确的",
+    "options": {
+      "A": "如果 K=N,那么其称为留一交叉验证,其中 N 为验证集中的样本数量",
+      "B": "更大的 K 值相比于小 K 值将对交叉验证结构有更高的信心",
+      "C": "以上都是",
+      "D": "增大 K 将导致交叉验证结果时需要更多的时间"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_10_d743b434",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知有m个样本，进行n次（n<=m）采样。什么是Bootstrap数据？\n\n",
+    "options": {
+      "A": "无放回地从总共N个样本中抽样n个样本",
+      "B": "无放回地从总共M个特征中抽样m个特征",
+      "C": "有放回地从总共N个样本中抽样n个样本",
+      "D": "有放回地从总共M个特征中抽样m个特征"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_14_10e32d87",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列方法中,不可以用于特征降维的方法包括",
+    "options": {
+      "A": "深度学习：稀疏自编码器",
+      "B": "矩阵奇异值分解SVD",
+      "C": "线性判别分析",
+      "D": "主成分分析"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_15_3409e3f2",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "贝叶斯定理求得是什么概率?",
+    "options": {
+      "A": "先验概率",
+      "B": "其它选项都不是",
+      "C": "条件概率",
+      "D": "联合概率"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_18_065ed2d4",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以P(w)表示词条w的概率,假设已知P(南京)=0.8,P(市长)=0.6,P(江大桥)=0.4:P(南京市)=0.3,P(长江大桥)=0.5:如果假设前后两个词的出现是独立的,那么分词结果就是",
+    "options": {
+      "A": "南京_市长_江大桥",
+      "B": "南京市_长江_大桥",
+      "C": "南京市长_江大桥",
+      "D": "南京市_长江大桥"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_19_fe9e4c4c",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对数几率回归（logistics regression）与一般回归分析的主要区别是什么？\n\n",
+    "options": {
+      "A": "对数几率回归是设计用来预测事件可能性的",
+      "B": "对数几率回归可以用来估计回归系数",
+      "C": "以上都是",
+      "D": "对数几率回归可以用来度量模型拟合程度"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_22_8b6f01b7",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "高斯混合模型(GMM)是一种什么模型",
+    "options": {
+      "A": "无监督学习模型",
+      "B": "其他选项都不是",
+      "C": "半监督学习模型",
+      "D": "有监督学习模型"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_23_e36a3156",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于语法规则的方法为",
+    "options": {
+      "A": "条件随机场",
+      "B": "最大熵模型",
+      "C": "句法、语义分析",
+      "D": "最大熵隐马尔科夫模型"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_24_7876de5d",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "有两个样本点,第一个点为正样本,它的特征向量是(0,-1);第二个点为负样本,它的特征向量是(2,3),从这两个样本点组成的训练集构建一个线性SVM分类器的分类面方程是",
+    "options": {
+      "A": "2x-y=0",
+      "B": "x+2y=5",
+      "C": "x+2y=3",
+      "D": "2x+y=4"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_25_43894dfb",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "隐马尔可夫模型，观测空间为 O，状态空间为 S。如果使用维特比算法（Viterbi algorithm）进行解码，时间复杂度为。\n",
+    "options": {
+      "A": "O(NK)",
+      "B": "O(N^2K)",
+      "C": "以上都不是",
+      "D": "O(NK^2)"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_26_5a849003",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定你使用了一个很大γ值的RBF核,这意味着:",
+    "options": {
+      "A": "模型不会被点到超平面的距离所影响",
+      "B": "以上都不是",
+      "C": "模型仅使用接近超平面的点来建模",
+      "D": "模型将考虑使用远离超平面的点建模"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_28_59534649",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "变量选择是用来选择最好的判别器子集, 如果要考虑模型效率,我们应该做除了下列哪项的变量选择的考虑",
+    "options": {
+      "A": "交叉验证",
+      "B": "变量对于模型的解释有多大作用",
+      "C": "特征携带的信息",
+      "D": "多个变量其实有相同的用处"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_30_e63ff4aa",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "当我们构造线性模型时, 我们注意变量间的相关性. 在相关矩阵中搜索相关系数时, 如果我们发现3对变量的相关系数是(Var1 和Var2, Var2和Var3, Var3和Var1)是-0.98, 0.45, 1.23 . 我们可以得出什么结论",
+    "options": {
+      "A": "以上都是",
+      "B": "因为Var1和Var2是非常相关的, 我们可以去除其中一个",
+      "C": "Var1和Var2是非常相关的",
+      "D": "Var3和Var1的1.23相关系数是不可能的"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_31_16d007b4",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "机器学习中做特征选择时,可能用到的方法有",
+    "options": {
+      "A": "以上都有",
+      "B": "卡方",
+      "C": "信息增益",
+      "D": "期望交叉熵"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_32_5879ac1e",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "LSTM与GRU的主要区别在于，GRU将LSTM中的哪些门融合了？\n\n",
+    "options": {
+      "A": "忘记门控和输入门控",
+      "B": "输入门和输出门\n",
+      "C": "忘记门控和输出门",
+      "D": "输出门和重置门"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_33_eba5d4f4",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "符号集 a 、 b 、 c 、 d ,它们相互独立,相应概率为 1/2 、 1/4 、 1/8/ 、 1/16 ,其中包含信息量最小的符号是",
+    "options": {
+      "A": "d",
+      "B": "b",
+      "C": "a",
+      "D": "c"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_34_9030701e",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设你使用 log-loss 函数作为评估标准。以下选项，哪些是对作为评估标准的 log-loss 的正确解释？\n\n",
+    "options": {
+      "A": "以上都是",
+      "B": "log-loss 越低，表示模型的预测越准确。",
+      "C": "对于一个特定的观察，分类器将正确的类别分配给极低的概率，从而导致 log-loss 的相应分布非常大。\n",
+      "D": "如果一个分类器对错误的分类表现出极高的置信度，则损失函数（log-loss）会对其进行严厉的惩罚。\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_35_15994be0",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知一组数据的协方差矩阵P,下面关于主分量说法错误的是",
+    "options": {
+      "A": "主分量分析就是K-L变换",
+      "B": "在经主分量分解后,协方差矩阵成为对角矩阵",
+      "C": "主分量分析的最佳准则是对一组数据进行按一组正交基分解, 在只取相同数量分量的条件下,以均方误差计算截尾误差最小",
+      "D": "主分量是通过求协方差矩阵的特征值得到"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_37_adcec8a2",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪项不是降低过拟合的方法",
+    "options": {
+      "A": "收集更多训练数据",
+      "B": "进行数据清洗,减少噪声",
+      "C": "增加神经网络隐藏层节点数",
+      "D": "简化模型假设"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_38_077aa147",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "给定三个变量 X、Y、Z。\n(X, Y)、(Y, Z) 和 (X, Z) 的皮尔逊相关系数分别为 C1、C2 和 C3。\n\n现在，X 的所有值加上 2（即 X+2），Y 的所有值减 2（即 Y-2），Z 不变。\n那么运算后的 (X, Y)、(Y, Z) 和 (X, Z) 相关系数分别为 D1、D2 和 D3。\n现在，请问 D1、D2、D3 和 C1、C2、C3 之间有什么关系？\n",
+    "options": {
+      "A": "D1 = C1, D2 < C2, D3 < C3",
+      "B": "D1= C1, D2 < C2, D3 > C3",
+      "C": "D1 = C1, D2 = C2, D3 = C3",
+      "D": "D1 = C1, D2 > C2, D3 > C3"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_39_d5871219",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在决策树中，关于使用信息增益作为分裂节点的说法，哪一项是不正确的？\n",
+    "options": {
+      "A": "信息增益更加倾向于选择有较多取值的属性",
+      "B": "信息增益可以使用熵得到",
+      "C": "较小不纯度的节点需要更多的信息来区分总体",
+      "D": "以上均不是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_40_410da5bb",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列关于回归分析中的残差表述正确的是",
+    "options": {
+      "A": "残差的平均值总小于零",
+      "B": "残差的平均值总大于零",
+      "C": "残差的平均值总为零",
+      "D": "残差没有此类规律"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_41_acc96f09",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "我们建立一个5000个特征, 100万数据的机器学习模型. 我们怎么有效地应对这样的大数据训练",
+    "options": {
+      "A": "我们随机抽取一些样本, 在这些少量样本之上训练",
+      "B": "以上所有",
+      "C": "我们可以试用在线机器学习算法",
+      "D": "我们应用PCA算法降维, 减少特征数"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_42_8613092d",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪个不属于条件随机场模型对于隐马尔科夫模型和最大熵隐马尔科夫模型模型的优势",
+    "options": {
+      "A": "速度快",
+      "B": "可容纳较多上下文信息",
+      "C": "全局最优",
+      "D": "特征灵活"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_43_53afa741",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪项不是基于词典的方法的中文分词的基本方法",
+    "options": {
+      "A": "最大熵模型",
+      "B": "最大概率法",
+      "C": "最大匹配法",
+      "D": "最短路径法"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_44_505a40b1",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定你使用SVM学习数据X,数据X里面有些点存在错误。现在如果你使用一个二次核函数,多项式阶数为2,使用松弛变量C作为超参之一。 如果使用较小的C(C趋于0),则:",
+    "options": {
+      "A": "不确定",
+      "B": "误分类",
+      "C": "正确分类",
+      "D": "以上均不正确"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_45_1d2ae2a8",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种方法属于生成模型",
+    "options": {
+      "A": "条件随机场",
+      "B": "传统神经网络",
+      "C": "朴素贝叶斯",
+      "D": "线性回归"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_46_fb88013c",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在其它条件不变的前提下,以下哪种做法容易引起机器学习中的过拟合问题",
+    "options": {
+      "A": "增加训练集数量",
+      "B": "删除稀疏的特征",
+      "C": "SVM算法中使用高斯核/RBF核代替",
+      "D": "减少神经网络隐藏层节点数"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_47_f1d78742",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对应梯度提升（Gradient Boosting）树算法，以下说法正确的是：\n\n",
+    "options": {
+      "A": "当增加最小样本分裂个数,我们可以抵制过拟合",
+      "B": "当我们减少训练单个学习器的样本个数,我们可以降低偏差",
+      "C": "当增加最小样本分裂个数,会导致过拟合",
+      "D": "当我们增加训练单个学习器的样本个数,我们可以降低方差"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_48_87f5b75b",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设你训练SVM后,得到一个线性决策边界,你认为该模型欠拟合。在下次迭代训练模型时,应该考虑",
+    "options": {
+      "A": "减少训练数据",
+      "B": "减少特征",
+      "C": "计算更多变量",
+      "D": "增加训练数据"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_49_e28cbc13",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "语音信号由于具有什么特性,所以我们可以将语音信号进行分窗处理?",
+    "options": {
+      "A": "随机单调性",
+      "B": "其他选项都不是",
+      "C": "短时平稳性",
+      "D": "单调不变性"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_51_026c6f12",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下属于欧式距离特性的有",
+    "options": {
+      "A": "尺度缩放不变性",
+      "B": "旋转不变性",
+      "C": "不受量纲影响的特性",
+      "D": "考虑了模式的分布"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_52_8e3aa641",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "朴素贝叶斯是一种特殊的贝叶斯分类器,特征变量是X,类别标签是C,它的一个假定是",
+    "options": {
+      "A": "特征变量X的各个维度是类别条件独立随机变量",
+      "B": "P(X|C)是高斯分布",
+      "C": "以0为均值,sqr(2)/2为标准差的正态分布",
+      "D": "各类别的先验概率P(C)是相等的"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_55_8bccf2e1",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "数据科学家可能会同时使用多个算法(模型)进行预测, 并且最后把这些算法的结果集成起来进行最后的预测(集成学习),以下对集成学习说法正确的是",
+    "options": {
+      "A": "单个模型之间有高相关性",
+      "B": "单个模型都是用的一个算法",
+      "C": "单个模型之间有低相关性",
+      "D": "在集成学习中使用“平均权重”而不是“投票”会比较好"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_57_85d36f15",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "我们想要减少数据集中的特征数, 即降维. 选择以下适合的方案",
+    "options": {
+      "A": "以上所有",
+      "B": "我们先把所有特征都使用, 去训练一个模型, 得到测试集上的表现. 然后我们去掉一个特征, 再去训练, 用交叉验证看看测试集上的表现. 如果表现比原来还要好, 我们可以去除这个特征",
+      "C": "使用前向特征选择方法和后向特征排除方法",
+      "D": "查看相关性表, 去除相关性最高的一些特征"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_58_7b4cade0",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个激活函数不能解决梯度弥散的问题",
+    "options": {
+      "A": "漏斗-ReLU\n\n",
+      "B": "Elu",
+      "C": "Sigmoid 函数\n\n",
+      "D": "ReLU\n\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_59_07430e75",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪个不属于常用的文本分类的特征选择算法",
+    "options": {
+      "A": "主成分分析",
+      "B": "互信息",
+      "C": "信息增益",
+      "D": "卡方检验值"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_60_1de024f7",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "求解 Fisher 线性判别函数的步骤是将 M 维特征向量投影到（ ）中进行求解。\n",
+    "options": {
+      "A": "一维空间",
+      "B": "三维空间",
+      "C": "M-1维空间",
+      "D": "二维空间"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_61_5ff1a0a5",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪一项说明了X,Y之间的较强关系",
+    "options": {
+      "A": "相关系数为0.9",
+      "B": "都不对",
+      "C": "β系数为0的零假设的p值为0.0001",
+      "D": "β系数为0的零假设下的t统计量为30。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_62_17726dd3",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 k-均值算法中,以下哪个选项可用于获得全局最小?",
+    "options": {
+      "A": "以上所有",
+      "B": "找到集群的最佳数量",
+      "C": "调整迭代的次数",
+      "D": "尝试使用不同的质心（centroid）初始化运行算法。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_63_f6b8a129",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在统计语言模型中,通常以概率的形式描述任意语句的可能性,利用最大相似度估计进行度量,对于一些低频词,无论如何扩大训练数据,出现的频度仍然很低,下列哪种方法能解决这一问题",
+    "options": {
+      "A": "数据平滑",
+      "B": "N元文法",
+      "C": "一元文法",
+      "D": "一元切分"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_64_ceabfedd",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下说法中错误的是",
+    "options": {
+      "A": "给定n个数据点,如果其中一半用于训练,一半用户测试,则训练误差和测试误差之间的差别会随着n的增加而减少的",
+      "B": "Boosting 和 Bagging 都是通过组合多个分类器来进行投票的方法。两者都根据单个分类器的准确率来确定其权重。",
+      "C": "SVM对噪声(如来自其他分部的噪声样本)具备鲁棒性",
+      "D": "在 AdaBoost 算法中，所有被错误分类的样本的权重更新比例是不相同的。\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_65_3c1cc76e",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个二进制源X发出符号集为{-1,1},经过离散无记忆信道传输,由于信道中噪音的存在,接收端Y收到符号集为{-1,1,0}。已知P(x=-1)=1/4,P(x=1)=3/4,P(y=-1|x=-1)=4/5,P(y=0|x=-1)=1/5,P(y=1|x=1)=3/4,P(y=0|x=1)=1/4,求条件熵H(Y|X)",
+    "options": {
+      "A": "0.5372",
+      "B": "0.2375",
+      "C": "0.5273",
+      "D": "0.3275"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_66_44389730",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪种技术对于减少数据集的维度会更好?",
+    "options": {
+      "A": "删除数据差异较大的列",
+      "B": "删除缺少值太多的列",
+      "C": "删除不同数据趋势的列",
+      "D": "都不是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_67_ad70a5eb",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪些不特别适合用来对高维数据进行降维",
+    "options": {
+      "A": "聚类分析",
+      "B": "LASSO\n\n",
+      "C": "小波分析法",
+      "D": "拉普拉斯特征映射"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_70_7685feb6",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列关于维特比算法(Viterbi)的说法中错误的是",
+    "options": {
+      "A": "维特比算法中的转移概率是从一个隐含状态转移到另一个隐含状态的概率",
+      "B": "维特比算法是一种贪心算法",
+      "C": "维特比算法可应用于中文分词任务",
+      "D": "维特比算法可得到全局最优解"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_71_e9434518",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下( )不属于线性分类器最佳准则",
+    "options": {
+      "A": "贝叶斯分类",
+      "B": "感知准则函数",
+      "C": "支持向量机",
+      "D": "费舍尔原则\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_73_857c70f1",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面不是迭代二叉树3代算法对数据的要求",
+    "options": {
+      "A": "所有的训练例的所有属性必须有一个明确的值",
+      "B": "所有属性必须为离散量",
+      "C": "所有属性必须为连续",
+      "D": "相同的因素必须得到相同的结论且训练例必须唯一"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_74_96092b53",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面的优化算法中,速度最快的是",
+    "options": {
+      "A": "BFGS\n\n",
+      "B": "梯度下降法",
+      "C": "牛顿法",
+      "D": "亚当\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_77_d453dff2",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "类域界面方程法中,不能求线性不可分情况下分类问题近似或精确解的方法是",
+    "options": {
+      "A": "基于二次准则的H-K算法",
+      "B": "感知器算法 ",
+      "C": "势函数法",
+      "D": "伪逆法"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_78_fdbb7c17",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个选项中哪一项属于确定性算法",
+    "options": {
+      "A": "K-均值聚类\n",
+      "B": "PCA",
+      "C": "KNN",
+      "D": "以上都不是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_79_d930300e",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些算法, 1. KNN;2. 线性回归;3.对数几率回归。可以用神经网络去构造:",
+    "options": {
+      "A": "2 和 3",
+      "B": "1和 2",
+      "C": "以上都不是",
+      "D": "1, 2 和 3"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_80_d47298f9",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "训练SVM的最小时间复杂度为O(n2),那么一下哪种数据集不适合用SVM?",
+    "options": {
+      "A": "和数据集大小无关",
+      "B": "大数据集",
+      "C": "小数据集",
+      "D": "中等大小数据集"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_81_831ab2cf",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果线性回归模型中的随机误差存在异方差性,那么参数的普通最小二乘法估计量是",
+    "options": {
+      "A": "无偏的,非有效的",
+      "B": "无偏的,有效的",
+      "C": "有偏的,非有效的",
+      "D": "有偏的,有效的"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_82_6211064f",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项关于RoBERTa的说法是错误的？\n\n",
+    "options": {
+      "A": "不做NSP任务",
+      "B": "采用静态掩码机制",
+      "C": "采用更多训练数据",
+      "D": "训练采用更大的批次大小"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_83_8d2c337f",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在逻辑回归输出与目标对比的情况下,以下评估指标中哪一项不适用?",
+    "options": {
+      "A": "准确度",
+      "B": "均方误差",
+      "C": "AUC-ROC",
+      "D": "对数损失"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_84_85afcf74",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "语言模型的参数估计经常使用MLE(最大似然估计)。面临的一个问题是没有出现的项概率为0,这样会导致语言模型的效果不好。为了解决这个问题,需要使用()",
+    "options": {
+      "A": "增加白噪音",
+      "B": "平滑",
+      "C": "随机插值",
+      "D": "去噪"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_85_25451bca",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "建模北京市人口的年龄分布,采用什么分布更合适",
+    "options": {
+      "A": "0-1分布",
+      "B": "正态分布",
+      "C": "泊松分布",
+      "D": "指数分布"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_86_4caaef53",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "SVM中的代价参数表示:",
+    "options": {
+      "A": "误分类与模型复杂性之间的平衡",
+      "B": "以上均不是",
+      "C": "使用的核",
+      "D": "交叉验证的次数"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_88_745d08cb",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪一项关于BERT的说法是错误的？\n\n",
+    "options": {
+      "A": "支持对语义上下文进行建模",
+      "B": "使用激活函数 GELU",
+      "C": "网络一共有20层",
+      "D": "使用 Transformer"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_89_e47d8785",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "模式识别中,不属于马式距离较之于欧式距离的优点的是",
+    "options": {
+      "A": "尺度不变性",
+      "B": "平移不变性",
+      "C": "考虑到各种特性之间的联系",
+      "D": "考虑了模式的分布"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_91_68d3c7a0",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个不是LSTM本身的特点？\n\n",
+    "options": {
+      "A": "LSTM 是一种循环神经网络 (RNN) 的变体。\n\n",
+      "B": "防止梯度弥散",
+      "C": "训练时GPU使用率较高",
+      "D": "LSTM 具有遗忘门机制。\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_92_13d4e21f",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "关于逻辑回归和支持向量机不正确的是",
+    "options": {
+      "A": "逻辑回归本质上是一种根据样本对权值进行极大似然估计的方法,而后验概率正比于先验概率和似然函数的乘积。逻辑仅仅是最大化似然函数,并没有最大化后验概率,更谈不上最小化后验概率",
+      "B": "支持向量机可以通过正则化系数控制模型的复杂度,避免过拟合。",
+      "C": "支持向量机的目标是找到使得训练数据尽可能分开且分类间隔最大的超平面,应该属于结构风险最小化",
+      "D": "逻辑回归的输出就是样本属于正类别的几率,可以计算出概率。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_93_5185bf57",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下不属于影响聚类算法结果的主要因素有",
+    "options": {
+      "A": "特征选取",
+      "B": "已知类别的样本质量",
+      "C": "分类准则",
+      "D": "模式相似性测度"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_94_216b58a6",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "高斯混合模型(GMM)采用什么准则进行训练",
+    "options": {
+      "A": "均方误差最小化",
+      "B": "经验风险最小化",
+      "C": "期望最大化",
+      "D": "其他选项都不是"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_95_70664edf",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下说法正确的是",
+    "options": {
+      "A": "一个机器学习模型,如果有较高准确率,并不难总是说明这个分类器是好的",
+      "B": "我们不可以使用聚类“类别id”作为一个新的特征项, 然后再用监督学习分别进行学习",
+      "C": "如果增加模型复杂度, 那么模型的测试错误率总是会降低",
+      "D": "如果增加模型复杂度, 那么模型的训练错误率总是会降低"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_96_f1f978d2",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在中文同义词替换时，常用Word2Vec模型。以下说法错误的是：",
+    "options": {
+      "A": "Word2Vec结果符合当前预期环境。",
+      "B": "Word2Vec 得到的词语都具有相同的语义含义。\n\n",
+      "C": "Word2Vec 的训练依赖于语料的数量和质量。\n\n",
+      "D": "Word2Vec 建立在概率统计模型之上。\n\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_97_1cbfb460",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在以下不同的场景中,使用的分析方法不正确的有",
+    "options": {
+      "A": "根据商家最近一年的经营及服务数据,用聚类算法判断出天猫商家在各自主营类目下所属的商家层级",
+      "B": "根据商家近几年的成交数据,用聚类算法拟合出用户未来一个月可能的消费金额公式",
+      "C": "用关联规则算法分析出购买了汽车坐垫的买家,是否适合推荐汽车脚垫",
+      "D": "根据用户最近购买的商品信息,用决策树算法识别出淘宝买家可能是男还是女"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_99_53f23016",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下关于LDA(Latent Dirichlet allocation)的说法错误的是",
+    "options": {
+      "A": "LDA是非监督学习技术",
+      "B": "LDA可通过EM的思想求解",
+      "C": "当选取一篇文档后,对于该文档主题的分布是确定的",
+      "D": "LDA包含词,主题和文档三层结构"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_100_11829b3d",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果我使用数据集的全部特征并且能够达到100%的准确率,但在测试集上仅能达到70%左右,这说明:",
+    "options": {
+      "A": "以上均不正确",
+      "B": "欠拟合",
+      "C": "过拟合",
+      "D": "模型很棒"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_102_5461d824",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "基于统计的分词方法为",
+    "options": {
+      "A": "正向量最大匹配法",
+      "B": "条件随机场",
+      "C": "最少切分",
+      "D": "逆向量最大匹配法"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_104_d81b8f64",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下关于word2vec的说法中，哪一项是错误的？\n\n",
+    "options": {
+      "A": "使用词向量可以得到以下等式：King - man + woman = Queen\n\n",
+      "B": "跳跃模型（Skip-gram）：根据给定词窗中的文本，预测当前词的概率。",
+      "C": "word2vec 的假设是词袋模型（bag-of-words model），即词的顺序不重要。\n",
+      "D": "在word2vec训练中，使用了负采样（Negative Sampling）和分层Softmax两种加速算法。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_105_1299de51",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下描述正确的是",
+    "options": {
+      "A": "聚类分析可以看作是一种非监督的分类。",
+      "B": "在聚类分析当中,簇内的相似性越大,簇间的差别越大,聚类的效果就越差。",
+      "C": "SVM是这样一个分类器,他寻找具有最小边缘的超平面,因此它也经常被称为最小边缘分类器",
+      "D": "在决策树中,随着树中结点数变得太大,即使模型的训练误差还在继续减低,但是检验误差开始增大,这是出现了模型拟合不足的问题。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_106_7e1bd656",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列选项中,识别模式与其他不一样的是",
+    "options": {
+      "A": "出行方式判断:步行、骑车、坐车",
+      "B": "用户年龄分布判断:少年、青年、中年、老年",
+      "C": "投递员分拣信件",
+      "D": "医生给病人诊断发病类型"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_107_a311f847",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列说法不正确的是",
+    "options": {
+      "A": "梯度下降法是利用当前位置的负梯度作为搜索方向的方法",
+      "B": "共轭梯度法仅需利用一阶导数的信息,但是收敛速度高于梯度下降法",
+      "C": "批量梯度下降和随机梯度下降相比,批量梯度下降优势是对于大规模样本效率很高",
+      "D": "牛顿法和梯度下降法相比,一个劣势是求解复杂,一个优势是收敛速度加快"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_108_47913701",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在隐马尔科夫模型中,如果已知观察序列和产生观察序列的状态序列,那么可用以下哪种方法直接进行参数估计",
+    "options": {
+      "A": "前向后向算法",
+      "B": "极大似然估计 ",
+      "C": "维特比算法",
+      "D": "EM算法"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_109_1698ba19",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "LDA(Latent Dirichlet allocation)中归属于同一主题下单词分布的先验分布是?",
+    "options": {
+      "A": "正态分布",
+      "B": "狄利克雷分布",
+      "C": "多项分布",
+      "D": "二项分布"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_112_bf1a9a54",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪些是非监督学习方法",
+    "options": {
+      "A": "SVM",
+      "B": "K-均值聚类\n",
+      "C": "KNN",
+      "D": "决策树"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_114_8715dfca",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下交叉验证方法：\ni. 带有替换的 Bootstrap 方法；\nii. 留一个测试样本的交叉验证；\niii. 5折交叉验证；\niv. 两次重复的5折教程验证。\n\n当样本大小为1000时，以下执行时间的顺序，正确的是：\n",
+    "options": {
+      "A": "ii > iv > iii > i",
+      "B": "ii > iii > iv > i",
+      "C": "iv > i > ii > iii",
+      "D": "i > ii > iii > iv"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_115_a73c45b9",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Seq2Seq模型在解码时可以选用的方法",
+    "options": {
+      "A": "贪心算法",
+      "B": "二者均可",
+      "C": "光束搜索\n",
+      "D": "二者均不可"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_116_0ea6ef3e",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "解决隐马模型中预测问题的算法是",
+    "options": {
+      "A": "前向算法",
+      "B": "维特比算法",
+      "C": "巴姆-威尔算法\n",
+      "D": "后向算法"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_117_2e937244",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪个是对 k-means 聚类算法的正确解释？\n\n",
+    "options": {
+      "A": "能自动识别类的个数,不是随即挑选初始点为中心点计算",
+      "B": "不能自动识别类的个数,不是随即挑选初始点为中心点计算",
+      "C": "不能自动识别类的个数,随即挑选初始点为中心点计算",
+      "D": "能自动识别类的个数,随即挑选初始点为中心点计算"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_119_420bd4e5",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一监狱人脸识别准入系统用来识别待进入人员的身份,此系统一共包括识别4种不同的人员:狱警,小偷,送餐员,其他。下面哪种学习方法最适合此种应用需求",
+    "options": {
+      "A": "多分类问题",
+      "B": "二分类问题",
+      "C": "k-中心点聚类问题",
+      "D": "层次聚类问题"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_120_a321771a",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为了得到与 SVD 相同的投影，您需要在 PCA 中执行哪些操作？\n",
+    "options": {
+      "A": "将数据转换成零均值",
+      "B": "无法做到",
+      "C": "将数据转换成零众数",
+      "D": "将数据转换成零中位数"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_121_04273b0d",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在统计模式分类问题中,当先验概率未知时,可以使用",
+    "options": {
+      "A": "N-P判决",
+      "B": "最小最大损失准则",
+      "C": "最小损失准则",
+      "D": "最小误判概率准则"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CMMLU_机器学习_122_6af8c956",
+    "source": "CMMLU",
+    "subject": "机器学习",
+    "subject_en": "machine_learning",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下哪些方法不可以直接来对文本分类",
+    "options": {
+      "A": "决策树",
+      "B": "K-均值聚类\n",
+      "C": "支持向量机",
+      "D": "KNN"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  }
+]

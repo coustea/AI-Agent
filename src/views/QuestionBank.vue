@@ -26,6 +26,7 @@
                       <el-tag v-if="randomQuestion.type === '多选题'" size="small" type="primary" effect="plain">可多选</el-tag>
                     </div>
 
+                    <div class="debug-question-id">ID: {{ randomQuestion.id }}</div>
                     <div class="question-text markdown-body" v-html="renderMarkdown(randomQuestion.content)"></div>
 
                     <!-- 客观题选项 -->
@@ -322,6 +323,7 @@
                   </div>
                 </div>
                 <div class="q-card-body">
+                  <div class="debug-question-id">ID: {{ q.id }}</div>
                   <div class="q-content markdown-body" v-html="renderMarkdown(q.content)"></div>
 
                   <div v-if="isOptionQuestion(q)" class="q-browser-options">
@@ -461,6 +463,7 @@
               </div>
             </div>
 
+            <div class="debug-question-id">ID: {{ q.id }}</div>
             <div class="q-text-body markdown-body" v-html="renderMarkdown(q.content)"></div>
 
             <!-- 客观题选项 -->
@@ -669,6 +672,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import katex from 'katex';
 import {
   Collection, Cpu,
   Close, Checked, Timer, CircleCheck, CircleClose,
@@ -677,7 +681,7 @@ import {
 } from '@element-plus/icons-vue';
 import { getProfileOnboarding } from '@/api/ai';
 import { fetchQuizBankQuestions } from '@/api/quizBank';
-import { renderStreamingMarkdownHtml } from '@/utils/markdown';
+import 'katex/dist/katex.min.css';
 
 interface Question {
   id: string;
@@ -695,6 +699,7 @@ interface Question {
   split?: string | null;
 }
 
+
 // 全局状态与基本选项数据
 // ------------------------------
 const activeView = ref<'bank' | 'exam'>('bank');
@@ -705,9 +710,65 @@ const learnerCourses = ref<string[]>([]);
 const totalQuestions = ref(0);
 const currentPage = ref(1);
 const pageSize = ref(200);
+const escapeHtml = (text: string) => {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+const normalizeQuizMath = (text: string) => {
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/^\s*\$([=_]{2,})\s*$/gm, '$1')
+    .replace(/^\s*\$(=_{2,})\s*$/gm, '$1')
+    .replace(/\\right\\\}\}/g, '\\right\\}')
+    .replace(/\\right\}\}/g, '\\right\\}')
+    .replace(/\\end\{cases\$\}/g, '\\end{cases}$')
+    .replace(/\\end\{array\$\}/g, '\\end{array}$')
+    .replace(/\$\$\$+$/gm, '$')
+    .replace(/\$\$\$(?=____|$)/g, '$')
+    .replace(/\$\$([\s\S]*?)=\$\$\s*____/g, (_matched, content: string) => `$$${content.trim()}=\\underline{\\qquad}$$`)
+    .replace(/\$([^$\n]+)=\$\s*____/g, (_matched, content: string) => `$${content}=\\underline{\\qquad}$`)
+    .replace(/\$([^$\n]+)=____/g, (_matched, content: string) => `$${content}=\\underline{\\qquad}$`)
+    .replace(/\$\s*\n([\s\S]*?)\n\s*\$/g, (_matched, content: string) => `$$${content.trim()}$$`);
+
+  return normalized.replace(/(?<!\$)\$(\${2,})$/gm, '$');
+};
+
+const renderQuizKatexHtml = (text: string) => {
+  const normalized = normalizeQuizMath(text || '');
+  if (!normalized.trim()) return '';
+
+  const parts = normalized.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g).filter(Boolean);
+  return parts.map((part) => {
+    if (part.startsWith('$$') && part.endsWith('$$')) {
+      const math = part.slice(2, -2).trim();
+      try {
+        return katex.renderToString(math, { displayMode: true, throwOnError: false });
+      } catch {
+        return `<pre>${escapeHtml(part)}</pre>`;
+      }
+    }
+
+    if (part.startsWith('$') && part.endsWith('$')) {
+      const math = part.slice(1, -1).trim();
+      try {
+        return katex.renderToString(math, { displayMode: false, throwOnError: false });
+      } catch {
+        return escapeHtml(part);
+      }
+    }
+
+    return escapeHtml(part).replace(/\n/g, '<br>');
+  }).join('');
+};
 
 const renderMarkdown = (text: string) => {
-  return renderStreamingMarkdownHtml(text || '');
+  return renderQuizKatexHtml(text || '');
 };
 const subjects = ref<string[]>([]);
 const difficulties = ref<string[]>([]);
@@ -1834,6 +1895,15 @@ onUnmounted(() => {
   font-size: 0.95rem;
   line-height: 1.5;
   color: var(--text-dark);
+}
+
+.debug-question-id {
+  margin-bottom: 8px;
+  font-size: 0.76rem;
+  line-height: 1.3;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
 }
 
 .q-content {

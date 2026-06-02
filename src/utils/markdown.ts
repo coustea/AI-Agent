@@ -310,9 +310,55 @@ function shouldPromoteInlineMath(content: string): boolean {
 function promoteComplexInlineMath(text: string): string {
   if (!text) return text
 
-  return text.replace(/\$([^$\n]+)\$/g, (matched, content: string) => {
+  return text.replace(/(^|[ \t]*\n[ \t]*)\$([^$\n]+)\$(?=[ \t]*(?:\n|$))/g, (matched, prefix: string, content: string) => {
     if (!shouldPromoteInlineMath(content)) return matched
-    return `\n$$\n${content.trim()}\n$$\n`
+    return `${prefix}$$\n${content.trim()}\n$$`
+  })
+}
+
+function repairMalformedCasesEnvironment(text: string): string {
+  if (!text) return text
+
+  const normalizeCasesBody = (body: string): string => {
+    let normalized = body
+      .replace(/\\text\{\s*,\s*\}/g, ',')
+      .replace(/(?<=\d)\\(?=0,)/g, '\\\\')
+      .replace(/(?<=\d)\\(?=1,)/g, '\\\\')
+      .replace(/(?<=\})\\(?=\d,)/g, '\\\\')
+
+    if (!normalized.includes('\\\\')) return normalized
+
+    const rows = normalized.split('\\\\').map((row) => {
+      const trimmed = row.trim()
+      if (!trimmed || trimmed.includes('&')) return trimmed
+
+      const commaIndex = trimmed.indexOf(',')
+      if (commaIndex === -1) return trimmed
+
+      const left = trimmed.slice(0, commaIndex + 1).trim()
+      const right = trimmed.slice(commaIndex + 1).trim()
+      if (!right) return trimmed
+
+      return `${left} & ${right}`
+    })
+
+    return rows.join('\\\\')
+  }
+
+  return text
+    .replace(/\\end\{cases\$\}/g, '\\end{cases}$')
+    .replace(/\\end\{cases(?=\$)/g, '\\end{cases}')
+    .replace(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g, (_matched, body: string) => `\\begin{cases}${normalizeCasesBody(body)}\\end{cases}`)
+}
+
+function repairUnbalancedMathBraces(text: string): string {
+  if (!text) return text
+
+  return text.replace(/(\${1,2}\n?)([\s\S]*?)(\n?\${1,2})/g, (matched, open: string, content: string, close: string) => {
+    const openCount = (content.match(/\{/g) || []).length
+    const closeCount = (content.match(/\}/g) || []).length
+    if (openCount <= closeCount) return matched
+    return `${open}${content}${'}'.repeat(openCount - closeCount)}${close}`
   })
 }
 
@@ -355,6 +401,14 @@ function repairSingleLineDelimitedMathBlocks(text: string): string {
   }
 
   return repaired.join('\n')
+}
+
+function repairQuizBlankPlaceholders(text: string): string {
+  if (!text) return text
+
+  return text
+    .replace(/^\s*\$(_{2,})\s*$/gm, '$1')
+    .replace(/^\s*\$\s*(={0,1}_{2,})\s*$/gm, '$1')
 }
 
 function repairEscapedMathDelimiters(text: string): string {
@@ -546,16 +600,22 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
     promoteComplexInlineMath(
       repairBrokenMultilineInlineMath(
         repairCommonBrokenMathSyntax(
+          repairMalformedCasesEnvironment(
           repairBrokenDelimiterCommands(
             repairMissingLatexCommands(
               normalizeLatexDelimiters(
                 repairIsolatedDollarBlocks(
-                  repairSingleLineDelimitedMathBlocks(
-                    repairEscapedMathDelimiters(repairedBase),
+                  repairQuizBlankPlaceholders(
+                    repairSingleLineDelimitedMathBlocks(
+                      repairUnbalancedMathBraces(
+                        repairEscapedMathDelimiters(repairedBase),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
+          ),
           ),
         ),
       ),

@@ -1,0 +1,24 @@
+{
+  "source": "fixed_output\\概率论与数理统计\\choice.json",
+  "output": "cleaned_output\\fixed_output\\概率论与数理统计\\choice.json",
+  "total_items": 187,
+  "source_bytes": 162098,
+  "issues_detected": {
+    "invalid_json_fixed": true,
+    "math_command_repairs": true,
+    "delimiter_repairs": true,
+    "probability_formula_repairs": true
+  },
+  "sample_ids": [
+    "ceval_probability_and_statistics_0000",
+    "ceval_probability_and_statistics_0001",
+    "ceval_probability_and_statistics_0002",
+    "ceval_probability_and_statistics_0003",
+    "ceval_probability_and_statistics_0004",
+    "ceval_probability_and_statistics_0005",
+    "ceval_probability_and_statistics_0006",
+    "ceval_probability_and_statistics_0007",
+    "ceval_probability_and_statistics_0008",
+    "ceval_probability_and_statistics_0009"
+  ]
+}

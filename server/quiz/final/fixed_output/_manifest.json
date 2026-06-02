@@ -1,0 +1,1842 @@
+[
+  {
+    "file": "初等数学\\choice.json",
+    "original_count": 235,
+    "output_count": 235,
+    "normalized_fields": 295,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "大学数学\\choice.json",
+    "original_count": 110,
+    "output_count": 110,
+    "normalized_fields": 241,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "大学物理\\choice.json",
+    "original_count": 200,
+    "output_count": 200,
+    "normalized_fields": 417,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "大学编程\\analysis.json",
+    "index": 99,
+    "id": "SYSU-Exam_college_programming_a0115",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "大学编程\\analysis.json",
+    "original_count": 244,
+    "output_count": 243,
+    "normalized_fields": 5,
+    "exact_duplicates_removed": 1
+  },
+  {
+    "file": "大学编程\\choice.json",
+    "original_count": 2440,
+    "output_count": 2440,
+    "normalized_fields": 585,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "大学编程\\judge.json",
+    "original_count": 36,
+    "output_count": 36,
+    "normalized_fields": 2,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "工程学\\choice.json",
+    "original_count": 974,
+    "output_count": 974,
+    "normalized_fields": 82,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "操作系统\\choice.json",
+    "original_count": 513,
+    "output_count": 513,
+    "normalized_fields": 562,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "操作系统\\short_answer.json",
+    "original_count": 5,
+    "output_count": 5,
+    "normalized_fields": 4,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "数字逻辑\\choice.json",
+    "original_count": 53,
+    "output_count": 53,
+    "normalized_fields": 1,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "数学(高阶)\\choice.json",
+    "original_count": 1356,
+    "output_count": 1356,
+    "normalized_fields": 6,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "数据库系统\\choice.json",
+    "original_count": 76,
+    "output_count": 76,
+    "normalized_fields": 65,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "数据结构与算法\\analysis.json",
+    "original_count": 295,
+    "output_count": 295,
+    "normalized_fields": 284,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "数据结构与算法\\choice.json",
+    "original_count": 444,
+    "output_count": 444,
+    "normalized_fields": 732,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "数据结构与算法\\fill.json",
+    "original_count": 81,
+    "output_count": 81,
+    "normalized_fields": 108,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "数据结构与算法\\judge.json",
+    "original_count": 114,
+    "output_count": 114,
+    "normalized_fields": 62,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 254,
+    "id": "CMMLU_机器学习_3_8a620766",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 262,
+    "id": "CMMLU_机器学习_11_e0c7a49b",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 263,
+    "id": "CMMLU_机器学习_12_0521eea3",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 264,
+    "id": "CMMLU_机器学习_13_352ff7b3",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 267,
+    "id": "CMMLU_机器学习_16_a7e2c35c",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 268,
+    "id": "CMMLU_机器学习_17_881155bb",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 271,
+    "id": "CMMLU_机器学习_20_95451c09",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 272,
+    "id": "CMMLU_机器学习_21_dfd4a9c6",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 278,
+    "id": "CMMLU_机器学习_27_aa964870",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 280,
+    "id": "CMMLU_机器学习_29_8466a475",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 287,
+    "id": "CMMLU_机器学习_36_5cb39ac7",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 301,
+    "id": "CMMLU_机器学习_50_7f24a86a",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 304,
+    "id": "CMMLU_机器学习_53_ecd33f58",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 305,
+    "id": "CMMLU_机器学习_54_0f71ad03",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 307,
+    "id": "CMMLU_机器学习_56_6c2dc9b9",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 319,
+    "id": "CMMLU_机器学习_68_43929527",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 320,
+    "id": "CMMLU_机器学习_69_7d220ce7",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 323,
+    "id": "CMMLU_机器学习_72_31d49369",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 326,
+    "id": "CMMLU_机器学习_75_7df523e5",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 327,
+    "id": "CMMLU_机器学习_76_3359f700",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 338,
+    "id": "CMMLU_机器学习_87_f77fba2b",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 341,
+    "id": "CMMLU_机器学习_90_107af4d6",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 349,
+    "id": "CMMLU_机器学习_98_90b622ad",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 352,
+    "id": "CMMLU_机器学习_101_62ba998b",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 354,
+    "id": "CMMLU_机器学习_103_0fec1170",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 361,
+    "id": "CMMLU_机器学习_110_68e06bc3",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 362,
+    "id": "CMMLU_机器学习_111_d748b854",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 364,
+    "id": "CMMLU_机器学习_113_d4583f76",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "index": 369,
+    "id": "CMMLU_机器学习_118_e32155f3",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "机器学习\\choice.json",
+    "original_count": 373,
+    "output_count": 344,
+    "normalized_fields": 234,
+    "exact_duplicates_removed": 29
+  },
+  {
+    "file": "概率论与数理统计\\choice.json",
+    "original_count": 187,
+    "output_count": 187,
+    "normalized_fields": 158,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "物理(高阶)\\choice.json",
+    "original_count": 1304,
+    "output_count": 1304,
+    "normalized_fields": 36,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "离散数学\\analysis.json",
+    "original_count": 142,
+    "output_count": 142,
+    "normalized_fields": 101,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "离散数学\\choice.json",
+    "original_count": 201,
+    "output_count": 201,
+    "normalized_fields": 291,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "编译原理\\analysis.json",
+    "original_count": 206,
+    "output_count": 206,
+    "normalized_fields": 157,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "编译原理\\choice.json",
+    "original_count": 39,
+    "output_count": 39,
+    "normalized_fields": 43,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "编译原理\\fill.json",
+    "original_count": 11,
+    "output_count": 11,
+    "normalized_fields": 17,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "编译原理\\judge.json",
+    "original_count": 26,
+    "output_count": 26,
+    "normalized_fields": 10,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 283,
+    "id": "CMMLU_计算机安全_3_f67365c9",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 284,
+    "id": "CMMLU_计算机安全_4_acc47356",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 286,
+    "id": "CMMLU_计算机安全_6_75c2cc06",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 287,
+    "id": "CMMLU_计算机安全_7_cbd4cb7c",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 290,
+    "id": "CMMLU_计算机安全_10_0f14e7b1",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 292,
+    "id": "CMMLU_计算机安全_12_ad6abd0d",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 294,
+    "id": "CMMLU_计算机安全_14_a47ccb52",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 295,
+    "id": "CMMLU_计算机安全_15_efff7958",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 298,
+    "id": "CMMLU_计算机安全_18_4b9de8fd",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 303,
+    "id": "CMMLU_计算机安全_23_565d2e2f",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 306,
+    "id": "CMMLU_计算机安全_26_883ffa03",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 307,
+    "id": "CMMLU_计算机安全_27_03537383",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 308,
+    "id": "CMMLU_计算机安全_28_fdc7162b",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 315,
+    "id": "CMMLU_计算机安全_35_3737eeb9",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 317,
+    "id": "CMMLU_计算机安全_37_fc6fe8a2",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 331,
+    "id": "CMMLU_计算机安全_51_2737c6d1",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 332,
+    "id": "CMMLU_计算机安全_52_747d0b9d",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 336,
+    "id": "CMMLU_计算机安全_56_30f40135",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 337,
+    "id": "CMMLU_计算机安全_57_325c001a",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 348,
+    "id": "CMMLU_计算机安全_69_2d4f37a1",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 350,
+    "id": "CMMLU_计算机安全_71_f1b1405d",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 354,
+    "id": "CMMLU_计算机安全_75_3d0360a0",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 356,
+    "id": "CMMLU_计算机安全_77_97a388c0",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 363,
+    "id": "CMMLU_计算机安全_84_7bc62d75",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 366,
+    "id": "CMMLU_计算机安全_87_9e3d713c",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 367,
+    "id": "CMMLU_计算机安全_88_6bfabee5",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 369,
+    "id": "CMMLU_计算机安全_90_a0ce1819",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 377,
+    "id": "CMMLU_计算机安全_98_efe0f228",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 386,
+    "id": "CMMLU_计算机安全_107_7450f4f0",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 391,
+    "id": "CMMLU_计算机安全_112_c4694f26",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 393,
+    "id": "CMMLU_计算机安全_114_bf6fda5c",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 396,
+    "id": "CMMLU_计算机安全_118_274e5602",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 398,
+    "id": "CMMLU_计算机安全_120_e2cf3418",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 403,
+    "id": "CMMLU_计算机安全_125_50dd5f93",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 407,
+    "id": "CMMLU_计算机安全_129_ad3d89e1",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 414,
+    "id": "CMMLU_计算机安全_136_a03cecfc",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 416,
+    "id": "CMMLU_计算机安全_138_a56aabff",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 417,
+    "id": "CMMLU_计算机安全_139_f1f59b95",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 429,
+    "id": "CMMLU_计算机安全_151_2b8de2b6",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 432,
+    "id": "CMMLU_计算机安全_154_ae8422cb",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "index": 436,
+    "id": "CMMLU_计算机安全_158_479db7ef",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "计算机安全\\choice.json",
+    "original_count": 449,
+    "output_count": 408,
+    "normalized_fields": 457,
+    "exact_duplicates_removed": 41
+  },
+  {
+    "file": "计算机科学\\choice.json",
+    "original_count": 204,
+    "output_count": 204,
+    "normalized_fields": 382,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "计算机科学(高阶)\\choice.json",
+    "original_count": 415,
+    "output_count": 415,
+    "normalized_fields": 3,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "计算机组成原理\\choice.json",
+    "original_count": 607,
+    "output_count": 607,
+    "normalized_fields": 803,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "计算机网络\\choice.json",
+    "original_count": 569,
+    "output_count": 569,
+    "normalized_fields": 696,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "软件工程\\choice.json",
+    "original_count": 267,
+    "output_count": 267,
+    "normalized_fields": 0,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "软件工程\\judge.json",
+    "original_count": 293,
+    "output_count": 293,
+    "normalized_fields": 0,
+    "exact_duplicates_removed": 0
+  },
+  {
+    "file": "逻辑学\\choice.json",
+    "index": 44,
+    "id": "cmmlu_logic_test_0039",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "逻辑学\\choice.json",
+    "original_count": 128,
+    "output_count": 127,
+    "normalized_fields": 91,
+    "exact_duplicates_removed": 1
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 196,
+    "id": "ceval_advanced_mathematics_0000",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 197,
+    "id": "ceval_advanced_mathematics_0001",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 198,
+    "id": "ceval_advanced_mathematics_0002",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 199,
+    "id": "ceval_advanced_mathematics_0003",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 200,
+    "id": "ceval_advanced_mathematics_0004",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 201,
+    "id": "ceval_advanced_mathematics_0005",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 202,
+    "id": "ceval_advanced_mathematics_0006",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 203,
+    "id": "ceval_advanced_mathematics_0007",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 204,
+    "id": "ceval_advanced_mathematics_0008",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 205,
+    "id": "ceval_advanced_mathematics_0009",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 206,
+    "id": "ceval_advanced_mathematics_0010",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 207,
+    "id": "ceval_advanced_mathematics_0011",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 208,
+    "id": "ceval_advanced_mathematics_0012",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 209,
+    "id": "ceval_advanced_mathematics_0013",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 210,
+    "id": "ceval_advanced_mathematics_0014",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 211,
+    "id": "ceval_advanced_mathematics_0015",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 212,
+    "id": "ceval_advanced_mathematics_0016",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 213,
+    "id": "ceval_advanced_mathematics_0017",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 214,
+    "id": "ceval_advanced_mathematics_0018",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 215,
+    "id": "ceval_advanced_mathematics_0019",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 216,
+    "id": "ceval_advanced_mathematics_0020",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 217,
+    "id": "ceval_advanced_mathematics_0021",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 218,
+    "id": "ceval_advanced_mathematics_0022",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 219,
+    "id": "ceval_advanced_mathematics_0023",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 220,
+    "id": "ceval_advanced_mathematics_0024",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 221,
+    "id": "ceval_advanced_mathematics_0025",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 222,
+    "id": "ceval_advanced_mathematics_0026",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 223,
+    "id": "ceval_advanced_mathematics_0027",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 224,
+    "id": "ceval_advanced_mathematics_0028",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 225,
+    "id": "ceval_advanced_mathematics_0029",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 226,
+    "id": "ceval_advanced_mathematics_0030",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 227,
+    "id": "ceval_advanced_mathematics_0031",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 228,
+    "id": "ceval_advanced_mathematics_0032",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 229,
+    "id": "ceval_advanced_mathematics_0033",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 230,
+    "id": "ceval_advanced_mathematics_0034",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 231,
+    "id": "ceval_advanced_mathematics_0035",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 232,
+    "id": "ceval_advanced_mathematics_0036",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 233,
+    "id": "ceval_advanced_mathematics_0037",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 234,
+    "id": "ceval_advanced_mathematics_0038",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 235,
+    "id": "ceval_advanced_mathematics_0039",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 236,
+    "id": "ceval_advanced_mathematics_0040",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 237,
+    "id": "ceval_advanced_mathematics_0041",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 238,
+    "id": "ceval_advanced_mathematics_0042",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 239,
+    "id": "ceval_advanced_mathematics_0043",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 240,
+    "id": "ceval_advanced_mathematics_0044",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 241,
+    "id": "ceval_advanced_mathematics_0045",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 242,
+    "id": "ceval_advanced_mathematics_0046",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 243,
+    "id": "ceval_advanced_mathematics_0047",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 244,
+    "id": "ceval_advanced_mathematics_0048",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 245,
+    "id": "ceval_advanced_mathematics_0049",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 246,
+    "id": "ceval_advanced_mathematics_0050",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 247,
+    "id": "ceval_advanced_mathematics_0051",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 248,
+    "id": "ceval_advanced_mathematics_0052",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 249,
+    "id": "ceval_advanced_mathematics_0053",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 250,
+    "id": "ceval_advanced_mathematics_0054",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 251,
+    "id": "ceval_advanced_mathematics_0055",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 252,
+    "id": "ceval_advanced_mathematics_0056",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 253,
+    "id": "ceval_advanced_mathematics_0057",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 254,
+    "id": "ceval_advanced_mathematics_0058",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 255,
+    "id": "ceval_advanced_mathematics_0059",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 256,
+    "id": "ceval_advanced_mathematics_0060",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 257,
+    "id": "ceval_advanced_mathematics_0061",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 258,
+    "id": "ceval_advanced_mathematics_0062",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 259,
+    "id": "ceval_advanced_mathematics_0063",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 260,
+    "id": "ceval_advanced_mathematics_0064",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 261,
+    "id": "ceval_advanced_mathematics_0065",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 262,
+    "id": "ceval_advanced_mathematics_0066",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 263,
+    "id": "ceval_advanced_mathematics_0067",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 264,
+    "id": "ceval_advanced_mathematics_0068",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 265,
+    "id": "ceval_advanced_mathematics_0069",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 266,
+    "id": "ceval_advanced_mathematics_0070",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 267,
+    "id": "ceval_advanced_mathematics_0071",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 268,
+    "id": "ceval_advanced_mathematics_0072",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 269,
+    "id": "ceval_advanced_mathematics_0073",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 270,
+    "id": "ceval_advanced_mathematics_0074",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 271,
+    "id": "ceval_advanced_mathematics_0075",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 272,
+    "id": "ceval_advanced_mathematics_0076",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 273,
+    "id": "ceval_advanced_mathematics_0077",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 274,
+    "id": "ceval_advanced_mathematics_0078",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 275,
+    "id": "ceval_advanced_mathematics_0079",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 276,
+    "id": "ceval_advanced_mathematics_0080",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 277,
+    "id": "ceval_advanced_mathematics_0081",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 278,
+    "id": "ceval_advanced_mathematics_0082",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 279,
+    "id": "ceval_advanced_mathematics_0083",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 280,
+    "id": "ceval_advanced_mathematics_0084",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 281,
+    "id": "ceval_advanced_mathematics_0085",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 282,
+    "id": "ceval_advanced_mathematics_0086",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 283,
+    "id": "ceval_advanced_mathematics_0087",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 284,
+    "id": "ceval_advanced_mathematics_0088",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 285,
+    "id": "ceval_advanced_mathematics_0089",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 286,
+    "id": "ceval_advanced_mathematics_0090",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 287,
+    "id": "ceval_advanced_mathematics_0091",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 288,
+    "id": "ceval_advanced_mathematics_0092",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 289,
+    "id": "ceval_advanced_mathematics_0093",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 290,
+    "id": "ceval_advanced_mathematics_0094",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 291,
+    "id": "ceval_advanced_mathematics_0095",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 292,
+    "id": "ceval_advanced_mathematics_0096",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 293,
+    "id": "ceval_advanced_mathematics_0097",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 294,
+    "id": "ceval_advanced_mathematics_0098",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 295,
+    "id": "ceval_advanced_mathematics_0099",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 296,
+    "id": "ceval_advanced_mathematics_0100",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 297,
+    "id": "ceval_advanced_mathematics_0101",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 298,
+    "id": "ceval_advanced_mathematics_0102",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 299,
+    "id": "ceval_advanced_mathematics_0103",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 300,
+    "id": "ceval_advanced_mathematics_0104",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 301,
+    "id": "ceval_advanced_mathematics_0105",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 302,
+    "id": "ceval_advanced_mathematics_0106",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 303,
+    "id": "ceval_advanced_mathematics_0107",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 304,
+    "id": "ceval_advanced_mathematics_0108",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 305,
+    "id": "ceval_advanced_mathematics_0109",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 306,
+    "id": "ceval_advanced_mathematics_0110",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 307,
+    "id": "ceval_advanced_mathematics_0111",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 309,
+    "id": "ceval_advanced_mathematics_0113",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 310,
+    "id": "ceval_advanced_mathematics_0114",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 311,
+    "id": "ceval_advanced_mathematics_0115",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 312,
+    "id": "ceval_advanced_mathematics_0116",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 313,
+    "id": "ceval_advanced_mathematics_0117",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 314,
+    "id": "ceval_advanced_mathematics_0118",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 315,
+    "id": "ceval_advanced_mathematics_0119",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 316,
+    "id": "ceval_advanced_mathematics_0120",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 317,
+    "id": "ceval_advanced_mathematics_0121",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 318,
+    "id": "ceval_advanced_mathematics_0122",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 319,
+    "id": "ceval_advanced_mathematics_0123",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 320,
+    "id": "ceval_advanced_mathematics_0124",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 321,
+    "id": "ceval_advanced_mathematics_0125",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 322,
+    "id": "ceval_advanced_mathematics_0126",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 323,
+    "id": "ceval_advanced_mathematics_0127",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 324,
+    "id": "ceval_advanced_mathematics_0128",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 325,
+    "id": "ceval_advanced_mathematics_0129",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 326,
+    "id": "ceval_advanced_mathematics_0130",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 327,
+    "id": "ceval_advanced_mathematics_0131",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 328,
+    "id": "ceval_advanced_mathematics_0132",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 329,
+    "id": "ceval_advanced_mathematics_0133",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 330,
+    "id": "ceval_advanced_mathematics_0134",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 331,
+    "id": "ceval_advanced_mathematics_0135",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 332,
+    "id": "ceval_advanced_mathematics_0136",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 333,
+    "id": "ceval_advanced_mathematics_0137",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 334,
+    "id": "ceval_advanced_mathematics_0138",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 335,
+    "id": "ceval_advanced_mathematics_0139",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 336,
+    "id": "ceval_advanced_mathematics_0140",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 337,
+    "id": "ceval_advanced_mathematics_0141",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 338,
+    "id": "ceval_advanced_mathematics_0142",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 339,
+    "id": "ceval_advanced_mathematics_0143",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 340,
+    "id": "ceval_advanced_mathematics_0144",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 341,
+    "id": "ceval_advanced_mathematics_0145",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 342,
+    "id": "ceval_advanced_mathematics_0146",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 343,
+    "id": "ceval_advanced_mathematics_0147",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 344,
+    "id": "ceval_advanced_mathematics_0148",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 345,
+    "id": "ceval_advanced_mathematics_0149",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 346,
+    "id": "ceval_advanced_mathematics_0150",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 347,
+    "id": "ceval_advanced_mathematics_0151",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 348,
+    "id": "ceval_advanced_mathematics_0152",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 349,
+    "id": "ceval_advanced_mathematics_0154",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 350,
+    "id": "ceval_advanced_mathematics_0155",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 351,
+    "id": "ceval_advanced_mathematics_0156",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 352,
+    "id": "ceval_advanced_mathematics_0157",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 353,
+    "id": "ceval_advanced_mathematics_0158",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 354,
+    "id": "ceval_advanced_mathematics_0159",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 355,
+    "id": "ceval_advanced_mathematics_0160",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 356,
+    "id": "ceval_advanced_mathematics_0161",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 357,
+    "id": "ceval_advanced_mathematics_0162",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 358,
+    "id": "ceval_advanced_mathematics_0163",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 359,
+    "id": "ceval_advanced_mathematics_0164",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 360,
+    "id": "ceval_advanced_mathematics_0165",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 361,
+    "id": "ceval_advanced_mathematics_0166",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 362,
+    "id": "ceval_advanced_mathematics_0167",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 363,
+    "id": "ceval_advanced_mathematics_0168",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 364,
+    "id": "ceval_advanced_mathematics_0169",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 365,
+    "id": "ceval_advanced_mathematics_0170",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 366,
+    "id": "ceval_advanced_mathematics_0171",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 367,
+    "id": "ceval_advanced_mathematics_0172",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 368,
+    "id": "ceval_advanced_mathematics_0173",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 369,
+    "id": "ceval_advanced_mathematics_0174",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 370,
+    "id": "ceval_advanced_mathematics_0175",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 371,
+    "id": "ceval_advanced_mathematics_0176",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 372,
+    "id": "ceval_advanced_mathematics_0177",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 373,
+    "id": "ceval_advanced_mathematics_0178",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 374,
+    "id": "ceval_advanced_mathematics_0179",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 375,
+    "id": "ceval_advanced_mathematics_0180",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 376,
+    "id": "ceval_advanced_mathematics_0181",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 377,
+    "id": "ceval_advanced_mathematics_0182",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 378,
+    "id": "ceval_advanced_mathematics_0183",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 379,
+    "id": "ceval_advanced_mathematics_0184",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 380,
+    "id": "ceval_advanced_mathematics_0185",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 381,
+    "id": "ceval_advanced_mathematics_0186",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 382,
+    "id": "ceval_advanced_mathematics_0187",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 383,
+    "id": "ceval_advanced_mathematics_0188",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 384,
+    "id": "ceval_advanced_mathematics_0189",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 385,
+    "id": "ceval_advanced_mathematics_0190",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 386,
+    "id": "ceval_advanced_mathematics_0191",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 387,
+    "id": "ceval_advanced_mathematics_0192",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 388,
+    "id": "ceval_advanced_mathematics_0193",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 389,
+    "id": "ceval_advanced_mathematics_0194",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 390,
+    "id": "ceval_advanced_mathematics_0195",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "index": 391,
+    "id": "ceval_advanced_mathematics_0196",
+    "status": "removed_exact_duplicate"
+  },
+  {
+    "file": "高等数学\\choice.json",
+    "original_count": 391,
+    "output_count": 196,
+    "normalized_fields": 351,
+    "exact_duplicates_removed": 195
+  }
+]

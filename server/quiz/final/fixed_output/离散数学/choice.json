@@ -1,0 +1,4362 @@
+[
+  {
+    "id": "ceval_0798",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设简单无向图G有15条边,有3个4度结点,其余结点的度数均为3,则G中的结点个数是____",
+    "options": {
+      "A": "6",
+      "B": "7",
+      "C": "8",
+      "D": "9"
+    },
+    "answer": "D",
+    "analysis": "1. 设图G的结点个数为n,则3×4+(n-3)×3=2×15。\n2. 解上述方程得n=9。",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "ceval_0799",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一棵树有2个3度结点,其余结点都是叶子,则叶子数是____",
+    "options": {
+      "A": "7",
+      "B": "6",
+      "C": "5",
+      "D": "4"
+    },
+    "answer": "D",
+    "analysis": "1. 首先,我们需要知道树的度数定理:一棵有n个结点的树,度数之和为2(n-1)。\n2. 则2×3+(n-2)×1=2(n-1)。\n3. 解得n=6,n-2=4,则此树有4个叶结点。",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "ceval_0800",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设简单无向图G有16条边,有3个4度结点,有4个3度结点,其余结点的度数均大于3,则G中的结点个数至多为____",
+    "options": {
+      "A": "9",
+      "B": "10",
+      "C": "11",
+      "D": "12"
+    },
+    "answer": "A",
+    "analysis": "1. 首先,我们需要知道握手定理:对于一个简单无向图,所有结点的度数之和等于边数的两倍。\n2. 其次,我们可以根据题目中给出的信息列出方程组。设G中有k个结点,则有:\n- 3个4度结点,贡献为3*4=12度;\n- 4个3度结点,贡献为4*3=12度;\n- 其余结点的度数均大于3,设这些结点的个数为x,则它们的度数之和至少为4x。\n因此,我们可以列出方程:$12+12+4x=2*16$,即$4x=8$,解得x=2。\n3. 最后,我们可以计算出结点个数为3+4+2=9。",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "ceval_0801",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "5个结点的非同构的无向树的数目是____",
+    "options": {
+      "A": "5",
+      "B": "4",
+      "C": "3",
+      "D": "2"
+    },
+    "answer": "C",
+    "analysis": "1. 对于5个结点的无向树,我们可以通过手动绘制图形来发现,其中有3种不同的形态,分别是一条链、一个V形和一个Y形。因此,5个结点的非同构的无向树的数目为3。",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "ceval_0802",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设S={0,1},*为普通乘法,则〈S,*〉是____",
+    "options": {
+      "A": "独异点,但不是群",
+      "B": "半群,但不是独异点",
+      "C": "群",
+      "D": "环,但不是群"
+    },
+    "answer": "A",
+    "analysis": "1.〈S,*〉中的运算*是封闭的,并且是可结合的,则〈S,*〉是半群。\n2. 因为半群〈S,*〉中存在幺元1,所以〈S,*〉是独异点,而S中的元素0不存在它的逆元,所以〈S,*〉不是群。〈S,*〉也不是环。",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "ceval_0803",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列集合中与$\\mathbf{\\{}1,2\\}$不相等的是:____",
+    "options": {
+      "A": "$\\{1,2\\}\\cup\\phi$",
+      "B": "$\\{1,2\\}$",
+      "C": "$\\{1,2,2\\}$",
+      "D": "$\\{x|\\ x\\in{\\mathcal{R}}\\land x^{2}-3x+2=0\\}$"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0804",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "令P:天气很冷,Q:老王来了,则命题“虽然天气很冷,但是老王还是来了”可符号化为____",
+    "options": {
+      "A": "P∧Q",
+      "B": "P→Q",
+      "C": "P∧「Q",
+      "D": "P→「Q"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0805",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于集合A上的二元关系R，如果$B\\subseteq A$、$C\\subseteq A$、$R\\uparrow\\ B$表示关系R在集合B上受限，那么以下哪个陈述是正确的____",
+    "options": {
+      "A": "$R[B\\cap C]=R[B]\\cap R[C]$",
+      "B": "$R[B]-R[C]=R[B-C]$",
+      "C": "$B\\subseteq A\\Leftrightarrow R[B]\\subseteq R[A]$\n",
+      "D": "$R\\uparrow(B\\cup C)=R\\uparrow B\\cup R\\uparrow C$\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0807",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "给定n个结点的一个图,它是一个树的下列说法中,____是不对的。",
+    "options": {
+      "A": "无回路的连通图",
+      "B": "无回路但若增加一条新边就有回路",
+      "C": "连通且m=n-1, 其中m是边数,n是结点数",
+      "D": "所有结点的度数>2"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0808",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "六阶群的任何非平凡子群一定不是____",
+    "options": {
+      "A": "2阶",
+      "B": "5阶",
+      "C": "3阶",
+      "D": "6阶"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0809",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面说法____是错误的",
+    "options": {
+      "A": "不存在既自反又反自反的关系",
+      "B": "存在即对称又反对称的关系",
+      "C": "存在即不对称又不反对称的关系",
+      "D": "由一个有序对构成的二元关系一定是一个传递关系。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0810",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设图G是有6个顶点的连通图,总度数为20,则从G中删去____边后使之变成树。",
+    "options": {
+      "A": "10",
+      "B": "5",
+      "C": "3",
+      "D": "2"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0811",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设G为平面图,则下面可能不正确的选项是_____",
+    "options": {
+      "A": "G = (G*)*",
+      "B": "G*= ((G*)*)*",
+      "C": "(G*)* = (G*)*)*)*",
+      "D": "((G*)*)*= ((((G*)*)*)*)*"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0812",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知一棵树T中有度为5,4,3,2的顶点各一个,其余为树叶顶点,T的树叶顶点数为哪项?____",
+    "options": {
+      "A": "8",
+      "B": "7",
+      "C": "6",
+      "D": "5"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0813",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "含5个顶点、3条边的不同构的简单图有几个?____",
+    "options": {
+      "A": "2",
+      "B": "3",
+      "C": "4",
+      "D": "5"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0814",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面说法错误的是____",
+    "options": {
+      "A": "邻接矩阵能表示自环,也能表示重边",
+      "B": "有向图邻接矩阵的第$i$行非零元的数目恰好是$\\nu_{i}$的正度。第$j$列非零元的数目是$\\nu_{j}$的负度",
+      "C": "关联矩阵能表示重边,不能表示自环",
+      "D": "有向图关联矩阵第$i$行中1 的数目是$\\nu_{i}$的正度,-1 的数目是$\\nu_{i}$的负度。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0815",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下式不一定成立的是____",
+    "options": {
+      "A": "$(\\forall x)(P(x)\\wedge Q(x))=(\\forall x)P(x)\\wedge(\\forall x)Q(x)$\n",
+      "B": "$(\\exists x)(P(x)\\lor Q(x))=(\\exists x)P(x)\\lor(\\exists x)Q(x)$\n",
+      "C": "$(\\forall x)(\\forall y)(P(x)\\lor{Q(x)}(y))=(\\forall x)P(x)\\lor(\\forall x)Q(x)$",
+      "D": "$(\\exists x)(P(x)\\wedge Q(x))=(\\exists x)P(x)\\wedge(\\exists x)Q(x)$\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0816",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设A={2,3,4,6,9,12,18},A中的整除关系R是偏序关系,那么在偏序集<A,R>中,下列说法正确的是____",
+    "options": {
+      "A": "A的最大元素是18;",
+      "B": "A 的最小元素是2;",
+      "C": "B= {3,9}的上界只有 18;",
+      "D": "B= {4,9} 没有上下界。"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0817",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设G为平面图,则下面可能不连通的图是____",
+    "options": {
+      "A": "G的闭合图",
+      "B": "G*",
+      "C": "(G*)*",
+      "D": "(((G)*)*)*"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0818",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个无向图有五个结点,其中4个的度数是1,2,3,4,则第5个结点的度数不可能是____",
+    "options": {
+      "A": "0",
+      "B": "2",
+      "C": "4",
+      "D": "5"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "val"
+  },
+  {
+    "id": "ceval_0819",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在代数系统中,整环和域的关系是____",
+    "options": {
+      "A": "整环一定是域",
+      "B": "域不一定是整环",
+      "C": "域一定是整环",
+      "D": "域一定不是整环"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0820",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列公式与 $\\left(\\forall x\\right)\\left(\\left(\\exists y\\right)P\\left(y\\right)\\rightarrow Q\\left(x\\right)\\right)$ 等值的是____\n",
+    "options": {
+      "A": "$(\\forall\\:x)\\:(\\exists\\:y)\\:(\\mathsf{P}\\:(y)\\:\\rightarrow\\:\\mathsf{Q}\\:(x)\\:)$",
+      "B": "$\\left(\\forall x\\right)\\left(\\forall y\\right)\\left(\\neg\\mathsf{P}\\left(y\\right)\\:\\rightarrow\\:\\mathsf{Q}\\left(x\\right)\\right)$",
+      "C": "$\\left(\\forall x\\right)\\left(\\neg\\mathtt{Q}\\left(x\\right)\\ \\rightarrow\\ \\left(\\forall y\\right)\\neg\\mathtt{P}\\left(y\\right)\\right)$",
+      "D": "$\\left(\\exists y\\right)\\mathsf{P}\\left(y\\right)\\:\\rightarrow\\:\\left(\\:\\forall x\\right)\\mathsf{Q}\\left(x\\right)$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0821",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个连通图G具有以下____条件时,能一笔画出:即从某结点出发,经过图中每边仅一次回到该结点。",
+    "options": {
+      "A": "G 没有奇数度结点",
+      "B": "G 有一个奇数度结点",
+      "C": "G有2个奇数度结点",
+      "D": "G没有或有2个奇数度结点"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0822",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "公式$\\neg p\\rightarrow(q\\rightarrow r)$与____等值。",
+    "options": {
+      "A": "$q\\rightarrow(p\\lor r)$",
+      "B": "$(p\\wedge q)\\rightarrow r$",
+      "C": "$(p\\rightarrow r)\\lor(q\\rightarrow r)$",
+      "D": "$p\\rightarrow\\left(q\\lor r\\right)$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0823",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "具有7个结点的所有非同构的树有____个。",
+    "options": {
+      "A": "7",
+      "B": "11",
+      "C": "12",
+      "D": "14"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0824",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若一个平面图G是面4可着色的,则其对偶图G*一定满足_____",
+    "options": {
+      "A": "点4可着色",
+      "B": "面4可着色",
+      "C": "有H回路",
+      "D": "有欧拉回路"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0825",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列公式中____不是永真式:",
+    "options": {
+      "A": "$\\neg p\\rightarrow(p\\rightarrow q)$",
+      "B": "$p\\rightarrow(\\neg p\\rightarrow q)$",
+      "C": "$\\big(p\\to\\big(q\\lor(p\\to q)\\big)\\big)\\land\\neg q$",
+      "D": "$\\big(p\\to\\big(q\\lor(p\\to q)\\big)\\big)\\lor\\neg q$"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0826",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "令$P$:今天下雪了,$Q$:路滑,则命题“虽然今天下雪了,但是路不滑”可符号化为____",
+    "options": {
+      "A": "$P\\rightarrow\\neg Q$\n",
+      "B": "$P \\lor \\neg Q$",
+      "C": "$\\textit{P}\\wedge Q$",
+      "D": "$\\textit{P}\\wedge \\neg Q$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0827",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下性质不一定正确的是____",
+    "options": {
+      "A": "$A=B\\Leftrightarrow P(A)=P(B)$",
+      "B": "$A\\subseteq B\\Leftrightarrow P(A)\\subseteq P(B)$\n",
+      "C": "$P(A)\\in P(B)\\Leftrightarrow A\\in B$\n",
+      "D": "$(A-B)\\oplus(A-C)=\\Phi\\Leftrightarrow A-B=A-C$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0828",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设个体域为$\\{-1,1\\}$，并对$\\mathsf{P}\\left(x,y\\right)$设定为$\\mathsf{P}\\left(-1,-1\\right)\\mathsf{=T}$,$\\mathsf{P}\\left(-1,1\\right)\\mathsf{=F}$,$\\mathsf{P}(1,-1)\\mathsf{=T}$,$\\mathtt{P}\\left(1,1\\right)\\mathtt{=F}$，其真值为$\\textbf{T}$的公式为____",
+    "options": {
+      "A": "$(\\forall x)\\left(\\exists y\\right)\\mathsf{P}\\left(x,y\\right)$",
+      "B": "$(\\exists x)(\\forall y)\\mathsf{P}(x,y)$",
+      "C": "$(\\forall x)(\\forall y)P(x,y)$",
+      "D": "$(\\forall y)(\\exists x)P(x,y)$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0829",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$R$是集合$A$上的二元关系,下面____说法是错误的。",
+    "options": {
+      "A": "$tsr(R)=trs(R)$",
+      "B": "$rts(R)=tsr(R)$",
+      "C": "$str(R)=rts(R)$",
+      "D": "$rts(R)=trs(R)$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0830",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以2,2,3,3,1,1,1,1为顶点度数列的所有非同构的无向树的个数为____。",
+    "options": {
+      "A": "4",
+      "B": "5",
+      "C": "6",
+      "D": "7"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0831",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知5阶有向图G的度数列和入度列分别为(3,3,2,3,3)和(2,1,1,1,2),则有向图G的出度列为____。",
+    "options": {
+      "A": "(1,2,1,2,1)",
+      "B": "(2,2,2,2,0)",
+      "C": "(2,2,1,2,1)",
+      "D": "(1,2,0,2,1)"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0832",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "令$F(x)$:\"x是金属\",$G(y)$:\"y是液体\",$H(x,y)$:\"x可以溶解在y中\",则命题“任何金属可以溶解在某种液体中”可符号化为下列哪项?____",
+    "options": {
+      "A": "$(\\forall x)(F(x)\\land(\\exists y)(G(y)\\land H(x,y)))$\n",
+      "B": "$(\\forall x)(\\exists(x)F(x)\\rightarrow(G(y)\\rightarrow H(x,y)))$",
+      "C": "$(\\forall x)(F(x)\\rightarrow(\\exists y)(G(y)\\land H(x,y)))$\n",
+      "D": "$(\\forall x)(F(x)\\rightarrow(\\exists y)(G(y)\\rightarrow H(x,y))$\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0833",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "A,B为任意集合,以下____不一定正确",
+    "options": {
+      "A": "${P}({A})\\cup P(B)=P(A\\cup B)$",
+      "B": "${P}({A})\\cap P(B)=P(A\\cap B)$",
+      "C": "${P}({A})\\in P(B)\\Rightarrow P(A\\in B)$",
+      "D": "${P}({A})\\subseteq P(B)\\Rightarrow P(A\\subseteq B)$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0834",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$P(P(P(\\Phi)))$为____",
+    "options": {
+      "A": "$\\{\\{\\Phi\\},\\{\\Phi,\\{\\Phi\\}\\}\\}$",
+      "B": "$\\{\\Phi,\\{\\Phi,\\{\\Phi\\}\\},\\{\\Phi\\}\\}$",
+      "C": "$\\{\\Phi,\\{\\Phi,\\{\\Phi\\}\\},\\{\\Phi\\},\\{\\{\\Phi\\}\\}\\}$",
+      "D": "$\\{\\Phi,\\{\\Phi,\\{\\Phi\\}\\}\\}$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0835",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设p:我很累,q:我去学习,命题:“除非我很累,否则我就去学习”的符号化正确的是____",
+    "options": {
+      "A": "$\\neg p\\wedge q$\n",
+      "B": "$\\neg p\\rightarrow q$\n",
+      "C": "$\\neg p\\rightarrow\\neg q$\n",
+      "D": "$ p\\rightarrow\\neg q$\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0836",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "任意一条链都是____",
+    "options": {
+      "A": "分配格",
+      "B": "有补格",
+      "C": "有界格",
+      "D": "有界分配格"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0837",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列选项中,关于大项和小项的说法错误的是____",
+    "options": {
+      "A": "每个小项有一个成真赋值,有2n-1种成假赋值",
+      "B": "任意两个不同大项的合取式为矛盾式",
+      "C": "全体小项的析取式为重言式",
+      "D": "每个大项的成假赋值均不相同"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0838",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$f\\colon N\\rightarrow N\\quad\\text{}$，且对任意$i\\:\\in\\:N$有$f(i)=i(\\text{mod}\\ 6)$，则$\\mathcal{f}$是____",
+    "options": {
+      "A": "单射",
+      "B": "满射",
+      "C": "双射",
+      "D": "以上都不对"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0839",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知图G中有11条边,1个4度顶点,4个3度顶点,其余顶点的度数均不大于2,则G中至少有____个顶点。",
+    "options": {
+      "A": "9",
+      "B": "8",
+      "C": "7",
+      "D": "6"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0840",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设$A\\subseteq B$，以下____不一定成立\n",
+    "options": {
+      "A": "$\\cup A\\subseteq\\cup B$\n",
+      "B": "$\\cap A\\subseteq\\cap B$\n",
+      "C": "$P(A)\\subseteq P(B)$",
+      "D": "$A-B\\subseteq B-A$\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0841",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "含n个命题变元的任一命题公式的指派个数是____",
+    "options": {
+      "A": "n",
+      "B": "n^2",
+      "C": "2n",
+      "D": "22n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0842",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "使得$(q\\wedge(p\\rightarrow q))\\rightarrow p$的真值为$\\mathsf{F}$的是下列情形____",
+    "options": {
+      "A": "$(p,q)=(F,F)$",
+      "B": "$(p,q)=(F,T)$",
+      "C": "$(p,q)=(T,F)$",
+      "D": "$(p,q)=(T,T)$"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0844",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "公式$(p\\uparrow q)\\downarrow(p\\uparrow q)$与____等值。",
+    "options": {
+      "A": "$p\\lor q$",
+      "B": "$p\\wedge q$\n",
+      "C": "${p\\rightarrow q}$",
+      "D": "$p\\leftrightarrow q$\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0845",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$(\\forall x)(P(x)\\rightarrow(\\exists y)Q(x,y))$的前束范式为____",
+    "options": {
+      "A": "$(\\forall x)(\\exists y)(\\neg P(x)\\lor Q(x,y))$\n",
+      "B": "$(\\forall x)(\\exists y)(P(x)\\lor Q(x,y))$\n",
+      "C": "$(\\forall x)(\\exists y)(\\neg P(x)\\wedge Q(x,y))$\n",
+      "D": "$(\\exists x)(\\exists y)(\\neg P(x)\\wedge Q(x,y))$\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0847",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "A是一个有限集合,(A,≤)是一个偏序集,则下面说法____是错误的。",
+    "options": {
+      "A": "(A,≤)是全序集当有仅当(A,≤)是良序集",
+      "B": "集合A 的任意非空子集B一定存在上确界",
+      "C": "集合A 的任意非空子集B一定存在极大元",
+      "D": "(B,≤)可能存在多条链"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0848",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$A\\cup(B\\cap C)$与____不恒等",
+    "options": {
+      "A": "$(A\\cup B)\\cap(A\\cup C)$",
+      "B": "$((A-B)-C)\\cup(B\\cap C)$",
+      "C": "$(A-B)\\cup(B\\cap C)\\cup(A-C)$",
+      "D": "$A\\cup(B-(B\\oplus C))$"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0849",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设$\\mathsf{H}\\left(x\\right)$:x是人；$\\mathsf{P}\\left(x\\right)$:x犯错误。则“没有不犯错误的人”应该翻译成____",
+    "options": {
+      "A": "$\\left(\\exists x\\right)\\:\\left(\\text{H}\\left(x\\right)\\wedge\\neg\\text{P}\\left(x\\right)\\right)$",
+      "B": "$\\left(\\forall x\\right)\\left(H\\left(x\\right)\\rightarrow P\\left(x\\right)\\right)$",
+      "C": "$\\left(\\forall x\\right)\\:\\left(H\\left(x\\right)\\wedge P\\left(x\\right)\\right)$",
+      "D": "$\\left(\\exists x\\right)\\:\\left(H\\left(x\\right)\\rightarrow P\\left(x\\right)\\right)$"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0850",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设T为n(n≥3)阶无向树,T有几条割边?____",
+    "options": {
+      "A": "n条",
+      "B": "n-2条",
+      "C": "n-1条",
+      "D": "没有"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0851",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "关于$A\\rightarrow\\phi$函数的陈述，以下哪个是正确的？\n",
+    "options": {
+      "A": "不存在",
+      "B": "有一个空函数$\\Phi$",
+      "C": "仅当A非空时才能有函数",
+      "D": "仅当A为空时才能有函数"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0852",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列命题联结词集合中,是联结词的完备集的是____",
+    "options": {
+      "A": "$\\{\\neg,\\leftrightarrow\\}$",
+      "B": "$\\{\\uparrow\\}$",
+      "C": "$\\{\\wedge,\\lor \\}$",
+      "D": "$\\{\\wedge,\\rightarrow \\}$"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0853",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下____不正确。",
+    "options": {
+      "A": "$\\phi\\subseteq\\phi$\n",
+      "B": "$\\phi\\in1$",
+      "C": "$\\phi\\subseteq1$\n",
+      "D": "$\\phi\\in\\phi$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0854",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设$A\\left(x\\right):x$是成功人士，$B\\left(x\\right):x$出身名门，命题“成功人士未必都出身名门”符号化为____",
+    "options": {
+      "A": "$(\\forall x)(A(x)\\wedge B(x))$",
+      "B": "$\\neg\\left(\\exists x\\right)\\left(\\mathtt{A}\\left(\\mathtt{x}\\right)\\rightarrow\\mathbf{B}\\left(\\mathtt{x}\\right)\\right)$",
+      "C": "$\\neg\\left(\\forall x\\right)\\left(\\mathtt{A}\\left(\\mathtt{x}\\right)\\wedge\\mathtt{B}\\left(\\mathtt{x}\\right)\\right)$",
+      "D": "$\\neg\\left(\\forall x\\right)\\left(\\text{A}\\left(x\\right)\\rightarrow\\text{B}\\left(x\\right)\\right)$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0855",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设R是集合A={1,2,3}上的二元关系,且R={<1,1>,<3,3>},下列命题中____为真。I.R的自反闭包为{<1,1>,<2,2>,<3,3>}II.R的对称闭包为{<1,1>,<3,3>}III.R的传递闭包为{<l,1>,<3,3>}",
+    "options": {
+      "A": "只有I",
+      "B": "只有II",
+      "C": "I和II",
+      "D": "I、II和III"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0856",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设G是连通平面图,有v个顶点,e条边,且其平面表示中共有r个面,则e=____",
+    "options": {
+      "A": "v+r+2",
+      "B": "r-v+2",
+      "C": "r+v-2",
+      "D": "v-r+2"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0857",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "与自然数集合$N$等势的集合是____",
+    "options": {
+      "A": "$[0,1]$",
+      "B": "$\\mathbf{N_2}$",
+      "C": "$Q$",
+      "D": "$R$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0858",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知集合A={1,2,3}上的关系R={〈3,3〉,〈3,1〉},则s(R)=____",
+    "options": {
+      "A": "{〈3,3〉,〈1,3〉}",
+      "B": "{〈3,3〉,〈3,1〉,〈1,3〉}",
+      "C": "{〈3,3〉,〈1,1〉,〈2,2〉}",
+      "D": "{〈3,3〉,〈3,1〉,〈1,3〉,〈1,1〉}"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0859",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Z代表整数集合,“≤”是Ζ上的小于等于二关系,下面说法____是错误的。",
+    "options": {
+      "A": "(Z, ≤)是偏序集",
+      "B": "(Z, ≤)是全序集",
+      "C": "(Z, ≤)是良序集",
+      "D": "(Z, ≤)是一条链"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0860",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知图G有11条边,由1个4度顶点,4个3度顶点,其余顶点的度数均小于等于2,则G中至少有____个顶点。",
+    "options": {
+      "A": "7",
+      "B": "8",
+      "C": "9",
+      "D": "10"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0861",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设集合${A\\subseteq B}$,$C$是任意一个集合，则以下不一定成立____",
+    "options": {
+      "A": "$C\\cup A\\subseteq C\\cup B$\n",
+      "B": "$\\cap A\\subseteq \\cap B$\n",
+      "C": "$C\\cap A\\subseteq C\\cap{B}$",
+      "D": "$A-B\\subseteq B-A$\n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0862",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "令$\\mathbb{N}$是自然数集，$\\mathbb{Q}$是有理数集，$\\mathbb{R}$是实数集，则与闭区间$[1,2]$等势的集合是____",
+    "options": {
+      "A": "$\\ {\\mathrm{{N}}}$",
+      "B": "$\\mathbb{N}\\times\\mathbb{Q}$",
+      "C": "$\\mathbb{N}_{2}$",
+      "D": "$p(\\mathbb{R})$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0863",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设$R_{3}$是集合A到集合B上的二元关系,$R_{1}$,$R_{2}$,是集合B到集合C上的二元关系,则以下_是错误的.____",
+    "options": {
+      "A": "$(R_1\\cup R_2)\\circ R_3=(R_{1}\\circ R_{3})\\cup(R_{2}\\circ R_{3})$",
+      "B": "$(R_{1}\\cap R_{2})\\circ R_{3}=(R_{1}\\circ R_{3})\\cap(R_{2}\\circ R_{3})$",
+      "C": "$R_1[A\\cup B]=R_1[A]\\cup R_1[B]$",
+      "D": "$\\left(R_1\\circ R_3\\right)^{-1}=R_3^{-1}\\circ R_1^{-1}$"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0864",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设T为n≥2的简单图,以下____不足以证明T是树。",
+    "options": {
+      "A": "T连通且无回路",
+      "B": "T连通且每条边为割边",
+      "C": "T连通且有n一1条边",
+      "D": "T无回路且每条边均为割边"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0865",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设$N\\left(\\mathbf{x}\\right):\\textbf{x}$是自然数$\\mathsf{E}\\left(x,y\\right):\\textbf{x}$等于$\\textbf{y}$;$\\text{f}\\left(\\text{x}\\right):\\textbf{x}$的相继前元。则命题$(\\forall\\:x)\\:(\\:(N(x)\\land\\neg E(x,0))\\rightarrow\\:(\\exists\\:y)\\:(E(y,f(x))\\land(\\forall\\:z)\\:(\\:E(z,f(x))\\rightarrow E(y,z))\\:))$表示的自然语言是____",
+    "options": {
+      "A": "任意非零自然数有相继前元",
+      "B": "存在非零自然数有且仅有一个相继前元",
+      "C": "任意非零自然数有且仅有一个相继前元",
+      "D": "存在一个自然数是任意非零自然数的唯一相继前元"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0866",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设G是有n个结点,m条边的连通图,必须删去G的____条边,才能确定G的一棵生成树.",
+    "options": {
+      "A": "m-n+I",
+      "B": "m-n",
+      "C": "m+n+1",
+      "D": "n-m+1"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0867",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在平面图$\\mathbf{G}$的某个域内增加一个结点及连接该结点与该域的边界上某结点的一条边，得到一个新图$\\mathbf{G^{\\prime}}$，那么以下正确的是____",
+    "options": {
+      "A": "$\\mathbf{G}^*\\subset\\mathbf{G^{\\prime}}^*$",
+      "B": "$\\mathbf{G}^{*}\\supset\\mathbf{G^{\\prime}}^{*}$",
+      "C": "$\\mathbf{G}^{*}=\\mathbf{G^{\\prime}}^{*}$",
+      "D": "以上都不对"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0868",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设有一个连通平面图G,共有7个结点,12条边,则G的面的个数为____",
+    "options": {
+      "A": "6",
+      "B": "7",
+      "C": "8",
+      "D": "9"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0869",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "集合A1,A2,...,An是集合C的n个子集,n≥2,已知C中的任意一元素都恰好在两个不同的子集中出现一次,即任意两个不同的子集Ai,Aj有|Ai∩Aj|=1,则|C|=____。",
+    "options": {
+      "A": "n",
+      "B": "n-1",
+      "C": "2n",
+      "D": "n+1"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0870",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设a:小华,P(x):x是教授,f(x):x的父亲,则语句“小华的父亲是教授”可符号化为____",
+    "options": {
+      "A": "P(f(a))",
+      "B": "P(a)∧f(a)",
+      "C": "f(P(a))",
+      "D": "P(a)∨f(a)"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0871",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设f:B→C,g:A→B。若f·g是满射的,则下面命题为真的是____。",
+    "options": {
+      "A": "f是满射的",
+      "B": "f是单射的",
+      "C": "f是双射的",
+      "D": "g是满射的"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0872",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "任意一个具有2个或2个以上元的半群____",
+    "options": {
+      "A": "可能不是群",
+      "B": "一定不是群",
+      "C": "一定是群",
+      "D": "是交换群"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0873",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设$\\mathcal{R}$是集合$\\mathcal{A}$上反自反、对称、传递的二元关系，且$\\mid A\\mid\\geq2$。定义二元关系$\\overline{R}=A\\times A-R$，则对于关系$\\overline{\\mathcal{R}}$，错误的是_____",
+    "options": {
+      "A": "$\\overline{\\mathcal{R}}$是自反的",
+      "B": "$\\overline{\\mathcal{R}}$是对称的",
+      "C": "$\\overline{\\mathcal{R}}$不是反对称的",
+      "D": "$\\overline{\\mathcal{R}}$是传递的"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0874",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设G=〈V,E〉是无向图,若每个顶点的度数至少为2,则G包含____条初级回路。",
+    "options": {
+      "A": "1",
+      "B": "2",
+      "C": "3",
+      "D": "4"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0875",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个无向图共有6个顶点,其中5个顶点的度数分别为1,2,2,3,4,则第六个顶点的度数不可能是下列哪项?____",
+    "options": {
+      "A": "4",
+      "B": "2",
+      "C": "1",
+      "D": "0"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0877",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列命题公式为永假式的是____",
+    "options": {
+      "A": "「(P→Q)",
+      "B": "「(P→Q)∧Q",
+      "C": "(P→Q)∨Q",
+      "D": "「P∧(P→Q)"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0878",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面表述不正确的是哪项?____",
+    "options": {
+      "A": "全称量词和存在量词不可以随便交换位置。",
+      "B": "如果公式A没有自由变元,则称公式A为闭公式",
+      "C": "命题的真值可以不唯一",
+      "D": "谓词是用来刻画个体具有的性质或关系的。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0879",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列语句中是真命题的是____",
+    "options": {
+      "A": "这个语句是假的",
+      "B": "严禁吸烟",
+      "C": "如果1+2=3,那么雪是黑的",
+      "D": "如果1+2=5,那么雪是黑的"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0880",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "A、B、C 为任意命题公式，以下哪项成立？\n",
+    "options": {
+      "A": "$C\\to A\\Leftrightarrow C\\to B$\n",
+      "B": "$A\\lor C\\Leftrightarrow B\\lor C$\n",
+      "C": "$A\\land C\\Leftrightarrow B\\land C$\n",
+      "D": "$\\neg A\\Leftrightarrow \\neg B$\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0881",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设N为自然数集合,Z为整数集合,Q为有理数集合,R为实数集合,为全体奇数集合,[0,1)和(0,1)为两个区间,下列关系中为假的是____。",
+    "options": {
+      "A": "(0,1)≈Q",
+      "B": "Z≤R",
+      "C": "Q≈N",
+      "D": "[0,1]≈R"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0882",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列公式中____不是永真公式",
+    "options": {
+      "A": "$(\\alpha\\rightarrow\\beta)\\rightarrow(\\neg\\beta\\rightarrow\\neg\\alpha)$",
+      "B": "$(\\neg\\alpha\\rightarrow\\beta)\\rightarrow(\\neg\\beta\\rightarrow\\alpha)$",
+      "C": "$(\\neg\\alpha\\rightarrow\\neg\\beta)\\rightarrow(\\beta\\rightarrow\\alpha)$",
+      "D": "$(\\alpha\\rightarrow\\beta)\\rightarrow(\\neg\\alpha\\rightarrow\\neg\\beta)$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0883",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$f$,$g$是函数.若$g$不是单射的,则____",
+    "options": {
+      "A": "$f\\circ g$ 不是单射函数",
+      "B": "$g\\circ f$ 不是单射函数",
+      "C": "A,B 都不对",
+      "D": "不一定"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0884",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设平面图$G$加上一个孤立结点,得到一个新图$G^{,}$,那么以下正确的是____",
+    "options": {
+      "A": "$G^{*}\\supset G^{,*}$",
+      "B": "$G^{*}\\subset G^{,*}$",
+      "C": "$G^{*} = G^{,*}$",
+      "D": "以上都不对"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0885",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在谓词逻辑中,令F(x)表示x是人,G(x)表示x呼吸,命题“没有不呼吸的人”的符号表示中____是正确的。",
+    "options": {
+      "A": "仅III",
+      "B": "I和II",
+      "C": "II和III",
+      "D": "I、II和III"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0886",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "${\\mathcal{f}}\\circ{\\mathcal{g}}\\circ{\\mathcal{h}}$是双射，那么一定有____",
+    "options": {
+      "A": "$\\mathcal{f}$是单射，$\\mathcal{h}$是满射；",
+      "B": "$\\mathcal{g}$是满射，$\\mathcal{h}$是单射；",
+      "C": "$\\mathcal{f}$是满射，$\\mathcal{h}$是单射；",
+      "D": "$\\mathcal{f}$是单射，$\\mathcal{g}$是单射。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0887",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下性质中,不正确的是____",
+    "options": {
+      "A": "存在对称但不反对称的二元关系",
+      "B": "存在反对称但不对称的二元关系",
+      "C": "存在既对称又反对称的二元关系",
+      "D": "没有既不对称也不反对称的二元关系"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0888",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面四个关系中____是拟序关系",
+    "options": {
+      "A": "R中的“>”关系",
+      "B": "N- {0}中的整除关系",
+      "C": "N-{0}中的互素关系",
+      "D": "R={<x,y>|(x-y)被5整除,$x,y\\in Z$}"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0889",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "G是平面图,它的点、边、域数分别是:n、m、d,G*是其对偶图,它的点、边、域数分别是:n*、m*、d*,则G*满足____",
+    "options": {
+      "A": "G*不唯一",
+      "B": "有K子图",
+      "C": "G* = G",
+      "D": "d = n*"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0890",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在整数集Z上,下列运算满足结合律的是____",
+    "options": {
+      "A": "a*b=|a-b|",
+      "B": "a*b=ab+1",
+      "C": "a*b=2a+b",
+      "D": "a*b=a+b+1"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0891",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列不是命题的是____",
+    "options": {
+      "A": "乌鸦是黑色的",
+      "B": "歌声多么动听!",
+      "C": "2是素数",
+      "D": "雪是黑色的"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0892",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "前提「P∧Q,Q→R,「R的结论是____",
+    "options": {
+      "A": "P",
+      "B": "Q",
+      "C": "「R",
+      "D": "「P"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0893",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对自然数集合N,下列哪种运算是可结合的,运算定义为a,b∈N____",
+    "options": {
+      "A": "a*b=a-b",
+      "B": "a*b=a+2b",
+      "C": "a*b=min(a,b)",
+      "D": "a*b=|a-b|"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0894",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "T是结点数为n≥2的树,则T至少有____个叶结点。",
+    "options": {
+      "A": "2",
+      "B": "3",
+      "C": "4",
+      "D": "无合适选项"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0895",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设无向图G的邻接矩阵为$\\begin{bmatrix}0&1&1&1&1\\\\1&0&1&0&0\\\\1&1&0&1&1\\\\1&0&1&0&1\\\\1&0&1&1&0\\end{bmatrix}$则G的顶点数与边数分别为哪项？____",
+    "options": {
+      "A": "4,10",
+      "B": "5,10",
+      "C": "4,8",
+      "D": "5,8"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0897",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "根据归结推理规则，子句${\\mathsf{P}}\\left(x\\right)\\:\\lor\\:{\\mathsf{Q}}\\left(a,\\:x\\right)$与${\\mathsf P}\\left(\\mathbf{y}\\right)\\lor\\neg{\\mathsf Q}\\left(\\mathbf{y},\\mathbf{b}\\right)$的归结式是____",
+    "options": {
+      "A": "$\\mathsf{P}\\left(\\mathsf{a}\\right)$",
+      "B": "$\\mathsf{P}\\left(\\mathsf{b}\\right)$",
+      "C": "$\\mathsf{P}\\left(\\mathsf{a}\\right)\\ \\lor\\ \\mathsf{P}\\left(\\mathsf{b}\\right)$",
+      "D": "$\\mathsf{P}\\left(\\mathbf{a}\\right)\\:\\wedge\\:\\mathsf{P}\\left(\\mathbf{b}\\right)$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0898",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设S={1,{1},{1,2}},则既是S的元素又是S的子集的为____",
+    "options": {
+      "A": "φ",
+      "B": "1",
+      "C": "{1}",
+      "D": "{1,2}"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0899",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列命题不含联结词的(称为原子命题)是____",
+    "options": {
+      "A": "“小明和小华是兄弟”。",
+      "B": "“他个子不高也不漂亮”。",
+      "C": "“小张或小王能解出这道题”。",
+      "D": "“小张可能去体育场也可能在家里电视屏幕上观看这场球赛”。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0900",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列公式不成立的是____",
+    "options": {
+      "A": "$(\\forall x)P(x)\\rightarrow q=(\\exists x)(P(x)\\rightarrow q)$\n",
+      "B": "$(\\exists x)(P(x)\\to Q(x))\\:=(\\forall x)P(x)\\to(\\exists x)Q(x)$\n",
+      "C": "$(\\exists x)P(x)\\rightarrow(\\forall x)Q(x)\\Rightarrow(\\forall x)(P(x)\\rightarrow Q(x))$\n",
+      "D": "$(\\exists x)(\\forall y)P(x,y)=(\\forall y)(\\exists x)P(x,y)$\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0901",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设R是集合A={a,b,c,d)上的二元关系,R={<a,d>,<d,a>,<a,c>,<c,a>,<b,d>,<d,b>},下面____命题为真,I. R·R是对称的II.R·R是自反的 III.R·R不是传递的",
+    "options": {
+      "A": "仅I",
+      "B": "仅II",
+      "C": "I和II",
+      "D": "全真"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0902",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "6阶11条边的连通的简单的非同构的非平面图的个数为____。",
+    "options": {
+      "A": "3",
+      "B": "4",
+      "C": "5",
+      "D": "6"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0903",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列公式中是重言式____",
+    "options": {
+      "A": "$\\mathsf{P}\\rightarrow(\\mathsf{P}\\wedge\\mathsf{Q})$",
+      "B": "$(\\neg\\mathtt{Q}\\wedge(\\mathtt{P}\\rightarrow\\mathtt{Q})\\rightarrow\\mathtt{P}$",
+      "C": "$\\mathsf{Q}\\rightarrow(\\mathsf{P}\\rightarrow\\mathsf{Q})$",
+      "D": "$\\left(\\mathsf{P}\\rightarrow\\mathsf{Q}\\right)\\rightarrow\\left(\\begin{matrix}{\\left(\\mathsf{P}\\rightarrow\\mathsf{R}\\right)}\\rightarrow\\left(\\mathsf{Q}\\rightarrow\\mathsf{R}\\right)\\end{matrix}\\right)$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0904",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设${\\mathcal{f}}:[0,1]\\to[0,1]$。${\\mathcal{f}}(x)={\\frac{2x+1}{4}}$则$\\mathcal{f}$是____",
+    "options": {
+      "A": "双射;",
+      "B": "单射;",
+      "C": "满射;",
+      "D": "无法判断。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0905",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "所有使命题公式$\\neg P\\wedge(Q\\vee\\neg R)$的真值为T的解释是$(\\mathsf{P},\\mathsf{Q},\\mathsf{R})$____",
+    "options": {
+      "A": "$(\\mathsf{F},\\mathsf{F},\\mathsf{F})$, $(\\mathsf{F},\\mathsf{F},\\mathsf{T})$,$(\\mathsf{T},\\mathsf{F},\\mathsf{F})$;",
+      "B": "$(\\mathsf{F},\\mathsf{T},\\mathsf{T})$,$(\\mathsf{F},\\mathsf{T},\\mathsf{F})$,$(\\mathsf{F},\\mathsf{F},\\mathsf{F})$;",
+      "C": "$(\\mathsf{T},\\mathsf{F},\\mathsf{F})$,$(\\mathsf{T},\\mathsf{F},\\mathsf{T})$,$(\\mathsf{T},\\mathsf{T},\\mathsf{F})$);",
+      "D": "$(\\mathsf{T},\\mathsf{T},\\mathsf{F})$,$(\\mathsf{T},\\mathsf{F},\\mathsf{T})$,$(\\mathsf{T},\\mathsf{T},\\mathsf{T})$."
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0906",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设R={<a,b>,<a,c>,<b,c>,<a,a>},则R满足的性质有____",
+    "options": {
+      "A": "对称;",
+      "B": "传递;",
+      "C": "自反;",
+      "D": "以上都不满足。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0907",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "与基数$2^{\\aleph_{0}}$相等的是____",
+    "options": {
+      "A": "$\\aleph2^{\\aleph_{o}}$ ($\\boldsymbol{\\aleph}$为实数集$R$的基数）",
+      "B": "$2^{\\aleph}$",
+      "C": "$\\aleph_0\\cdot\\aleph_0$\n",
+      "D": "$\\aleph_o2^{\\aleph}$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0908",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "互不相同的n元真值函数有多少个?____",
+    "options": {
+      "A": "$\\text{2n}$",
+      "B": "$\\mathcal{2}^{n}$",
+      "C": "$n^2$",
+      "D": "$2^{2^n}$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0909",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于一个只有4个不同元素的集合A来说,A上的不同的二元关系的总数为____。",
+    "options": {
+      "A": "42",
+      "B": "24",
+      "C": "216",
+      "D": "取决于元素是否为数值"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0911",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若A可化为与其等价的含2n个小项的主析取范式,则A为____",
+    "options": {
+      "A": "矛盾式",
+      "B": "重言式",
+      "C": "可满足式",
+      "D": "不确定"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0912",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设无向图G=<V,E>,其中V={V1,V2,V3,V4,V5},E={(V1,V4),(V4,V4),(V1,V2),(V2,V3),(V3,V4)},下列命题为真的是____。",
+    "options": {
+      "A": "G是哈密尔顿图",
+      "B": "G是欧拉图",
+      "C": "G是二部图",
+      "D": "G是平面图"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0913",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设p:他怕困难,q:他获得成功。命题“他只有不怕困难,才能获得成功”可符号化为____",
+    "options": {
+      "A": "p→q",
+      "B": "q→p",
+      "C": "「p→q",
+      "D": "q→「p"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0914",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列4个推理中,不正确的是____",
+    "options": {
+      "A": "$A\\Rightarrow(A\\wedge B)$",
+      "B": "$(A \\lor B) \\wedge\\neg A\\Rightarrow B$\n",
+      "C": "(A → B) ∧ A → B\n",
+      "D": "$(A\\rightarrow B)\\wedge\\neg B\\Rightarrow\\neg A$\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0915",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列集合可数的是____",
+    "options": {
+      "A": "$[1,2]$",
+      "B": "$\\mathsf{N}_{2}$",
+      "C": "$\\mathbb{R}^{*}$即正实数集合",
+      "D": "$\\mathbb{Q}\\times\\mathbb{Q}$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0916",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "极大平面图不满足____",
+    "options": {
+      "A": "连通",
+      "B": "无割边",
+      "C": "每个域边界数3",
+      "D": "3d< 2m"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0917",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设G为n(n≥2)阶无向连通图,下面____命题必为真。I.若G有割点,则G一定有桥II,若G有桥,则G一定有割点",
+    "options": {
+      "A": "仅I",
+      "B": "仅II",
+      "C": "全不一定为真",
+      "D": "全一定为真"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0918",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "4阶非同构的无向简单图共有____个。",
+    "options": {
+      "A": "9",
+      "B": "13",
+      "C": "11",
+      "D": "27"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0919",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$f$是集合$A$到集合$B$的关系,则____",
+    "options": {
+      "A": "若$f$是函数,则$f^{-1}$也是函数",
+      "B": "若$f^{-1}$是函数,则$f$也是函数",
+      "C": "若$f$不是函数,则$f^{-1}$也不是函数",
+      "D": "都不对"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0920",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$R_{1}$,$R_{2}$是集合A上的二元关系,则以下____是正确的",
+    "options": {
+      "A": "若$R_{1}\\cap R_{2}$自反,则$R_{1}$和$R_{2}$均自反;",
+      "B": "若$R_{1}\\cap R_{2}$对称,则$R_{1}$和$R_{2}$均对称;",
+      "C": "若$R_{1}$和$R_{2}$传递,则$R_1\\cup R_2$传递;",
+      "D": "若$R_{1}$和$R_{2}$反对称,则$R_1\\cup R_2$反对称;"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0921",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列各组公式不等值的是____",
+    "options": {
+      "A": "$(\\forall x)(\\alpha(x)\\wedge\\beta(x))$ 和 $(\\forall x)\\alpha\\big(x\\big)\\wedge(\\forall x)\\beta\\big(x\\big)$\n",
+      "B": "$(\\exists x)\\alpha(x)\\lor\\beta$与$(\\exists x)\\big(\\alpha\\big(x\\big)\\lor\\beta\\big)$",
+      "C": "$(\\forall x)\\alpha\\bigl(x\\bigr)\\rightarrow\\beta$与$(\\forall x)\\big(\\alpha(x)\\rightarrow\\beta\\big)$",
+      "D": "$(\\exists x)(\\alpha(x)\\lor\\beta(x))$ 和 $(\\exists x)\\alpha\\big(x\\big)\\lor(\\exists x)\\beta\\big(x\\big)$\n"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0922",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$(\\exists x)(\\forall y)P(x,y,z)\\rightarrow(\\exists z)P(x,y,z)$ 的前束范式为____\n",
+    "options": {
+      "A": "$(\\exists x)(\\forall y)(\\exists z)(\\neg P(x,y,u)\\lor P(\\nu,w,z))$\n",
+      "B": "$(\\forall x)(\\exists y)(\\exists z)(\\neg P(x,\\nu,u)\\lor P(\\nu,w,z))$\n",
+      "C": "$(\\exists x)(\\forall y)(\\exists z)(P(x,\\nu,u)\\rightarrow P(\\nu,w,z))$\n",
+      "D": "以上都不对"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0923",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设无向树T由3个3度顶点,2个2度顶点,其余顶点都是树叶,则T有____片树叶。",
+    "options": {
+      "A": "3",
+      "B": "4",
+      "C": "5",
+      "D": "6"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0924",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "G为平面图,其对偶图的结点数、边数、域数分别为n*,m*,d*,则以下性质一定正确的是____",
+    "options": {
+      "A": "(G*)*=G",
+      "B": "d*=m*-n*+2",
+      "C": "G 未必有对偶图",
+      "D": "G*未必有对偶图"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0925",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设个体域为$\\{\\mathbf{a},\\mathbf{b}\\}$，并对$\\mathsf{P}\\left\\{x,y\\right\\}$设定为$P\\left(\\mathbf{a},\\:\\mathbf{a}\\right)\\:=\\mathbf{T}$，$P\\left(a,b\\right)=F$，$P\\left(b\\:,\\:a\\right)\\:=\\:F$，$\\mathsf{P}\\left(\\mathbf{b},\\mathbf{b}\\right)$，其真值为真的公式为____",
+    "options": {
+      "A": "$(\\forall x)(\\exists y)P(x,y)$",
+      "B": "$(\\exists x)(\\forall y)P(x,y)$",
+      "C": "$(\\forall x)(\\forall y)P(x,y)$",
+      "D": "$(\\exists y)(\\forall x)P(x,y)$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0926",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设无向图G有n个结点(n≥3),有m=n+1条边,下面说法不正确的是____",
+    "options": {
+      "A": "图 G 是一个连通图;",
+      "B": "图 G 中一定有回路;",
+      "C": "图G存在一条不是割边的边;",
+      "D": "图 G 存在某两个点, 这两个点间有两条不同的道路;"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0927",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面不正确的是____",
+    "options": {
+      "A": "$\\neg Q\\land(P\\rightarrow Q)\\Rightarrow\\neg P$\n",
+      "B": "$P\\Rightarrow P\\lor Q$\n",
+      "C": "$P\\rightarrow Q\\Rightarrow\\neg Q\\rightarrow\\neg P$\n",
+      "D": "$(P\\to Q)\\lor\\neg Q\\Rightarrow\\neg P$\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0928",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "公式$(p\\downarrow q)\\downarrow(p\\downarrow q)$与____等值。",
+    "options": {
+      "A": "$p \\lor q$",
+      "B": "$\\mathfrak{p}\\wedge\\mathfrak{q}$",
+      "C": "$\\mathtt{p}\\rightarrow\\mathtt{q}$",
+      "D": "$\\text{p}\\leftrightarrow\\text{q}$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0929",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设${\\mathrm{P}}(x)$表示“x是数学学得好的学生”，${\\mathrm{Q}}(x)$表示“x是优秀生”，则“并不是数学学得好的都是优秀生”用符号表示为____",
+    "options": {
+      "A": "$\\neg(\\forall x)(\\mathrm{P}(x)\\to\\mathrm{Q}(x))$",
+      "B": "$\\neg(\\forall x)(\\mathrm{P}(x)\\wedge\\mathrm{Q}(x))$",
+      "C": "$\\neg(\\exists x)(\\operatorname P(x)\\to Q(x))$\n",
+      "D": "$(\\forall x)(\\neg\\mathrm{P}(x)\\wedge\\mathrm{Q}(x))$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0930",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面关于命题公式的叙述不正确的是____",
+    "options": {
+      "A": "不是可满足的公式必永假",
+      "B": "如果$\\mathsf{P}$是重言式， 对其使用代入规则得到的公式 $\\mathsf{Q}$不一定是重言式",
+      "C": "如果$\\mathsf{P}\\leftrightarrow\\ \\mathsf{Q}$是重言式，那么$\\mathsf{P}=\\mathsf{Q}$",
+      "D": "如果${\\mathsf P}\\rightarrow{\\mathsf Q}$是重言式， 那么$\\neg\\mathsf{Q}\\rightarrow\\neg\\mathsf{P}$是重言式"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0931",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下三个命题公式中，有多少个与$(x\\land\\neg y)$矛盾（既不是真，也不是假）？($\\neg x\\lor y$),($\\neg x\\land y$),($\\neg y\\to\\neg x$)____\n",
+    "options": {
+      "A": "0",
+      "B": "1",
+      "C": "2",
+      "D": "3"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0932",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列语句为复合命题的是____",
+    "options": {
+      "A": "今天天气凉爽",
+      "B": "今天天气炎热,有雷阵雨",
+      "C": "x+y>16",
+      "D": "今天天气多好呀,外面景色多美呀"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0933",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "集合A有5个元素,集合B有2个元素,则A到B的满射(假设在A中每个元素上都有定义)个数为____",
+    "options": {
+      "A": "30",
+      "B": "32",
+      "C": "25",
+      "D": "23"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0934",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "无向连通图G=〈V,E〉的点割集为V1,边割集为E1,则子图G—E1所含的连通分量个数为____",
+    "options": {
+      "A": "1",
+      "B": "2",
+      "C": "3",
+      "D": "4"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0935",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设A为n个元素的集合,则A上有____个二元关系。",
+    "options": {
+      "A": "2n",
+      "B": "2n×n",
+      "C": "2n",
+      "D": "n"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0936",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$\\left(\\exists x\\right)\\left(\\mathsf{P}\\left(a,x\\right)\\rightarrow\\left(\\forall y\\right)\\mathsf{Q}\\left(x,b,y\\right)\\right)$的前束范式为____",
+    "options": {
+      "A": "$\\left(\\exists x\\right)\\left(\\forall y\\right)\\left(\\neg P\\left(a,x\\right)\\lor Q\\left(x,b,y\\right)\\right)$\n",
+      "B": "$\\neg\\left(\\forall x\\right)\\left(\\exists y\\right)\\left(\\mathsf{P}\\left(a,x\\right)\\wedge\\neg Q\\left(x,b,y\\right)\\right)$",
+      "C": "$(\\exists x)(\\forall y)~(\\neg P(a,x)\\land Q(x,b,y))$\n",
+      "D": "$(\\exists x)(\\neg P(a,x)\\lor(\\forall y)Q(x,b,y))$\n"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0937",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设有函数f:R→R和g:R→R,且f(x)=x^2-1,g(x)=4x+1,则复合函数[*]____",
+    "options": {
+      "A": "x^2",
+      "B": "4x^2-3",
+      "C": "4x^2+8x",
+      "D": "4x^2"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0938",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列属于两个命题变元P、Q的大项的是____",
+    "options": {
+      "A": "「P∧P∧Q",
+      "B": "「P∨P∨Q",
+      "C": "「P∧Q",
+      "D": "「P∨Q"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0939",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设有四个犯罪嫌疑人甲乙丙丁。甲说:“我不是罪犯。“乙说:\"丁是罪犯。“丙说:”乙是罪犯,”丁说:\"我不是罪犯。\"经调查证实四人中只有一人说的是真话。下列哪个判断为真?____",
+    "options": {
+      "A": "甲说的是假话,甲是罪犯。",
+      "B": "乙说的是真话,丁是罪犯。",
+      "C": "丙说的是真话,乙是罪犯,",
+      "D": "丁说的是假话,丁是罪犯。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0940",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$R_{1}$,$R_{2}$,$R_{3}$,是三个关系,如果下面等式所涉及的运算都有意义,那么不正确的等式是____",
+    "options": {
+      "A": "$R_1\\circ(R_2\\cup R_3)=R_1\\circ R_2\\cup R_1\\circ R_3$\n",
+      "B": "$(R_1\\circ R_2)\\circ R_3=R_1\\circ(R_2\\circ R_3)$\n",
+      "C": "$R_1\\circ(R_2\\cap R_3)=R_1\\circ R_2\\cap R_1\\circ R_3$\n",
+      "D": "$(R_1\\circ R_2)^{-1}=R_2^{-1}\\circ R_1^{-1}$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0941",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在简单无向图G=〈V,E〉中,如果V中的每个顶点都与其余的顶点邻接,则该图称为____",
+    "options": {
+      "A": "正则图",
+      "B": "完全图",
+      "C": "强连通图",
+      "D": "连通图"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0942",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列哪个命题公式是重言式?____",
+    "options": {
+      "A": "$(x\\rightarrow y)\\land(y\\rightarrow x)$",
+      "B": "$(\\neg x\\circ y)\\land(\\neg(\\neg x\\land\\neg y))$\n",
+      "C": "$\\neg(x\\rightarrow\\neg y)\\rightarrow x$",
+      "D": "$\\neg(x\\lor y)$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0943",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以下____不是集合",
+    "options": {
+      "A": "$\\phi\\times P(\\phi)$（$P$表示幂集运算）",
+      "B": "{x|是整数且|x|是素数}",
+      "C": "{x| x是包含1的集合}",
+      "D": "{x| x包含1且$x\\mathsf{\\subseteq}R$}"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0944",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面不是命题的是____",
+    "options": {
+      "A": "火星上有生命存在",
+      "B": "雪是白的",
+      "C": "我正在说谎",
+      "D": "10 + 11= 101"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0945",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "$R_{1}$,$R_{2}$,均为A中的关系,下面结论正确的是____",
+    "options": {
+      "A": "若$R_{1}$， $R_{2}$均为对称关系，则${R_1}\\circ {R_2}$为对称关系",
+      "B": "若$R_{1}$是偏序关系，则$R_{\\textbf{1}}^{-\\textbf{1}}$也是偏序关系",
+      "C": "$t(R_1)\\cup t(R_2)=t(R_1\\cup R_2)$ (t 为传递闭包)",
+      "D": "$st(R_1)=ts(R_1)$(s为对称闭包)"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0946",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设 $R$ 是 $A$ 中的一个关系，$I_A\\subseteq R$。如果存在 $<a,b>\\in R\\wedge<a,c>\\in R\\Rightarrow<b,c>\\in R$，那么下列说法最准确的是____",
+    "options": {
+      "A": "$R$是等价关系",
+      "B": "$R$是相容关系",
+      "C": "$R$是偏序关系",
+      "D": "$R$是拟序关系"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0947",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设解释I如下:个体域$D=\\{a,b\\}$,$F(a,a)=F(b,b)=0$,$F(a,b)=F\\{b,a\\}=1$,在解释l下.下列公式中真值为1的是哪项?____",
+    "options": {
+      "A": "$\\{\\forall x\\}(\\exists y)F(x,y)$",
+      "B": "$(\\exists x)(\\forall y)F(x,y)$",
+      "C": "$(\\forall x)(\\forall y)F(x,y)$",
+      "D": "$\\neg(\\exists x)(\\exists y)F(x,y)$"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0948",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列命题公式中____为重言式?I.(p→(p∨q))∨rII.(p→(q∨r))→((p→q)∧(p→r))III.(p→q)∧(p→r)→(p→r)IV.┐(p→q)∧q∧r",
+    "options": {
+      "A": "III",
+      "B": "I和III",
+      "C": "I和II",
+      "D": "I、II、III和IV"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0949",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列无向图不一定为树的是____",
+    "options": {
+      "A": "无回路的连通图",
+      "B": "有n个结点,n-1条边的连通图",
+      "C": "每对结点间都有路的图",
+      "D": "连通但删去一条边便不连通的图"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0950",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列命题公式为重言式的是____",
+    "options": {
+      "A": "$Q\\rightarrow(P\\wedge Q)$",
+      "B": "$P\\rightarrow(P\\wedge Q)$",
+      "C": "$(P\\wedge Q)\\rightarrow P$",
+      "D": "$(P\\lor Q)\\rightarrow Q$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0951",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设集合$\\mathbf{A}=\\{a\\}$，下式不成立的是:____",
+    "options": {
+      "A": "$\\{\\phi\\}\\in P P(A)$",
+      "B": "$\\{\\phi\\}\\subseteq{\\mathcal{PP}}({\\mathcal{A}})$",
+      "C": "$\\{\\phi,\\{\\alpha\\}\\}\\in{\\mathcal{PP}}({\\mathcal{A}})$",
+      "D": "$\\{\\phi,\\{a\\}\\}\\subseteq{\\mathcal{P}}{\\mathcal{P}}(A)$"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0952",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "与闭区间 $\\left[444,555\\right]$ 等势的集合是____\n",
+    "options": {
+      "A": "$N$",
+      "B": "$\\text{NxQ}$",
+      "C": "$\\mathbf{N}_{2}$",
+      "D": "$\\text{NxN}$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0953",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面论述不正确的是____",
+    "options": {
+      "A": "良序集必为全序集",
+      "B": "偏序关系是自反、反对称、传递的。",
+      "C": "相容关系是自反和反对称的",
+      "D": "有限全序集必为良序集"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0954",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在自然数集N上,下列运算满足结合律的是____",
+    "options": {
+      "A": "a*b=a",
+      "B": "a*b=|a-b|",
+      "C": "a*b=ba",
+      "D": "a*b=2a+b"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0955",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设R+为正实数集合,<R+,*>在下面四种运算下不构成代数系统的是____。",
+    "options": {
+      "A": "*代表普通加法",
+      "B": "*代表普通乘法",
+      "C": "*代表普通除法",
+      "D": "*代表普通减法"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0956",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设连通图G的顶点数和边数与一立方体相同,即有8个顶点和12条边。任意一棵G的生成树的总边数为____。",
+    "options": {
+      "A": "10",
+      "B": "9",
+      "C": "8",
+      "D": "7"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0957",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设R1、R2都是从A到B的二元关系,则下列各式成立的为____",
+    "options": {
+      "A": "(R1∩R2)-1=R1-1∪R2-1",
+      "B": "(R1∩R2)-1=R1-1∩R2-1",
+      "C": "(R1∩R2)-1=R1∪R2",
+      "D": "(R1∩R2)-1=R1∩R2"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0958",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列集合关于数的加法和乘法运算不能构成环的是____",
+    "options": {
+      "A": "自然数集合",
+      "B": "整数集合",
+      "C": "有理数集合",
+      "D": "实数集合"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0959",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "${\\mathcal{R}}=\\{\\lt a,b\\gt,\\lt b,a\\gt,\\lt a,c\\gt\\}$,则${st}({\\mathcal{R}})$为____(其中${s}({\\mathcal{R}})$为${\\mathcal{R}}$的对称闭包，${t}({\\mathcal{R}})$为${\\mathcal{R}}$的传递闭包)",
+    "options": {
+      "A": "$\\{\\lt a,b\\gt \\lt b,a\\gt ,\\lt a,c\\gt ,\\lt c,a\\gt ,\\lt a,a\\gt ,\\lt b,c\\gt \\}$",
+      "B": "$\\{\\lt a,b\\gt \\lt b,a\\gt ,\\lt a,c\\gt ,\\lt a,a\\gt ,\\lt b,c\\gt ,\\lt c,b\\gt \\}$",
+      "C": "$\\{\\lt a,b\\gt \\lt b,a\\gt ,\\lt a,c\\gt ,\\lt a,a\\gt ,\\lt b,b\\gt ,\\lt b,c\\gt,\\lt c,a\\gt,\\lt c,b\\gt \\}$",
+      "D": "$\\{\\lt a,b\\gt \\lt b,a\\gt ,\\lt a,c\\gt ,\\lt b,b\\gt ,\\lt b,c\\gt,\\lt c,b\\gt,\\lt c,a\\gt \\}$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0960",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设函数 f(x) = $g\\colon A\\rightarrow B$， g(x) = $f\\colon B\\rightarrow C$，则下列哪个陈述是正确的？\n",
+    "options": {
+      "A": "如果$g$是满射，$f$是单射，则$f\\circ g$是单射。",
+      "B": "如果$g$是命中，$f$是单次命中，则$f\\circ g$是命中",
+      "C": "如果$g$是正射，$f$是单射，则$f\\circ g$是双射\n",
+      "D": "如果 $f\\circ g$ 是单射，并且 $g$ 是满射，那么 $f$ 也是单射。\n"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0961",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面的联结词集合不是完备集的是____",
+    "options": {
+      "A": "$\\{\\uparrow\\}$ ($\\uparrow$ 表示与非)",
+      "B": "$\\{\\lnot,\\to\\}$",
+      "C": "$\\{\\lnot,\\leftrightarrow\\}$",
+      "D": "$\\{\\neg, \\lor \\}$"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0962",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一棵高度为h的正则k叉树中,叶结点的个数为____",
+    "options": {
+      "A": "kh-1",
+      "B": "kh",
+      "C": "2h-1",
+      "D": "2h"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0963",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪一种图不一定是树____",
+    "options": {
+      "A": "无回路的连通图",
+      "B": "有n个结点n-1 条边的连通图",
+      "C": "连通但删去一条边则不连通的图",
+      "D": "每对结点之间都有通路的图"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0964",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列数组中,能构成无向图的顶点度数的数组是____",
+    "options": {
+      "A": "(1,1,2,3)",
+      "B": "(2,2,2,2)",
+      "C": "(3,2,3,4,5)",
+      "D": "(0,1,3,3)"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0965",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "偏序关系一定不是____",
+    "options": {
+      "A": "自反的",
+      "B": "传递的",
+      "C": "反自反的",
+      "D": "反对称的"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0966",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设$N\\left(x\\right)$：x是自然数；$L\\left(x,y\\right)$：x大于y。则命题$(\\:\\forall x)\\:\\left(N(x)\\rightarrow L\\:\\left(x+1,0\\right)\\:\\right)$表示的自然语言是_____",
+    "options": {
+      "A": "$x+1>0$",
+      "B": "任何自然数的后继数必大于0",
+      "C": "每一个自然数都大于0",
+      "D": "存在自然数大于0"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0967",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "无向简单图G是棵树,当且仅当____",
+    "options": {
+      "A": "G连通且边数比结点数少1",
+      "B": "G连通且结点数比边数少1",
+      "C": "G的边数比结点数少1",
+      "D": "G中没有回路"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0968",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设p:天下雨,q:我开车上班。命题“除非不下雨,否则我开车上班”可符号化为____",
+    "options": {
+      "A": "p→q",
+      "B": "q→p",
+      "C": "「p→q",
+      "D": "q→「p"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0969",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "权序列为(30,25,20,15,10)的最优二叉树的带权路径总长为____",
+    "options": {
+      "A": "100",
+      "B": "225",
+      "C": "400",
+      "D": "625"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "ceval_0970",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设〈G,*〉为群,[*]有____",
+    "options": {
+      "A": "(ab)-1=ab",
+      "B": "(ab)-1=ba",
+      "C": "(ab)-1=a-1b-1",
+      "D": "(ab)-1=b-1a-1"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [
+      "discrete_mathematics"
+    ],
+    "language": "zh",
+    "split": "test"
+  },
+  {
+    "id": "C-Eval_离散数学_24_e4cb1c1c",
+    "source": "C-Eval",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下列说法错误的是____",
+    "options": {
+      "A": "\\textbf{K}_5 是结点数最小的非平面图；",
+      "B": "\\textbf{K}_5去掉任意一条边所形成的图仍是$K^{(2)}$型子图；",
+      "C": "\\textbf{K}_5 中不存在 K（2）型子图；",
+      "D": "在\\textbf{K}_5的边上任意加一个度为2的结点， 所形成的新图具有 K 型子图。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0001",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个公式是公式p ∧(q ∨p ↔r ∧p →q)的子公式?",
+    "options": {
+      "A": "p ∧(q ∨p)",
+      "B": "q ∨p ↔r",
+      "C": "p ↔r ∧p",
+      "D": "r ∧p →q"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0002",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面是公式r ↔q ∧((p →r) ∨¬p)的真值表,\np\nq\nr\np →r\n¬p\n(p →r) ∨¬p\nq ∧((p →r) ∨¬p)\nr ↔q ∧((p →r) ∨¬p)\n0\n0\n0\n1\n1\n1\n0\n0\n1\n1\n1\n0\n0\n1\n0\n1\n1\n0\n0\n1\n1\n1\n1\n(1)\n1\n0\n0\n0\n0\n(2)\n1\n0\n1\n1\n0\n0\n1\n1\n0\n0\n0\n(3)\n1\n1\n1\n1\n0\n(4)\n其中的空(1),(2),(3),(4)依次填入的真值应该是:",
+    "options": {
+      "A": "0000",
+      "B": "0110",
+      "C": "1100",
+      "D": "1111"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0003",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面公式中是永真式的是",
+    "options": {
+      "A": "¬(r →¬q) ∨(p →¬r)",
+      "B": "(¬p ∨¬q) →(p ↔¬q)",
+      "C": "(p →q) ∧(¬p →¬q)",
+      "D": "(p →q →r) →(p →q) ∨(q →r)"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0004",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面是公式(p →r) ∧(¬r →q)的真值表,\np\nq\nr\np →r\n¬r\n¬r →q\n(p →r) ∧(¬r →q)\n0\n0\n0\n1\n1\n0\n0\n0\n0\n1\n1\n0\n1\n1\n0\n1\n0\n1\n1\n1\n1\n0\n1\n1\n1\n0\n1\n1\n1\n0\n0\n0\n1\n0\n0\n1\n0\n1\n1\n0\n1\n1\n1\n1\n0\n0\n1\n1\n0\n1\n1\n1\n1\n0\n1\n1\n1\n\n则与该公式等值的主范式是",
+    "options": {
+      "A": "m1 ∧m2 ∧m3 ∧m5 ∧m7",
+      "B": "m0 ∧m4 ∧m6",
+      "C": "m1 ∨m2 ∨m3 ∨m5 ∨m7",
+      "D": "m0 ∨m4 ∨m6"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0005",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "说一组命题是一致的，如果存在对其中原子命题的真值赋值使得所有命题的真值都为真。设\n有一组命题：(1) 如果学生没有学过C++语言，则他不理解面向对象编程思想。(2) 如果学生不理解\n面向对象编程思想，则他不能编程求解复杂问题。(3) 如果学生学过Java语言，则他能编程求解复杂\n问题。这一组命题加入下面哪个命题将会是不一致的？",
+    "options": {
+      "A": "学生虽然未学习过C++语言，但已学习过Java语言。\n",
+      "B": "学生没学过C++语言,且不能编程求解复杂问题。",
+      "C": "学生已学习过Java语言，并具备理解面向对象编程思想的能力。",
+      "D": "学生：\n1. 尚未学习Java语言。\n2. 无法理解面向对象编程思想。"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0006",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于公式∀x∃y(x ∗y = z) →∃z(x + z = x),下面哪个是约束变量改名规则的正确使\n用?",
+    "options": {
+      "A": "子公式∃y(x ∗y = z)约束变量改名为∃x(x ∗x = z)。",
+      "B": "子公式∃y(x ∗y = z)约束变量改名为∃z(x ∗z = z)。",
+      "C": "子公式∃z(x + z = x)约束变量改名为∃y(x + y = x)。",
+      "D": "子公式∃z(x + z = x)约束变量改名为∃x(y + x = y)。"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0007",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪个一阶公式是命题逻辑永真式的替换实例?",
+    "options": {
+      "A": "∀x(F(x) →∃y(H(x, y) →F(y))",
+      "B": "∀xF(x) →∃y(H(x, y) →F(y))",
+      "C": "∀xF(x) →(∃yH(x, y) →∀xF(x))",
+      "D": "∀xF(x) →(∃yH(x, y) →∃xF(x))"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0008",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪组的两个一阶逻辑公式是逻辑等值的?",
+    "options": {
+      "A": "∀x(F(x) ∧G(x))和∀xF(x) ∧∀xG(x)",
+      "B": "∀x(F(x) ∨G(x))和∀xF(x) ∨∀xG(x)",
+      "C": "∀x(F(x) →G(x))和∀xF(x) →∀xG(x)",
+      "D": "∀x(F(x) ↔G(x))和∀xF(x) ↔∀xG(x)"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0009",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定F(x), G(x)都是原子公式,下面哪个公式序列是正确论证的一部分?",
+    "options": {
+      "A": "(1) ∃x(F(x) ∧G(x)) // 前提 (2) ∃xF(x) // (1)化简规则 (3) F(a) // (2)存在例化",
+      "B": "(1) ∀x(F(x) ∧G(x)) // 前提 (2) F(a) ∧G(a) // (1)全称例化 (3) F(a) // (2)化简规则",
+      "C": "(1) ¬∀xF(x) // 前提 (2) ¬F(a) // (1)全称例化",
+      "D": "(1) ¬F(a) // 前提 (2) ¬∃xF(x) // (1)存在泛化"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0010",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "以所有程序员为论域,并给定谓词O(x)表示“x是面向对象编程语言”,S(x, y)表示“x学\n过y”,U(x)表示“x能理解面向对象编程思想”。符号化命题“并非所有程序员学过某门面向对象编\n程语言就能理解面向对象编程思想”最合适的一阶逻辑公式是\n\n2",
+    "options": {
+      "A": "¬∀x(∃y(O(y) ∧S(x, y)) ∧U(x))",
+      "B": "∀x(¬∃y(O(y) ∧S(x, y)) ∧U(x))",
+      "C": "¬∀x(∃y(O(y) ∧S(x, y)) →U(x))",
+      "D": "∀x(¬∃y(O(y) ∧S(x, y)) →U(x))"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0011",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设论域是自然数集。我们用第一数学归纳法已证明:归纳基:P(0)为真;归纳步:对\n于k ≥1,P(k)蕴涵P(k + 1)。根据这个证明我们一定有以下结论",
+    "options": {
+      "A": "P(500)为真",
+      "B": "P(500)为假",
+      "C": "不能确定P(500)的真假",
+      "D": "P(600)为假"
+    },
+    "answer": "C",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0012",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设论域是自然数集。我们用强归纳法已证明:归纳基:P(0), P(1), P(2), P(3), P(4)为真;\n归纳步:假设P(0), P(1), P(2), · · · , P(k)为真(k ≥4),我们得到P(k −5)蕴涵P(k + 1)。那么我们一\n定有以下结论",
+    "options": {
+      "A": "P(200)为真",
+      "B": "不能确定P(200)的真假",
+      "C": "P(200)为假",
+      "D": "P(100)为假 二、多选题(每小题4分,十九题共76分)(评分标准:选对所有正确选项得4分,选对部分正确 选项且没有选任何错误选项得2分,选了任意错误选项就不得分)"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0014",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪些组的两个公式是逻辑等值的?",
+    "options": {
+      "A": "公式(p ∧q) ↔(p ∧r) 和p ∧(q ↔r)",
+      "B": "公式(p ∨q) ↔(p ∨r) 和p ∨(q ↔r)",
+      "C": "公式(p ∧q) ↔r 和(p ↔r) ∧(q ↔r)",
+      "D": "公式(p ∨q) ↔r 和(p ↔r) ∨(q ↔r)"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0023",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "给定一阶逻辑公式解释的论域是D = {a, b},在按照类似等值演算形式展开量词时,下面哪\n些说法是正确的?",
+    "options": {
+      "A": "一阶公式∃x(F(x) →G(x))展开为(F(a) ∨G(a)) →(F(b) ∨G(b))。",
+      "B": "一阶公式∀x(F(x) →G(x))展开为(F(a) →G(a)) ∧(F(b) →G(b))。",
+      "C": "一阶公式∃xF(x) →∃xG(x)展开为(F(a) ∨G(a)) →(F(b) ∨G(b))。",
+      "D": "一阶公式∀xF(x) →∀xG(x)展开为(F(a) →G(a)) ∧(F(b) →G(b))。"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_discrete_mathematics_c0026",
+    "source": "SYSU-Exam",
+    "subject": "离散数学",
+    "subject_en": "discrete_mathematics",
+    "type": "选择题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "下面哪些公式是一阶逻辑的前束范式?",
+    "options": {
+      "A": "∀x(F(x) →¬∃y(G(y) ∧K(x, y)))",
+      "B": "∀x¬∃y(F(x) →(G(y) →K(x, y)))",
+      "C": "∀xF(x) →∃y(G(y) ∧K(x, y))",
+      "D": "∀x∃y(F(x) →(G(y) ∧K(y, z)))"
+    },
+    "answer": "D",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  }
+]

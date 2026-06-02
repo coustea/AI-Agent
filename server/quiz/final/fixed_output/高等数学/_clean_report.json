@@ -1,0 +1,24 @@
+{
+  "source": "fixed_output\\高等数学\\choice.json",
+  "output": "cleaned_output\\fixed_output\\高等数学\\choice.json",
+  "total_items": 193,
+  "source_bytes": 149262,
+  "issues_detected": {
+    "invalid_json_fixed": true,
+    "math_command_repairs": true,
+    "delimiter_repairs": true,
+    "multiline_math_repairs": true
+  },
+  "sample_ids": [
+    "ceval_1364",
+    "ceval_1365",
+    "ceval_1366",
+    "ceval_1367",
+    "ceval_1368",
+    "ceval_1369",
+    "ceval_1370",
+    "ceval_1371",
+    "ceval_1372",
+    "ceval_1373"
+  ]
+}

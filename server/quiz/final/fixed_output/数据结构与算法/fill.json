@@ -1,0 +1,1724 @@
+[
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0001",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "通常从四个方面评价算法的质量:_________、_________、\n_________和_________。",
+    "options": null,
+    "answer": "、;、;和",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0002",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个算法的时间复杂度为(n3+n2log2n+14n)/n2,其数量级表示为\n________。",
+    "options": null,
+    "answer": "n3+n2log2n+14n",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0003",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定一棵树的广义表表示为A(C,D(E,F,G),H(I,J)),\n则树中所含的结点数为__________ 个,树的深度为\n___________,树的度为_________。",
+    "options": null,
+    "answer": "C,D(E,F,G;I,J",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0004",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "后缀算式9 2 3 +- 10 2 / -的值为__________。中缀算式(3+4X)\n-2Y/3 对应的后缀算式为_______________________________。",
+    "options": null,
+    "answer": "3+4X",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0005",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若用链表存储一棵二叉树时,每个结点除数据域外,还有指向\n左孩子和右孩子的两个指针。在这种存储结构中,n 个结点的\n二叉树共有________个指针域,其中有________个指针域是存\n放了地址,有________________个指针是空指针。",
+    "options": null,
+    "answer": "个指针域,其中有;个指针域是存\n放了地址,有",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0006",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于一个具有n 个顶点和e 条边的有向图和无向图,在其对应\n的邻接表中,所含边结点分别有_______个和________个。",
+    "options": null,
+    "answer": "个和",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0007",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "AOV 网是一种___________________的图。",
+    "options": null,
+    "answer": "有向无环",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0008",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在一个具有n 个顶点的无向完全图中,包含有________条边,\n在一个具有n 个顶点的有向完全图中,包含有________条边。",
+    "options": null,
+    "answer": "条边,\n在一个具有n 个顶点的有向完全图中,包含有",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0009",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定一个线性表为(12,23,74,55,63,40),若按Key % 4 条件进行\n划分,使得同一余数的元素成为一个子表,则得到的四个子表\n分\n别\n为\n____________________________\n、\n___________________\n、\n_______________________\n和\n__________________________。",
+    "options": null,
+    "answer": "12,23,74,55,63,40",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0010",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "向一棵B_树插入元素的过程中,若最终引起树根结点的分裂,\n则新树比原树的高度___________。",
+    "options": null,
+    "answer": "树插入元素的过程中,若最终引起树根结点的分裂,\n则新树比原树的高度",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0011",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在堆排序的过程中,对任一分支结点进行筛运算的时间复杂度\n为________,整个堆排序过程的时间复杂度为________。",
+    "options": null,
+    "answer": ",整个堆排序过程的时间复杂度为",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_data_structures_and_algorithms_f0012",
+    "source": "SYSU-Exam",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structures_and_algorithms",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在快速排序、堆排序、归并排序中,_________排序是稳定的。",
+    "options": null,
+    "answer": "归并",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_474_ce44fe0a",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若线性表最常用的操作是存取第i个元素及其前驱和后继元素的值,为了提高效率,应采用()的存储方式。",
+    "options": null,
+    "answer": "顺序表",
+    "analysis": "",
+    "knowledge_points": [
+      "Linear List"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_475_4050f268",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在一个长度为n的顺序表中删除第i(1≤i≤n)个元素时,需向前移动()个元素",
+    "options": null,
+    "answer": "n-i",
+    "analysis": "",
+    "knowledge_points": [
+      "Linear List"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_476_1276f24d",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "需要分配较大空间,插入和删除不需要移动元紊的线性表,其存储结构为()。",
+    "options": null,
+    "answer": "静态链表",
+    "analysis": "",
+    "knowledge_points": [
+      "Linear List"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_477_4b614e62",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "将长度为 n 的单链表链接在长度为 m 的单链表后面,其算法的时间复杂度采用大于O形式表示应该是()。",
+    "options": null,
+    "answer": "O(m)",
+    "analysis": "",
+    "knowledge_points": [
+      "Linear List"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_478_c85178f3",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在长度为n的有序单链表中插入一个新结点,并仍然保持有序的时间复杂度是()。",
+    "options": null,
+    "answer": "O(n)",
+    "analysis": "",
+    "knowledge_points": [
+      "Linear List"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_479_6c6e7f75",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在用单链表实现队列时,队头设在链表的()位置。",
+    "options": null,
+    "answer": "链头",
+    "analysis": "",
+    "knowledge_points": [
+      "Stack, Queue, and Array"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_480_c76a466c",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "执行函数时,其局部变量一般采用()进行存储。",
+    "options": null,
+    "answer": "栈结构",
+    "analysis": "",
+    "knowledge_points": [
+      "Stack, Queue, and Array"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_481_7d6a4eef",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "3个不同元素依次进,能得到()种不同的出栈序列。",
+    "options": null,
+    "answer": "5",
+    "analysis": "",
+    "knowledge_points": [
+      "Stack, Queue, and Array"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_482_48d0fb6e",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "将三对角矩阵A[1...100][1...100]按行优先存入一维数组B[1...298]中,A中元素A[66][65]在数组B中的位置k为()。",
+    "options": null,
+    "answer": "195",
+    "analysis": "",
+    "knowledge_points": [
+      "Stack, Queue, and Array"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_483_d4134198",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "构造哈夫曼树时,如果原始集合有n个结点,那么哈夫曼树的结点总数是多少?",
+    "options": null,
+    "answer": "2n-1",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_484_4987223c",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一颗有n个结点的树的所有结点的度数之和为()",
+    "options": null,
+    "answer": "n-1",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_485_e787f9dd",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一棵完全二叉树上有1001个结点,其中叶结点的个数是()。",
+    "options": null,
+    "answer": "501",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_486_a4f460c8",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一颗有n个结点的二叉树采用二叉链存储结点,其中空指针数为()。",
+    "options": null,
+    "answer": "n+1",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_487_e68f676d",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定一棵度为3的树中,结点数为50,则其最小高度为()。",
+    "options": null,
+    "answer": "5",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_488_b221f490",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设一课二叉树的结点个数为50,则它的最小高度是()。",
+    "options": null,
+    "answer": "6",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_489_8f8f5ce6",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知一探有2011个结点的树,其叶结点个数是116,该树对应的二叉树中无右孩子的结点个数是()。",
+    "options": null,
+    "answer": "1896",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_490_0de0e502",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对二叉树的结点从1开始进行连续编号,要求每个结点的编号大于其左、右孩子的编号同一结点的左、右孩子中,其左孩子的编号小于其右孩子的编号,可采用()次序的遍历实现编号。",
+    "options": null,
+    "answer": "后序遍历",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_491_d3cda77f",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知一棵二叉树的后序序列为DABEC,中序序列为DEBAC,则先序序列为()。",
+    "options": null,
+    "answer": "CEDBA\n",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_492_1dd1d3b1",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一棵左子树为空的二叉树在先序线索化后,其中空的链域的个数是()",
+    "options": null,
+    "answer": "2个",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_493_acd05c29",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若T_1是由有序树T转换而来的二叉树,则T中结点的后根序列就是中结点的()序列。",
+    "options": null,
+    "answer": "中序",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_494_69554fe5",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在有n个叶子结点的哈夫曼树中,非叶子结点的总数是()",
+    "options": null,
+    "answer": "n-1",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_495_d22a58e9",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设哈夫曼编码的长度不超过4,若已对两个字符编码为1和01,则还最多可对()个字符编码。",
+    "options": null,
+    "answer": "4",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_496_ec7f3bc4",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一棵哈夫要树共有215个结点,对其进行哈夫曼缩码,共能得到()个不同的字。",
+    "options": null,
+    "answer": "108",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_497_b7ceb7f1",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "构造哈夫曼树过程中共新建了多少个结点?",
+    "options": null,
+    "answer": "n-1",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_498_c76fc611",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "十字链表适用于存储什么类型的图?",
+    "options": null,
+    "answer": "有向图",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_499_2d0bc664",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "邻接多重表适用于存储什么类型的图?",
+    "options": null,
+    "answer": "无向图",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_500_bea39018",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "邻接矩阵最适合用于存储哪种类型的图?",
+    "options": null,
+    "answer": "稠密图",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_501_36c02722",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个有28条边的非连通无向图至少有()个顶点。",
+    "options": null,
+    "answer": "9",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_502_6f803472",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若具有n个顶点的图是一个环,则它有()棵生成树",
+    "options": null,
+    "answer": "n",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_503_08add4ed",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "n个顶点的无向图的邻接表最多有()个边表结点",
+    "options": null,
+    "answer": "n(n-1)",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_504_c2d39d53",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "邻接多重表是()的存储结构。",
+    "options": null,
+    "answer": "无向图",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_505_55148706",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若图的邻接矩阵中主对角线上的元素皆为0,其余元素全为1,则可以断定该图一定是()。",
+    "options": null,
+    "answer": "完全图",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_506_87de6fc0",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设有n个顶点、e条边的有向图用邻接表表示,则删除与某个顶点V相关的所有边的时间复杂度为()。",
+    "options": null,
+    "answer": "O(n+e)",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_507_c33ecf8b",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "用DFS遍历一个无环有向图,并在DFS算法退栈返回时打印相应的顶点,则输出的顶点序列是()。",
+    "options": null,
+    "answer": "逆拓扑有序",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_508_95c129d1",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "顺序查找通常适用于哪种数据结构?",
+    "options": null,
+    "answer": "线性表",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_509_09e96f63",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "按()遍历二叉排序树得到的序列是一个有序序列",
+    "options": null,
+    "answer": "中序",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_510_1a8d5f89",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "含有20个结点的平衡二叉树的最大深度为()",
+    "options": null,
+    "answer": "6",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_511_fad55d68",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对有2500个记录的索引顺序表(分块表)进行查找,最理想的块长为()",
+    "options": null,
+    "answer": "50",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_512_ff479e63",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "具有n个关健字的m阶B树,应有()个叶结点。",
+    "options": null,
+    "answer": "n+1",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_513_b3e79316",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在待排序的元素序列基本有序的前提下,效率最高的排序方法是()",
+    "options": null,
+    "answer": "直接插入排序",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_514_d7d830ce",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对5个不同的数据元素进行直接插入排序,最多需要进行的比较次数是()。",
+    "options": null,
+    "answer": "10",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_515_1614e9ae",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若用冒泡排序算法对序列{10,14,26,29,41,52}从大到小排序,则需进行()次比较。",
+    "options": null,
+    "answer": "15",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_516_e2a1d344",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "就平均性能而言,目前最好的内部排序方法是()。",
+    "options": null,
+    "answer": "快速排序",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_517_6049c513",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若只想得到1000个元素组成的序列中第10个最小元素之前的部分排序的序列,用()方法最快。",
+    "options": null,
+    "answer": "堆排序",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_518_1ad1d9ed",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若序列的原始状态为{1,2,3,4,5,10,6,7,8,9},要想使得排序过程中的元素比较次数最少,则应该采用()方法。",
+    "options": null,
+    "answer": "插入排序",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_519_00bc061a",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "试举一例,说明对相同的逻辑结构,同一种运算在不同的存储方式下实现时,其运算效率不同。",
+    "options": null,
+    "answer": "线性表既可以用顺序存储方式实现,又可以用链式存储方式实现。在顺序存储方式下,在线性表中插入和删除元素,平均要移动近一半的元素,时间复杂度为O(n):而在链式存储方式下,插入和删除的时间复杂度都是O(1)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_520_71abc677",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若元素的进栈序列为A,B,C,D,E,运用栈操作,能否得到出栈序列B,C,A,E,D和D,B,A,C,E?为什么?",
+    "options": null,
+    "answer": "可以得到出栈序列 BC AED。 这种序列可以通过以下操作得到：A入，B入，B出，C入，C出，A出，D入，E入，E出，D出。 无法得到出栈序列 DBACE。 如果出栈序列以 D 开头，则说明在 D 之前的入栈元素是 A、B 和 C，其中 C 是栈顶元素，B 和 A 必须在 C 之后出栈，因此无法得到出栈序列 DBACE。",
+    "analysis": "",
+    "knowledge_points": [
+      "Stack, Queue, and Array"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_521_edf5346b",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "有n个元素已构成1个小根堆,现在要增加一个元素K_n+1,请用文字简要说明如何在log2n的时间内将其重新调整为一个堆。",
+    "options": null,
+    "answer": "将K_n+1插入数组的第n+1个位置(即作为一个树叶插入)然后将其与双亲比较若它大于其双亲则停止调整,否则将K_n+1与其双亲交换,重复地将K与其新的双亲比较,算法终止于K_n+1大于等于其双亲或K_n+1本身已上升为根。",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_522_fcfdc5ed",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "含有n个结点的三叉树的最小高度是多少?",
+    "options": null,
+    "answer": "要求含有n个结点的三叉树的最小高度,那么满足条件的一定是一棵完全三叉树,设含有个结点的完全三叉树的高度为h,第h层至少有1个结点,至多有3^(h-1)个结点。则有\n1 + 3^1+ 3^2 +...+ 3^(h-2) < n ≤1 + 3^1 + 3^2 +...+ 3^(h-2)  + 3^(h-1) \n由于h只能为正整数,h=[log3(2n+1)],故这样的三叉树的最小高度是[log3(2n+1)]",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_523_54c39350",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在一棵完全二叉树中,含有n_0个叶子结点,当度为1的结点数为1时,该树的高度是多少?当度为1的结点数为0时,该树的高度是多少?",
+    "options": null,
+    "answer": "1当n_1=1时,n=2n_0,h=[log2(n+1)]=[log2(2n_0+1)]。\n2当 n_1=0时,n=2n_0-1,h=[log2(n+1)]=[log2(2n_0)=[log2(n_0)]+ 1",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_524_473933e2",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知完全二叉树的第9层有240个结点,则整个完全二叉树有多少个结点?有多少个叶子结点?",
+    "options": null,
+    "answer": "在完全二叉树中,若第9层是满的,则结点数=2^(9-1)=256,而现在第9层只有240个结点,说明第9层未满,是最后一层。1~8层是满的,所以总结点数=281+240=495。因为第9层是最后一层,所以第9层的结点都是叶子结点。且第9层的240个结点的双亲在第8层中,其双亲个数为120,即第8层有120个分支结点,其余为叶子结点,所以第8层的叶子结点个数为2^(8-1)_120=8。因此,总的叶子结点个数=8+240=248。",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_525_0478d233",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若某非空二叉树的先序序列和后序序列正好相反,则该二叉树的形态是什么?",
+    "options": null,
+    "answer": "二叉树的先序序列是NLR,后序序列是LRN。要使NLR=NRL(后序序列反序)成立,L或R应为空,这样的二叉树每层只有一个结点,即二叉树的形态是其高度等于结点个数。",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_526_43385d32",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若某非空二叉树的先序序列和后序序列正好相同,则该二叉树的形态是什么?",
+    "options": null,
+    "answer": "二叉树的先序序列是NLR,后序序列是LRN。要使NLR=LRN成立,L和R应均为空,所以满足条件的二叉树只有一个根结点。",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_527_083df546",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "图G是一个非连通无向图,共有28条边,该图至少有多少个顶点?",
+    "options": null,
+    "answer": "由于图G是一个非连通无向图,在边数固定时,顶点数最少的情况是该图由两个连通子图构成,且其中之一只含一个顶点,另个为完全图。其中只含一个顶点的子图没有边,另一个完全图的边数为n(n-1)/2=28,得n=8。所以该图至少有1+8=9个顶点。",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_528_e547a202",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如何对无环有向图中的项点号重新安排可使得该图的邻接矩阵中所有的1都集中到对角线以上?",
+    "options": null,
+    "answer": "按各项点的出度进行排序。n个顶点的有向图,其顶点的最大出度是n-1,最小出度为0,这样排序后,出度最大的顶点编号为1,出度最小的项点编号为n。之后,进行调整,即只要存在弧<i,j>,就不管顶点j的出度是否大于顶点1的出度,都把1编号在顶点j的编号之前,因为只有i≤i,弧<i、j>对应的1才能出现在邻接矩阵的上三角。",
+    "analysis": "",
+    "knowledge_points": [
+      "Graph"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_529_b2b18558",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若要在散列表中删除一个记录,应如何操作?为什么?",
+    "options": null,
+    "answer": "在散列表中删除一个记录,在拉链法情况下可以物理地删除。但在开放定址法情况下,不能物理地除,只能做删除标记。该地址可能是该记录的同义词查找路径上的地址,物理地删除就中断了查找路径,因为查找时碰到空地址就认为是查找失败。",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_530_e0c494e9",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若对有n个元素的有序顺序表和无序顺序表进行顺序查找,试就下列三种情况分别讨论两者在相等查找概率时的平均查找长度是否相同\n(1)查找失败。\n(2)查找成功,且表中只有一个关键字等于给定值k的元素\n(3)查找成功,且表中有若干关键字等于给定值k的元素,要求一次查找能找出所有元素。",
+    "options": null,
+    "answer": "(1)平均查找长度不同。因为有序顺序表查找到其关键字值比要查找值大的元素时就停止查找,并报告失败信息,不必查找到表尾;而无序顺序表必须查找到表尾才能确定查找失败。\n(2)平均查找长度相同。两者查找到表中元素的关键学值等于给定值时就停止查找。\n(3)平均查找长度不同。有序顺序表中关键学相等的元素相继排列在一起,只要查找到第一个就可以连续查找到其他关键字相同的元素。而无序顺序表必须查找全部表中的元素才能找出相同关键字的元素,因此所需的时间不同。",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_531_b4bd524d",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "类比二分查找算法,设计k分查找算法(k为大于2的整数)如下:首先检查nk处()为查找表的长度)的元素是否等于要搜索的值,然后检查2n/k处的元素.....这样,或者找到要查找的元素,或者把集合缩小到原来的1/k,若未找到要查找的元素,则继续在得到的集合上进行k分查找;如此进行,直到找到要查找的元素或查找失败,试求查找成功和查找失败的时间复杂度。",
+    "options": null,
+    "answer": "与二分查找类似,表分查找法可用k叉树来描述。在最坏情况下,从第2层开始每层都比较k-1次,具有n个结点的k叉树的深度为[logkn]+1,所以k分查找法在查找成功时和给定关键字进行比较的次数至多为(k-1)×[logkn],即时间复杂度为O(logkn)。同理,查找不成功时,和给定关键字进行比较的次数也至多为(k-1)x[logkn],故时间复杂度也为O(logkn)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_532_6d986758",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "利用B树做文件索引时,若假设磁盘页块的大小是4000B(实际应是2的次幂,此处是为了计算方便),指示磁盘地址的指针需要5B。现有20000000个记录构成的文件,每个记录为200B,其中包括关键字5B,试问在这个采用B树作索引的文件中,B树的阶数应为多少?假定文件数据部分未按关键字有序排列,则索引部分需要占用多少磁盘页块?",
+    "options": null,
+    "answer": "根据B树的概念,一个索引结点应适应操作系统一次读写的物理记录大小,其大小应取不超过但最接近一个磁盘页块的大小。假设B树为m阶,1个B树结点最多存放m-1个关键字(5B)和对应的记录地址(5B)、m个子树指针(5B)和1个指示结点中的实际关键字个数的整数(2B),则有\n(2*(m-1)+m)*5 +2≤4000计算结果为m≤267。一个索引结点最多可以存放m-1=266个紧引项,最少可以存放m/2|-1=133个索引项。全部有n=20000000个记录,每个记录占用空间200B,每个页块可以存放4000/200=20个记录,则全部记录分布在20000000/20=1000000个页块中,最多需要占用1000000/133=7519个磁盘页块作为B树索引,最少需要占用1000000/2663760个磁盘页块作为B树索引(注意B树与B+树的不同,B树所有对数据记录的索引项分布在各个层次的结点中,B+树所有对数据记录的索引项都在叶结点中)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_533_65c6a160",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定把关键字key散列到有n个表项(从0到n-1编址)的散列表中。对于下面的每\n个函数H(key)(key为整数),这些函数能够当作散列函数吗?若能,它是一个好的散列函数吗?说明理由.设函数random(n)返回个0到n一1之问的随机整数(包括0与n-1在内)。\n(1) H(key)=key/n.\n(2) H(key)=1\n(3) H(key) = (key + random(n)) % n\n\n(4)H(key)=key%p(n);其中p(n)是不大于n的最大素数",
+    "options": null,
+    "answer": "(1)不能作为散列函数,因为key/n可能大于n,这样就无法找到适合的位置。\n(2)能够作为散列函数,但不是一个好的散列函数,自因为所有关键字都映射到同一位置,造成大量的冲突机会。\n(3)不能当作散列函数,因为该函数的返回值不确定,这样无法进行需的查找\n(4)能够作为散列函数,是一个好的散列函数。",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_534_caa48dab",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "多路平衡归并排序是外部排序的主要方法,试问多路平衡归并排序包括哪两个相对独立的阶段?每个阶段完成何种工作?",
+    "options": null,
+    "answer": "多路平衡归并排序由两个相对独立的阶段组成;生成初始归并段阶段和多趟归并排序阶段。生成初始归并段阶段根据内存工作区的大小,将有n个记录的磁盘文件分批输入内存,采用有效的内部排序方法分别进行排序,生成若干有序的子文件,即初始归并段。多趟归并排序阶段采用多路归并方法将这些归并段逐趟归并,最后归并成一个有序文件。",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_535_c180507d",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在使用非递归方法实现快速排序时,通常要利用一个栈记忆待排序区间的两个端点,能否用队列来实现这个栈?为什么?",
+    "options": null,
+    "answer": "可以用队列来代替栈。在快速排序的过程中,通过一趟划分,可以把与个待排序区间分为两个子区间,然后分别对这两个子区间施行同样的划分。栈的作用是在处理一个子区间时,保存另一个子区间的上界和下界(排序过程中可能产生新的左、右子区间),待该区间处理完后再从栈中取出另一子区间的边界,对其进行处理。这个功能用队列也可以实现,只不过处理子区间的顺序有所变动而已。",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_536_f62a6da5",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若只想得到一个序列中第k(k≥5)个最小元素之前的部分排序序列,则最好采用什么排序方法?",
+    "options": null,
+    "answer": "在基于比较的排序方法中,插入排序、快速排序和归并排序只有在将元素全部排完序后,才能得到前小的元素序列,算法的效率不高。\n冒泡排序、堆排序和简单选择排序都可以，因为它们在每次迭代中都能确定一个最小的元素。 采用堆排序，对于包含n个元素的序列，建立初始堆的时间不超过4n，获取第k个最小元素之前的排序序列所花费的时间为klog2n，总时间为4n+klog2n。 冒泡和简单选择排序完成此功能所花费的时间为n。 当k≥5时，通过比较可以得出堆排序最优。",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_537_e56a20ff",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设关键字序列为{3,7,6,9,7,1,4,5,20},对其进行排序的最小交换次数是多少?",
+    "options": null,
+    "answer": "由于关键字序列数较小,采用直接插入排序或简单选择排序,直接插入排序的交换次数更多选择简单选择排序。\n初始序列:3,7,6.9,7,1,4,5,20\n第一次:1,7,6,9,7,3,4,5,20交换1,3\n第二次:1,3,6,9,7,7,4,5,20交换3,7\n第二次:1,3,4,9,7,7,6,5,20交换4,6\n第四次:1,3,4,5,7,7,6,9,20交换5,9\n第五次:1,3,4,5,6,7,7,9,20交换6,7\n所以最小交换次数为5(注意这里是交换次数,不是移动次数或比较次数)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Sorting"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_56_45b00a1a",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在二叉树中有两个结点m和,若m是n的祖先,则使用()可以找到从m到的路径",
+    "options": null,
+    "answer": "后序遍历",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_57_486ef4ce",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "折半查找的时间复杂度是多少?",
+    "options": null,
+    "answer": "O(log2n)",
+    "analysis": "",
+    "knowledge_points": [
+      "Searching"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_58_e6431117",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于两种不同的数据结构,逻辑结构或物理结构一定不相同吗?",
+    "options": null,
+    "answer": "对于两种不同的数据结构,它们的逻辑结构和物理结构完全有可能相同。比如二叉树和二叉排序树,二叉排序树可以采用二叉树的逻辑表示和存储方式,前者通常用于表示层次关系,而后者通常用于排序和查找。虽然它们的运算都有建立树、插入结点、删除结点和查找结点等功能,但对于二叉树和二叉排序树,这些运算的定义是不同的,以查找结点为例,二叉树的时间复杂度为O(n),而二叉排序树的时间复杂度为O(log2n)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_59_22d9c4a9",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "指出堆和二叉排序树的区别?",
+    "options": null,
+    "answer": "以小根堆为例,堆的特点是双亲结点的关键字必然小于等于该孩子结点的关键字,而两个孩子结点的关键字没有次序规定。在二叉排序树中,每个双亲结点的关键字均大于左子树结点的关键字,均小于右子树结点的关键字,也就是说,每个双亲结点的左、右孩子的关键字有次序关系。这样,当对两种树执行中序遍历后,二叉排序树会得到一个有序的序列,而堆则不一定能得到一有序的序列。",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_数据结构与算法_60_580d867b",
+    "source": "CS-Bench",
+    "subject": "数据结构与算法",
+    "subject_en": "data_structure_and_algorithm",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一棵有n个结点的满二叉树有多少个分支结点和多少个叶子结点?该满二叉树的高度是多少?",
+    "options": null,
+    "answer": "满二叉树中n1=0,由二叉树的性质可知n2 = n0-1,n = n0 + n1 + n2 = 2*n0-1= 2n2+1则n_0=(n+1)/2。分支结点个数n2=n-(n+1)/2=(n-1)/2。高度为h的满二叉树的结点数n=1+2^1 +2^2 +...+2^(h-1) =2^h-1,即高度 h=log2(n +1)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Tree"
+    ],
+    "tags": [
+      "data_structure_and_algorithm",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  }
+]

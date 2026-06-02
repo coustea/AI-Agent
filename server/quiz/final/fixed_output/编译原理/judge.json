@@ -1,0 +1,522 @@
+[
+  {
+    "id": "SYSU-Exam_compiler_principles_j0001",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "自动机 M和 M的状态数不同,则二者必不等价。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0002",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对任意一个右线性文法G,都存在一个NFAM,满足L(G)=L(M)",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0003",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对任何正规表达式e,都存在一个NFAM,满足 L(G)=L(e)。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0004",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在形式语言中,最右推导的逆过程称为规范归约。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0005",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "句型的每个直接短语都是某规则的右部。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0006",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "任何正规文法都是上下文无关文法。\n一”“",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0007",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "计算机高级语言翻译成低级语言只有解释一种方式。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0008",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "自底而上语法分析方法的主要问题是候选式的选择。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0009",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "\"用高级语言写的源程序都必须通过编译.产生目标代码后才能投入运行\"这\n种说法。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0010",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个句型的句柄一定是文法某产生式的右部。\n一”“",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0011",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "综合属性是用于\"自上而下\"传递信息。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0012",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "使用语法制导翻译方法的编译程序能同时进行语法分析和语义分析。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0013",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "终结符既可以有综合属性,又可以有继承属性。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0014",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "逆波兰表示法表示表达式时无须使用括号。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0015",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "由于C语言的函数允许递归调用,因此对C程序中的所有变量的单元分配一\n律采用动态分配方式。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0016",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "最左素短语一定是短语。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0017",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "LR分析中的活前缀一定包含某句型的句柄的一部分或全部。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0018",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "自下而上分析的\"下指的是被分析的源程序串。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0019",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文法G若是LALR(1)文法,则文法G必定是LR(1)文法。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0020",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "语法分析必须在语义分析之前完成。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0021",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文法若存在左递归,则在自上而下语法分析过程中会因为假匹配造成算法的\n回溯。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0022",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在C语言中，语句 `int intl;` 在词法分析后被识别为四个词：`int`、`int`、`1`和`;`。\n\n",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0023",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个有限自动机识别的语言是一个无限集合,则该有限自动机的状态图一定\n含有回路。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0024",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "正规文法、正规式、NFA和 DFA在接受语言的能力上是相互等价的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0025",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文法G的一个句子对应于多个推导,则G是二义的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "SYSU-Exam_compiler_principles_j0026",
+    "source": "SYSU-Exam",
+    "subject": "编译原理",
+    "subject_en": "compiler_principles",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "编译程序是应用软件。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [],
+    "tags": [],
+    "language": "zh",
+    "split": "dev"
+  }
+]

@@ -2,25 +2,31 @@
   <div class="quiz-resource" :class="{ compact }">
     <div v-if="questions.length" class="quiz-list">
       <article v-for="(question, index) in visibleQuestions" :key="index" class="technical-frame quiz-item">
-
-
         <div class="quiz-stem">
           <span class="quiz-index">Q{{ index + 1 }}</span>
           <div class="quiz-title">
             <div class="quiz-meta-row">
               <span class="quiz-meta">{{ getQuestionTypeText(question.type || question.question_type) }}</span>
-              <span class="quiz-difficulty" :class="question.difficulty?.toLowerCase()">{{ getDifficultyText(question.difficulty) }}</span>
+              <span class="quiz-difficulty" :class="question.difficulty?.toLowerCase()">
+                {{ getDifficultyText(question.difficulty) }}
+              </span>
             </div>
-            <span class="quiz-text">{{ question.stem || question.question || '题目内容' }}</span>
+            <div
+              class="quiz-text quiz-rich-text"
+              v-html="renderQuizHtml(question.stem || question.question || '题目内容')"
+            ></div>
           </div>
         </div>
-        
-        <div v-if="isChoiceType(question) && Array.isArray(question.options) && question.options.length" class="quiz-options">
-          <div 
-            v-for="(option, optionIndex) in question.options" 
+
+        <div
+          v-if="isChoiceType(question) && Array.isArray(question.options) && question.options.length"
+          class="quiz-options"
+        >
+          <div
+            v-for="(option, optionIndex) in question.options"
             :key="optionIndex"
             class="quiz-option-item"
-            :class="{ 
+            :class="{
               'is-selected': isSelected(index, option, question),
               'is-correct': showAnswers[index] && isCorrectOption(option, question),
               'is-wrong': showAnswers[index] && isSelected(index, option, question) && !isCorrectOption(option, question),
@@ -30,41 +36,46 @@
           >
             <div class="option-check">
               <div class="check-box"></div>
-              <span class="option-label" v-if="option.label">{{ option.label }}</span>
+              <span v-if="option.label" class="option-label">{{ option.label }}</span>
             </div>
-            <span class="option-content">{{ typeof option === 'string' ? option : option.content }}</span>
-            
-            <div class="option-status-wrap" v-if="showAnswers[index]">
+            <div
+              class="option-content quiz-rich-text"
+              v-html="renderQuizHtml(typeof option === 'string' ? option : option.content)"
+            ></div>
+
+            <div v-if="showAnswers[index]" class="option-status-wrap">
               <el-icon v-if="isCorrectOption(option, question)" class="status-icon correct"><Select /></el-icon>
-              <el-icon v-if="isSelected(index, option, question) && !isCorrectOption(option, question)" class="status-icon wrong"><Close /></el-icon>
+              <el-icon
+                v-if="isSelected(index, option, question) && !isCorrectOption(option, question)"
+                class="status-icon wrong"
+              >
+                <Close />
+              </el-icon>
             </div>
           </div>
         </div>
 
         <div v-else-if="!isChoiceType(question) && !compact" class="quiz-short-answer">
-          <textarea 
-            v-model="userAnswers[index]" 
-            class="short-answer-input" 
+          <textarea
+            v-model="userAnswers[index]"
+            class="short-answer-input"
             :disabled="showAnswers[index]"
             placeholder="请输入您的答案 / ENTER_YOUR_ANSWER..."
             rows="4"
           ></textarea>
         </div>
 
-        <!-- 作答区与查看答案按钮 -->
         <div v-if="!compact && !showAnswers[index]" class="quiz-actions">
           <div class="action-footer">
-            <div class="hint-text" v-if="!hasSelected(index)">
+            <div v-if="!hasSelected(index)" class="hint-text">
               <span class="mono-blink">_</span> 等待作答... / AWAITING_INPUT
             </div>
-            <div class="hint-text active" v-else>
-              已作答 / READY_TO_SUBMIT
-            </div>
-            
-            <button 
-              class="hud-btn-primary" 
-              @click="showAnswers[index] = true" 
+            <div v-else class="hint-text active">已作答 / READY_TO_SUBMIT</div>
+
+            <button
+              class="hud-btn-primary"
               :disabled="!hasSelected(index)"
+              @click="showAnswers[index] = true"
             >
               提交答案
             </button>
@@ -78,11 +89,17 @@
               <span class="header-text">正确答案</span>
             </div>
             <div class="answer-content">
-              {{ Array.isArray(question.answer) ? question.answer.join(', ') : question.answer }}
+              <div
+                class="quiz-rich-text"
+                v-html="renderQuizHtml(Array.isArray(question.answer) ? question.answer.join(', ') : question.answer)"
+              ></div>
             </div>
           </div>
 
-          <div v-if="question.explanation || question.analysis || question.reference_answer" class="quiz-explanation">
+          <div
+            v-if="question.explanation || question.analysis || question.reference_answer"
+            class="quiz-explanation"
+          >
             <div class="explanation-header">
               <span class="header-tag analysis">ANALYSIS</span>
               <span class="header-text">解析报告</span>
@@ -90,21 +107,27 @@
             <div class="explanation-content">
               <div v-if="question.reference_answer" class="ref-answer">
                 <div class="ref-label">参考内容 / REFERENCE:</div>
-                <pre><code>{{ question.reference_answer }}</code></pre>
+                <div
+                  class="quiz-rich-text reference-answer-render"
+                  v-html="renderQuizHtml(question.reference_answer)"
+                ></div>
               </div>
-              <div class="analysis-text">{{ question.explanation || question.analysis }}</div>
+              <div
+                class="analysis-text quiz-rich-text"
+                v-html="renderQuizHtml(question.explanation || question.analysis)"
+              ></div>
             </div>
           </div>
         </template>
       </article>
-      
+
       <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
         <el-button type="primary" link class="more-btn-hud">
           查看全部题目 / VIEW_ALL ({{ questions.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
         </el-button>
       </div>
     </div>
-    
+
     <div v-else class="quiz-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
@@ -117,6 +140,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Select, ArrowRight, Close } from '@element-plus/icons-vue'
+import { renderStreamingMarkdownHtml } from '@/utils/markdown'
 import { normalizeQuizQuestions, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -125,12 +149,16 @@ const props = defineProps<{
 }>()
 
 const questions = computed<Record<string, any>[]>(() => normalizeQuizQuestions(props.resultData))
+const visibleQuestions = computed(() => (props.compact ? questions.value.slice(0, 2) : questions.value))
 
-const visibleQuestions = computed(() => props.compact ? questions.value.slice(0, 2) : questions.value)
-
-// --- 交互与作答状态 ---
 const userAnswers = ref<Record<number, any>>({})
 const showAnswers = ref<Record<number, boolean>>({})
+
+const renderQuizHtml = (content?: string) => {
+  const text = String(content || '').trim()
+  if (!text) return ''
+  return renderStreamingMarkdownHtml(text)
+}
 
 const isChoiceType = (q: any) => {
   const type = (q.type || q.question_type)?.toLowerCase() || ''
@@ -147,14 +175,10 @@ const toggleOption = (qIndex: number, option: any, question: any) => {
   if (isMultipleChoice(question)) {
     const current = userAnswers.value[qIndex] || []
     const idx = current.indexOf(val)
-    if (idx > -1) {
-      userAnswers.value[qIndex] = current.filter((v: any) => v !== val)
-    } else {
-      userAnswers.value[qIndex] = [...current, val]
-    }
-  } else {
-    userAnswers.value[qIndex] = val
+    userAnswers.value[qIndex] = idx > -1 ? current.filter((v: any) => v !== val) : [...current, val]
+    return
   }
+  userAnswers.value[qIndex] = val
 }
 
 const isSelected = (qIndex: number, option: any, question: any) => {
@@ -183,25 +207,35 @@ const isCorrectOption = (option: any, question: any) => {
 const getDifficultyText = (difficulty?: string) => {
   switch (difficulty?.toLowerCase()) {
     case 'easy':
-    case 'basic': return '基础'
+    case 'basic':
+      return '基础'
     case 'medium':
-    case 'intermediate': return '进阶'
+    case 'intermediate':
+      return '进阶'
     case 'hard':
     case 'advanced':
-    case 'challenge': return '挑战'
-    default: return '练习'
+    case 'challenge':
+      return '挑战'
+    default:
+      return '练习'
   }
 }
 
 const getQuestionTypeText = (questionType?: string) => {
   switch (questionType?.toLowerCase()) {
     case 'single_choice':
-    case 'choice': return '单选'
-    case 'multiple_choice': return '多选'
-    case 'true_false': return '判断'
-    case 'blank': return '填空'
-    case 'short_answer': return '简答'
-    default: return '题目'
+    case 'choice':
+      return '单选'
+    case 'multiple_choice':
+      return '多选'
+    case 'true_false':
+      return '判断'
+    case 'blank':
+      return '填空'
+    case 'short_answer':
+      return '简答'
+    default:
+      return '题目'
   }
 }
 </script>
@@ -211,13 +245,13 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .quiz-resource {
   width: 100%;
-  --primary: #475569; /* Slate 600 */
-  --bg: #FFFFFF;
-  --fg: #334155; /* Slate 700 */
-  --border: #E2E8F0;
-  --accent: #6366F1; /* Indigo 500 */
-  --success: #10B981; /* Emerald 500 */
-  --error: #EF4444; /* Red 500 */
+  --primary: #475569;
+  --bg: #ffffff;
+  --fg: #334155;
+  --border: #e2e8f0;
+  --accent: #6366f1;
+  --success: #10b981;
+  --error: #ef4444;
 }
 
 .quiz-list {
@@ -226,7 +260,6 @@ const getQuestionTypeText = (questionType?: string) => {
   gap: 32px;
 }
 
-/* 技术框架样式 */
 .technical-frame {
   position: relative;
   background: var(--bg);
@@ -237,52 +270,6 @@ const getQuestionTypeText = (questionType?: string) => {
   transition: all 0.3s ease;
 }
 
-.frame-corners {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--primary);
-  pointer-events: none;
-}
-
-.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
-.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
-.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
-
-.frame-header {
-  position: absolute;
-  top: 12px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-indicator {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: none;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.2); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.technical-label {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.7rem;
-  color: var(--primary);
-  letter-spacing: 1px;
-}
-
-/* 题目干样式 */
 .quiz-stem {
   display: flex;
   gap: 24px;
@@ -292,7 +279,7 @@ const getQuestionTypeText = (questionType?: string) => {
 .quiz-index {
   font-family: 'Share Tech Mono', monospace;
   font-size: 1.8rem;
-  font-weight: normal;
+  font-weight: 400;
   color: var(--primary);
   line-height: 1;
   opacity: 0.8;
@@ -303,6 +290,7 @@ const getQuestionTypeText = (questionType?: string) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .quiz-meta-row {
@@ -311,7 +299,8 @@ const getQuestionTypeText = (questionType?: string) => {
   gap: 8px;
 }
 
-.quiz-meta, .quiz-difficulty {
+.quiz-meta,
+.quiz-difficulty {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.65rem;
   padding: 2px 8px;
@@ -329,7 +318,8 @@ const getQuestionTypeText = (questionType?: string) => {
   color: var(--primary);
 }
 
-.quiz-difficulty.hard, .quiz-difficulty.challenge {
+.quiz-difficulty.hard,
+.quiz-difficulty.challenge {
   border-color: var(--error);
   color: var(--error);
 }
@@ -342,7 +332,6 @@ const getQuestionTypeText = (questionType?: string) => {
   line-height: 1.6;
 }
 
-/* 选项样式 */
 .quiz-options {
   display: flex;
   flex-direction: column;
@@ -370,7 +359,7 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-option-item.is-selected {
-  background: #EEF2FF; /* Indigo 50 */
+  background: #eef2ff;
   border-color: var(--accent);
   box-shadow: none;
 }
@@ -398,7 +387,7 @@ const getQuestionTypeText = (questionType?: string) => {
 .option-label {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.9rem;
-  font-weight: bold;
+  font-weight: 700;
   color: var(--primary);
 }
 
@@ -407,30 +396,43 @@ const getQuestionTypeText = (questionType?: string) => {
   font-size: 0.95rem;
   color: var(--fg);
   flex: 1;
+  min-width: 0;
 }
 
-/* 状态样式 */
 .quiz-option-item.is-correct {
   border-color: var(--success);
-  background: #ECFDF5; /* Emerald 50 */
+  background: #ecfdf5;
 }
-.is-correct .check-box { background: var(--success); border-color: var(--success); box-shadow: none; }
+
+.is-correct .check-box {
+  background: var(--success);
+  border-color: var(--success);
+}
 
 .quiz-option-item.is-wrong {
   border-color: var(--error);
-  background: #FEF2F2; /* Red 50 */
+  background: #fef2f2;
 }
-.is-wrong .check-box { background: var(--error); border-color: var(--error); box-shadow: none; }
+
+.is-wrong .check-box {
+  background: var(--error);
+  border-color: var(--error);
+}
 
 .option-status-wrap {
   display: flex;
   align-items: center;
   font-size: 1.2rem;
 }
-.correct { color: var(--success); }
-.wrong { color: var(--error); }
 
-/* 动作区 */
+.correct {
+  color: var(--success);
+}
+
+.wrong {
+  color: var(--error);
+}
+
 .quiz-actions {
   margin-top: 32px;
   padding-top: 24px;
@@ -446,7 +448,7 @@ const getQuestionTypeText = (questionType?: string) => {
 .hint-text {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.75rem;
-  color: #64748B;
+  color: #64748b;
   letter-spacing: 1px;
 }
 
@@ -459,7 +461,9 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 @keyframes blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 
 .hud-btn-primary {
@@ -477,18 +481,17 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .hud-btn-primary:hover:not(:disabled) {
   opacity: 0.9;
-  box-shadow: none;
 }
 
 .hud-btn-primary:disabled {
-  background: #CBD5E1;
+  background: #cbd5e1;
   cursor: not-allowed;
-  color: #94A3B8;
+  color: #94a3b8;
 }
 
-/* 答案与解析 */
-.quiz-answer {
-  margin-top: 28px;
+.quiz-answer,
+.quiz-explanation {
+  margin-top: 20px;
   padding: 20px;
   background: rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -504,11 +507,15 @@ const getQuestionTypeText = (questionType?: string) => {
   margin-right: 10px;
 }
 
+.header-tag.analysis {
+  background: var(--primary);
+}
+
 .header-text {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.9rem;
   color: var(--fg);
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .answer-content {
@@ -517,19 +524,7 @@ const getQuestionTypeText = (questionType?: string) => {
   font-family: 'Fira Code', monospace;
   font-size: 1.1rem;
   color: var(--success);
-  font-weight: bold;
-}
-
-.quiz-explanation {
-  margin-top: 16px;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-
-.header-tag.analysis {
-  background: var(--primary);
+  font-weight: 700;
 }
 
 .explanation-content {
@@ -544,28 +539,12 @@ const getQuestionTypeText = (questionType?: string) => {
   margin-bottom: 8px;
 }
 
-.ref-answer pre {
-  margin: 0 0 16px 0;
-  padding: 16px;
-  background: #FFFFFF;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  overflow: auto;
-}
-
-.ref-answer code {
-  font-family: 'Fira Code', monospace;
-  color: var(--fg);
-  font-size: 0.85rem;
-}
-
 .analysis-text {
   font-family: 'Fira Code', monospace;
   font-size: 0.95rem;
   line-height: 1.6;
 }
 
-/* 简答题输入区 */
 .quiz-short-answer {
   margin-left: 56px;
   margin-top: 16px;
@@ -593,11 +572,10 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .short-answer-input:disabled {
   background: rgba(0, 0, 0, 0.03);
-  color: #64748B;
+  color: #64748b;
   cursor: not-allowed;
 }
 
-/* 更多按钮 */
 .more-btn-hud {
   width: 100%;
   margin-top: 16px;
@@ -606,7 +584,6 @@ const getQuestionTypeText = (questionType?: string) => {
   letter-spacing: 1px;
 }
 
-/* 空状态 */
 .quiz-empty-hud {
   padding: 60px;
   display: flex;
@@ -631,22 +608,77 @@ const getQuestionTypeText = (questionType?: string) => {
 .empty-frame p {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.8rem;
-  color: #94A3B8;
+  color: #94a3b8;
   letter-spacing: 1px;
 }
 
-/* 紧凑模式 */
+.quiz-rich-text {
+  min-width: 0;
+}
+
+.quiz-rich-text :deep(p) {
+  margin: 0;
+}
+
+.quiz-rich-text :deep(p + p) {
+  margin-top: 0.6em;
+}
+
+.quiz-rich-text :deep(.katex-display) {
+  margin: 0.8em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.quiz-rich-text :deep(pre) {
+  margin: 0.75em 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quiz-rich-text :deep(code) {
+  white-space: pre-wrap;
+}
+
+.quiz-rich-text :deep(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.quiz-rich-text :deep(td),
+.quiz-rich-text :deep(th) {
+  padding: 4px 8px;
+}
+
+.reference-answer-render {
+  margin-top: 8px;
+}
+
 .compact .technical-frame {
   padding: 0;
   border: none;
   background: transparent;
   box-shadow: none;
 }
-.compact .frame-header {
-  display: none;
+
+.compact .quiz-stem {
+  gap: 16px;
+  margin-bottom: 16px;
 }
-.compact .quiz-stem { gap: 16px; margin-bottom: 16px; }
-.compact .quiz-index { font-size: 1.4rem; }
-.compact .quiz-options { margin-left: 36px; gap: 8px; }
-.compact .quiz-option-item { padding: 10px 16px; font-size: 0.85rem; }
+
+.compact .quiz-index {
+  font-size: 1.4rem;
+}
+
+.compact .quiz-options {
+  margin-left: 36px;
+  gap: 8px;
+}
+
+.compact .quiz-option-item {
+  padding: 10px 16px;
+  font-size: 0.85rem;
+}
 </style>
