@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from app.chat.schemas import InsightCanvas, TutorState
+from app.chat.schemas import TeachingDiagram, TutorState
 from app.chat.utils import extract_question, normalize_message_content, node_timer
 from app.infra.logging import get_logger
 
@@ -100,9 +100,9 @@ async def teaching_diagram_generate_node(agent: Any, state: TutorState) -> Tutor
                 state=state,
             )
             state["teaching_diagram"] = diagram.model_dump(mode="json")
-            state["diagram_type"] = diagram.type
+            state["diagram_type"] = diagram.graph_type
             state["teaching_diagram_error"] = None
-            logger.info("[Diagram] 图解生成完成: user_id=%s type=%s", user_id, diagram.type)
+            logger.info("[Diagram] 图解生成完成: user_id=%s type=%s", user_id, diagram.graph_type)
             return state
         except Exception as exc:
             logger.exception("[Diagram] 教学图解节点失败: user_id=%s", user_id)
@@ -117,7 +117,7 @@ async def generate_teaching_diagram(
     question: str,
     answer: str,
     state: TutorState,
-) -> InsightCanvas:
+) -> TeachingDiagram:
     """使用注入的上下文生成经过验证的面向学习者的图板。"""
     from app.prompts import registry
 
@@ -141,10 +141,10 @@ async def generate_teaching_diagram(
         f"最终回答：\n{answer}\n\n"
         f"上下文：\n{chr(10).join(context_parts) if context_parts else '无额外上下文。'}\n\n"
         f"偏好图板类型：{preferred}\n\n"
-        "请生成一张能辅助学生理解答案的 InsightCanvas 图板 JSON。"
+        "请生成一张能辅助学生理解答案的教学图解 JSON。"
     )
     return await agent.llm.ainvoke_json(
-        InsightCanvas,
+        TeachingDiagram,
         [SystemMessage(content=registry.get("chat/teaching_diagram")), HumanMessage(content=prompt)],
         temperature=0.1,
     )

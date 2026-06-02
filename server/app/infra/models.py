@@ -105,7 +105,7 @@ class ChatSession(SQLModel, table=True):
         sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
     )  # UUID 原生类型主键
     user_id: int = Field(index=True)
-    module: str = Field(index=True)  # 所属功能模块（如 "mentor"）
+    module: str = Field(default="mentor", index=True)  # 所属功能模块（如 "mentor"）
     title: str = Field(default="新对话", max_length=100)  # 会话标题（取首条消息前 20 字符）
     is_archived: bool = Field(default=False)  # 软删除标记
 
@@ -251,6 +251,7 @@ class UserProfile(SQLModel, table=True):
         Index("ix_user_profiles_profile_json", "profile_json", postgresql_using="gin"),
         Index("ix_user_profiles_profile_score_json", "profile_score_json", postgresql_using="gin"),
         Index("ix_user_profiles_source_session_ids", "source_session_ids", postgresql_using="gin"),
+        Index("ix_user_profiles_source_summary_ids", "source_summary_ids", postgresql_using="gin"),
         Index("ix_user_profiles_source_event_ids", "source_event_ids", postgresql_using="gin"),
     )
 
@@ -359,7 +360,7 @@ class GeneratedResourceItem(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
     user_id: int = Field(index=True)
 
     # Agent 类型（content/mindmap/quiz/code/reading/ppt）
@@ -506,7 +507,7 @@ class CoursePathGenerationTask(SQLModel, table=True):
     progress: int = Field(default=0, ge=0, le=100)
     latest_message: str = Field(default="规划任务已创建，等待开始", sa_column=Column(Text))
     error_message: str | None = Field(default=None, sa_column=Column(Text))
-    generated_path_id: int | None = Field(default=None, foreign_key="course_paths.id", index=True)
+    generated_path_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("course_paths.id", ondelete="SET NULL"), index=True))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -582,7 +583,7 @@ class CoursePathNode(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    path_id: int = Field(index=True, foreign_key="course_paths.id")
+    path_id: int = Field(sa_column=Column(Integer, ForeignKey("course_paths.id", ondelete="CASCADE"), index=True))
     user_id: int = Field(index=True)
 
     # 节点标识
@@ -633,13 +634,42 @@ class CoursePathResourceBinding(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     
-    node_id: int = Field(index=True, foreign_key="course_path_nodes.id")
-    resource_id: int = Field(index=True, foreign_key="generated_resources.id")
+    node_id: int = Field(sa_column=Column(Integer, ForeignKey("course_path_nodes.id", ondelete="CASCADE"), index=True))
+    resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
     resource_item_id: int | None = Field(default=None, index=True)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
+    )
+
+
+class CoursePathSummary(SQLModel, table=True):
+    """路径学习总结表 — 记录路径完成后的掌握度分析、薄弱点回顾和后续建议。"""
+    __tablename__ = "course_path_summaries"
+    __table_args__ = (
+        Index("ix_course_path_summaries_user_path", "user_id", "path_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    path_id: int = Field(index=True, foreign_key="course_paths.id")
+    user_id: int = Field(index=True)
+
+    summary_markdown: str | None = Field(default=None, sa_column=Column(Text))
+    mastery_scores: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    weak_points: list[dict] | None = Field(default=None, sa_column=Column(JSONB))
+    next_suggestions: list[dict] | None = Field(default=None, sa_column=Column(JSONB))
+
+    status: str = Field(default="pending", max_length=20, index=True)  # pending, generating, completed, failed
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -663,6 +693,7 @@ REGISTERED_MODELS = (
     CoursePath,
     CoursePathNode,
     CoursePathResourceBinding,
+    CoursePathSummary,
     User,
     School,
 )

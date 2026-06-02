@@ -12,7 +12,7 @@ import time
 from typing import Any
 
 from app.chat.request import ChatHistoryMessage
-from app.chat.schemas import InsightCanvas, TutorAgentContext, TutorState
+from app.chat.schemas import TeachingDiagram, TutorAgentContext, TutorState
 from app.infra.context import runtime_context as chat_runtime_context
 from app.chat.runtime import prepare_tutor_state
 from app.chat.utils import (
@@ -133,7 +133,7 @@ class TutorAgent:
         question: str,
         answer: str,
         state: TutorState,
-    ) -> InsightCanvas:
+    ) -> TeachingDiagram:
         """图板生成辅助方法（委托至 diagram.py）。"""
         from app.chat.diagram import generate_teaching_diagram
         return await generate_teaching_diagram(

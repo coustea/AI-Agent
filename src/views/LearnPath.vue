@@ -240,11 +240,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Search, DataAnalysis,
-  Lock, MagicStick, Check, Loading, VideoPlay, More
+  Lock, MagicStick, Check, Loading, VideoPlay, More, Trophy
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
@@ -557,6 +557,99 @@ function formatStrategyReport(text: string) {
 </script>
 
 <style scoped>
+/* 路径完成总结卡片 */
+.summary-card {
+  margin: 20px 0;
+  padding: 24px;
+}
+.summary-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--el-color-success);
+  margin-bottom: 20px;
+}
+.summary-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--el-text-color-secondary);
+  padding: 30px 0;
+  justify-content: center;
+}
+.summary-section {
+  margin-bottom: 20px;
+}
+.summary-section h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--el-text-color-primary);
+}
+.mastery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mastery-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mastery-topic {
+  min-width: 120px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+.mastery-item :deep(.el-progress) {
+  flex: 1;
+}
+.weak-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.weak-tag {
+  font-size: 14px;
+}
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.suggestion-item strong {
+  font-size: 15px;
+  color: var(--el-text-color-primary);
+}
+.suggestion-item p {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin: 4px 0 0;
+}
+.summary-markdown {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--el-text-color-regular);
+}
+.summary-markdown :deep(h1),
+.summary-markdown :deep(h2),
+.summary-markdown :deep(h3) {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  color: var(--el-text-color-primary);
+}
+.summary-markdown :deep(ul),
+.summary-markdown :deep(ol) {
+  padding-left: 20px;
+}
+.summary-error {
+  text-align: center;
+  padding: 20px;
+  color: var(--el-color-danger);
+}
+</style>
 /* ==================== 
    Minimalist Clean Theme 
    ==================== */

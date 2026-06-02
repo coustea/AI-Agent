@@ -3,15 +3,18 @@ from typing import Any, Sequence
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.logging import get_logger
+from app.evaluation.service import EvaluationService
 from app.memory.service import MemoryService
-from app.infra.models import CoursePath, CoursePathGenerationTask, CoursePathNode, CoursePathResourceBinding
+from app.infra.models import CoursePath, CoursePathGenerationTask, CoursePathNode, CoursePathResourceBinding, CoursePathSummary
 from app.path.agents.planner import PathPlannerAgent
 from app.path.schemas import (
     CoursePathNodeDTO,
     CoursePathResponse,
+    CoursePathSummaryResponse,
     GeneratePathRequest,
     PathGenerationTaskResponse,
     PathPlanFeedbackRequest,
+    PathSummarySchema,
 )
 from app.path.validation import normalize_path_plan, validate_path_plan
 from app.path.signals import get_resource_policy_fallback, build_learning_signal_snapshot
@@ -529,6 +532,8 @@ class CoursePathService:
 
     async def complete_node(self, *, user_id: int, node_id: int) -> CoursePathResponse:
         """Complete a learning node and unlock successors whose dependencies are done."""
+        should_generate_summary = False
+        summary_id = None
         node = await self._get_owned_node_for_update(user_id=user_id, node_id=node_id)
         path = await self._get_path_for_update(node.path_id)
         nodes = list(await self._get_nodes_for_path(path.id))
@@ -559,13 +564,28 @@ class CoursePathService:
             path.overall_progress = 100
             path.current_node_id = None
             path.current_stage_id = None
+            path.status = "completed"
+
+            # 路径完成闭环：创建学习总结记录
+            summary = CoursePathSummary(
+                path_id=path.id,
+                user_id=path.user_id,
+                status="pending",
+            )
+            self.session.add(summary)
+            await self.session.flush()
+            should_generate_summary = True
+            summary_id = summary.id
         elif next_node:
             path.current_node_id = next_node.node_id
             path.current_stage_id = next_node.stage_id
 
         await self.session.commit()
         resource_map = await self._get_node_resource_ids([item.id for item in nodes if item.id is not None])
-        return await self._build_path_response_async(path, nodes, resource_map)
+        resp = await self._build_path_response_async(path, nodes, resource_map)
+        resp.should_generate_summary = should_generate_summary
+        resp.summary_id = summary_id
+        return resp
 
     async def _build_resource_context(self, *, user_id: int, resource_id: int) -> str:
         """Summarize a generated resource for replanning without sending full content."""
@@ -869,6 +889,138 @@ class CoursePathService:
             generated_path_id=task.generated_path_id,
         )
 
+    # ------------------------------------------------------------------
+    # 路径完成闭环：学习总结
+    # ------------------------------------------------------------------
+
+    async def execute_summary_task(self, summary_id: int) -> None:
+        """后台执行路径学习总结生成。"""
+        from app.infra.llm import get_llm
+        from app.infra.models import LearningEvent
+
+        summary = await self.session.get(CoursePathSummary, summary_id)
+        if summary is None or summary.status not in ("pending",):
+            return
+
+        try:
+            summary.status = "generating"
+            await self.session.commit()
+
+            # 1. 读取路径和节点数据
+            path = await self.session.get(CoursePath, summary.path_id)
+            if path is None:
+                raise ValueError("路径不存在")
+            nodes = list(await self._get_nodes_for_path(path.id))
+
+            # 2. 聚合学习事件数据
+            event_stmt = (
+                select(LearningEvent)
+                .where(
+                    LearningEvent.user_id == path.user_id,
+                    LearningEvent.created_at >= path.created_at,
+                )
+                .order_by(LearningEvent.created_at.desc())
+                .limit(100)
+            )
+            events = list((await self.session.exec(event_stmt)).all())
+
+            # 3. 构造节点完成数据
+            nodes_data = []
+            for n in nodes:
+                node_events = [e for e in events if e.node_id == n.node_id]
+                quiz_scores = [e.score for e in node_events if e.event_type == "quiz_submitted" and e.score is not None]
+                avg_score = round(sum(quiz_scores) / len(quiz_scores), 1) if quiz_scores else None
+                nodes_data.append({
+                    "node_id": n.node_id,
+                    "title": n.title,
+                    "status": n.status,
+                    "difficulty": n.difficulty,
+                    "estimated_minutes": n.estimated_minutes,
+                    "average_quiz_score": avg_score,
+                })
+
+            # 4. 构造 prompt 并调用 LLM
+            import json
+            from langchain_core.messages import SystemMessage, HumanMessage
+
+            nodes_json = json.dumps(nodes_data, ensure_ascii=False, indent=2)
+            profile_dict = await self._get_profile_dict(path.user_id)
+            profile_json = json.dumps(profile_dict, ensure_ascii=False, indent=2)
+
+            sys_msg = SystemMessage(content="""你是一个世界顶级的学习效果评估专家。
+根据用户在整条学习路径上的完成情况、测验成绩和画像，生成一份结构化的学习总结报告。
+
+要求：
+1. summary_markdown: 详细的 Markdown 总结报告，包含掌握度概览、薄弱点分析和后续建议
+2. mastery_scores: 每个节点的掌握度评分 {node_id: {score: 0-100, topic: "节点标题", status: "completed/..."}}
+3. weak_points: 薄弱知识点列表，score < 65 的节点应重点关注
+4. next_suggestions: 基于本次学习成果的后续学习建议，2-5 条""")
+
+            human_msg = HumanMessage(content=(
+                f"路径标题: {path.title}\n"
+                f"路径目标: {path.goal}\n"
+                f"节点完成数据:\n{nodes_json}\n\n"
+                f"用户画像:\n{profile_json}"
+            ))
+
+            llm = get_llm()
+            result = await llm.ainvoke_json(PathSummarySchema, [sys_msg, human_msg])
+
+            # 5. 写入总结记录
+            summary.summary_markdown = result.summary_markdown
+            summary.mastery_scores = result.mastery_scores
+            summary.weak_points = [dict(wp) for wp in result.weak_points]
+            summary.next_suggestions = [dict(ns) for ns in result.next_suggestions]
+            summary.status = "completed"
+            summary.updated_at = datetime.now(timezone.utc)
+            await self.session.commit()
+
+            # 6. 触发画像更新
+            try:
+                memory_service = MemoryService(module="mentor")
+                await memory_service.upsert_profile(
+                    user_id=path.user_id,
+                    reason=f"完成学习路径「{path.title}」，总结已生成",
+                )
+            except Exception as exc:
+                logger.warning("路径完成后画像更新失败: %s", exc)
+
+            logger.info("路径学习总结生成完成: summary_id=%s path_id=%s", summary_id, path.id)
+
+        except Exception as exc:
+            await self.session.rollback()
+            failed_summary = await self.session.get(CoursePathSummary, summary_id)
+            if failed_summary is not None:
+                failed_summary.status = "failed"
+                failed_summary.error_message = str(exc)
+                failed_summary.updated_at = datetime.now(timezone.utc)
+                await self.session.commit()
+            logger.exception("路径学习总结生成失败: summary_id=%s err=%s", summary_id, exc)
+
+    async def get_path_summary(self, *, user_id: int, path_id: int) -> CoursePathSummaryResponse | None:
+        """获取路径的学习总结。"""
+        stmt = (
+            select(CoursePathSummary)
+            .where(
+                CoursePathSummary.path_id == path_id,
+                CoursePathSummary.user_id == user_id,
+            )
+            .order_by(col(CoursePathSummary.created_at).desc())
+        )
+        summary = (await self.session.exec(stmt)).first()
+        if summary is None:
+            return None
+        return CoursePathSummaryResponse(
+            id=summary.id,
+            path_id=summary.path_id,
+            status=summary.status,
+            summary_markdown=summary.summary_markdown,
+            mastery_scores=summary.mastery_scores,
+            weak_points=summary.weak_points,
+            next_suggestions=summary.next_suggestions,
+            error_message=summary.error_message,
+        )
+
 
 async def bg_generate_path_task(task_id: int) -> None:
     """使用独立会话执行慢速路径规划，API 请求无需等待模型完成。"""
@@ -876,3 +1028,15 @@ async def bg_generate_path_task(task_id: int) -> None:
 
     async with session_scope() as session:
         await CoursePathService(session).execute_generation_task(task_id)
+
+# ======================================================================
+# 路径完成闭环
+# ======================================================================
+
+
+async def bg_path_summary_task(summary_id: int) -> None:
+    """后台生成路径学习总结。"""
+    async with session_scope() as session:
+        service = CoursePathService(session)
+        await service.execute_summary_task(summary_id)
+

@@ -84,26 +84,30 @@ class PathPlannerAgent:
             request_context = format_path_request_context(state["request"])
             search_context = format_evidence_for_prompt(state.get("search_evidence", []))
             sys_msg = SystemMessage(content="""你是一个世界顶级的学习画像诊断专家。
-你的任务是对比用户的学习目标与他们的个人画像，输出一份诊断与裁剪策略。
-如果用户在某方面已经掌握，你需要明确指出"可跳过或快速复习"；
-如果用户缺乏某前置基础，你需要明确指出"必须补充前置基础"。
-重点分析其认知风格和薄弱点，为后续的规划定下基调。
-引用检索资料时必须标明出处，不得编造检索资料未支持的事实。""")
+                你的任务是对比用户的学习目标与他们的个人画像，输出一份诊断与裁剪策略。
+                如果用户在某方面已经掌握，你需要明确指出"可跳过或快速复习"；
+                如果用户缺乏某前置基础，你需要明确指出"必须补充前置基础"。
+                重点分析其认知风格和薄弱点，为后续的规划定下基调。
+                引用检索资料时必须标明出处，不得编造检索资料未支持的事实。"""
+                )
             human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n当前画像:\n{profile_json}")
 
             result = await self.llm.ainvoke_json(StrategyReport, [sys_msg, human_msg])
             logger.info("LangGraph [Profile Analyst] finished.")
-            return {"strategy_report": result.strategy_report}
+            return {
+                "strategy_report": result.strategy_report
+            }
 
         async def curriculum_architect_node(state: PathState) -> dict:
             logger.info("LangGraph [Curriculum Architect] starting...")
             request_context = format_path_request_context(state["request"])
             search_context = format_evidence_for_prompt(state.get("search_evidence", []))
             sys_msg = SystemMessage(content="""你是一个世界顶级的课程架构师。
-你的任务是根据用户的学习目标、主题和个性化诊断策略，设计出宏观的学习阶段骨架（stages）。
-通常分为 3-6 个阶段（如基础入门、核心进阶、实战演练等）。必须严格遵照诊断策略中的"跳过"或"补充"建议！
-只需输出 stages 列表，不要拆分具体节点。
-引用检索资料时必须标明出处，不得编造检索资料未支持的事实。""")
+                你的任务是根据用户的学习目标、主题和个性化诊断策略，设计出宏观的学习阶段骨架（stages）。
+                通常分为 3-6 个阶段（如基础入门、核心进阶、实战演练等）。必须严格遵照诊断策略中的"跳过"或"补充"建议！
+                只需输出 stages 列表，不要拆分具体节点。
+                引用检索资料时必须标明出处，不得编造检索资料未支持的事实。"""
+            )
             human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n诊断策略:\n{state['strategy_report']}")
 
             result = await self.llm.ainvoke_json(MacroStages, [sys_msg, human_msg])
