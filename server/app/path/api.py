@@ -5,9 +5,9 @@ from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest, PathPlanFeedbackRequest
-from app.path.service import CoursePathService, bg_generate_path_task
-from app.resource.service import bg_gen_task
+from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest, PathPlanFeedbackRequest, CoursePathSummaryResponse
+from app.path.service import CoursePathService, bg_generate_path_task, bg_path_summary_task
+from app.resource.service import run_multi_agent_generation
 from app.infra.response import HttpResponse
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
@@ -132,6 +132,7 @@ async def start_node(
 @router.post("/nodes/{node_id}/complete")
 async def complete_node(
     node_id: int,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -141,6 +142,8 @@ async def complete_node(
         response = await service.complete_node(user_id=current_user.id, node_id=node_id)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
+    if response.should_generate_summary and response.summary_id:
+        background_tasks.add_task(bg_path_summary_task, response.summary_id)
     return HttpResponse.success(data=response.model_dump(mode="json"))
 
 
@@ -157,3 +160,17 @@ async def adjust_path(
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=updated_path.model_dump(mode="json"))
+
+
+@router.get("/{path_id}/summary")
+async def get_path_summary(
+    path_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取路径的学习完成总结。"""
+    service = CoursePathService(session)
+    summary = await service.get_path_summary(user_id=current_user.id, path_id=path_id)
+    if summary is None:
+        return HttpResponse.success(data=None)
+    return HttpResponse.success(data=summary.model_dump(mode="json"))

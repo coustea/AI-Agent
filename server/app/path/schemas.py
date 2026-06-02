@@ -178,6 +178,8 @@ class CoursePathResponse(BaseModel):
     optimization_tips: list[str] = Field(default_factory=list)
     search_evidence: list[dict[str, Any]] = Field(default_factory=list)
     created_at: str = ""
+    should_generate_summary: bool = False
+    summary_id: int | None = None
 
 
 class PathGenerationTaskResponse(BaseModel):
@@ -198,6 +200,39 @@ class PathGenerationTaskResponse(BaseModel):
 # ======================================================================
 
 from app.path.request import PathPlanFeedbackRequest  # noqa: E402
+
+
+# ======================================================================
+# 路径完成总结
+# ======================================================================
+
+
+class PathSummarySchema(BaseModel):
+    """LLM 结构化输出 schema — 路径完成总结。"""
+
+    summary_markdown: str = Field(description="学习总结报告 Markdown")
+    mastery_scores: dict[str, Any] = Field(
+        description="各节点掌握度 {node_id: {score: 85, topic: '...', status: 'completed'}}"
+    )
+    weak_points: list[dict[str, Any]] = Field(
+        description="薄弱知识点列表 [{topic: '...', score: 55, suggestion: '...'}]"
+    )
+    next_suggestions: list[dict[str, Any]] = Field(
+        description="后续学习建议 [{title: '...', reason: '...'}]"
+    )
+
+
+class CoursePathSummaryResponse(BaseModel):
+    """路径完成总结 API 响应 DTO。"""
+
+    id: int | None = None
+    path_id: int = 0
+    status: str = "pending"
+    summary_markdown: str | None = None
+    mastery_scores: dict | None = None
+    weak_points: list | None = None
+    next_suggestions: list | None = None
+    error_message: str | None = None
 
 __all__ = [
     # Request
