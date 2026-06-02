@@ -11,8 +11,70 @@ export interface AttachmentInfo {
   name: string
 }
 
+export type TeachingDiagramType = 'node_graph' | 'sequence_timeline' | 'grid_timeline'
+
+export interface GraphNode {
+  id: string
+  label: string
+  x: number
+  y: number
+  shape: 'circle' | 'rect' | 'diamond' | 'capsule' | 'actor' | 'cylinder' | 'uml_class'
+  state: 'unvisited' | 'active' | 'visited'
+  fields?: string[] | null
+  tooltip?: string | null
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  label?: string | null
+  arrow_type: 'association' | 'dependency' | 'inheritance' | 'aggregation' | 'composition' | 'none'
+  is_flowing: boolean
+  is_backtrack: boolean
+}
+
+export interface NodeGraphPayload {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+export interface SequenceTimelinePayload {
+  participants: string[]
+  steps: Array<{
+    step_index: number
+    message: {
+      sender: string
+      receiver: string
+      label: string
+      details?: string | null
+      highlight: boolean
+    }
+    active_states: Array<{
+      participant: string
+      state_label: string
+    }>
+  }>
+  final_state: string
+}
+
+export interface GridTimelinePayload {
+  orientation: 'horizontal' | 'vertical'
+  rows: string[]
+  cols: string[]
+  cells: Array<{
+    row_label: string
+    col_label: string
+    state: 'running' | 'ready' | 'blocked' | 'allocated' | 'free' | 'pointer' | 'highlight'
+    label: string
+    pointer_target?: string | null
+    tooltip?: string | null
+  }>
+  call_stack?: string[] | null
+  timeline_summary: string
+}
+
 export interface TeachingDiagram {
-  type: 'contrast' | 'journey' | 'anatomy' | 'simulation'
+  type: TeachingDiagramType
   title: string
   focus_question: string
   takeaway: string
@@ -20,7 +82,7 @@ export interface TeachingDiagram {
   pitfall?: string | null
   try_it: string
   personalization_note?: string | null
-  payload: any
+  payload: NodeGraphPayload | SequenceTimelinePayload | GridTimelinePayload
 }
 
 export interface KnowledgeSource {
@@ -59,7 +121,8 @@ export interface StreamChatParams {
   attachments?: string[]
   need_teaching_diagram?: boolean
   generate_video?: boolean
-  enable_search?: boolean
+  enable_web_search?: boolean
+  enable_knowledge_base?: boolean
 }
 
 export interface StreamChatHistoryItem {
@@ -99,9 +162,7 @@ export function deleteSession(sessionId: string) {
 }
 
 export function updateSessionTitle(sessionId: string, title: string) {
-  const formData = new FormData()
-  formData.append('title', title)
-  return http.patch<ApiResponse>(`/ai/chat/sessions/${sessionId}`, formData)
+  return http.patch<ApiResponse>(`/ai/chat/sessions/${sessionId}`, { title })
 }
 
 // ==========================================
@@ -168,8 +229,11 @@ export function streamChat(
   if (params.generate_video != null) {
     formData.append('generate_video', String(Boolean(params.generate_video)))
   }
-  if (params.enable_search != null) {
-    formData.append('enable_search', String(Boolean(params.enable_search)))
+  if (params.enable_web_search != null) {
+    formData.append('enable_web_search', String(Boolean(params.enable_web_search)))
+  }
+  if (params.enable_knowledge_base != null) {
+    formData.append('enable_knowledge_base', String(Boolean(params.enable_knowledge_base)))
   }
 
   fetch('/api/v1/ai/chat/stream', {

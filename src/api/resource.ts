@@ -37,40 +37,19 @@ interface ResourceGenerationRequest {
     code: {
       programming_language: 'python' | 'c' | 'cpp' | 'java' | 'go' | 'javascript' | 'typescript'
       case_type: 'basic_demo' | 'algorithm_template' | 'debug_demo'
-      comment_level: 'minimal' | 'standard' | 'verbose'
-      include_test: boolean
       difficulty: 'beginner' | 'intermediate' | 'advanced'
     }
     reading: {
       reading_depth: 'course_extended' | 'engineering' | 'frontier'
       max_items: number
-      resource_quality: 'classic' | 'latest' | 'balanced'
-      include_practice: boolean
       language_preference: 'chinese' | 'english' | 'both'
     }
     ppt: {
-      template_id: 'theme-logic-blue'
       page_count: number
       difficulty: 'beginner' | 'intermediate' | 'advanced'
       output_format: 'preview'
     }
   }
-  output_options: {
-    output_format: 'json'
-  }
-}
-
-export interface ResourceGenerateEvent {
-  event_id: string
-  task_id: string
-  event_type: 'workflow' | 'planning' | 'agent_step' | 'agent' | 'resource' | 'review' | 'bundle' | 'error' | 'done' | 'layer'
-  stage: string
-  agent?: string
-  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped'
-  message: string
-  progress?: number
-  payload: Record<string, any>
-  timestamp: string
 }
 
 export interface ResourceProgressNode {
@@ -103,7 +82,7 @@ export async function startResourceGeneration(
   params: ResourceGenerationRequest
 ): Promise<{ resource_id: number; status: string }> {
   const token = localStorage.getItem('token')
-  const response = await fetch('/api/v1/ai/generate/task', {
+  const response = await fetch('/api/v1/ai/resources', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -128,7 +107,7 @@ export async function pollResourceStatus(
   resourceId: number
 ): Promise<ResourceTaskStatus> {
   const token = localStorage.getItem('token')
-  const response = await fetch(`/api/v1/ai/generate/task/${resourceId}/status`, {
+  const response = await fetch(`/api/v1/ai/resources/${resourceId}/status`, {
     method: 'GET',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -194,7 +173,7 @@ export function streamResourceEvents(
   const controller = new AbortController()
   const token = localStorage.getItem('token')
 
-  fetch(`/api/v1/ai/generate/task/${resourceId}/events`, {
+  fetch(`/api/v1/ai/resources/${resourceId}/events`, {
     method: 'GET',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

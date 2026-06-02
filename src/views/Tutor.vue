@@ -528,7 +528,7 @@ interface ChatMsg {
 
 const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): TeachingDiagram | null => {
   if (!diagram || typeof diagram !== 'object') return null
-  if (!['contrast', 'journey', 'anatomy', 'simulation'].includes(diagram.type)) return null
+  if (!['node_graph', 'sequence_timeline', 'grid_timeline'].includes(diagram.type)) return null
   if (!diagram.title || !diagram.payload || typeof diagram.payload !== 'object') return null
   return diagram
 }
@@ -573,7 +573,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
 const enableWebSearch = ref(false)
-const enableKnowledgeBase = ref(true)
+const enableKnowledgeBase = ref(false)
 const needTeachingDiagram = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
@@ -1525,7 +1525,8 @@ const removeAttachment = (idx: number) => {
 const getAvatarCapabilities = () => ({
   session_id: digitalHumanSessionId.value,
   history: buildStreamHistory().map(item => ({ role: item.role, content: item.content })),
-  enable_search: enableWebSearch.value,
+  enable_web_search: enableWebSearch.value,
+  enable_knowledge_base: enableKnowledgeBase.value,
   generate_video: generateVideo.value,
 })
 
@@ -1770,7 +1771,8 @@ const handleSend = async () => {
         attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
         need_teaching_diagram: shouldGenerateTeachingDiagram,
         generate_video: generateVideo.value,
-        enable_search: enableWebSearch.value || enableKnowledgeBase.value,
+        enable_web_search: enableWebSearch.value,
+        enable_knowledge_base: enableKnowledgeBase.value,
       },
       (chunk) => {
         enqueueStreamChunk(aiMsgId, chunk)

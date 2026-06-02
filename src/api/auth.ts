@@ -44,7 +44,7 @@ export function register(params: RegisterParams) {
 }
 
 export function logout() {
-  return http.delete<ApiResponse>('/users/auth')
+  return http.post<ApiResponse>('/users/auth/logout')
 }
 
 export function getAuthStatus() {

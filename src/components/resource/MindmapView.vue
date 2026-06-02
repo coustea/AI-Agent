@@ -79,9 +79,61 @@ const markdownContent = computed<string>(() => {
   return ''
 })
 
+// 预处理内容，兼容 LLM 误生成的 Mermaid mindmap 语法
+const preprocessContent = (text: string): string => {
+  let content = text.trim()
+  // 移除可能存在的代码块包裹
+  if (content.startsWith('```')) {
+    content = content.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '').trim()
+  }
+
+  if (content.startsWith('mindmap')) {
+    const lines = content.split('\n')
+    const mdLines: string[] = []
+    let rootFound = false
+    let baseIndent = 0
+
+    for (let line of lines) {
+      if (line.trim() === 'mindmap') continue
+      if (!line.trim()) continue
+
+      const match = line.match(/^(\s*)(.*)/)
+      const rawIndent = match?.[1] || ''
+      const rawNodeText = match?.[2] || ''
+      if (rawNodeText.trim()) {
+        const indent = rawIndent.length
+        // 移除 Mermaid 形状符号如 (( )), [ ], {{ }} 等
+        let nodeText = rawNodeText.replace(/^[\(\[\{]+|[\)\]\}]+$/g, '').trim()
+
+        if (!rootFound) {
+          mdLines.push(`# ${nodeText}`)
+          rootFound = true
+          baseIndent = indent
+        } else {
+          // 启发式层级计算：假设至少每级缩进 2 个空格
+          let depth = Math.floor((indent - baseIndent) / 2)
+          if (depth <= 0) depth = 1
+          
+          if (depth === 1) {
+            mdLines.push(`## ${nodeText}`)
+          } else {
+            const listIndent = '  '.repeat(depth - 2)
+            mdLines.push(`${listIndent}- ${nodeText}`)
+          }
+        }
+      }
+    }
+    return mdLines.join('\n')
+  }
+
+  return text
+}
+
 // 渲染 markmap
-const renderMarkmap = async (content: string) => {
-  if (!content.trim() || !markmapRef.value) return
+const renderMarkmap = async (rawContent: string) => {
+  if (!rawContent.trim() || !markmapRef.value) return
+  
+  const content = preprocessContent(rawContent)
 
   // Wait for container to have layout so SVG can resolve relative lengths
   await nextTick()
