@@ -96,8 +96,6 @@ class CodeConfig(BaseModel):
     """代码 Agent 配置。"""
     programming_language: Literal["python", "c", "cpp", "java", "go", "javascript", "typescript"] = "python"
     case_type: Literal["basic_demo", "algorithm_template", "debug_demo"] = "basic_demo"
-    comment_level: Literal["minimal", "standard", "verbose"] = "standard"
-    include_test: bool = True
     difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
 
 
@@ -105,8 +103,6 @@ class ReadingConfig(BaseModel):
     """阅读推荐 Agent 配置。"""
     reading_depth: Literal["course_extended", "engineering", "frontier"] = "course_extended"
     max_items: int = Field(default=5, ge=1, le=10)
-    resource_quality: Literal["classic", "latest", "balanced"] = "balanced"
-    include_practice: bool = True
     language_preference: Literal["chinese", "english", "both"] = "chinese"
 
     @field_validator("language_preference", mode="before")
@@ -119,7 +115,6 @@ class ReadingConfig(BaseModel):
 
 class PptConfig(BaseModel):
     """PPT Agent 配置。"""
-    template_id: Literal["theme-logic-blue"] = "theme-logic-blue"
     page_count: int = Field(default=6, ge=3, le=20)
     difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
     output_format: Literal["preview"] = "preview"
@@ -160,7 +155,6 @@ class ResourceGenerationRequest(BaseModel):
     learning_scenario: LearningScenario = "self_study"
     selected_agents: list[AgentSelection] = Field(default_factory=list)
     agent_configs: AgentConfigs = Field(default_factory=AgentConfigs)
-    output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     @field_validator("learning_need")
     @classmethod
@@ -321,51 +315,6 @@ ResourceGenerationRequest.model_rebuild()
 # 响应模型
 # ======================================================================
 
-class AgentMeta(BaseModel):
-    """Agent 元信息 (用于 /agents 接口)。"""
-    agent_id: str
-    name: str
-    description: str
-    icon: str = ""
-    default_enabled: bool = True
-
-
-class ResourceItemResponse(BaseModel):
-    """单个资源项响应。"""
-    id: int
-    resource_id: int
-    agent_name: str
-    title: str
-    content: str
-    file_type: str
-    summary: str = ""
-    summary_data: dict[str, Any] = Field(default_factory=dict)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class ResourceResponse(BaseModel):
-    """资源列表响应。"""
-    id: int
-    user_id: int
-    learning_need: str
-    learning_scenario: str
-    status: str = "completed"
-    items: list[ResourceItemResponse] = Field(default_factory=list)
-
-
-class ResourceDetailResponse(BaseModel):
-    """Resource detail response with content."""
-
-    id: int
-    title: str
-    resource_type: str
-    status: str = "pending"
-    content: str | None = None
-    metadata: dict | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
 class SingleResourceRequest(BaseModel):
     """Request for single-agent resource generation (path planning / on-demand use)."""
     model_config = ConfigDict(extra="forbid")
@@ -381,12 +330,6 @@ class SingleResourceRequest(BaseModel):
             raise ValueError("学习需求不能为空")
         return value
 
-
-class ResourceListResponse(BaseModel):
-    """Resource list response."""
-
-    items: list[ResourceResponse] = Field(default_factory=list)
-    total: int = 0
 
 __all__ = [
     # Constants
@@ -408,9 +351,5 @@ __all__ = [
     "ReviewResult",
     "ResourceBundle",
     # Response models
-    "AgentMeta",
-    "ResourceItemResponse",
-    "ResourceResponse",
-    "ResourceDetailResponse",
     "ResourceListResponse",
 ]

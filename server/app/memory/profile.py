@@ -50,13 +50,6 @@ def normalize_onboarding(data: dict[str, Any] | None) -> dict[str, Any]:
                     seen.add(course)
                     courses.append(course)
             result["courses"] = courses
-        elif field == "weakness_points":
-            raw = src.get("weakness_points")
-            if isinstance(raw, list):
-                result[field] = [str(item).strip() for item in raw if str(item).strip()]
-            else:
-                text = str(raw or "").strip()
-                result[field] = [text] if text else []
         else:
             text = str(src.get(field) or "").strip()
             result[field] = text or None

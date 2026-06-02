@@ -21,6 +21,7 @@ from app.infra.models import GeneratedResource, GeneratedResourceItem as Generat
 from app.resource.agents.base import AGENT_REGISTRY
 from app.resource.events import AgentEventEmitter, ResourceGenerateEvent
 from app.resource.schemas import (
+    AgentSelection,
     ExecutionPlan,
     GeneratedResourceItem,
     ResourceBundle,
@@ -224,16 +225,13 @@ class ResourceUsecases:
     def _resolve_progress_node(self, event: ResourceGenerateEvent) -> str | None:
         if event.event_type == "bundle" or event.agent == "assembler":
             return "bundle"
-        if event.agent in {PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID}:
+        if event.agent in {PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, "planning"}:
             return event.agent
         if event.agent and event.agent != "coordinator":
             return event.agent
-        if event.stage.startswith("planning"):
-            return "planning"
-        if event.stage == "pre_reviewing":
-            return PRE_REVIEW_AGENT_ID
-        if event.stage == "ppt_reviewing":
-            return PPT_REVIEW_AGENT_ID
+        for prefix, node in (("planning", "planning"), ("pre_review", PRE_REVIEW_AGENT_ID), ("ppt_review", PPT_REVIEW_AGENT_ID)):
+            if event.stage.startswith(prefix) or event.stage == f"{prefix}ing":
+                return node
         if event.stage == "reviewing":
             return PRE_REVIEW_AGENT_ID
         return None
@@ -749,48 +747,6 @@ class ResourceUsecases:
         result = await self.session.exec(statement)
         return list(result.all())
 
-    async def execute_single_agent(
-        self,
-        agent_id: str,
-        state: WorkerState,
-        emitter: AgentEventEmitter | None = None,
-    ) -> WorkerResult:
-        """单点运行指定的 Agent。"""
-        agent_cls = AGENT_REGISTRY.get(agent_id)
-        if not agent_cls:
-            return WorkerResult(success=False, error=f"Unknown agent: {agent_id}")
-            
-        agent = agent_cls(emitter=emitter)
-        try:
-            return await agent.run(state)
-        except Exception as exc:
-            return WorkerResult(success=False, error=str(exc))
-
-    async def execute_parallel_agents(
-        self,
-        agent_ids: list[str],
-        state: WorkerState,
-        emitter: AgentEventEmitter | None = None,
-    ) -> dict[str, WorkerResult]:
-        """并行运行多个 Agent 并隔离错误。"""
-        async def run_safe(aid: str) -> tuple[str, WorkerResult]:
-            res = await self.execute_single_agent(aid, state, emitter)
-            return aid, res
-            
-        tasks = [run_safe(aid) for aid in agent_ids]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        final_results = {}
-        for idx, res in enumerate(results):
-            aid = agent_ids[idx]
-            if isinstance(res, Exception):
-                final_results[aid] = WorkerResult(success=False, error=f"Parallel execution exception: {str(res)}")
-            else:
-                returned_aid, worker_result = res
-                final_results[returned_aid] = worker_result
-                
-        return final_results
-
 
 async def bg_gen_task(
     user_id: int,
@@ -1267,71 +1223,6 @@ async def bg_single_gen_task(
             )
 
 
-async def start_single_resource_task(
-    *,
-    user_id: int,
-    agent_id: str,
-    learning_need: str,
-    profile: dict[str, Any],
-    node_id: int | None = None,
-) -> dict[str, Any]:
-    """创建单智能体资源任务记录。
-
-    实际后台任务调度由 API 层负责（需要 FastAPI BackgroundTasks）。
-    """
-    resource = GeneratedResource(
-        user_id=user_id,
-        learning_need=learning_need,
-        personalization={},
-        selected_agents=[agent_id],
-        agent_configs={},
-        status="pending",
-    )
-    session = None
-    resource_id = 0
-
-    from app.infra.database import session_scope
-    async with session_scope() as s:
-        session = s
-        session.add(resource)
-        await session.flush()
-        resource_id = int(getattr(resource, "id", 0) or 0)
-
-        if node_id is not None:
-            from app.infra.models import CoursePathNode, CoursePathResourceBinding
-
-            node = await session.get(CoursePathNode, node_id)
-            if node is None or node.user_id != user_id:
-                raise ValueError("路径节点不存在或不属于当前用户")
-            node.resource_status = "generating"
-            binding_stmt = (
-                select(CoursePathResourceBinding)
-                .where(
-                    CoursePathResourceBinding.node_id == node_id,
-                    CoursePathResourceBinding.user_id == user_id,
-                )
-                .order_by(col(CoursePathResourceBinding.created_at).desc())
-            )
-            binding = (await session.exec(binding_stmt)).first()
-            if binding:
-                binding.resource_id = resource_id
-                binding.resource_item_id = None
-            else:
-                session.add(
-                    CoursePathResourceBinding(
-                        user_id=user_id,
-                        node_id=node_id,
-                        resource_id=resource_id,
-                    )
-                )
-        await session.commit()
-
-    return {
-        "resource_id": resource_id,
-        "status": "pending",
-        "node_id": node_id,
-        "source": "single_agent",
-    }
 
 
 async def _update_node_resource_status(

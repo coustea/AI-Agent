@@ -103,7 +103,13 @@ def resolve_uploaded_image_path(image_url: str) -> Path | None:
     return path if path.is_file() else None
 
 
-def read_uploaded_file_content(absolute_path: str) -> str:
+def read_uploaded_file_content(
+    absolute_path: str,
+    *,
+    max_content_chars: int = MAX_FILE_CONTENT_CHARS,
+    max_pdf_pages: int | None = None,
+    max_docx_paragraphs: int | None = None,
+) -> str:
     """读取上传文件内容，支持 .pdf / .docx / .txt / .md / .log。
 
     Args:
@@ -124,14 +130,16 @@ def read_uploaded_file_content(absolute_path: str) -> str:
 
         text_parts = []
         with pdf_open(str(path)) as doc:
-            for page in doc:
+            pages = doc if max_pdf_pages is None else list(doc)[:max_pdf_pages]
+            for page in pages:
                 text_parts.append(page.get_text())
         content = "\n".join(text_parts)
     elif suffix == ".docx":
         from docx import Document
 
         doc = Document(str(path))
-        content = "\n".join(para.text for para in doc.paragraphs if para.text.strip())
+        paragraphs = doc.paragraphs if max_docx_paragraphs is None else doc.paragraphs[:max_docx_paragraphs]
+        content = "\n".join(para.text for para in paragraphs if para.text.strip())
     elif suffix in {".txt", ".md", ".log"}:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
@@ -140,12 +148,21 @@ def read_uploaded_file_content(absolute_path: str) -> str:
 
     if not content or not content.strip():
         return "文件内容为空"
-    if len(content) > MAX_FILE_CONTENT_CHARS:
-        content = content[:MAX_FILE_CONTENT_CHARS] + "\n\n[...文档内容过长，已截断...]"
+    if len(content) > max_content_chars:
+        content = content[:max_content_chars] + "\n\n[...文档内容过长，已截断...]"
     return content
 
 
-async def analyze_documents(*, current_user_id: int, file_urls: list[str], question: str) -> dict:
+async def analyze_documents(
+    *,
+    current_user_id: int,
+    file_urls: list[str],
+    question: str,
+    max_total_chars: int = 40000,
+    max_file_content_chars: int = MAX_FILE_CONTENT_CHARS,
+    max_pdf_pages: int | None = None,
+    max_docx_paragraphs: int | None = None,
+) -> dict:
     """批量读取用户上传的文档内容，返回分析摘要。
 
     Args:
@@ -173,7 +190,12 @@ async def analyze_documents(*, current_user_id: int, file_urls: list[str], quest
             )
             continue
 
-        content = read_uploaded_file_content(absolute_path)
+        content = read_uploaded_file_content(
+            absolute_path,
+            max_content_chars=max_file_content_chars,
+            max_pdf_pages=max_pdf_pages,
+            max_docx_paragraphs=max_docx_paragraphs,
+        )
         documents.append({
             "url": file_url,
             "name": Path(absolute_path).name,
@@ -190,10 +212,14 @@ async def analyze_documents(*, current_user_id: int, file_urls: list[str], quest
             "error": "未找到可访问的文档。",
         }
 
+    joined_snippets = "\n\n".join(snippets)
+    if len(joined_snippets) > max_total_chars:
+        joined_snippets = joined_snippets[:max_total_chars] + "\n\n[...文档总内容过长，已截断...]"
+
     analysis_text = (
         f"用户问题：{question or '请分析这些文档'}\n\n"
         "以下是已提取的文档内容，请基于它们回答用户问题，并在回答中尽量提炼知识点：\n\n"
-        + "\n\n".join(snippets)
+        + joined_snippets
     )
     return {
         "success": True,

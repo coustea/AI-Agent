@@ -26,7 +26,7 @@ async def create_user(
     result = await auth_usecases.register(session, data)
     if not result:
         return HttpResponse.error(code=400, message="用户名已存在")
-    return HttpResponse.success(data=result)
+    return HttpResponse.success(data=result, status_code=201)
 
 
 @router.post("/auth")
@@ -40,7 +40,7 @@ async def login(
     return HttpResponse.success(data=result)
 
 
-@router.delete("/auth")
+@router.post("/auth/logout")
 async def logout(
     background_tasks: BackgroundTasks,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),

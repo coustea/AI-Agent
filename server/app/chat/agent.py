@@ -47,6 +47,7 @@ GRAPH_NODE_NAMES = {
     "classify",
     "answer_node",
     "search_node",
+    "knowledge_node",
     "attachment_answer",
     "teaching_diagram_generate",
 }
@@ -162,6 +163,7 @@ class TutorAgent:
             graph.add_node("classify", self._classify_node)
             graph.add_node("answer_node", self._answer_node)
             graph.add_node("search_node", self._search_node)
+            graph.add_node("knowledge_node", self._knowledge_node)
             graph.add_node("attachment_answer", self._attachment_answer_node)
             graph.add_node("teaching_diagram_generate", self._teaching_diagram_generate_node)
 
@@ -174,6 +176,7 @@ class TutorAgent:
                     "direct": "answer_node",
                     "diagram_only": "teaching_diagram_generate",
                     "search": "search_node",
+                    "knowledge": "knowledge_node",
                     "attachment_needed": "attachment_answer",
                 },
             )
@@ -186,6 +189,7 @@ class TutorAgent:
                 },
             )
             graph.add_edge("search_node", "answer_node")
+            graph.add_edge("knowledge_node", "answer_node")
             graph.add_conditional_edges(
                 "attachment_answer",
                 self._route_after_answer,
@@ -219,7 +223,8 @@ class TutorAgent:
         session_id = state.get("session_id")
         messages = state.get("messages") or []
         attachments = state.get("attachments") or []
-        enable_search = bool(state.get("enable_search", False))
+        enable_web_search = bool(state.get("enable_web_search", False))
+        enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
         need_teaching_diagram = bool(state.get("need_teaching_diagram", False))
         user_message = extract_question(messages)
 
@@ -228,18 +233,28 @@ class TutorAgent:
         with node_timer("classify", user=user_id, session=session_id):
             # 判断是否需要请求画图
             need_diagram = need_teaching_diagram or explicit_diagram_requested(user_message)
-            
+
             state_updates: dict[str, Any] = {}
             if need_diagram != need_teaching_diagram:
                 state_updates["need_teaching_diagram"] = need_diagram
 
-            # 根据附件情况、搜索开关以及是否只要画图，决定路由去向
+            # 根据附件情况、搜索/知识库开关以及是否只要画图，决定路由去向
             if has_attachments:
+                if enable_web_search and enable_knowledge_base:
+                    execution_mode = "attachment_search_knowledge"
+                elif enable_web_search:
+                    execution_mode = "attachment_search"
+                elif enable_knowledge_base:
+                    execution_mode = "attachment_knowledge"
+                else:
+                    execution_mode = "attachment"
                 route = "attachment_needed"
-                execution_mode = "attachment_search" if enable_search else "attachment"
-            elif enable_search:
+            elif enable_web_search:
                 route = "search"
                 execution_mode = "search"
+            elif enable_knowledge_base:
+                route = "knowledge"
+                execution_mode = "knowledge"
             elif need_diagram and diagram_only_requested(user_message):
                 _, prior_answer = previous_teaching_exchange(list(messages))
                 if prior_answer:
@@ -255,10 +270,12 @@ class TutorAgent:
                 execution_mode = "direct"
 
             logger.debug(
-                "[TutorAgent] 路由分类 route=%s execution_mode=%s need_diagram=%s question=%s",
+                "[TutorAgent] 路由分类 route=%s execution_mode=%s need_diagram=%s web_search=%s knowledge=%s question=%s",
                 route,
                 execution_mode,
                 need_diagram,
+                enable_web_search,
+                enable_knowledge_base,
                 truncate(user_message, 120),
             )
 
@@ -266,8 +283,6 @@ class TutorAgent:
                 "route": route,
                 "execution_mode": execution_mode,
             })
-            if enable_search != bool(state.get("enable_search", False)):
-                state_updates["enable_search"] = True
 
             return state_updates
 
@@ -288,7 +303,7 @@ class TutorAgent:
         attachment_context = str(state.get("attachment_analysis_context", "")).strip()
 
         with node_timer("search_node", user=user_id, session=session_id):
-            logger.info("[TutorAgent] 搜索节点 question=%s", truncate(question, 180))
+            logger.info("[TutorAgent] 联网搜索节点 question=%s", truncate(question, 180))
 
             search_result, knowledge_sources = await collect_search_context(
                 agent=self,
@@ -296,6 +311,7 @@ class TutorAgent:
                 system_prompt=system_prompt,
                 messages=messages,
                 attachment_context=attachment_context,
+                include_knowledge=bool(state.get("enable_knowledge_base", False)),
             )
 
             logger.debug("[TutorAgent] search_node 完成 preview=%s", truncate(search_result, 220))
@@ -304,6 +320,30 @@ class TutorAgent:
                 "search_result": search_result,
                 "knowledge_sources": knowledge_sources,
                 "termination_reason": "search_done",
+            }
+
+    async def _knowledge_node(self, state: TutorState) -> dict[str, Any]:
+        """知识库检索节点：只查本地 Chroma 知识库，不触发联网搜索。"""
+        from app.chat.answer import collect_knowledge_context
+
+        messages = state.get("messages") or []
+        user_id = state.get("user_id")
+        session_id = state.get("session_id")
+        question = extract_question(messages)
+
+        with node_timer("knowledge_node", user=user_id, session=session_id):
+            logger.info("[TutorAgent] 知识库检索节点 question=%s", truncate(question, 180))
+
+            knowledge_result, knowledge_sources = await collect_knowledge_context(
+                question=question,
+            )
+
+            logger.debug("[TutorAgent] knowledge_node 完成 preview=%s", truncate(knowledge_result, 220))
+
+            return {
+                "search_result": knowledge_result,
+                "knowledge_sources": knowledge_sources,
+                "termination_reason": "knowledge_done",
             }
 
     async def _attachment_answer_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
@@ -333,10 +373,11 @@ class TutorAgent:
                 break
 
         logger.info(
-            "[TutorAgent] 对话开始 message=%s attachments=%s enable_search=%s",
+            "[TutorAgent] 对话开始 message=%s attachments=%s web_search=%s knowledge=%s",
             truncate(current_message, 180),
             len(context.attachments),
-            context.enable_search,
+            context.enable_web_search,
+            context.enable_knowledge_base,
         )
 
         await self._ensure_graph()
@@ -370,7 +411,12 @@ class TutorAgent:
                         elif name == "search_node":
                             yield stream_event(
                                 "status",
-                                {"stage": name, "message": "正在检索与问题相关的补充资料..."},
+                                {"stage": name, "message": "正在联网搜索与问题相关的资料..."},
+                            )
+                        elif name == "knowledge_node":
+                            yield stream_event(
+                                "status",
+                                {"stage": name, "message": "正在检索本地知识库..."},
                             )
                         elif name == "answer_node":
                             # 自适应子节点状态消息

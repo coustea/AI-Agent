@@ -5,53 +5,17 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
+from app.resource.agents.common import salvage_json_from_llm
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
 logger = get_module_logger("resource", sub="reading")
-
-
-def _extract_json(raw: str) -> dict | None:
-    """Try to extract a JSON dict from LLM output that may be wrapped in markdown fences."""
-    # Try direct parse first
-    try:
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError:
-        pass
-
-    # Try stripping ```json``` fence
-    pattern = r"```(?:json)?\s*\n(.*?)```"
-    match = re.search(pattern, raw, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            if isinstance(data, dict):
-                return data
-        except json.JSONDecodeError:
-            pass
-
-    # Try finding outermost { }
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            data = json.loads(raw[start:end + 1])
-            if isinstance(data, dict):
-                return data
-        except json.JSONDecodeError:
-            pass
-
-    return None
 
 
 @register_agent
@@ -94,7 +58,7 @@ class ReadingAgent(BaseResourceAgent):
 
         # The prompt instructs JSON output, but LLM often wraps in ```json```.
         # Parse it so the backend stores as content_json for frontend consumption.
-        parsed = _extract_json(content)
+        parsed = salvage_json_from_llm(content)
         if parsed is not None:
             content = json.dumps(parsed, ensure_ascii=False, indent=2)
             file_type = "json"
@@ -127,8 +91,8 @@ class ReadingAgent(BaseResourceAgent):
             },
         )
 
-    def _build_input_override(self, state: WorkerState) -> str:
-        parts = build_worker_base_context(state)
+    def agent_input_parts(self, state: WorkerState) -> list[str]:
+        parts = []
         config = state.agent_config
         if config:
             cfg_lines = ["## 阅读配置"]
@@ -139,8 +103,4 @@ class ReadingAgent(BaseResourceAgent):
             )
             parts.append("\n".join(cfg_lines))
         parts.append("请生成学习阅读材料，输出 Markdown 格式。")
-        return "\n\n".join(parts)
-
-    async def run(self, state: WorkerState) -> WorkerResult:
-        input_text = self._build_input_override(state)
-        return await self._execute(input_text, state)
+        return parts

@@ -10,7 +10,6 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
@@ -81,10 +80,7 @@ class ContentAgent(BaseResourceAgent):
             metadata={"agent_id": "content"},
         )
 
-    def _build_input_override(self, state: WorkerState) -> str:
-        """Content-specific input building with config."""
-        parts = build_worker_base_context(state)
-
+    def agent_input_parts(self, state: WorkerState) -> list[str]:
         config = state.agent_config
         if config:
             cfg_lines = ["## 内容配置"]
@@ -97,15 +93,8 @@ class ContentAgent(BaseResourceAgent):
             cfg_lines.append(
                 "- 包含常见误区和易错点" if config.get("include_common_mistakes", True) else "- 不包含常见误区"
             )
-            parts.append("\n".join(cfg_lines))
-
-        parts.append("请生成专业课程讲解文档，只输出 Markdown 内容。")
-        return "\n\n".join(parts)
-
-    async def run(self, state: WorkerState) -> WorkerResult:
-        """Override run() to use content-specific input building."""
-        input_text = self._build_input_override(state)
-        return await self._execute(input_text, state)
+            return ["\n".join(cfg_lines), "请生成专业课程讲解文档，只输出 Markdown 内容。"]
+        return ["请生成专业课程讲解文档，只输出 Markdown 内容。"]
 
     def _clean_content(self, content: str) -> str:
         """清理内容中的常见问题。"""

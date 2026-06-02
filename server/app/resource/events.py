@@ -196,15 +196,13 @@ class AgentEventEmitter:
         resource: Any = None,
         task_id: str | None = None,
         progress: int = 0,
-        agent: str | None = None,
     ) -> None:
         """发送资源生成完成事件。"""
-        resolved_agent_id = agent_id or agent or ""
         resource_payload = resource.model_dump(mode="json") if hasattr(resource, "model_dump") else resource
         if resource_payload is None:
             resource_payload = {
-                "id": f"{self.resource_id}-{resolved_agent_id}" if self.resource_id else resolved_agent_id,
-                "type": resolved_agent_id,
+                "id": f"{self.resource_id}-{agent_id}" if self.resource_id else agent_id,
+                "type": agent_id,
                 "title": title,
                 "format": file_type,
                 "content": content,
@@ -214,14 +212,14 @@ class AgentEventEmitter:
             }
         await self._publish(self._make_event(
             event_type="resource",
-            agent=resolved_agent_id,
+            agent=agent_id,
             status="success",
-            message=f"资源生成完成: {title or resolved_agent_id}",
+            message=f"资源生成完成: {title or agent_id}",
             progress=progress,
             task_id=task_id,
             payload={
                 "resource": resource_payload,
-                "agent_id": resolved_agent_id,
+                "agent_id": agent_id,
                 "title": title,
                 "file_type": file_type,
                 "summary": summary,

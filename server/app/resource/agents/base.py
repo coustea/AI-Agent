@@ -32,13 +32,22 @@ class BaseResourceAgent(ABC):
     def __init__(self, emitter: AgentEventEmitter | None = None) -> None:
         self.emitter = emitter
 
+    def agent_input_parts(self, state: WorkerState) -> list[str]:
+        """Override to add agent-specific context sections to the LLM prompt.
+
+        The base prompt already includes learning need, profile, blueprint,
+        and planner instructions. Return extra sections unique to this agent.
+        """
+        return []
+
     async def run(self, state: WorkerState) -> WorkerResult:
         """Unified entry point for both single-agent and multi-agent modes."""
         from app.resource.agents.common import build_worker_base_context
 
-        input_text = "\n\n".join(build_worker_base_context(state))
-        result = await self._execute(input_text, state)
-        return result
+        parts = build_worker_base_context(state)
+        parts.extend(self.agent_input_parts(state))
+        input_text = "\n\n".join(parts)
+        return await self._execute(input_text, state)
 
     @abstractmethod
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:

@@ -34,7 +34,6 @@ from typing import Any, AsyncIterator
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
-from pydantic import ValidationError
 
 from app.config import get
 from app.infra.utils import ServiceError, parse_first_json_object

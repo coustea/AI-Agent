@@ -16,9 +16,13 @@ class HttpResponse(BaseModel):
     data: Any = None
 
     @staticmethod
-    def success(data: Any = None, message: str = "success") -> dict[str, Any]:
-        """Create a successful response (HTTP 200)."""
-        return HttpResponse(code=200, message=message, data=data).model_dump()
+    def success(data: Any = None, message: str = "success", status_code: int = 200) -> JSONResponse:
+        """Create a successful response (HTTP 200 by default).
+
+        Use status_code=201 for resource creation endpoints.
+        """
+        body = HttpResponse(code=200, message=message, data=data).model_dump(mode="json")
+        return JSONResponse(status_code=status_code, content=body)
 
     @staticmethod
     def error(
@@ -31,5 +35,5 @@ class HttpResponse(BaseModel):
         Returns a JSONResponse so FastAPI uses the business code as the
         HTTP status code, keeping the envelope format {code, message, data}.
         """
-        body = HttpResponse(code=code, message=message, data=data).model_dump()
+        body = HttpResponse(code=code, message=message, data=data).model_dump(mode="json")
         return JSONResponse(status_code=code, content=body)

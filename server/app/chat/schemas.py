@@ -34,7 +34,8 @@ class TutorAgentContext(BaseModel):
     attachment_analysis_context: str = ""
     attachment_analysis: dict[str, Any] = Field(default_factory=dict)
     attachments: list[str] = Field(default_factory=list)
-    enable_search: bool = False
+    enable_web_search: bool = False
+    enable_knowledge_base: bool = False
     need_teaching_diagram: bool = False
     diagram_mode: Literal["requested", "off"] = "off"
     preferred_diagram_type: Optional["TeachingDiagramType"] = None
@@ -55,7 +56,8 @@ class TutorState(TypedDict, total=False):
     session_id: str  # 会话ID
     attachments: Optional[list[str]]  # 附件URL列表
     need_teaching_diagram: bool  # 是否生成教学图解
-    enable_search: bool  # 是否启用搜索
+    enable_web_search: bool  # 是否启用联网搜索
+    enable_knowledge_base: bool  # 是否启用本地知识库检索
     teaching_diagram: Optional[dict[str, Any]]  # 生成的教学图解数据
     teaching_diagram_error: Optional[str]  # 教学图解生成错误信息
     diagram_type: Optional["TeachingDiagramType"]  # 教学图解类型

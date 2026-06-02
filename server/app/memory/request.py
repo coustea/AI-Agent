@@ -16,5 +16,4 @@ class OnboardingUpdate(BaseModel):
     preferred_language: str | None = None
     cognitive_style: str | None = None
     interaction_preference: str | None = None
-    practice_ability: str | None = None
-    weakness_points: list[str] | None = None
+    

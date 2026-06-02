@@ -27,7 +27,7 @@ async def generate_path(
     result = await service.start_generation_task(user_id=current_user.id, request=request)
     if result["should_schedule"]:
         background_tasks.add_task(bg_generate_path_task, result["task"].task_id)
-    return HttpResponse.success(data=result["task"].model_dump(mode="json"))
+    return HttpResponse.success(data=result["task"].model_dump(mode="json"), status_code=201)
 
 
 @router.get("/tasks/active")
@@ -144,7 +144,7 @@ async def complete_node(
     return HttpResponse.success(data=response.model_dump(mode="json"))
 
 
-@router.post("/adjust")
+@router.patch("")
 async def adjust_path(
     request: PathPlanFeedbackRequest,
     current_user: User = Depends(get_current_user),

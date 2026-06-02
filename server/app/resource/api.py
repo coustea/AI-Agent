@@ -2,8 +2,10 @@
 Resource HTTP routes.
 
 API 端点：
-- POST /generate/task - 创建后台资源生成任务（独立入口）
-- GET /generate/task/{id}/status - 查询数据库中的真实执行快照
+- POST /resources - 创建后台资源生成任务
+- POST /resources/single - 创建单智能体资源生成任务
+- GET /resources/{id}/status - 查询任务执行状态
+- GET /resources/{id}/events - SSE 推送任务事件
 - GET /agents - 查询可用 Agent 列表
 - GET /resources - 查询资源列表
 - GET /resources/{id} - 查询资源详情
@@ -24,7 +26,7 @@ from app.auth.security import get_current_user
 from app.infra.database import get_session, session_scope
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest
+from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceUsecases, bg_gen_task, bg_single_gen_task
 from app.memory.service import MemoryService
 from app.infra.response import HttpResponse
@@ -33,7 +35,7 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.post("/generate/task")
+@router.post("/resources")
 async def gen_task(
     req: ResourceGenerationRequest,
     background_tasks: BackgroundTasks,
@@ -66,10 +68,10 @@ async def gen_task(
         resource_id=resource_id,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"})
+    return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
 
 
-@router.post("/generate/single")
+@router.post("/resources/single")
 async def gen_single(
     req: SingleResourceRequest,
     background_tasks: BackgroundTasks,
@@ -107,12 +109,10 @@ async def gen_single(
         profile=profile_dict,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value})
+    return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
 
 
-from app.resource.schemas import AgentSelection
-
-@router.get("/generate/task/{resource_id}/status")
+@router.get("/resources/{resource_id}/status")
 async def get_generation_status(
     resource_id: int,
     current_user: User = Depends(get_current_user),
@@ -127,7 +127,7 @@ async def get_generation_status(
     return HttpResponse.success(data=status_data)
 
 
-@router.get("/generate/task/{resource_id}/events")
+@router.get("/resources/{resource_id}/events")
 async def stream_generation_events(
     resource_id: int,
     current_user: User = Depends(get_current_user),

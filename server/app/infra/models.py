@@ -25,8 +25,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import ARRAY, Integer, Text, Column, Index, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+from sqlalchemy import ForeignKey, Text, Column, Index, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
 from sqlmodel import SQLModel, Field
 
 from app.infra.logging import get_logger
@@ -55,7 +55,7 @@ class User(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -84,7 +84,10 @@ class School(SQLModel, table=True):
     name: str = Field(index=True, max_length=100)
     level: str | None = Field(default=None, max_length=50)  # 办学层次：本科/专科
     tier: str | None = Field(default=None, max_length=20)  # 院校层次：985/211/双一流/普通本科/专科
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
 
 # ---------------------------------------------------------------------------
 # Chat — 会话与消息
@@ -93,8 +96,14 @@ class School(SQLModel, table=True):
 class ChatSession(SQLModel, table=True):
     """会话表 — 管理多会话隔离，每个用户可以有多个独立会话"""
     __tablename__ = "chat_sessions"
+    __table_args__ = (
+        Index("ix_chat_sessions_attachment_analyses", "attachment_analyses", postgresql_using="gin"),
+    )
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)  # UUID 字符串主键
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
+    )  # UUID 原生类型主键
     user_id: int = Field(index=True)
     module: str = Field(index=True)  # 所属功能模块（如 "mentor"）
     title: str = Field(default="新对话", max_length=100)  # 会话标题（取首条消息前 20 字符）
@@ -106,7 +115,7 @@ class ChatSession(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
     # 会话概要触发计数器
     summary_token_count: int = Field(default=0)  # 累计 token 数，达到阈值触发会话概要生成
@@ -119,11 +128,17 @@ class ChatMessage(SQLModel, table=True):
     __tablename__ = "chat_messages"
     __table_args__ = (
         Index("ix_chat_messages_user_session_module_created_at", "user_id", "session_id", "module", "created_at"),
+        Index("ix_chat_messages_attachments", "attachments", postgresql_using="gin"),
+        Index("ix_chat_messages_tool_calls", "tool_calls", postgresql_using="gin"),
+        Index("ix_chat_messages_teaching_diagram", "teaching_diagram", postgresql_using="gin"),
+        Index("ix_chat_messages_usage_metadata", "usage_metadata", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    session_id: str = Field(index=True)  # 关联 ChatSession
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )  # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
     module: str = Field(default="mentor", index=True)
     role: str  # 消息角色："user" | "assistant" | "system" | "tool"
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
@@ -150,7 +165,9 @@ class ChatSessionSummary(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    session_id: str = Field(index=True)  # 关联 ChatSession
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )  # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
     module: str = Field(default="mentor", index=True)  # 所属功能模块
 
     summary_markdown: str = Field(sa_column=Column(Text))  # 概要主体 Markdown（唯一权威来源）
@@ -168,7 +185,7 @@ class ChatSessionSummary(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -187,6 +204,9 @@ class UserLongTermMemory(SQLModel, table=True):
     __tablename__ = "user_long_term_memories"
     __table_args__ = (
         UniqueConstraint("user_id", "module", name="uq_user_long_term_memory_user_module"),
+        Index("ix_user_long_term_memories_source_session_ids", "source_session_ids", postgresql_using="gin"),
+        Index("ix_user_long_term_memories_source_message_ids", "source_message_ids", postgresql_using="gin"),
+        Index("ix_user_long_term_memories_source_summary_ids", "source_summary_ids", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -210,7 +230,7 @@ class UserLongTermMemory(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -228,6 +248,10 @@ class UserProfile(SQLModel, table=True):
     __tablename__ = "user_profiles"
     __table_args__ = (
         UniqueConstraint("user_id", "module", name="uq_user_profile_user_module"),
+        Index("ix_user_profiles_profile_json", "profile_json", postgresql_using="gin"),
+        Index("ix_user_profiles_profile_score_json", "profile_score_json", postgresql_using="gin"),
+        Index("ix_user_profiles_source_session_ids", "source_session_ids", postgresql_using="gin"),
+        Index("ix_user_profiles_source_event_ids", "source_event_ids", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)  # 改为 id 主键
@@ -253,7 +277,7 @@ class UserProfile(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -261,6 +285,8 @@ class UserProfileHistory(SQLModel, table=True):
     """用户画像历史表 — 保存每次画像变更的快照"""
     __tablename__ = "user_profile_history"
     __table_args__ = (
+        Index("ix_user_profile_history_profile_json", "profile_json", postgresql_using="gin"),
+        Index("ix_user_profile_history_profile_score_json", "profile_score_json", postgresql_using="gin"),
         Index("ix_user_profile_history_user_module_version", "user_id", "module", "version"),
     )
 
@@ -316,7 +342,7 @@ class GeneratedResource(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -324,6 +350,10 @@ class GeneratedResourceItem(SQLModel, table=True):
     """资源项明细表 — 每个 agent 生成一个资源项。"""
     __tablename__ = "generated_resource_items"
     __table_args__ = (
+        Index("ix_generated_resource_items_content_json", "content_json", postgresql_using="gin"),
+        Index("ix_generated_resource_items_metadata_json", "metadata_json", postgresql_using="gin"),
+        Index("ix_generated_resource_items_covered_knowledge_points", "covered_knowledge_points", postgresql_using="gin"),
+        Index("ix_generated_resource_items_weak_points_covered", "weak_points_covered", postgresql_using="gin"),
         Index("ix_generated_resource_items_resource_agent", "resource_id", "agent_type"),
         Index("ix_generated_resource_items_user_created_at", "user_id", "created_at"),
     )
@@ -369,7 +399,7 @@ class GeneratedResourceItem(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -383,6 +413,7 @@ class LearningEvent(SQLModel, table=True):
     __table_args__ = (
         Index("ix_learning_events_user_session_created_at", "user_id", "session_id", "created_at"),
         Index("ix_learning_events_user_type_created_at", "user_id", "event_type", "created_at"),
+        Index("ix_learning_events_metadata_json", "metadata_json", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -439,7 +470,7 @@ class CoursePathGenerationTask(SQLModel, table=True):
     completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -448,6 +479,7 @@ class CoursePath(SQLModel, table=True):
     __tablename__ = "course_paths"
     __table_args__ = (
         Index("ix_course_paths_user_module_status", "user_id", "module", "status"),
+        Index("ix_course_paths_stages_json", "stages_json", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -477,13 +509,20 @@ class CoursePath(SQLModel, table=True):
     # 规划原因/依据 (来自大模型)
     adjustment_rationale: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
+    # 个性化诊断与裁剪策略报告 (来自多智能体规划第一棒)
+    strategy_report: str | None = Field(default=None, sa_column=Column(Text))
+
+    # 搜索证据与学习效果摘要
+    search_evidence: list[dict] | None = Field(default=None, sa_column=Column(JSONB), description="搜索证据摘要")
+    learning_signal_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="学习效果摘要")
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -493,6 +532,7 @@ class CoursePathNode(SQLModel, table=True):
     __table_args__ = (
         Index("ix_course_path_nodes_path_stage", "path_id", "stage_id"),
         Index("ix_course_path_nodes_user_status", "user_id", "status"),
+        Index("ix_course_path_nodes_prerequisites", "prerequisites", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -519,6 +559,9 @@ class CoursePathNode(SQLModel, table=True):
     # 推荐原因（基于画像维度的推荐理由）
     recommendation_reason: str | None = Field(default=None, sa_column=Column(Text))
 
+    # 资源推送策略
+    resource_policy: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="资源推送策略")
+
     # 完成信息
     started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
     completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
@@ -529,7 +572,7 @@ class CoursePathNode(SQLModel, table=True):
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 

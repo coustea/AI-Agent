@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 
 from pydantic import BaseModel, Field
@@ -14,7 +13,7 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
+from app.resource.agents.common import salvage_json_from_llm
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
@@ -106,7 +105,7 @@ class QuizAgent(BaseResourceAgent):
             logger.debug("Agent[quiz] LLM fallback 调用完成: %.2fs", elapsed)
 
             raw = response.content if hasattr(response, "content") else str(response)
-            quiz_data = self._salvage_quiz_payload(raw)
+            quiz_data = salvage_json_from_llm(raw, require_key="questions")
             if quiz_data is None:
                 elapsed = time.perf_counter() - start
                 logger.warning("Agent[quiz] 失败: %.2fs, error=习题 JSON 解析失败", elapsed)
@@ -159,8 +158,7 @@ class QuizAgent(BaseResourceAgent):
             },
         )
 
-    def _build_input_override(self, state: WorkerState) -> str:
-        parts = build_worker_base_context(state)
+    def agent_input_parts(self, state: WorkerState) -> list[str]:
         config = state.agent_config
         if config:
             cfg_lines = ["## 习题配置"]
@@ -171,39 +169,5 @@ class QuizAgent(BaseResourceAgent):
             cfg_lines.append(
                 "- 每题包含详细解析" if config.get("include_analysis", True) else "- 不包含解析"
             )
-            parts.append("\n".join(cfg_lines))
-        return "\n\n".join(parts)
-
-    async def run(self, state: WorkerState) -> WorkerResult:
-        input_text = self._build_input_override(state)
-        return await self._execute(input_text, state)
-
-    def _salvage_quiz_payload(self, raw: str) -> dict | None:
-        try:
-            data = json.loads(raw)
-            if isinstance(data, dict) and "questions" in data:
-                return data
-        except json.JSONDecodeError:
-            pass
-
-        pattern = r"```(?:json)?\s*\n(.*?)```"
-        match = re.search(pattern, raw, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                if isinstance(data, dict) and "questions" in data:
-                    return data
-            except json.JSONDecodeError:
-                pass
-
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                data = json.loads(raw[start:end + 1])
-                if isinstance(data, dict) and "questions" in data:
-                    return data
-            except json.JSONDecodeError:
-                pass
-
-        return None
+            return ["\n".join(cfg_lines)]
+        return []

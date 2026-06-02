@@ -5,7 +5,6 @@ PPT 智能体 — 生成幻灯片内容 JSON 供前端渲染。
 from __future__ import annotations
 
 import json
-import re
 import time
 
 from pydantic import BaseModel, Field, model_validator
@@ -14,7 +13,7 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
+from app.resource.agents.common import salvage_json_from_llm
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
@@ -211,8 +210,7 @@ class PptAgent(BaseResourceAgent):
             },
         )
 
-    def _build_input_override(self, state: WorkerState) -> str:
-        parts = build_worker_base_context(state)
+    def agent_input_parts(self, state: WorkerState) -> list[str]:
         config = state.agent_config or {}
         page_count = config.get("page_count") or config.get("slide_count") or 10
         difficulty = config.get("difficulty") or "intermediate"
@@ -222,46 +220,19 @@ class PptAgent(BaseResourceAgent):
         cfg_lines.append(f"- 仅允许使用 theme-logic-blue 模板")
         cfg_lines.append(f"- 在线预览格式 (output_format=preview)")
         cfg_lines.append(f"- 教学难度: {difficulty}")
-        parts.append("\n".join(cfg_lines))
+        parts = ["\n".join(cfg_lines)]
         approved_sources = config.get("approved_sources")
         if isinstance(approved_sources, list) and approved_sources:
             parts.append("## 已通过审核的内容来源")
             parts.append(json.dumps(approved_sources, ensure_ascii=False, indent=2))
             parts.append("PPT 的核心事实、概念解释和案例应基于以上已审核来源展开，不要引入无依据的新结论。")
         parts.append("请生成 PPT 幻灯片内容。")
-        return "\n\n".join(parts)
-
-    async def run(self, state: WorkerState) -> WorkerResult:
-        input_text = self._build_input_override(state)
-        return await self._execute(input_text, state)
+        return parts
 
     def _salvage_ppt_payload(self, raw: str) -> dict | None:
         """Try to parse raw LLM output as PPT JSON; convert old format if needed."""
-        data = None
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            pass
-
+        data = salvage_json_from_llm(raw, require_key="slides")
         if data is None:
-            pattern = r"```(?:json)?\s*\n(.*?)```"
-            match = re.search(pattern, raw, re.DOTALL)
-            if match:
-                try:
-                    data = json.loads(match.group(1))
-                except json.JSONDecodeError:
-                    pass
-
-        if data is None:
-            start = raw.find("{")
-            end = raw.rfind("}")
-            if start >= 0 and end > start:
-                try:
-                    data = json.loads(raw[start:end + 1])
-                except json.JSONDecodeError:
-                    pass
-
-        if not isinstance(data, dict) or "slides" not in data:
             return None
 
         # Already in PPTDocument format (has config + layout-based slides)

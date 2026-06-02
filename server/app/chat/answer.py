@@ -263,6 +263,7 @@ async def collect_search_context(
     system_prompt: str,
     messages: list[Any],
     attachment_context: str = "",
+    include_knowledge: bool = False,
 ) -> tuple[str, list[dict[str, Any]]]:
     """联网搜索和本地知识库上下文收集。"""
     from app.prompts import registry
@@ -287,22 +288,13 @@ async def collect_search_context(
 
     search_result = normalize_message_content(getattr(response, "content", "") if response else "")
     
-    from app.chat.tools.knowledge import format_knowledge_context
-    knowledge_context, knowledge_rows = format_knowledge_context(question)
-    knowledge_sources = [
-        {
-            "rank": item.get("rank"),
-            "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("file_name") or "未知来源",
-            "file_name": (item.get("metadata") or {}).get("file_name") or "",
-            "chunk_index": (item.get("metadata") or {}).get("chunk_index"),
-            "distance": item.get("distance"),
-        }
-        for item in knowledge_rows
-    ]
-    if knowledge_rows:
-        search_result = (
-            f"【本地知识库检索结果】\n{knowledge_context}\n\n{search_result}"
-        ).strip()
+    knowledge_sources: list[dict[str, Any]] = []
+    if include_knowledge:
+        knowledge_context, knowledge_sources = await collect_knowledge_context(question=question)
+        if knowledge_sources:
+            search_result = (
+                f"【本地知识库检索结果】\n{knowledge_context}\n\n{search_result}"
+            ).strip()
 
     tool_calls = getattr(response, "tool_calls", []) if response else []
     tool_results = []
@@ -359,6 +351,26 @@ async def collect_search_context(
 
     combined_parts = [part for part in [search_result, "\n\n".join(tool_results)] if part.strip()]
     return "\n\n".join(combined_parts), knowledge_sources
+
+
+async def collect_knowledge_context(*, question: str) -> tuple[str, list[dict[str, Any]]]:
+    """收集本地知识库上下文，不触发联网搜索。"""
+    from app.chat.tools.knowledge import format_knowledge_context
+
+    knowledge_context, knowledge_rows = format_knowledge_context(question)
+    knowledge_sources = [
+        {
+            "rank": item.get("rank"),
+            "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("file_name") or "未知来源",
+            "file_name": (item.get("metadata") or {}).get("file_name") or "",
+            "chunk_index": item.get("metadata", {}).get("chunk_index") if isinstance(item.get("metadata"), dict) else None,
+            "distance": item.get("distance"),
+        }
+        for item in knowledge_rows
+    ]
+    if not knowledge_rows:
+        return "本地知识库没有检索到相关内容，或知识库尚未正确加载。", []
+    return knowledge_context, knowledge_sources
 
 
 async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
@@ -477,14 +489,19 @@ async def attachment_answer_node(
 
         search_context = ""
         knowledge_sources: list[dict[str, Any]] = []
-        if bool(state.get("enable_search", False)):
+        enable_web_search = bool(state.get("enable_web_search", False))
+        enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
+        if enable_web_search:
             search_context, knowledge_sources = await collect_search_context(
                 agent=agent,
                 question=question,
                 system_prompt=system_prompt,
                 messages=messages,
                 attachment_context=full_context,
+                include_knowledge=enable_knowledge_base,
             )
+        elif enable_knowledge_base:
+            search_context, knowledge_sources = await collect_knowledge_context(question=question)
 
         answer_prompt = f"""用户问题: {question}
 

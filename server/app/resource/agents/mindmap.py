@@ -10,7 +10,6 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
@@ -98,8 +97,8 @@ class MindmapAgent(BaseResourceAgent):
             },
         )
 
-    def _build_input_override(self, state: WorkerState) -> str:
-        parts = build_worker_base_context(state)
+    def agent_input_parts(self, state: WorkerState) -> list[str]:
+        parts = []
         config = state.agent_config
         if config:
             cfg_lines = ["## 思维导图配置"]
@@ -115,19 +114,19 @@ class MindmapAgent(BaseResourceAgent):
                 "- 包含前置知识节点" if config.get("include_prerequisites", False) else "- 不包含前置知识"
             )
             parts.append("\n".join(cfg_lines))
-        parts.append("请生成思维导图，只输出 Markdown 内容。")
-        return "\n\n".join(parts)
-
-    async def run(self, state: WorkerState) -> WorkerResult:
-        input_text = self._build_input_override(state)
-        return await self._execute(input_text, state)
+        parts.append(
+            "请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
+            "【注意】绝对不要使用 Mermaid 语法（不要输出 ````mermaid`，不要使用 `mindmap` 关键字）！\n"
+            "请只输出标准的 Markdown 标题和列表文本。"
+        )
+        return parts
 
     def _clean_markdown(self, content: str) -> str:
         lines = content.split("\n")
         cleaned = []
         for line in lines:
             stripped = line.strip()
-            if stripped in ("```", "```markdown", "```text"):
+            if stripped.startswith("```") or stripped in ("```", "```markdown", "```text", "```mermaid"):
                 continue
             cleaned.append(line)
         return "\n".join(cleaned)

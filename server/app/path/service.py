@@ -13,11 +13,40 @@ from app.path.schemas import (
     PathGenerationTaskResponse,
     PathPlanFeedbackRequest,
 )
+from app.path.validation import normalize_path_plan, validate_path_plan
+from app.path.signals import get_resource_policy_fallback, build_learning_signal_snapshot
 from app.resource.schemas import AgentConfigs, AgentSelection, OutputOptions, ResourceGenerationRequest
 
 logger = get_logger(__name__)
 
 ACTIVE_GENERATION_STATUSES = ("pending", "preparing", "planning", "validating")
+PATH_SEARCH_ENABLED_KEY = "_path_enable_search"
+
+
+def _format_search_evidence(records: list[dict] | str | None) -> list[dict] | None:
+    """将结构化搜索证据记录格式化为持久化格式。
+
+    接受 list[dict]（结构化证据）或 str（旧格式纯文本，自动包装）。
+    每条记录包含 {tool, query, title, url, snippet, used_for}。
+    """
+    if not records:
+        return None
+    if isinstance(records, str):
+        text = records.strip()
+        if not text:
+            return None
+        return [{"tool": "unknown", "query": "", "title": "", "url": "", "snippet": text[:500], "used_for": []}]
+    cleaned = []
+    for r in records:
+        cleaned.append({
+            "tool": r.get("tool", ""),
+            "query": r.get("query", ""),
+            "title": r.get("title", ""),
+            "url": r.get("url", ""),
+            "snippet": r.get("snippet", ""),
+            "used_for": r.get("used_for", []),
+        })
+    return cleaned or None
 
 
 class CoursePathService:
@@ -37,8 +66,13 @@ class CoursePathService:
         logger.info(f"Generating new course path for user_id={user_id}, topic={request.topic}")
 
         profile_dict = await self._get_profile_dict(user_id)
-        plan = await self.agent.generate_plan(request, profile_dict)
-        db_path, db_nodes = await self._persist_generated_path(user_id, request, plan)
+        plan, search_evidence = await self.agent.generate_plan(
+            request=request,
+            profile=profile_dict,
+        )
+        normalize_path_plan(plan)
+        validate_path_plan(plan)
+        db_path, db_nodes = await self._persist_generated_path(user_id, request, plan, search_evidence=search_evidence)
         return self._build_path_response(db_path, db_nodes)
 
     async def _get_active_path_record(self, user_id: int, module: str = "mentor") -> CoursePath | None:
@@ -65,6 +99,28 @@ class CoursePathService:
 
         # 3. 读取画像
         profile_dict = await self._get_profile_dict(user_id)
+        resource_context = ""
+        if request.resource_id is not None:
+            resource_context = await self._build_resource_context(
+                user_id=user_id,
+                resource_id=request.resource_id,
+            )
+
+        # 3.5: 读取学习效果摘要
+        learning_signal_text = ""
+        if request.use_learning_signals:
+            try:
+                snapshot = await build_learning_signal_snapshot(self.session, user_id, active_path)
+                if snapshot.average_score is not None or snapshot.weak_topics:
+                    learning_signal_text = (
+                        f"\n\n学习效果摘要：平均分数={snapshot.average_score}, "
+                        f"薄弱知识点={snapshot.weak_topics}, "
+                        f"偏好资源={snapshot.preferred_resources}, "
+                        f"负面反馈={snapshot.negative_feedback}, "
+                        f"建议={snapshot.recommendations}"
+                    )
+            except Exception as exc:
+                logger.warning("构建学习效果摘要失败: %s", exc)
 
         # 4. 调用 Agent 重新规划后续节点
         plan = await self.agent.adjust_plan(
@@ -72,8 +128,12 @@ class CoursePathService:
             completed_nodes=completed_nodes,
             remaining_nodes=remaining_nodes,
             profile=profile_dict,
-            feedback=request.feedback
+            feedback=request.feedback + learning_signal_text,
+            weak_points=request.weak_points or [],
+            resource_context=resource_context,
         )
+        normalize_path_plan(plan)
+        validate_path_plan(plan)
 
         # 5. 更新数据库
         # 删除所有未完成节点
@@ -102,6 +162,7 @@ class CoursePathService:
                 difficulty=agent_node.difficulty,
                 recommendation_reason=agent_node.recommendation_reason,
                 priority=agent_node.priority,
+                resource_policy=agent_node.resource_policy.model_dump() if agent_node.resource_policy else None,
                 status="locked",
                 resource_status="not_started",
             )
@@ -156,7 +217,7 @@ class CoursePathService:
             goal=request.goal,
             topic=request.topic,
             current_knowledge=request.current_knowledge,
-            preferences=request.preferences,
+            preferences=self._encode_task_preferences(request),
         )
         self.session.add(task)
         await self.session.flush()
@@ -209,13 +270,19 @@ class CoursePathService:
                 topic=task.topic,
                 module=task.module,
                 current_knowledge=task.current_knowledge or [],
-                preferences=task.preferences or {},
+                preferences=self._decode_user_preferences(task.preferences or {}),
+                enable_search=self._decode_search_enabled(task.preferences or {}),
             )
-            await self._set_task_progress(task, "planning", 30, "路径规划智能体正在编排学习节点")
-            plan = await self.agent.generate_plan(request, profile_dict)
+            await self._set_task_progress(task, "planning", 30, "路径规划智能体正在检索参考资料并编排学习节点")
+            plan, search_evidence = await self.agent.generate_plan(
+                request=request,
+                profile=profile_dict,
+            )
             logger.info("[PathService] 规划完成: task_id=%s nodes=%d", task_id, len(plan.nodes))
             await self._set_task_progress(task, "validating", 80, "正在校验依赖关系并保存学习地图")
-            db_path, _ = await self._persist_generated_path(user_id=task.user_id, request=request, plan=plan, commit=False)
+            normalize_path_plan(plan)
+            validate_path_plan(plan)
+            db_path, _ = await self._persist_generated_path(user_id=task.user_id, request=request, plan=plan, search_evidence=search_evidence, commit=False)
             task.generated_path_id = db_path.id
             task.status = "completed"
             task.progress = 100
@@ -241,6 +308,20 @@ class CoursePathService:
         profile = await self.memory_layer.get_or_create_profile(user_id)
         return profile.profile_json if profile and profile.profile_json else {}
 
+    def _encode_task_preferences(self, request: GeneratePathRequest) -> dict[str, Any]:
+        preferences = dict(request.preferences or {})
+        preferences[PATH_SEARCH_ENABLED_KEY] = request.enable_search
+        return preferences
+
+    def _decode_user_preferences(self, preferences: dict[str, Any]) -> dict[str, Any]:
+        cleaned = dict(preferences or {})
+        cleaned.pop(PATH_SEARCH_ENABLED_KEY, None)
+        return cleaned
+
+    def _decode_search_enabled(self, preferences: dict[str, Any]) -> bool:
+        value = dict(preferences or {}).get(PATH_SEARCH_ENABLED_KEY, True)
+        return bool(value)
+
     async def _set_task_progress(
         self,
         task: CoursePathGenerationTask,
@@ -263,6 +344,7 @@ class CoursePathService:
         request: GeneratePathRequest,
         plan: Any,
         *,
+        search_evidence: list[dict] | None = None,
         commit: bool = True,
     ) -> tuple[CoursePath, list[CoursePathNode]]:
         """持久化已验证路径；后台任务在最终提交前同时完成任务状态更新。"""
@@ -278,6 +360,8 @@ class CoursePathService:
             current_stage_id=plan.stages[0].stage_id if plan.stages else None,
             stages_json=[s.model_dump() for s in plan.stages],
             adjustment_rationale=plan.adjustment_rationale,
+            strategy_report=plan.strategy_report,
+            search_evidence=_format_search_evidence(search_evidence),
             status="active"
         )
         self.session.add(db_path)
@@ -297,6 +381,7 @@ class CoursePathService:
                 difficulty=agent_node.difficulty,
                 recommendation_reason=agent_node.recommendation_reason,
                 priority=agent_node.priority,
+                resource_policy=agent_node.resource_policy.model_dump() if agent_node.resource_policy else None,
                 status="locked",
                 resource_status="not_started",
             )
@@ -370,6 +455,27 @@ class CoursePathService:
         path = (await self.session.exec(path_stmt)).first()
         learning_need = self._build_node_learning_need(node, path)
 
+        # Determine selected_agents: frontend choice > node policy > fallback
+        if not selected_agents:
+            policy = node.resource_policy
+            if policy and policy.get("required_resource_types"):
+                raw_types = policy["required_resource_types"]
+            else:
+                raw_types = get_resource_policy_fallback(node.difficulty)
+        else:
+            raw_types = [s.agent_id for s in selected_agents]
+
+        # Filter unimplemented types, always produce at least one valid agent
+        from app.path.schemas import ALLOWED_RESOURCE_TYPES
+        resolved_types = [t for t in raw_types if t in ALLOWED_RESOURCE_TYPES]
+        removed = set(raw_types) - set(resolved_types)
+        if removed:
+            logger.warning("过滤掉未实现的资源类型 %s for node %s", removed, node.node_id)
+        if not resolved_types:
+            resolved_types = ["content"]
+
+        selected_agents = [AgentSelection(agent_id=t) for t in resolved_types]
+
         # 5: 构造 ResourceGenerationRequest
         request = ResourceGenerationRequest(
             learning_need=learning_need,
@@ -400,6 +506,7 @@ class CoursePathService:
             "should_schedule": True,
             "request": request,
             "profile": profile_dict,
+            "actual_agents": resolved_types,
         }
 
     async def start_node(self, *, user_id: int, node_id: int) -> CoursePathResponse:
@@ -460,15 +567,78 @@ class CoursePathService:
         resource_map = await self._get_node_resource_ids([item.id for item in nodes if item.id is not None])
         return await self._build_path_response_async(path, nodes, resource_map)
 
+    async def _build_resource_context(self, *, user_id: int, resource_id: int) -> str:
+        """Summarize a generated resource for replanning without sending full content."""
+        from app.infra.models import GeneratedResource, GeneratedResourceItem
+
+        resource_stmt = select(GeneratedResource).where(
+            GeneratedResource.id == resource_id,
+            GeneratedResource.user_id == user_id,
+        )
+        resource = (await self.session.exec(resource_stmt)).first()
+        if resource is None:
+            return f"资源 {resource_id} 不存在或不属于当前用户"
+
+        item_stmt = (
+            select(GeneratedResourceItem)
+            .where(
+                GeneratedResourceItem.resource_id == resource_id,
+                GeneratedResourceItem.user_id == user_id,
+            )
+            .order_by(GeneratedResourceItem.created_at)
+        )
+        items = (await self.session.exec(item_stmt)).all()
+
+        parts = [f"资源 {resource_id} 学习需求：{resource.learning_need or '未记录'}"]
+        for item in items[:6]:
+            summary_parts = [
+                f"- {item.agent_type}",
+                f"标题：{item.title}" if item.title else "",
+                f"摘要：{item.summary}" if item.summary else "",
+                f"覆盖知识点：{', '.join(item.covered_knowledge_points or [])}" if item.covered_knowledge_points else "",
+                f"覆盖薄弱点：{', '.join(item.weak_points_covered or [])}" if item.weak_points_covered else "",
+            ]
+            parts.append("；".join(part for part in summary_parts if part))
+        return "\n".join(parts)[:4000]
+
     def _build_node_learning_need(self, node: CoursePathNode, path: CoursePath | None) -> str:
         """从节点和路径信息组装 learning_need 文本。"""
         parts = [f"当前学习节点：{node.title}"]
         if path:
-            parts.append(f"当前课程：{path.module}")
+            parts.append(f"路径标题：{path.title}")
+            parts.append(f"路径目标：{path.goal}")
+            parts.append(f"所属模块：{path.module}")
+            stage = next(
+                (
+                    item for item in (path.stages_json or [])
+                    if isinstance(item, dict) and item.get("stage_id") == node.stage_id
+                ),
+                None,
+            )
+            if stage:
+                parts.append(f"当前阶段：{stage.get('title', node.stage_id)}")
+                if stage.get("description"):
+                    parts.append(f"阶段说明：{stage['description']}")
+            else:
+                parts.append(f"当前阶段：{node.stage_id}")
         if node.mastery_target:
             parts.append(f"学习目标：{node.mastery_target}")
         if node.prerequisites:
             parts.append(f"前置知识：{', '.join(node.prerequisites)}")
+        if node.difficulty:
+            parts.append(f"节点难度：{node.difficulty}")
+        if node.estimated_minutes:
+            parts.append(f"建议学习时长：{node.estimated_minutes} 分钟")
+        parts.append(f"节点优先级：{node.priority}")
+        if node.recommendation_reason:
+            parts.append(f"推荐依据：{node.recommendation_reason}")
+        if node.resource_policy:
+            generation_focus = node.resource_policy.get("generation_focus", [])
+            if generation_focus:
+                parts.append(f"资源生成重点：{', '.join(generation_focus)}")
+            personalization_reason = node.resource_policy.get("personalization_reason", "")
+            if personalization_reason:
+                parts.append(f"个性化原因：{personalization_reason}")
         parts.append("学习场景：路径学习中的当前节点学习资料生成")
         return "\n".join(parts)
 
@@ -660,6 +830,9 @@ class CoursePathService:
                 difficulty=n.difficulty,
                 recommendation_reason=n.recommendation_reason,
                 resource_id=resource_map.get(n.id, None) if n.id else None,
+                resource_policy=n.resource_policy,
+                recommended_agents=n.resource_policy.get("required_resource_types", []) if n.resource_policy else [],
+                resource_generation_reason=n.resource_policy.get("personalization_reason", "") if n.resource_policy else None,
             )
             for n in nodes
         ]
@@ -675,10 +848,12 @@ class CoursePathService:
             eta_days=path.eta_days,
             confidence=path.confidence,
             status=path.status,
-            stages=path.stages_json or [],
+            strategy_report=getattr(path, "strategy_report", None),
+            stages=getattr(path, "stages_json", None) or [],
             nodes=node_dtos,
             needs_optimization=needs_optimization,
             optimization_tips=optimization_tips or [],
+            search_evidence=getattr(path, "search_evidence", None) or [],
             created_at=path.created_at.isoformat() if path.created_at else ""
         )
 

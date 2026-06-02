@@ -79,7 +79,14 @@ class AttachmentInfo:
 class ChatMessageItem:
     """聊天消息 DTO。"""
 
-    def __init__(self, *, id: int, role: str, content: str, attachments: list[AttachmentInfo] | None = None, tool_calls: list[dict[str, Any]] | None = None, teaching_diagram: dict[str, Any] | None = None, created_at: Any = None) -> None:
+    def __init__(self, *,
+                 id: int,
+                 role: str,
+                 content: str,
+                 attachments: list[AttachmentInfo] | None = None,
+                 tool_calls: list[dict[str, Any]] | None = None,
+                 teaching_diagram: dict[str, Any] | None = None,
+                 created_at: Any = None) -> None:
         self.id = id
         self.role = role
         self.content = content
@@ -97,9 +104,6 @@ class ChatMessageItem:
         if self.teaching_diagram:
             d["teaching_diagram"] = self.teaching_diagram
         return d
-
-
-# ── ChatUseCases ──
 
 
 class ChatUseCases:
@@ -259,13 +263,21 @@ class ChatUseCases:
                 return
             try:
                 from app.chat.utils.files import analyze_documents
-                document_results = await analyze_documents(
-                    file_urls[:MAX_ANALYZE_FILE_COUNT],
+                analysis = await analyze_documents(
+                    current_user_id=user_id,
+                    file_urls=file_urls[:MAX_ANALYZE_FILE_COUNT],
+                    question="请分析这些文档",
                     max_total_chars=MAX_ANALYZE_TOTAL_CHARS,
                     max_file_content_chars=MAX_FILE_CONTENT_CHARS,
                     max_pdf_pages=MAX_PDF_PAGES_TO_READ,
                     max_docx_paragraphs=MAX_DOCX_PARAGRAPHS_TO_READ,
                 )
+                if analysis.get("success") and analysis.get("analysis_text"):
+                    document_results = [{
+                        "type": "document",
+                        "summary": str(analysis.get("analysis_text", "")).strip(),
+                        "documents": analysis.get("documents", []),
+                    }]
             except Exception as exc:
                 logger.warning("[ChatUseCases] 文档分析失败: %s", exc)
 
@@ -353,7 +365,8 @@ class ChatUseCases:
         user_id: int,
         session_id: str | None,
         attachments: list[str],
-        enable_search: bool = False,
+        enable_web_search: bool = False,
+        enable_knowledge_base: bool = False,
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
     ) -> TutorAgentContext:
@@ -387,7 +400,8 @@ class ChatUseCases:
             attachment_analysis_context=attachment_analysis_context,
             attachment_analysis=attachment_analysis or {},
             attachments=attachments,
-            enable_search=enable_search,
+            enable_web_search=enable_web_search,
+            enable_knowledge_base=enable_knowledge_base,
             need_teaching_diagram=need_teaching_diagram,
             diagram_mode="requested" if need_teaching_diagram else "off",
             generate_video=generate_video,
@@ -409,9 +423,13 @@ class ChatUseCases:
         attachments: list[str] | None = None,
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
-        enable_search: bool = False
+        enable_search: bool | None = None,
+        enable_web_search: bool = False,
+        enable_knowledge_base: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """SSE 流式对话主入口。"""
+        if enable_search is not None:
+            enable_web_search = bool(enable_search)
         async for event in self.stream_chat_events(
             user_id=user_id,
             user_message=user_message,
@@ -420,7 +438,8 @@ class ChatUseCases:
             attachments=attachments,
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
-            enable_search=enable_search,
+            enable_web_search=enable_web_search,
+            enable_knowledge_base=enable_knowledge_base,
             persist=True,
         ):
             yield event
@@ -435,15 +454,19 @@ class ChatUseCases:
         attachments: list[str] | None = None,
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
-        enable_search: bool = False,
+        enable_search: bool | None = None,
+        enable_web_search: bool = False,
+        enable_knowledge_base: bool = False,
         persist: bool = True,
     ) -> AsyncIterator[dict[str, Any]]:
         """流式对话事件生成器，供 SSE 和 avatar bridge 共用。"""
+        if enable_search is not None:
+            enable_web_search = bool(enable_search)
         effective_session = session_id or self.default_session_id(user_id)
         merged_attachments = list(dict.fromkeys(attachments or []))
         logger.info(
-            "[ChatUseCases] 开始对话: user_id=%s session_id=%s msg_len=%d attachments=%d search=%s diagram=%s",
-            user_id, effective_session, len(user_message or ""), len(merged_attachments), enable_search, need_teaching_diagram,
+            "[ChatUseCases] 开始对话: user_id=%s session_id=%s msg_len=%d attachments=%d web_search=%s knowledge=%s diagram=%s",
+            user_id, effective_session, len(user_message or ""), len(merged_attachments), enable_web_search, enable_knowledge_base, need_teaching_diagram,
         )
         normalized_history = list(history or [])
         if not normalized_history and (user_message or "").strip():
@@ -494,7 +517,8 @@ class ChatUseCases:
             user_id=user_id,
             session_id=effective_session,
             attachments=merged_attachments,
-            enable_search=enable_search,
+            enable_web_search=enable_web_search,
+            enable_knowledge_base=enable_knowledge_base,
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
         )

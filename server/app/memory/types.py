@@ -151,8 +151,6 @@ ONBOARDING_OPTIONAL_FIELDS: Final[tuple[str, ...]] = (
     "preferred_language",
     "cognitive_style",
     "interaction_preference",
-    "practice_ability",
-    "weakness_points",
 )
 
 

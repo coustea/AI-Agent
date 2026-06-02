@@ -57,7 +57,7 @@ async def cleanup_avatar(
     return HttpResponse.success()
 
 
-@router.post("/avatar/history/clear")
+@router.delete("/avatar/history")
 async def clear_avatar_history(
     session_id: str | None = Form(default=None),
     user: User = Depends(get_current_user),

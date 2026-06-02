@@ -12,7 +12,6 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_module_logger
 from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import WorkerResult, WorkerState
 
@@ -95,30 +94,28 @@ class ReviewAgent(BaseResourceAgent):
             error=parse_error or ("" if success else f"review status: {review_status}"),
         )
 
-    def _build_input_override(self, state: WorkerState) -> str:
-        parts = build_worker_base_context(state)
-
+    def agent_input_parts(self, state: WorkerState) -> list[str]:
         review_envelope = state.agent_config.get("review_envelope")
         if isinstance(review_envelope, dict):
             mode = review_envelope.get("mode", "")
-            parts.append(f"## 审核模式\n{mode}")
-            parts.append("## 审核输入 JSON")
-            parts.append(json.dumps(review_envelope, ensure_ascii=False, indent=2))
-            parts.append("请仅根据审核模式输出 JSON，不要输出 Markdown 或解释性文字。")
-            return "\n\n".join(parts)
+            return [
+                f"## 审核模式\n{mode}",
+                "## 审核输入 JSON",
+                json.dumps(review_envelope, ensure_ascii=False, indent=2),
+                "请仅根据审核模式输出 JSON，不要输出 Markdown 或解释性文字。",
+            ]
 
-        # Backward-compatible fallback for any older caller that still provides worker_results.
         worker_results = state.agent_config.get("worker_results", [])
         if worker_results:
-            parts.append("## 待审核内容")
+            parts = ["## 待审核内容"]
             for wr in worker_results:
                 agent_name = wr.get("agent_name", wr.get("agent_id", "unknown"))
                 parts.append(f"### {agent_name}")
                 parts.append(wr.get("content", "")[:2000])
                 parts.append("")
-
             parts.append("请审核以上内容，仅输出结构化 JSON。")
-        return "\n\n".join(parts)
+            return parts
+        return []
 
     @staticmethod
     def _progress_agent_id(review_mode: str) -> str:
@@ -174,6 +171,4 @@ class ReviewAgent(BaseResourceAgent):
         parsed.setdefault("revision_targets", [])
         return parsed, ""
 
-    async def run(self, state: WorkerState) -> WorkerResult:
-        input_text = self._build_input_override(state)
-        return await self._execute(input_text, state)
+    

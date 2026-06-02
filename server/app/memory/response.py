@@ -16,9 +16,7 @@ class StudentProfileData(BaseModel):
     preferred_language: str | None = None
     cognitive_style: str | None = None
     interaction_preference: str | None = None
-    practice_ability: str | None = None
-    weakness_points: list[str] = Field(default_factory=list)
-
+    
 
 class OnboardingResponse(BaseModel):
     student_profile: StudentProfileData = Field(default_factory=StudentProfileData)

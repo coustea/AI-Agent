@@ -5,9 +5,9 @@ from __future__ import annotations
 import serpapi
 import re
 import requests
-from langchain_community.tools import DuckDuckGoSearchRun, TavilySearchResults
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
-from sympy import false
 
 from app.config import SERPAPI_KEY, TAVILY_KEY,SPARK_SEARCH_KEY
 from app.infra.logging import get_logger
@@ -46,7 +46,7 @@ def tavily_search(query: str) -> str:
         return "Tavily 搜索不可用: 未配置 TAVILY_KEY"
 
     try:
-        search_tool = TavilySearchResults(tavily_api_key=TAVILY_KEY, max_results=3)
+        search_tool = TavilySearch(tavily_api_key=TAVILY_KEY, max_results=3)
         result = search_tool.run(query)
         logger.info(
             "[tavily_search] query=%r result_preview=%r",

@@ -196,7 +196,9 @@ def classify_route(state: dict) -> str:
     Returns:
         路由目标节点名称。
     """
-    return state.get("route", "direct")
+    route = state.get("route", "direct")
+    valid_routes = {"direct", "diagram_only", "search", "knowledge", "attachment_needed"}
+    return route if route in valid_routes else "direct"
 
 
 # ---------------------------------------------------------------------------

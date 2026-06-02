@@ -25,6 +25,7 @@ class GeneratePathRequest(BaseModel):
     module: str = Field(default="mentor", description="模块名称")
     current_knowledge: list[str] = Field(default_factory=list, description="当前已掌握的知识点")
     preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
+    enable_search: bool = Field(default=True, description="是否为路径规划启用联网搜索参考")
 
 
 class PathNodeResourceRequest(BaseModel):
@@ -37,8 +38,47 @@ class PathNodeResourceRequest(BaseModel):
 
 
 # ======================================================================
+# 资源类型白名单
+# ======================================================================
+
+ALLOWED_RESOURCE_TYPES: tuple[str, ...] = (
+    "content",
+    "quiz",
+    "mindmap",
+    "code",
+    "reading",
+    "ppt",
+)
+
+
+# ======================================================================
 # Agent 结构化输出模型
 # ======================================================================
+
+
+class NodeResourcePolicy(BaseModel):
+    """资源推送策略 — 每个路径节点推荐生成哪些资源。"""
+
+    primary_resource_type: str = Field(description="主要资源类型，如 'content'")
+    required_resource_types: list[str] = Field(description="必须生成的资源类型列表")
+    optional_resource_types: list[str] = Field(default_factory=list, description="可选增强资源类型列表")
+    assessment_type: str = Field(default="quiz", description="掌握度评估方式: 'quiz', 'code', 'none'")
+    generation_focus: list[str] = Field(default_factory=list, description="资源生成内容重点提示")
+    personalization_reason: str = Field(description="为什么此策略适合该学习者")
+    expected_resource_count: int = Field(default=2, ge=1, le=6, description="预期生成资源数量")
+
+
+class LearningSignalSnapshot(BaseModel):
+    """学习效果摘要 — 路径调整用的聚合信号。"""
+
+    average_score: float | None = Field(default=None, description="平均测验分数 0-100")
+    weak_topics: list[str] = Field(default_factory=list, description="薄弱知识点")
+    preferred_resources: list[str] = Field(default_factory=list, description="偏好资源类型")
+    negative_feedback: list[str] = Field(default_factory=list, description="负面反馈摘要")
+    completed_resource_count: int = Field(default=0)
+    viewed_resource_count: int = Field(default=0)
+    active_minutes: int = Field(default=0)
+    recommendations: list[str] = Field(default_factory=list, description="系统调整建议")
 
 
 class AgentPathNode(BaseModel):
@@ -53,6 +93,7 @@ class AgentPathNode(BaseModel):
     difficulty: str = Field(default="intermediate", description="难度等级")
     recommendation_reason: str = Field(default="", description="推荐理由")
     priority: int = Field(default=0, description="优先级")
+    resource_policy: NodeResourcePolicy | None = Field(default=None, description="资源推送策略")
 
 
 class AgentStage(BaseModel):
@@ -69,6 +110,7 @@ class AgentCoursePathPlan(BaseModel):
     title: str = Field(description="路径标题")
     eta_days: int = Field(default=14, description="预估学习天数")
     confidence: int = Field(default=60, ge=0, le=100, description="规划置信度百分比")
+    strategy_report: str = Field(default="", description="个性化诊断与裁剪策略报告")
     adjustment_rationale: list[str] = Field(default_factory=list, description="调整理由列表")
     stages: list[AgentStage] = Field(default_factory=list, description="宏观阶段骨架列表")
     nodes: list[AgentPathNode] = Field(default_factory=list, description="所有阶段的具体学习节点列表")
@@ -111,6 +153,9 @@ class CoursePathNodeDTO(BaseModel):
     difficulty: str | None = None
     recommendation_reason: str | None = None
     resource_id: int | None = None
+    resource_policy: dict | None = None
+    recommended_agents: list[str] = Field(default_factory=list)
+    resource_generation_reason: str | None = None
 
 
 class CoursePathResponse(BaseModel):
@@ -126,10 +171,12 @@ class CoursePathResponse(BaseModel):
     eta_days: int = 0
     confidence: int = 0
     status: str = "pending"
+    strategy_report: str | None = None
     stages: list[dict[str, Any]] = Field(default_factory=list)
     nodes: list[CoursePathNodeDTO] = Field(default_factory=list)
     needs_optimization: bool = False
     optimization_tips: list[str] = Field(default_factory=list)
+    search_evidence: list[dict[str, Any]] = Field(default_factory=list)
     created_at: str = ""
 
 
@@ -161,6 +208,10 @@ __all__ = [
     "AgentPathNode",
     "AgentStage",
     "AgentCoursePathPlan",
+    # Resource policy
+    "NodeResourcePolicy",
+    "LearningSignalSnapshot",
+    "ALLOWED_RESOURCE_TYPES",
     # Response
     "CoursePathNodeDTO",
     "CoursePathResponse",

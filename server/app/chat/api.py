@@ -52,7 +52,8 @@ async def mentor_chat_stream(
     attachments: str | None = Form(default=None),
     need_teaching_diagram: bool = Form(default=False),
     generate_video: bool = Form(default=False),
-    enable_search: bool = Form(default=False),
+    enable_web_search: bool = Form(default=False),
+    enable_knowledge_base: bool = Form(default=False),
     current_user: User = Depends(get_current_user),
 ):
     """SSE 流式对话主入口。
@@ -66,7 +67,8 @@ async def mentor_chat_stream(
         attachments: 附件URL字符串（逗号分隔）。
         need_teaching_diagram: 是否生成图解说明。
         generate_video: 是否生成视频。
-        enable_search: 是否启用联网搜索。
+        enable_web_search: 是否启用联网搜索。
+        enable_knowledge_base: 是否启用本地知识库检索。
         current_user: 当前登录用户。
 
     Returns:
@@ -111,7 +113,8 @@ async def mentor_chat_stream(
             attachments=parsed_attachments or None,
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
-            enable_search=enable_search,
+            enable_web_search=enable_web_search,
+            enable_knowledge_base=enable_knowledge_base,
         )),
         media_type="text/event-stream",
         headers={
@@ -300,7 +303,7 @@ async def create_session(
         新创建的会话信息。
     """
     uc = get_chat_usecases()
-    return HttpResponse.success(data=await uc.create_session(current_user.id))
+    return HttpResponse.success(data=await uc.create_session(current_user.id), status_code=201)
 
 
 @router.delete("/chat/sessions/{session_id}")
@@ -329,19 +332,13 @@ async def delete_session(
 @router.patch("/chat/sessions/{session_id}")
 async def update_session(
     session_id: str,
-    title: str = Form(...),
+    payload: dict,
     current_user: User = Depends(get_current_user),
 ):
-    """更新会话标题。
-
-    Args:
-        session_id: 会话ID。
-        title: 新标题。
-        current_user: 当前登录用户。
-
-    Returns:
-        操作结果。
-    """
+    """更新会话标题。"""
+    title = (payload.get("title") or "").strip()
+    if not title:
+        return HttpResponse.error(code=400, message="标题不能为空")
     uc = get_chat_usecases()
     success = await uc.update_session_title(current_user.id, session_id, title)
     if not success:
