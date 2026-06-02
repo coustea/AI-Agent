@@ -1,3 +1,4 @@
+// 假的资源数据用来观看样式
 import type { GeneratedResourceItem, GeneratedResourceBundle } from '@/api/ai'
 
 // 动态计算相对时间，返回 ISO 格式字符串
@@ -12,7 +13,7 @@ export function getMockResourceHistory(): GeneratedResourceItem[] {
       id: 1,
       learning_need: '深度学习核心概念',
       status: 'completed',
-      resource_types: ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt'],
+      resource_types: ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'video'],
       created_at: getRelativeTime(0), // 刚刚
       updated_at: getRelativeTime(0)
     },
@@ -317,12 +318,65 @@ export function getMockResourceDetail(id: number | string): GeneratedResourceBun
         format: 'json',
         content: JSON.stringify({
           slides: [
-            { title: '深度学习：从感知机到多层网络', bullets: ['深度学习在多领域的突破', '什么是表征学习与自动特征提取', '本课程整体路线概览'] },
+            { title: '深度学习：从感知机 to 多层网络', bullets: ['深度学习在多领域的突破', '什么是表征学习与自动特征提取', '本课程整体路线概览'] },
             { title: '核心基石：人工神经元模型', bullets: ['生物神经元 vs 仿真数学模型', '权重（Weights）与偏置（Bias）的作用', '为什么必须使用非线性激活函数（Activation Functions）'] },
             { title: '如何优化：反向传播与梯度下降', bullets: ['前向计算与误差计算', '链式法则在梯度回传中的应用', 'SGD 及常用优化算法（Adam）的区别'] }
           ]
         }),
         summary: '精炼的 3 页汇报大纲演示文稿，快速演示神经网络演进历程与核心优化方法。',
+        summary_data: {},
+        metadata: {},
+        status: 'completed',
+        error_message: null,
+        created_at: getRelativeTime(0),
+        updated_at: null
+      },
+      {
+        id: 17,
+        type: 'video',
+        title: '深度学习核心概念与模型机制 - 视频课件',
+        format: 'json',
+        content: JSON.stringify({
+          title: "深度学习与神经网络极简入门",
+          duration: 75,
+          scenes: [
+            {
+              time: 0,
+              title: "什么是深度学习",
+              image_url: "/src/assets/video/scene1.png",
+              narration: "哈喽，大家好！欢迎来到学枢 AI 课堂。今天我们将一起探索深度学习的奇妙世界。深度学习是人工智能的核心引擎之一，它模仿人类大脑神经元的工作方式，通过构建深层神经网络，自动从海量数据中提取出复杂的特征。",
+              subtitles: [
+                { start: 0, end: 4, text: "哈喽，大家好！欢迎来到学枢 AI 课堂。" },
+                { start: 4, end: 8, text: "今天我们将一起探索深度学习的奇妙世界。" },
+                { start: 8, end: 13, text: "深度学习是人工智能的核心引擎之一，它模仿人脑工作方式。" },
+                { start: 13, end: 18, text: "通过构建深层神经网络，自动从数据中提取特征。" }
+              ]
+            },
+            {
+              time: 20,
+              title: "人工神经元模型",
+              image_url: "/src/assets/video/scene2.png",
+              narration: "神经网络的核心基石是人工神经元。输入信号经过权重的加权求和，再加上偏置，最后通过激活函数产生输出。为什么要激活函数呢？因为非线性激活函数赋予了神经网络逼近任意复杂函数的能力。",
+              subtitles: [
+                { start: 20, end: 24, text: "神经网络的核心基石是人工神经元。" },
+                { start: 24, end: 29, text: "输入信号经过权重的加权求和，再加上偏置，最后通过激活函数产生输出。" },
+                { start: 29, end: 35, text: "非线性激活函数赋予了神经网络逼近任意复杂函数的能力。" }
+              ]
+            },
+            {
+              time: 50,
+              title: "反向传播与优化",
+              image_url: "/src/assets/video/scene3.png",
+              narration: "网络是如何学习的呢？这就需要反向传播算法。我们通过损失函数计算出当前的预测误差，然后利用多元微积分的链式法则，将误差梯度从输出层反向传播回输入层，更新网络中的所有权重。最终使误差达到最小。",
+              subtitles: [
+                { start: 50, end: 54, text: "网络是如何学习的呢？这就需要反向传播算法。" },
+                { start: 54, end: 60, text: "我们通过损失函数计算误差，并利用链式法则将误差梯度反向传播。" },
+                { start: 60, end: 65, text: "通过更新权重，使预测误差逐步达到最小。" }
+              ]
+            }
+          ]
+        }),
+        summary: '智能多智能体生成的 1.25 分钟高画质视频课程大纲及讲解配音。',
         summary_data: {},
         metadata: {},
         status: 'completed',

@@ -122,6 +122,7 @@
         <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
         <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem" />
         <PptView v-else-if="previewItem.type === 'ppt'" :result-data="previewItem" />
+        <VideoView v-else-if="previewItem.type === 'video'" :result-data="previewItem" />
         <MarkdownView v-else :result-data="previewItem" />
       </div>
     </el-dialog>
@@ -131,7 +132,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, DataBoard, Share, Download } from '@element-plus/icons-vue'
+import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, DataBoard, Share, Download, VideoCamera } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import MindmapView from '@/components/resource/MindmapView.vue'
 import MarkdownView from '@/components/resource/MarkdownView.vue'
@@ -139,6 +140,7 @@ import QuizView from '@/components/resource/QuizView.vue'
 import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
 import PptView from '@/components/resource/PptView.vue'
+import VideoView from '@/components/resource/VideoView.vue'
 import { getGeneratedResourceDetail } from '@/api/ai'
 import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
 import { getMockResourceDetail } from '@/utils/mockResourceData'
@@ -243,7 +245,8 @@ const getAgentMeta = (type: string) => {
     quiz: { icon: Edit, color: 'tone-emerald' },
     code: { icon: Cpu, color: 'tone-rose' },
     reading: { icon: Collection, color: 'tone-indigo' },
-    ppt: { icon: DataBoard, color: 'tone-amber' }
+    ppt: { icon: DataBoard, color: 'tone-amber' },
+    video: { icon: VideoCamera, color: 'tone-teal' }
   }
   return map[type] || { icon: Document, color: 'tone-slate' }
 }
@@ -256,6 +259,7 @@ const getAgentTypeName = (type: string) => {
     code: '代码示例',
     reading: '阅读材料',
     ppt: 'PPT',
+    video: '视频课件'
   }
   return map[type] || type
 }

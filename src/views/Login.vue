@@ -157,7 +157,7 @@ const handleLogin = async (formEl: any) => {
         const { data } = res.data
         if (data.token) {
           localStorage.setItem('token', data.token)
-          ElMessage.success('登录成功！')
+          ElMessage.success({ message: '登录成功！', duration: 1000 })
           if (data.user?.is_first_login) {
             router.push('/dashboard?onboarding=true')
           } else {

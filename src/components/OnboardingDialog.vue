@@ -45,16 +45,12 @@
 
       <main class="chat-messages" ref="messagesRef">
         <transition-group name="msg-list">
-          <div v-for="(msg, index) in messages" :key="msg.id" class="message-row" :class="msg.role">
-            <div class="avatar" v-if="msg.role === 'bot'">
-              <el-icon><Service /></el-icon>
-            </div>
-            
-            <div class="message-content" style="display: flex; flex-direction: column; align-items: flex-start; max-width: 100%;">
+          <div v-for="(msg, index) in botMessages" :key="msg.id" class="message-row" :class="msg.role">
+            <div class="message-content" style="display: flex; flex-direction: column; align-items: flex-start; max-width: 100%; width: 100%;">
               <div class="bubble" v-html="msg.content"></div>
               
               <!-- INLINE WIDGETS -->
-              <div v-if="msg.role === 'bot' && index === messages.length - 1 && !isTyping && !isStreaming && currentQuestion" class="inline-action-panel mt-3 w-full">
+              <div v-if="index === botMessages.length - 1 && !isTyping && !isStreaming && currentQuestion && (currentQuestion === 'major' || currentQuestion === 'courses')" class="inline-action-panel mt-3 w-full">
                 <transition name="panel-slide" mode="out-in">
                   
                   <!-- Major Options -->
@@ -76,83 +72,18 @@
                         {{ customCourse }}
                       </div>
                     </div>
-                    <div class="mt-3">
+                    <div class="button-row mt-3">
                        <el-button type="primary" class="primary-send-btn" @click="submitCourses">
                          确认并继续 <el-icon class="ml-1"><Position/></el-icon>
-                       </el-button>
-                    </div>
-                  </div>
-
-                  <!-- School Form -->
-                  <div v-else-if="currentQuestion === 'school'" class="action-card form-panel" key="school">
-                    <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
-                      <el-autocomplete v-model="onboardingForm.school" :fetch-suggestions="querySearchSchool" placeholder="搜索并选择院校名称" clearable class="glass-select w-full" @select="handleSchoolSelect" placement="top-start">
-                        <template #prefix><el-icon><Search /></el-icon></template>
-                        <template #default="{ item }">
-                          <div class="autocomplete-item">
-                            <span>{{ item.value }}</span>
-                            <span v-if="item.level" class="school-tag">{{ item.level }}</span>
-                          </div>
-                        </template>
-                      </el-autocomplete>
-                    </div>
-                    <div class="mt-3 slide-up-anim" style="animation-delay: 0.2s">
-                       <el-button type="primary" class="primary-send-btn" @click="submitSchool">
-                         确认发送 <el-icon class="ml-1"><Position/></el-icon>
-                       </el-button>
-                    </div>
-                  </div>
-
-                  <!-- Grade Form -->
-                  <div v-else-if="currentQuestion === 'grade'" class="action-card form-panel" key="grade">
-                    <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
-                      <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" class="glass-select w-full" filterable placement="top-start">
-                        <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
-                      </el-select>
-                    </div>
-                    <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
-                      <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option placeholder="请选择当前年级" class="glass-select w-full" placement="top-start">
-                        <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
-                      </el-select>
-                    </div>
-                    <div class="mt-3 slide-up-anim" style="animation-delay: 0.25s">
-                       <el-button type="primary" class="primary-send-btn" @click="submitGrade">
-                         确认发送 <el-icon class="ml-1"><Position/></el-icon>
-                       </el-button>
-                    </div>
-                  </div>
-
-                  <!-- Goal Form -->
-                  <div v-else-if="currentQuestion === 'goal'" class="action-card form-panel" key="goal">
-                    <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
-                      <el-select v-model="onboardingForm.learning_goal" filterable allow-create default-first-option placeholder="请选择核心学习目标" class="glass-select w-full" placement="top-start">
-                        <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
-                      </el-select>
-                    </div>
-                    <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
-                      <el-select v-model="onboardingForm.preferred_language" filterable allow-create default-first-option clearable placeholder="常用编程语言 (选填)" class="glass-select w-full" placement="top-start">
-                        <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
-                      </el-select>
-                    </div>
-                    <div class="mt-3 slide-up-anim" style="animation-delay: 0.25s">
-                       <el-button type="primary" class="primary-send-btn finish-btn" :loading="submitting" @click="submitGoal">
-                         <span class="finish-text">生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
                        </el-button>
                     </div>
                   </div>
                 </transition>
               </div>
             </div>
-
-            <div class="avatar" v-if="msg.role === 'user'">
-              <el-icon><User /></el-icon>
-            </div>
           </div>
 
           <div v-if="isTyping" key="typing" class="message-row bot typing-row">
-            <div class="avatar">
-              <el-icon><Service /></el-icon>
-            </div>
             <div class="bubble typing-bubble">
               <div class="typing-indicator">
                 <span></span><span></span><span></span>
@@ -162,21 +93,87 @@
         </transition-group>
       </main>
 
-      <footer class="command-bar-wrapper">
-        <div class="ai-input-wrap slide-up-anim">
-          <el-input
-              v-model="universalInput"
-              placeholder="直接回复，或输入补充细节..."
-              @keyup.enter="handleUniversalSubmit"
-              class="glass-command-bar"
-          >
-            <template #suffix>
-              <el-button @click="handleUniversalSubmit" class="inside-action-btn" circle :disabled="!universalInput.trim()">
-                <el-icon><Position/></el-icon>
-              </el-button>
-            </template>
-          </el-input>
-        </div>
+      <footer class="chat-footer" :class="{ 'is-collapsed-panel': isFinishedState || !currentQuestion }">
+        <transition name="panel-slide" mode="out-in">
+          <!-- Universal Input for Major and Courses -->
+          <div v-if="currentQuestion === 'major' || currentQuestion === 'courses'" class="ai-input-wrap slide-up-anim" key="chat-input">
+            <el-input
+                v-model="universalInput"
+                placeholder="直接回复，或输入补充细节..."
+                @keyup.enter="handleUniversalSubmit"
+                class="glass-command-bar"
+            >
+              <template #suffix>
+                <el-button @click="handleUniversalSubmit" class="inside-action-btn" circle :disabled="!universalInput.trim()">
+                  <el-icon><Position/></el-icon>
+                </el-button>
+              </template>
+            </el-input>
+          </div>
+
+          <!-- School Form -->
+          <div v-else-if="currentQuestion === 'school'" class="action-panel form-panel" key="school">
+            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+              <el-autocomplete v-model="onboardingForm.school" :fetch-suggestions="querySearchSchool" placeholder="搜索并选择院校名称" clearable class="glass-select w-full" @select="handleSchoolSelect" placement="top-start" popper-class="school-autocomplete-popper">
+                <template #prefix><el-icon><Search /></el-icon></template>
+                <template #default="{ item }">
+                  <div class="autocomplete-item">
+                    <span class="school-name">
+                      <el-icon class="mr-1"><School /></el-icon>
+                      {{ item.value }}
+                    </span>
+                    <span v-if="item.level" class="school-tag" :class="getSchoolLevelClass(item.level)">
+                      {{ item.level }}
+                    </span>
+                  </div>
+                </template>
+              </el-autocomplete>
+            </div>
+            <div class="button-row mt-3 slide-up-anim" style="animation-delay: 0.2s">
+               <el-button type="primary" class="primary-send-btn" @click="submitSchool">
+                 确认发送 <el-icon class="ml-1"><Position/></el-icon>
+               </el-button>
+            </div>
+          </div>
+
+          <!-- Grade Form -->
+          <div v-else-if="currentQuestion === 'grade'" class="action-panel form-panel" key="grade">
+            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+              <el-select v-model="onboardingForm.education_level" placeholder="请选择学历层次" class="glass-select w-full" filterable placement="top-start">
+                <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
+              </el-select>
+            </div>
+            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
+              <el-select v-model="onboardingForm.grade" filterable allow-create default-first-option placeholder="请选择当前年级" class="glass-select w-full" placement="top-start">
+                <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
+              </el-select>
+            </div>
+            <div class="button-row mt-3 slide-up-anim" style="animation-delay: 0.25s">
+               <el-button type="primary" class="primary-send-btn" @click="submitGrade">
+                 确认发送 <el-icon class="ml-1"><Position/></el-icon>
+               </el-button>
+            </div>
+          </div>
+
+          <!-- Goal Form -->
+          <div v-else-if="currentQuestion === 'goal'" class="action-panel form-panel" key="goal">
+            <div class="form-row slide-up-anim" style="animation-delay: 0.1s">
+              <el-select v-model="onboardingForm.learning_goal" filterable allow-create default-first-option placeholder="请选择核心学习目标" class="glass-select w-full" placement="top-start">
+                <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
+              </el-select>
+            </div>
+            <div class="form-row mt-3 slide-up-anim" style="animation-delay: 0.18s">
+              <el-select v-model="onboardingForm.preferred_language" filterable allow-create default-first-option clearable placeholder="常用编程语言 (选填)" class="glass-select w-full" placement="top-start">
+                <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
+              </el-select>
+            </div>
+            <div class="button-row mt-3 slide-up-anim" style="animation-delay: 0.25s">
+               <el-button type="primary" class="primary-send-btn finish-btn" :loading="submitting" @click="submitGoal">
+                 <span class="finish-text">生成画像</span> <el-icon class="ml-1"><Check /></el-icon>
+               </el-button>
+            </div>
+          </div>
+        </transition>
       </footer>
     </div>
   </el-dialog>
@@ -186,7 +183,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Service, Position, Search, Close, Check, MoreFilled } from '@element-plus/icons-vue'
+import { Service, Position, Search, Close, Check, MoreFilled, School } from '@element-plus/icons-vue'
 
 import { getProfileOnboarding, updateProfileOnboarding, searchSchools } from '@/api/ai'
 import type { ProfileOnboardingUpdate, SchoolItem } from '@/api/ai'
@@ -226,10 +223,18 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
+const botMessages = computed(() => messages.value.filter(m => m.role === 'bot'))
+
 // 优化：删除了原本列表末尾的 '其他' 选项
 const PRESET_MAJORS = ['计算机科学与技术', '软件工程', '人工智能', '数据科学与大数据技术', '网络空间安全', '电子信息工程']
 const PRESET_COURSES = ['数据结构与算法', '操作系统', '计算机网络', '数据库系统概论', '编译原理', '机器学习']
-const PRESET_GOALS = ['考研升学', '求职就业', '竞赛科研', '保研/出国', '期末满绩']
+const PRESET_GOALS = [
+  '考研深造与学术冲刺（真题攻坚与专业课精讲）',
+  '求职就业与面试突击（大厂真题与项目实战经验）',
+  '竞赛夺奖与科研攻坚（高水平赛事与论文指导）',
+  '名校保研与出国留学（背景提升与直通申请）',
+  '期末满绩与绩点跃升（核心专业课重难点突破）'
+]
 const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
 const PRESET_GRADES = [
   '大一', '大二', '大三', '大四', '大五',
@@ -439,6 +444,17 @@ const handleSchoolSelect = (item: any) => {
   onboardingForm.school_level = item.level || '';
 }
 
+const getSchoolLevelClass = (level: string) => {
+  if (!level) return '';
+  if (level.includes('985') || level.includes('211') || level.includes('双一流')) {
+    return 'level-elite';
+  }
+  if (level.includes('本科')) {
+    return 'level-undergrad';
+  }
+  return 'level-associate';
+}
+
 const loadStatus = async () => {
   try {
     const res = await getProfileOnboarding();
@@ -528,13 +544,26 @@ const handleHeaderCommand = async (cmd: string) => {
   color: #1d1d1f;
 }
 
-.command-bar-wrapper {
-  background: transparent;
-  padding: var(--space-2) var(--space-6) 24px;
+.chat-footer {
+  background: var(--color-surface);
+  border-top: 1px solid #e5e5ea;
+  padding: var(--space-4) var(--space-6) 24px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
   z-index: 10;
+}
+
+.chat-footer.is-collapsed-panel {
+  height: 0;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .quick-reply-area {
@@ -661,6 +690,7 @@ const handleHeaderCommand = async (cmd: string) => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 30px var(--space-6);
   display: flex;
   flex-direction: column;
@@ -684,63 +714,30 @@ const handleHeaderCommand = async (cmd: string) => {
 
 .message-row {
   display: flex;
-  gap: var(--space-3);
-  align-items: flex-end;
+  flex-direction: column;
   width: 100%;
 }
 
-.message-row.bot { justify-content: flex-start; }
-.message-row.user { justify-content: flex-end; }
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-pill);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.bot .avatar {
-  background: var(--color-primary-soft, #EEF2FF);
-  color: var(--color-primary, #4F46E5);
-  border: 1px solid var(--color-primary-border, #C7D2FE);
-}
-
-.user .avatar {
-  background: var(--color-primary, #4F46E5);
-  color: var(--color-surface);
-}
-
 .bubble {
-  max-width: 75%;
-  padding: var(--space-3) var(--space-4);
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-4);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.6;
   word-break: break-word;
   position: relative;
 }
 
 .bot .bubble {
-  background: #f5f5f7;
-  color: #1d1d1f;
-  border-radius: 18px 18px 18px 4px;
-  border: 1px solid rgba(0,0,0,0.02);
+  background: #f8fafc;
+  color: #1e293b;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
 }
 
 .bot .bubble :deep(b) {
   color: var(--color-primary, #4F46E5);
   font-weight: var(--weight-semibold);
-}
-
-.user .bubble {
-  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
-  color: var(--color-surface);
-  border-radius: 18px 18px 4px 18px;
-  font-weight: var(--weight-medium);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
 
 .inline-action-panel {
@@ -828,6 +825,9 @@ const handleHeaderCommand = async (cmd: string) => {
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .ai-chip {
@@ -847,6 +847,10 @@ const handleHeaderCommand = async (cmd: string) => {
   justify-content: center;
   flex-grow: 0;
   text-align: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  word-break: break-all;
 }
 
 .ai-chip:hover {
@@ -967,6 +971,12 @@ const handleHeaderCommand = async (cmd: string) => {
   color: var(--color-primary, #4F46E5) !important;
 }
 
+.button-row {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
 .primary-send-btn {
   background: var(--color-primary, #4F46E5) !important;
   color: var(--color-surface) !important;
@@ -1006,11 +1016,75 @@ const handleHeaderCommand = async (cmd: string) => {
   box-shadow: 0 0 0 1px var(--color-primary, #4F46E5) !important;
 }
 
-.school-tag {
-  margin-left: var(--space-2); font-size: var(--text-xs); color: var(--color-primary, #4F46E5); background: var(--color-primary-soft, #EEF2FF);
-  padding: 2px var(--space-2); border-radius: var(--radius-sm); font-weight: var(--weight-medium);
+/* School Autocomplete Popper styles */
+:global(.school-autocomplete-popper) {
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.08) !important;
+  border: 1px solid #e2e8f0 !important;
+  background: var(--color-surface) !important;
+  overflow: hidden;
 }
-.autocomplete-item { display: flex; align-items: center; justify-content: space-between; }
+
+:global(.school-autocomplete-popper .el-autocomplete-suggestion__wrap) {
+  padding: 4px 0 !important;
+}
+
+:global(.school-autocomplete-popper .el-autocomplete-suggestion__list li) {
+  padding: 10px 16px !important;
+  transition: all 0.2s ease;
+}
+
+:global(.school-autocomplete-popper .el-autocomplete-suggestion__list li:hover),
+:global(.school-autocomplete-popper .el-autocomplete-suggestion__list li.highlighted) {
+  background-color: var(--color-primary-soft, #EEF2FF) !important;
+}
+
+:global(.school-autocomplete-popper .el-autocomplete-suggestion__list li:hover .school-name),
+:global(.school-autocomplete-popper .el-autocomplete-suggestion__list li.highlighted .school-name) {
+  color: var(--color-primary, #4F46E5) !important;
+}
+
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.school-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: #1d1d1f;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.school-tag {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.school-tag.level-elite {
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+}
+
+.school-tag.level-undergrad {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.school-tag.level-associate {
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
 
 /* Transitions & Animations */
 .panel-slide-enter-active, .panel-slide-leave-active { transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1); }
