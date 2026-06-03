@@ -3,13 +3,13 @@ import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import MainLayout from '../layouts/MainLayout.vue'
 import Home from '../views/Home.vue'
-import ResourceGenerator from '../views/ResourceGenerator.vue'
-import LearnPath from '../views/LearnPath.vue'
-import Tutor from '../views/Tutor.vue'
-import Profile from "@/views/Profile.vue";
-import ResourceDetail from "@/views/ResourceDetail.vue";
+import ResourceGenerator from '../resource/views/ResourceGenerator.vue'
+import LearnPath from '../path/views/LearnPath.vue'
+import Tutor from '../chat/views/Tutor.vue'
+import Profile from "@/profile/views/Profile.vue";
+import ResourceDetail from "@/resource/views/ResourceDetail.vue";
 import OnboardingPreview from "@/views/OnboardingPreview.vue";
-import QuestionBank from "@/views/QuestionBank.vue";
+import QuestionBank from "@/evaluation/views/QuestionBank.vue";
 
 const routes = [
   { path: '/', redirect: '/login' },

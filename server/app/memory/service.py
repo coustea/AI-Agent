@@ -289,6 +289,15 @@ class MemoryService:
         async with session_scope() as db:
             return await self.profile_builder.upsert(db=db, user_id=user_id, session_id=session_id, onboarding=onboarding, reason=reason)
 
+    async def apply_tutoring_profile_update(
+        self,
+        *,
+        user_id: int,
+        payload: dict[str, Any],
+    ) -> Any:
+        async with session_scope() as db:
+            return await self.profile_builder.apply_tutoring_update(db=db, user_id=user_id, payload=payload)
+
     async def list_profile_history(self, *, user_id: int, limit: int = 20) -> list[Any]:
         async with session_scope() as db:
             stmt = (

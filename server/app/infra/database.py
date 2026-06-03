@@ -36,8 +36,6 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
-# ============ Health check data structures ============
-
 
 @dataclass
 class ServiceStatus:
@@ -73,8 +71,6 @@ class HealthReport:
         }
 
 
-# ============ Config validation ============
-
 
 def _validate_database_settings() -> None:
     """校验数据库配置必填项。"""
@@ -94,6 +90,7 @@ engine = create_async_engine(
     max_overflow=DB_MAX_OVERFLOW,
     pool_recycle=DB_POOL_RECYCLE,
     pool_timeout=DB_POOL_TIMEOUT,
+    connect_args={"prepared_statement_cache_size": 0},
 )
 
 

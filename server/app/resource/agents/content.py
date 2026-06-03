@@ -1,19 +1,11 @@
-"""
-内容智能体 — 生成专业课程讲解文档。
-"""
+"""内容智能体 — 生成专业课程讲解文档。"""
 
 from __future__ import annotations
 
-import time
-
 from app.infra.llm import get_llm
-from app.infra.logging import get_module_logger
-from app.prompts import registry
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.events import AgentEventEmitter
+from app.resource.agents.common import build_worker_base_context
 from app.resource.schemas import WorkerResult, WorkerState
-
-logger = get_module_logger("resource", sub="content")
 
 
 @register_agent
@@ -23,52 +15,30 @@ class ContentAgent(BaseResourceAgent):
     agent_id = "content"
     agent_name = "内容生成"
 
-    def __init__(self, emitter: AgentEventEmitter | None = None):
+    def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        start = time.perf_counter()
-        logger.info("Agent[content] 启动: learning_need=%s", state.learning_need[:50])
+    async def _execute(self, state: WorkerState) -> WorkerResult:
+        from app.prompts import registry
 
-        await self.emitter.emit_agent("content", status="running", message="正在准备课程讲解", progress=0)
-        await self.emitter.emit_agent_action(
-            "content", "prepare", detail="正在梳理核心概念",
-            current_step=1, total_steps=4, step_label="梳理概念", progress=15,
-        )
+        parts = build_worker_base_context(state)
+        config = state.agent_config
+        if config:
+            cfg = ["## 内容配置"]
+            cfg.append(f"- 结构: {config.get('structure', 'progressive')}")
+            cfg.append(f"- 深度: {config.get('depth_level', 'standard')}")
+            cfg.append(f"- 关注模式: {config.get('focus_mode', 'key_concepts')}")
+            cfg.append("- 包含示例和代码说明" if config.get("include_examples", True) else "- 不包含示例")
+            cfg.append("- 包含常见误区和易错点" if config.get("include_common_mistakes", True) else "- 不包含常见误区")
+            parts.append("\n".join(cfg))
+        parts.append("请生成专业课程讲解文档，只输出 Markdown 内容。")
 
         prompt = registry.get("resource/content")
-        full_input = f"{prompt}\n\n{input_text}"
-
-        await self.emitter.emit_agent_action(
-            "content", "generate", detail="正在编写知识讲解",
-            current_step=2, total_steps=4, step_label="编写讲解", progress=35,
-        )
-
-        response = await self.llm.ainvoke(
-            full_input,
-            temperature=0.3,
-        )
-
-        elapsed = time.perf_counter() - start
-        logger.debug("Agent[content] LLM 调用完成: %.2fs", elapsed)
-
-        await self.emitter.emit_agent_action(
-            "content", "refine", detail="正在补充易错点解析",
-            current_step=3, total_steps=4, step_label="补充解析", progress=70,
-        )
-
+        full_input = f"{prompt}\n\n{'\n\n'.join(parts)}"
+        response = await self.llm.ainvoke(full_input, temperature=0.3)
         content = response.content if hasattr(response, "content") else str(response)
-        content = self._clean_content(content)
-
-        await self.emitter.emit_agent_action(
-            "content", "done", detail="讲解文档生成完成",
-            current_step=4, total_steps=4, step_label="生成完成", progress=100,
-        )
-        await self.emitter.emit_agent("content", status="success", message="课程讲解生成完成", progress=100)
-
-        elapsed = time.perf_counter() - start
-        logger.info("Agent[content] 完成: %.2fs", elapsed)
+        content = _clean_markdown_fences(content)
 
         return WorkerResult(
             success=True,
@@ -80,29 +50,7 @@ class ContentAgent(BaseResourceAgent):
             metadata={"agent_id": "content"},
         )
 
-    def agent_input_parts(self, state: WorkerState) -> list[str]:
-        config = state.agent_config
-        if config:
-            cfg_lines = ["## 内容配置"]
-            cfg_lines.append(f"- 结构: {config.get('structure', 'progressive')}")
-            cfg_lines.append(f"- 深度: {config.get('depth_level', 'standard')}")
-            cfg_lines.append(f"- 关注模式: {config.get('focus_mode', 'key_concepts')}")
-            cfg_lines.append(
-                "- 包含示例和代码说明" if config.get("include_examples", True) else "- 不包含示例"
-            )
-            cfg_lines.append(
-                "- 包含常见误区和易错点" if config.get("include_common_mistakes", True) else "- 不包含常见误区"
-            )
-            return ["\n".join(cfg_lines), "请生成专业课程讲解文档，只输出 Markdown 内容。"]
-        return ["请生成专业课程讲解文档，只输出 Markdown 内容。"]
 
-    def _clean_content(self, content: str) -> str:
-        """清理内容中的常见问题。"""
-        lines = content.split("\n")
-        cleaned = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped in ("```", "```markdown", "```text"):
-                continue
-            cleaned.append(line)
-        return "\n".join(cleaned)
+def _clean_markdown_fences(content: str) -> str:
+    lines = content.split("\n")
+    return "\n".join(line for line in lines if line.strip() not in ("```", "```markdown", "```text"))

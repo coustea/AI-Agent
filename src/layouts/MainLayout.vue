@@ -93,8 +93,8 @@ import {
 } from '@element-plus/icons-vue'
 import { logout } from '@/api/auth'
 import OnboardingDialog from '@/components/OnboardingDialog.vue'
-import GlobalProfileDialog from '@/components/GlobalProfileDialog.vue'
-import { isGlobalProfileVisible } from '@/composables/useGlobalProfile'
+import GlobalProfileDialog from '@/profile/components/GlobalProfileDialog.vue'
+import { isGlobalProfileVisible } from '@/profile/composables/useGlobalProfile'
 import { useAuthPolling } from '@/composables/useAuthPolling'
 
 const route = useRoute()

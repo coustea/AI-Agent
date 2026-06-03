@@ -2,39 +2,15 @@
 -- 初始化数据库 Schema
 -- 与 app/infra/models.py 中 ORM 模型定义保持一致
 -- 表名、列名、类型、约束必须与 ORM 模型完全一致
+-- 每次执行都会删除 public schema 下的所有表并重新创建
+-- 注意：仅建议开发环境使用，生产环境不要直接执行
 -- ============================================================
 
--- 开发环境：清空并重建（仅在 DEBUG=true 时由 init_db() 执行）
--- DROP SCHEMA public CASCADE;
--- CREATE SCHEMA public;
+DROP SCHEMA IF EXISTS public CASCADE;
+CREATE SCHEMA public;
 
 -- UUID 默认值使用 gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- 如果旧脚本已经把 chat_sessions.id 建成 VARCHAR，这里先修复再继续创建外键。
--- 无数据时直接重建；有数据时仅在已有 id 都是合法 UUID 字符串时转换。
-DO $$
-DECLARE
-    chat_session_id_type TEXT;
-BEGIN
-    SELECT data_type INTO chat_session_id_type
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'chat_sessions'
-      AND column_name = 'id';
-
-    IF chat_session_id_type IS NOT NULL AND chat_session_id_type <> 'uuid' THEN
-        IF EXISTS (SELECT 1 FROM chat_sessions LIMIT 1) THEN
-            ALTER TABLE chat_sessions
-                ALTER COLUMN id TYPE UUID USING id::uuid,
-                ALTER COLUMN id SET DEFAULT gen_random_uuid();
-        ELSE
-            DROP TABLE IF EXISTS chat_session_summaries CASCADE;
-            DROP TABLE IF EXISTS chat_messages CASCADE;
-            DROP TABLE IF EXISTS chat_sessions CASCADE;
-        END IF;
-    END IF;
-END $$;
 
 -- ============================================================
 -- 1. users
@@ -305,7 +281,7 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
     title                           VARCHAR(200),
     summary                         TEXT,
     output_contract                 VARCHAR(80),
-    generated_by                     VARCHAR(50),
+    generated_by                    VARCHAR(50),
     content_json                    JSONB,
     content_text                    TEXT,
     metadata_json                   JSONB,

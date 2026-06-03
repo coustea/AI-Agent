@@ -19,7 +19,7 @@ from app.infra.models import User
 from app.chat.request import ChatHistoryMessage
 from app.chat.runtime import latest_user_message
 from app.chat.service import get_chat_usecases
-from app.memory import OnboardingResponse, OnboardingUpdate
+from app.memory import OnboardingResponse, OnboardingUpdate, TutoringProfileUpdate
 from app.infra.response import HttpResponse
 
 if TYPE_CHECKING:
@@ -381,9 +381,15 @@ async def get_profile(current_user: User = Depends(get_current_user)):
     """获取当前用户画像。"""
     memory = _get_memory_service()
     profile = await memory.get_or_create_profile(user_id=current_user.id)
+    profile_json = profile.profile_json or {}
     return HttpResponse.success(data={
         "user_id": profile.user_id,
         "module": profile.module,
+        "base_info": profile_json.get("base_info") or {},
+        "learning_profile": profile_json.get("learning_profile") or {},
+        "knowledge_mastery": profile_json.get("knowledge_mastery") or [],
+        "initial_strategy": profile_json.get("initial_strategy") or {},
+        "profile_meta": profile_json.get("profile_meta") or {},
         "profile_json": profile.profile_json,
         "profile_score_json": profile.profile_score_json,
         "profile_markdown": profile.profile_markdown,
@@ -437,28 +443,33 @@ async def update_profile_onboarding(
 ):
     """更新首次登录数据。"""
     memory = _get_memory_service()
-    student_profile = payload.model_dump()
-    student_profile["school_level"] = await _resolve_school_level(student_profile.get("school"))
+    base_info = payload.model_dump()
+    base_info["school_level"] = await _resolve_school_level(base_info.get("school"))
     try:
         profile = await memory.upsert_profile(
             user_id=current_user.id,
-            onboarding=student_profile,
+            onboarding=base_info,
             reason="onboarding",
         )
-        #画像引导成功后，标记用户的 is_first_login 为 False
         current_user.is_first_login = False
         db.add(current_user)
         await db.commit()
-        logger.info("[ChatAPI] 画像引导完成: user_id=%s", current_user.id)
+        logger.info("[ChatAPI] onboarding complete: user_id=%s", current_user.id)
     except ValueError as e:
-        logger.warning("[ChatAPI] 画像引导失败: user_id=%s err=%s", current_user.id, e)
+        logger.warning("[ChatAPI] onboarding update failed: user_id=%s err=%s", current_user.id, e)
         return HttpResponse.error(code=400, message=str(e))
 
     onboarding_data = await memory.get_onboarding(user_id=current_user.id)
+    profile_json = profile.profile_json or {}
     return HttpResponse.success(data={
         "profile": {
             "user_id": profile.user_id,
             "module": profile.module,
+            "base_info": profile_json.get("base_info") or {},
+            "learning_profile": profile_json.get("learning_profile") or {},
+            "knowledge_mastery": profile_json.get("knowledge_mastery") or [],
+            "initial_strategy": profile_json.get("initial_strategy") or {},
+            "profile_meta": profile_json.get("profile_meta") or {},
             "profile_json": profile.profile_json,
             "profile_score_json": profile.profile_score_json,
             "version": profile.version,
@@ -467,6 +478,31 @@ async def update_profile_onboarding(
             "updated_at": profile.updated_at,
         },
         "onboarding": onboarding_data,
+    })
+
+
+@router.patch("/profile/tutoring-update")
+async def update_profile_from_tutoring(
+    payload: TutoringProfileUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    """应用智能辅导产生的画像增量更新。"""
+    memory = _get_memory_service()
+    profile = await memory.apply_tutoring_profile_update(
+        user_id=current_user.id,
+        payload=payload.model_dump(),
+    )
+    if not profile:
+        return HttpResponse.success(data={"profile_updated": False})
+
+    profile_json = profile.profile_json or {}
+    return HttpResponse.success(data={
+        "profile_updated": True,
+        "learning_profile": profile_json.get("learning_profile") or {},
+        "knowledge_mastery": profile_json.get("knowledge_mastery") or [],
+        "profile_meta": profile_json.get("profile_meta") or {},
+        "version": profile.version,
+        "updated_at": profile.updated_at,
     })
 
 
