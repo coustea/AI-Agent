@@ -35,11 +35,14 @@ STREAK_MIN_SECONDS = 300
 @dataclass(frozen=True)
 class MemoryUpdateSignal:
     content: str
-    dimension: str
+    signal_type: str
+    course: str | None = None
+    knowledge_point: str | None = None
+    confidence: float = 0.5
 
 
 def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal]:
-    """Extract long-term memory update signals from learning events."""
+    """Extract profile update signals from learning events."""
     topic = event.topic or event.course or "当前主题"
     signals: list[MemoryUpdateSignal] = []
 
@@ -47,7 +50,10 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
         signals.append(
             MemoryUpdateSignal(
                 content=f"在“{topic}”练习中得分偏低（{event.score:.0f}分），需要加强针对性巩固。",
-                dimension="weakness_points",
+                signal_type="quiz_result",
+                course=event.course,
+                knowledge_point=event.topic,
+                confidence=0.7,
             )
         )
 
@@ -56,15 +62,21 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
         if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
             signals.append(
                 MemoryUpdateSignal(
-                    content=f"学习“{topic}”时反馈：{feedback}",
-                    dimension="weakness_points",
+                    content=f"学习“{topic}”时用户反馈：{feedback}",
+                    signal_type="self_report_weakness",
+                    course=event.course,
+                    knowledge_point=event.topic,
+                    confidence=0.65,
                 )
             )
         if any(keyword in feedback for keyword in ("喜欢", "希望", "更想", "图解", "案例", "代码", "视频")):
             signals.append(
                 MemoryUpdateSignal(
                     content=f"学习资源偏好反馈：{feedback}",
-                    dimension="interaction_preference",
+                    signal_type="preference",
+                    course=event.course,
+                    knowledge_point=event.topic,
+                    confidence=0.6,
                 )
             )
 

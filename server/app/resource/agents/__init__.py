@@ -12,19 +12,8 @@ from app.resource.agents.reading import ReadingAgent
 from app.resource.agents.ppt import PptAgent
 from app.resource.agents.review import ReviewAgent
 
-# Backward-compatible alias
-AGENT_CLASSES: dict[str, type] = {
-    "content": ContentAgent,
-    "mindmap": MindmapAgent,
-    "quiz": QuizAgent,
-    "code": CodeAgent,
-    "reading": ReadingAgent,
-    "ppt": PptAgent,
-}
-
 __all__ = [
     "AGENT_REGISTRY",
-    "AGENT_CLASSES",
     "BaseResourceAgent",
     "register_agent",
     "PlanningAgent",

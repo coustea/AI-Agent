@@ -9,17 +9,16 @@ from __future__ import annotations
 import time
 import asyncio
 import json
-from copy import deepcopy
+import time
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
 from app.resource.agents.base import AGENT_REGISTRY
-from app.resource.events import AgentEventEmitter, ResourceGenerateEvent
+from app.resource.events import AgentEventEmitter
 from app.resource.schemas import (
     AgentSelection,
     ExecutionPlan,
@@ -114,95 +113,17 @@ class ResourceUsecases:
             "source": source,
         }
 
-    def _initial_workflow_progress(self, selected_agents: list[str]) -> dict[str, Any]:
-        selected = [agent_id for agent_id in selected_agents if agent_id not in {"planning", "review"}]
-        base_agents = [agent_id for agent_id in selected if agent_id != PPT_AGENT_ID]
-        nodes = ["planning", *base_agents, PRE_REVIEW_AGENT_ID]
-        if PPT_AGENT_ID in selected:
-            nodes.extend([PPT_AGENT_ID, PPT_REVIEW_AGENT_ID])
-        nodes.append("bundle")
-        return {
-            "stage": "pending",
-            "progress": 0,
-            "latest_message": "等待开始生成",
-            "agents": {
-                agent_id: {
-                    "status": "waiting",
-                    "progress": 0,
-                    "message": "",
-                    "steps": [],
-                }
-                for agent_id in nodes
-            },
-        }
-
-    async def initialize_generation_progress(self, resource_id: int, selected_agents: list[str]) -> None:
-        """写入任务的初始真实进度快照。"""
-        async with self._write_lock:
-            resource = await self.session.get(GeneratedResource, resource_id)
-            if resource is None:
-                raise ValueError("资源不存在")
-            personalization = dict(resource.personalization or {})
-            personalization["workflow_progress"] = self._initial_workflow_progress(selected_agents)
-            resource.personalization = personalization
-            resource.updated_at = datetime.now(timezone.utc)
-            await self._commit(resource)
-
-    async def record_generation_event(self, resource_id: int, event: ResourceGenerateEvent) -> None:
-        """将 Agent 发出的真实事件折叠为可轮询的轻量进度快照。"""
-        async with self._write_lock:
-            resource = await self.session.get(GeneratedResource, resource_id)
-            if resource is None:
-                return
-            personalization = deepcopy(resource.personalization or {})
-            progress = personalization.get("workflow_progress")
-            if not isinstance(progress, dict):
-                progress = self._initial_workflow_progress(list(resource.selected_agents or []))
-            agents = dict(progress.get("agents") or {})
-            node_id = self._resolve_progress_node(event)
-
-            if node_id:
-                node = dict(agents.get(node_id) or self._initial_workflow_progress([])["agents"]["planning"])
-                node["status"] = event.status
-                event_node_progress = 100 if event.event_type == "resource" else int(event.progress or 0)
-                node["progress"] = max(int(node.get("progress") or 0), event_node_progress)
-                node["message"] = event.message
-                if event.event_type == "agent_step" and event.message:
-                    node["steps"] = [*(node.get("steps") or []), event.message][-12:]
-                agents[node_id] = node
-
-            stage, task_status = self._resolve_progress_stage(event)
-            if event.event_type == "done" and resource.status in {"completed", "partial_completed", "failed"}:
-                stage = resource.status
-            progress["stage"] = stage or progress.get("stage", "pending")
-            if event.event_type in {"workflow", "bundle", "done", "error"}:
-                progress["progress"] = max(int(progress.get("progress") or 0), int(event.progress or 0))
-            progress["latest_message"] = event.message or progress.get("latest_message", "")
-            progress["agents"] = agents
-            personalization["workflow_progress"] = progress
-            resource.personalization = personalization
-            self._mark_json_modified(resource, "personalization")
-            if task_status and resource.status not in {"completed", "partial_completed", "failed"}:
-                resource.status = task_status
-            resource.updated_at = datetime.now(timezone.utc)
-            await self._commit(resource)
-
     async def get_generation_status(self, user_id: int, resource_id: int) -> dict[str, Any] | None:
-        """读取任务总状态及数据库中记录的真实进度。"""
+        """读取任务总状态及已生成资源列表。"""
         resource = await self.get_resource(user_id, resource_id)
         if resource is None:
             return None
-        personalization = resource.personalization if isinstance(resource.personalization, dict) else {}
-        progress = personalization.get("workflow_progress")
-        if not isinstance(progress, dict):
-            progress = self._initial_workflow_progress(list(resource.selected_agents or []))
         db_items: list[GeneratedResourceItemModel] = []
         if hasattr(self.session, "exec"):
             db_items = await self.list_resource_items(user_id, resource_id)
         return {
             "resource_id": resource_id,
             "status": resource.status,
-            "progress": progress,
             "resources": [
                 self._db_item_to_resource_item(item).model_dump(mode="json")
                 for item in db_items
@@ -222,35 +143,6 @@ class ResourceUsecases:
                 resource.updated_at = datetime.now(timezone.utc)
                 await self._commit(resource)
 
-    def _resolve_progress_node(self, event: ResourceGenerateEvent) -> str | None:
-        if event.event_type == "bundle" or event.agent == "assembler":
-            return "bundle"
-        if event.agent in {PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, "planning"}:
-            return event.agent
-        if event.agent and event.agent != "coordinator":
-            return event.agent
-        for prefix, node in (("planning", "planning"), ("pre_review", PRE_REVIEW_AGENT_ID), ("ppt_review", PPT_REVIEW_AGENT_ID)):
-            if event.stage.startswith(prefix) or event.stage == f"{prefix}ing":
-                return node
-        if event.stage == "reviewing":
-            return PRE_REVIEW_AGENT_ID
-        return None
-
-    def _resolve_progress_stage(self, event: ResourceGenerateEvent) -> tuple[str | None, str | None]:
-        if event.event_type == "done":
-            return "completed", None
-        if event.event_type == "bundle":
-            return "assembling", None
-        if event.stage in {"reviewing", "pre_reviewing", "ppt_reviewing"} or event.agent in {"review", PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID}:
-            return "reviewing", "reviewing"
-        if event.stage == "generating" or (
-            event.agent and event.agent not in {"coordinator", "planning", "review", "assembler"}
-        ):
-            return "generating", "generating"
-        if event.stage.startswith("planning") or event.agent == "planning":
-            return "planning", "planning"
-        return event.stage or None, None
-
     async def _commit(self, obj: Any) -> None:
         """提交并刷新数据库对象。"""
         try:
@@ -260,14 +152,7 @@ class ResourceUsecases:
             raise exc
         await self.session.refresh(obj)
 
-    def _mark_json_modified(self, obj: Any, field_name: str) -> None:
-        """标记 SQLAlchemy JSON/JSONB 字段为脏数据，确保嵌套快照重写后被持久化。"""
-        try:
-            flag_modified(obj, field_name)
-        except Exception:
-            # Unit-test fakes and simple namespace objects are not SQLAlchemy-mapped.
-            return
-
+    
     @staticmethod
     def _has_generated_content(result: WorkerResult | None) -> bool:
         if result is None or not result.success:
@@ -542,7 +427,7 @@ class ResourceUsecases:
             content_json=content_json,
             content_text=content_text,
             metadata_json=result.metadata,
-            status="completed",
+            status="finished",
             updated_at=datetime.now(timezone.utc),
         )
         async with self._write_lock:
@@ -780,16 +665,9 @@ async def run_multi_agent_generation(
     async with session_scope() as session:
         usecases = ResourceUsecases(session)
         enabled_agents = request.enabled_agent_ids()
-        
-        # 初始化前端能够轮询到的进度骨架
-        await usecases.initialize_generation_progress(resource_id, enabled_agents)
-
-        async def persist_event(event: ResourceGenerateEvent) -> None:
-            # 事件回调：将任意 Agent 内部发出的状态变更写入数据库，供前端 SSE 推送
-            await usecases.record_generation_event(resource_id, event)
 
         # 实例化事件发射器，贯穿所有 Agent 的生命周期
-        emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
+        emitter = AgentEventEmitter(resource_id=resource_id)
 
         success = False
         start_time = time.perf_counter()
@@ -806,6 +684,7 @@ async def run_multi_agent_generation(
                 profile=profile,
                 agent_config={"enabled_agents": enabled_agents},
             )
+            await emitter.emit_agent("planning", status="running", message="正在规划生成蓝图...")
             planning_result = await AGENT_REGISTRY["planning"](emitter).run(planning_state)
 
             blueprint = None
@@ -832,7 +711,7 @@ async def run_multi_agent_generation(
             # 职责: 先生成非 PPT 资源，PPT 必须等待 source pre-audit 通过后再生成
             # ==========================================
             worker_start = time.perf_counter()
-            await emitter.emit_workflow("generating", "并行生成基础资源", progress=20)
+            await emitter.emit_agent("coordinator", status="running", message="并行生成基础资源")
             results: dict[str, WorkerResult] = {}
 
             async def run_one(agent_id: str, agent_config_extra: dict[str, Any] | None = None) -> None:
@@ -872,15 +751,7 @@ async def run_multi_agent_generation(
                             result=result,
                         )
                         # 发送资源就绪事件给前端
-                        await emitter.emit_resource(
-                            agent_id=agent_id,
-                            title=result.title,
-                            file_type=result.file_type,
-                            content=result.content,
-                            summary=result.summary,
-                            summary_data=result.summary_data,
-                            metadata=result.metadata,
-                        )
+                        # resource saved to DB, frontend polls status
                 except Exception as exc:
                     agent_elapsed = time.perf_counter() - agent_start
                     logger.error("Agent[%s] 异常: %.2fs", agent_id, agent_elapsed, exc_info=True)
@@ -910,7 +781,7 @@ async def run_multi_agent_generation(
             # 阶段 3: 前置审核 + PPT 生成 + PPT 单独审核
             # 职责: source 先过安全/事实性审核，PPT 只在通过后生成并单独审核
             # ==========================================
-            await emitter.emit_workflow("pre_reviewing", "前置内容安全审核中", progress=70)
+            await emitter.emit_agent("pre_review", status="running", message="前置内容安全审核中")
             pre_review_result = ReviewResult(passed=True, overall_score=100)
             review_result = pre_review_result
             review_passed = True
@@ -937,7 +808,6 @@ async def run_multi_agent_generation(
                     PRE_REVIEW_AGENT_ID,
                     status="failed",
                     message="前置审核未通过：资源生成不完整",
-                    progress=100,
                 )
                 logger.warning("前置审核跳过: missing_resources=%s", missing_resources)
             elif source_audit_required and "review" in AGENT_REGISTRY:
@@ -972,19 +842,17 @@ async def run_multi_agent_generation(
                     PRE_REVIEW_AGENT_ID,
                     status="failed",
                     message="审核智能体不可用，前置安全审核已阻断",
-                    progress=100,
                 )
             else:
                 await emitter.emit_agent(
                     PRE_REVIEW_AGENT_ID,
                     status="skipped",
-                    message="未选择需要深度审核的内容，跳过前置 LLM 审核",
-                    progress=100,
+                    message="无需深度审核，跳过前置审核",
                 )
                 logger.info("未选择 content/reading 或 review agent 不可用，跳过前置 LLM 审核")
 
             if review_passed and PPT_AGENT_ID in enabled_agents:
-                await emitter.emit_workflow("generating", "正在生成 PPT", progress=82)
+                await emitter.emit_agent("ppt", status="running", message="正在生成 PPT")
                 approved_sources = [
                     {
                         "agent_id": item["agent_id"],
@@ -997,7 +865,7 @@ async def run_multi_agent_generation(
                 if PPT_AGENT_ID in AGENT_REGISTRY:
                     await run_one(PPT_AGENT_ID, {"approved_sources": approved_sources})
 
-                await emitter.emit_workflow("ppt_reviewing", "PPT 内容安全审核中", progress=90)
+                await emitter.emit_agent("ppt_review", status="running", message="PPT 内容审核中")
                 failed_results = {aid: r for aid, r in results.items() if not r.success}
                 review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
                 ppt_audit_envelope, ppt_missing_resources = ResourceService.build_ppt_audit_envelope(
@@ -1018,7 +886,6 @@ async def run_multi_agent_generation(
                         PPT_REVIEW_AGENT_ID,
                         status="failed",
                         message="PPT 审核未通过：PPT 生成不完整",
-                        progress=100,
                     )
                     logger.warning("PPT 审核跳过: missing_resources=%s", ppt_missing_resources)
                 elif "review" in AGENT_REGISTRY:
@@ -1058,20 +925,17 @@ async def run_multi_agent_generation(
                         PPT_REVIEW_AGENT_ID,
                         status="failed",
                         message="审核智能体不可用，PPT 安全审核已阻断",
-                        progress=100,
                     )
             elif PPT_AGENT_ID in enabled_agents:
                 await emitter.emit_agent(
                     PPT_AGENT_ID,
                     status="skipped",
                     message="前置审核未通过，已跳过 PPT 生成",
-                    progress=100,
                 )
                 await emitter.emit_agent(
                     PPT_REVIEW_AGENT_ID,
                     status="skipped",
                     message="PPT 未生成，已跳过 PPT 审核",
-                    progress=100,
                 )
 
             # ==========================================
@@ -1095,9 +959,7 @@ async def run_multi_agent_generation(
 
             # 组装最终 Bundle 发送结束事件
             bundle = await usecases.get_resource_bundle(user_id, resource_id)
-            if bundle:
-                await emitter.emit_bundle(bundle, progress=99)
-            await emitter.emit_done(bundle=bundle)
+            await emitter.emit_done(success=True)
 
             saved_items = await usecases.list_resource_items(user_id, resource_id)
             resource = await usecases.get_resource(user_id, resource_id)
@@ -1147,14 +1009,8 @@ async def run_single_agent_generation(
 
     async with session_scope() as session:
         usecases = ResourceUsecases(session)
-        # 初始化数据库中的任务进度骨架，只包含当前这唯一的一个 Agent
-        await usecases.initialize_generation_progress(resource_id, [agent_id])
 
-        async def persist_event(event: ResourceGenerateEvent) -> None:
-            # 实时回调，将 Agent 输出的打字机文本或进度状态记录到数据库
-            await usecases.record_generation_event(resource_id, event)
-
-        emitter = AgentEventEmitter(resource_id=resource_id, event_sink=persist_event)
+        emitter = AgentEventEmitter(resource_id=resource_id)
 
         success = False
         start_time = time.perf_counter()
@@ -1188,19 +1044,11 @@ async def run_single_agent_generation(
                     result=result,
                 )
                 # 2. 通过 SSE 推送给前端（触发前端界面的卡片渲染）
-                await emitter.emit_resource(
-                    agent_id=agent_id,
-                    title=result.title,
-                    file_type=result.file_type,
-                    content=result.content,
-                    summary=result.summary,
-                    summary_data=result.summary_data,
-                    metadata=result.metadata,
-                )
+                # resource saved to DB, frontend polls status
                 success = True
 
             # 发送全局结束信号
-            await emitter.emit_done(bundle=None)
+            await emitter.emit_done(success=True)
         except Exception:
             logger.error("单智能体生成异常: agent=%s, resource_id=%s", agent_id, resource_id, exc_info=True)
 
@@ -1260,6 +1108,7 @@ async def _update_node_resource_status(
 # ---------------------------------------------------------------------------
 # 向后兼容别名（逐步迁移后移除）
 # ---------------------------------------------------------------------------
+
+
+# Alias for api.py compatibility
 ResourceService = ResourceUsecases
-bg_gen_task = run_multi_agent_generation
-bg_single_gen_task = run_single_agent_generation
