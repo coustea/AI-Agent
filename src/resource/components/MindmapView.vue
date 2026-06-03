@@ -1,8 +1,6 @@
 <template>
   <div class="mindmap-resource" :class="{ compact }">
     <div v-if="markdownContent" class="technical-frame mindmap-container">
-
-
       <div ref="markmapRef" class="markmap-shell"></div>
 
       <div class="frame-footer">
@@ -20,9 +18,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, nextTick } from 'vue'
-import { Transformer } from 'markmap-lib'
-import { Markmap } from 'markmap-view'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -30,39 +26,86 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
+type MarkmapInstance = {
+  setData: (root: unknown) => void
+}
+
+type MarkmapRuntime = {
+  transformer: { transform: (content: string) => { root: unknown } }
+  createMarkmap: (svg: SVGElement) => MarkmapInstance
+}
+
 const markmapRef = ref<HTMLElement | null>(null)
-let markmapInstance: Markmap | null = null
+let markmapInstance: MarkmapInstance | null = null
+let markmapRuntimePromise: Promise<MarkmapRuntime> | null = null
 
-const transformer = new Transformer()
+const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
+  if (!markmapRuntimePromise) {
+    markmapRuntimePromise = Promise.all([
+      import('markmap-lib'),
+      import('markmap-view'),
+    ]).then(([markmapLib, markmapView]) => {
+      const transformer = new markmapLib.Transformer()
 
-// 提取 Markdown 内容
+      return {
+        transformer,
+        createMarkmap: (svg: SVGElement) => new markmapView.Markmap(svg, {
+          autoFit: true,
+          duration: 400,
+          maxWidth: 320,
+          paddingX: 30,
+          style: (id) => `
+            .${id}-g {
+              font-family: 'Fira Code', monospace;
+              font-size: 15px;
+            }
+            .${id}-g foreignObject {
+              overflow: visible;
+            }
+            .${id}-g .markmap-node text {
+              fill: #000000;
+            }
+            .${id}-g .markmap-link {
+              stroke: #000000;
+              stroke-width: 1.5px;
+              opacity: 0.6;
+            }
+            .${id}-g .markmap-node circle {
+              fill: #FFFFFF;
+              stroke: #000000;
+              stroke-width: 2px;
+            }
+          `,
+        }),
+      }
+    })
+  }
+
+  return markmapRuntimePromise
+}
+
 const markdownContent = computed<string>(() => {
   if (!props.resultData) return ''
   if (typeof props.resultData === 'string') return props.resultData
 
-  // 1. 如果有包裹 resource 结构
   let data: Record<string, any> = props.resultData as Record<string, any>
   if (data.resource && typeof data.resource === 'object') {
     data = data.resource
   }
 
-  // 2. 从 data 或 data.content 中提取 markdown 字符串
   const content = data.content
-  
-  // 2.1 content 是字符串（可能是 JSON 字符串或直接的 Markdown）
+
   if (typeof content === 'string' && content.trim()) {
-    // 尝试解析 JSON 字符串
     const parsed = parseJsonObject(content)
     if (parsed) {
       if (parsed.markdown_content) return parsed.markdown_content
       if (parsed.outline) return parsed.outline
       if (parsed.source) return parsed.source
     }
-    // 如果不是 JSON，直接返回（可能是直接的 Markdown）
+
     return content
   }
 
-  // 2.2 content 是对象（后端返回的嵌套结构）
   if (typeof content === 'object' && content !== null) {
     if (content.markdown_content) return content.markdown_content
     if (content.outline) return content.outline
@@ -70,7 +113,6 @@ const markdownContent = computed<string>(() => {
     if (content.markdown) return content.markdown
   }
 
-  // 3. 回退策略：直接在 data 第一层找
   if (data.markdown_content) return data.markdown_content
   if (data.outline) return data.outline
   if (data.source) return data.source
@@ -79,73 +121,67 @@ const markdownContent = computed<string>(() => {
   return ''
 })
 
-// 预处理内容，兼容 LLM 误生成的 Mermaid mindmap 语法
 const preprocessContent = (text: string): string => {
   let content = text.trim()
-  // 移除可能存在的代码块包裹
   if (content.startsWith('```')) {
     content = content.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '').trim()
   }
 
-  if (content.startsWith('mindmap')) {
-    const lines = content.split('\n')
-    const mdLines: string[] = []
-    let rootFound = false
-    let baseIndent = 0
-
-    for (let line of lines) {
-      if (line.trim() === 'mindmap') continue
-      if (!line.trim()) continue
-
-      const match = line.match(/^(\s*)(.*)/)
-      const rawIndent = match?.[1] || ''
-      const rawNodeText = match?.[2] || ''
-      if (rawNodeText.trim()) {
-        const indent = rawIndent.length
-        // 移除 Mermaid 形状符号如 (( )), [ ], {{ }} 等
-        let nodeText = rawNodeText.replace(/^[\(\[\{]+|[\)\]\}]+$/g, '').trim()
-
-        if (!rootFound) {
-          mdLines.push(`# ${nodeText}`)
-          rootFound = true
-          baseIndent = indent
-        } else {
-          // 启发式层级计算：假设至少每级缩进 2 个空格
-          let depth = Math.floor((indent - baseIndent) / 2)
-          if (depth <= 0) depth = 1
-          
-          if (depth === 1) {
-            mdLines.push(`## ${nodeText}`)
-          } else {
-            const listIndent = '  '.repeat(depth - 2)
-            mdLines.push(`${listIndent}- ${nodeText}`)
-          }
-        }
-      }
-    }
-    return mdLines.join('\n')
+  if (!content.startsWith('mindmap')) {
+    return text
   }
 
-  return text
+  const lines = content.split('\n')
+  const markdownLines: string[] = []
+  let rootFound = false
+  let baseIndent = 0
+
+  for (const line of lines) {
+    if (line.trim() === 'mindmap' || !line.trim()) continue
+
+    const match = line.match(/^(\s*)(.*)/)
+    const rawIndent = match?.[1] || ''
+    const rawNodeText = match?.[2] || ''
+    if (!rawNodeText.trim()) continue
+
+    const indent = rawIndent.length
+    const nodeText = rawNodeText.replace(/^[\(\[\{]+|[\)\]\}]+$/g, '').trim()
+
+    if (!rootFound) {
+      markdownLines.push(`# ${nodeText}`)
+      rootFound = true
+      baseIndent = indent
+      continue
+    }
+
+    let depth = Math.floor((indent - baseIndent) / 2)
+    if (depth <= 0) depth = 1
+
+    if (depth === 1) {
+      markdownLines.push(`## ${nodeText}`)
+      continue
+    }
+
+    const listIndent = '  '.repeat(depth - 2)
+    markdownLines.push(`${listIndent}- ${nodeText}`)
+  }
+
+  return markdownLines.join('\n')
 }
 
-// 渲染 markmap
 const renderMarkmap = async (rawContent: string) => {
   if (!rawContent.trim() || !markmapRef.value) return
-  
-  const content = preprocessContent(rawContent)
 
-  // Wait for container to have layout so SVG can resolve relative lengths
+  const content = preprocessContent(rawContent)
   await nextTick()
 
   try {
+    const { transformer, createMarkmap } = await loadMarkmapRuntime()
     const { root } = transformer.transform(content)
 
-    // 创建 SVG 容器
     let svg = markmapRef.value.querySelector('svg')
     if (!svg) {
       svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      // Use explicit pixel width from container to avoid "Could not resolve relative length" error
       const containerWidth = markmapRef.value.clientWidth || 800
       const height = props.compact ? 240 : 500
       svg.setAttribute('width', String(containerWidth))
@@ -156,54 +192,27 @@ const renderMarkmap = async (rawContent: string) => {
     }
 
     if (!markmapInstance) {
-      markmapInstance = new Markmap(svg, {
-        autoFit: true,
-        duration: 400,
-        maxWidth: 320,
-        paddingX: 30, // 增加水平间距
-        style: (id) => `
-          .${id}-g {
-            font-family: 'Fira Code', monospace;
-            font-size: 15px;
-          }
-          .${id}-g foreignObject {
-            overflow: visible;
-          }
-          .${id}-g .markmap-node text {
-            fill: #000000;
-          }
-          .${id}-g .markmap-link {
-            stroke: #000000;
-            stroke-width: 1.5px;
-            opacity: 0.6;
-          }
-          .${id}-g .markmap-node circle {
-            fill: #FFFFFF;
-            stroke: #000000;
-            stroke-width: 2px;
-          }
-        `
-      })
+      markmapInstance = createMarkmap(svg)
     }
 
     markmapInstance.setData(root)
   } catch (err) {
     console.error('[MindmapResourceView] Markmap render error:', err)
-    
-    const errorMsg = err instanceof Error ? err.message : String(err)
+
+    const errorMessage = err instanceof Error ? err.message : String(err)
     if (markmapRef.value) {
-      markmapRef.value.innerHTML = `<pre class="markmap-error">SYSTEM_RENDER_FAIL: ${errorMsg}</pre>`
+      markmapRef.value.innerHTML = `<pre class="markmap-error">SYSTEM_RENDER_FAIL: ${errorMessage}</pre>`
     }
   }
 }
 
 watch(markdownContent, (content) => {
-  renderMarkmap(content)
+  void renderMarkmap(content)
 }, { immediate: true })
 
 onMounted(() => {
   if (markdownContent.value) {
-    renderMarkmap(markdownContent.value)
+    void renderMarkmap(markdownContent.value)
   }
 })
 </script>
@@ -220,7 +229,6 @@ onMounted(() => {
   --accent: #000000;
 }
 
-/* 技术框架样式 */
 .technical-frame {
   position: relative;
   background: var(--bg);
@@ -246,7 +254,6 @@ onMounted(() => {
 .bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
 .bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 
-/* 头部 HUD */
 .frame-header {
   position: absolute;
   top: 12px;
@@ -279,7 +286,6 @@ onMounted(() => {
   letter-spacing: 1px;
 }
 
-/* 底部 HUD */
 .frame-footer {
   margin-top: 12px;
   display: flex;
@@ -349,10 +355,12 @@ onMounted(() => {
   background: transparent;
   box-shadow: none;
 }
+
 .compact .frame-header,
 .compact .frame-footer {
   display: none;
 }
+
 .compact .markmap-shell {
   min-height: 240px;
   background-size: 20px 20px;

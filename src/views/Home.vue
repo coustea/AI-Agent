@@ -30,7 +30,7 @@
 
       <article class="panel">
         <div class="panel-head">
-          <h2>课程子画像</h2>
+          <h2>课程画像</h2>
           <el-button text @click="goTo('/path-planner')">规划路径</el-button>
         </div>
         <div v-if="courseCards.length" class="list">
@@ -45,7 +45,7 @@
             </div>
           </div>
         </div>
-        <div v-else class="empty-state">当前还没有课程子画像。</div>
+        <div v-else class="empty-state">当前还没有课程画像。</div>
       </article>
 
       <article class="panel">
@@ -87,44 +87,22 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { getProfile, type ProfileData } from '@/profile/api/profile'
+import {
+  getCourseProfileCards,
+  getGlobalProfileCards,
+  getMasteryTop,
+  getStrategyList,
+} from '@/profile/utils/profileViewModel'
 
 const router = useRouter()
 const profile = ref<ProfileData | null>(null)
 
 const goTo = (path: string) => router.push(path)
 
-const globalProfile = computed(() => ((profile.value?.learning_profile as any)?.global_profile || {}))
-
-const globalCards = computed(() => [
-  { label: '专业背景', value: globalProfile.value.major_background?.value || '暂无' },
-  { label: '学习阶段', value: globalProfile.value.student_stage?.value || '暂无' },
-  { label: '学习节奏', value: globalProfile.value.learning_pace?.value || '暂无' },
-  { label: '认知风格', value: globalProfile.value.cognitive_style?.value || '暂无' },
-])
-
-const courseCards = computed(() => {
-  const courses = ((profile.value?.learning_profile as any)?.course_profiles || []) as any[]
-  return courses.map((course) => ({
-    name: course.course_context?.value?.course || '未命名课程',
-    level: course.knowledge_level?.value || '暂无',
-    goal: ((course.learning_goal_type?.value || []) as string[]).join(' / ') || '暂无目标',
-    weakPoints: (course.weak_knowledge_points?.value || []).map((item: any) => item.name || item),
-  }))
-})
-
-const masteryTop = computed(() => {
-  const items = (profile.value?.knowledge_mastery || []) as Array<any>
-  return [...items].sort((a, b) => (a.mastery_score || 0) - (b.mastery_score || 0)).slice(0, 4)
-})
-
-const strategyList = computed(() => {
-  const strategy = profile.value?.initial_strategy || {}
-  return [
-    strategy.strategy_summary,
-    strategy.path_planning_strategy,
-    strategy.tutor_strategy,
-  ].filter(Boolean) as string[]
-})
+const globalCards = computed(() => getGlobalProfileCards(profile.value))
+const courseCards = computed(() => getCourseProfileCards(profile.value))
+const masteryTop = computed(() => getMasteryTop(profile.value))
+const strategyList = computed(() => getStrategyList(profile.value))
 
 const isColdStart = computed(() => !profile.value?.base_info?.major)
 const heroTitle = computed(() => {
@@ -136,7 +114,7 @@ const heroDescription = computed(() => {
   if (isColdStart.value) {
     return '首次画像只负责冷启动。真正影响资源推荐、路径规划和智能辅导的，是你后续使用系统时持续形成的动态画像。'
   }
-  return '系统会优先基于课程子画像、知识掌握度和最近学习信号，动态调整资源生成、路径规划和辅导策略。'
+  return '系统会基于课程画像、知识掌握度和最近学习信号，动态调整资源生成、路径规划和辅导策略。'
 })
 
 const statCards = computed(() => [

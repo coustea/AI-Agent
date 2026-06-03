@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -25,5 +24,35 @@ export default defineConfig({
     watch: {
       ignored: ['**/server/**'],
     },
-  }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+
+          if (id.includes('element-plus') || id.includes('@element-plus')) {
+            return 'vendor-element'
+          }
+
+          if (id.includes('echarts') || id.includes('vue-echarts')) {
+            return 'vendor-charts'
+          }
+
+          if (
+            id.includes('mermaid') ||
+            id.includes('markmap') ||
+            id.includes('katex') ||
+            id.includes('markdown-it') ||
+            id.includes('highlight.js') ||
+            id.includes('md-editor-v3')
+          ) {
+            return 'vendor-renderers'
+          }
+
+          return 'vendor'
+        },
+      },
+    },
+  },
 })

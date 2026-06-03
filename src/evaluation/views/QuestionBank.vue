@@ -664,7 +664,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import katex from 'katex';
 import {
   Collection, Cpu,
   Close, Checked, Timer, CircleCheck, CircleClose,
@@ -676,7 +675,25 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { ElConfigProvider } from 'element-plus';
 import { getProfileOnboarding } from '@/api/ai';
 import { fetchQuizBankQuestions } from '@/api/quizBank';
-import 'katex/dist/katex.min.css';
+
+type KatexModule = typeof import('katex');
+
+let katexModule: KatexModule | null = null;
+let katexRuntimePromise: Promise<KatexModule> | null = null;
+
+const loadKatexRuntime = async () => {
+  if (!katexRuntimePromise) {
+    katexRuntimePromise = Promise.all([
+      import('katex'),
+      import('katex/dist/katex.min.css'),
+    ]).then(([module]) => {
+      katexModule = module.default ?? module;
+      return katexModule;
+    });
+  }
+
+  return katexRuntimePromise;
+};
 
 interface Question {
   id: string;
@@ -868,6 +885,11 @@ const renderQuizKatexHtml = (text: string) => {
   const normalized = normalizeQuizMath(normalizeFragmentedLinearListText(text || ''));
   if (!normalized.trim()) return '';
 
+  const katex = katexModule;
+  if (!katex) {
+    return escapeHtml(normalized).replace(/\n/g, '<br>');
+  }
+
   const parts = normalized.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g).filter(Boolean);
   return parts.map((part) => {
     if (part.startsWith('$$') && part.endsWith('$$')) {
@@ -937,6 +959,7 @@ const saveGlobalStats = (newAttempted: number, newCorrect: number) => {
 
 onMounted(() => {
   loadGlobalStats();
+  void loadKatexRuntime();
   void initializeQuizBank();
 });
 

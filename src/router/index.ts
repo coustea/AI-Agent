@@ -1,15 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Login from '../views/Login.vue'
-import Register from '../views/Register.vue'
-import MainLayout from '../layouts/MainLayout.vue'
-import Home from '../views/Home.vue'
-import ResourceGenerator from '../resource/views/ResourceGenerator.vue'
-import LearnPath from '../path/views/LearnPath.vue'
-import Tutor from '../chat/views/Tutor.vue'
-import Profile from "@/profile/views/Profile.vue";
-import ResourceDetail from "@/resource/views/ResourceDetail.vue";
-import OnboardingPreview from "@/views/OnboardingPreview.vue";
-import QuestionBank from "@/evaluation/views/QuestionBank.vue";
+
+const Login = () => import('../views/Login.vue')
+const Register = () => import('../views/Register.vue')
+const MainLayout = () => import('../layouts/MainLayout.vue')
+const Home = () => import('../views/Home.vue')
+const ResourceGenerator = () => import('../resource/views/ResourceGenerator.vue')
+const LearnPath = () => import('../path/views/LearnPath.vue')
+const Tutor = () => import('../chat/views/Tutor.vue')
+const Profile = () => import('@/profile/views/Profile.vue')
+const ResourceDetail = () => import('@/resource/views/ResourceDetail.vue')
+const OnboardingPreview = () => import('@/views/OnboardingPreview.vue')
+const QuestionBank = () => import('@/evaluation/views/QuestionBank.vue')
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -20,13 +21,13 @@ const routes = [
     path: '/',
     component: MainLayout,
     children: [
-        {path: 'dashboard', name: 'Dashboard', component: Home},
-        {path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator},
-        {path: 'path-planner', name: 'LearnPath', component: LearnPath},
-        {path: 'tutor', name: 'Tutor', component: Tutor},
-        {path: 'profile', name: 'Profile', component: Profile,},
-        {path: 'resource-detail/:id', name: 'ResourceDetail', component: ResourceDetail,},
-        {path: 'question-bank', name: 'QuestionBank', component: QuestionBank}
+      { path: 'dashboard', name: 'Dashboard', component: Home },
+      { path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator },
+      { path: 'path-planner', name: 'LearnPath', component: LearnPath },
+      { path: 'tutor', name: 'Tutor', component: Tutor },
+      { path: 'profile', name: 'Profile', component: Profile },
+      { path: 'resource-detail/:id', name: 'ResourceDetail', component: ResourceDetail },
+      { path: 'question-bank', name: 'QuestionBank', component: QuestionBank }
     ]
   }
 ]
@@ -36,18 +37,20 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫：无 token 跳转到登录页，已登录禁止访问登录/注册页
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
   const isPublicPage = to.path === '/login' || to.path === '/register' || to.path === '/onboarding'
+
   if (!isPublicPage && !token) {
     next('/login')
     return
   }
+
   if (isPublicPage && token) {
     next('/dashboard')
     return
   }
+
   next()
 })
 
