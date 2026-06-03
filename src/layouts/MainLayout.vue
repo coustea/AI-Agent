@@ -87,7 +87,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Menu, Connection, Cpu, DataLine, ChatDotRound,
+  Menu, Connection, Cpu, ChatDotRound,
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
   User, DataBoard, Collection
 } from '@element-plus/icons-vue'
@@ -107,7 +107,6 @@ const navItems = [
   { path: '/path-planner', label: '路径规划', icon: Connection },
   { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
   { path: '/question-bank', label: '学习题库', icon: Collection },
-  { path: '/evaluation', label: '多维评估', icon: DataLine },
 ]
 
 useAuthPolling(60000)

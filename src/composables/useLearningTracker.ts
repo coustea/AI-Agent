@@ -1,8 +1,12 @@
-import { recordLearningEvent, type LearningEventCreate } from '@/api/ai'
+import { recordLearningEvent, recordPathLearningEvent, type LearningEventCreate } from '@/api/ai'
 
 type LearningTrackerOptions = {
   context: string
   sessionId?: string | null
+  pathId?: number | null
+  pathNodeId?: number | null
+  nodeId?: string | null
+  resourceId?: number | null
   getMetadata?: () => Record<string, unknown>
 }
 
@@ -15,6 +19,10 @@ export function useLearningTracker(options: LearningTrackerOptions) {
   const buildPayload = (durationSeconds: number): LearningEventCreate => ({
     event_type: 'learning_heartbeat',
     session_id: options.sessionId ?? null,
+    resource_id: options.resourceId ?? null,
+    path_id: options.pathId ?? null,
+    path_node_id: options.pathNodeId ?? null,
+    node_id: options.nodeId ?? null,
     duration_seconds: durationSeconds,
     metadata: {
       context: options.context,
@@ -29,7 +37,12 @@ export function useLearningTracker(options: LearningTrackerOptions) {
     startedAt = now
 
     try {
-      await recordLearningEvent(buildPayload(durationSeconds))
+      const payload = buildPayload(durationSeconds)
+      if (options.pathId) {
+        await recordPathLearningEvent(options.pathId, payload)
+        return
+      }
+      await recordLearningEvent(payload)
     } catch (err) {
       console.warn('[useLearningTracker] record learning heartbeat failed:', err)
     }

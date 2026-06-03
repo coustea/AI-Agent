@@ -77,6 +77,62 @@
         </div>
       </transition>
 
+      <section class="learning-evaluation-panel clean-panel">
+        <div class="lep-main">
+          <div>
+            <p class="lep-eyebrow">学习效果评估</p>
+            <h3>路径自适应状态</h3>
+            <p class="lep-summary">
+              {{ evaluationSummaryText }}
+            </p>
+          </div>
+          <el-progress
+            type="dashboard"
+            :percentage="evaluationScore"
+            :stroke-width="10"
+            :color="evaluationColors"
+          >
+            <template #default="{ percentage }">
+              <span class="lep-score">{{ percentage }}%</span>
+            </template>
+          </el-progress>
+        </div>
+
+        <div class="lep-metrics">
+          <div class="lep-metric">
+            <span>平均测验</span>
+            <strong>{{ signalSnapshot.average_score === null ? '暂无' : `${Math.round(signalSnapshot.average_score)}分` }}</strong>
+          </div>
+          <div class="lep-metric">
+            <span>已完成资源</span>
+            <strong>{{ signalSnapshot.completed_resource_count }}</strong>
+          </div>
+          <div class="lep-metric">
+            <span>活跃学习</span>
+            <strong>{{ signalSnapshot.active_minutes }} 分钟</strong>
+          </div>
+        </div>
+
+        <div class="lep-tags">
+          <el-tag
+            v-for="topic in signalSnapshot.weak_topics"
+            :key="topic"
+            type="warning"
+            effect="plain"
+          >
+            {{ topic }}
+          </el-tag>
+          <el-tag v-if="!signalSnapshot.weak_topics.length" type="info" effect="plain">等待更多学习信号</el-tag>
+        </div>
+
+        <div v-if="pathEvaluation?.optimization_tips.length" class="lep-tips">
+          <div v-for="tip in pathEvaluation.optimization_tips" :key="tip" class="lep-tip">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>{{ tip }}</span>
+          </div>
+        </div>
+      </section>
+
       <!-- Timeline Skill Tree -->
       <div class="timeline-container">
         <div 
@@ -240,18 +296,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Search, DataAnalysis,
-  Lock, MagicStick, Check, Loading, VideoPlay, More, Trophy
+  Lock, MagicStick, Check, Loading, VideoPlay, More
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   completeCoursePathNode, generateCoursePath, getActiveCoursePathTask,
   getCoursePathTaskStatus, generatePathNodeResources, getActiveCoursePath,
-  startCoursePathNode, adjustCoursePath,
-  type CoursePathNodeDTO, type CoursePathResponse, type PathGenerationTaskResponse, type PathNodeResourceRequest,
+  getPathLearningEvaluation, recordPathLearningEvent, startCoursePathNode, adjustCoursePath,
+  type CoursePathNodeDTO, type CoursePathResponse, type PathGenerationTaskResponse,
+  type PathLearningEvaluationResponse, type PathNodeResourceRequest,
 } from '@/api/ai'
 import { pollResourceStatus, type ResourceTaskStatus } from '@/api/resource'
 
@@ -262,6 +319,7 @@ const isGenerating = ref(false)
 const generatingNodeId = ref<number | null>(null)
 const completingNodeId = ref<number | null>(null)
 const coursePath = ref<CoursePathResponse | null>(null)
+const pathEvaluation = ref<PathLearningEvaluationResponse | null>(null)
 const nodeTaskStatuses = ref<Record<number, ResourceTaskStatus>>({})
 const activePathTask = ref<PathGenerationTaskResponse | null>(null)
 
@@ -290,10 +348,42 @@ const groupedStages = computed(() => {
   }))
 })
 
+const signalSnapshot = computed(() => pathEvaluation.value?.signal_snapshot ?? {
+  average_score: null,
+  weak_topics: [],
+  preferred_resources: [],
+  negative_feedback: [],
+  completed_resource_count: 0,
+  viewed_resource_count: 0,
+  active_minutes: 0,
+  recommendations: [],
+})
+
+const evaluationScore = computed(() => {
+  if (signalSnapshot.value.average_score !== null) return Math.round(signalSnapshot.value.average_score)
+  if (!coursePath.value) return 0
+  return Math.round(coursePath.value.overall_progress || 0)
+})
+
+const evaluationSummaryText = computed(() => {
+  if (pathEvaluation.value?.needs_optimization) return '检测到薄弱点或负向反馈，建议触发诊断优化调整后续节点。'
+  if (signalSnapshot.value.completed_resource_count > 0 || signalSnapshot.value.viewed_resource_count > 0) {
+    return '已结合学习行为、测验表现和资源完成情况校准当前路径。'
+  }
+  return '开始学习资源或完成节点后，系统会生成更具体的掌握度判断。'
+})
+
 const needsPolling = computed(() => {
   if (!coursePath.value) return false
   return coursePath.value.nodes.some(n => n.resource_status === 'generating')
 })
+
+const evaluationColors = [
+  { color: '#f56c6c', percentage: 40 },
+  { color: '#e6a23c', percentage: 65 },
+  { color: '#5cb87a', percentage: 80 },
+  { color: '#1989fa', percentage: 100 },
+]
 
 let pollTimer: number | null = null
 
@@ -318,6 +408,7 @@ async function fetchExistingPath() {
       coursePath.value = res.data.data
       activePathTask.value = null
       isGenerating.value = false
+      await refreshPathEvaluation()
       await refreshTaskStatuses()
       if (needsPolling.value) startPolling()
       else stopPolling()
@@ -349,6 +440,7 @@ async function fetchActivePath(silent = false) {
       coursePath.value = res.data.data
       activePathTask.value = null
       isGenerating.value = false
+      await refreshPathEvaluation()
       await refreshTaskStatuses()
       if (needsPolling.value) startPolling()
       else stopPolling()
@@ -365,6 +457,7 @@ async function handleGeneratePath() {
   }
   isGenerating.value = true
   coursePath.value = null
+  pathEvaluation.value = null
   stopPolling()
   try {
     const res = await generateCoursePath({ goal: courseGoal.value.trim(), module: 'mentor' })
@@ -379,6 +472,7 @@ async function handleGeneratePath() {
 function resetPath() {
   courseGoal.value = ''
   coursePath.value = null
+  pathEvaluation.value = null
   activePathTask.value = null
   isGenerating.value = false
   stopPolling()
@@ -497,6 +591,8 @@ async function handleCompleteNode(node: CoursePathNodeDTO) {
   try {
     const res = await completeCoursePathNode(node.id)
     coursePath.value = res.data.data
+    await recordNodeEvent(node, 'resource_completed')
+    await refreshPathEvaluation()
     ElMessage.success(`「${node.title}」已完成，进度已更新`)
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '完成节点失败')
@@ -507,7 +603,15 @@ async function handleCompleteNode(node: CoursePathNodeDTO) {
 
 function viewResource(node: CoursePathNodeDTO) {
   if (node.resource_id) {
-    router.push({ name: 'ResourceDetail', params: { id: node.resource_id } })
+    router.push({
+      name: 'ResourceDetail',
+      params: { id: node.resource_id },
+      query: {
+        pathId: coursePath.value?.id,
+        pathNodeId: node.id,
+        nodeId: node.node_id,
+      },
+    })
   }
 }
 
@@ -533,9 +637,11 @@ async function handleOptimizePath() {
   }, 1200)
 
   try {
-    const res = await adjustCoursePath({ feedback: feedbackText })
+    await recordPathFeedback(feedbackText)
+    const res = await adjustCoursePath({ feedback: feedbackText, use_learning_signals: true })
     await new Promise(resolve => setTimeout(resolve, 800))
     coursePath.value = res.data.data
+    await refreshPathEvaluation()
     ElMessage.success('路径重新规划完成！')
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '重构失败')
@@ -553,6 +659,59 @@ function formatStrategyReport(text: string) {
   html = html.replace(/(跳过|裁剪|无需|快速复习)/g, '<span class="text-success">$1</span>')
   html = html.replace(/(必须补充|核心短板|强相关)/g, '<span class="text-danger">$1</span>')
   return html
+}
+
+async function refreshPathEvaluation() {
+  if (!coursePath.value?.id) {
+    pathEvaluation.value = null
+    return
+  }
+
+  try {
+    const res = await getPathLearningEvaluation(coursePath.value.id)
+    pathEvaluation.value = res.data.data
+  } catch (error) {
+    console.warn('[LearnPath] load path evaluation failed:', error)
+  }
+}
+
+async function recordNodeEvent(node: CoursePathNodeDTO, eventType: 'resource_viewed' | 'resource_completed') {
+  if (!coursePath.value?.id) return
+  try {
+    await recordPathLearningEvent(coursePath.value.id, {
+      event_type: eventType,
+      resource_id: node.resource_id,
+      path_id: coursePath.value.id,
+      path_node_id: node.id,
+      node_id: node.node_id,
+      course: coursePath.value.title,
+      topic: node.title,
+      metadata: {
+        source: 'learn_path_node',
+        status: node.status,
+      },
+    })
+  } catch (error) {
+    console.warn('[LearnPath] record node event failed:', error)
+  }
+}
+
+async function recordPathFeedback(feedback: string) {
+  if (!coursePath.value?.id) return
+  try {
+    await recordPathLearningEvent(coursePath.value.id, {
+      event_type: 'path_feedback',
+      path_id: coursePath.value.id,
+      course: coursePath.value.title,
+      topic: coursePath.value.current_node_id,
+      feedback,
+      metadata: {
+        source: 'learn_path_optimization',
+      },
+    })
+  } catch (error) {
+    console.warn('[LearnPath] record path feedback failed:', error)
+  }
 }
 </script>
 
@@ -649,7 +808,97 @@ function formatStrategyReport(text: string) {
   padding: 20px;
   color: var(--el-color-danger);
 }
-</style>
+
+.learning-evaluation-panel {
+  margin: 22px 0 28px;
+  padding: 24px;
+  border: 1px solid rgba(59, 130, 246, 0.16);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.88));
+}
+
+.lep-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.lep-eyebrow {
+  margin: 0 0 8px;
+  color: #2563EB;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.lep-main h3 {
+  margin: 0 0 8px;
+  color: #0F172A;
+  font-size: 22px;
+}
+
+.lep-summary {
+  max-width: 640px;
+  margin: 0;
+  color: #64748B;
+  line-height: 1.8;
+}
+
+.lep-score {
+  color: #0F172A;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.lep-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.lep-metric {
+  min-height: 82px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.lep-metric span {
+  display: block;
+  margin-bottom: 8px;
+  color: #64748B;
+  font-size: 13px;
+}
+
+.lep-metric strong {
+  color: #0F172A;
+  font-size: 20px;
+}
+
+.lep-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.lep-tips {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lep-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: #1E3A8A;
+  background: rgba(219, 234, 254, 0.72);
+}
 /* ==================== 
    Minimalist Clean Theme 
    ==================== */
@@ -957,4 +1206,19 @@ function formatStrategyReport(text: string) {
 .c-step { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
 .c-step.active { color: var(--text-primary); font-weight: 500; }
 .c-step.done { color: var(--success-color); }
+
+@media (max-width: 768px) {
+  .learning-evaluation-panel {
+    padding: 18px;
+  }
+
+  .lep-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .lep-metrics {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

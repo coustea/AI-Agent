@@ -141,10 +141,32 @@ export interface CoursePathResponse {
   created_at: string
 }
 
+export interface LearningSignalSnapshot {
+  average_score: number | null
+  weak_topics: string[]
+  preferred_resources: string[]
+  negative_feedback: string[]
+  completed_resource_count: number
+  viewed_resource_count: number
+  active_minutes: number
+  recommendations: string[]
+}
+
+export interface PathLearningEvaluationResponse {
+  path_id: number
+  overall_progress: number
+  current_stage_id: string | null
+  current_node_id: string | null
+  signal_snapshot: LearningSignalSnapshot
+  needs_optimization: boolean
+  optimization_tips: string[]
+}
+
 export interface PathPlanFeedbackRequest {
   feedback: string
   weak_points?: string[] | null
   resource_id?: number | null
+  use_learning_signals?: boolean
 }
 
 export function adjustCoursePath(payload: PathPlanFeedbackRequest) {
@@ -235,6 +257,10 @@ export interface LearningEventCreate {
   event_type: LearningEventType
   session_id?: string | null
   resource_id?: number | null
+  resource_item_id?: number | null
+  path_id?: number | null
+  path_node_id?: number | null
+  node_id?: string | null
   course?: string | null
   topic?: string | null
   score?: number | null
@@ -246,31 +272,17 @@ export interface LearningEventCreate {
 export interface LearningEventItem {
   id: number
   event_type: string
+  resource_id: number | null
+  resource_item_id: number | null
+  path_id: number | null
+  path_node_id: number | null
+  node_id: string | null
   course: string | null
   topic: string | null
   score: number | null
   duration_seconds: number | null
   feedback: string | null
   created_at: string
-}
-
-export interface EvaluationMetric {
-  label: string
-  value: string
-  trend: string
-}
-
-export interface EvaluationSummary {
-  event_count: number
-  average_score: number | null
-  completed_resources: number
-  viewed_resources: number
-  active_minutes: number
-  weak_topics: string[]
-  preferred_resources: string[]
-  recommendations: string[]
-  metrics: EvaluationMetric[]
-  recent_events: LearningEventItem[]
 }
 
 export interface DailyTimeEntry {
@@ -298,10 +310,12 @@ export function recordLearningEvent(payload: LearningEventCreate) {
   return http.post<ApiResponse<{ id: number }>>('/ai/evaluation/events', payload)
 }
 
-export function getEvaluationSummary(limit = 100) {
-  return http.get<ApiResponse<EvaluationSummary>>('/ai/evaluation/summary', {
-    params: { limit },
-  })
+export function recordPathLearningEvent(pathId: number, payload: LearningEventCreate) {
+  return http.post<ApiResponse<LearningEventItem>>(`/ai/path-plan/${pathId}/events`, payload)
+}
+
+export function getPathLearningEvaluation(pathId: number) {
+  return http.get<ApiResponse<PathLearningEvaluationResponse>>(`/ai/path-plan/${pathId}/evaluation`)
 }
 
 export function getLearningTimeStats(days = 30) {

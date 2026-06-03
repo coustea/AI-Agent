@@ -11,78 +11,130 @@ export interface AttachmentInfo {
   name: string
 }
 
-export type TeachingDiagramType = 'node_graph' | 'sequence_timeline' | 'grid_timeline'
+export type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy'
+export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
 
-export interface GraphNode {
+// ---- 1. 对比图 ----
+export interface ComparisonEntity {
+  name: string
+  core_label: string
+  short_desc: string
+}
+
+export interface ComparisonDimension {
+  name: string
+  left: string
+  right: string
+  highlight?: string | null
+}
+
+export interface VisualSummary {
+  left_keyword: string
+  right_keyword: string
+  center_conclusion: string
+}
+
+export interface ComparisonPayload {
+  left_entity: ComparisonEntity
+  right_entity: ComparisonEntity
+  dimensions: ComparisonDimension[]
+  visual_summary: VisualSummary
+}
+
+// ---- 2. 流程图 ----
+export type FlowchartNodeType = 'start' | 'process' | 'decision' | 'end' | 'danger'
+
+export interface FlowchartNode {
   id: string
-  label: string
-  x: number
-  y: number
-  shape: 'circle' | 'rect' | 'diamond' | 'capsule' | 'actor' | 'cylinder' | 'uml_class'
-  state: 'unvisited' | 'active' | 'visited'
-  fields?: string[] | null
-  tooltip?: string | null
+  title: string
+  short_desc?: string
+  type: FlowchartNodeType
 }
 
-export interface GraphEdge {
-  source: string
-  target: string
+export interface FlowchartEdge {
+  from: string
+  to: string
   label?: string | null
-  arrow_type: 'association' | 'dependency' | 'inheritance' | 'aggregation' | 'composition' | 'none'
-  is_flowing: boolean
-  is_backtrack: boolean
 }
 
-export interface NodeGraphPayload {
-  nodes: GraphNode[]
-  edges: GraphEdge[]
+export interface FlowchartPayload {
+  direction: 'vertical' | 'horizontal'
+  nodes: FlowchartNode[]
+  edges: FlowchartEdge[]
 }
 
-export interface SequenceTimelinePayload {
-  participants: string[]
-  steps: Array<{
-    step_index: number
-    message: {
-      sender: string
-      receiver: string
-      label: string
-      details?: string | null
-      highlight: boolean
-    }
-    active_states: Array<{
-      participant: string
-      state_label: string
-    }>
-  }>
-  final_state: string
+// ---- 3. 时序图 ----
+export interface SequenceMessage {
+  from: string
+  to: string
+  label: string
+  detail?: string | null
 }
 
-export interface GridTimelinePayload {
-  orientation: 'horizontal' | 'vertical'
-  rows: string[]
-  cols: string[]
-  cells: Array<{
-    row_label: string
-    col_label: string
-    state: 'running' | 'ready' | 'blocked' | 'allocated' | 'free' | 'pointer' | 'highlight'
-    label: string
-    pointer_target?: string | null
-    tooltip?: string | null
-  }>
-  call_stack?: string[] | null
-  timeline_summary: string
+export interface SequencePayload {
+  actors: string[]
+  messages: SequenceMessage[]
 }
+
+// ---- 4. 知识框架图 ----
+export interface FrameworkModule {
+  title: string
+  items: string[]
+}
+
+export interface FrameworkPayload {
+  center: string
+  modules: FrameworkModule[]
+}
+
+// ---- 5. 总结卡片图 ----
+export interface SummaryCard {
+  title: string
+  short_desc: string
+}
+
+export interface SummaryPayload {
+  cards: SummaryCard[]
+}
+
+// ---- 6. 层级概括图 ----
+export interface HierarchyBranch {
+  title: string
+  children: string[]
+}
+
+export interface HierarchyPayload {
+  root: string
+  branches: HierarchyBranch[]
+}
+
+// ---- 辅助文字 ----
+export interface TeachingContent {
+  core_explanation: string
+  key_points: string[]
+  common_mistakes?: string[]
+  examples?: string[]
+  summary: string
+}
+
+// ---- 顶层 TeachingDiagram ----
+export type VisualContent =
+  | ComparisonPayload
+  | FlowchartPayload
+  | SequencePayload
+  | FrameworkPayload
+  | SummaryPayload
+  | HierarchyPayload
 
 export interface TeachingDiagram {
-  type: TeachingDiagramType
+  graph_type: TeachingDiagramType
   title: string
-  focus_question: string
-  takeaway: string
-  why_it_works: string
-  pitfall?: string | null
-  try_it: string
-  personalization_note?: string | null
-  payload: NodeGraphPayload | SequenceTimelinePayload | GridTimelinePayload
+  subtitle?: string | null
+  teaching_goal: string
+  course?: string | null
+  difficulty: DifficultyLevel
+  visual_content: VisualContent
+  teaching_content: TeachingContent
 }
 
 export interface KnowledgeSource {

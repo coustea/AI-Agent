@@ -201,7 +201,6 @@ import {
   Collection,
   Connection,
   Cpu,
-  DataLine,
   Document,
   Edit,
   Monitor,
@@ -290,11 +289,11 @@ const primaryActions = ref([
     tone: 'tone-indigo'
   },
   {
-    title: '查看多维评估',
-    badge: 'EVALUATION',
-    description: '查看掌握度、练习表现和下一步建议',
-    icon: DataLine,
-    path: '/evaluation',
+    title: '查看路径评估',
+    badge: 'ADAPTIVE PATH',
+    description: '在学习路径中查看掌握度与自适应优化建议',
+    icon: Connection,
+    path: '/path-planner',
     tone: 'tone-amber'
   }
 ])
@@ -463,7 +462,7 @@ const loadDashboardData = async () => {
       if (Array.isArray(resources) && resources.length > 0) {
         hasResources = true
         const toneMap = ['tone-blue', 'tone-amber', 'tone-emerald', 'tone-indigo']
-        const iconMap = [Share, Edit, Monitor, Document, Collection, DataLine]
+        const iconMap = [Share, Edit, Monitor, Document, Collection, Connection]
 
         multiAgentResources.value = resources.map((res: any, index: number) => ({
           id: res.id,

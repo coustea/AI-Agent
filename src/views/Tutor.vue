@@ -248,7 +248,7 @@
                 </div>
 
                 <div v-if="msg.teachingDiagram" class="msg-teaching-diagram" @click="previewTeachingDiagram(msg.teachingDiagram)">
-                  <TeachingDiagramView :diagram="msg.teachingDiagram" compact />
+                  <TeachingDiagramCard :diagram="msg.teachingDiagram" compact />
                 </div>
 
                 <div v-if="msg.role === 'ai' && msg.knowledgeSources && msg.knowledgeSources.length > 0" class="knowledge-sources">
@@ -455,7 +455,7 @@
     >
       <div class="diagram-preview-body" v-if="teachingDiagramPreviewData">
         <div class="preview-content">
-          <TeachingDiagramView :diagram="teachingDiagramPreviewData" />
+          <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
         </div>
         <div class="preview-footer">
           <el-button type="primary" plain @click="copyTeachingDiagramJson(teachingDiagramPreviewData)">复制图解 JSON</el-button>
@@ -478,7 +478,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { getErrorMessage } from '@/utils/http'
 import TutorMessageContent from '@/components/TutorMessageContent.vue'
-import TeachingDiagramView from '@/components/chat/TeachingDiagramView.vue'
+import TeachingDiagramCard from '@/components/chat/TeachingDiagramCard.vue'
 
 import { triggerGlobalProfileRefresh } from '@/composables/useGlobalProfile'
 import {
@@ -528,8 +528,8 @@ interface ChatMsg {
 
 const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): TeachingDiagram | null => {
   if (!diagram || typeof diagram !== 'object') return null
-  if (!['node_graph', 'sequence_timeline', 'grid_timeline'].includes(diagram.type)) return null
-  if (!diagram.title || !diagram.payload || typeof diagram.payload !== 'object') return null
+  if (!['comparison', 'flowchart', 'sequence', 'framework', 'summary', 'hierarchy'].includes(diagram.graph_type)) return null
+  if (!diagram.title || !diagram.visual_content || !diagram.teaching_content) return null
   return diagram
 }
 

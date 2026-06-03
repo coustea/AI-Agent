@@ -6,7 +6,6 @@ import Home from '../views/Home.vue'
 import ResourceGenerator from '../views/ResourceGenerator.vue'
 import LearnPath from '../views/LearnPath.vue'
 import Tutor from '../views/Tutor.vue'
-import Evaluation from '../views/Evaluation.vue'
 import Profile from "@/views/Profile.vue";
 import ResourceDetail from "@/views/ResourceDetail.vue";
 import OnboardingPreview from "@/views/OnboardingPreview.vue";
@@ -25,7 +24,6 @@ const routes = [
         {path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator},
         {path: 'path-planner', name: 'LearnPath', component: LearnPath},
         {path: 'tutor', name: 'Tutor', component: Tutor},
-        {path: 'evaluation', name: 'Evaluation', component: Evaluation},
         {path: 'profile', name: 'Profile', component: Profile,},
         {path: 'resource-detail/:id', name: 'ResourceDetail', component: ResourceDetail,},
         {path: 'question-bank', name: 'QuestionBank', component: QuestionBank}

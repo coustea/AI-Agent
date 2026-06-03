@@ -141,7 +141,7 @@ import CodeView from '@/components/resource/CodeView.vue'
 import ReadingView from '@/components/resource/ReadingView.vue'
 import PptView from '@/components/resource/PptView.vue'
 import VideoView from '@/components/resource/VideoView.vue'
-import { getGeneratedResourceDetail } from '@/api/ai'
+import { getGeneratedResourceDetail, recordLearningEvent, recordPathLearningEvent } from '@/api/ai'
 import type { GeneratedResourceBundle, ResourceItemDetail } from '@/api/ai'
 import { getMockResourceDetail } from '@/utils/mockResourceData'
 
@@ -159,13 +159,17 @@ const previewTitle = computed(() => {
   return previewItem.value.title || `${getAgentTypeName(previewItem.value.type)}资源`
 })
 
+const resourceId = computed(() => Number(route.params.id) || null)
+const pathId = computed(() => getNumericQuery('pathId'))
+const pathNodeId = computed(() => getNumericQuery('pathNodeId'))
+const pathNodeKey = computed(() => getStringQuery('nodeId'))
+
 onMounted(() => {
   loadResource()
 })
 
 const loadResource = async () => {
-  const resourceId = Number(route.params.id)
-  if (!resourceId) {
+  if (!resourceId.value) {
     error.value = true
     return
   }
@@ -174,7 +178,7 @@ const loadResource = async () => {
   error.value = false
 
   // 优先拦截并直接渲染 Mock 数据以提升演示体验并避免无效的后端报错
-  const mockDetail = getMockResourceDetail(resourceId)
+  const mockDetail = getMockResourceDetail(resourceId.value)
   if (mockDetail) {
     resource.value = mockDetail
     loading.value = false
@@ -182,11 +186,11 @@ const loadResource = async () => {
   }
 
   try {
-    const res = await getGeneratedResourceDetail(resourceId)
+    const res = await getGeneratedResourceDetail(resourceId.value)
     if (res.data && res.data.data) {
       resource.value = res.data.data
     } else {
-      const fallbackMock = getMockResourceDetail(resourceId)
+      const fallbackMock = getMockResourceDetail(resourceId.value)
       if (fallbackMock) {
         resource.value = fallbackMock
       } else {
@@ -195,7 +199,7 @@ const loadResource = async () => {
     }
   } catch (e) {
     console.error('Failed to load resource detail, checking fallback', e)
-    const fallbackMock = getMockResourceDetail(resourceId)
+    const fallbackMock = getMockResourceDetail(resourceId.value)
     if (fallbackMock) {
       resource.value = fallbackMock
     } else {
@@ -208,6 +212,10 @@ const loadResource = async () => {
 }
 
 const goBack = () => {
+  if (pathId.value) {
+    router.push({ name: 'LearnPath' })
+    return
+  }
   router.push({ name: 'Profile' })
 }
 
@@ -275,6 +283,45 @@ const openResourcePreview = (item: ResourceItemDetail) => {
   if (!hasPreviewContent(item)) return
   previewItem.value = item
   previewVisible.value = true
+  recordResourceViewed(item)
+}
+
+const recordResourceViewed = (item: ResourceItemDetail) => {
+  const payload = {
+    event_type: 'resource_viewed' as const,
+    resource_id: resourceId.value,
+    resource_item_id: item.id,
+    path_id: pathId.value,
+    path_node_id: pathNodeId.value,
+    node_id: pathNodeKey.value,
+    course: resource.value?.title || resource.value?.learning_need || null,
+    topic: item.title || getAgentTypeName(item.type),
+    metadata: {
+      agent: item.type,
+      source: 'resource_detail_preview',
+    },
+  }
+
+  const request = pathId.value
+    ? recordPathLearningEvent(pathId.value, payload)
+    : recordLearningEvent(payload)
+
+  request.catch((err) => {
+    console.warn('[ResourceDetail] record resource view failed:', err)
+  })
+}
+
+const getNumericQuery = (key: string) => {
+  const value = route.query[key]
+  const raw = Array.isArray(value) ? value[0] : value
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+const getStringQuery = (key: string) => {
+  const value = route.query[key]
+  const raw = Array.isArray(value) ? value[0] : value
+  return raw ? String(raw) : null
 }
 
 // === 核心：导出资源到本地并支持选择路径的逻辑 ===
