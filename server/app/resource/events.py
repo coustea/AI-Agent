@@ -1,18 +1,20 @@
 """
-SSE 事件发射器 — 资源生成过程中的实时事件推送。
+资源生成 SSE 事件系统。
 
-ResourceGenerateEvent: 事件数据模型
-AgentEventEmitter: 事件发射器，支持 SSE 格式输出
+架构：
+- AgentEventEmitter: agent 在执行关键节点时 emit 状态消息
+- ResourceEventBus: 内存广播器，把事件推给所有订阅的 SSE 连接
+
+SSE 只发两种事件：
+  agent  — { agent_id, status, message }  （status: running / finished / failed / skipped）
+  done   — { success, message }
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
-import time
-import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, AsyncGenerator
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,309 +23,116 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
-class ResourceGenerateEvent(BaseModel):
-    """资源生成事件。"""
-    event_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
-    task_id: str = ""
-    event_type: str = "workflow"  # workflow | planning | agent_step | agent | resource | review | bundle | error | done | layer
-    stage: str = ""
-    agent: str | None = None
-    status: str = "pending"  # pending | running | success | failed | skipped
-    message: str = ""
-    progress: int = 0
-    payload: dict[str, Any] = Field(default_factory=dict)
-    timestamp: str = Field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
+# ======================================================================
+# AgentEvent — SSE 推送给前端的唯一数据格式
+# ======================================================================
+
+class AgentEvent(BaseModel):
+    """单个 SSE 事件：agent 状态变更 或 生成完成。"""
+
+    event_type: Literal["agent", "done"] = "agent"
+    agent_id: str | None = None
+    status: Literal["running", "finished", "failed", "skipped"] | None = None
+    message: str | None = None
+    # done 事件专用
+    success: bool | None = None
+    timestamp: float = Field(default_factory=lambda: __import__("time").time())
 
 
-EventSink = Callable[[ResourceGenerateEvent], Awaitable[None]]
+# ======================================================================
+# ResourceEventBus — 内存广播器（进程级单例）
+# ======================================================================
+
+class ResourceEventBus:
+    """进程级事件广播器。
+
+    后台任务 publish 事件，SSE endpoint subscribe 拿到 asyncio.Queue，
+    事件通过 Queue 直接推给前端，不再轮询 DB。
+    """
+
+    def __init__(self) -> None:
+        self._subscribers: dict[int, list[asyncio.Queue[AgentEvent]]] = {}
+
+    def subscribe(self, resource_id: int) -> asyncio.Queue[AgentEvent]:
+        """SSE endpoint 调用，拿到一个 Queue，事件会自动灌入。"""
+        q: asyncio.Queue[AgentEvent] = asyncio.Queue(maxsize=256)
+        if resource_id not in self._subscribers:
+            self._subscribers[resource_id] = []
+        self._subscribers[resource_id].append(q)
+        return q
+
+    def unsubscribe(self, resource_id: int, queue: asyncio.Queue[AgentEvent]) -> None:
+        """SSE 连接断开时调用，清理 Queue。"""
+        if resource_id in self._subscribers:
+            subs = self._subscribers[resource_id]
+            subs[:] = [q for q in subs if q is not queue]
+            if not subs:
+                del self._subscribers[resource_id]
+
+    async def publish(self, resource_id: int, event: AgentEvent) -> None:
+        """后台任务调用，事件广播给所有订阅者。"""
+        subs = self._subscribers.get(resource_id, [])
+        for q in subs:
+            try:
+                await q.put(event)
+            except asyncio.QueueFull:
+                logger.warning("EventBus queue full for resource_id=%s, dropping event", resource_id)
+
+
+# 进程级单例
+resource_event_bus = ResourceEventBus()
+
+
+# ======================================================================
+# AgentEventEmitter — agent 在关键节点 emit 状态
+# ======================================================================
+
+EventSink = Callable[[AgentEvent], Awaitable[None]]
 
 
 class AgentEventEmitter:
-    """
-    Agent 事件发射器。
+    """Agent 的事件发射器。
 
-    收集生成过程中的事件，支持 SSE 格式流式输出。
+    调用方在 agent 执行的关键节点调用 emit_agent 或 emit_done，
+    事件通过 EventBus 直接推给 SSE。
     """
 
     def __init__(
         self,
         resource_id: int = 0,
-        task_id: str | None = None,
         event_sink: EventSink | None = None,
-    ):
+    ) -> None:
         self.resource_id = resource_id
-        self.task_id = task_id or (str(resource_id) if resource_id else "")
         self._event_sink = event_sink
-        self._queue: asyncio.Queue[ResourceGenerateEvent | None] = asyncio.Queue()
-        self._finished = False
-
-    def bind_task(self, task_id: str) -> None:
-        """绑定任务 ID。"""
-        self.task_id = task_id
-
-    def _make_event(
-        self,
-        event_type: str,
-        stage: str = "",
-        agent: str | None = None,
-        status: str = "running",
-        message: str = "",
-        progress: int = 0,
-        payload: dict[str, Any] | None = None,
-        task_id: str | None = None,
-    ) -> ResourceGenerateEvent:
-        """创建事件对象。"""
-        return ResourceGenerateEvent(
-            task_id=task_id or self.task_id or str(self.resource_id),
-            event_type=event_type,
-            stage=stage,
-            agent=agent,
-            status=status,
-            message=message,
-            progress=progress,
-            payload=payload or {},
-        )
-
-    def _queue_event(self, event: ResourceGenerateEvent) -> None:
-        """将事件放入队列。"""
-        self._queue.put_nowait(event)
-
-    async def _publish(self, event: ResourceGenerateEvent) -> None:
-        """发布事件，并等待数据库快照已反映这一真实状态。"""
-        self._queue_event(event)
-        if self._event_sink:
-            await self._event_sink(event)
-
-    # ------------------------------------------------------------------
-    # 事件发送方法
-    # ------------------------------------------------------------------
-
-    async def emit_workflow(
-        self,
-        stage: str,
-        message: str = "",
-        progress: int = 0,
-        status: str = "running",
-        payload: dict[str, Any] | None = None,
-        task_id: str | None = None,
-        agent: str | None = "coordinator",
-    ) -> None:
-        """发送工作流事件。"""
-        await self._publish(self._make_event(
-            event_type="workflow",
-            stage=stage,
-            agent=agent,
-            status=status,
-            message=message,
-            progress=progress,
-            payload=payload,
-            task_id=task_id,
-        ))
-
-    
-    async def emit_agent_action(
-        self,
-        agent_name: str,
-        action: str,
-        detail: str = "",
-        *,
-        current_step: int = 0,
-        total_steps: int = 0,
-        step_label: str = "",
-        current_action: str = "",
-        layer: int = 0,
-        layer_name: str = "",
-        agent_role: str = "",
-        resource_type: str = "",
-        progress: int = 0,
-    ) -> None:
-        """发送 Agent 动作事件。"""
-        event = self._make_event(
-            event_type="agent_step",
-            stage=f"layer_{layer}",
-            agent=agent_name,
-            message=detail or current_action or action,
-            progress=progress,
-            payload={
-                "action": action,
-                "detail": detail,
-                "current_step": current_step,
-                "total_steps": total_steps,
-                "step_label": step_label,
-                "current_action": current_action,
-                "layer": layer,
-                "layer_name": layer_name,
-                "agent_role": agent_role,
-                "resource_type": resource_type,
-            },
-        )
-        await self._publish(event)
 
     async def emit_agent(
         self,
-        agent_name: str = "",
-        status: str = "running",
+        agent_id: str,
+        status: Literal["running", "finished", "failed", "skipped"],
         message: str = "",
-        progress: int = 0,
-        *,
-        payload: dict[str, Any] | None = None,
-        task_id: str | None = None,
-        stage: str = "",
-        agent: str | None = None,
     ) -> None:
-        """发送 Agent 状态事件。"""
-        resolved_agent = agent_name or agent or ""
-        await self._publish(self._make_event(
+        """发送 agent 状态变更。比如：emit_agent("content", "running", "正在生成渐进式讲解...")"""
+        event = AgentEvent(
             event_type="agent",
-            stage=stage,
-            agent=resolved_agent,
+            agent_id=agent_id,
             status=status,
             message=message,
-            progress=progress,
-            payload=payload,
-            task_id=task_id,
-        ))
-
-    async def emit_resource(
-        self,
-        agent_id: str = "",
-        title: str = "",
-        file_type: str = "",
-        content: Any = None,
-        summary: str = "",
-        summary_data: dict | None = None,
-        metadata: dict | None = None,
-        resource: Any = None,
-        task_id: str | None = None,
-        progress: int = 0,
-    ) -> None:
-        """发送资源生成完成事件。
-
-        Args:
-            content: 生成的资源内容（str / dict / list）。
-            resource: 可选的 GeneratedResourceItem 实例，提供则自动序列化。
-        """
-        resource_payload = resource.model_dump(mode="json") if hasattr(resource, "model_dump") else resource
-        if resource_payload is None:
-            resource_payload = {
-                "id": f"{self.resource_id}-{agent_id}" if self.resource_id else agent_id,
-                "type": agent_id,
-                "title": title,
-                "format": file_type,
-                "content": content,
-                "summary": summary,
-                "summary_data": summary_data or {},
-                "metadata": metadata or {},
-            }
-        await self._publish(self._make_event(
-            event_type="resource",
-            agent=agent_id,
-            status="success",
-            message=f"资源生成完成: {title or agent_id}",
-            progress=progress,
-            task_id=task_id,
-            payload={
-                "resource": resource_payload,
-                "agent_id": agent_id,
-                "title": title,
-                "file_type": file_type,
-                "summary": summary,
-                "summary_data": summary_data or {},
-                "metadata": metadata or {},
-            },
-        ))
-
-    async def emit_review(
-        self,
-        message: str = "",
-        progress: int = 0,
-        payload: dict | None = None,
-    ) -> None:
-        """发送审核事件。"""
-        await self._publish(self._make_event(
-            event_type="review",
-            stage="reviewing",
-            message=message,
-            progress=progress,
-            payload=payload or {},
-        ))
-
-    async def emit_bundle(
-        self,
-        bundle: Any = None,
-        progress: int = 0,
-    ) -> None:
-        """发送组装事件。
-
-        Args:
-            bundle: ResourceBundle 实例或包含资源列表的字典，提供则自动序列化。
-        """
-        bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
-        item_count = 0
-        if isinstance(bundle_payload, list):
-            item_count = len(bundle_payload)
-        elif isinstance(bundle_payload, dict) and isinstance(bundle_payload.get("resources"), list):
-            item_count = len(bundle_payload["resources"])
-        await self._publish(self._make_event(
-            event_type="bundle",
-            stage="assembling",
-            agent="assembler",
-            status="success",
-            message="资源组装完成",
-            progress=progress,
-            payload={"bundle": bundle_payload, "item_count": item_count},
-        ))
-
-    async def emit_error(self, message: str) -> None:
-        """发送错误事件。"""
-        logger.error("[EventEmitter] error: resource_id=%s task_id=%s message=%s", self.resource_id, self.task_id, message)
-        await self._publish(self._make_event(
-            event_type="error",
-            status="failed",
-            message=message,
-        ))
+        )
+        await resource_event_bus.publish(self.resource_id, event)
+        if self._event_sink:
+            await self._event_sink(event)
 
     async def emit_done(
         self,
-        progress: int = 100,
-        bundle: Any = None,
-        task_id: str | None = None,
+        success: bool = True,
         message: str = "资源生成完成",
     ) -> None:
-        """发送完成事件。"""
-        bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
-        await self._publish(self._make_event(
+        """发送生成完成信号。"""
+        event = AgentEvent(
             event_type="done",
-            stage="completed",
-            status="success",
+            success=success,
             message=message,
-            progress=progress,
-            payload={"bundle": bundle_payload} if bundle_payload else {},
-            task_id=task_id,
-        ))
-        # 发送结束信号
-        self._queue.put_nowait(None)
-        self._finished = True
-
-    async def close(self) -> None:
-        """关闭事件流。"""
-        self._queue.put_nowait(None)
-        self._finished = True
-
-    # ------------------------------------------------------------------
-    # SSE 流式输出
-    # ------------------------------------------------------------------
-
-    async def stream(self) -> AsyncGenerator[str, None]:
-        """以 SSE 格式流式输出事件。"""
-        while True:
-            event = await self._queue.get()
-            if event is None:
-                yield "event: close\ndata: {}\n\n"
-                break
-            yield self._format_sse(event)
-
-    def _format_sse(self, event: ResourceGenerateEvent) -> str:
-        """将事件格式化为 SSE 字符串。"""
-        data = json.dumps(event.model_dump(mode="json"), ensure_ascii=False)
-        return f"event: {event.event_type}\ndata: {data}\n\n"
+        )
+        await resource_event_bus.publish(self.resource_id, event)
+        if self._event_sink:
+            await self._event_sink(event)

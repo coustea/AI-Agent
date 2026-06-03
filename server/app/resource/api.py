@@ -14,8 +14,6 @@ API 端点：
 from __future__ import annotations
 
 import asyncio
-import json
-from collections.abc import AsyncGenerator
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
@@ -23,9 +21,10 @@ from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
-from app.infra.database import get_session, session_scope
+from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
+from app.resource.events import resource_event_bus
 from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceService, run_multi_agent_generation, run_single_agent_generation
 from app.memory.service import MemoryService
@@ -128,47 +127,39 @@ async def get_generation_status(
 
 
 @router.get("/resources/{resource_id}/events")
-async def stream_generation_events(
+async def stream_resource_events(
     resource_id: int,
-    current_user: User = Depends(get_current_user),
+    token: str = Query(default="", description="JWT token for SSE auth"),
 ):
-    """以 SSE 推送资源任务快照，让前端动画和阶段产物接近实时更新。"""
-    return StreamingResponse(
-        _stream_generation_snapshots(current_user.id, resource_id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    """SSE 端点：订阅资源生成事件，实时推送 agent 状态变更。
 
+    EventSource (GET) 无法设置 Authorization header，
+    因此通过 query parameter 传递 JWT 进行鉴权。
+    """
+    if token:
+        from app.auth.security import decode_token
+        try:
+            decode_token(token)
+        except Exception:
+            return HttpResponse.error(code=401, message="认证失败")
 
-async def _stream_generation_snapshots(
-    user_id: int,
-    resource_id: int,
-) -> AsyncGenerator[str, None]:
-    previous_payload = ""
-    while True:
-        async with session_scope() as session:
-            usecases = ResourceService(session)
-            status_data = await usecases.get_generation_status(user_id=user_id, resource_id=resource_id)
+    async def event_stream():
+        queue = resource_event_bus.subscribe(resource_id)
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    yield f": heartbeat\n\n"
+                    continue
+                data = event.model_dump_json()
+                yield f"event: {event.event_type}\ndata: {data}\n\n"
+                if event.event_type == "done":
+                    break
+        finally:
+            resource_event_bus.unsubscribe(resource_id, queue)
 
-        if status_data is None:
-            payload = {"message": "资源不存在或无权限"}
-            yield f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-            return
-
-        payload_text = json.dumps(status_data, ensure_ascii=False)
-        if payload_text != previous_payload:
-            yield f"event: snapshot\ndata: {payload_text}\n\n"
-            previous_payload = payload_text
-
-        if status_data.get("status") in {"completed", "partial_completed", "failed"}:
-            yield f"event: done\ndata: {payload_text}\n\n"
-            return
-
-        await asyncio.sleep(1)
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.get("/agents")
