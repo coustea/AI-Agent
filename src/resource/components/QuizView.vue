@@ -140,7 +140,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Select, ArrowRight, Close } from '@element-plus/icons-vue'
-import { renderStreamingMarkdownHtml } from '@/utils/markdown'
+import { renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
 import { normalizeQuizQuestions, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{

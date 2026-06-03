@@ -91,11 +91,11 @@ import {
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
   User, DataBoard, Collection
 } from '@element-plus/icons-vue'
-import { logout } from '@/api/auth'
-import OnboardingDialog from '@/components/OnboardingDialog.vue'
+import { logout } from '@/auth/api/auth'
+import OnboardingDialog from '@/auth/components/OnboardingDialog.vue'
 import GlobalProfileDialog from '@/profile/components/GlobalProfileDialog.vue'
 import { isGlobalProfileVisible } from '@/profile/composables/useGlobalProfile'
-import { useAuthPolling } from '@/composables/useAuthPolling'
+import { useAuthPolling } from '@/auth/composables/useAuthPolling'
 
 const route = useRoute()
 const router = useRouter()

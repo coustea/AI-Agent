@@ -43,28 +43,52 @@ defineProps<{
 }
 
 .actor-badge {
-  padding: 6px 14px;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.9) 0%, rgba(209, 250, 229, 0.5) 100%);
+  border: 1px solid rgba(167, 243, 208, 0.8);
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
+  color: #064e3b;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);
+  position: relative;
+}
+
+.actor-badge::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100vh;
+  background: linear-gradient(to bottom, rgba(167, 243, 208, 0.6) 0%, transparent 100%);
+  z-index: 0;
 }
 
 .messages-list {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
+  position: relative;
+  z-index: 1;
 }
 
 .message-item {
-  padding: 10px 12px;
-  background: var(--c-bg, #f8fafc);
-  border: 1px solid var(--c-border, #d8dee9);
-  border-radius: 8px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.message-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
 }
 
 .message-arrow {
@@ -80,12 +104,12 @@ defineProps<{
 .arrow-line {
   flex: 1;
   height: 2px;
-  background: #475569;
+  background: linear-gradient(90deg, #94a3b8 0%, #475569 100%);
   position: relative;
 }
 
 .arrow-line.reverse {
-  background: #2563eb;
+  background: linear-gradient(90deg, #2563eb 0%, #60a5fa 100%);
 }
 
 .arrow-head {
@@ -110,11 +134,15 @@ defineProps<{
 .message-body strong {
   font-size: 14px;
   color: var(--c-ink, #111827);
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 
 .message-body p {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 12px;
   color: var(--c-muted, #64748b);
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 </style>

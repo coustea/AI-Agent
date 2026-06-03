@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAuthStatus } from '@/api/auth'
+import { getAuthStatus } from '@/auth/api/auth'
 
 export function useAuthPolling(intervalMs: number = 60000) {
   const router = useRouter()

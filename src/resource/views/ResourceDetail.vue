@@ -142,7 +142,7 @@ import ReadingView from '@/resource/components/ReadingView.vue'
 import PptView from '@/resource/components/PptView.vue'
 import VideoView from '@/resource/components/VideoView.vue'
 import { getGeneratedResourceDetail } from '@/resource/api/resource-history'
-import { recordLearningEvent, recordPathLearningEvent } from '@/evaluation/api/evaluation'
+import { recordLearningEvent, recordPathLearningEvent } from '@/learning/api/evaluation'
 import type { GeneratedResourceBundle, ResourceItemDetail } from '@/resource/api/resource-history'
 import { getMockResourceDetail } from '@/resource/utils/mockResourceData'
 

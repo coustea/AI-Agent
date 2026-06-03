@@ -63,21 +63,25 @@ defineProps<{
 .entity {
   display: grid;
   gap: 6px;
-  padding: 14px;
-  background: var(--c-bg, #f8fafc);
-  border: 1px solid var(--c-border, #d8dee9);
-  border-radius: 8px;
+  padding: 18px 14px;
+  border-radius: 12px;
   text-align: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s ease;
+}
+
+.entity:hover {
+  transform: translateY(-2px);
 }
 
 .entity.left {
-  border-color: #bfdbfe;
-  background: #eff6ff;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(219, 234, 254, 0.4) 100%);
+  border: 1px solid rgba(191, 219, 254, 0.6);
 }
 
 .entity.right {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
+  background: linear-gradient(135deg, rgba(240, 253, 244, 0.9) 0%, rgba(220, 252, 231, 0.4) 100%);
+  border: 1px solid rgba(187, 247, 208, 0.6);
 }
 
 .entity-name {
@@ -99,36 +103,67 @@ defineProps<{
 }
 
 .vs-badge {
-  padding: 6px 10px;
-  background: #fef3c7;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
   border: 1px solid #fcd34d;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   color: #92400e;
+  box-shadow: 0 0 15px rgba(252, 211, 77, 0.4);
+  z-index: 1;
 }
 
 .dimensions-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 8px;
   font-size: 14px;
 }
 
 .dimensions-table th,
 .dimensions-table td {
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
+  padding: 12px 16px;
   text-align: left;
 }
 
 .dimensions-table th {
-  background: #f1f5f9;
   font-weight: 600;
   color: #334155;
+  padding-bottom: 4px;
+  border-bottom: 2px solid rgba(226, 232, 240, 0.5);
+}
+
+.dimensions-table tbody tr {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.dimensions-table tbody tr:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04);
+}
+
+.dimensions-table td {
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dimensions-table td:first-child {
+  border-left: 1px solid #f1f5f9;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.dimensions-table td:last-child {
+  border-right: 1px solid #f1f5f9;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 .dimensions-table .dim-name {
-  background: #f8fafc;
+  background: rgba(248, 250, 252, 0.6);
   font-weight: 600;
   color: #475569;
 }
@@ -138,10 +173,11 @@ defineProps<{
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.8) 0%, rgba(240, 253, 244, 0.8) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
 }
 
 .keyword {

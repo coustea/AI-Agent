@@ -106,28 +106,43 @@ const difficultyLabel: Record<string, string> = {
 .animate-block { animation: slideUpFade 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 .diagram-card {
-  --c-primary: #2563EB;
-  --c-teal: #0F766E;
-  --c-amber: #D97706;
-  --c-red: #DC2626;
-  --c-ink: #111827;
-  --c-muted: #64748B;
-  --c-border: #D8DEE9;
-  --c-bg: #F8FAFC;
+  --c-primary: #3b82f6;
+  --c-teal: #0d9488;
+  --c-amber: #d97706;
+  --c-red: #ef4444;
+  --c-ink: #0f172a;
+  --c-muted: #64748b;
+  --c-border: rgba(226, 232, 240, 0.8);
+  --c-bg: rgba(255, 255, 255, 0.6);
+  --c-glass: rgba(255, 255, 255, 0.85);
+
   display: grid;
   gap: 16px;
   padding: clamp(16px, 3vw, 24px);
   color: var(--c-ink);
-  background: #ffffff;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
+  background: var(--c-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.diagram-card:not(.compact):hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 20px 25px -5px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  transform: translateY(-2px);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: end;
+  align-items: flex-start;
+}
+
+.card-header > div:first-child {
+  min-width: 0;
 }
 
 .card-kicker {
@@ -143,6 +158,9 @@ h3, p { margin: 0; }
 h3 {
   color: var(--c-ink);
   font-size: clamp(19px, 3vw, 24px);
+  text-wrap: balance;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .card-subtitle {
@@ -193,10 +211,11 @@ h3 {
   display: flex;
   gap: 10px;
   align-items: center;
-  padding: 10px 14px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.8) 0%, rgba(250, 250, 250, 0.5) 100%);
+  border: 1px solid rgba(191, 219, 254, 0.5);
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02) inset;
 }
 
 .goal-label, .section-label, .footer-label {
@@ -225,10 +244,19 @@ h3 {
 .teaching-points,
 .teaching-mistakes,
 .teaching-examples {
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: var(--c-bg);
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: background 0.2s ease;
+}
+
+.teaching-core:hover,
+.teaching-points:hover,
+.teaching-mistakes:hover,
+.teaching-examples:hover {
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .section-label.warn {
@@ -267,10 +295,10 @@ h3 {
 }
 
 .card-footer {
-  padding: 12px 14px;
-  background: var(--c-bg);
+  padding: 14px 16px;
+  background: linear-gradient(to right, rgba(248, 250, 252, 0.8), rgba(241, 245, 249, 0.4));
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .card-footer p {

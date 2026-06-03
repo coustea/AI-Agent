@@ -7,7 +7,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { normalizeStreamingMarkdown, renderStreamingMarkdownHtml } from '@/utils/markdown'
+import { normalizeStreamingMarkdown, renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
 
 const props = withDefaults(defineProps<{
   content: string

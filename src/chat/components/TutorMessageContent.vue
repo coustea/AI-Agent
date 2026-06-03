@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { renderStreamingMarkdownHtml } from '@/utils/markdown'
+import { renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
 
 const props = defineProps<{
   content: string

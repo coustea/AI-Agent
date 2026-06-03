@@ -7,7 +7,7 @@
         </marker>
       </defs>
       <g v-for="edge in layoutEdges" :key="edge.key">
-        <path :d="edge.path" fill="none" stroke="#475569" stroke-width="1.5" :marker-end="edge.hasLabel ? undefined : 'url(#flowchart-arrow)'" />
+        <path :d="edge.path" class="flow-edge" fill="none" :marker-end="edge.hasLabel ? undefined : 'url(#flowchart-arrow)'" />
         <text v-if="edge.label" :x="edge.labelX" :y="edge.labelY" text-anchor="middle" class="edge-label">{{ edge.label }}</text>
       </g>
     </svg>
@@ -118,13 +118,24 @@ const layoutEdges = computed(() => {
   pointer-events: none;
 }
 
+.flow-edge {
+  stroke: #94a3b8;
+  stroke-width: 2px;
+  stroke-dasharray: 6 4;
+  animation: flow-dash 30s linear infinite;
+}
+
+@keyframes flow-dash {
+  to { stroke-dashoffset: -1000; }
+}
+
 .edge-label {
-  fill: #475569;
+  fill: #334155;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   paint-order: stroke;
-  stroke: #ffffff;
-  stroke-width: 3px;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 4px;
 }
 
 .nodes-layer {
@@ -133,50 +144,71 @@ const layoutEdges = computed(() => {
 
 .flow-node {
   position: absolute;
-  min-width: 120px;
+  min-width: 130px;
   max-width: 160px;
-  padding: 10px 12px;
-  background: #ffffff;
-  border: 2px solid #94a3b8;
-  border-radius: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
   text-align: center;
   transform: translate(-50%, 0);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+  z-index: 2;
+}
+
+.flow-node:hover {
+  transform: translate(-50%, -4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
 }
 
 .flow-node strong {
   display: block;
   font-size: 13px;
-  line-height: 1.35;
-  color: var(--c-ink, #111827);
+  line-height: 1.4;
+  color: var(--c-ink, #0f172a);
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 
 .flow-node p {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 11px;
+  line-height: 1.4;
   color: var(--c-muted, #64748b);
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 
 .flow-node.start {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border: 2px solid rgba(59, 130, 246, 0.5);
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(219, 234, 254, 0.8) 100%);
   border-radius: 999px;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
 }
 
 .flow-node.end {
-  border-color: #16a34a;
-  background: #f0fdf4;
+  border: 2px solid rgba(16, 185, 129, 0.5);
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.95) 0%, rgba(209, 250, 229, 0.8) 100%);
   border-radius: 999px;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
 }
 
 .flow-node.decision {
-  border-color: #d97706;
-  background: #fffbeb;
-  border-radius: 4px;
+  border: 2px solid rgba(245, 158, 11, 0.5);
+  background: linear-gradient(135deg, rgba(254, 252, 232, 0.95) 0%, rgba(254, 240, 138, 0.6) 100%);
+  border-radius: 8px;
+  transform: translate(-50%, 0) rotate(2deg);
+}
+
+.flow-node.decision:hover {
+  transform: translate(-50%, -4px) rotate(0deg);
 }
 
 .flow-node.danger {
-  border-color: #dc2626;
-  background: #fef2f2;
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.95) 0%, rgba(254, 202, 202, 0.8) 100%);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
 }
 </style>

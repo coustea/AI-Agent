@@ -674,7 +674,7 @@ import {
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { ElConfigProvider } from 'element-plus';
 import { getProfileOnboarding } from '@/profile/api/profile';
-import { fetchQuizBankQuestions } from '@/evaluation/api/quizBank';
+import { fetchQuizBankQuestions } from '@/learning/api/quizBank';
 
 type KatexModule = {
   render: (tex: string, element: HTMLElement, options?: Record<string, unknown>) => void
@@ -975,7 +975,7 @@ const initializeQuizBank = async () => {
   try {
     try {
       const profileRes = await getProfileOnboarding();
-      learnerCourses.value = profileRes.data.data.student_profile.courses || [];
+      learnerCourses.value = profileRes.data?.data?.student_profile?.courses || [];
     } catch {
       learnerCourses.value = [];
     }

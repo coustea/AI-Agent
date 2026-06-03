@@ -28,13 +28,16 @@ defineProps<{
 
 .root-node {
   justify-self: center;
-  padding: 10px 24px;
-  background: #eff6ff;
-  border: 2px solid #2563eb;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(219, 234, 254, 0.5) 100%);
+  border: 2px solid rgba(59, 130, 246, 0.5);
   border-radius: 999px;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 800;
   color: #1d4ed8;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.15);
+  position: relative;
+  z-index: 2;
 }
 
 .branches {
@@ -44,21 +47,31 @@ defineProps<{
 }
 
 .branch {
-  padding: 14px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-top: 3px solid #0f766e;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-top: 4px solid #0d9488;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-top-color 0.3s ease;
+}
+
+.branch:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  border-top-color: #14b8a6;
 }
 
 .branch-title {
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 700;
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 800;
   color: #0f766e;
   padding-bottom: 8px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 
 .branch-children {
@@ -70,11 +83,13 @@ defineProps<{
 }
 
 .branch-children li {
-  padding: 3px 0 3px 14px;
+  padding: 4px 0 4px 16px;
   font-size: 13px;
   color: var(--c-muted, #64748b);
-  line-height: 1.4;
+  line-height: 1.5;
   position: relative;
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 
 .branch-children li::before {

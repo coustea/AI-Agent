@@ -477,7 +477,7 @@ import {
   CircleCheckFilled
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getErrorMessage } from '@/utils/http'
+import { getErrorMessage } from '@/shared/utils/http'
 import TutorMessageContent from '@/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/chat/components/TeachingDiagramCard.vue'
 
@@ -497,8 +497,8 @@ import type {
   StreamChatHistoryItem,
   TeachingDiagram,
 } from '@/chat/types/chat'
-import { getMe } from '@/api/auth'
-import { useDigitalHuman } from '@/digital-human/composables/useDigitalHuman'
+import { getMe } from '@/auth/api/auth'
+import { useDigitalHuman } from '@/chat/digital-human/composables/useDigitalHuman'
 // import DigitalHumanCanvas from '@/digital-human/views/DigitalHumanCanvas.vue' // TODO: re-enable when DigitalHumanCanvas.vue is restored
 import {
   type PendingFile,

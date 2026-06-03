@@ -133,6 +133,68 @@
         </div>
       </section>
 
+      <section v-if="shouldShowPathSummary" class="summary-card clean-panel">
+        <div class="summary-header">
+          <el-icon><DataAnalysis /></el-icon>
+          <div class="summary-header-text">
+            <span>路径学习总结</span>
+            <small>{{ summaryStatusText }}</small>
+          </div>
+        </div>
+
+        <div v-if="summaryLoading || pathSummary?.status === 'pending' || pathSummary?.status === 'generating'" class="summary-loading">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <span>正在生成掌握度分析与后续建议...</span>
+        </div>
+
+        <div v-else-if="pathSummary?.status === 'failed'" class="summary-error">
+          {{ pathSummary.error_message || '学习总结生成失败，请稍后刷新。' }}
+        </div>
+
+        <div v-else-if="pathSummary?.status === 'completed'" class="summary-content">
+          <div v-if="masteryEntries.length" class="summary-section">
+            <h4>节点掌握度</h4>
+            <div class="mastery-list">
+              <div v-for="item in masteryEntries" :key="item.nodeId" class="mastery-item">
+                <span class="mastery-topic">{{ item.topic }}</span>
+                <el-progress :percentage="item.score" :stroke-width="8" />
+              </div>
+            </div>
+          </div>
+
+          <div v-if="pathSummary.weak_points?.length" class="summary-section">
+            <h4>薄弱点回顾</h4>
+            <div class="weak-list">
+              <el-tag
+                v-for="weak in pathSummary.weak_points"
+                :key="`${weak.topic || 'weak'}-${weak.score || 0}`"
+                type="warning"
+                effect="plain"
+                class="weak-tag"
+              >
+                {{ weak.topic || '待巩固知识点' }}{{ weak.score !== undefined ? ` ${weak.score}分` : '' }}
+              </el-tag>
+            </div>
+          </div>
+
+          <div v-if="pathSummary.next_suggestions?.length" class="summary-section">
+            <h4>后续建议</h4>
+            <div class="suggestions-list">
+              <div v-for="suggestion in pathSummary.next_suggestions" :key="suggestion.title || suggestion.reason" class="suggestion-item">
+                <strong>{{ suggestion.title || '继续学习建议' }}</strong>
+                <p>{{ suggestion.reason }}</p>
+              </div>
+            </div>
+          </div>
+
+          <MarkdownPreview
+            v-if="pathSummary.summary_markdown"
+            class="summary-markdown"
+            :content="pathSummary.summary_markdown"
+          />
+        </div>
+      </section>
+
       <!-- Timeline Skill Tree -->
       <div class="timeline-container">
         <div 
@@ -212,6 +274,24 @@
                   </el-button>
                   <div v-else-if="node.status === 'in_progress'" class="nc-actions-group">
                     <el-button class="clean-btn" plain @click="viewResource(node)">继续学习</el-button>
+                    <div class="quiz-score-submit">
+                      <el-input-number
+                        v-model="quizScores[node.id]"
+                        :min="0"
+                        :max="100"
+                        :step="5"
+                        size="small"
+                        controls-position="right"
+                      />
+                      <el-button
+                        class="clean-btn"
+                        plain
+                        :loading="submittingQuizNodeId === node.id"
+                        @click="handleSubmitQuiz(node)"
+                      >
+                        提交测验
+                      </el-button>
+                    </div>
                     <el-button type="success" class="clean-btn" :loading="completingNodeId === node.id" @click="handleCompleteNode(node)">
                       完成节点
                     </el-button>
@@ -306,16 +386,18 @@ import { ElMessage } from 'element-plus'
 import {
   completeCoursePathNode, generateCoursePath, getActiveCoursePathTask,
   getCoursePathTaskStatus, generatePathNodeResources, getActiveCoursePath,
-  startCoursePathNode, adjustCoursePath,
+  startCoursePathNode, adjustCoursePath, getCoursePathSummary,
+  type CoursePathSummaryResponse,
   type CoursePathNodeDTO, type CoursePathResponse, type PathGenerationTaskResponse,
   type PathLearningEvaluationResponse, type PathNodeResourceRequest,
-} from '@/path/api/path'
+} from '@/learning/api/path'
 import {
   getPathLearningEvaluation,
   recordPathLearningEvent,
-} from '@/evaluation/api/evaluation'
+} from '@/learning/api/evaluation'
 import { pollResourceStatus } from '@/resource/api/resource'
 import type { ResourceTaskStatus } from '@/resource/types/resource'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 
 const router = useRouter()
 
@@ -325,8 +407,12 @@ const generatingNodeId = ref<number | null>(null)
 const completingNodeId = ref<number | null>(null)
 const coursePath = ref<CoursePathResponse | null>(null)
 const pathEvaluation = ref<PathLearningEvaluationResponse | null>(null)
+const pathSummary = ref<CoursePathSummaryResponse | null>(null)
+const summaryLoading = ref(false)
 const nodeTaskStatuses = ref<Record<number, ResourceTaskStatus>>({})
 const activePathTask = ref<PathGenerationTaskResponse | null>(null)
+const quizScores = ref<Record<number, number | undefined>>({})
+const submittingQuizNodeId = ref<number | null>(null)
 
 const showOptimizeDialog = ref(false)
 const isOptimizing = ref(false)
@@ -383,6 +469,33 @@ const needsPolling = computed(() => {
   return coursePath.value.nodes.some(n => n.resource_status === 'generating')
 })
 
+const shouldShowPathSummary = computed(() => {
+  return !!pathSummary.value || (coursePath.value?.overall_progress ?? 0) >= 100
+})
+
+const summaryStatusText = computed(() => {
+  if (!pathSummary.value) return '完成整条路径后生成'
+  const map: Record<string, string> = {
+    pending: '排队生成中',
+    generating: '生成中',
+    completed: '已完成',
+    failed: '生成失败',
+  }
+  return map[pathSummary.value.status] || pathSummary.value.status
+})
+
+const masteryEntries = computed(() => {
+  const scores = pathSummary.value?.mastery_scores || {}
+  return Object.entries(scores).map(([nodeId, raw]) => {
+    const score = Number(raw?.score ?? 0)
+    return {
+      nodeId,
+      topic: String(raw?.topic || nodeId),
+      score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : 0,
+    }
+  })
+})
+
 const evaluationColors = [
   { color: '#f56c6c', percentage: 40 },
   { color: '#e6a23c', percentage: 65 },
@@ -391,6 +504,7 @@ const evaluationColors = [
 ]
 
 let pollTimer: number | null = null
+let summaryPollTimer: number | null = null
 
 onMounted(() => {
   initializePathView()
@@ -398,6 +512,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPolling()
+  stopSummaryPolling()
 })
 
 async function initializePathView() {
@@ -414,6 +529,7 @@ async function fetchExistingPath() {
       activePathTask.value = null
       isGenerating.value = false
       await refreshPathEvaluation()
+      await refreshPathSummary()
       await refreshTaskStatuses()
       if (needsPolling.value) startPolling()
       else stopPolling()
@@ -446,6 +562,7 @@ async function fetchActivePath(silent = false) {
       activePathTask.value = null
       isGenerating.value = false
       await refreshPathEvaluation()
+      await refreshPathSummary()
       await refreshTaskStatuses()
       if (needsPolling.value) startPolling()
       else stopPolling()
@@ -463,7 +580,9 @@ async function handleGeneratePath() {
   isGenerating.value = true
   coursePath.value = null
   pathEvaluation.value = null
+  pathSummary.value = null
   stopPolling()
+  stopSummaryPolling()
   try {
     const res = await generateCoursePath({ goal: courseGoal.value.trim(), module: 'mentor' })
     activePathTask.value = res.data.data
@@ -478,9 +597,11 @@ function resetPath() {
   courseGoal.value = ''
   coursePath.value = null
   pathEvaluation.value = null
+  pathSummary.value = null
   activePathTask.value = null
   isGenerating.value = false
   stopPolling()
+  stopSummaryPolling()
 }
 
 function startPolling() {
@@ -498,6 +619,20 @@ function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
+  }
+}
+
+function startSummaryPolling() {
+  if (summaryPollTimer) return
+  summaryPollTimer = window.setInterval(() => {
+    void refreshPathSummary(true)
+  }, 3000)
+}
+
+function stopSummaryPolling() {
+  if (summaryPollTimer) {
+    clearInterval(summaryPollTimer)
+    summaryPollTimer = null
   }
 }
 
@@ -601,11 +736,48 @@ async function handleCompleteNode(node: CoursePathNodeDTO) {
     coursePath.value = res.data.data
     await recordNodeEvent(node, 'resource_completed')
     await refreshPathEvaluation()
+    await refreshPathSummary()
     ElMessage.success(`「${node.title}」已完成，进度已更新`)
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '完成节点失败')
   } finally {
     completingNodeId.value = null
+  }
+}
+
+async function handleSubmitQuiz(node: CoursePathNodeDTO) {
+  if (!coursePath.value?.id) return
+  const score = quizScores.value[node.id]
+  if (score === undefined || !Number.isFinite(Number(score))) {
+    ElMessage.warning('请输入 0-100 的测验分数')
+    return
+  }
+
+  submittingQuizNodeId.value = node.id
+  try {
+    await recordPathLearningEvent(coursePath.value.id, {
+      event_type: 'quiz_submitted',
+      resource_id: node.resource_id,
+      path_id: coursePath.value.id,
+      path_node_id: node.id,
+      node_id: node.node_id,
+      course: coursePath.value.title,
+      topic: node.title,
+      score: Number(score),
+      metadata: {
+        source: 'learn_path_quiz_score',
+      },
+    })
+    await refreshPathEvaluation()
+    if (Number(score) < 65) {
+      ElMessage.warning('已记录薄弱点，系统会在诊断优化时参考该分数')
+    } else {
+      ElMessage.success('测验分数已记录')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '测验分数记录失败')
+  } finally {
+    submittingQuizNodeId.value = null
   }
 }
 
@@ -683,6 +855,29 @@ async function refreshPathEvaluation() {
   }
 }
 
+async function refreshPathSummary(silent = false) {
+  if (!coursePath.value?.id || (coursePath.value.overall_progress ?? 0) < 100) {
+    pathSummary.value = null
+    stopSummaryPolling()
+    return
+  }
+
+  summaryLoading.value = !silent
+  try {
+    const res = await getCoursePathSummary(coursePath.value.id)
+    pathSummary.value = res.data.data
+    if (pathSummary.value?.status === 'pending' || pathSummary.value?.status === 'generating') {
+      startSummaryPolling()
+    } else {
+      stopSummaryPolling()
+    }
+  } catch (error) {
+    console.warn('[LearnPath] load path summary failed:', error)
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
 async function recordNodeEvent(node: CoursePathNodeDTO, eventType: 'resource_viewed' | 'resource_completed') {
   if (!coursePath.value?.id) return
   try {
@@ -737,6 +932,16 @@ async function recordPathFeedback(feedback: string) {
   font-weight: 600;
   color: var(--el-color-success);
   margin-bottom: 20px;
+}
+.summary-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.summary-header-text small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--el-text-color-secondary);
 }
 .summary-loading {
   display: flex;
@@ -1187,6 +1392,16 @@ async function recordPathFeedback(feedback: string) {
 .nc-actions-group {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.quiz-score-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.quiz-score-submit :deep(.el-input-number) {
+  width: 116px;
 }
 .locked-hint {
   font-size: 12px;

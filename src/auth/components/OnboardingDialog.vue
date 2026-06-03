@@ -1,113 +1,115 @@
 <template>
-  <el-dialog
-    v-model="visible"
-    width="720px"
-    :show-close="false"
-    :close-on-click-modal="false"
-    :close-on-press-escape="false"
-    class="onboarding-dialog"
-    align-center
-  >
-    <div class="dialog-shell">
-      <header class="dialog-header">
-        <div>
-          <p class="eyebrow">首次登录</p>
-          <h2>先完成冷启动画像</h2>
-          <p class="subcopy">只收集必要基础信息，后续画像会在学习和辅导过程中持续更新。</p>
+  <component :is="standalone ? 'div' : 'Fragment'" :class="standalone ? 'onboarding-standalone' : undefined">
+    <el-dialog
+      v-model="visible"
+      width="720px"
+      :show-close="false"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      class="onboarding-dialog"
+      align-center
+    >
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div>
+            <p class="eyebrow">首次登录</p>
+            <h2>先完成冷启动画像</h2>
+            <p class="subcopy">只收集必要基础信息，后续画像会在学习和辅导过程中持续更新。</p>
+          </div>
+          <el-button text @click="handleSkip">稍后完善</el-button>
+        </header>
+
+        <div class="stepper">
+          <div
+            v-for="item in steps"
+            :key="item.key"
+            :class="['step-chip', { active: item.key === currentStep, done: stepOrder.indexOf(item.key) < stepOrder.indexOf(currentStep) }]"
+          >
+            {{ item.label }}
+          </div>
         </div>
-        <el-button text @click="handleSkip">稍后完善</el-button>
-      </header>
 
-      <div class="stepper">
-        <div
-          v-for="item in steps"
-          :key="item.key"
-          :class="['step-chip', { active: item.key === currentStep, done: stepOrder.indexOf(item.key) < stepOrder.indexOf(currentStep) }]"
-        >
-          {{ item.label }}
-        </div>
-      </div>
+        <section class="panel" v-if="currentStep === 'base'">
+          <div class="grid two">
+            <el-form-item label="专业" required>
+              <el-select v-model="form.major" filterable allow-create default-first-option placeholder="请选择或输入专业">
+                <el-option v-for="item in PRESET_MAJORS" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
 
-      <section class="panel" v-if="currentStep === 'base'">
-        <div class="grid two">
-          <el-form-item label="专业" required>
-            <el-select v-model="form.major" filterable allow-create default-first-option placeholder="请选择或输入专业">
-              <el-option v-for="item in PRESET_MAJORS" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
+            <el-form-item label="学校" required>
+              <el-autocomplete
+                v-model="form.school"
+                :fetch-suggestions="querySearchSchool"
+                placeholder="搜索学校"
+                clearable
+                @select="handleSchoolSelect"
+              />
+            </el-form-item>
 
-          <el-form-item label="学校" required>
-            <el-autocomplete
-              v-model="form.school"
-              :fetch-suggestions="querySearchSchool"
-              placeholder="搜索学校"
-              clearable
-              @select="handleSchoolSelect"
-            />
-          </el-form-item>
+            <el-form-item label="年级" required>
+              <el-select v-model="form.grade" placeholder="请选择年级">
+                <el-option v-for="item in PRESET_GRADES" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
 
-          <el-form-item label="年级" required>
-            <el-select v-model="form.grade" placeholder="请选择年级">
-              <el-option v-for="item in PRESET_GRADES" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="每日学习时长" required>
-            <el-select v-model="form.daily_study_time" placeholder="请选择时长">
-              <el-option v-for="item in PRESET_DAILY_STUDY_TIME" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-        </div>
-      </section>
-
-      <section class="panel" v-else-if="currentStep === 'goal'">
-        <div class="grid two">
-          <el-form-item label="全局学习目标" required>
-            <el-select v-model="form.global_learning_goal" filterable allow-create default-first-option placeholder="请选择学习目标">
-              <el-option v-for="item in PRESET_GOALS" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="当前课程" required>
-            <el-select
-              v-model="selectedCourseNames"
-              multiple
-              filterable
-              allow-create
-              default-first-option
-              collapse-tags
-              collapse-tags-tooltip
-              placeholder="最多选择 3 门课程"
-            >
-              <el-option v-for="item in PRESET_COURSES" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-        </div>
-        <p class="hint">课程画像会按课程分别维护，后续可在个人中心继续修改。</p>
-      </section>
-
-      <section class="panel" v-else>
-        <div class="course-grid">
-          <div v-for="(course, index) in form.courses" :key="course.course || index" class="course-card">
-            <div class="course-card-head">
-              <strong>{{ course.course }}</strong>
-            </div>
-            <el-form-item label="基础水平" required>
-              <el-select v-model="course.foundation_level" placeholder="请选择基础水平">
-                <el-option v-for="item in PRESET_FOUNDATION_LEVELS" :key="item" :label="item" :value="item" />
+            <el-form-item label="每日学习时长" required>
+              <el-select v-model="form.daily_study_time" placeholder="请选择时长">
+                <el-option v-for="item in PRESET_DAILY_STUDY_TIME" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <footer class="dialog-footer">
-        <el-button v-if="currentStep !== 'base'" @click="goPrev">上一步</el-button>
-        <el-button v-if="currentStep !== 'foundation'" type="primary" @click="goNext">下一步</el-button>
-        <el-button v-else type="primary" :loading="submitting" @click="submitForm">生成冷启动画像</el-button>
-      </footer>
-    </div>
-  </el-dialog>
+        <section class="panel" v-else-if="currentStep === 'goal'">
+          <div class="grid two">
+            <el-form-item label="全局学习目标" required>
+              <el-select v-model="form.global_learning_goal" filterable allow-create default-first-option placeholder="请选择学习目标">
+                <el-option v-for="item in PRESET_GOALS" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item label="当前课程" required>
+              <el-select
+                v-model="selectedCourseNames"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="最多选择 3 门课程"
+              >
+                <el-option v-for="item in PRESET_COURSES" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <p class="hint">课程画像会按课程分别维护，后续可在个人中心继续修改。</p>
+        </section>
+
+        <section class="panel" v-else>
+          <div class="course-grid">
+            <div v-for="(course, index) in form.courses" :key="course.course || index" class="course-card">
+              <div class="course-card-head">
+                <strong>{{ course.course }}</strong>
+              </div>
+              <el-form-item label="基础水平" required>
+                <el-select v-model="course.foundation_level" placeholder="请选择基础水平">
+                  <el-option v-for="item in PRESET_FOUNDATION_LEVELS" :key="item" :label="item" :value="item" />
+                </el-select>
+              </el-form-item>
+            </div>
+          </div>
+        </section>
+
+        <footer class="dialog-footer">
+          <el-button v-if="currentStep !== 'base'" @click="goPrev">上一步</el-button>
+          <el-button v-if="currentStep !== 'foundation'" type="primary" @click="goNext">下一步</el-button>
+          <el-button v-else type="primary" :loading="submitting" @click="submitForm">生成冷启动画像</el-button>
+        </footer>
+      </div>
+    </el-dialog>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -115,14 +117,17 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import { updateMe } from '@/api/auth'
+import { updateMe } from '@/auth/api/auth'
 import { getProfileOnboarding, updateProfileOnboarding } from '@/profile/api/profile'
 import type { CourseBaseInfo, ProfileOnboardingUpdate } from '@/profile/api/profile'
 import { searchSchools } from '@/resource/api/school'
 
 type StepKey = 'base' | 'goal' | 'foundation'
 
-const props = defineProps<{ modelValue: boolean }>()
+const props = withDefaults(defineProps<{ modelValue?: boolean; standalone?: boolean }>(), {
+  modelValue: true,
+  standalone: false,
+})
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'success'): void
@@ -147,7 +152,7 @@ const currentStep = ref<StepKey>('base')
 const selectedCourseNames = ref<string[]>([])
 const submitting = ref(false)
 
-const form = reactive<ProfileOnboardingUpdate & { courses: CourseBaseInfo[] }>({
+const form = reactive<ProfileOnboardingUpdate>({
   school: '',
   school_level: '',
   major: '',
@@ -317,6 +322,15 @@ const handleSkip = async () => {
 </script>
 
 <style scoped>
+.onboarding-standalone {
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--color-bg, #f8fafc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .onboarding-dialog :deep(.el-dialog__header) {
   display: none;
 }

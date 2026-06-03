@@ -124,8 +124,8 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { User, Lock, ArrowRight, Connection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { login } from '@/api/auth'
-import { getErrorMessage } from '@/utils/http'
+import { login } from '@/auth/api/auth'
+import { getErrorMessage } from '@/shared/utils/http'
 
 const router = useRouter()
 const isLoading = ref(false)

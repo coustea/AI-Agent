@@ -1,22 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-const Login = () => import('../views/Login.vue')
-const Register = () => import('../views/Register.vue')
+const Login = () => import('@/auth/views/Login.vue')
+const Register = () => import('@/auth/views/Register.vue')
 const MainLayout = () => import('../layouts/MainLayout.vue')
-const Home = () => import('../views/Home.vue')
+const Home = () => import('@/dashboard/views/Home.vue')
 const ResourceGenerator = () => import('../resource/views/ResourceGenerator.vue')
-const LearnPath = () => import('../path/views/LearnPath.vue')
+const LearnPath = () => import('@/learning/views/LearnPath.vue')
 const Tutor = () => import('../chat/views/Tutor.vue')
 const Profile = () => import('@/profile/views/Profile.vue')
 const ResourceDetail = () => import('@/resource/views/ResourceDetail.vue')
-const OnboardingPreview = () => import('@/views/OnboardingPreview.vue')
-const QuestionBank = () => import('@/evaluation/views/QuestionBank.vue')
+import OnboardingDialog from '@/auth/components/OnboardingDialog.vue'
+const QuestionBank = () => import('@/learning/views/QuestionBank.vue')
 
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'Login', component: Login },
   { path: '/register', name: 'Register', component: Register },
-  { path: '/onboarding', name: 'OnboardingPreview', component: OnboardingPreview },
+  { path: '/onboarding', name: 'Onboarding', component: OnboardingDialog, props: { standalone: true } },
   {
     path: '/',
     component: MainLayout,

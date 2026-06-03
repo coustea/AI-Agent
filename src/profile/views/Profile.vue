@@ -604,7 +604,7 @@
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
+import type { FormInstance } from 'element-plus'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -615,15 +615,15 @@ import {
   Reading, UserFilled, Clock, Cpu, DocumentCopy, Aim,
   Top, Bottom, Right, User, ChatDotRound
 } from '@element-plus/icons-vue'
-import { getMe, uploadAvatar } from '@/api/auth'
+import { getMe, uploadAvatar } from '@/auth/api/auth'
 import {
   getProfileOnboarding, updateProfileOnboarding,
   getProfileScore, getProfile, getProfileHistory
 } from '@/profile/api/profile'
 import { getGeneratedResources } from '@/resource/api/resource-history'
 import type { GeneratedResourceItem } from '@/resource/api/resource-history'
-import { getLearningTimeStats } from '@/evaluation/api/evaluation'
-import type { LearningTimeStats } from '@/evaluation/api/evaluation'
+import { getLearningTimeStats } from '@/learning/api/evaluation'
+import type { LearningTimeStats } from '@/learning/api/evaluation'
 import { searchSchools } from '@/resource/api/school'
 import type { SchoolItem } from '@/resource/api/school'
 import type { ProfileOnboardingUpdate, ProfileScoreData, StudentProfileData } from '@/profile/api/profile'
@@ -670,7 +670,18 @@ const activeDimensionKey = ref<string | null>(null)
 const selectedHistoryVersion = ref<number | null>(null)
 const compareVersionData = ref<any>(null)
 
-const profileForm = reactive<ProfileOnboardingUpdate & { courses: string[] }>({
+interface ProfileFormData {
+  education_level: string
+  grade: string
+  major: string
+  courses: string[]
+  learning_goal: string
+  school: string
+  school_level: string
+  preferred_language: string
+}
+
+const profileForm = reactive<ProfileFormData>({
   education_level: '',
   grade: '',
   major: '',
@@ -709,7 +720,7 @@ const PRESET_LANGUAGES = [
   'SQL', 'Shell', 'Kotlin', 'Swift', 'PHP', 'HTML/CSS'
 ]
 
-const profileRules: FormRules<ProfileOnboardingUpdate> = {
+const profileRules = {
   school: [{ required: true, message: '请选择或填写院校', trigger: 'change' }],
   education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
   grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
@@ -1095,7 +1106,7 @@ const loadProfileInfo = async () => {
     }
 
     if (onboardingRes.status === 'fulfilled') {
-      studentProfile.value = onboardingRes.value.data.data.student_profile
+      studentProfile.value = onboardingRes.value.data?.data?.student_profile ?? studentProfile.value
     }
 
     if (scoreRes.status === 'fulfilled') {
@@ -1198,14 +1209,23 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
   if (!valid) return
   profileSubmitting.value = true
   try {
-    const res = await updateProfileOnboarding({
-      ...profileForm,
-      courses: profileForm.courses.map((course) => course.trim()).filter(Boolean),
+    const payload: ProfileOnboardingUpdate = {
       school: profileForm.school || null,
       school_level: profileForm.school_level || null,
-      preferred_language: profileForm.preferred_language || null,
-    } as any)
-    studentProfile.value = res.data.data.onboarding.student_profile
+      major: profileForm.major,
+      grade: profileForm.grade,
+      global_learning_goal: profileForm.learning_goal || null,
+      daily_study_time: null,
+      courses: profileForm.courses.filter(Boolean).map((course) => ({
+        course: course.trim(),
+        foundation_level: '一般',
+      })),
+      resource_preference: [],
+      programming_languages: profileForm.preferred_language ? [profileForm.preferred_language] : [],
+      self_description: null,
+    }
+    const res = await updateProfileOnboarding(payload)
+    studentProfile.value = res.data?.data?.onboarding?.student_profile ?? studentProfile.value
     profileEditorVisible.value = false
     ElMessage.success('学习画像资料已更新')
     await loadProfileInfo()

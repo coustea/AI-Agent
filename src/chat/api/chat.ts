@@ -1,6 +1,6 @@
-import http from '@/utils/http'
-import type { ApiResponse } from '@/utils/http'
-import { createSseStream } from '@/resource/api/sse'
+import http from '@/shared/utils/http'
+import type { ApiResponse } from '@/shared/utils/http'
+import { createSseStream } from '@/shared/api/sse'
 import type {
   ChatMessageItem,
   ChatSession,

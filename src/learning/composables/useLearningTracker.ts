@@ -1,4 +1,4 @@
-import { recordLearningEvent, recordPathLearningEvent, type LearningEventCreate } from '@/evaluation/api/evaluation'
+import { recordLearningEvent, recordPathLearningEvent, type LearningEventCreate } from '@/learning/api/evaluation'
 
 type LearningTrackerOptions = {
   context: string

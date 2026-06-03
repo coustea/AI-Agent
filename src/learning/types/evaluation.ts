@@ -1,11 +1,3 @@
-import http from '@/utils/http'
-import type { ApiResponse } from '@/utils/http'
-import type { PathLearningEvaluationResponse } from '@/path/api/path'
-
-// ==========================================
-// 类型定义
-// ==========================================
-
 export type LearningEventType =
   | 'resource_viewed'
   | 'resource_completed'
@@ -68,24 +60,28 @@ export interface LearningTimeStats {
   context_breakdown?: Record<string, number>
 }
 
-// ==========================================
-// 学习效果评估 API
-// ==========================================
-
-export function recordLearningEvent(payload: LearningEventCreate) {
-  return http.post<ApiResponse<{ id: number }>>('/ai/evaluation/events', payload)
+export interface QuizBankQuestion {
+  id: string
+  subject: string
+  subject_en?: string | null
+  type: string
+  difficulty?: string | null
+  content: string
+  options?: Record<string, string> | null
+  answer: string
+  analysis: string
+  knowledge_points: string[]
+  tags: string[]
+  language?: string | null
+  split?: string | null
 }
 
-export function recordPathLearningEvent(pathId: number, payload: LearningEventCreate) {
-  return http.post<ApiResponse<LearningEventItem>>(`/ai/path-plan/${pathId}/events`, payload)
-}
-
-export function getPathLearningEvaluation(pathId: number) {
-  return http.get<ApiResponse<PathLearningEvaluationResponse>>(`/ai/path-plan/${pathId}/evaluation`)
-}
-
-export function getLearningTimeStats(days = 30) {
-  return http.get<ApiResponse<LearningTimeStats>>('/ai/evaluation/time-stats', {
-    params: { days },
-  })
+export interface QuizBankQuestionListResponse {
+  items: QuizBankQuestion[]
+  total: number
+  page: number
+  page_size: number
+  subjects: string[]
+  difficulties: string[]
+  types: string[]
 }

@@ -1,38 +1,21 @@
-import http from '@/utils/http'
-import type { ApiResponse } from '@/utils/http'
+import http from '@/shared/utils/http'
+import type { ApiResponse } from '@/shared/utils/http'
+import type {
+  LoginParams,
+  RegisterParams,
+  LoginData,
+  UserData,
+  UserUpdateParams,
+  AvatarUploadData,
+} from '@/auth/types/auth'
 
-export interface LoginParams {
-  username: string
-  password: string
-}
-
-export interface RegisterParams {
-  username: string
-  password: string
-  email?: string
-}
-
-export interface LoginData {
-  token: string
-  user: {
-    id: number
-    username: string
-    email: string | null
-    avatar: string | null
-    created_at: string
-    is_first_login?: boolean
-  }
-}
-
-export interface UserData {
-  user: {
-    id: number
-    username: string
-    email: string | null
-    avatar: string | null
-    created_at: string
-    is_first_login?: boolean
-  }
+export type {
+  LoginParams,
+  RegisterParams,
+  LoginData,
+  UserData,
+  UserUpdateParams,
+  AvatarUploadData,
 }
 
 export function login(params: LoginParams) {
@@ -55,20 +38,8 @@ export function getMe() {
   return http.get<ApiResponse<LoginData['user']>>('/users/me')
 }
 
-export interface UserUpdateParams {
-  username?: string
-  email?: string
-  avatar?: string
-  is_first_login?: boolean
-}
-
 export function updateMe(params: UserUpdateParams) {
   return http.patch<ApiResponse<LoginData['user']>>('/users/me', params)
-}
-
-
-export interface AvatarUploadData {
-  avatar: string
 }
 
 export function uploadAvatar(file: File) {

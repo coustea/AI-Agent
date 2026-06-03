@@ -28,13 +28,16 @@ defineProps<{
 
 .center-node {
   justify-self: center;
-  padding: 12px 24px;
-  background: #eff6ff;
-  border: 2px solid #2563eb;
+  padding: 14px 28px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(219, 234, 254, 0.8) 100%);
+  border: 2px solid rgba(59, 130, 246, 0.5);
   border-radius: 999px;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
   color: #1d4ed8;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+  position: relative;
+  z-index: 2;
 }
 
 .modules-grid {
@@ -44,21 +47,43 @@ defineProps<{
 }
 
 .module-card {
-  padding: 14px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.module-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+.module-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+  opacity: 0.8;
 }
 
 .module-title {
   display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--c-ink, #111827);
+  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--c-ink, #0f172a);
   padding-bottom: 8px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 
 .module-items {
@@ -70,16 +95,22 @@ defineProps<{
 }
 
 .module-items li {
-  padding: 3px 0;
+  padding: 4px 0;
   font-size: 13px;
   color: var(--c-muted, #64748b);
-  line-height: 1.4;
+  line-height: 1.5;
+  overflow-wrap: break-words;
+  word-break: break-all;
 }
 
 .module-items li::before {
-  content: '\00B7';
-  margin-right: 6px;
-  color: #94a3b8;
-  font-weight: 700;
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #94a3b8;
+  border-radius: 50%;
+  margin-right: 8px;
+  transform: translateY(-1px);
 }
 </style>

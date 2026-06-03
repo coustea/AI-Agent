@@ -1,5 +1,5 @@
-import http from '@/utils/http'
-import type { ApiResponse } from '@/utils/http'
+import http from '@/shared/utils/http'
+import type { ApiResponse } from '@/shared/utils/http'
 
 // ==========================================
 // 类型定义
