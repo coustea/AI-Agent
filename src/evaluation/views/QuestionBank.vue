@@ -1,15 +1,10 @@
 <template>
   <div class="question-bank-container">
-    <!-- 视图 1：题库主页 -->
     <div v-if="activeView === 'bank'" class="bank-dashboard-view">
-      <!-- 双栏布局：左侧控制台，右侧题库检索 -->
       <div class="bank-main-grid">
-        <!-- 左侧：侧边工作台 (每日挑战+智能组卷) 与数据统计 -->
         <div class="grid-left-col">
-          <!-- 侧边工作台卡片 (每日挑战与智能组卷 Tab 切换) -->
           <div class="premium-card workspace-tabs-card">
             <el-tabs v-model="activeSidebarTab" class="sidebar-workspace-tabs">
-              <!-- 每日挑战 Tab -->
               <el-tab-pane name="challenge">
                 <template #label>
                   <span class="tab-label-custom">
@@ -29,7 +24,6 @@
                     <div class="debug-question-id">ID: {{ randomQuestion.id }}</div>
                     <div class="question-text markdown-body" v-html="renderMarkdown(randomQuestion.content)"></div>
 
-                    <!-- 客观题选项 -->
                     <div
                         v-if="isOptionQuestion(randomQuestion)"
                         :class="['q-browser-options', 'challenge-options', { 'is-binary': randomQuestion.type === '判断题' }]"
@@ -49,7 +43,6 @@
                       </div>
                     </div>
 
-                    <!-- 填空或问答 -->
                     <div v-else class="text-answer-input">
                       <el-input
                           v-model="randomUserAnswer"
@@ -60,7 +53,6 @@
                       />
                     </div>
 
-                    <!-- 提交按钮 -->
                     <div class="action-footer">
                       <el-button
                           v-if="!randomSubmitted"
@@ -90,7 +82,6 @@
                       </div>
                     </div>
 
-                    <!-- 答题解析展示 -->
                     <transition name="el-collapse-transition">
                       <div v-if="randomSubmitted && challengeAnalysisVisible" class="random-analysis-panel">
                         <div class="analysis-title">参考答案: <span class="ans-badge">{{ formatAnswer(randomQuestion.answer) }}</span></div>
@@ -116,7 +107,6 @@
                 </div>
               </el-tab-pane>
 
-              <!-- 智能组卷 Tab -->
               <el-tab-pane name="assembly">
                 <template #label>
                   <span class="tab-label-custom">
@@ -177,7 +167,6 @@
             </el-tabs>
           </div>
 
-          <!-- 数据概览卡片 -->
           <div class="premium-card stats-overview-card-left">
             <div class="card-header-mini">
               <el-icon class="icon-accent"><DataLine /></el-icon>
@@ -215,11 +204,8 @@
           </div>
         </div>
 
-        <!-- 右侧：题库检索 -->
         <div class="grid-right-col">
-          <!-- 题库检索区 -->
           <div class="premium-card question-browser-card">
-            <!-- 题库检索头部栏与展开/折叠按钮 -->
             <div class="browser-header-row">
               <div class="header-title">
                 <el-icon class="icon-accent"><Search /></el-icon>
@@ -236,11 +222,9 @@
               </button>
             </div>
 
-            <!-- 使用内置折叠动画包裹筛选面板 -->
             <transition name="el-collapse-transition">
               <div v-show="isFiltersExpanded" class="browser-filters">
                 <div class="filter-dropdowns-row">
-                  <!-- 模糊搜索关键词输入框 -->
                   <div class="filter-dropdown-item search-item">
                     <span class="filter-label">搜索</span>
                     <el-input
@@ -291,7 +275,6 @@
               </div>
             </transition>
 
-            <!-- 题目列表 -->
             <div class="browser-questions-list">
               <div v-if="quizBankLoading" class="empty-state">
                 <p>题库加载中...</p>
@@ -396,13 +379,29 @@
                 </transition>
               </div>
             </div>
+
+            <el-config-provider :locale="zhCn">
+              <div class="pagination-container" v-if="totalQuestions > 0">
+                <el-pagination
+                    v-model:current-page="currentPage"
+                    v-model:page-size="pageSize"
+                    :page-sizes="[10, 20, 30, 50]"
+                    :background="true"
+                    :pager-count="5"
+                    layout="sizes, prev, pager, next, jumper"
+                    :total="totalQuestions"
+                    @size-change="handleSizeChange"
+                    @current-change="handleCurrentChange"
+                />
+              </div>
+            </el-config-provider>
+
           </div>
         </div>
       </div>
 
     </div>
 
-    <!-- 视图 2：沉浸式模拟考试模式 -->
     <div v-else-if="activeView === 'exam'" class="exam-simulation-view">
       <header class="exam-header-bar">
         <div class="exam-header-left">
@@ -418,7 +417,6 @@
         </div>
 
         <div class="exam-header-right">
-          <!-- 计时器 -->
           <div class="exam-timer" v-if="!isExamSubmitted">
             <el-icon class="timer-icon"><Timer /></el-icon>
             <span class="timer-text">{{ formattedTimeElapsed }}</span>
@@ -437,7 +435,6 @@
       </header>
 
       <div class="exam-main-layout">
-        <!-- 试卷主体 -->
         <main class="exam-paper-content">
           <div
               v-for="(q, index) in examPaper"
@@ -466,7 +463,6 @@
             <div class="debug-question-id">ID: {{ q.id }}</div>
             <div class="q-text-body markdown-body" v-html="renderMarkdown(q.content)"></div>
 
-            <!-- 客观题选项 -->
             <div v-if="isOptionQuestion(q)" class="q-options-area">
               <div
                   v-for="(val, key) in getQuestionOptions(q)"
@@ -486,7 +482,6 @@
               </div>
             </div>
 
-            <!-- 填空题 -->
             <div v-else-if="q.type === '填空题'" class="q-textarea-area">
               <el-input
                   v-model="examAnswers[q.id]"
@@ -512,7 +507,6 @@
               </div>
             </div>
 
-            <!-- 简答题 -->
             <div v-else-if="q.type === '简答题'" class="q-textarea-area">
               <el-input
                   v-model="examAnswers[q.id]"
@@ -538,7 +532,6 @@
               </div>
             </div>
 
-            <!-- 查看解析按钮与面板 -->
             <div v-if="isExamSubmitted" class="review-analysis-toggle-row">
               <el-button
                   type="primary"
@@ -566,7 +559,6 @@
           </div>
         </main>
 
-        <!-- 右侧答题状态栏与导航 -->
         <aside class="exam-status-sidebar">
           <div class="status-sidebar-card">
             <h3>答题卡</h3>
@@ -679,8 +671,11 @@ import {
   Opportunity, Finished, DataLine, WarningFilled, DocumentChecked,
   ArrowDown, Filter, Search
 } from '@element-plus/icons-vue';
-import { getProfileOnboarding } from '@/profile/api/profile';
-import { fetchQuizBankQuestions } from '@/evaluation/api/quizBank';
+// 引入中文配置与 ConfigProvider
+import zhCn from 'element-plus/es/locale/lang/zh-cn';
+import { ElConfigProvider } from 'element-plus';
+import { getProfileOnboarding } from '@/api/ai';
+import { fetchQuizBankQuestions } from '@/api/quizBank';
 import 'katex/dist/katex.min.css';
 
 interface Question {
@@ -699,7 +694,6 @@ interface Question {
   split?: string | null;
 }
 
-
 // 全局状态与基本选项数据
 // ------------------------------
 const activeView = ref<'bank' | 'exam'>('bank');
@@ -709,32 +703,32 @@ const quizBankLoading = ref(false);
 const learnerCourses = ref<string[]>([]);
 const totalQuestions = ref(0);
 const currentPage = ref(1);
-const pageSize = ref(200);
+const pageSize = ref(10); // 调整为适合分页展示的数量
 const escapeHtml = (text: string) => {
   return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 };
 
 const normalizeQuizMath = (text: string) => {
   const normalized = text
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/^\s*\$([=_]{2,})\s*$/gm, '$1')
-    .replace(/^\s*\$(=_{2,})\s*$/gm, '$1')
-    .replace(/\\right\\\}\}/g, '\\right\\}')
-    .replace(/\\right\}\}/g, '\\right\\}')
-    .replace(/\\end\{cases\$\}/g, '\\end{cases}$')
-    .replace(/\\end\{array\$\}/g, '\\end{array}$')
-    .replace(/\$\$\$+$/gm, '$')
-    .replace(/\$\$\$(?=____|$)/g, '$')
-    .replace(/\$\$([\s\S]*?)=\$\$\s*____/g, (_matched, content: string) => `$$${content.trim()}=\\underline{\\qquad}$$`)
-    .replace(/\$([^$\n]+)=\$\s*____/g, (_matched, content: string) => `$${content}=\\underline{\\qquad}$`)
-    .replace(/\$([^$\n]+)=____/g, (_matched, content: string) => `$${content}=\\underline{\\qquad}$`)
-    .replace(/\$\s*\n([\s\S]*?)\n\s*\$/g, (_matched, content: string) => `$$${content.trim()}$$`);
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/^\s*\$([=_]{2,})\s*$/gm, '$1')
+      .replace(/^\s*\$(=_{2,})\s*$/gm, '$1')
+      .replace(/\\right\\\}\}/g, '\\right\\}')
+      .replace(/\\right\}\}/g, '\\right\\}')
+      .replace(/\\end\{cases\$\}/g, '\\end{cases}$')
+      .replace(/\\end\{array\$\}/g, '\\end{array}$')
+      .replace(/\$\$\$+$/gm, '$')
+      .replace(/\$\$\$(?=____|$)/g, '$')
+      .replace(/\$\$([\s\S]*?)=\$\$\s*____/g, (_matched, content: string) => `$$${content.trim()}=\\underline{\\qquad}$$`)
+      .replace(/\$([^$\n]+)=\$\s*____/g, (_matched, content: string) => `$${content}=\\underline{\\qquad}$`)
+      .replace(/\$([^$\n]+)=____/g, (_matched, content: string) => `$${content}=\\underline{\\qquad}$`)
+      .replace(/\$\s*\n([\s\S]*?)\n\s*\$/g, (_matched, content: string) => `$$${content.trim()}$$`);
 
   return normalized.replace(/(?<!\$)\$(\${2,})$/gm, '$');
 };
@@ -820,7 +814,7 @@ const initializeQuizBank = async () => {
   try {
     try {
       const profileRes = await getProfileOnboarding();
-      learnerCourses.value = (profileRes.data.data.base_info.courses || []).map((item) => item.course).filter(Boolean);
+      learnerCourses.value = profileRes.data.data.student_profile.courses || [];
     } catch {
       learnerCourses.value = [];
     }
@@ -935,13 +929,40 @@ const reloadFilteredQuestions = async () => {
   }
 };
 
+// 监听检索条件变化，重置到第一页并收起之前展开的解析
 watch(
     () => [filters.query, filters.subject, filters.difficulty, filters.type],
     () => {
       currentPage.value = 1;
+      expandedQuestionIds.value.clear(); // 清空已展开的解析状态
       void reloadFilteredQuestions();
+      scrollToTop();
     }
 );
+
+// ------------------------------
+// 分页切换逻辑
+// ------------------------------
+const handleSizeChange = (val: number) => {
+  pageSize.value = val;
+  currentPage.value = 1;
+  void reloadFilteredQuestions();
+  scrollToTop();
+};
+
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val;
+  void reloadFilteredQuestions();
+  scrollToTop();
+};
+
+// 辅助方法：翻页后自动滚动回列表顶部
+const scrollToTop = () => {
+  const listContainer = document.querySelector('.browser-questions-list');
+  if (listContainer) {
+    listContainer.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
 
 // 展开/收起解析状态记录
 const expandedQuestionIds = ref<Set<string>>(new Set());
@@ -1856,6 +1877,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  scroll-behavior: smooth;
 }
 
 .browser-question-card {
@@ -2805,35 +2827,6 @@ onUnmounted(() => {
   margin-top: 12px;
 }
 
-
-
-.review-score-eval {
-  text-align: center;
-  padding: 8px 12px;
-  background: #FFFFFF;
-  border-radius: 8px;
-  border: 1px solid rgba(226, 232, 240, 0.6);
-  margin-bottom: 16px;
-}
-
-.review-score-eval h4 {
-  margin: 0 0 4px 0;
-  font-size: 0.95rem;
-  font-weight: bold;
-  color: var(--text-dark);
-}
-
-.review-score-eval p {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.margin-top-12 {
-  margin-top: 12px;
-}
-
 .browser-header-row {
   display: flex;
   justify-content: space-between;
@@ -2949,5 +2942,40 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* ================= 分页控件样式 ================= */
+.pagination-container {
+  display: flex;
+  justify-content: center; /* 居中展示 */
+  align-items: center;
+  padding-top: 16px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border-light);
+  background: transparent;
+}
+
+/* 隐藏 Element Plus 默认的省略号 */
+.pagination-container :deep(.el-pagination .el-pager li.more) {
+  display: none !important;
+}
+
+.pagination-container :deep(.el-pagination.is-background .el-pager li:not(.is-disabled).is-active) {
+  background-color: var(--primary-color);
+  color: #FFFFFF;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
+.pagination-container :deep(.el-pagination.is-background .el-pager li) {
+  border-radius: 8px;
+  background-color: #F8FAFC;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.pagination-container :deep(.el-pagination.is-background .el-pager li:hover) {
+  color: var(--primary-color);
+  border-color: var(--primary-glow);
 }
 </style>
