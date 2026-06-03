@@ -617,13 +617,16 @@ import {
 } from '@element-plus/icons-vue'
 import { getMe, uploadAvatar } from '@/api/auth'
 import {
-  getProfileOnboarding, updateProfileOnboarding, getGeneratedResources,
-  searchSchools, getProfileScore, getLearningTimeStats, getProfile, getProfileHistory
-} from '@/api/ai'
-import type {
-  ProfileOnboardingUpdate, StudentProfileData, GeneratedResourceItem,
-  SchoolItem, ProfileScoreData, LearningTimeStats
-} from '@/api/ai'
+  getProfileOnboarding, updateProfileOnboarding,
+  getProfileScore, getProfile, getProfileHistory
+} from '@/profile/api/profile'
+import { getGeneratedResources } from '@/resource/api/resource-history'
+import type { GeneratedResourceItem } from '@/resource/api/resource-history'
+import { getLearningTimeStats } from '@/evaluation/api/evaluation'
+import type { LearningTimeStats } from '@/evaluation/api/evaluation'
+import { searchSchools } from '@/resource/api/school'
+import type { SchoolItem } from '@/resource/api/school'
+import type { ProfileOnboardingUpdate, ProfileScoreData, StudentProfileData } from '@/profile/api/profile'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
@@ -667,7 +670,7 @@ const activeDimensionKey = ref<string | null>(null)
 const selectedHistoryVersion = ref<number | null>(null)
 const compareVersionData = ref<any>(null)
 
-const profileForm = reactive<ProfileOnboardingUpdate>({
+const profileForm = reactive<ProfileOnboardingUpdate & { courses: string[] }>({
   education_level: '',
   grade: '',
   major: '',

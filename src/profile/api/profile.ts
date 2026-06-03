@@ -41,11 +41,36 @@ export interface ProfileData {
 
 export interface ProfileOnboardingData {
   base_info: BaseInfoData
+  student_profile: StudentProfileData
   profile_initialized: boolean
 }
 
-export interface ProfileOnboardingUpdate extends Omit<BaseInfoData, 'school_level'> {
+export interface StudentProfileData {
+  education_level: string | null
+  grade: string | null
+  major: string | null
+  courses: string[]
+  learning_goal: string | null
+  school: string | null
+  school_level: string | null
+  preferred_language: string | null
+  weakness_points?: string[]
+}
+
+export interface ProfileOnboardingUpdate {
+  school: string | null
   school_level?: string | null
+  major: string
+  grade: string
+  daily_study_time?: string | null
+  global_learning_goal?: string | null
+  resource_preference?: string[]
+  programming_languages?: string[]
+  self_description?: string | null
+  courses: string[] | CourseBaseInfo[]
+  education_level?: string
+  learning_goal?: string
+  preferred_language?: string
 }
 
 export interface ProfileOnboardingUpdateResult {

@@ -673,13 +673,16 @@ import {
 // 引入中文配置与 ConfigProvider
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { ElConfigProvider } from 'element-plus';
-import { getProfileOnboarding } from '@/api/ai';
-import { fetchQuizBankQuestions } from '@/api/quizBank';
+import { getProfileOnboarding } from '@/profile/api/profile';
+import { fetchQuizBankQuestions } from '@/evaluation/api/quizBank';
 
-type KatexModule = typeof import('katex');
+type KatexModule = {
+  render: (tex: string, element: HTMLElement, options?: Record<string, unknown>) => void
+  renderToString: (tex: string, options?: Record<string, unknown>) => string
+}
 
 let katexModule: KatexModule | null = null;
-let katexRuntimePromise: Promise<KatexModule> | null = null;
+let katexRuntimePromise: Promise<KatexModule | null> | null = null;
 
 const loadKatexRuntime = async () => {
   if (!katexRuntimePromise) {
@@ -687,12 +690,16 @@ const loadKatexRuntime = async () => {
       import('katex'),
       import('katex/dist/katex.min.css'),
     ]).then(([module]) => {
-      katexModule = module.default ?? module;
+      const mod: any = module.default ?? module;
+      katexModule = {
+        render: mod.render.bind(mod),
+        renderToString: mod.renderToString.bind(mod),
+      };
       return katexModule;
     });
   }
 
-  return katexRuntimePromise;
+  return katexRuntimePromise as Promise<KatexModule>;
 };
 
 interface Question {

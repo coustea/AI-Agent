@@ -47,14 +47,13 @@ const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
     ]).then(([markmapLib, markmapView]) => {
       const transformer = new markmapLib.Transformer()
 
-      return {
-        transformer,
-        createMarkmap: (svg: SVGElement) => new markmapView.Markmap(svg, {
+      const createMarkmap = (svg: SVGElement): MarkmapInstance => {
+        const instance = new markmapView.Markmap(svg, {
           autoFit: true,
           duration: 400,
           maxWidth: 320,
           paddingX: 30,
-          style: (id) => `
+          style: (id: string) => `
             .${id}-g {
               font-family: 'Fira Code', monospace;
               font-size: 15px;
@@ -76,8 +75,13 @@ const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
               stroke-width: 2px;
             }
           `,
-        }),
+        })
+        return {
+          setData: (root: unknown) => { instance.setData(root as any) },
+        }
       }
+
+      return { transformer, createMarkmap } as MarkmapRuntime
     })
   }
 

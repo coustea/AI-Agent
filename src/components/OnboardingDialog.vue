@@ -147,7 +147,7 @@ const currentStep = ref<StepKey>('base')
 const selectedCourseNames = ref<string[]>([])
 const submitting = ref(false)
 
-const form = reactive<ProfileOnboardingUpdate>({
+const form = reactive<ProfileOnboardingUpdate & { courses: CourseBaseInfo[] }>({
   school: '',
   school_level: '',
   major: '',
