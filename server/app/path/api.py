@@ -4,6 +4,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.response import LearningEventItem
+from app.evaluation.service import bg_apply_profile_update_from_learning_event
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import LearningEvent, User
@@ -112,7 +113,6 @@ async def generate_node_resources(
             node_id=node_id,
             selected_agents=payload.selected_agents,
             agent_configs=payload.agent_configs,
-            output_options=payload.output_options,
         )
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
@@ -186,6 +186,7 @@ async def adjust_path(
 async def record_path_learning_event(
     path_id: int,
     payload: LearningEventCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -199,6 +200,25 @@ async def record_path_learning_event(
         )
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
+    background_tasks.add_task(
+        bg_apply_profile_update_from_learning_event,
+        current_user.id,
+        {
+            "event_type": event.event_type,
+            "session_id": event.session_id,
+            "resource_id": event.resource_id,
+            "resource_item_id": event.resource_item_id,
+            "path_id": event.path_id,
+            "path_node_id": event.path_node_id,
+            "node_id": event.node_id,
+            "course": event.course,
+            "topic": event.topic,
+            "score": event.score,
+            "duration_seconds": event.duration_seconds,
+            "feedback": event.feedback,
+            "metadata": event.metadata_json or {},
+        },
+    )
     return HttpResponse.success(data=_build_learning_event_item(event).model_dump(mode="json"))
 
 

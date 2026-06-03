@@ -120,11 +120,6 @@ class PptConfig(BaseModel):
     output_format: Literal["preview"] = "preview"
 
 
-class OutputOptions(BaseModel):
-    """输出选项。"""
-    output_format: Literal["json"] = "json"
-
-
 class AgentConfigs(BaseModel):
     """Agent 配置集合。"""
     model_config = ConfigDict(extra="forbid")

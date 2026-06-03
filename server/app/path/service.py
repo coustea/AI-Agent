@@ -20,7 +20,7 @@ from app.path.schemas import (
 )
 from app.path.validation import normalize_path_plan, validate_path_plan
 from app.path.signals import get_resource_policy_fallback, build_learning_signal_snapshot
-from app.resource.schemas import AgentConfigs, AgentSelection, OutputOptions, ResourceGenerationRequest
+from app.resource.schemas import AgentConfigs, AgentSelection, ResourceGenerationRequest
 
 logger = get_logger(__name__)
 
@@ -416,7 +416,6 @@ class CoursePathService:
         node_id: int,
         selected_agents: list[AgentSelection],
         agent_configs: AgentConfigs,
-        output_options: OutputOptions,
     ) -> dict[str, Any]:
         """为路径节点生成学习资源。
 

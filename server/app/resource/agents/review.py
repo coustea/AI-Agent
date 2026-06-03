@@ -49,11 +49,9 @@ class ReviewAgent(BaseResourceAgent):
 
     def _build_review_input(self, state: WorkerState) -> str:
         parts = ["## 待审核内容"]
-        if hasattr(state, "worker_results") and state.worker_results:
-            for agent_id, result in state.worker_results.items():
-                if result.success:
-                    preview = result.content[:500] if result.content else ""
-                    parts.append(f"### {agent_id}\n{preview}...")
+        review_envelope = state.agent_config.get("review_envelope", {})
+        if review_envelope:
+            parts.append(json.dumps(review_envelope, ensure_ascii=False, indent=2))
         return "\n\n".join(parts)
 
     @staticmethod

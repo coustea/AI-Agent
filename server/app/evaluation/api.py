@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user, get_current_user_flexible
 from app.evaluation.schemas import LearningEventCreate
-from app.evaluation.service import evaluation_service
+from app.evaluation.service import bg_apply_profile_update_from_learning_event, evaluation_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 @router.post("/evaluation/events")
 async def record_learning_event(
     payload: LearningEventCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
@@ -28,6 +29,26 @@ async def record_learning_event(
         user_id=current_user.id,
         payload=payload,
     )
+    if event is not None:
+        background_tasks.add_task(
+            bg_apply_profile_update_from_learning_event,
+            current_user.id,
+            {
+                "event_type": event.event_type,
+                "session_id": event.session_id,
+                "resource_id": event.resource_id,
+                "resource_item_id": event.resource_item_id,
+                "path_id": event.path_id,
+                "path_node_id": event.path_node_id,
+                "node_id": event.node_id,
+                "course": event.course,
+                "topic": event.topic,
+                "score": event.score,
+                "duration_seconds": event.duration_seconds,
+                "feedback": event.feedback,
+                "metadata": event.metadata_json or {},
+            },
+        )
     logger.info("[EvalAPI] 学习事件记录: user_id=%s event_type=%s", current_user.id, payload.event_type)
     return HttpResponse.success(data={"id": event.id if event else None})
 
@@ -58,4 +79,3 @@ async def get_learning_time_stats(
         days=days,
     )
     return HttpResponse.success(data=stats)
-

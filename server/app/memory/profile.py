@@ -362,7 +362,24 @@ class ProfileBuilder:
         ).first()
         profile_json = profile.profile_json if profile and profile.profile_json else {}
         base_info = normalize_onboarding(profile_json.get("base_info"))
-        return {"base_info": base_info, "profile_initialized": is_onboarding_complete(base_info)}
+        student_profile = self._build_student_profile(base_info)
+        return {"base_info": base_info, "student_profile": student_profile, "profile_initialized": is_onboarding_complete(base_info)}
+
+    @staticmethod
+    def _build_student_profile(base_info: dict[str, Any]) -> dict[str, Any]:
+        courses = base_info.get("courses") or []
+        course_names = [c.get("course", "") if isinstance(c, dict) else str(c) for c in courses]
+        return {
+            "education_level": base_info.get("school_level"),
+            "grade": base_info.get("grade"),
+            "major": base_info.get("major"),
+            "courses": course_names,
+            "learning_goal": base_info.get("global_learning_goal"),
+            "school": base_info.get("school"),
+            "school_level": base_info.get("school_level"),
+            "preferred_language": None,
+            "weakness_points": [],
+        }
 
     async def upsert(
         self,

@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.resource.schemas import AgentConfigs, AgentSelection, OutputOptions
+from app.resource.schemas import AgentConfigs, AgentSelection
 
 
 # ======================================================================
@@ -34,7 +34,6 @@ class PathNodeResourceRequest(BaseModel):
 
     selected_agents: list[AgentSelection] = Field(default_factory=list)
     agent_configs: AgentConfigs = Field(default_factory=AgentConfigs)
-    output_options: OutputOptions = Field(default_factory=OutputOptions)
 
 
 # ======================================================================
