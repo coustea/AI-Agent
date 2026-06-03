@@ -481,8 +481,8 @@ import TutorMessageContent from '@/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/components/chat/TeachingDiagramCard.vue'
 
 import { triggerGlobalProfileRefresh } from '@/composables/useGlobalProfile'
+import { useChatStreamManager } from '@/composables/useChatStreamManager'
 import {
-  streamChat,
   uploadFile,
   getSessions,
   createSession,
@@ -757,7 +757,7 @@ const searchKeyword = ref('')
 const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
 const streamingMsgRef = ref<ChatMsg | null>(null)
-let abortController: AbortController | null = null
+const streamManager = useChatStreamManager()
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 const isAsrProcessing = ref(false)
 let asrProcessingTimer: ReturnType<typeof setTimeout> | null = null
@@ -1247,7 +1247,6 @@ const finishStream = (messageId: number) => {
   streamingMsgId.value = null
   streamingMsgRef.value = null
   triggerGlobalProfileRefresh()
-  abortController = null
 }
 
 const commitStreamTextToMessage = (messageId: number) => {
@@ -1448,15 +1447,20 @@ const refreshSessionTitleWithRetry = async (sessionId: string) => {
 }
 
 const newSession = () => {
+  // Detach from the current stream's render loop without aborting the SSE.
+  // The global streamManager keeps the old session's connection alive so
+  // the AI response continues and gets persisted by the backend.
+  stopStreamFlushLoop()
+  streamingMsgId.value = null
+  streamingMsgRef.value = null
+  isAIThinking.value = false
+
   currentSessionId.value = undefined
   messages.value = []
   pendingFiles.value = []
 }
 
-const switchSession = async (sessionId: string) => {
-  currentSessionId.value = sessionId
-  messages.value = []
-
+const loadHistoryFromAPI = async (sessionId: string) => {
   try {
     const res = await getChatHistory(sessionId)
     const history = res.data.data || []
@@ -1477,11 +1481,184 @@ const switchSession = async (sessionId: string) => {
   } catch (err) {
     ElMessage.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
   }
+}
+
+const switchSession = async (sessionId: string) => {
+  currentSessionId.value = sessionId
+  messages.value = []
+
+  // Check global manager for stream state on this session
+  const streamState = streamManager.getStreamState(sessionId)
+
+  if (streamState?.status === 'streaming') {
+    // ── Branch 1: Stream still active ──
+    // Load persisted history (won't include the in-progress AI msg)
+    await loadHistoryFromAPI(sessionId)
+
+    // Show the accumulated AI response from the stream buffer
+    const { text, events } = streamManager.getBuffer(sessionId)
+    const aiMsgId = Date.now() + 10000
+    messages.value.push({
+      id: aiMsgId,
+      role: 'ai',
+      content: text,
+      time: now(),
+    })
+    streamingMsgId.value = aiMsgId
+    streamingMsgRef.value = messages.value[messages.value.length - 1] ?? null
+    isAIThinking.value = true
+    isStreamDone = false
+    streamRenderedChunks.length = 0
+    streamDisplayText.value = text
+
+    // Process buffered events (diagrams, status, etc.)
+    for (const evt of events) {
+      if (evt.event === 'diagram') {
+        const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
+        if (diagram) {
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (aiMsg) {
+            aiMsg.teachingDiagram = diagram
+            aiMsg.teachingDiagramGenerating = false
+          }
+        }
+        continue
+      }
+      if (evt.event === 'status') {
+        const payload = evt.data as { stage?: string; message?: string }
+        if (payload?.stage === 'teaching_diagram_generate') {
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (aiMsg) {
+            aiMsg.teachingDiagramGenerating = true
+          }
+        }
+      }
+    }
+
+    // Resubscribe callbacks so new chunks flow to this component
+    streamManager.resubscribe(sessionId, {
+      onChunk: (chunk) => {
+        enqueueStreamChunk(aiMsgId, chunk)
+      },
+      onDone: () => {
+        isStreamDone = true
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg) {
+          aiMsg.teachingDiagramGenerating = false
+        }
+        if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+          stopStreamFlushLoop()
+          finishStream(aiMsgId)
+        }
+        void refreshSessionTitleWithRetry(sessionId)
+      },
+      onError: (err) => {
+        isStreamDone = false
+        flushPendingStreamText(true)
+        stopStreamFlushLoop()
+        commitStreamTextToMessage(aiMsgId)
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg) {
+          aiMsg.teachingDiagramGenerating = false
+          if (!aiMsg.content) {
+            aiMsg.content = `生成失败: ${err.message}`
+          }
+        }
+        stopTeachingDiagramGeneratingForCurrentAi()
+        isAIThinking.value = false
+        streamingMsgId.value = null
+        streamingMsgRef.value = null
+      },
+      onEvent: (evt) => {
+        if (evt.event === 'status') {
+          const payload = evt.data as { stage?: string; message?: string }
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          if ([
+            'preparing_context', 'classify', 'search_node', 'spark_summary',
+            'direct_answer', 'attachment_answer', 'reading_profile',
+            'searching_learning_memory', 'persisting_turn',
+          ].includes(payload?.stage || '')) {
+            aiMsg.searchStage = payload.stage
+            aiMsg.searchMessage = payload.message || '正在组织本轮回答...'
+            scrollToBottom()
+            return
+          }
+          if (payload?.stage === 'teaching_diagram_generate') {
+            aiMsg.searchStage = undefined
+            aiMsg.searchMessage = undefined
+            aiMsg.teachingDiagramGenerating = true
+            scrollToBottom()
+            return
+          }
+          return
+        }
+        if (evt.event === 'diagram') {
+          const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg || !diagram) return
+          aiMsg.searchStage = undefined
+          aiMsg.searchMessage = undefined
+          aiMsg.teachingDiagram = diagram
+          aiMsg.teachingDiagramGenerating = false
+          scrollToBottom()
+          return
+        }
+        if (evt.event === 'done') {
+          const payload = evt.data as {
+            teaching_diagram?: TeachingDiagram | null
+            resources?: { teaching_diagram?: TeachingDiagram | null }
+            knowledge_sources?: KnowledgeSource[]
+          }
+          const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (!aiMsg) return
+          aiMsg.searchStage = undefined
+          aiMsg.searchMessage = undefined
+          aiMsg.teachingDiagramGenerating = false
+          if (Array.isArray(payload?.knowledge_sources)) {
+            aiMsg.knowledgeSources = payload.knowledge_sources
+          }
+          if (diagram) {
+            aiMsg.teachingDiagram = diagram
+          }
+          scrollToBottom()
+        }
+      },
+    })
+
+    // Kick off the render loop to display any pending text
+    scheduleStreamFlush(true)
+
+  } else if (streamState?.status === 'done') {
+    // ── Branch 2: Stream completed in background ──
+    // Backend has persisted the AI message. Load from API only.
+    streamManager.clearStream(sessionId)
+    await loadHistoryFromAPI(sessionId)
+
+  } else if (streamState?.status === 'error') {
+    // ── Branch 3: Stream errored in background ──
+    streamManager.clearStream(sessionId)
+    await loadHistoryFromAPI(sessionId)
+    messages.value.push({
+      id: Date.now() + 99999,
+      role: 'ai',
+      content: `生成失败: ${streamState.error?.message || '未知错误'}`,
+      time: now(),
+    })
+
+  } else {
+    // ── Branch 4: No stream state — normal load ──
+    await loadHistoryFromAPI(sessionId)
+  }
+
   scrollToBottom()
 }
 
 const archiveSession = async (sessionId: string) => {
   try {
+    // Clean up any stream state for this session before deleting
+    streamManager.clearStream(sessionId)
     await deleteSession(sessionId)
     sessions.value = sessions.value.filter(s => s.id !== sessionId)
     if (currentSessionId.value === sessionId) {
@@ -1764,7 +1941,8 @@ const handleSend = async () => {
     return
   }
 
-  abortController = streamChat(
+  streamManager.startStream(
+      currentSessionId.value!,
       {
         history: streamHistory,
         session_id: currentSessionId.value,
@@ -1774,107 +1952,108 @@ const handleSend = async () => {
         enable_web_search: enableWebSearch.value,
         enable_knowledge_base: enableKnowledgeBase.value,
       },
-      (chunk) => {
-        enqueueStreamChunk(aiMsgId, chunk)
-      },
-      () => {
-        isStreamDone = true
-        const finishedSessionId = currentSessionId.value
-        const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (aiMsg) {
-          aiMsg.teachingDiagramGenerating = false
-        }
-        if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-          stopStreamFlushLoop()
-          finishStream(aiMsgId)
-        }
-        if (finishedSessionId) {
-          void refreshSessionTitleWithRetry(finishedSessionId)
-        }
-      },
-      (err) => {
-        isStreamDone = false
-        flushPendingStreamText(true)
-        stopStreamFlushLoop()
-        commitStreamTextToMessage(aiMsgId)
-        const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (aiMsg) {
-          aiMsg.teachingDiagramGenerating = false
-          if (!aiMsg.content) {
-            aiMsg.content = `Generate failed: ${err.message}`
-          }
-        }
-        stopTeachingDiagramGeneratingForCurrentAi()
-        isAIThinking.value = false
-        streamingMsgId.value = null
-        streamingMsgRef.value = null
-        abortController = null
-      },
-      (evt) => {
-        if (evt.event === 'status') {
-          const payload = evt.data as { stage?: string; message?: string }
+      {
+        onChunk: (chunk) => {
+          enqueueStreamChunk(aiMsgId, chunk)
+        },
+        onDone: () => {
+          isStreamDone = true
+          const finishedSessionId = currentSessionId.value
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (!aiMsg) return
+          if (aiMsg) {
+            aiMsg.teachingDiagramGenerating = false
+          }
+          if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+            stopStreamFlushLoop()
+            finishStream(aiMsgId)
+          }
+          if (finishedSessionId) {
+            void refreshSessionTitleWithRetry(finishedSessionId)
+          }
+        },
+        onError: (err) => {
+          isStreamDone = false
+          flushPendingStreamText(true)
+          stopStreamFlushLoop()
+          commitStreamTextToMessage(aiMsgId)
+          const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          if (aiMsg) {
+            aiMsg.teachingDiagramGenerating = false
+            if (!aiMsg.content) {
+              aiMsg.content = `生成失败: ${err.message}`
+            }
+          }
+          stopTeachingDiagramGeneratingForCurrentAi()
+          isAIThinking.value = false
+          streamingMsgId.value = null
+          streamingMsgRef.value = null
+        },
+        onEvent: (evt) => {
+          if (evt.event === 'status') {
+            const payload = evt.data as { stage?: string; message?: string }
+            const aiMsg = messages.value.find(m => m.id === aiMsgId)
+            if (!aiMsg) return
 
-          if ([
-            'preparing_context',
-            'classify',
-            'search_node',
-            'spark_summary',
-            'direct_answer',
-            'attachment_answer',
-            'reading_profile',
-            'searching_learning_memory',
-            'persisting_turn',
-          ].includes(payload?.stage || '')) {
-            aiMsg.searchStage = payload.stage
-            aiMsg.searchMessage = payload.message || '正在组织本轮回答...'
-            scrollToBottom()
+            if ([
+              'preparing_context',
+              'classify',
+              'search_node',
+              'spark_summary',
+              'direct_answer',
+              'attachment_answer',
+              'reading_profile',
+              'searching_learning_memory',
+              'persisting_turn',
+            ].includes(payload?.stage || '')) {
+              aiMsg.searchStage = payload.stage
+              aiMsg.searchMessage = payload.message || '正在组织本轮回答...'
+              scrollToBottom()
+              return
+            }
+            if (payload?.stage === 'teaching_diagram_generate') {
+              aiMsg.searchStage = undefined
+              aiMsg.searchMessage = undefined
+              aiMsg.teachingDiagramGenerating = true
+              scrollToBottom()
+              return
+            }
             return
           }
-          if (payload?.stage === 'teaching_diagram_generate') {
+
+          if (evt.event === 'diagram') {
+            const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
+            const aiMsg = messages.value.find(m => m.id === aiMsgId)
+            if (!aiMsg || !diagram) return
             aiMsg.searchStage = undefined
             aiMsg.searchMessage = undefined
-            aiMsg.teachingDiagramGenerating = true
+            aiMsg.teachingDiagram = diagram
+            aiMsg.teachingDiagramGenerating = false
             scrollToBottom()
             return
           }
-          return
-        }
 
-        if (evt.event === 'diagram') {
-          const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (!aiMsg || !diagram) return
-          aiMsg.searchStage = undefined
-          aiMsg.searchMessage = undefined
-          aiMsg.teachingDiagram = diagram
-          aiMsg.teachingDiagramGenerating = false
-          scrollToBottom()
-          return
-        }
-
-        if (evt.event === 'done') {
-          const payload = evt.data as {
-            teaching_diagram?: TeachingDiagram | null
-            resources?: { teaching_diagram?: TeachingDiagram | null }
-            knowledge_sources?: KnowledgeSource[]
+          if (evt.event === 'done') {
+            const payload = evt.data as {
+              teaching_diagram?: TeachingDiagram | null
+              resources?: { teaching_diagram?: TeachingDiagram | null }
+              knowledge_sources?: KnowledgeSource[]
+            }
+            const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
+            const aiMsg = messages.value.find(m => m.id === aiMsgId)
+            if (!aiMsg) return
+            aiMsg.searchStage = undefined
+            aiMsg.searchMessage = undefined
+            aiMsg.teachingDiagramGenerating = false
+            if (Array.isArray(payload?.knowledge_sources)) {
+              aiMsg.knowledgeSources = payload.knowledge_sources
+            }
+            if (!diagram) return
+            aiMsg.teachingDiagram = diagram
+            scrollToBottom()
           }
-          const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (!aiMsg) return
-          aiMsg.searchStage = undefined
-          aiMsg.searchMessage = undefined
-          aiMsg.teachingDiagramGenerating = false
-          if (Array.isArray(payload?.knowledge_sources)) {
-            aiMsg.knowledgeSources = payload.knowledge_sources
-          }
-          if (!diagram) return
-          aiMsg.teachingDiagram = diagram
-          scrollToBottom()
-        }
+        },
       },
-  )
+    )
 }
 
 watch(chatMode, async (newMode) => {
@@ -1918,7 +2097,13 @@ onMounted(async () => {
 
   await fetchCurrentUser()
   await loadSessions()
-  if (sessions.value.length > 0) {
+
+  // If we still have a currentSessionId (from before navigating away),
+  // switch back to it. This recovers streams that completed or are still
+  // active in the global manager. Otherwise, pick the first session.
+  if (currentSessionId.value) {
+    await switchSession(currentSessionId.value)
+  } else if (sessions.value.length > 0) {
     await switchSession(sessions.value[0]!.id)
   }
 })
