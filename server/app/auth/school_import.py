@@ -55,6 +55,8 @@ async def read_school_excel(path: Path) -> list[tuple[str, str, str]]:
 async def import_schools(session: AsyncSession) -> int:
     """导入学校数据到数据库。
 
+    使用批量查询避免逐行网络往返。
+
     Args:
         session: 数据库会话
 
@@ -66,18 +68,20 @@ async def import_schools(session: AsyncSession) -> int:
         logger.info("[SchoolImport] 无学校数据需要导入")
         return 0
 
-    count = 0
-    for name, level, tier in schools_data:
-        # 检查是否已存在
-        stmt = select(School).where(School.name == name)
-        existing = (await session.exec(stmt)).first()
-        if existing:
-            continue
+    existing_names: set[str] = {
+        school.name for school in (await session.exec(select(School))).scalars().all()
+    }
 
-        school = School(name=name, level=level, tier=tier)
-        session.add(school)
-        count += 1
+    new_schools = [
+        School(name=name, level=level, tier=tier)
+        for name, level, tier in schools_data
+        if name not in existing_names
+    ]
+    if not new_schools:
+        logger.info("[SchoolImport] 学校数据已存在，跳过导入")
+        return 0
 
+    session.add_all(new_schools)
     await session.commit()
-    logger.info("[SchoolImport] 导入完成，新增 %d 所学校", count)
-    return count
+    logger.info("[SchoolImport] 导入完成，新增 %d 所学校", len(new_schools))
+    return len(new_schools)

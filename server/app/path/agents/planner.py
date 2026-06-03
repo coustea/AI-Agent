@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.chat.tools.search import duckduckgo_search, serp_search, spark_search, tavily_search
 from app.infra.llm import get_llm
-from app.path.schemas import AgentCoursePathPlan, AgentStage, GeneratePathRequest
+from app.path.schemas import AgentCoursePathPlan, AgentPathNode, AgentStage, GeneratePathRequest
 
 
 class StrategyReport(BaseModel):
@@ -123,7 +123,12 @@ class PathPlannerAgent:
             human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n诊断策略:\n{state['strategy_report']}\n\n宏观阶段骨架:\n{stages_json}")
 
             result = await self.llm.ainvoke_json(AgentCoursePathPlan, [sys_msg, human_msg])
-            result.strategy_report = state["strategy_report"]
+            result = repair_generated_plan_from_macro_stages(
+                plan=result,
+                macro_stages=state["macro_stages"],
+                request=state["request"],
+                strategy_report=state["strategy_report"],
+            )
             logger.info(f"LangGraph [Node Strategist] finished with {len(result.nodes)} nodes.")
             return {"final_plan": result}
 
@@ -339,6 +344,58 @@ class PathPlannerAgent:
         except Exception as exc:
             logger.warning("[PathPlannerAgent] search tool failed: tool=%s error=%s", tool_name, exc)
             return f"{tool_name} 搜索失败: {exc}"
+
+
+def repair_generated_plan_from_macro_stages(
+    *,
+    plan: AgentCoursePathPlan,
+    macro_stages: list[AgentStage],
+    request: GeneratePathRequest,
+    strategy_report: str,
+) -> AgentCoursePathPlan:
+    """Recover a structurally usable plan from the architect stage output.
+
+    The planner is designed as a single LLM pass after research/profile/stage
+    planning. If the final structured output omits stages or nodes, reuse the
+    already-generated macro stages instead of retrying.
+    """
+    if not plan.stages and macro_stages:
+        plan.stages = list(macro_stages)
+
+    if strategy_report:
+        plan.strategy_report = strategy_report
+
+    if not plan.adjustment_rationale:
+        plan.adjustment_rationale = ["基于画像与路径规划阶段骨架生成学习路径"]
+
+    if not plan.nodes and plan.stages:
+        previous_node_id = ""
+        nodes: list[AgentPathNode] = []
+        for index, stage in enumerate(plan.stages, 1):
+            node_id = f"{stage.stage_id}-core"
+            difficulty = "beginner" if index == 1 else "intermediate"
+            if index == len(plan.stages) and len(plan.stages) >= 3:
+                difficulty = "advanced"
+            node = AgentPathNode(
+                node_id=node_id,
+                stage_id=stage.stage_id,
+                title=stage.title,
+                prerequisites=[previous_node_id] if previous_node_id else [],
+                mastery_target=stage.description or f"完成{stage.title}阶段学习",
+                estimated_minutes=45,
+                difficulty=difficulty,
+                recommendation_reason=(
+                    f"围绕“{request.goal}”的阶段目标生成，"
+                    "用于保证路径规划结果可直接开始学习"
+                ),
+                priority=index * 10,
+            )
+            nodes.append(node)
+            previous_node_id = node_id
+        plan.nodes = nodes
+
+    return plan
+
 
 NODE_STRATEGIST_SYSTEM_PROMPT = """你是一个世界顶级的课程节点规划师。
 你的任务是将架构师给出的宏观阶段骨架（stages），拆解为具体的拓扑节点（nodes）。

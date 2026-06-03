@@ -182,6 +182,18 @@ class CoursePathResponse(BaseModel):
     summary_id: int | None = None
 
 
+class PathLearningEvaluationResponse(BaseModel):
+    """路径内学习效果评估响应。"""
+
+    path_id: int
+    overall_progress: float = 0.0
+    current_stage_id: str | None = None
+    current_node_id: str | None = None
+    signal_snapshot: LearningSignalSnapshot = Field(default_factory=LearningSignalSnapshot)
+    needs_optimization: bool = False
+    optimization_tips: list[str] = Field(default_factory=list)
+
+
 class PathGenerationTaskResponse(BaseModel):
     """异步路径规划任务状态响应。"""
 
@@ -250,5 +262,6 @@ __all__ = [
     # Response
     "CoursePathNodeDTO",
     "CoursePathResponse",
+    "PathLearningEvaluationResponse",
     "PathGenerationTaskResponse",
 ]

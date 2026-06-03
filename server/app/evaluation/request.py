@@ -23,6 +23,10 @@ class LearningEventCreate(BaseModel):
     event_type: LearningEventType
     session_id: str | None = None
     resource_id: int | None = Field(default=None, ge=1)
+    resource_item_id: int | None = Field(default=None, ge=1)
+    path_id: int | None = Field(default=None, ge=1)
+    path_node_id: int | None = Field(default=None, ge=1)
+    node_id: str | None = Field(default=None, max_length=50)
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
     score: float | None = Field(default=None, ge=0, le=100)

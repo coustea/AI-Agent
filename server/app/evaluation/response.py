@@ -12,6 +12,11 @@ class LearningEventItem(BaseModel):
 
     id: int
     event_type: str
+    resource_id: int | None = None
+    resource_item_id: int | None = None
+    path_id: int | None = None
+    path_node_id: int | None = None
+    node_id: str | None = None
     course: str | None = None
     topic: str | None = None
     score: float | None = None

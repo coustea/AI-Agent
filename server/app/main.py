@@ -16,7 +16,6 @@ from app.evaluation.api import router as evaluation_router
 from app.path.api import router as path_router
 from app.resource.api import router as resource_router
 from app.avatar.api import router as avatar_router
-from app.quiz.api import router as quiz_router
 from app.avatar.bridge.manager import avatar_bridge_manager
 from app.infra.database import init_db, check_all
 from app.infra.logging import configure_logging
@@ -24,6 +23,13 @@ from app.infra.response import HttpResponse
 from app.config import DEBUG
 
 configure_logging(debug=DEBUG)
+
+try:
+    from app.quiz.api import router as quiz_router
+except ModuleNotFoundError as exc:
+    if exc.name != "app.quiz":
+        raise
+    quiz_router = None
 
 
 @asynccontextmanager
@@ -62,7 +68,8 @@ app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 app.include_router(path_router, prefix="/api/v1/ai", tags=["path"])
 app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
 app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
-app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
+if quiz_router is not None:
+    app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
 
 
 @app.websocket("/ws/avatar")

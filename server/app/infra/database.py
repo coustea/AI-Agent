@@ -192,8 +192,20 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     不自动 commit — 服务层自行决定何时 commit。
     上下文管理器退出时自动 close session。
     """
-    async with AsyncSession(engine, expire_on_commit=False) as session:
-        yield session
+    yielded_exception = False
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            try:
+                yield session
+            except GeneratorExit:
+                raise
+            except BaseException:
+                yielded_exception = True
+                raise
+    except OperationalError as exc:
+        if yielded_exception:
+            raise
+        logger.warning("[Database] 会话关闭时数据库连接已不可用，已忽略: %s", exc)
 
 
 @asynccontextmanager

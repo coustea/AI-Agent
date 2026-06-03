@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 from typing import Any, Sequence
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.evaluation.request import LearningEventCreate
 from app.infra.logging import get_logger
 from app.evaluation.service import EvaluationService
 from app.memory.service import MemoryService
-from app.infra.models import CoursePath, CoursePathGenerationTask, CoursePathNode, CoursePathResourceBinding, CoursePathSummary
+from app.infra.models import CoursePath, CoursePathGenerationTask, CoursePathNode, CoursePathResourceBinding, CoursePathSummary, LearningEvent
 from app.path.agents.planner import PathPlannerAgent
 from app.path.schemas import (
     CoursePathNodeDTO,
@@ -13,6 +14,7 @@ from app.path.schemas import (
     CoursePathSummaryResponse,
     GeneratePathRequest,
     PathGenerationTaskResponse,
+    PathLearningEvaluationResponse,
     PathPlanFeedbackRequest,
     PathSummarySchema,
 )
@@ -58,6 +60,7 @@ class CoursePathService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.memory_layer = MemoryService()
+        self.evaluation_service = EvaluationService()
         self.agent = PathPlannerAgent()
 
     async def generate_path(self, user_id: int, request: GeneratePathRequest) -> CoursePathResponse:
@@ -114,6 +117,7 @@ class CoursePathService:
         if request.use_learning_signals:
             try:
                 snapshot = await build_learning_signal_snapshot(self.session, user_id, active_path)
+                active_path.learning_signal_snapshot = snapshot.model_dump(mode="json")
                 if snapshot.average_score is not None or snapshot.weak_topics:
                     learning_signal_text = (
                         f"\n\n学习效果摘要：平均分数={snapshot.average_score}, "
@@ -308,7 +312,7 @@ class CoursePathService:
             logger.exception("[PathService] 路径规划任务失败: task_id=%s err=%s", task_id, exc)
 
     async def _get_profile_dict(self, user_id: int) -> dict[str, Any]:
-        profile = await self.memory_layer.get_or_create_profile(user_id)
+        profile = await self.memory_layer.get_or_create_profile(user_id=user_id)
         return profile.profile_json if profile and profile.profile_json else {}
 
     def _encode_task_preferences(self, request: GeneratePathRequest) -> dict[str, Any]:
@@ -485,7 +489,6 @@ class CoursePathService:
             learning_scenario="path_learning",
             selected_agents=selected_agents,
             agent_configs=agent_configs,
-            output_options=output_options,
         )
 
         # Use unified start_resource_task
@@ -564,18 +567,18 @@ class CoursePathService:
             path.overall_progress = 100
             path.current_node_id = None
             path.current_stage_id = None
-            path.status = "completed"
 
-            # 路径完成闭环：创建学习总结记录
-            summary = CoursePathSummary(
-                path_id=path.id,
-                user_id=path.user_id,
-                status="pending",
-            )
-            self.session.add(summary)
-            await self.session.flush()
-            should_generate_summary = True
-            summary_id = summary.id
+            # 路径完成闭环：保留 active 路径可读，并创建学习总结记录。
+            if hasattr(self.session, "add"):
+                summary = CoursePathSummary(
+                    path_id=path.id,
+                    user_id=path.user_id,
+                    status="pending",
+                )
+                self.session.add(summary)
+                await self.session.flush()
+                should_generate_summary = True
+                summary_id = summary.id
         elif next_node:
             path.current_node_id = next_node.node_id
             path.current_stage_id = next_node.stage_id
@@ -682,6 +685,93 @@ class CoursePathService:
 
         return await self._build_path_response_async(db_path, nodes, resource_map)
 
+    async def record_learning_event(
+        self,
+        *,
+        user_id: int,
+        path_id: int,
+        payload: LearningEventCreate,
+    ) -> LearningEvent:
+        """记录路径内学习信号，并把事件绑定到具体路径/节点。"""
+        path = await self._get_owned_path(user_id=user_id, path_id=path_id)
+        if payload.path_id is not None and payload.path_id != path_id:
+            raise ValueError("学习事件所属路径与请求路径不一致")
+
+        node = await self._resolve_event_node(
+            user_id=user_id,
+            path_id=path_id,
+            path_node_id=payload.path_node_id,
+            node_id=payload.node_id,
+        )
+        if payload.path_node_id is not None and node is None:
+            raise ValueError("学习事件节点不存在或不属于当前路径")
+        if payload.node_id is not None and node is None:
+            raise ValueError("学习事件节点不存在或不属于当前路径")
+
+        enriched = payload.model_copy(update={
+            "path_id": path_id,
+            "path_node_id": node.id if node is not None else payload.path_node_id,
+            "node_id": node.node_id if node is not None else payload.node_id,
+            "course": payload.course or path.title,
+            "topic": payload.topic or (node.title if node is not None else path.goal),
+        })
+        event = await self.evaluation_service.record_event(self.session, user_id=user_id, payload=enriched)
+        if event is None:
+            raise ValueError("无效的学习事件")
+        return event
+
+    async def get_learning_evaluation(
+        self,
+        *,
+        user_id: int,
+        path_id: int,
+    ) -> PathLearningEvaluationResponse | None:
+        """读取当前路径的学习效果评估与自适应优化提示。"""
+        path = await self._get_owned_path(user_id=user_id, path_id=path_id)
+        nodes = await self._get_nodes_for_path(path.id)
+        snapshot = await build_learning_signal_snapshot(self.session, user_id, path)
+        needs_opt, tips = await self._check_optimization_needs(user_id, path, nodes)
+        return PathLearningEvaluationResponse(
+            path_id=path.id or path_id,
+            overall_progress=path.overall_progress,
+            current_stage_id=path.current_stage_id,
+            current_node_id=path.current_node_id,
+            signal_snapshot=snapshot,
+            needs_optimization=needs_opt,
+            optimization_tips=tips,
+        )
+
+    async def _get_owned_path(self, *, user_id: int, path_id: int) -> CoursePath:
+        statement = select(CoursePath).where(
+            CoursePath.id == path_id,
+            CoursePath.user_id == user_id,
+        )
+        path = (await self.session.exec(statement)).first()
+        if path is None:
+            raise ValueError("学习路径不存在或不属于当前用户")
+        return path
+
+    async def _resolve_event_node(
+        self,
+        *,
+        user_id: int,
+        path_id: int,
+        path_node_id: int | None,
+        node_id: str | None,
+    ) -> CoursePathNode | None:
+        if path_node_id is None and node_id is None:
+            return None
+
+        statement = select(CoursePathNode).where(
+            CoursePathNode.user_id == user_id,
+            CoursePathNode.path_id == path_id,
+        )
+        if path_node_id is not None:
+            statement = statement.where(CoursePathNode.id == path_node_id)
+        if node_id is not None:
+            statement = statement.where(CoursePathNode.node_id == node_id)
+        return (await self.session.exec(statement)).first()
+
     async def _get_owned_node_for_update(self, *, user_id: int, node_id: int) -> CoursePathNode:
         statement = (
             select(CoursePathNode)
@@ -759,7 +849,7 @@ class CoursePathService:
             select(LearningEvent)
             .where(
                 LearningEvent.user_id == user_id,
-                LearningEvent.created_at >= path.created_at,
+                LearningEvent.path_id == path.id,
             )
             .order_by(LearningEvent.created_at.desc())
             .limit(50)
@@ -917,7 +1007,7 @@ class CoursePathService:
                 select(LearningEvent)
                 .where(
                     LearningEvent.user_id == path.user_id,
-                    LearningEvent.created_at >= path.created_at,
+                    LearningEvent.path_id == path.id,
                 )
                 .order_by(LearningEvent.created_at.desc())
                 .limit(100)
@@ -1039,4 +1129,3 @@ async def bg_path_summary_task(summary_id: int) -> None:
     async with session_scope() as session:
         service = CoursePathService(session)
         await service.execute_summary_task(summary_id)
-

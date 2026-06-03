@@ -2,16 +2,36 @@ from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
+from app.evaluation.schemas import LearningEventCreate
+from app.evaluation.response import LearningEventItem
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import User
-from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest, PathPlanFeedbackRequest, CoursePathSummaryResponse
+from app.infra.models import LearningEvent, User
+from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest, PathPlanFeedbackRequest
 from app.path.service import CoursePathService, bg_generate_path_task, bg_path_summary_task
 from app.resource.service import run_multi_agent_generation
 from app.infra.response import HttpResponse
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
 logger = get_logger(__name__)
+
+
+def _build_learning_event_item(event: LearningEvent) -> LearningEventItem:
+    return LearningEventItem(
+        id=event.id or 0,
+        event_type=event.event_type,
+        resource_id=event.resource_id,
+        resource_item_id=event.resource_item_id,
+        path_id=event.path_id,
+        path_node_id=event.path_node_id,
+        node_id=event.node_id,
+        course=event.course,
+        topic=event.topic,
+        score=event.score,
+        duration_seconds=event.duration_seconds,
+        feedback=event.feedback,
+        created_at=event.created_at,
+    )
 
 
 @router.post("/generate")
@@ -160,6 +180,43 @@ async def adjust_path(
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=updated_path.model_dump(mode="json"))
+
+
+@router.post("/{path_id}/events")
+async def record_path_learning_event(
+    path_id: int,
+    payload: LearningEventCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """记录路径学习过程中的行为、测验和反馈信号。"""
+    service = CoursePathService(session)
+    try:
+        event = await service.record_learning_event(
+            user_id=current_user.id,
+            path_id=path_id,
+            payload=payload,
+        )
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=_build_learning_event_item(event).model_dump(mode="json"))
+
+
+@router.get("/{path_id}/evaluation")
+async def get_path_learning_evaluation(
+    path_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取路径内学习效果评估与自适应优化提示。"""
+    service = CoursePathService(session)
+    try:
+        evaluation = await service.get_learning_evaluation(user_id=current_user.id, path_id=path_id)
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    if evaluation is None:
+        return HttpResponse.success(data=None)
+    return HttpResponse.success(data=evaluation.model_dump(mode="json"))
 
 
 @router.get("/{path_id}/summary")

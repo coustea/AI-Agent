@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import ForeignKey, Text, Column, Index, UniqueConstraint, func
+from sqlalchemy import ForeignKey, Integer, Text, Column, Index, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
 from sqlmodel import SQLModel, Field
 

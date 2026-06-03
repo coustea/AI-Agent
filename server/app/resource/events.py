@@ -109,7 +109,7 @@ class AgentEventEmitter:
         agent: str | None = "coordinator",
     ) -> None:
         """发送工作流事件。"""
-        await self._publish(self._create_event(
+        await self._publish(self._make_event(
             event_type="workflow",
             stage=stage,
             agent=agent,
@@ -138,7 +138,7 @@ class AgentEventEmitter:
         progress: int = 0,
     ) -> None:
         """发送 Agent 动作事件。"""
-        event = self._create_event(
+        event = self._make_event(
             event_type="agent_step",
             stage=f"layer_{layer}",
             agent=agent_name,
@@ -173,7 +173,7 @@ class AgentEventEmitter:
     ) -> None:
         """发送 Agent 状态事件。"""
         resolved_agent = agent_name or agent or ""
-        await self._publish(self._create_event(
+        await self._publish(self._make_event(
             event_type="agent",
             stage=stage,
             agent=resolved_agent,
@@ -215,7 +215,7 @@ class AgentEventEmitter:
                 "summary_data": summary_data or {},
                 "metadata": metadata or {},
             }
-        await self._publish(self._create_event(
+        await self._publish(self._make_event(
             event_type="resource",
             agent=agent_id,
             status="success",
@@ -240,7 +240,7 @@ class AgentEventEmitter:
         payload: dict | None = None,
     ) -> None:
         """发送审核事件。"""
-        await self._publish(self._create_event(
+        await self._publish(self._make_event(
             event_type="review",
             stage="reviewing",
             message=message,
@@ -264,7 +264,7 @@ class AgentEventEmitter:
             item_count = len(bundle_payload)
         elif isinstance(bundle_payload, dict) and isinstance(bundle_payload.get("resources"), list):
             item_count = len(bundle_payload["resources"])
-        await self._publish(self._create_event(
+        await self._publish(self._make_event(
             event_type="bundle",
             stage="assembling",
             agent="assembler",
@@ -277,7 +277,7 @@ class AgentEventEmitter:
     async def emit_error(self, message: str) -> None:
         """发送错误事件。"""
         logger.error("[EventEmitter] error: resource_id=%s task_id=%s message=%s", self.resource_id, self.task_id, message)
-        await self._publish(self._create_event(
+        await self._publish(self._make_event(
             event_type="error",
             status="failed",
             message=message,
@@ -292,7 +292,7 @@ class AgentEventEmitter:
     ) -> None:
         """发送完成事件。"""
         bundle_payload = bundle.model_dump(mode="json") if hasattr(bundle, "model_dump") else bundle
-        await self._publish(self._create_event(
+        await self._publish(self._make_event(
             event_type="done",
             stage="completed",
             status="success",

@@ -34,7 +34,7 @@ async def build_learning_signal_snapshot(
         select(LearningEvent)
         .where(
             LearningEvent.user_id == user_id,
-            LearningEvent.created_at >= path.created_at,
+            LearningEvent.path_id == path.id,
         )
         .order_by(LearningEvent.created_at.desc())
         .limit(50)
