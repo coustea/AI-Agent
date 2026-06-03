@@ -7,7 +7,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X$服从几何分布，$P(X=1)=0.6$，则$P(X=4\\mid X>2)=$____",
+    "content": "设$X$服从几何分布,$P(X=1)=0.6$,则$P(X=4\\mid X>2)=$____",
     "options": {
       "A": "0.5",
       "B": "0.24",
@@ -105,10 +105,10 @@
     "bloom_level": null,
     "content": "设随机变量$X$服从均匀分布$U(-1,1)$,则$Y=e^X$的密度函数为:____",
     "options": {
-      "A": "$$\nf_Y(y)=\\left\\{\\begin{array}{cl}\n\\frac{1}{2} \\ln y+1, & y \\in\\left(e^{-1}, e^1\\right) \\\\\n0, & \\text { 其他 }\n\\end{array}\\right.\n$$",
-      "B": "$$\nf_Y(y)=\\left\\{\\begin{array}{lc}\n\\frac{1}{y}, & y \\in\\left(e^{-1}, e^1\\right) \\\\\n0, & \\text { 其他 }\n\\end{array}\\right.\n$$",
-      "C": "$f_Y(y)=\\left\\{\\begin{array}{cl}\\frac{1}{2}(\\ln y+1), & y \\in\\left(e^{-1}, e^1\\right) \\\\ 0, & \\text { 其他 }\\end{array}\\right.$",
-      "D": "$f_Y(y)=\\left\\{\\begin{array}{cc}\\frac{1}{2 y}, & y \\in\\left(e^{-1}, e^1\\right) \\\\ 0, & \\text { 其他 }\\end{array}\\right.$"
+      "A": "$$\nf_Y(y)=\\left\\left\\{\\begin{array}{cl}\\\\frac{1}{2} \\ln y+1, & y \\in\\left(e^{-1}, e^1\\right) \\\\0, & \\text{ 其他 }\\end{array}\\right.\n$$",
+      "B": "$$\nf_Y(y)=\\left\\left\\{\\begin{array}{lc}\\\\frac{1}{y}, & y \\in\\left(e^{-1}, e^1\\right) \\\\0, & \\text{ 其他 }\\end{array}\\right.\n$$",
+      "C": "$f_Y(y)=\\left\\left\\{\\begin{array}{cl}\\\\frac{1}{2}(\\ln y+1), & y \\in\\left(e^{-1}, e^1\\right) \\\\ 0, & \\text{ 其他 }\\end{array}\\right.$",
+      "D": "$f_Y(y)=\\left\\left\\{\\begin{array}{cc}\\\\frac{1}{2 y}, & y \\in\\left(e^{-1}, e^1\\right) \\\\ 0, & \\text{ 其他 }\\end{array}\\right.$"
     },
     "answer": "D",
     "analysis": "",
@@ -127,12 +127,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "随机变量X$\\sim N(2，4)，Y\\sim N(2，5)$，且$D(X+Y)=DX-DY+14$，则下列正确的是____",
+    "content": "随机变量X$\\sim N(2,4),Y\\sim N(2,5)$,且$D(X+Y)=DX-DY+14$,则下列正确的是____",
     "options": {
       "A": "$E(XY)=E(X)E(Y)+2[D(X)-D(Y)]$",
       "B": "$D(X-Y)=D(Y)$",
       "C": "X, Y独立",
-      "D": "X，Y不相关"
+      "D": "X,Y不相关"
     },
     "answer": "B",
     "analysis": "",
@@ -199,7 +199,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设二维随机变量$(X,Y)$的联合分布函数为\n$$\nF(x,y)=\\left\\{\\begin{array}{cl}\n1-e^{-0.01x}-e^{-0.01y}+e^{-0.01(x+y)},&x\\geq0,y\\geq0,\\\\\n0,&\\text{其他}\n\\end{array}\\right.\n$$\n则$P(X>100)=$____",
+    "content": "设二维随机变量$(X,Y)$的联合分布函数为\n$$\nF(x,y)=\\left\\left\\{\\begin{array}{cl}1-e^{-0.01x}-e^{-0.01y}+e^{-0.01(x+y)},&x\\geq0,y\\geq0,\\\\0,&\\text{其他}\\end{array}\\right.\n$$\n则$P(X>100)=$____",
     "options": {
       "A": "$1-e^{-1}$",
       "B": "$e^{-1}$",
@@ -223,7 +223,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "已知随机变量$X\\sim\\left(\\begin{array}{cc}0&1\\\\\\frac{1}{4}&\\frac{3}{4}\\end{array}\\right),Y\\sim\\left(\\begin{array}{cc}0&1\\\\\\frac{1}{4}&\\frac{3}{4}\\end{array}\\right),E(XY)=\\frac{5}{8}$，则P$\\{X+Y\\leq1\\}$等于____",
+    "content": "已知随机变量$X\\sim\\left(\\begin{array}{cc}0&1\\\\\\frac{1}{4}&\\frac{3}{4}\\end{array}\\right),Y\\sim\\left(\\begin{array}{cc}0&1\\\\\\frac{1}{4}&\\frac{3}{4}\\end{array}\\right),E(XY)=\\frac{5}{8}$，则$P\\{X+Y\\leq1\\}$等于____",
     "options": {
       "A": "$\\frac{1}{8}$",
       "B": "$\\frac{1}{4}$",
@@ -319,7 +319,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "某高校某课程考试，成绩分优秀，合格，不合格三种，分别得3分、2分、1分。根据以往统计,每批参加考试的学生中,优秀、合格、不合格的各占30%、60%、10%。用中心极限定理估计100位学生考试总分在210分至230分之间的概率为:(其中$\\phi(x)$是标准正态分布的分布函数)____",
+    "content": "某高校某课程考试,成绩分优秀,合格,不合格三种,分别得3分、2分、1分。根据以往统计,每批参加考试的学生中,优秀、合格、不合格的各占30%、60%、10%。用中心极限定理估计100位学生考试总分在210分至230分之间的概率为:(其中$\\phi(x)$是标准正态分布的分布函数)____",
     "options": {
       "A": "$1-2 \\phi(2.67)$",
       "B": "$2 \\phi(2.67)-1$",
@@ -367,12 +367,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "在原假设为$H_0$和备择假设$H_1$的假设检验中,显著性水平为$\\alpha$。下列说法错误的是____",
+    "content": "在假设为$H_0$和$H_1$的假设检验中，显著性水平为$\\alpha$。下列说法错误的是____",
     "options": {
       "A": "$P( 拒绝 H_0 \\mid H_1 为假 ) \\leq \\alpha$",
       "B": "$P( 接受 H_0 \\mid H_1 为真 ) \\leq \\alpha$",
       "C": "当 $\\alpha=0.05$ 拒绝 $H_0$ 时, $\\alpha=0.01$ 必然拒绝 $H_0$",
-      "D": "当 $\\alpha=0.05$ 接受 $H_0$ 时, $\\alpha=0.01$ 必然接受 $H_0$"
+      "D": "当 $\\alpha=0.05$ 满足 $H_0$ 的条件时， $\\alpha=0.01$ 必然满足 $H_0$ 的条件。"
     },
     "answer": "C",
     "analysis": "",
@@ -391,7 +391,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机向量$(X，Y)$的分布函数为$F(x，y)$，则$P(-X<a,Y\\leq y)=$____",
+    "content": "设随机向量$(X,Y)$的分布函数为$F(x,y)$,则$P(-X<a,Y\\leq y)=$____",
     "options": {
       "A": "$1-F(-a, y)$",
       "B": "1-F(-a, $y-0)$",
@@ -415,7 +415,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "已知随机变量$X$的密度函数为$f(x)=\\left\\{\\begin{array}{cc}2x,&0\\leq x\\leq1\\\\0,&\\text{其他}\\end{array}\\right.$.设随机变量$Y=\\left\\{\\begin{array}{cc}1,&X\\leq\\frac{1}{3}\\\\0,&\\text{其他}\\end{array}\\right.$和随机变量$Z=\\left\\{\\begin{array}{ll}1,&X>\\frac{1}{2}\\\\0,&\\text{其他}\\end{array}\\right.$则概率$P(Y=1,Z=0)=$____",
+    "content": "已知随机变量$X$的密度函数为$f(x)=\\left\\left\\{\\begin{array}{cc}2x,&0\\leq x\\leq1\\\\0,&\\text{其他}\\end{array}\\right.$.设随机变量$Y=\\left\\left\\{\\begin{array}{cc}1,&X\\leq\\\\frac{1}{3}\\\\0,&\\text{其他}\\end{array}\\right.$和随机变量$Z=\\left\\left\\{\\begin{array}{ll}1,&X>\\\\frac{1}{2}\\\\0,&\\text{其他}\\end{array}\\right.$则概率$P(Y=1,Z=0)=$____",
     "options": {
       "A": "$\\frac{3}{4}$",
       "B": "0",
@@ -439,7 +439,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$X\\sim P(3),Y$表示对$X$做相互独立观察时，事件$\\{X\\geq1\\}$首次出现时已经观察的次数,则$Y$的分布律为:____",
+    "content": "设随机变量$X\\sim P(3),Y$表示对$X$做相互独立观察时,事件$\\{X\\geq1\\}$首次出现时已经观察的次数,则$Y$的分布律为:____",
     "options": {
       "A": "$P(Y=k)=e^{-3(k-1)}\\left(1-e^{-3}\\right), k=1,2, \\cdots$",
       "B": "$P(Y=k)=\\frac{3^k}{k !} e^{-3}, k=1,2, \\cdots$",
@@ -463,7 +463,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X\\sim t(n)$，则下列结论正确的是____",
+    "content": "设$X\\sim t(n)$,则下列结论正确的是____",
     "options": {
       "A": "$X^2 \\sim F(1, n)$",
       "B": "$\\frac{1}{X^2} \\sim F(1, n)$",
@@ -487,7 +487,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X,Y相互独立，且均服从均匀分布U(0,1),则$P(X^2+Y^2<=1)=$____",
+    "content": "设随机变量X,Y相互独立,且均服从均匀分布U(0,1),则$P(X^2+Y^2<=1)=$____",
     "options": {
       "A": "$\\frac{1}{4}$",
       "B": "$\\frac{1}{2}$",
@@ -513,10 +513,10 @@
     "bloom_level": null,
     "content": "设二维随机向量$(X,Y)$在区域$\\mathrm{D}=\\{(x,y)|x^2+y^2<1\\}$内均匀分布，____",
     "options": {
-      "A": "当 $|x|<1$ 时, $f_{Y \\mid X}(y \\mid x)=\\left\\{\\begin{array}{cc}\\frac{1}{2 \\sqrt{1-x^2}}, & -\\sqrt{1-x^2}<y<\\sqrt{1-x^2}, \\\\ 0, & \\text { 其他}\\end{array}\\right.$",
-      "B": "当 $|x|<1$ 时, $f_{Y \\mid X}(y \\mid x)=\\left\\{\\begin{array}{cl}\\frac{1}{\\pi}, & x^2+y^2<1 ， \\\\ 0, & \\text { 其他 }\\end{array}\\right.$",
-      "C": "当 $|x|<1$ 时, $f_{Y \\mid X}(y \\mid x)=\\left\\{\\begin{array}{cl}\\frac{1}{\\sqrt{1-x^2}}, & y<\\sqrt{1-x^2}, \\\\ 0, & \\text { 其他}\\end{array}\\right.$",
-      "D": "当 $|x|<1$ 时, $\\quad f_{Y \\mid X}(y \\mid x)=\\left\\{\\begin{array}{cc}\\frac{1}{\\pi \\sqrt{1-x^2}},-\\sqrt{1-x^2}<y<\\sqrt{1-x^2} \\text { ， } \\\\ 0, & \\text { 其他}\\end{array}\\right.$"
+      "A": "当 $|x|<1$ 时, $f_{Y \\mid X}(y \\mid x)=\\left\\left\\{\\begin{array}{cc}\\\\frac{1}{2 \\sqrt{1-x^2}}, & -\\sqrt{1-x^2}<y<\\sqrt{1-x^2}, \\\\ 0, & \\text{ 其他}\\end{array}\\right.$",
+      "B": "当 $|x|<1$ 时, $f_{Y \\mid X}(y \\mid x)=\\left\\left\\{\\begin{array}{cl}\\\\frac{1}{\\pi}, & x^2+y^2<1 ， \\\\ 0, & \\text{ 其他 }\\end{array}\\right.$",
+      "C": "当 $|x|<1$ 时, $f_{Y \\mid X}(y \\mid x)=\\left\\left\\{\\begin{array}{cl}\\\\frac{1}{\\sqrt{1-x^2}}, & y<\\sqrt{1-x^2}, \\\\ 0, & \\text{ 其他}\\end{array}\\right.$",
+      "D": "当 $|x|<1$ 时, $\\quad f_{Y \\mid X}(y \\mid x)=\\left\\left\\{\\begin{array}{cc}\\\\frac{1}{\\pi \\sqrt{1-x^2}},-\\sqrt{1-x^2}<y<\\sqrt{1-x^2} \\text{ ， } \\\\ 0, & \\text{ 其他}\\end{array}\\right.$"
     },
     "answer": "A",
     "analysis": "",
@@ -540,7 +540,7 @@
       "A": "$D\\left(S_{1}^{2}\\right)=\\frac{2}{8} \\sigma^{4}, D\\left(S_{2}^{2}\\right)=\\frac{2}{9} \\sigma^{4}$, 所以 $s_{2}^{2}$ 比 $S_{1}^{2}$ 有效",
       "B": "$D\\left(S_{1}^{2}\\right)=\\frac{2}{8} \\sigma^{4}, D\\left(S_{2}^{2}\\right)=\\frac{2}{9} \\sigma^{4}$, 不能确定 $S_{2}^{2}$ 与 $S_{1}^{2}$ 无偏性, 所以无法比较有效性",
       "C": "$D\\left(S_{1}^{2}\\right)=\\frac{2}{9} \\sigma^{2}, D\\left(s_{2}^{2}\\right)=\\frac{2}{10} \\sigma^{2}$, 不能确定无偏性, 所以无法比较有效性",
-      "D": "$D\\left(S_{1}^{2}\\right)=\\frac{2}{8} \\sigma^{2}, D\\left(S_{2}^{2}\\right)=\\frac{2}{9} \\sigma^{2} \\text {, 所以 } S_{2}^{2} \\text { 比 } S_{1}^{2-1} \\text { 有效 }$"
+      "D": "$D\\left(S_{1}^{2}\\right)=\\frac{2}{8} \\sigma^{2}, D\\left(S_{2}^{2}\\right)=\\frac{2}{9} \\sigma^{2} \\text{, 所以 } S_{2}^{2} \\text{ 比 } S_{1}^{2-1} \\text{ 有效 }$"
     },
     "answer": "A",
     "analysis": "",
@@ -607,7 +607,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设总体$X$的分布函数为$F(x)=\\left\\{\\begin{array}{cc}1-1/x^{\\theta+1},&x>1,\\\\0,&x\\leq1\\text{,}\\end{array}\\right.$其中末知参数$\\theta>0,\\left(X_1,X_2,\\cdots,X_n\\right)$为取自总体$X$的简单随机样本,$\\bar{X}$为样本均值,$\\theta$的矩估计量为:____",
+    "content": "设总体$X$的分布函数为$F(x)=\\left\\left\\{\\begin{array}{cc}1-1/x^{\\theta+1},&x>1,\\\\0,&x\\leq1\\text{,}\\end{array}\\right.$其中末知参数$\\theta>0,\\left(X_1,X_2,\\cdots,X_n\\right)$为取自总体$X$的简单随机样本,$\\bar{X}$为样本均值,$\\theta$的矩估计量为:____",
     "options": {
       "A": "$\\frac{n}{\\sum_{i=1}^n \\ln X_i}-1$",
       "B": "$1-\\frac{n}{\\sum_{i=1}^n \\ln X_i}$",
@@ -658,7 +658,7 @@
     "content": "设随机变量X的分布函数为$F(x)=\\alpha\\Phi(x)+(1-\\alpha)\\Phi\\left(\\frac{x-1}{2}\\right)$,其中$\\Phi(x)$为标准正态分布函数，$0<\\alpha<1$，则$E(X)$和$D(X)$分别为____",
     "options": {
       "A": "$1-\\alpha$ 和$5-(\\alpha+1) 2$",
-      "B": "$1-\\alpha$ 和$5- (\\alpha-1) 2$",
+      "B": "$1-\\alpha$ 和 $5- (\\alpha-1) 2$",
       "C": "$\\alpha$ 和$5-(\\alpha+1) 2$",
       "D": "$\\alpha$ 和$5-(\\alpha-1)2$"
     },
@@ -679,7 +679,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X的概率密度函数为\n$$\nf(x)=\\begin{cases}0,&x<0,\\\\a,&0\\leqslant x\\leqslant 1,\\text{,则}a={}_{-}\\\\a\\mathrm{e}^{-(x-1)},&x>1\\end{cases}\n$$____",
+    "content": "设随机变量X的概率密度函数为\n$$\nf(x)=\\begin{cases}0,&x<0,\\\\a,&0\\leqslant x\\leqslant 1,\\text{,则}a={}_{-}\\\\ae^{-(x-1)},&x>1\\end{cases}\n____",
     "options": {
       "A": "1",
       "B": "\\frac{1}{2}",
@@ -703,7 +703,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X_1，X_2，\\ldots,X_{10}$是取自正态总体$N\\left(2，\\sigma^2\\right)$的样本，记$\\bar{X}=\\frac{1}{10}\\sum_{i=1}^{10}X_i,\\mathrm{~S}=\\sqrt{\\frac{1}{9}\\sum_{i=1}^{10}\\left(X_i-\\bar{X}\\right)^2}$,已知$P\\left(\\bar{X}\\leqslant2,S^2\\leqslant\\sigma^2\\right)=\\frac{1}{5}$，则$\\mathrm{P}(\\mathrm{S}\\leq\\sigma)$的值为____",
+    "content": "设$X_1，X_2，\\ldots,X_{10}$是取自正态总体$N\\left(2，\\sigma^2\\right)$的样本，记$\\bar{X}=\\frac{1}{10}\\sum_{i=1}^{10}X_i,\\mathrm{~S}=\\sqrt{\\frac{1}{9}\\sum_{i=1}^{10}\\left(X_i-\\bar{X}\\right)^2}$,已知$P\\left(\\bar{X}\\leqslant2,S^2\\leqslant\\sigma^2\\right)=\\frac{1}{5}$，则$P(\\mathrm{S}\\leq\\sigma)$的值为____",
     "options": {
       "A": "\\frac{1}{5}",
       "B": "\\frac{1}{4}",
@@ -751,7 +751,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "对于任意两个事件A和B，____",
+    "content": "对于任意两个事件A和B,____",
     "options": {
       "A": "若 $A B \\neq \\varnothing$ ，则 $\\mathrm{A} ， \\mathrm{~B}$ 定独立",
       "B": "若 $A B \\neq \\varnothing$ ，则A，B有可能独立",
@@ -799,7 +799,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$X\\sim N(0，1)$，对给定的$\\alpha(0<\\alpha<1)$，数$\\mathrm{u}_\\alpha$满足P$\\left\\{X>u_\\alpha\\right\\}=\\alpha$.若$P\\{X\\mid\\geq35\\}=\\alpha$，则x等于____",
+    "content": "设随机变量$X\\sim N(0,1)$，对给定的$\\alpha(0<\\alpha<1)$，数$u_{\\alpha}$满足$P\\left\\{X>u_{\\alpha}\\right\\}=\\alpha$。若$P\\left\\{|X|\\geq x\\right\\}=\\alpha$，则$x$等于____",
     "options": {
       "A": "$u_{\\frac{a}{2}}$",
       "B": "$u_{1-\\frac{\\alpha}{2}}$",
@@ -823,7 +823,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$X$服从参数为$\\lambda=4$的泊松分布，即$X\\sim\\mathrm{P}(4)$,当$k=$.时，使得概率$P(X=k)$最大____",
+    "content": "设随机变量$X$服从参数为$\\lambda=4$的泊松分布，即$X\\simP(4)$,当$k=$.时，使得概率$P(X=k)$最大____",
     "options": {
       "A": "3",
       "B": "4",
@@ -871,12 +871,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X_1,X_2,\\cdots,X_{20}$是总体$X$的简单样本,$X_0=\\min\\left\\{X_1,X_2,\\cdots,X_{20}\\right\\}$,其中$X$分布律如下表\n\\begin{tabular}{lccc}\n\\hline$X$&0&1&2\\\\\n\\hline$P$&$p_1$&$p_2$&$p_3$\\\\\n\\hline\n\\end{tabular}____",
+    "content": "设$X_1,X_2,\\cdots,X_{20}$是总体$X$的简单样本,$X_{(1)}=\\min\\left\\{X_1,X_2,\\cdots,X_{20}\\right\\}$,其中$X$分布律如下表\n\\begin{tabular}{lccc}\n\\hline\n$X$&0&1&2\\\\\n\\hline\n$P$&$p_1$&$p_2$&$p_3$\\\\\n\\hline\n\\end{tabular}\n____",
     "options": {
-      "A": "$$\n\\mathrm{P}\\left(X_{(1)}=0\\right)=p_1^{20}, \\quad \\mathrm{P}\\left(X_{(1)}=2\\right)=1-\\left(1-p_3\\right)^{20}\n$$",
-      "B": "$$\n\\mathrm{P}\\left(X_{(1)}=0\\right)=p_1^{20}, \\quad \\mathrm{P}\\left(X_{(1)}=2\\right)=p_3^{20}\n$$",
-      "C": "$$\n\\mathrm{P}\\left(X_{(1)}=0\\right)=p_1^{20}, \\quad \\mathrm{P}\\left(X_{(1)}=2\\right)=1-\\left(1-p_2\\right)^{20}\n$$",
-      "D": "$$\n\\mathrm{P}\\left(X_{(1)}=0\\right)=1-\\left(1-p_1\\right)^{20}, \\quad \\mathrm{P}\\left(X_{(1)}=2\\right)=p_3^{20}\n$$"
+      "A": "$$\nP\\left(X_{(1)}=0\\right)=p_1^{20}, \\quad P\\left(X_{(1)}=2\\right)=1-\\left(1-p_3\\right)^{20}\n$$",
+      "B": "$$\nP\\left(X_{(1)}=0\\right)=p_1^{20}, \\quad P\\left(X_{(1)}=2\\right)=p_3^{20}\n$$",
+      "C": "$$\nP\\left(X_{(1)}=0\\right)=p_1^{20}, \\quad P\\left(X_{(1)}=2\\right)=1-\\left(1-p_2\\right)^{20}\n$$",
+      "D": "$$\nP\\left(X_{(1)}=0\\right)=1-\\left(1-p_1\\right)^{20}, \\quad P\\left(X_{(1)}=2\\right)=p_3^{20}\n$$"
     },
     "answer": "D",
     "analysis": "",
@@ -897,10 +897,10 @@
     "bloom_level": null,
     "content": "设二维随机向量$(X,Y)$的联合概率密度为$f(x,y)=\\begin{cases}k,&0<x<1,x^2<y<1\\text{;}\\\\0,&\\text{其他}\\end{cases}$其中$k>0$为常数，下例结论正确的为:____",
     "options": {
-      "A": "$$\nf_X(x)=\\left\\{\\begin{array}{l}\nk\\left(1-x^2\\right), 0<x<1, \\\\\n0, \\quad \\text { 其他. }\n\\end{array} ; f_Y(y)=\\left\\{\\begin{array}{l}\nk \\sqrt{y}, 0<y<1, \\\\\n0, \\quad \\text { 其他. }\n\\end{array}\\right.\\right.\n$$",
-      "B": "$$\nf_X(x)=\\left\\{\\begin{array}{l}\nk\\left(x^2-1\\right), 0<x<1, \\\\\n0, \\quad \\text { 其他 }\n\\end{array} ; f_Y(y)=\\left\\{\\begin{array}{l}\nk \\sqrt{y}, 0<y<1, \\\\\n0, \\quad \\text { 其他 }\n\\end{array}\\right.\\right.\n$$",
-      "C": "$$\nf_X(x)=\\left\\{\\begin{array}{l}\nk\\left(1-y^2\\right), 0<x<1, \\\\\n0, \\quad \\text { 其他 }\n\\end{array} ; f_Y(y)=\\left\\{\\begin{array}{l}\nk \\sqrt{x}, 0<y<1, \\\\\n0, \\quad \\text { 其他 }\n\\end{array}\\right.\\right.\n$$",
-      "D": "$$\nf_X(x)=\\left\\{\\begin{array}{l}\n\\left(1-x^2\\right), 0<x<1, \\\\\n0, \\quad \\text { 其他 }\n\\end{array} ; f_Y(y)=\\left\\{\\begin{array}{l}\nk \\sqrt{y}, 0<y<1, \\\\\n0, \\quad \\text { 其他 }\n\\end{array}\\right.\\right.\n$$"
+      "A": "$$\nf_X(x)=\\left\\left\\{\\begin{array}{l}k\\left(1-x^2\\right), 0<x<1, \\\\0, \\quad \\text{ 其他. }\\end{array} ; f_Y(y)=\\left\\left\\{\\begin{array}{l}k \\sqrt{y}, 0<y<1, \\\\0, \\quad \\text{ 其他. }\\end{array}\\right.\\right.\n$$",
+      "B": "$$\nf_X(x)=\\left\\left\\{\\begin{array}{l}k\\left(x^2-1\\right), 0<x<1, \\\\0, \\quad \\text{ 其他 }\\end{array} ; f_Y(y)=\\left\\left\\{\\begin{array}{l}k \\sqrt{y}, 0<y<1, \\\\0, \\quad \\text{ 其他 }\\end{array}\\right.\\right.\n$$",
+      "C": "$$\nf_X(x)=\\left\\left\\{\\begin{array}{l}k\\left(1-y^2\\right), 0<x<1, \\\\0, \\quad \\text{ 其他 }\\end{array} ; f_Y(y)=\\left\\left\\{\\begin{array}{l}k \\sqrt{x}, 0<y<1, \\\\0, \\quad \\text{ 其他 }\\end{array}\\right.\\right.\n$$",
+      "D": "$$\nf_X(x)=\\left\\left\\{\\begin{array}{l}\\left(1-x^2\\right), 0<x<1, \\\\0, \\quad \\text{ 其他 }\\end{array} ; f_Y(y)=\\left\\left\\{\\begin{array}{l}k \\sqrt{y}, 0<y<1, \\\\0, \\quad \\text{ 其他 }\\end{array}\\right.\\right.\n$$"
     },
     "answer": "A",
     "analysis": "",
@@ -943,7 +943,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "随机变量$X,Y$相互独立,其概率密度分别为\n\n$$\nf_{X}(x)=\\left\\{\\begin{array}{rc}\ne^{-x},&x>0,\\\\\n0,&x\\leq0,\n\\end{array}f_{Y}(y)=\\left\\{\\begin{aligned}\n2e^{-2y},&y>0,\\\\\n0,&y\\leq0.\n\\end{aligned}\\right.\\right.\n$$\n\n考虑随机变量\n\n$$\nZ=\\begin{cases}1,&\\text{当}X\\leq Y，\\\\0,&\\text{当}X>Y，\\end{cases}\n$$\n\n则$Z$的期望与方差分别为____",
+    "content": "随机变量$X,Y$相互独立,其概率密度分别为\n\n$$\nf_{X}(x)=\\left\\left\\{\\begin{array}{rc}e^{-x},&x>0,\\\\0,&x\\leq0,\\end{array}f_{Y}(y)=\\left\\{\\begin{aligned}2e^{-2y},&y>0,\\\\0,&y\\leq0.\\end{aligned}\\right.\\right.\n$$\n考虑随机变量\n$$\nZ=\\begin{cases}1,&\\text{当}X\\leq Y，\\\\0,&\\text{当}X>Y，\\end{cases}\n$$\n\n则$Z$的期望与方差分别为____",
     "options": {
       "A": "$\\frac{1}{3}$与$\\frac{2}{9}$",
       "B": "$\\frac{2}{3}$与$\\frac{2}{9}$",
@@ -993,7 +993,7 @@
     "bloom_level": null,
     "content": "设随机变量序列$X_1,X_2,\\cdots,X_n,\\cdots$相互独立、同分布,且$E\\left(X_i\\right)=3$,$D\\left(X_i\\right)=4,i=1,2,\\cdots$,则下列选项不正确的是____",
     "options": {
-      "A": "$$\n\\forall \\varepsilon>0 \\quad \\lim _{n \\rightarrow+\\infty} \\mathrm{P}\\left(\\left|\\frac{1}{n} \\sum_{i=1}^n X_i-3\\right|>\\varepsilon\\right)=0\n$$",
+      "A": "$$\n\\forall \\varepsilon>0 \\quad \\lim _{n \\rightarrow+\\infty} P\\left(\\left|\\frac{1}{n} \\sum_{i=1}^n X_i-3\\right|>\\varepsilon\\right)=0\n$$",
       "B": "$$\n\\frac{1}{n} \\sum_{i=1}^n X_i^2 \\longrightarrow 13\n$$",
       "C": "$$\n{n} \\sum_{i=1}^n X_i \\stackrel{p}{\\longrightarrow} 3\n$$",
       "D": "$$\n\\frac{1}{n} \\sum_{i=1}^n X_i^3 \\longrightarrow 27\n$$"
@@ -1015,12 +1015,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "假设$(X,Y)$为二维随机变量，则下列结论正确的是____",
+    "content": "假设$(X,Y)$为二维随机变量,则下列结论正确的是____",
     "options": {
-      "A": "如果 $(X,Y)$ 服从二维正态分布，则 $X$ 与 $Y$ 一定独立",
-      "B": "如果 $(X,Y)$ 服从二维正态分布，则 $X$ 与 $Y$ 一定不独立",
-      "C": "如果 $(X,Y)$ 不服从二维正态分布，则 $X$ 与 $Y$ 一定都不服从正 态分布",
-      "D": "如果 $(X,Y)$ 不服从二维正态分布，则 $X$ 与 $Y$ 不一定都不服从 正态分布"
+      "A": "如果 $(X,Y)$ 服从二维正态分布,则 $X$ 与 $Y$ 一定独立",
+      "B": "如果 $(X,Y)$ 服从二维正态分布,则 $X$ 与 $Y$ 一定不独立",
+      "C": "如果 $(X,Y)$ 不服从二维正态分布,则 $X$ 与 $Y$ 一定都不服从正 态分布",
+      "D": "如果 $(X,Y)$ 不服从二维正态分布,则 $X$ 与 $Y$ 不一定都不服从 正态分布"
     },
     "answer": "D",
     "analysis": "",
@@ -1087,12 +1087,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设二维随机变量$(X,Y)$的联合密度函数$f(x,y)=\\begin{cases}12e^{-3x-b},&x>0,y>0\\\\0,&\\text{o.w.}\\end{cases}$令$M=\\max(X,Y)$,则$\\boldsymbol{M}$的分布函数为:____",
+    "content": "设二维随机变量$(X,Y)$的联合密度函数$f(x,y)=\\begin{cases}12e^{-3x-b},&x>0,y>0\\\\0,&\\text{other}\\end{cases}$令$M=\\max(X,Y)$,则$\\boldsymbol{M}$的分布函数为:____",
     "options": {
-      "A": "$$\nF(z)= \\begin{cases}3 e^{-3 z}+4 e^{-4 z}-7 e^{-7 z}, & z \\geq 0, \\\\ 0, & \\text { 其他}\\end{cases}\n$$",
-      "B": "$$\nF(z)=\\left\\{\\begin{array}{cc}1-e^{-3 z}-e^{-4 z}+e^{-7 z}, & z \\geq 0 ， \\\\ 0, & \\text { 其他}\\end{array}\\right.\n$$",
-      "C": "$$\nF(z)=\\left\\{\\begin{array}{cc}\n1-e^{-7 z}, & z \\geq 0 ， \\\\\n0, & \\text { 其他}\n\\end{array}\\right.\n$$",
-      "D": "$$\nF(z)=\\left\\{\\begin{array}{cc}\n1-e^{-3 z}-e^{-4 z}, & z \\geq 0, \\\\\n0, & \\text { 其他}\n\\end{array}\\right.\n$$"
+      "A": "$$\nF(z)= \\begin{cases}3 e^{-3 z}+4 e^{-4 z}-7 e^{-7 z}, & z \\geq 0, \\\\ 0, & \\text{ 其他}\\end{cases}\n$$",
+      "B": "$$\nF(z)=\\left\\left\\{\\begin{array}{cc}1-e^{-3 z}-e^{-4 z}+e^{-7 z}, & z \\geq 0 ， \\\\ 0, & \\text{ 其他}\\end{array}\\right.\n$$",
+      "C": "$$\nF(z)=\\left\\left\\{\\begin{array}{cc}1-e^{-7 z}, & z \\geq 0 ， \\\\0, & \\text{ 其他}\\end{array}\\right.\n$$",
+      "D": "$$\nF(z)=\\left\\left\\{\\begin{array}{cc}1-e^{-3 z}-e^{-4 z}, & z \\geq 0, \\\\0, & \\text{ 其他}\\end{array}\\right.\n$$"
     },
     "answer": "B",
     "analysis": "",
@@ -1111,7 +1111,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X_1,X_2,X_3$是来自总体$X$的样本,其中$E(X)=7,D(X)=4$,下面说法正确的是：____",
+    "content": "设$X_1,X_2,X_3$是来自总体$X$的样本,其中$E(X)=7,D(X)=4$,下面说法正确的是:____",
     "options": {
       "A": "$P\\left(X_1=X_2=X_3\\right)=0$",
       "B": "$D\\left(X_1+X_2\\right)=D(2 X)=4 D(X)=16$",
@@ -1135,12 +1135,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "在正态总体的假设检验中，显著性水平为$\\alpha$，则下列结论正确的是____",
+    "content": "在正态总体假设检验中，显著性水平为$\\alpha$，以下结论正确的是____",
     "options": {
-      "A": "若在 $\\alpha=0.1$ 下接受H0，则在 $\\alpha=0.05$ 下必接受H0",
-      "B": "若在 $\\alpha=0.1$ 下接受H0 ，则在 $\\alpha=0.05$ 下必拒绝H0",
-      "C": "若在 $\\alpha=0.1$ 下拒绝H0，则在 $\\alpha=0.05$ 下必接受H0",
-      "D": "若在 $\\alpha=0.1$ 下拒绝H0，则在 $\\alpha=0.05$ 下必拒绝H0"
+      "A": "如果在一个$\\alpha=0.1$条件下接受原假设H0，那么在$\\alpha=0.05$条件下，必然接受原假设H0。",
+      "B": "如果在一个$\\alpha=0.1$条件下接受原假设H0，那么在$\\alpha=0.05$条件下，必然拒绝原假设H0。",
+      "C": "如果在一个$\\alpha=0.1$条件下拒绝H0，那么在$\\alpha=0.05$条件下，H0一定被接受。",
+      "D": "如果在 $\\alpha=0.1$ 下拒绝H0，则在 $\\alpha=0.05$ 下，H0一定被拒绝。"
     },
     "answer": "A",
     "analysis": "",
@@ -1159,7 +1159,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X，Y和Z相互独立且服从同一伯努利分布$B(1,p)$，则$U=X+Y$与$Z$____",
+    "content": "设随机变量X,Y和Z相互独立且服从同一伯努利分布$B(1,p)$,则$U=X+Y$与$Z$____",
     "options": {
       "A": "不独立且相关",
       "B": "不独立且不相关",
@@ -1375,7 +1375,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "由概率密度的性质，得A，B为随机事件，$P(A)=\\frac{2}{3},P(B\\mid A)=\\frac{1}{6},P(A\\mid B)=\\frac{1}{3}$,令$X=\\left\\{\\begin{array}{ll}1,&A\\text{发生}\\\\0,&A\\text{不发生}\\end{array}\\quad Y=\\begin{cases}1,&B\\text{发生}\\\\0,&B\\text{不发生}\\end{cases}\\right.$若$Z=X+aY，X$与Z不相关，则$a$的值为____",
+    "content": "由概率密度的性质，得A，B为随机事件，$P(A)=\\frac{2}{3},P(B\\mid A)=\\frac{1}{6},P(A\\mid B)=\\frac{1}{3}$,令$X=\\left\\left\\{\\begin{array}{ll}1,&A\\text{发生}\\\\0,&A\\text{不发生}\\end{array}\\quad Y=\\begin{cases}1,&B\\text{发生}\\\\0,&B\\text{不发生}\\end{cases}\\right.$若$Z=X+aY，X$与Z不相关，则$a$的值为____",
     "options": {
       "A": "0.5",
       "B": "1",
@@ -1399,12 +1399,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X的分布函数为$F(x)=\\begin{cases}0,&x<0\\\\\\frac{1}{2},&0\\leq x<1\\\\1-\\mathrm{e}^{-x},&x\\geq 1\\end{cases}$,则$\\mathrm{P}\\{\\mathrm{x}=0\\}=$____",
+    "content": "设随机变量X的分布函数为$F(x)=\\begin{cases}0,&x<0\\\\\\frac{1}{2},&0\\leq x<1\\\\1-e^{-x},&x\\geq 1\\end{cases}$,则$P\\{\\mathrm{x}=0\\}=$____",
     "options": {
       "A": "0",
       "B": "$\\frac{1}{2}$",
-      "C": "$\\frac{1}{2}-\\mathrm{e}^{-1}$",
-      "D": "$1-\\mathrm{e}^{-1}$."
+      "C": "$\\frac{1}{2}-e^{-1}$",
+      "D": "$1-e^{-1}$."
     },
     "answer": "B",
     "analysis": "",
@@ -1423,7 +1423,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X$和$Y$为相互独立的连续型随机变量，它们的密度函数分别为$f_1(x)，f_2(x)$，它们的分布函数分别为$F_1(x)，F_2(x)$，则____",
+    "content": "设$X$和$Y$为相互独立的连续型随机变量,它们的密度函数分别为$f_1(x),f_2(x)$,它们的分布函数分别为$F_1(x),F_2(x)$,则____",
     "options": {
       "A": "$f 1(x)+f 2(x)$ 为某一随机变量的密度函数",
       "B": "$f 1(x) f 2(x)$ 为某一随机变量的密度函数",
@@ -1449,10 +1449,10 @@
     "bloom_level": null,
     "content": "设$X_1,X_2,\\cdots,X_n$是取自正态分布$N\\left(\\mu,\\sigma^2\\right)$的简单样本,其中$\\mu$末知。$\\sigma^2$的置信度为$1-\\alpha$的双侧置信区问为$\\left(\\hat{\\sigma}_1^2,\\hat{\\sigma}_2^2\\right)$,则上限$\\hat{\\sigma}_2^2$的估计量应为:____",
     "options": {
-      "A": "$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_{1-\\alpha}^2(n-1)}\n$",
-      "B": "$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_{\\frac{\\alpha}{2}}^2(n-1)}\n$",
-      "C": "$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_{1-\\frac{a}{2}}^2(n-1)}\n$",
-      "D": "$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_\\alpha^2(n-1)}\n$"
+      "A": "$$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_{1-\\alpha}^2(n-1)}\n$$",
+      "B": "$$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_{\\frac{\\alpha}{2}}^2(n-1)}\n$$",
+      "C": "$$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_{1-\\frac{a}{2}}^2(n-1)}\n$$",
+      "D": "$$\n\\frac{\\sum_{i=1}^n\\left(X_i-\\bar{X}\\right)^2}{\\chi_\\alpha^2(n-1)}\n$$"
     },
     "answer": "C",
     "analysis": "",
@@ -1615,7 +1615,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X和Y相互独立，都服从$[0,b]$上均匀分布，则$E[\\min(X,Y)]=$____",
+    "content": "设随机变量X和Y相互独立,都服从$[0,b]$上均匀分布,则$E[\\min(X,Y)]=$____",
     "options": {
       "A": "\\frac{b}{2}",
       "B": "b",
@@ -1639,7 +1639,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机事件A，B的概率均大于0。(1)若A，B互不相容，则它们相互独立.(2)若A，B相互独立，则它们互不相容.(3)若P(A)=P(B)=0.5，则它们互不相容.（4）若P(A)=P(B)=0.5,则它们相互独立.上述结论正确的个数为：____",
+    "content": "设随机事件A,B的概率均大于0。(1)若A,B互不相容,则它们相互独立.(2)若A,B相互独立,则它们互不相容.(3)若P(A)=P(B)=0.5,则它们互不相容.(4)若P(A)=P(B)=0.5,则它们相互独立.上述结论正确的个数为:____",
     "options": {
       "A": "2个",
       "B": "3个",
@@ -1711,12 +1711,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$(X，Y)$的联合分布函数为$F(x，y)，X$与$Y$的分布函数分别为$F_X(x)$和$F_Y(y)$，定义$U=\\max(X，Y)，V=\\min(X，Y)$，下列说法正确的是____",
+    "content": "设$(X,Y)$的联合分布函数为$F(x,y),X$与$Y$的分布函数分别为$F_X(x)$和$F_Y(y)$,定义$U=\\max(X,Y),V=\\min(X,Y)$,下列说法正确的是____",
     "options": {
       "A": "U的分布函数为 $F U(u)=F X(u) F Y(u)$",
       "B": "V的分布函数为 $F V(v)=1-[1-F X(v)][1-F Y(v)]$",
       "C": "V的分布函数为 $F V(v)=F X(v)+F Y(v)-F(v,v)$",
-      "D": "U， V必相互独立"
+      "D": "U, V必相互独立"
     },
     "answer": "C",
     "analysis": "",
@@ -1735,7 +1735,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设X，Y为两个随机变量，D(X)=1,D(Y)=4,cov(X,Y)=1,令Z_1=X-2Y,Z_2=2X-Y,则Z_1与Z_2的相关系数为____",
+    "content": "设X,Y为两个随机变量,D(X)=1,D(Y)=4,cov(X,Y)=1,令Z_1=X-2Y,Z_2=2X-Y,则Z_1与Z_2的相关系数为____",
     "options": {
       "A": "1",
       "B": "\\frac{5}{\\sqrt{13}}",
@@ -1759,7 +1759,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X与$Y$相互独立，且分别服从参数为1与参数为4的指数分布，则$P(X<Y)=$____",
+    "content": "设随机变量X与$Y$相互独立,且分别服从参数为1与参数为4的指数分布,则$P(X<Y)=$____",
     "options": {
       "A": "\\frac{1}{5}",
       "B": "\\frac{1}{3}",
@@ -1785,10 +1785,10 @@
     "bloom_level": null,
     "content": "已知P(A)=0.15,P(B)=0.25,P(AB)=0.125,则P(A\\cupB)与P(\\overline{A}B)的值为____",
     "options": {
-      "A": "0.375，0.175",
-      "B": "0.625，0.375",
-      "C": "0.275，0.125",
-      "D": "0.575，0.075"
+      "A": "0.375,0.175",
+      "B": "0.625,0.375",
+      "C": "0.275,0.125",
+      "D": "0.575,0.075"
     },
     "answer": "C",
     "analysis": "",
@@ -1807,7 +1807,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "甲乙两人约定在$8\\sim12$点某地会面，设两人8点后$X$与$Y$小时到达会面地点，且两人到达时间相互独立且均服从$[0$，4]上的均匀分布，则先到者的平均等待时间为多少小时____",
+    "content": "甲乙两人约定在$8\\sim12$点某地会面,设两人8点后$X$与$Y$小时到达会面地点,且两人到达时间相互独立且均服从$[0$,4]上的均匀分布,则先到者的平均等待时间为多少小时____",
     "options": {
       "A": "\\frac{1}{3}",
       "B": "\\frac{2}{3}",
@@ -2071,7 +2071,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$(X，Y)$的联合概率密度函数为$f(x，y)=Ae^{-x}(x>0，0<y<2)$，则$A=$____",
+    "content": "设$(X,Y)$的联合概率密度函数为$f(x,y)=Ae^{-x}(x>0,0<y<2)$,则$A=$____",
     "options": {
       "A": "0.5",
       "B": "0.75",
@@ -2095,12 +2095,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设有2个袋子，各装r+b只球，其中红球r只，黑球b只，今从第1个袋子随机取一球，放入第2个袋子，再从第2个袋子随机取一球.令\n$$\nX_i=\\left\\{\\begin{array}{ll}\n1,&\\text{第i次取出红球}\\\\\n0,&\\text{第i次取出黑球}\n\\end{array}\\right.\n$$，(i=1,2)则____",
+    "content": "设有2个袋子，各装r+b只球，其中红球r只，黑球b只，今从第1个袋子随机取一球，放入第2个袋子，再从第2个袋子随机取一球.令\n$$\nX_i=\\left\\left\\{\\begin{array}{ll}1,&\\text{第i次取出红球}\\\\0,&\\text{第i次取出黑球}\\end{array}\\right.\n$$\n，(i=1,2)则____",
     "options": {
-      "A": "$X_1$和X_2独立，不同分布",
-      "B": "$X_1$和$X_2$不独立，同分布",
-      "C": "$X_1$和$X_2$独立，同分布",
-      "D": "$X_1$和$X_2$不独立，不同分布"
+      "A": "$X_1$和X_2独立,不同分布",
+      "B": "$X_1$和$X_2$不独立,同分布",
+      "C": "$X_1$和$X_2$独立,同分布",
+      "D": "$X_1$和$X_2$不独立,不同分布"
     },
     "answer": "B",
     "analysis": "",
@@ -2123,7 +2123,7 @@
     "options": {
       "A": "与样本容量 $n$ 无关",
       "B": "唯一",
-      "C": "与$1-\\alpha$无关",
+      "C": "与 $1-\\alpha$ 无关联",
       "D": "不唯一"
     },
     "answer": "D",
@@ -2167,7 +2167,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X，$Y，Z$相互独立，且$X\\sim N(1，2)$,$Y\\sim N(2，2)$,$Z\\sim N(3，7)$，记$a=P\\{X<Y\\}$，$b=P\\{Y<Z\\}$，则____",
+    "content": "设随机变量X,$Y,Z$相互独立,且$X\\sim N(1,2)$,$Y\\sim N(2,2)$,$Z\\sim N(3,7)$,记$a=P\\{X<Y\\}$,$b=P\\{Y<Z\\}$,则____",
     "options": {
       "A": "a<b",
       "B": "a>b",
@@ -2287,10 +2287,10 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$X\\sim E(1)$，记$Y=\\max(X，1)$，则$E(Y)=$____",
+    "content": "设随机变量$X\\sim E(1)$,记$Y=\\max(X,1)$,则$E(Y)=$____",
     "options": {
       "A": "1",
-      "B": "1+\\mathrm{e}-1",
+      "B": "1+e-1",
       "C": "1-e-1",
       "D": "e-1"
     },
@@ -2311,7 +2311,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$\\left(X_{1},X_{2},\\cdots,X_{10}\\right)$是来自总体$N(0,1)$的一个样本,统计量$a\\left(X_{1}+X_{2}+\\cdots+X_{6}\\right)^{2}+$$b\\left(X_{7}+X_{8}+X_{9}+X_{10}\\right)^{2}$的分布是自由度为$\\mathrm{n}$的$\\chi^{2}$分布,则$a、b、n$的数值分别是____",
+    "content": "设$\\left(X_{1},X_{2},\\cdots,X_{10}\\right)$是来自总体$N(0,1)$的一个样本,统计量$a\\left(X_{1}+X_{2}+\\cdots+X_{6}\\right)^{2}+\n$$\nb\\left(X_{7}+X_{8}+X_{9}+X_{10}\\right)^{2}$的分布是自由度为$\\mathrm{n}$的$\\chi^{2}$分布,则$a、b、n$的数值分别是____",
     "options": {
       "A": "$1 / 2,1 / 2,10$",
       "B": "$1 / 4,1 / 6,2$",
@@ -2337,10 +2337,10 @@
     "bloom_level": null,
     "content": "设二维连续型随机变量$(X,Y)$的联合概率密度为$f(x,y),X$与$Y$的边缘密度函数分别为$f_X(x)$与$f_Y(y)$,$Z=X+Y$,则$Z$的概率密度函数为:____",
     "options": {
-      "A": "$\n\\int_{-\\infty}^{+\\infty} f_X(v) f_Y(z-v) d v\n$",
-      "B": "$\n\\int_{-\\infty}^{+\\infty} f(v, z-v) d v\n$",
-      "C": "$\n\\int_{-\\infty}^{+\\infty} \\int_{-\\infty}^{+\\infty}\\left[f_X(x)+f_Y(y)\\right] d x d y\n$",
-      "D": "$\n\\int_{-\\infty}^{+\\infty} f_X(z-v) f_Y(v) d v\n$"
+      "A": "$$\n\\int_{-\\infty}^{+\\infty} f_X(v) f_Y(z-v) d v\n$$",
+      "B": "$$\n\\int_{-\\infty}^{+\\infty} f(v, z-v) d v\n$$",
+      "C": "$$\n\\int_{-\\infty}^{+\\infty} \\int_{-\\infty}^{+\\infty}\\left[f_X(x)+f_Y(y)\\right] d x d y\n$$",
+      "D": "$$\n\\int_{-\\infty}^{+\\infty} f_X(z-v) f_Y(v) d v\n$$"
     },
     "answer": "B",
     "analysis": "",
@@ -2359,7 +2359,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X\\sim N(1，4)$，$P(X>a)=\\Phi(-1)$则a=____",
+    "content": "设$X\\sim N(1,4)$,$P(X>a)=\\Phi(-1)$则a=____",
     "options": {
       "A": "2",
       "B": "3",
@@ -2431,7 +2431,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "在$H_0$为原假设,$H_1$为备选假设的徦设检验中,若显著性水平为$\\alpha=0.025$,则____",
+    "content": "在假设$H_0$为原假设，$H_1$为备选假设的假设检验中，若显著性水平为$\\alpha=0.025$，则____",
     "options": {
       "A": "$P( 接受 H_0 \\mid H_0 成立 ) \\leq 0.025$",
       "B": "$P( 接受 H_1 \\mid H_1 成立 ) \\leq 0.025$",
@@ -2503,7 +2503,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X$\\sim U[-1，1]$，则随机变量$U=arcsin X$,$V=arccos X$的相关系数为____",
+    "content": "设随机变量 X，则随机变量 Y1, Y2 的相关系数为 ____",
     "options": {
       "A": "-1",
       "B": "0",
@@ -2529,10 +2529,10 @@
     "bloom_level": null,
     "content": "设随机变量$X\\sim N(0,1)$,$\\Phi(x)$为X的分布函数,$Y=2(X+|X|)$,则Y的分布函数为____",
     "options": {
-      "A": "$F_Y(y)=\\begin{cases} \\Phi(\\frac{y}{2}), y\\geq0, \\\\ 0, y < 0 \\end{cases}$",
-      "B": "$F_Y(y)=\\begin{cases} \\Phi(2y), y\\geq0, \\\\ 0, y < 0 \\end{cases}$",
-      "C": "$F_Y(y)=\\begin{cases} \\Phi(\\frac{y}{4}), y\\geq0, \\\\ 0, y < 0 \\end{cases}$",
-      "D": "$F_Y(y)=\\begin{cases} \\Phi(4y), y\\geq0, \\\\ 0, y < 0 \\end{cases}$"
+      "A": "$F_Y(y)=\\begin{cases} \\\\Phi(\\\\frac{y}{2}), y\\geq0, \\\\ 0, y < 0 \\end{cases}$",
+      "B": "$F_Y(y)=\\begin{cases} \\\\Phi(2y), y\\geq0, \\\\ 0, y < 0 \\end{cases}$",
+      "C": "$F_Y(y)=\\begin{cases} \\\\Phi(\\\\frac{y}{4}), y\\geq0, \\\\ 0, y < 0 \\end{cases}$",
+      "D": "$F_Y(y)=\\begin{cases} \\\\Phi(4y), y\\geq0, \\\\ 0, y < 0 \\end{cases}$"
     },
     "answer": "C",
     "analysis": "",
@@ -2551,12 +2551,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "已知随机变量X的密度函数$f(x)=\\left\\{\\begin{array}{ll}A\\mathrm{e}^{-x},&x\\geqslant\\lambda,\\\\0,&x<\\lambda\\end{array}(\\lambda>0,A\\right.$为常数$)$,则概率$\\mathrm{P}\\{\\lambda<X<\\lambda+a\\}(a>0)$的值____",
+    "content": "已知随机变量X的密度函数$f(x)=\\left\\left\\{\\begin{array}{ll}Ae^{-x},&x\\geqslant\\lambda,\\\\0,&x<\\lambda\\end{array}(\\lambda>0,A\\right.$为常数$)$,则概率$P\\{\\lambda<X<\\lambda+a\\}(a>0)$的值____",
     "options": {
       "A": "与a无关，随 $\\lambda$ 的增大而增大",
-      "B": "与a无关，随 $\\lambda$ 的增大而减小",
-      "C": "与 $\\lambda$ 无关，随a的增大而增大",
-      "D": "与 $\\lambda$ 无关，随a的增大而减小"
+      "B": "与a无关，随$\\lambda$增大而减小。",
+      "C": "与 $\\lambda$ 无关，随a增大而增大",
+      "D": "与 $\\lambda$ 无关，随a增大而减小"
     },
     "answer": "C",
     "analysis": "",
@@ -2575,7 +2575,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$Z$的分布函数为\n$$\nF(z)=\\left\\{\\begin{array}{cc}\n1-e^{-3z}-e^{-4z}+e^{-7z},&z\\geq0,\\\\\n0,&\\text{其他.}\n\\end{array}\\right.\n$$\n则$E(Z)=$____",
+    "content": "设随机变量$Z$的分布函数为\n$$\nF(z)=\\left\\left\\{\\begin{array}{cc}1-e^{-3z}-e^{-4z}+e^{-7z},&z\\geq0,\\\\0,&\\text{其他.}\\end{array}\\right.\n$$\n则$E(Z)=$____",
     "options": {
       "A": "$-\\frac{7}{12}$",
       "B": "$\\frac{7}{12}$",
@@ -2599,7 +2599,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X与Y相互独立，X的概率分布为$P\\{X=0\\}=P\\{X=1\\}=\\frac{1}{2},Y$的概率密度为$f_Y(y)=\\left\\{\\begin{array}{ll}2y,&0<y<1\\\\0,&\\text{其他}\\end{array}\\right.$,记$Z=X+2Y则$$P\\left\\{Z>\\frac{3}{2}\\right\\}=$____",
+    "content": "设随机变量X与Y相互独立，X的概率分布为$P\\{X=0\\}=P\\{X=1\\}=\\frac{1}{2},Y$的概率密度为$f_Y(y)=\\left\\left\\{\\begin{array}{ll}2y,&0<y<1\\\\0,&\\text{其他}\\end{array}\\right.$,记$Z=X+2Y则\n$$\nP\\left\\{Z>\\frac{3}{2}\\right\\}=$____",
     "options": {
       "A": "\\frac{7}{16}",
       "B": "\\frac{15}{16}",
@@ -2743,7 +2743,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设事件$A，B$满足$P(B)=0.4$，$P(\\bar{A}\\mid B)=0.8$,$P(\\bar{A}\\mid\\bar{B})=0.3$,则$P(B\\mid A)=$____",
+    "content": "设事件$A,B$满足$P(B)=0.4$,$P(\\bar{A}\\mid B)=0.8$,$P(\\bar{A}\\mid\\bar{B})=0.3$,则$P(B\\mid A)=$____",
     "options": {
       "A": "0.5",
       "B": "0.24",
@@ -2767,7 +2767,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "一种传染病在某市的发病率为3%,为查出这种传染病,医院采用一种新的检验法，它能使$98\\%$的患有此病的人被检出阳性，但也会有0.5%未患此疒的人被检查出阳性.则某人被此法检出阳性的概率:____",
+    "content": "一种传染病在某市的发病率为3%,为查出这种传染病,医院采用一种新的检验法,它能使$98\\%$的患有此病的人被检出阳性,但也会有0.5%未患此疒的人被检查出阳性.则某人被此法检出阳性的概率:____",
     "options": {
       "A": "0.03425",
       "B": "0.96575",
@@ -2815,12 +2815,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$f(x)=\\{\\begin{array}{ll}{{\\sin(x),}}&{{\\quad a<x<b,}}\\\\{{0,}}&\\text{其他}\\end{array}$，则在下列给定的各组数值中，应取____，才可以让f(x)成为一个概率密度函数",
+    "content": "设$f(x)=\\left\\{\\begin{array}{ll}{{\\sin(x),}}&{{\\quad a<x<b,}}\\\\{{0,}}&\\text{其他}\\end{array}\\right.$，则在下列给定的各组数值中，应取____，才可以让f(x)成为一个概率密度函数",
     "options": {
-      "A": "$（a,b）=(0, \\pi)$",
-      "B": "$（a,b）=(0, \\pi/2)$",
-      "C": "$（a,b）=(0, 3\\pi/2)$",
-      "D": "$（a,b）=(0, 2\\pi)$"
+      "A": "$(a,b)=(0, \\pi)$",
+      "B": "$(a,b)=(0, \\pi/2)$",
+      "C": "$(a,b)=(0, 3\\pi/2)$",
+      "D": "$(a,b)=(0, 2\\pi)$"
     },
     "answer": "B",
     "analysis": "",
@@ -2863,7 +2863,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设条件概率密度为$f_{x\\mid Y}(x\\mid Y)=\\left\\{\\begin{array}{cc}\\frac{2x}{y^2},&0\\leq x\\leq y,\\\\0,&\\text{其他}\\end{array}\\right.$,则$P\\left(X>\\frac{1}{4}\\mid Y=\\frac{3}{4}\\right)=$____",
+    "content": "设条件概率密度为$f_{x\\mid Y}(x\\mid Y)=\\left\\left\\{\\begin{array}{cc}\\\\frac{2x}{y^2},&0\\leq x\\leq y,\\\\0,&\\text{其他}\\end{array}\\right.$,则$P\\left(X>\\frac{1}{4}\\mid Y=\\frac{3}{4}\\right)=$____",
     "options": {
       "A": "$\\frac{1}{9}$",
       "B": "$\\frac{9}{16}$",
@@ -2887,12 +2887,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "随机变量$X,Y$相互独立,且$X$服从区间$(0,1)$上的均匀分布,$Y$的概率密度为\n\n$$\nf(y)=\\left\\{\\begin{array}{rr}\n\\frac{1}{2}e^{-\\frac{y}{2}},&y>0\\\\\n0,&y\\leq0\n\\end{array}\\right.\n$$\n\n那么$X$和$2Y$的联合概率密度为____",
+    "content": "随机变量$X,Y$相互独立,且$X$服从区间$(0,1)$上的均匀分布,$Y$的概率密度为\n\n$$\nf(y)=\\left\\left\\{\\begin{array}{rr}\\\\frac{1}{2}e^{-\\\\frac{y}{2}},&y>0\\\\0,&y\\leq0\\end{array}\\right.\n$$\n\n那么$X$和$2Y$的联合概率密度为____",
     "options": {
-      "A": "$$\nf(x, y)=\\left\\{\\begin{array}{rc}\n\\frac{1}{2} e^{-y}, & 0<x<2, \\quad y>0, \\\\\n0, & \\text { 其他. }\n\\end{array}\\right.\n$$",
-      "B": "$$\nf(x, y)=\\left\\{\\begin{array}{rc}\n\\frac{1}{4} e^{-\\frac{y}{4}}, & 0<x<1, \\quad y>0, \\\\\n0, & \\text { 其他. }\n\\end{array}\\right.\n$$",
-      "C": "$$\nf(x, y)=\\left\\{\\begin{array}{cc}\n\\frac{1}{2} e^{-\\frac{y}{2}}, & 0<x<1, \\quad y>0, \\\\\n0, & \\text { 其他. }\n\\end{array}\\right.\n$$",
-      "D": "$$\nf(x, y)=\\left\\{\\begin{array}{rc}\n\\frac{1}{4} e^{-\\frac{y}{2}}, & 0<x<2, \\quad y>0, \\\\\n0, & \\text { 其他. }\n\\end{array}\\right.\n$$"
+      "A": "$$\nf(x, y)=\\left\\left\\{\\begin{array}{rc}\\\\frac{1}{2} e^{-y}, & 0<x<2, \\quad y>0, \\\\0, & \\text{ 其他. }\\end{array}\\right.\n$$",
+      "B": "$$\nf(x, y)=\\left\\left\\{\\begin{array}{rc}\\\\frac{1}{4} e^{-\\\\frac{y}{4}}, & 0<x<1, \\quad y>0, \\\\0, & \\text{ 其他. }\\end{array}\\right.\n$$",
+      "C": "$$\nf(x, y)=\\left\\left\\{\\begin{array}{cc}\\\\frac{1}{2} e^{-\\\\frac{y}{2}}, & 0<x<1, \\quad y>0, \\\\0, & \\text{ 其他. }\\end{array}\\right.\n$$",
+      "D": "$$\nf(x, y)=\\left\\left\\{\\begin{array}{rc}\\\\frac{1}{4} e^{-\\\\frac{y}{2}}, & 0<x<2, \\quad y>0, \\\\0, & \\text{ 其他. }\\end{array}\\right.\n$$"
     },
     "answer": "B",
     "analysis": "",
@@ -2935,12 +2935,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X的密度函数为$f(x)=\\begin{cases}\\frac{3}{16}x^2,-2<x<2\\\\0,其他,\\end{cases}$令$Y=X^2$，则随机变量Y的密度函数为：____",
+    "content": "设随机变量X的密度函数为$f(x)=\\begin{cases}\\\\frac{3}{16}x^2,-2<x<2\\\\0,其他,\\end{cases}$令$Y=X^2$，则随机变量Y的密度函数为：____",
     "options": {
-      "A": "$f_Y(y) = \\begin{cases} \\frac{3}{32\\sqrt{y}}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$",
-      "B": "$f_Y(y) = \\begin{cases} \\frac{3}{16}\\sqrt{y}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$",
-      "C": "$f_Y(y) = \\begin{cases} \\frac{3}{16\\sqrt{y}}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$",
-      "D": "$f_Y(y) = \\begin{cases} \\frac{3}{32}\\sqrt{y}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$"
+      "A": "$f_Y(y) = \\begin{cases} \\\\frac{3}{32\\sqrt{y}}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$",
+      "B": "$f_Y(y) = \\begin{cases} \\\\frac{3}{16}\\sqrt{y}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$",
+      "C": "$f_Y(y) = \\begin{cases} \\\\frac{3}{16\\sqrt{y}}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$",
+      "D": "$f_Y(y) = \\begin{cases} \\\\frac{3}{32}\\sqrt{y}, 0 < y < 4, \\\\ 0, 其他, \\end{cases}$"
     },
     "answer": "B",
     "analysis": "",
@@ -2961,8 +2961,8 @@
     "bloom_level": null,
     "content": "设$X$为随机变量，若矩阵$\\boldsymbol{A}=\\left(\\begin{array}{ccc}2&3&2\\\\0&-2&-X\\\\0&1&0\\end{array}\\right)$的特征值全为实数的概率为0.5，则____",
     "options": {
-      "A": "X服从区间 $[0 ， 2]$ 的均匀分布",
-      "B": "X服从二项分布 $B(2 ， 0.5)$",
+      "A": "X服从区间 $[0 , 2]$ 的均匀分布",
+      "B": "X服从二项分布 $B(2 , 0.5)$",
       "C": "X服从参数为 1 的指数分布",
       "D": "X服从正态分布"
     },
@@ -2983,7 +2983,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$(X,Y)$的联合概率密度为\n\n$$\nf(x,y)=\\left\\{\\begin{aligned}\n\\frac{21}{4}x^{2}y,&x^{2}<y<1\\\\\n0,&\\text{其他.}\n\\end{aligned}\\right.\n$$\n\n(1)$f_{X\\mid Y}\\left(x\\mid y=\\frac{1}{2}\\right)=\\left\\{\\begin{array}{ccc}3\\sqrt{2}x^{2},&-\\frac{\\sqrt{2}}{2}<x<\\frac{\\sqrt{2}}{2},&E(XY)=0\\\\0,&\\text{其他.}&E(X)=\\infty\\end{array}\\right.$\n\n(2)$f_{Y\\mid X}\\left(y\\mid x=\\frac{\\sqrt{2}}{2}\\right)=\\left\\{\\begin{aligned}\\frac{8}{3}y,&\\frac{1}{2}<y<1\\\\0,&\\text{其他.}\\end{aligned}\\right.$\n\n(3)$X,Y$相互独立.\n\n(4)$X,Y$不相关.\n\n上述结论正确的个数为____",
+    "content": "设随机变量$(X,Y)$的联合概率密度为\n\n$$\nf(x,y)=\\left\\{\\begin{aligned}\\\\frac{21}{4}x^{2}y,&x^{2}<y<1\\\\0,&\\text{其他.}\\end{aligned}\\right.\n$$\n\n(1)$f_{X\\mid Y}\\left(x\\mid y=\\frac{1}{2}\\right)=\\left\\left\\{\\begin{array}{ccc}3\\sqrt{2}x^{2},&-\\\\frac{\\sqrt{2}}{2}<x<\\\\frac{\\sqrt{2}}{2},&E(XY)=0\\\\0,&\\text{其他.}&E(X)=\\infty\\end{array}\\right.$\n\n(2)$f_{Y\\mid X}\\left(y\\mid x=\\frac{\\sqrt{2}}{2}\\right)=\\left\\{\\begin{aligned}\\\\frac{8}{3}y,&\\\\frac{1}{2}<y<1\\\\0,&\\text{其他.}\\end{aligned}\\right.$\n\n(3)$X,Y$相互独立.\n\n(4)$X,Y$不相关.\n\n上述结论正确的个数为____",
     "options": {
       "A": "1个",
       "B": "2个",
@@ -3007,7 +3007,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "已知随机变量$X\\sim N\\left(\\mu，\\sigma^2\\right)$，事件$A=\\{X>\\mu\\}$，事件$B=\\{X$$>\\sigma\\}$，事件$C=\\{X>\\mu+\\sigma\\}$，如果$P(A)=P(B)$，那么事件A、B、C至多有一个发生的概率为____",
+    "content": "已知随机变量$X\\sim N\\left(\\mu，\\sigma^2\\right)$，事件$A=\\{X>\\mu\\}$，事件$B=\\{X\n$$\n>\\sigma\\}$，事件$C=\\{X>\\mu+\\sigma\\}$，如果$P(A)=P(B)$，那么事件A、B、C至多有一个发生的概率为____",
     "options": {
       "A": "\\frac{1}{2}",
       "B": "\\Phi(1)",
@@ -3031,12 +3031,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设二维随机变量$(X，Y)$服从二维正态分布，则下列说法不正确的是____",
+    "content": "设二维随机变量$(X,Y)$服从二维正态分布,则下列说法不正确的是____",
     "options": {
-      "A": "X，Y一定相互独立",
+      "A": "X,Y一定相互独立",
       "B": "X ， Y的任意线性组合 $1 \\mathrm{X}+12",
-      "C": "X ， Y分别服从于一维正态分布",
-      "D": "当相关系数 $\\rho=0$ 时，$X ， Y相互独立"
+      "C": "X , Y分别服从于一维正态分布",
+      "D": "当相关系数 $\\rho=0$ 时,$X , Y相互独立"
     },
     "answer": "A",
     "analysis": "",
@@ -3060,7 +3060,7 @@
       "A": "$\\sqrt{n}(\\bar{X}-\\mu) \\sim N(0,1)$.",
       "B": "$E\\left(\\bar{X}^2\\right)=\\mu^2$.",
       "C": "由切比雪夫不等式知 $P\\{|\\bar{X}-\\mu|<\\varepsilon\\} \\geqslant 1-\\frac{1}{m \\varepsilon^2}$ (为任意正数).",
-      "D": "若 $\\mu$ 为末知参数，则样本均值 $\\bar{X}$ 是 $\\mu$ 的知估计，又是 $\\mu$ 的最大似然估计."
+      "D": "若 $\\mu$ 为末知参数,则样本均值 $\\bar{X}$ 是 $\\mu$ 的知估计,又是 $\\mu$ 的最大似然估计."
     },
     "answer": "C",
     "analysis": "",
@@ -3079,7 +3079,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$(X,Y)$的联合密度函数是:$f(x,y)=\\left\\{\\begin{array}{c}ke^{-3x-6y},x>0,y>0\\\\0,\\text{otherwise}\\end{array}\\right.$,则$P(0\\leq X\\leq2,0\\leq Y\\leq1)=$____",
+    "content": "设随机变量$(X,Y)$的联合密度函数是:$f(x,y)=\\left\\left\\{\\begin{array}{c}ke^{-3x-6y},x>0,y>0\\\\0,\\text{otherwise}\\end{array}\\right.$,则$P(0\\leq X\\leq2,0\\leq Y\\leq1)=$____",
     "options": {
       "A": "$$\n\\left(1-e^{-2}\\right)^{2}\n$$",
       "B": "$$\n\\left(1-e^{-s}\\right)^{2}\n$$",
@@ -3103,7 +3103,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "下列各函数中，可以做随机变量的分布函数的是____",
+    "content": "下列各函数中,可以做随机变量的分布函数的是____",
     "options": {
       "A": "$F(x)=\\frac{1}{1+x^2}$",
       "B": "$F(x)=\\frac{3}{4}+\\frac{1}{2 \\pi} \\arctan x$",
@@ -3129,10 +3129,10 @@
     "bloom_level": null,
     "content": "设总体X服从拉普拉斯分布$f(x,\\lambda)=\\frac{1}{4\\lambda}e^{-\\frac{|x|}{2\\lambda}},-\\infty<x<\\infty\\text{,其中}\\lambda>0$。若取得样本值$\\left(x_1,x_2,\\cdots x_n\\right)$,参数$\\lambda$的极大似然估计值为：____",
     "options": {
-      "A": "$\n\\frac{1}{2 n} \\sum_{i=1}^n\\left|x_i\\right|\n$",
-      "B": "$\n\\frac{1}{2 n} \\sum_{i=1}^n x_i\n$",
-      "C": "$\n\\frac{1}{n} \\sum_{i=1}^n\\left|x_i\\right|\n$",
-      "D": "$\n\\frac{1}{4 n} \\sum_{i=1}^n\\left|x_i\\right|\n$"
+      "A": "$$\n\\frac{1}{2 n} \\sum_{i=1}^n\\left|x_i\\right|\n$$",
+      "B": "$$\n\\frac{1}{2 n} \\sum_{i=1}^n x_i\n$$",
+      "C": "$$\n\\frac{1}{n} \\sum_{i=1}^n\\left|x_i\\right|\n$$",
+      "D": "$$\n\\frac{1}{4 n} \\sum_{i=1}^n\\left|x_i\\right|\n$$"
     },
     "answer": "A",
     "analysis": "",
@@ -3199,7 +3199,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X的分布函数为\n$$\nF(x)=\\left\\{\\begin{array}{ll}\n0,&x<0\\\\\n\\frac{1}{2},&0\\leq x<1\\\\\n1-\\mathrm{e}^{-x},&x\\geq 1\n\\end{array}\\right.$$,则$\\mathrm{P}\\{\\mathrm{X}=0\\}=$$____",
+    "content": "设随机变量X的分布函数为\n$$\nF(x)=\\left\\left\\{\\begin{array}{ll}0,&x<0\\\\frac{1}{2},&0\\leq x<1\\\\1-e^{-x},&x\\geq 1\\end{array}\\right.\n$$\n,则$P\\{\\mathrm{X}=0\\}=____",
     "options": {
       "A": "0",
       "B": "\\frac{1}{2}",
@@ -3223,7 +3223,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "无线电讯号将两信号*和#传送出去，接收站收到时，*被误收作#的概率为0.01，#被误收作*的概率为0.01。已知在信号传送中，*和#发出的概率分别为2/3和1/3，若接收站收到的信息为*，则原发信号是*的概率为____",
+    "content": "无线电讯号将两信号*和#传送出去,接收站收到时,*被误收作#的概率为0.01,#被误收作*的概率为0.01。已知在信号传送中,*和#发出的概率分别为2/3和1/3,若接收站收到的信息为*,则原发信号是*的概率为____",
     "options": {
       "A": "197/199",
       "B": "196/197",
@@ -3367,7 +3367,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设总体X的概率分布如下\n\\begin{tabular}{c|ccc}\n\\hline$X$&-1&0&1\\\\\n\\hline$P$&$\\frac{1}{4}$&$\\frac{1}{2}$&$\\frac{1}{4}$\\\\\n\\hline\n\\end{tabular}\n从总体中抽取$n$个简单随机样本，$N_1$表示$n$个样本中取到1的个数，$N_2$表示$n$个样本中取到0的个数，$N_3$表示，$n$个样本中取到1的个数，则$N_1$与$N_2$的相关系数为____",
+    "content": "设总体$X$的概率分布如下\n\\begin{tabular}{c|ccc}\n\\hline\n$X$&-1&0&1\\\\\n\\hline\n$P$&$\\frac{1}{4}$&$\\frac{1}{2}$&$\\frac{1}{4}$\\\\\n\\hline\n\\end{tabular}\n从总体中抽取$n$个简单随机样本，$N_1$表示$n$个样本中取到1的个数，$N_2$表示$n$个样本中取到0的个数，$N_3$表示$n$个样本中取到-1的个数，则$N_1$与$N_2$的相关系数为____",
     "options": {
       "A": "-1",
       "B": "$-\\frac{\\sqrt{3}}{3}$",
@@ -3391,7 +3391,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设三事件$A，B，C$相互独立且$0<P(C)<1$，则下述事件中不独立的是:____",
+    "content": "设三事件$A,B,C$相互独立且$0<P(C)<1$,则下述事件中不独立的是:____",
     "options": {
       "A": "$\\overline{A \\cup B}$ 与C",
       "B": "$AC\\overline{C}$",
@@ -3463,7 +3463,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "调节一个装瓶机使其对每个瓶子的灌装量服从均值为$\\mu$盎司，标准差为1.0盎司的正态分布。抽取若干个瓶子，测定灌装量，作为一个样本。样本容量至少是才能使得样本均值偏离总体均值不超过0.3盎司的概率达到$95\\%$.____",
+    "content": "调节一个装瓶机使其对每个瓶子的灌装量服从均值为$\\mu$盎司,标准差为1.0盎司的正态分布。抽取若干个瓶子,测定灌装量,作为一个样本。样本容量至少是才能使得样本均值偏离总体均值不超过0.3盎司的概率达到$95\\%$.____",
     "options": {
       "A": "41",
       "B": "42",
@@ -3487,7 +3487,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设01分布总体X，并且P(X=1)=p,(X1,···,Xn)是来自总体的一个简单样本，$\\bar{X}$是样本均值，则$P(var{(X)}=k/n)=$____",
+    "content": "设01分布总体X,并且P(X=1)=p,(X1,···,Xn)是来自总体的一个简单样本,$\\bar{X}$是样本均值,则$P(var{(X)}=k/n)=$____",
     "options": {
       "A": "p",
       "B": "$C_np^k(1-p)^{n-k}$",
@@ -3511,10 +3511,10 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "对事件A，B，已知$P(A)=1$，则必有:____",
+    "content": "对事件A,B,已知$P(A)=1$,则必有:____",
     "options": {
       "A": "$A=\\Omega$",
-      "B": "$B \\subset A$.",
+      "B": "$B \\subset A$。",
       "C": "A与B独立",
       "D": "P(B)<P(A)"
     },
@@ -3535,7 +3535,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "某人射击，重复射击且每次命中的概率都为$P(0<P<1)$，则他第6次射击恰好是第3次命中的概率为____",
+    "content": "某人射击,重复射击且每次命中的概率都为$P(0<P<1)$,则他第6次射击恰好是第3次命中的概率为____",
     "options": {
       "A": "$10P3(1-P)3$",
       "B": "$5P3(1-P)3$",
@@ -3703,12 +3703,12 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "下面4个随机变量的分布中，期望值最大，方差最小的是____",
+    "content": "下面4个随机变量的分布中,期望值最大,方差最小的是____",
     "options": {
       "A": "$X \\sim N\\left(5, \\frac{1}{2}\\right)$",
-      "B": "$Y \\sim U(5 ， 7)$ ，即区间 $(5 ， 7)$ 上的均匀分布",
-      "C": "Z服从指数分布\n$$\nf(z)= \\begin{cases}0, & z \\leqslant 0, \\\\ \\frac{1}{6} \\mathrm{e}^{-\\frac{1}{6} z}, &z>0 ;\\end{cases}\n$$",
-      "D": "T服从指数分布\n$$\nf(t)= \\begin{cases}0, & t \\leqslant 0, \\\\ \\mathrm{e}^{-\\sqrt{3} t},& t>0 .\\end{cases}\n$$"
+      "B": "$Y \\sim U(5 , 7)$ ,即区间 $(5 , 7)$ 上的均匀分布",
+      "C": "Z服从指数分布\n$$\nf(z)= \\begin{cases}0, & z \\leqslant 0, \\\\ \\\\frac{1}{6} e^{-\\\\frac{1}{6} z}, &z>0 ;\\end{cases}\n$$",
+      "D": "T服从指数分布\n$$\nf(t)= \\begin{cases}0, & t \\leqslant 0, \\\\ e^{-\\sqrt{3} t},& t>0 .\\end{cases}\n$$"
     },
     "answer": "B",
     "analysis": "",
@@ -3727,7 +3727,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "随机变量$X$服从$\\chi^2(50)$分布，则上侧分位数$\\chi_{0.05}^2(50)$近似值为____",
+    "content": "随机变量$X$服从$\\chi^2(50)$分布,则上侧分位数$\\chi_{0.05}^2(50)$近似值为____",
     "options": {
       "A": "1.645;",
       "B": "50;",
@@ -3751,7 +3751,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量X的概率分布为$P\\{X=k\\}=a\\frac{1+\\mathrm{e}^{-1}}{k!},\\mathrm{k}=0,1，2，\\ldots$，则常数a=____",
+    "content": "设随机变量X的概率分布为$P\\{X=k\\}=a\\frac{1+e^{-1}}{k!},\\mathrm{k}=0,1，2，\\ldots$，则常数a=____",
     "options": {
       "A": "\\frac{1}{e-1}",
       "B": "\\frac{1}{e+1}",
@@ -3775,7 +3775,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$f(x)$为某随机变量X的概率密度函数，$f(1+x)=f(1-x)$，$\\int_0^2f(x)dx=0.6$,则$\\mathrm{P}\\{\\mathrm{X}<0\\}=$____",
+    "content": "设$f(x)$为某随机变量X的概率密度函数，$f(1+x)=f(1-x)$，$\\int_0^2f(x)dx=0.6$,则$P\\{\\mathrm{X}<0\\}=$____",
     "options": {
       "A": "0.2",
       "B": "0.3",
@@ -3799,7 +3799,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "已知二维随机变量$(X,Y)$的联合分布律为\n\\begin{tabular}{c|c|ccc}\n\\hline\\multicolumn{2}{c|}{}&\\multicolumn{3}{c}{$X$}\\\\\n\\cline{3-5}\\multicolumn{2}{c|}{$p_{ij}$}&0&1&2\\\\\n\\hline\\multirow{2}{*}{$Y$}&-1&$1/8$&$1/4$&$1/8$\\\\\n&0&$3/8$&0&$1/8$\\\\\n\\hline\n\\end{tabular}\nP(XY=0)=____",
+    "content": "已知二维随机变量$(X,Y)$的联合分布律为\n\\begin{tabular}{c|c|ccc}\n\\hline\n\\multicolumn{2}{c|}{}&\\multicolumn{3}{c}{$X$}\\\\\n\\cline{3-5}\n\\multicolumn{2}{c|}{$p_{ij}$}&0&1&2\\\\\n\\hline\n\\multirow{2}{*}{$Y$}&-1&$1/8$&$1/4$&$1/8$\\\\\n&0&$3/8$&0&$1/8$\\\\\n\\hline\n\\end{tabular}\n$P(XY=0)=$____",
     "options": {
       "A": "$5 / 8$",
       "B": "$1 / 2$",
@@ -3895,7 +3895,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设二维随机变且$(X，Y)$的联合密度函数为\n$$\nf(x,y)=\\left\\{\\begin{array}{cc}\nkx\\mathrm{e}^{-x(2y+3)},&x>0,y>0,\\\\\n0,&\\text{其他,}\n\\end{array}\\right.\n$$\n则$k$值为____",
+    "content": "设二维随机变且$(X，Y)$的联合密度函数为\n$$\nf(x,y)=\\left\\left\\{\\begin{array}{cc}kxe^{-x(2y+3)},&x>0,y>0,\\\\0,&\\text{其他,}\\end{array}\\right.\n$$\n则$k$值为____",
     "options": {
       "A": "2",
       "B": "4",
@@ -3919,7 +3919,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设二维离散型随机变量$(X,Y)$的联合分布律为\n\n\\begin{tabular}{|c|c|c|c|c|}\n\\hline&&\\multicolumn{3}{|c|}{$X$}\\\\\n\\hline\\multicolumn{2}{|c|}{$p_{tj}$}&-1&0&1\\\\\n\\hline\\multirow{2}{*}{$Y$}&-1&$1/8$&$1/2$&$1/8$\\\\\n&0&$1/8$&0&$1/8$\\\\\n\\hline\n\\end{tabular}\n(i)E(X)=E(Y)(ii)E(XY)=0(iii)X,Y不相关(iv)X,Y独立(v)cov(X,Y)=0\n上述结论正确的个数有____",
+    "content": "设二维离散型随机变量$(X,Y)$的联合分布律为\n\\begin{tabular}{|c|c|c|c|c|}\n\\hline\n&&\\multicolumn{3}{|c|}{$X$}\\\\\n\\hline\n\\multicolumn{2}{|c|}{$p_{ij}$}&-1&0&1\\\\\n\\hline\n\\multirow{2}{*}{$Y$}&-1&$1/8$&$1/2$&$1/8$\\\\\n&0&$1/8$&0&$1/8$\\\\\n\\hline\n\\end{tabular}\n(i)$E(X)=E(Y)$ (ii)$E(XY)=0$ (iii)$X,Y$不相关 (iv)$X,Y$独立 (v)$\\operatorname{cov}(X,Y)=0$\n上述结论正确的个数有____",
     "options": {
       "A": "3个",
       "B": "4个",
@@ -3967,7 +3967,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$(X,Y)$的概率密度为$f(x,y)=\\left\\{\\begin{array}{cc}6y,&0<x<1,0<y<x，\\\\0,&\\text{其他.}\\end{array}\\right.$,$$\\text{则}P\\left(X>\\frac{1}{2}\\mid Y=\\frac{1}{3}\\right)=$$____",
+    "content": "设随机变量$(X,Y)$的概率密度为$f(x,y)=\\left\\left\\{\\begin{array}{cc}6y,&0<x<1,0<y<x，\\\\0,&\\text{其他.}\\end{array}\\right.$,\\text{则}P\\left(X>\\frac{1}{2}\\mid Y=\\frac{1}{3}\\right)=____",
     "options": {
       "A": "$\\frac{3}{4}$",
       "B": "$\\frac{2}{3}$",
@@ -4087,7 +4087,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$(X_1,X_2,...,X_n)$是取自总体X的一个样本，X的概率密度如下：$f(x)=\\begin{cases}\\frac12e^{-\\frac{(x-\\mu)}{2}},x\\geq\\mu,\\\\0,其他\\end{cases}$,$\\mu$为未知参数。则$\\mu$的最大似然估计量是.____",
+    "content": "设$(X_1,X_2,...,X_n)$是取自总体X的一个样本，X的概率密度如下：$f(x)=\\begin{cases}\\\\frac12e^{-\\\\frac{(x-\\mu)}{2}},x\\geq\\mu,\\\\0,其他\\end{cases}$,$\\mu$为未知参数。则$\\mu$的最大似然估计量是.____",
     "options": {
       "A": "$\\hat{\\mu}=\\max _{1 \\leq i \\leq n} X_i$",
       "B": "$\\hat{\\mu}=\\frac13 \\max _{1 \\leq i \\leq n} X_i$",
@@ -4111,7 +4111,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "当事件$A$和$B$同时发生时$C$也发生，则下列式子中成立的是____",
+    "content": "当事件$A$和$B$同时发生时$C$也发生,则下列式子中成立的是____",
     "options": {
       "A": "$P(C)=P(A \\cap B)$",
       "B": "$P(C) \\leq P(A)+P(B)-1$",
@@ -4159,7 +4159,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设X和Y分别表示扔n次硬币出现正面和反面的次数，则$X，Y$的相关系数为____",
+    "content": "设X和Y分别表示扔n次硬币出现正面和反面的次数,则$X,Y$的相关系数为____",
     "options": {
       "A": "-1",
       "B": "0",
@@ -4207,7 +4207,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设$X\\sim N(1，4)，Y\\sim N(3，16)，P\\{Y=aX+b\\}=1$，且$\\rho_{XY}=-1$，则____",
+    "content": "设$X\\sim N(1,4),Y\\sim N(3,16),P\\{Y=aX+b\\}=1$,且$\\rho_{XY}=-1$,则____",
     "options": {
       "A": "a=2, b=5",
       "B": "a=-2, b=-5",
@@ -4231,7 +4231,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设总体$X$的分布列如下:\n\n\\begin{tabular}{|c|c|c|c|}\n\\hline$\\boldsymbol{X}$&0&1&2\\\\\n\\hline$\\boldsymbol{p}$&$2/5$&$1/5$&$2/5$\\\\\n\\hline\n\\end{tabular}\n\n$\\left(X_{1},X_{2},\\cdots X_{n}\\right)$是来自于该总体的样本,$X_{(n)}=\\max\\left(X_{1},X_{2},\\cdots X_{n}\\right)$,\n\n(i)$P\\left(\\mathbf{X}_{(n)}=0\\right)=\\left(\\frac{2}{5}\\right)^{n}$,\n(ii)$P\\left(X_{(n)}=1\\right)=\\frac{2}{5}\\left(c_{0}^{1}\\left(\\frac{1}{5}\\right)^{n-1}\\right.$,\n(iii)$P\\left(\\mathbf{X}_{(n)}=2\\right)=1-\\left(\\frac{2}{5}\\right)^{n}$,\n\n上述(i)、(ii)、(iii)中正确个数为____",
+    "content": "设总体$X$的分布列如下:\n\\begin{tabular}{|c|c|c|c|}\n\\hline\n$\\boldsymbol{X}$&0&1&2\\\\\n\\hline\n$\\boldsymbol{p}$&$2/5$&$1/5$&$2/5$\\\\\n\\hline\n\\end{tabular}\n$\\left(X_{1},X_{2},\\cdots,X_{n}\\right)$是来自于该总体的样本,$X_{(n)}=\\max\\left(X_{1},X_{2},\\cdots,X_{n}\\right)$,\n(i)$P\\left(X_{(n)}=0\\right)=\\left(\\frac{2}{5}\\right)^{n}$,\n(ii)$P\\left(X_{(n)}=1\\right)=\\left(\\frac{3}{5}\\right)^{n}-\\left(\\frac{2}{5}\\right)^{n}$,\n(iii)$P\\left(X_{(n)}=2\\right)=1-\\left(\\frac{3}{5}\\right)^{n}$,\n上述(i)、(ii)、(iii)中正确个数为____",
     "options": {
       "A": "2",
       "B": "1",
@@ -4257,10 +4257,10 @@
     "bloom_level": null,
     "content": "设随机变量(X,Y)的概率密度为$f(x,y)=\\begin{cases}2,0<x<y,0<y<1\\\\0,其他\\end{cases}$.则0<y<1时，f_{X|Y}(x|y)=____",
     "options": {
-      "A": "$\\begin{cases}\\frac{1}{x}, & 0<y<x, \\\\ 0, & \\text { 其他 }\\end{cases}$",
-      "B": "$\\{\\begin{array}{cl}\\frac{1}{2 x}, & |y|<x, \\\\0, & \\text { 其他}\\end{array}$",
-      "C": "$\\begin{cases}\\frac{1}{y}, & 0<x<y, \\\\ 0, & \\text { 其他. }\\end{cases}$",
-      "D": "$\\begin{cases}\\frac{1}{2y}, & |x|<y, \\\\ 0, & \\text { 其他. }\\end{cases}$"
+      "A": "$\\begin{cases}\\\\frac{1}{x}, & 0<y<x, \\\\ 0, & \\text{ 其他 }\\end{cases}$",
+      "B": "$\\left\\{\\begin{array}{cl}\\\\frac{1}{2 x}, & |y|<x, \\\\0, & \\text{ 其他}\\end{array}\\right.$",
+      "C": "$\\begin{cases}\\\\frac{1}{y}, & 0<x<y, \\\\ 0, & \\text{ 其他. }\\end{cases}$",
+      "D": "$\\begin{cases}\\\\frac{1}{2y}, & |x|<y, \\\\ 0, & \\text{ 其他. }\\end{cases}$"
     },
     "answer": "C",
     "analysis": "",
@@ -4279,7 +4279,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设总体$X$的分布律为\n\n\\begin{tabular}{|l|l|l|l|}\n\\hline$X$&-1&0&2\\\\\n\\hline$P$&$\\frac{1}{3}\\theta$&$1-\\frac{2}{3}\\theta$&$\\frac{1}{3}\\theta$\\\\\n\\hline\n\\end{tabular}\n\n$\\left(X_{1},X_{2},\\cdots,X_{n}\\right)$为来自总体的样本,设有以下四个统计量\n\n(i)$\\frac{3}{n}\\sum_{i=1}^{n}X_{i}$,(ii)$\\left.X_{1}+\\frac{2}{n-1}\\right)_{i=2}^{n}X_{i}$,(iii)$\\frac{3}{5n}\\sum_{i=1}^{n}X_{i}^{2}$,(iv)$\\frac{1}{3n}\\sum_{i=1}^{n}X_{i}^{2}$\n\n在上述四个统计量中,是参数$\\theta$的一致估计量的个数是____",
+    "content": "设总体$X$的分布律为\n\\begin{tabular}{|l|l|l|l|}\n\\hline\n$X$&-1&0&2\\\\\n\\hline\n$P$&$\\frac{1}{3}\\theta$&$1-\\frac{2}{3}\\theta$&$\\frac{1}{3}\\theta$\\\\\n\\hline\n\\end{tabular}\n$\\left(X_{1},X_{2},\\cdots,X_{n}\\right)$为来自总体的样本,设有以下四个统计量\n(i)$\\frac{3}{n}\\sum_{i=1}^{n}X_{i}$,\n(ii)$X_{1}+\\frac{2}{n-1}\\sum_{i=2}^{n}X_{i}$,\n(iii)$\\frac{3}{5n}\\sum_{i=1}^{n}X_{i}^{2}$,\n(iv)$\\frac{1}{3n}\\sum_{i=1}^{n}X_{i}^{2}$\n在以上四个统计量中，是参数$\\theta$的一致估计量的个数是____",
     "options": {
       "A": "0",
       "B": "2",
@@ -4375,7 +4375,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设随机变量$(X,Y)$的联合密度函数是:$f(x,y)=\\left\\{\\begin{array}{c}ke^{-x-2y},x>0,y>0\\\\0,\\text{其他}\\end{array}\\right.$则$P(0\\leq X\\leq2,0\\leq Y\\leq1)=$____",
+    "content": "设随机变量$(X,Y)$的联合密度函数是:$f(x,y)=\\left\\left\\{\\begin{array}{c}ke^{-x-2y},x>0,y>0\\\\0,\\text{其他}\\end{array}\\right.$则$P(0\\leq X\\leq2,0\\leq Y\\leq1)=$____",
     "options": {
       "A": "$\\left(1-e^{-4}\\right)^{2}$",
       "B": "$\\left(1-e^{-8}\\right)^{2}$",
@@ -4383,7 +4383,7 @@
       "D": "$\\left(1-e^{-6}\\right)^{2}$"
     },
     "answer": "C",
-    "analysis": "1. 首先，我们需要找到常数k。为了使f(x, y)成为一个有效的联合密度函数，我们需要满足$\\int_{-\\infty}^{\\infty}\\int_{-\\infty}^{\\infty}f(x,y)dxdy=1$。由于f(x, y)在x>0和y>0的区域内为非零值，我们可以将积分限改为$\\int_{0}^{\\infty}\\int_{0}^{\\infty}ke^{-x-2y}dxdy=1$。\n2. 计算积分，得到$k\\int_{0}^{\\infty}\\int_{0}^{\\infty}e^{-x-2y}dxdy=k\\int_{0}^{\\infty}(-e^{-x-2y}|_{x=0}^{x=\\infty})dy=k\\int_{0}^{\\infty}e^{-2y}dy=k(-\\frac{1}{2}e^{-2y}|_{y=0}^{y=\\infty})=k\\frac{1}{2}=1$。解得$k=2$。\n3. 现在我们已经知道联合密度函数$f(x,y)=\\left\\{\\begin{array}{c}2e^{-x-2y},x>0,y>0\\\\0,\\text{其他}\\end{array}\\right.$。接下来，我们需要计算$P(0\\leq X\\leq2,0\\leq Y\\leq1)$，即在给定范围内的联合密度函数的积分：$P(0\\leq X\\leq2,0\\leq Y\\leq1)=\\int_{0}^{1}\\int_{0}^{2}2e^{-x-2y}dxdy$。\n4. 计算积分，得到$P(0\\leq X\\leq2,0\\leq Y\\leq1)=\\int_{0}^{1}(-e^{-x-2y}|_{x=0}^{x=2})dy=\\int_{0}^{1}(e^{-2y}-e^{-2-2y})dy=(-\\frac{1}{2}e^{-2y}|_{y=0}^{y=1})+\\frac{1}{2}(e^{-2-2y}|_{y=0}^{y=1})=(1-e^{-2})^2$。",
+    "analysis": "1. 首先，我们需要找到常数k。为了使f(x, y)成为一个有效的联合密度函数，我们需要满足$\\int_{-\\infty}^{\\infty}\\int_{-\\infty}^{\\infty}f(x,y)dxdy=1$。由于f(x, y)在x>0和y>0的区域内为非零值，我们可以将积分限改为$\\int_{0}^{\\infty}\\int_{0}^{\\infty}ke^{-x-2y}dxdy=1$。\n2. 计算积分，得到$k\\int_{0}^{\\infty}\\int_{0}^{\\infty}e^{-x-2y}dxdy=k\\int_{0}^{\\infty}(-e^{-x-2y}|_{x=0}^{x=\\infty})dy=k\\int_{0}^{\\infty}e^{-2y}dy=k(-\\frac{1}{2}e^{-2y}|_{y=0}^{y=\\infty})=k\\frac{1}{2}=1$。解得$k=2$。\n3. 现在我们已经知道联合密度函数$f(x,y)=\\left\\left\\{\\begin{array}{c}2e^{-x-2y},x>0,y>0\\\\0,\\text{其他}\\end{array}\\right.$。接下来，我们需要计算$P(0\\leq X\\leq2,0\\leq Y\\leq1)$，即在给定范围内的联合密度函数的积分：$P(0\\leq X\\leq2,0\\leq Y\\leq1)=\\int_{0}^{1}\\int_{0}^{2}2e^{-x-2y}dxdy$。\n4. 计算积分，得到$P(0\\leq X\\leq2,0\\leq Y\\leq1)=\\int_{0}^{1}(-e^{-x-2y}|_{x=0}^{x=2})dy=\\int_{0}^{1}(e^{-2y}-e^{-2-2y})dy=(-\\frac{1}{2}e^{-2y}|_{y=0}^{y=1})+\\frac{1}{2}(e^{-2-2y}|_{y=0}^{y=1})=(1-e^{-2})^2$。",
     "knowledge_points": [],
     "tags": [
       "probability_and_statistics"
@@ -4449,13 +4449,13 @@
     "bloom_level": null,
     "content": "设总体$X\\sim N\\left(\\mu，\\sigma^2\\right)，\\sigma^2$已知，给定样本$X_1，X_2，\\ldots，X_n$，对总体均值$\\mu$进行检验，令$H_0:\\mu=\\mu_0，H_1:\\mu\\neq\\mu_0$，则____",
     "options": {
-      "A": "若显著性水平 $\\alpha=0.05$ 下拒绝 $H_0$ ，则 $\\alpha=0.01$ 下必拒绝 $H_0$.",
-      "B": "若显著性水平 $\\alpha=0.05$ 下接受 $H_0$ ，则 $\\alpha=0.01$ 下必拒绝 $H_0$",
-      "C": "若显著性水平 $\\alpha=0.05$ 下拒绝 $H_0$ ，则 $\\alpha=0.01$ 下接受 $H_0$",
-      "D": "若显著性水平$\\alpha=0.05$下接受 $H_0$ ，则 $\\alpha=0.01$ 下也接受$H_0$"
+      "A": "如果以显著性水平 $\\alpha=0.05$ 进行拒绝，则以显著性水平 $\\alpha=0.01$ 进行拒绝，则 $H_0$ 必须被拒绝。",
+      "B": "如果以显著性水平 $\\alpha=0.05$ 进行检验，且$H_0$ 拒绝，则以显著性水平 $\\alpha=0.01$ 进行检验，必然拒绝 $H_0$。",
+      "C": "如果以显著性水平 $\\alpha=0.05$ 作为阈值拒绝 $H_0$，则以显著性水平 $\\alpha=0.01$ 作为阈值接受 $H_0$。",
+      "D": "如果以显著性水平$\\alpha=0.05$作为阈值接受$H_0$，则以显著性水平$\\alpha=0.01$作为阈值也接受$H_0$。"
     },
     "answer": "D",
-    "analysis": "1. 首先，显著性水平α是用来衡量拒绝原假设的风险程度，即当原假设实际上是正确的情况下，我们错误地拒绝原假设的概率。显著性水平越小，我们拒绝原假设的标准就越严格。\n2. 接着，我们分析选项：(A) 若显著性水平α=0.05下拒绝H0，则α=0.01下必拒绝H0。这个选项是错误的，因为当显著性水平变小时，拒绝原假设的标准变得更严格，所以不能得出这个结论；(B) 若显著性水平α=0.05下接受H0，则α=0.01下必拒绝H0。这个选项也是错误的，因为当显著性水平变小时，拒绝原假设的标准变得更严格，但不能得出必然拒绝H0的结论；(C) 若显著性水平α=0.05下拒绝H0，则α=0.01下接受H0。这个选项是错误的，因为当显著性水平变小时，拒绝原假设的标准变得更严格，所以不能得出这个结论；(D) 若显著性水平α=0.05下接受H0，则α=0.01下也接受H0。这个选项是正确的，因为当显著性水平变小时，拒绝原假设的标准变得更严格，如果在较高的显著性水平下接受原假设，那么在较低的显著性水平下也应该接受原假设。",
+    "analysis": "1. 首先,显著性水平α是用来衡量拒绝原假设的风险程度,即当原假设实际上是正确的情况下,我们错误地拒绝原假设的概率。显著性水平越小,我们拒绝原假设的标准就越严格。\n2. 接着,我们分析选项:(A) 若显著性水平α=0.05下拒绝H0,则α=0.01下必拒绝H0。这个选项是错误的,因为当显著性水平变小时,拒绝原假设的标准变得更严格,所以不能得出这个结论;(B) 若显著性水平α=0.05下接受H0,则α=0.01下必拒绝H0。这个选项也是错误的,因为当显著性水平变小时,拒绝原假设的标准变得更严格,但不能得出必然拒绝H0的结论;(C) 若显著性水平α=0.05下拒绝H0,则α=0.01下接受H0。这个选项是错误的,因为当显著性水平变小时,拒绝原假设的标准变得更严格,所以不能得出这个结论;(D) 若显著性水平α=0.05下接受H0,则α=0.01下也接受H0。这个选项是正确的,因为当显著性水平变小时,拒绝原假设的标准变得更严格,如果在较高的显著性水平下接受原假设,那么在较低的显著性水平下也应该接受原假设。",
     "knowledge_points": [],
     "tags": [
       "probability_and_statistics"
@@ -4471,7 +4471,7 @@
     "type": "选择题",
     "difficulty": null,
     "bloom_level": null,
-    "content": "设二维随机变量$(X,Y)$的概率密度函数为:$f(x,y)=\\left\\{\\begin{array}{lc}a(x+y),&0<x<2,0<y<1\\\\0,&\\text{其他}\\end{array}\\right.$,则常数$a=$____",
+    "content": "设二维随机变量$(X,Y)$的概率密度函数为:$f(x,y)=\\left\\left\\{\\begin{array}{lc}a(x+y),&0<x<2,0<y<1\\\\0,&\\text{其他}\\end{array}\\right.$,则常数$a=$____",
     "options": {
       "A": "$\\frac{1}{3}$",
       "B": "2",

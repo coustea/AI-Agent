@@ -47,7 +47,6 @@ GRAPH_NODE_NAMES = {
     "classify",
     "answer_node",
     "search_node",
-    "knowledge_node",
     "attachment_answer",
     "teaching_diagram_generate",
 }
@@ -163,7 +162,6 @@ class TutorAgent:
             graph.add_node("classify", self._classify_node)
             graph.add_node("answer_node", self._answer_node)
             graph.add_node("search_node", self._search_node)
-            graph.add_node("knowledge_node", self._knowledge_node)
             graph.add_node("attachment_answer", self._attachment_answer_node)
             graph.add_node("teaching_diagram_generate", self._teaching_diagram_generate_node)
 
@@ -176,7 +174,6 @@ class TutorAgent:
                     "direct": "answer_node",
                     "diagram_only": "teaching_diagram_generate",
                     "search": "search_node",
-                    "knowledge": "knowledge_node",
                     "attachment_needed": "attachment_answer",
                 },
             )
@@ -189,7 +186,6 @@ class TutorAgent:
                 },
             )
             graph.add_edge("search_node", "answer_node")
-            graph.add_edge("knowledge_node", "answer_node")
             graph.add_conditional_edges(
                 "attachment_answer",
                 self._route_after_answer,
@@ -216,7 +212,11 @@ class TutorAgent:
     # ------------------------------------------------------------------
 
     async def _classify_node(self, state: TutorState) -> dict[str, Any]:
-        """分类节点：决定意图路由与执行模式。"""
+        """分类节点：决定意图路由与执行模式。
+
+        知识库检索已改为 Agent Tool，不再作为独立节点。
+        当 enable_knowledge_base=True 时，会在 state 中标记，供 answer_node 绑定工具时使用。
+        """
         from app.chat.diagram import explicit_diagram_requested, diagram_only_requested, previous_teaching_exchange
 
         user_id = state.get("user_id")
@@ -238,14 +238,11 @@ class TutorAgent:
             if need_diagram != need_teaching_diagram:
                 state_updates["need_teaching_diagram"] = need_diagram
 
-            # 根据附件情况、搜索/知识库开关以及是否只要画图，决定路由去向
+            # 根据附件情况、搜索开关以及是否只要画图，决定路由去向
+            # 知识库检索改为 Tool 方式，不作为独立路由
             if has_attachments:
-                if enable_web_search and enable_knowledge_base:
-                    execution_mode = "attachment_search_knowledge"
-                elif enable_web_search:
+                if enable_web_search:
                     execution_mode = "attachment_search"
-                elif enable_knowledge_base:
-                    execution_mode = "attachment_knowledge"
                 else:
                     execution_mode = "attachment"
                 route = "attachment_needed"
@@ -253,8 +250,9 @@ class TutorAgent:
                 route = "search"
                 execution_mode = "search"
             elif enable_knowledge_base:
-                route = "knowledge"
-                execution_mode = "knowledge"
+                # 知识库开启但没有联网搜索时，走 direct 路由，由 answer_node 绑定知识库工具
+                route = "direct"
+                execution_mode = "knowledge_tool"
             elif need_diagram and diagram_only_requested(user_message):
                 _, prior_answer = previous_teaching_exchange(list(messages))
                 if prior_answer:
@@ -320,30 +318,6 @@ class TutorAgent:
                 "search_result": search_result,
                 "knowledge_sources": knowledge_sources,
                 "termination_reason": "search_done",
-            }
-
-    async def _knowledge_node(self, state: TutorState) -> dict[str, Any]:
-        """知识库检索节点：只查本地 Chroma 知识库，不触发联网搜索。"""
-        from app.chat.answer import collect_knowledge_context
-
-        messages = state.get("messages") or []
-        user_id = state.get("user_id")
-        session_id = state.get("session_id")
-        question = extract_question(messages)
-
-        with node_timer("knowledge_node", user=user_id, session=session_id):
-            logger.info("[TutorAgent] 知识库检索节点 question=%s", truncate(question, 180))
-
-            knowledge_result, knowledge_sources = await collect_knowledge_context(
-                question=question,
-            )
-
-            logger.debug("[TutorAgent] knowledge_node 完成 preview=%s", truncate(knowledge_result, 220))
-
-            return {
-                "search_result": knowledge_result,
-                "knowledge_sources": knowledge_sources,
-                "termination_reason": "knowledge_done",
             }
 
     async def _attachment_answer_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:

@@ -25,6 +25,7 @@ from app.chat.utils import (
     truncate,
 )
 from app.chat.tools.search import duckduckgo_search, serp_search, tavily_search, spark_search
+from app.chat.tools.knowledge import search_knowledge_base, format_knowledge_context
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -187,71 +188,76 @@ async def _run_tool_augmented_generation(
     config: RunnableConfig,
     fallback_text: str = "抱歉，我暂时无法回答这个问题，请稍后重试。",
     retry_prompt: str = "请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。",
+    knowledge_fallback_query: str = "",  # 知识库兜底查询
 ) -> dict[str, Any]:
-    """带保护的工具增强生成循环。"""
+    """带保护的工具增强生成循环。
+
+    支持知识库兜底：当模型不支持 function calling 时，自动调用知识库检索。
+    注意：星火模型不支持标准 function calling，因此不绑定 tools，直接使用基础 LLM。
+    """
     start_time = time.monotonic()
-    
+
     tools_by_name = {t.name: t for t in tools}
-    llm_with_tools = agent.llm.model.bind_tools(tools) if tools else agent.llm
-    
+
+    # 星火模型不支持标准 function calling，直接使用基础 LLM 避免序列化问题
+    # 知识库检索通过 knowledge_fallback_query 参数兜底实现
+    llm_to_use = agent.llm if tools else agent.llm
+
     full_messages = list(messages)
     final_result = None
-    
-    for round_idx in range(MAX_TOOL_CALL_ROUNDS):
-        if time.monotonic() - start_time > TOOL_LOOP_TIMEOUT_SECONDS:
-            logger.warning("[TutorAgent] %s 工具调用超时，强制结束循环", node_name)
-            break
-            
-        result = await stream_answer_with_retry(
-            agent,
-            full_messages,
-            node_name=node_name,
-            config=config,
-            runnable=llm_with_tools,
-            fallback_text=fallback_text,
-            retry_prompt=retry_prompt,
-        )
-        
-        tool_calls = getattr(result, "tool_calls", [])
-        if not tool_calls:
-            final_result = result
-            break
-            
-        from langchain_core.messages import ToolMessage
-        full_messages.append(result)
-        
-        for tc in tool_calls:
-            tool_name = tc.get("name", "")
-            tool_args = tc.get("args", {})
-            tool_id = tc.get("id", "")
-            
-            try:
-                if tool_name in tools_by_name:
-                    tool_result = await tools_by_name[tool_name].ainvoke(tool_args)
-                else:
-                    tool_result = f"Error: Tool {tool_name} not found"
-                full_messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=str(tool_result)))
-            except Exception as exc:
-                logger.warning("[TutorAgent] 工具调用失败 %s: %s", tool_name, exc)
-                full_messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=f"调用失败: {exc}"))
+    knowledge_sources: list[dict[str, Any]] = []
 
-    if final_result is None:
-        logger.warning("[TutorAgent] %s 超出最大工具调用轮次/超时，强制生成最终回答", node_name)
-        final_result = await stream_answer_with_retry(
-            agent,
-            full_messages + [HumanMessage(content="请根据之前的工具结果，给出最终回答。不要再次尝试调用任何工具。")],
-            node_name=node_name,
-            config=config,
-            runnable=agent.llm,
-            fallback_text=fallback_text,
-            retry_prompt=retry_prompt,
-        )
+    result = await stream_answer_with_retry(
+        agent,
+        full_messages,
+        node_name=node_name,
+        config=config,
+        runnable=llm_to_use,
+        fallback_text=fallback_text,
+        retry_prompt=retry_prompt,
+    )
+
+    final_result = result
+
+    # 知识库兜底：如果开启了知识库，自动检索并注入
+    if knowledge_fallback_query and "search_knowledge_base" in tools_by_name:
+        logger.info("[TutorAgent] %s 知识库兜底检索 query=%s", node_name, truncate(knowledge_fallback_query, 100))
+        try:
+            # 获取检索结果和来源信息
+            kb_context, kb_rows = format_knowledge_context(knowledge_fallback_query)
+            knowledge_sources = [
+                {
+                    "rank": item.get("rank"),
+                    "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("book_title") or "未知来源",
+                    "file_name": (item.get("metadata") or {}).get("file_name") or "",
+                    "distance": item.get("distance"),
+                }
+                for item in kb_rows
+            ]
+
+            if kb_context and "没有检索到" not in kb_context:
+                # 将知识库结果注入消息，让模型参考
+                enhanced_messages = list(full_messages)
+                enhanced_messages.append(HumanMessage(
+                    content=f"【本地知识库检索结果】\n{kb_context}\n\n请参考以上内容回答用户问题。"
+                ))
+                final_result = await stream_answer_with_retry(
+                    agent,
+                    enhanced_messages,
+                    node_name=node_name,
+                    config=config,
+                    fallback_text=fallback_text,
+                    retry_prompt=retry_prompt,
+                )
+        except Exception as exc:
+            logger.warning("[TutorAgent] 知识库兜底检索失败: %s", exc)
 
     return {
         "messages": [final_result],
         "answer_text": final_result.content,
         "retrieved_profile_context": "",
         "retrieved_memory_context": "",
+        "knowledge_sources": knowledge_sources,
         "termination_reason": f"{node_name}_done",
     }
 
@@ -263,14 +269,17 @@ async def collect_search_context(
     system_prompt: str,
     messages: list[Any],
     attachment_context: str = "",
-    include_knowledge: bool = False,
+    include_knowledge: bool = False,  # Deprecated: 知识库已改为工具，此参数保留兼容但不再使用
 ) -> tuple[str, list[dict[str, Any]]]:
-    """联网搜索和本地知识库上下文收集。"""
+    """联网搜索上下文收集。
+
+    注意：本地知识库检索已改为 Agent Tool，不再在此处预检索。
+    """
     from app.prompts import registry
-    
+
     attachment_context_section = f"\n\n附件预分析上下文：\n{attachment_context}" if attachment_context else ""
     search_instruction_template = registry.get("chat/search_instruction")
-    
+
     search_instruction = HumanMessage(
         content=search_instruction_template.format(attachment_context_section=attachment_context_section)
     )
@@ -287,18 +296,10 @@ async def collect_search_context(
         logger.warning("[TutorAgent] 搜索意图生成失败，进入直接检索兜底 err=%s", exc)
 
     search_result = normalize_message_content(getattr(response, "content", "") if response else "")
-    
-    knowledge_sources: list[dict[str, Any]] = []
-    if include_knowledge:
-        knowledge_context, knowledge_sources = await collect_knowledge_context(question=question)
-        if knowledge_sources:
-            search_result = (
-                f"【本地知识库检索结果】\n{knowledge_context}\n\n{search_result}"
-            ).strip()
 
     tool_calls = getattr(response, "tool_calls", []) if response else []
     tool_results = []
-    
+
     async def invoke_search_tool(tool_call):
         tool_name = tool_call.get("name", "")
         tool_args = tool_call.get("args", {})
@@ -350,34 +351,15 @@ async def collect_search_context(
             tool_results.append(f"【tavily_search (自动兜底)】\n{tavily_result}")
 
     combined_parts = [part for part in [search_result, "\n\n".join(tool_results)] if part.strip()]
-    return "\n\n".join(combined_parts), knowledge_sources
-
-
-async def collect_knowledge_context(*, question: str) -> tuple[str, list[dict[str, Any]]]:
-    """收集本地知识库上下文，不触发联网搜索。"""
-    from app.chat.tools.knowledge import format_knowledge_context
-
-    knowledge_context, knowledge_rows = format_knowledge_context(question)
-    knowledge_sources = [
-        {
-            "rank": item.get("rank"),
-            "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("file_name") or "未知来源",
-            "file_name": (item.get("metadata") or {}).get("file_name") or "",
-            "chunk_index": item.get("metadata", {}).get("chunk_index") if isinstance(item.get("metadata"), dict) else None,
-            "distance": item.get("distance"),
-        }
-        for item in knowledge_rows
-    ]
-    if not knowledge_rows:
-        return "本地知识库没有检索到相关内容，或知识库尚未正确加载。", []
-    return knowledge_context, knowledge_sources
+    return "\n\n".join(combined_parts), []
 
 
 async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
     """统一自适应回答节点。
-    
+
     当 state 存在 search_result 时，充当总结回答角色 (spark_summary)；
     当 state 没有 search_result 时，充当直接回答角色 (direct_answer)，支持自主调用搜索和记忆工具。
+    当 enable_knowledge_base=True 时，绑定知识库检索工具供 Agent 自主调用。
     """
     messages = list(state.get("messages") or [])
     user_id = state.get("user_id")
@@ -386,16 +368,26 @@ async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> 
     question = extract_question(messages)
     search_result = state.get("search_result", "")
     diagram_enabled = bool(state.get("need_teaching_diagram", False))
+    enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
+
+    # 构建工具列表
+    from app.chat.tools.memory import make_memory_tools
+    memory_tools = []
+    if agent.context.memory_reader:
+        memory_tools = make_memory_tools(agent.context.memory_reader)
+
+    # 知识库工具：当开启知识库时绑定
+    knowledge_tools = [search_knowledge_base] if enable_knowledge_base else []
 
     if search_result:
         node_name = "spark_summary"
         with node_timer("spark_summary", user=user_id, session=session_id):
             logger.debug("[TutorAgent] Spark 总结回答：question=%s", truncate(question, 180))
-            
+
             sections_dict = _load_answer_policy_sections()
             summary_template = sections_dict.get("搜索总结提示词", "")
             prompt_content = summary_template.format(question=question, search_result=search_result)
-            
+
             fallback_text = search_result or "抱歉，我暂时无法回答这个问题，请稍后重试。"
             retry_prompt = "请基于已有资料重新回答，给出完整、可读、适合教学场景的中文回答。"
 
@@ -404,39 +396,30 @@ async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> 
                 question=question,
                 diagram_enabled=diagram_enabled,
             )
-            
+
             full_messages = [
                 SystemMessage(content=scoped_prompt),
                 HumanMessage(content=prompt_content),
             ]
-            
-            # 仅记忆工具
-            from app.chat.tools.memory import make_memory_tools
-            memory_tools = []
-            if agent.context.memory_reader:
-                memory_tools = make_memory_tools(agent.context.memory_reader)
-            tools = memory_tools
-            
+
+            # 记忆工具 + 知识库工具
+            tools = memory_tools + knowledge_tools
+
     else:
         node_name = "direct_answer"
         with node_timer("direct_answer", user=user_id, session=session_id):
             logger.debug("[TutorAgent] 直接回答：question=%s", truncate(question, 180))
-            
+
             scoped_prompt = _scoped_answer_prompt(
                 system_prompt,
                 question=question,
                 diagram_enabled=diagram_enabled,
             )
-            
+
             full_messages = build_messages(scoped_prompt, list(messages))
-            
-            # 仅记忆工具
-            from app.chat.tools.memory import make_memory_tools
-            memory_tools = []
-            if agent.context.memory_reader:
-                memory_tools = make_memory_tools(agent.context.memory_reader)
-            
-            tools = memory_tools
+
+            # 记忆工具 + 知识库工具
+            tools = memory_tools + knowledge_tools
             fallback_text = "抱歉，我暂时无法回答这个问题，请稍后重试。"
             retry_prompt = "请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。"
 
@@ -448,6 +431,7 @@ async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> 
         config=config,
         fallback_text=fallback_text,
         retry_prompt=retry_prompt,
+        knowledge_fallback_query=question if enable_knowledge_base else "",
     )
 
 
@@ -490,18 +474,16 @@ async def attachment_answer_node(
         search_context = ""
         knowledge_sources: list[dict[str, Any]] = []
         enable_web_search = bool(state.get("enable_web_search", False))
-        enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
         if enable_web_search:
+            # 搜索节点会获取网络搜索结果，知识库改为工具后不再在此处混合
             search_context, knowledge_sources = await collect_search_context(
                 agent=agent,
                 question=question,
                 system_prompt=system_prompt,
                 messages=messages,
                 attachment_context=full_context,
-                include_knowledge=enable_knowledge_base,
+                include_knowledge=False,  # 知识库改为工具，不再在此处预检索
             )
-        elif enable_knowledge_base:
-            search_context, knowledge_sources = await collect_knowledge_context(question=question)
 
         answer_prompt = f"""用户问题: {question}
 
@@ -527,22 +509,23 @@ async def attachment_answer_node(
         )
         full_messages = build_messages(scoped_prompt, [HumanMessage(content=answer_prompt)])
 
-        result = await stream_answer_with_retry(
-            agent,
-            full_messages,
+        # 构建工具列表：知识库工具在开启时绑定
+        from app.chat.tools.memory import make_memory_tools
+        memory_tools = []
+        if agent.context.memory_reader:
+            memory_tools = make_memory_tools(agent.context.memory_reader)
+
+        enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
+        knowledge_tools = [search_knowledge_base] if enable_knowledge_base else []
+        tools = memory_tools + knowledge_tools
+
+        return await _run_tool_augmented_generation(
+            agent=agent,
+            messages=full_messages,
+            tools=tools,
             node_name="attachment_answer",
             config=config,
+            fallback_text="抱歉，我暂时无法回答这个问题，请稍后重试。",
+            retry_prompt="请重新回答用户问题，给出完整、可读、适合教学场景的中文回答。",
+            knowledge_fallback_query=question if enable_knowledge_base else "",
         )
-
-        return {
-            "messages": [result],
-            "answer_text": result.content,
-            "retrieved_profile_context": "",
-            "retrieved_memory_context": "",
-            "attachment_analysis_result": {
-                "mode": "upload_preanalysis",
-                "analysis_context": full_context,
-            },
-            "knowledge_sources": knowledge_sources,
-            "termination_reason": "attachment_answer_done",
-        }
