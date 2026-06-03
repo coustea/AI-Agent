@@ -27,7 +27,7 @@
                     </div>
 
                     <div class="debug-question-id">ID: {{ randomQuestion.id }}</div>
-                    <div class="question-text markdown-body" v-html="renderMarkdown(randomQuestion.content)"></div>
+                    <div :class="['question-text', 'markdown-body', { 'analysis-markdown-compact': isAnalysisQuestion(randomQuestion) }]" v-html="renderMarkdown(getDisplayQuestionText(randomQuestion))"></div>
 
                     <!-- 客观题选项 -->
                     <div
@@ -96,7 +96,7 @@
                         <div class="analysis-title">参考答案: <span class="ans-badge">{{ formatAnswer(randomQuestion.answer) }}</span></div>
                         <div class="analysis-body markdown-body">
                           <strong>答案解析：</strong>
-                          <div v-html="renderMarkdown(randomQuestion.analysis)"></div>
+                          <div v-html="renderMarkdown(getDisplayAnalysisText(randomQuestion))"></div>
                         </div>
                         <div class="analysis-tags">
                           <span class="tag-title">知识点：</span>
@@ -324,7 +324,7 @@
                 </div>
                 <div class="q-card-body">
                   <div class="debug-question-id">ID: {{ q.id }}</div>
-                  <div class="q-content markdown-body" v-html="renderMarkdown(q.content)"></div>
+                  <div :class="['q-content', 'markdown-body', { 'analysis-markdown-compact': isAnalysisQuestion(q) }]" v-html="renderMarkdown(getDisplayQuestionText(q))"></div>
 
                   <div v-if="isOptionQuestion(q)" class="q-browser-options">
                     <div
@@ -384,9 +384,9 @@
                 <transition name="el-collapse-transition">
                   <div v-if="isDetailExpanded(q.id)" class="q-card-detail-analysis">
                     <div class="detail-ans">参考答案: <span class="ans-label">{{ formatAnswer(q.answer) }}</span></div>
-                    <div class="detail-anal markdown-body">
+                    <div :class="['detail-anal', 'markdown-body', { 'analysis-markdown-compact': isAnalysisQuestion(q) }]">
                       <strong>解析：</strong>
-                      <div v-html="renderMarkdown(q.analysis)"></div>
+                      <div v-html="renderMarkdown(getDisplayAnalysisText(q))"></div>
                     </div>
                     <div class="detail-kps">
                       <span>知识点：</span>
@@ -464,7 +464,7 @@
             </div>
 
             <div class="debug-question-id">ID: {{ q.id }}</div>
-            <div class="q-text-body markdown-body" v-html="renderMarkdown(q.content)"></div>
+            <div :class="['q-text-body', 'markdown-body', { 'analysis-markdown-compact': isAnalysisQuestion(q) }]" v-html="renderMarkdown(getDisplayQuestionText(q))"></div>
 
             <!-- 客观题选项 -->
             <div v-if="isOptionQuestion(q)" class="q-options-area">
@@ -553,9 +553,9 @@
 
             <transition name="el-collapse-transition">
               <div v-if="isExamSubmitted && isReviewAnalysisVisible(q.id)" class="exam-q-analysis-panel">
-                <div class="analysis-body markdown-body">
+                <div :class="['analysis-body', 'markdown-body', { 'analysis-markdown-compact': isAnalysisQuestion(q) }]">
                   <strong>答案解析：</strong>
-                  <div v-html="renderMarkdown(q.analysis)"></div>
+                  <div v-html="renderMarkdown(getDisplayAnalysisText(q))"></div>
                 </div>
                 <div class="analysis-kps">
                   <span>考查知识点：</span>
@@ -739,8 +739,139 @@ const normalizeQuizMath = (text: string) => {
   return normalized.replace(/(?<!\$)\$(\${2,})$/gm, '$');
 };
 
+const SHORT_FRAGMENT_LINE = /^[A-Za-z0-9(),.=，。．、…+\-−]{1,4}$/;
+
+const rebuildShortFragmentBlock = (block: string[]) => {
+  const merged = block
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\b([a-zA-Z])\s+(\d+|n)\b/g, '$1$2')
+    .replace(/\bna\b/g, 'an')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s*=\s*/g, ' = ')
+    .replace(/(?:,\s*){3,}/g, ', ..., ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return merged || block.join(' ');
+};
+
+const normalizeFragmentedLinearListText = (text: string) => {
+  if (!text) return '';
+
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const repaired: string[] = [];
+  let buffer: string[] = [];
+
+  const flushBuffer = () => {
+    if (!buffer.length) return;
+
+    const tokenLikeCount = buffer.filter(line => SHORT_FRAGMENT_LINE.test(line.trim())).length;
+    const hasListMarkers = buffer.some(line => /[=(),]|(^|\s)L(\s|$)|(^|\s)a(\s|$)|\d/.test(line));
+
+    if (buffer.length >= 6 && tokenLikeCount === buffer.length && hasListMarkers) {
+      repaired.push(rebuildShortFragmentBlock(buffer));
+    } else {
+      repaired.push(...buffer);
+    }
+
+    buffer = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed && SHORT_FRAGMENT_LINE.test(trimmed)) {
+      buffer.push(line);
+      continue;
+    }
+
+    flushBuffer();
+    repaired.push(line);
+  }
+
+  flushBuffer();
+  return repaired.join('\n');
+};
+
+const SHORT_MATH_FRAGMENT_LINE = /^[A-Za-z0-9(){}\[\],.=<>!+\-−≤≥^*\/]{1,8}$/;
+
+const rebuildShortMathFragmentBlock = (block: string[]) => {
+  const merged = block
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\b([A-Za-z])\s+(\d+|n|i|j|k|m)\b/g, '$1$2')
+    .replace(/\bmax\s+int\b/gi, 'maxint')
+    .replace(/\b([A-Za-z0-9_]+)\s*!\b/g, '$1!')
+    .replace(/([0-9A-Za-z_])\s*\^\s*([0-9A-Za-z_])/g, '$1^$2')
+    .replace(/([0-9A-Za-z_])\s*≤\s*([0-9A-Za-z_])/g, '$1 ≤ $2')
+    .replace(/([0-9A-Za-z_])\s*≥\s*([0-9A-Za-z_])/g, '$1 ≥ $2')
+    .replace(/([0-9A-Za-z_])\s*<\s*([0-9A-Za-z_])/g, '$1 < $2')
+    .replace(/([0-9A-Za-z_])\s*>\s*([0-9A-Za-z_])/g, '$1 > $2')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s*=\s*/g, ' = ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return merged || block.join(' ');
+};
+
+const normalizeFragmentedAnalysisMathText = (text: string) => {
+  if (!text) return '';
+
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const repaired: string[] = [];
+  let buffer: string[] = [];
+
+  const flushBuffer = () => {
+    if (!buffer.length) return;
+
+    const tokenLikeCount = buffer.filter(line => SHORT_MATH_FRAGMENT_LINE.test(line.trim())).length;
+    const hasMathMarkers = buffer.some(line => /[<>=!^≤≥()]|\d|[A-Za-z]/.test(line));
+
+    if (buffer.length >= 5 && tokenLikeCount === buffer.length && hasMathMarkers) {
+      repaired.push(rebuildShortMathFragmentBlock(buffer));
+    } else {
+      repaired.push(...buffer);
+    }
+
+    buffer = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed && SHORT_MATH_FRAGMENT_LINE.test(trimmed)) {
+      buffer.push(line);
+      continue;
+    }
+
+    flushBuffer();
+    repaired.push(line);
+  }
+
+  flushBuffer();
+  return repaired.join('\n');
+};
+
+const compactAnalysisSpacing = (text: string) => {
+  if (!text) return '';
+
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+\n/g, '\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 const renderQuizKatexHtml = (text: string) => {
-  const normalized = normalizeQuizMath(text || '');
+  const normalized = normalizeQuizMath(normalizeFragmentedLinearListText(text || ''));
   if (!normalized.trim()) return '';
 
   const parts = normalized.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g).filter(Boolean);
@@ -1202,6 +1333,22 @@ const getDifficultyType = (diff?: string | null) => {
 
 const isOptionQuestion = (question: Question) => {
   return question.type === '选择题' || question.type === '多选题' || question.type === '判断题';
+};
+
+const isAnalysisQuestion = (question: Question) => {
+  return /简答题|分析题|绠€绛旈|鍒嗘瀽棰?/.test(question.type || '');
+};
+
+const getDisplayQuestionText = (question: Question) => {
+  const content = question.content || '';
+  if (!isAnalysisQuestion(question)) return content;
+  return compactAnalysisSpacing(normalizeFragmentedAnalysisMathText(content));
+};
+
+const getDisplayAnalysisText = (question: Question) => {
+  const analysis = question.analysis || '';
+  if (!isAnalysisQuestion(question)) return analysis;
+  return compactAnalysisSpacing(normalizeFragmentedAnalysisMathText(analysis));
 };
 
 const getQuestionOptions = (question: Question) => {
@@ -1931,6 +2078,50 @@ onUnmounted(() => {
 .q-content:deep(p),
 .q-text-body:deep(p) {
   margin: 0.4rem 0;
+}
+
+.analysis-markdown-compact:deep(p) {
+  margin: 0.4rem 0;
+  line-height: inherit;
+}
+
+.analysis-markdown-compact:deep(pre) {
+  margin: 0.45rem 0;
+  padding-top: 0.55rem;
+  padding-right: 0.6rem;
+  padding-bottom: 0.55rem;
+  padding-left: 0.6rem;
+  line-height: inherit;
+  overflow-x: auto;
+}
+
+.analysis-markdown-compact:deep(code) {
+  line-height: inherit;
+}
+
+.analysis-markdown-compact:deep(pre code) {
+  display: block;
+  white-space: pre;
+  font-size: inherit;
+}
+
+.analysis-markdown-compact:deep(ul),
+.analysis-markdown-compact:deep(ol) {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+
+.analysis-markdown-compact:deep(li) {
+  margin: 0.2rem 0;
+  line-height: inherit;
+}
+
+.analysis-markdown-compact:deep(h1),
+.analysis-markdown-compact:deep(h2),
+.analysis-markdown-compact:deep(h3),
+.analysis-markdown-compact:deep(h4) {
+  margin: 0.5rem 0 0.25rem;
+  line-height: inherit;
 }
 
 .q-browser-options {

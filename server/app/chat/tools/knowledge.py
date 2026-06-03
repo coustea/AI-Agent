@@ -26,6 +26,25 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Cache for query embeddings to avoid repeated model calls.
+# Key: normalized query string, Value: embedding vector.
+_QUERY_EMBEDDING_CACHE_SIZE = 500
+
+
+@lru_cache(maxsize=1)
+def _get_embeddings() -> OllamaEmbeddings | None:
+    """Get Ollama embeddings instance (cached)."""
+    if not KB_ENABLED:
+        return None
+    try:
+        return OllamaEmbeddings(
+            model=KB_EMBED_MODEL,
+            base_url=KB_OLLAMA_BASE_URL,
+        )
+    except Exception:
+        logger.exception("[knowledge] failed to create embeddings")
+        return None
+
 
 @lru_cache(maxsize=1)
 def _get_vectorstore() -> Chroma | None:
@@ -39,10 +58,9 @@ def _get_vectorstore() -> Chroma | None:
         return None
 
     try:
-        embeddings = OllamaEmbeddings(
-            model=KB_EMBED_MODEL,
-            base_url=KB_OLLAMA_BASE_URL,
-        )
+        embeddings = _get_embeddings()
+        if embeddings is None:
+            return None
         return Chroma(
             collection_name=KB_COLLECTION,
             embedding_function=embeddings,
@@ -53,6 +71,23 @@ def _get_vectorstore() -> Chroma | None:
         return None
 
 
+@lru_cache(maxsize=_QUERY_EMBEDDING_CACHE_SIZE)
+def _get_cached_embedding(query: str) -> tuple[float, ...] | None:
+    """Get embedding for query with LRU cache.
+
+    Returns tuple for hashability (list is not hashable).
+    """
+    embeddings = _get_embeddings()
+    if embeddings is None:
+        return None
+    try:
+        embedding = embeddings.embed_query(query)
+        return tuple(embedding) if embedding else None
+    except Exception:
+        logger.exception("[knowledge] failed to embed query")
+        return None
+
+
 def retrieve_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str, Any]]:
     vectorstore = _get_vectorstore()
     normalized_query = (query or "").strip()
@@ -60,8 +95,15 @@ def retrieve_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str
         return []
 
     try:
-        rows = vectorstore.similarity_search_with_score(
-            normalized_query,
+        # Use cached embedding to avoid repeated model calls
+        cached_embedding = _get_cached_embedding(normalized_query)
+        if cached_embedding is None:
+            return []
+
+        # Use similarity_search_by_vector_with_relevance_scores for distance info
+        # This method returns List[Tuple[Document, float]]
+        rows = vectorstore.similarity_search_by_vector_with_relevance_scores(
+            list(cached_embedding),
             k=top_k or KB_TOP_K,
         )
     except Exception:
@@ -107,7 +149,7 @@ def format_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[s
 
 @tool("search_knowledge_base")
 def search_knowledge_base(query: str) -> str:
-    """Search the local course knowledge base and return relevant textbook snippets."""
+    """搜索本地课程知识库，返回教材相关内容片段。适用于查询学术概念、定义、理论等教材内容。"""
     context, rows = format_knowledge_context(query)
     if not rows:
         return "本地知识库没有检索到相关内容，或知识库尚未正确加载。"
