@@ -6,7 +6,7 @@ app:
 
 # 数据库配置
 database:
-  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://coustea:Aa123456@101.43.200.154:5432/agent"
   echo: false
   pool_size: 10
   max_overflow: 20
@@ -23,18 +23,13 @@ jwt:
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
   # 文本模型（修改以下三项即可切换本地/云端）
-  # 本地大模型配置 (端口 10000)
-  base_url: "http://127.0.0.1:10000/v1"
-  api_key: "local"
-  model_name: "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
-  concurrency: 10
+  base_url: "https://spark-api-open.xf-yun.com/v1/chat/completions"
+  api_key: "fsUxWflgdQvAuDDKwAau:wyIMVaJXZGgQwFohkdhS"
+  # Spark Pro: generalv3; Spark Max: generalv3.5; Spark Pro-128K: pro-128k
+  model_name: "generalv3"
+  concurrency: 5
 
-  # 云端配置（备用）
-  # base_url: "https://spark-api-open.xf-yun.com/v1"
-  # api_key: "hpsPlkflXyCLIrMxjSDk:RmSfDFfHtnSCmgtlCtiC"
-  # model_name: "4.0Ultra"
-  # concurrency: 10
-
+  
   # 图片理解模型（独立配置）
   vision:
     base_url: "https://open.bigmodel.cn/api/paas/v4/"
@@ -65,6 +60,7 @@ avatar:
 # 搜索服务
 search:
   tavily_key: "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"
+  spark_key: "fJBSbtdchNCLigLHcEMn:HWSLhFEcXxAItAvgvERb"
 
 # 路径配置
 paths:
