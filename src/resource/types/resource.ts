@@ -63,7 +63,6 @@ export interface ResourceGenerationRequest {
     ppt: {
       page_count: number
       difficulty: 'beginner' | 'intermediate' | 'advanced'
-      output_format: 'preview'
     }
   }
 }

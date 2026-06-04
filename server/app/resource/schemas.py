@@ -117,7 +117,6 @@ class PptConfig(BaseModel):
     """PPT Agent 配置。"""
     page_count: int = Field(default=6, ge=3, le=20)
     difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
-    output_format: Literal["preview"] = "preview"
 
 
 class AgentConfigs(BaseModel):
