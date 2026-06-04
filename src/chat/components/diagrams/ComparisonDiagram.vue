@@ -75,13 +75,13 @@ defineProps<{
 }
 
 .entity.left {
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(219, 234, 254, 0.4) 100%);
-  border: 1px solid rgba(191, 219, 254, 0.6);
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
 }
 
 .entity.right {
-  background: linear-gradient(135deg, rgba(240, 253, 244, 0.9) 0%, rgba(220, 252, 231, 0.4) 100%);
-  border: 1px solid rgba(187, 247, 208, 0.6);
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
 }
 
 .entity-name {
@@ -174,8 +174,8 @@ defineProps<{
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.8) 0%, rgba(240, 253, 244, 0.8) 100%);
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
 }

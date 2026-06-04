@@ -14,13 +14,6 @@ interface CourseProfileCard {
 
 type KnowledgeMasteryItem = Record<string, any>
 
-function toDisplayValue(value: unknown, fallback = '暂无'): string {
-  if (!value) return fallback
-  if (Array.isArray(value)) return value.join(' / ') || fallback
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
 function getLearningProfile(profile: ProfileData | null) {
   return (profile?.learning_profile as any) || {}
 }
@@ -33,16 +26,6 @@ export function getGlobalProfileCards(profile: ProfileData | null): DisplayItem[
     { label: '学习阶段', value: globalProfile.student_stage?.value || '暂无' },
     { label: '学习节奏', value: globalProfile.learning_pace?.value || '暂无' },
     { label: '认知风格', value: globalProfile.cognitive_style?.value || '暂无' },
-  ]
-}
-
-export function getExtendedGlobalProfileCards(profile: ProfileData | null): DisplayItem[] {
-  const globalProfile = getLearningProfile(profile).global_profile || {}
-
-  return [
-    ...getGlobalProfileCards(profile),
-    { label: '实践画像', value: toDisplayValue(globalProfile.practice_profile?.value) },
-    { label: '资源偏好', value: toDisplayValue(globalProfile.resource_preference_weight?.value) },
   ]
 }
 
@@ -67,7 +50,7 @@ export function getStrategyList(profile: ProfileData | null): string[] {
   ].filter(Boolean) as string[]
 }
 
-export function getMasteryItems(profile: ProfileData | null): KnowledgeMasteryItem[] {
+function getMasteryItems(profile: ProfileData | null): KnowledgeMasteryItem[] {
   return (profile?.knowledge_mastery || []) as KnowledgeMasteryItem[]
 }
 

@@ -5,7 +5,6 @@ export type LearningEventType =
   | 'path_feedback'
   | 'tutor_helpful'
   | 'resource_feedback'
-  | 'learning_heartbeat'
 
 export interface LearningEventCreate {
   event_type: LearningEventType
@@ -18,8 +17,21 @@ export interface LearningEventCreate {
   course?: string | null
   topic?: string | null
   score?: number | null
-  duration_seconds?: number | null
   feedback?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export interface LearningSessionCreate {
+  source_page: string
+  started_at: string
+  ended_at: string
+  duration_seconds: number
+  resource_id?: number | null
+  path_id?: number | null
+  path_node_id?: number | null
+  node_id?: string | null
+  course?: string | null
+  topic?: string | null
   metadata?: Record<string, unknown>
 }
 
@@ -34,7 +46,6 @@ export interface LearningEventItem {
   course: string | null
   topic: string | null
   score: number | null
-  duration_seconds: number | null
   feedback: string | null
   created_at: string
 }
@@ -60,7 +71,7 @@ export interface LearningTimeStats {
   context_breakdown?: Record<string, number>
 }
 
-export interface QuizBankQuestion {
+interface QuizBankQuestion {
   id: string
   subject: string
   subject_en?: string | null

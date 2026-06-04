@@ -62,7 +62,7 @@ export const formatRelativeTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString()
 }
 
-export const isCjkCharacter = (char: string): boolean => {
+const isCjkCharacter = (char: string): boolean => {
   return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(char)
 }
 
@@ -71,7 +71,7 @@ export const isInsideOpenFence = (text: string): boolean => {
   return !!fences && fences.length % 2 === 1
 }
 
-export const takeAsciiWordUnit = (text: string): number => {
+const takeAsciiWordUnit = (text: string): number => {
   const word = text.match(/^[A-Za-z0-9_]+(?:['-][A-Za-z0-9_]+)*/)
   if (!word) return 1
   let take = word[0].length

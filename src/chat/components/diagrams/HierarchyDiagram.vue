@@ -29,8 +29,8 @@ defineProps<{
 .root-node {
   justify-self: center;
   padding: 12px 28px;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(219, 234, 254, 0.5) 100%);
-  border: 2px solid rgba(59, 130, 246, 0.5);
+  background: #eff6ff;
+  border: 2px solid #3b82f6;
   border-radius: 999px;
   font-size: 16px;
   font-weight: 800;
@@ -48,9 +48,8 @@ defineProps<{
 
 .branch {
   padding: 16px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-top: 4px solid #0d9488;
   border-radius: 12px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);

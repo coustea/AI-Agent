@@ -269,7 +269,7 @@ async def collect_search_context(
     system_prompt: str,
     messages: list[Any],
     attachment_context: str = "",
-    include_knowledge: bool = False,  # Deprecated: 知识库已改为工具，此参数保留兼容但不再使用
+    _include_knowledge: bool = False,  # Deprecated: 知识库已改为工具，此参数保留兼容但不再使用
 ) -> tuple[str, list[dict[str, Any]]]:
     """联网搜索上下文收集。
 
@@ -482,7 +482,6 @@ async def attachment_answer_node(
                 system_prompt=system_prompt,
                 messages=messages,
                 attachment_context=full_context,
-                include_knowledge=False,  # 知识库改为工具，不再在此处预检索
             )
 
         answer_prompt = f"""用户问题: {question}

@@ -8,7 +8,6 @@ import type {
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
-  TutoringEvidence,
   TutoringProfileUpdatePayload,
   TutoringProfileUpdateResult,
   ProfileScoreData,
@@ -23,7 +22,6 @@ export type {
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
-  TutoringEvidence,
   TutoringProfileUpdatePayload,
   TutoringProfileUpdateResult,
   ProfileScoreData,
@@ -46,6 +44,14 @@ export function getProfileOnboarding() {
 
 export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
   return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload)
+}
+
+export interface OnboardingParsePayload {
+  text: string
+}
+
+export function parseOnboardingDialogue(payload: OnboardingParsePayload) {
+  return http.post<ApiResponse<BaseInfoData>>('/ai/profile/onboarding/parse', payload)
 }
 
 export function updateProfileFromTutoring(payload: TutoringProfileUpdatePayload) {

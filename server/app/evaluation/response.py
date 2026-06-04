@@ -20,7 +20,6 @@ class LearningEventItem(BaseModel):
     course: str | None = None
     topic: str | None = None
     score: float | None = None
-    duration_seconds: int | None = None
     feedback: str | None = None
     created_at: datetime
 
@@ -63,7 +62,7 @@ class HourlyDistributionEntry(BaseModel):
 
 
 class LearningTimeStatsResponse(BaseModel):
-    """Learning time statistics response."""
+    """学习时长统计响应 — 从 LearningSession 表聚合。"""
 
     today_seconds: int = Field(default=0, ge=0)
     week_seconds: int = Field(default=0, ge=0)

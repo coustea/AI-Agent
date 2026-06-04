@@ -475,12 +475,38 @@ class LearningEvent(SQLModel, table=True):
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
     score: float | None = Field(default=None)
-    duration_seconds: int | None = Field(default=None)
     feedback: str | None = Field(default=None, sa_column=Column(Text))
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
+
+
+class LearningSession(SQLModel, table=True):
+    """学习会话表 — 记录用户在某个学习页面上的实际活跃时长。"""
+    __tablename__ = "learning_sessions"
+    __table_args__ = (
+        Index("ix_learning_sessions_user_started_at", "user_id", "started_at"),
+        Index("ix_learning_sessions_user_source_page", "user_id", "source_page"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    source_page: str = Field(max_length=50, description="来源页面标识")
+    started_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), index=True))
+    ended_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
+    duration_seconds: int = Field(ge=1, le=86400, description="实际活跃时长(秒)")
+    resource_id: int | None = Field(default=None)
+    path_id: int | None = Field(default=None)
+    path_node_id: int | None = Field(default=None)
+    node_id: str | None = Field(default=None, max_length=50)
+    course: str | None = Field(default=None, max_length=200)
+    topic: str | None = Field(default=None, max_length=200)
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
     )
 
 
@@ -689,6 +715,7 @@ REGISTERED_MODELS = (
     GeneratedResourceItem,
     QuizQuestion,
     LearningEvent,
+    LearningSession,
     CoursePathGenerationTask,
     CoursePath,
     CoursePathNode,

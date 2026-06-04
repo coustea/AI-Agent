@@ -6,7 +6,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.logging import get_logger
-from app.infra.models import CoursePath, LearningEvent
+from app.infra.models import CoursePath, LearningEvent, LearningSession
 from app.path.schemas import LearningSignalSnapshot
 
 logger = get_logger(__name__)
@@ -68,7 +68,13 @@ async def build_learning_signal_snapshot(
 
     completed_resource_count = sum(1 for e in events if e.event_type == "resource_completed")
     viewed_resource_count = sum(1 for e in events if e.event_type == "resource_viewed")
-    active_minutes = sum(e.duration_seconds or 0 for e in events if e.event_type == "learning_heartbeat") // 60
+
+    # 从 LearningSession 表计算活跃时长
+    session_stmt = select(LearningSession).where(LearningSession.user_id == user_id)
+    if path.id:
+        session_stmt = session_stmt.where(LearningSession.path_id == path.id)
+    session_result = await session.exec(session_stmt)
+    active_minutes = sum(s.duration_seconds or 0 for s in session_result.all()) // 60
 
     recommendations: list[str] = []
     if weak_topics:

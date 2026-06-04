@@ -1,10 +1,9 @@
 import http from '@/shared/utils/http'
 import type {
-  QuizBankQuestion,
   QuizBankQuestionListResponse,
 } from '@/learning/types/evaluation'
 
-export type { QuizBankQuestion, QuizBankQuestionListResponse }
+export type { QuizBankQuestionListResponse }
 
 export async function fetchQuizBankQuestions(params?: {
   query?: string

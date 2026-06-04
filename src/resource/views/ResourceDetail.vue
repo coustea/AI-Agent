@@ -142,7 +142,6 @@ import ReadingView from '@/resource/components/ReadingView.vue'
 import PptView from '@/resource/components/PptView.vue'
 import VideoView from '@/resource/components/VideoView.vue'
 import { getGeneratedResourceDetail } from '@/resource/api/resource-history'
-import { recordLearningEvent, recordPathLearningEvent } from '@/learning/api/evaluation'
 import type { GeneratedResourceBundle, ResourceItemDetail } from '@/resource/api/resource-history'
 import { getMockResourceDetail } from '@/resource/utils/mockResourceData'
 
@@ -161,9 +160,6 @@ const previewTitle = computed(() => {
 })
 
 const resourceId = computed(() => Number(route.params.id) || null)
-const pathId = computed(() => getNumericQuery('pathId'))
-const pathNodeId = computed(() => getNumericQuery('pathNodeId'))
-const pathNodeKey = computed(() => getStringQuery('nodeId'))
 
 onMounted(() => {
   loadResource()
@@ -213,10 +209,6 @@ const loadResource = async () => {
 }
 
 const goBack = () => {
-  if (pathId.value) {
-    router.push({ name: 'LearnPath' })
-    return
-  }
   router.push({ name: 'Profile' })
 }
 
@@ -284,45 +276,6 @@ const openResourcePreview = (item: ResourceItemDetail) => {
   if (!hasPreviewContent(item)) return
   previewItem.value = item
   previewVisible.value = true
-  recordResourceViewed(item)
-}
-
-const recordResourceViewed = (item: ResourceItemDetail) => {
-  const payload = {
-    event_type: 'resource_viewed' as const,
-    resource_id: resourceId.value,
-    resource_item_id: item.id,
-    path_id: pathId.value,
-    path_node_id: pathNodeId.value,
-    node_id: pathNodeKey.value,
-    course: resource.value?.title || resource.value?.learning_need || null,
-    topic: item.title || getAgentTypeName(item.type),
-    metadata: {
-      agent: item.type,
-      source: 'resource_detail_preview',
-    },
-  }
-
-  const request = pathId.value
-    ? recordPathLearningEvent(pathId.value, payload)
-    : recordLearningEvent(payload)
-
-  request.catch((err) => {
-    console.warn('[ResourceDetail] record resource view failed:', err)
-  })
-}
-
-const getNumericQuery = (key: string) => {
-  const value = route.query[key]
-  const raw = Array.isArray(value) ? value[0] : value
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
-}
-
-const getStringQuery = (key: string) => {
-  const value = route.query[key]
-  const raw = Array.isArray(value) ? value[0] : value
-  return raw ? String(raw) : null
 }
 
 // === 核心：导出资源到本地并支持选择路径的逻辑 ===

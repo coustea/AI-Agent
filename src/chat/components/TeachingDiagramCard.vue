@@ -112,25 +112,23 @@ const difficultyLabel: Record<string, string> = {
   --c-red: #ef4444;
   --c-ink: #0f172a;
   --c-muted: #64748b;
-  --c-border: rgba(226, 232, 240, 0.8);
-  --c-bg: rgba(255, 255, 255, 0.6);
-  --c-glass: rgba(255, 255, 255, 0.85);
+  --c-border: #e2e8f0;
+  --c-bg: #f8fafc;
+  --c-white: #ffffff;
 
   display: grid;
   gap: 16px;
   padding: clamp(16px, 3vw, 24px);
   color: var(--c-ink);
-  background: var(--c-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: var(--c-white);
+  border: 1px solid var(--c-border);
   border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.05);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .diagram-card:not(.compact):hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 20px 25px -5px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 20px 25px -5px rgba(0, 0, 0, 0.06);
   transform: translateY(-2px);
 }
 
@@ -212,8 +210,8 @@ h3 {
   gap: 10px;
   align-items: center;
   padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.8) 0%, rgba(250, 250, 250, 0.5) 100%);
-  border: 1px solid rgba(191, 219, 254, 0.5);
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   border-radius: 10px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02) inset;
 }
@@ -245,18 +243,18 @@ h3 {
 .teaching-mistakes,
 .teaching-examples {
   padding: 14px 16px;
-  background: var(--c-bg);
+  background: #ffffff;
   border: 1px solid var(--c-border);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: background 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .teaching-core:hover,
 .teaching-points:hover,
 .teaching-mistakes:hover,
 .teaching-examples:hover {
-  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04);
 }
 
 .section-label.warn {
@@ -296,7 +294,7 @@ h3 {
 
 .card-footer {
   padding: 14px 16px;
-  background: linear-gradient(to right, rgba(248, 250, 252, 0.8), rgba(241, 245, 249, 0.4));
+  background: #f8fafc;
   border: 1px solid var(--c-border);
   border-radius: 10px;
 }

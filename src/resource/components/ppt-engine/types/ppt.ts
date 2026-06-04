@@ -11,7 +11,7 @@ export interface PPTConfig {
 }
 
 // 3. 通用页面元数据 (比如演讲者备注、自定义切换效果)
-export interface SlideMetadata {
+interface SlideMetadata {
   speaker_notes?: string;
   transition?: 'fade' | 'slide' | 'zoom' | 'none';
   background_override?: string; // 允许特殊页面自定义背景色
@@ -50,38 +50,38 @@ export interface ComparisonData {
 }
 
 // 5. 定义具体的 Slide 类型 (将 LayoutType 作为“辨识字段”)
-export interface SlideCover {
+interface SlideCover {
   layout: 'cover';
   metadata?: SlideMetadata;
   data: CoverData;
 }
 
-export interface SlideAgenda {
+interface SlideAgenda {
   layout: 'agenda';
   metadata?: SlideMetadata;
   data: AgendaData;
 }
 
-export interface SlideBulletPoints {
+interface SlideBulletPoints {
   layout: 'bullet_points';
   metadata?: SlideMetadata;
   data: BulletPointsData;
 }
 
-export interface SlideGridCards {
+interface SlideGridCards {
   layout: 'grid_cards';
   metadata?: SlideMetadata;
   data: GridCardsData;
 }
 
-export interface SlideComparison {
+interface SlideComparison {
   layout: 'comparison';
   metadata?: SlideMetadata;
   data: ComparisonData;
 }
 
 // 6. 将所有 Slide 组合成一个联合类型
-export type PPTSlide = 
+type PPTSlide = 
   | SlideCover 
   | SlideAgenda 
   | SlideBulletPoints 

@@ -67,12 +67,3 @@ export function getResourceBundle(resourceId: number) {
   return http.get<ApiResponse<any>>(`/ai/resources/${resourceId}/bundle`)
 }
 
-export function getResourceList(page = 1, pageSize = 10) {
-  return http.get<ApiResponse<any>>('/ai/resources', {
-    params: { page, page_size: pageSize },
-  })
-}
-
-export function getResourceAgents() {
-  return http.get<ApiResponse<any>>('/ai/resources/agents')
-}

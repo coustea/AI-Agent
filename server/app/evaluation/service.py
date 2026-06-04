@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.evaluation.request import LearningEventCreate
+from app.evaluation.request import LearningEventCreate, LearningSessionCreate
 from app.evaluation.response import (
     DailyTimeEntry,
     EvaluationMetric,
@@ -21,14 +21,11 @@ from app.evaluation.response import (
     LearningTimeStatsResponse,
 )
 from app.infra.logging import get_logger
-from app.infra.models import LearningEvent
+from app.infra.models import LearningEvent, LearningSession
 
 logger = get_logger(__name__)
 
-HEARTBEAT_EVENT = "learning_heartbeat"
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
-MAX_HEARTBEAT_SECONDS = 120
-MAX_NON_HEARTBEAT_SECONDS = 30
 STREAK_MIN_SECONDS = 300
 
 
@@ -50,7 +47,7 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
     if event.event_type == "quiz_submitted" and event.score is not None and event.score < 65:
         signals.append(
             MemoryUpdateSignal(
-                content=f"在“{topic}”练习中得分偏低（{event.score:.0f}分），需要加强针对性巩固。",
+                content=f"在「{topic}」练习中得分偏低（{event.score:.0f}分），需要加强针对性巩固。",
                 signal_type="quiz_result",
                 dimension="weakness_points",
                 course=event.course,
@@ -64,7 +61,7 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
         if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
             signals.append(
                 MemoryUpdateSignal(
-                    content=f"学习“{topic}”时用户反馈：{feedback}",
+                    content=f"学习「{topic}」时用户反馈：{feedback}",
                     signal_type="self_report_weakness",
                     dimension="weakness_points",
                     course=event.course,
@@ -101,7 +98,6 @@ def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> 
             course=event.course,
             topic=event.topic,
             score=event.score,
-            duration_seconds=event.duration_seconds,
             feedback=event.feedback,
             metadata=event.metadata_json or {},
         )
@@ -157,7 +153,7 @@ def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> 
 
 
 async def bg_apply_profile_update_from_learning_event(user_id: int, event_payload: dict[str, Any]) -> None:
-    """Apply non-heartbeat learning signals to the dynamic learner profile."""
+    """Apply learning signals to the dynamic learner profile."""
     update_payload = build_profile_update_payload(LearningEventCreate(**event_payload))
     if update_payload is None:
         return
@@ -173,16 +169,11 @@ async def bg_apply_profile_update_from_learning_event(user_id: int, event_payloa
         logger.warning("[Evaluation] profile update from learning signal failed user=%s err=%s", user_id, exc)
 
 
-def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryResponse:
+def build_summary_from_events(events: list[LearningEvent], active_minutes: int = 0) -> EvaluationSummaryResponse:
     score_values = [event.score for event in events if event.score is not None]
     average_score = round(sum(score_values) / len(score_values), 1) if score_values else None
     completed_resources = sum(1 for event in events if event.event_type == "resource_completed")
     viewed_resources = sum(1 for event in events if event.event_type == "resource_viewed")
-    active_seconds = sum(
-        _normalized_duration_for_summary(event)
-        for event in events
-        if event.event_type == HEARTBEAT_EVENT
-    )
 
     weak_counter: Counter[str] = Counter()
     preferred_counter: Counter[str] = Counter()
@@ -207,16 +198,16 @@ def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryR
     if average_score is not None and average_score < 70:
         recommendations.append("优先安排错题复盘和基础讲解资源，降低后续学习坡度。")
     if weak_counter:
-        recommendations.append(f"下一轮资源生成应重点覆盖“{weak_counter.most_common(1)[0][0]}”。")
+        recommendations.append(f"下一轮资源生成应重点覆盖「{weak_counter.most_common(1)[0][0]}」。")
     if preferred_counter:
-        recommendations.append(f"资源推送可提高“{preferred_counter.most_common(1)[0][0]}”占比。")
+        recommendations.append(f"资源推送可提高「{preferred_counter.most_common(1)[0][0]}」占比。")
     if not recommendations:
         recommendations.append("继续按当前路径推进，并通过阶段测验积累更多评估信号。")
 
     metrics = [
         EvaluationMetric(label="平均测验分", value="暂无" if average_score is None else f"{average_score:.1f}"),
         EvaluationMetric(label="完成资源", value=str(completed_resources)),
-        EvaluationMetric(label="活跃学习", value=f"{active_seconds // 60} 分钟"),
+        EvaluationMetric(label="活跃学习", value=f"{active_minutes} 分钟"),
     ]
 
     return EvaluationSummaryResponse(
@@ -224,7 +215,7 @@ def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryR
         average_score=average_score,
         completed_resources=completed_resources,
         viewed_resources=viewed_resources,
-        active_minutes=active_seconds // 60,
+        active_minutes=active_minutes,
         weak_topics=[item for item, _ in weak_counter.most_common(5)],
         preferred_resources=[item for item, _ in preferred_counter.most_common(5)],
         recommendations=recommendations,
@@ -240,12 +231,7 @@ class EvaluationService:
         *,
         user_id: int,
         payload: LearningEventCreate,
-    ) -> LearningEvent | None:
-        normalized_duration = _normalize_duration(payload)
-        if payload.event_type == HEARTBEAT_EVENT and normalized_duration is None:
-            logger.info("[Evaluation] Ignore invalid heartbeat user=%s", user_id)
-            return None
-
+    ) -> LearningEvent:
         event = LearningEvent(
             user_id=user_id,
             session_id=payload.session_id,
@@ -258,7 +244,6 @@ class EvaluationService:
             course=payload.course,
             topic=payload.topic,
             score=payload.score,
-            duration_seconds=normalized_duration,
             feedback=payload.feedback,
             metadata_json=payload.metadata or None,
         )
@@ -266,13 +251,47 @@ class EvaluationService:
         await session.commit()
         await session.refresh(event)
         logger.info(
-            "[Evaluation] event recorded user=%s type=%s event_id=%s duration=%s",
+            "[Evaluation] event recorded user=%s type=%s event_id=%s",
             user_id,
             payload.event_type,
             event.id,
-            normalized_duration,
         )
         return event
+
+    async def record_session(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: int,
+        payload: LearningSessionCreate,
+    ) -> LearningSession:
+        started_at = _parse_iso_datetime(payload.started_at)
+        ended_at = _parse_iso_datetime(payload.ended_at)
+        learning_session = LearningSession(
+            user_id=user_id,
+            source_page=payload.source_page,
+            started_at=started_at,
+            ended_at=ended_at,
+            duration_seconds=payload.duration_seconds,
+            resource_id=payload.resource_id,
+            path_id=payload.path_id,
+            path_node_id=payload.path_node_id,
+            node_id=payload.node_id,
+            course=payload.course,
+            topic=payload.topic,
+            metadata_json=payload.metadata or None,
+        )
+        session.add(learning_session)
+        await session.commit()
+        await session.refresh(learning_session)
+        logger.info(
+            "[Evaluation] session recorded user=%s page=%s duration=%ss session_id=%s",
+            user_id,
+            payload.source_page,
+            payload.duration_seconds,
+            learning_session.id,
+        )
+        return learning_session
 
     async def get_summary(
         self,
@@ -288,7 +307,16 @@ class EvaluationService:
             .limit(limit)
         )
         result = await session.exec(stmt)
-        return build_summary_from_events(list(result.all()))
+        events = list(result.all())
+
+        active_minutes = await self._get_active_minutes(session, user_id=user_id)
+        return build_summary_from_events(events, active_minutes=active_minutes)
+
+    async def _get_active_minutes(self, session: AsyncSession, *, user_id: int) -> int:
+        stmt = select(LearningSession).where(LearningSession.user_id == user_id)
+        result = await session.exec(stmt)
+        total_seconds = sum(s.duration_seconds or 0 for s in result.all())
+        return total_seconds // 60
 
     async def get_time_stats(
         self,
@@ -303,23 +331,21 @@ class EvaluationService:
         query_start_utc = min(bounds["month_start_utc"], _local_day_start(now_local.date() - timedelta(days=window_days - 1)))
 
         stmt = (
-            select(LearningEvent)
-            .where(LearningEvent.user_id == user_id)
-            .where(LearningEvent.event_type == HEARTBEAT_EVENT)
-            .where(LearningEvent.created_at >= query_start_utc)
-            .order_by(LearningEvent.created_at.asc())
+            select(LearningSession)
+            .where(LearningSession.user_id == user_id)
+            .where(LearningSession.started_at >= query_start_utc)
+            .order_by(LearningSession.started_at.asc())
         )
         result = await session.exec(stmt)
-        recent_events = list(result.all())
+        recent_sessions = list(result.all())
 
         total_stmt = (
-            select(LearningEvent)
-            .where(LearningEvent.user_id == user_id)
-            .where(LearningEvent.event_type == HEARTBEAT_EVENT)
-            .order_by(LearningEvent.created_at.asc())
+            select(LearningSession)
+            .where(LearningSession.user_id == user_id)
+            .order_by(LearningSession.started_at.asc())
         )
         total_result = await session.exec(total_stmt)
-        all_heartbeat_events = list(total_result.all())
+        all_sessions = list(total_result.all())
 
         today_seconds = 0
         week_seconds = 0
@@ -328,12 +354,12 @@ class EvaluationService:
         hourly_map: dict[int, int] = defaultdict(int)
         context_map: dict[str, int] = defaultdict(int)
 
-        for event in recent_events:
-            duration = _normalized_duration_for_summary(event)
+        for sess in recent_sessions:
+            duration = sess.duration_seconds or 0
             if duration <= 0:
                 continue
 
-            created_local = _to_local(event.created_at)
+            created_local = _to_local(sess.started_at)
             if created_local >= bounds["today_start_local"]:
                 today_seconds += duration
             if created_local >= bounds["week_start_local"]:
@@ -346,15 +372,12 @@ class EvaluationService:
                 daily_map[event_date] += duration
             hourly_map[created_local.hour] += duration
 
-            context = ""
-            if isinstance(event.metadata_json, dict):
-                raw_context = event.metadata_json.get("context")
-                context = str(raw_context).strip() if raw_context is not None else ""
+            context = sess.source_page
             if context:
                 context_map[context] += duration
 
-        total_seconds = sum(_normalized_duration_for_summary(event) for event in all_heartbeat_events)
-        streak_days = _compute_streak_days(all_heartbeat_events, now_local.date())
+        total_seconds = sum(s.duration_seconds or 0 for s in all_sessions)
+        streak_days = _compute_streak_days(all_sessions, now_local.date())
 
         return LearningTimeStatsResponse(
             today_seconds=today_seconds,
@@ -368,26 +391,11 @@ class EvaluationService:
         )
 
 
-def _normalize_duration(payload: LearningEventCreate) -> int | None:
-    raw = payload.duration_seconds
-    if payload.event_type == HEARTBEAT_EVENT:
-        if raw is None or raw <= 0:
-            return None
-        return min(raw, MAX_HEARTBEAT_SECONDS)
-
-    if raw is None:
-        return None
-    if raw <= 0:
-        return None
-    return min(raw, MAX_NON_HEARTBEAT_SECONDS)
-
-
-def _normalized_duration_for_summary(event: LearningEvent) -> int:
-    raw = int(event.duration_seconds or 0)
-    if raw <= 0:
-        return 0
-    cap = MAX_HEARTBEAT_SECONDS if event.event_type == HEARTBEAT_EVENT else MAX_NON_HEARTBEAT_SECONDS
-    return min(raw, cap)
+def _parse_iso_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 def _to_item(event: LearningEvent) -> LearningEventItem:
@@ -402,7 +410,6 @@ def _to_item(event: LearningEvent) -> LearningEventItem:
         course=event.course,
         topic=event.topic,
         score=event.score,
-        duration_seconds=event.duration_seconds,
         feedback=event.feedback,
         created_at=event.created_at,
     )
@@ -446,15 +453,13 @@ def _build_hourly_distribution(hourly_map: dict[int, int]) -> list[HourlyDistrib
     return [HourlyDistributionEntry(hour=hour, seconds=hourly_map.get(hour, 0)) for hour in range(24)]
 
 
-def _compute_streak_days(events: list[LearningEvent], today_local: date) -> int:
+def _compute_streak_days(sessions: list[LearningSession], today_local: date) -> int:
     daily_totals: dict[date, int] = defaultdict(int)
-    for event in events:
-        if event.event_type != HEARTBEAT_EVENT:
-            continue
-        duration = _normalized_duration_for_summary(event)
+    for sess in sessions:
+        duration = sess.duration_seconds or 0
         if duration <= 0:
             continue
-        daily_totals[_to_local(event.created_at).date()] += duration
+        daily_totals[_to_local(sess.started_at).date()] += duration
 
     streak = 0
     cursor = today_local

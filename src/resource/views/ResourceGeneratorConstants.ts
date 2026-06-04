@@ -155,18 +155,6 @@ export const getResourceToneClass = (type: string) => {
   return toneMap[type] || 'tone-blue'
 }
 
-export const getAgentShortName = (agentId: string) => {
-  const shortMap: Record<string, string> = {
-    content: '讲解',
-    mindmap: '导图',
-    code: '代码',
-    quiz: '题库',
-    reading: '阅读',
-    ppt: 'PPT',
-  }
-  return shortMap[agentId] || getResourceTypeLabel(agentId)
-}
-
 export const getAgentOutputFormat = (agentId: string) => {
   const formatMap: Record<string, string> = {
     content: 'Markdown 讲解',
@@ -204,17 +192,6 @@ export function createDagNode(id: string, isSystem: boolean): DagNodeState {
     stepHistory: [],
     isSystem,
   }
-}
-
-export function getStatusText(status: DagNodeState['status']) {
-  const statusMap: Record<DagNodeState['status'], string> = {
-    waiting: '等待中',
-    running: '运行中',
-    success: '已完成',
-    failed: '失败',
-    skipped: '已跳过',
-  }
-  return statusMap[status]
 }
 
 export function getNodeFallbackMessage(node: DagNodeState) {

@@ -418,6 +418,7 @@ const showOptimizeDialog = ref(false)
 const isOptimizing = ref(false)
 const customFeedback = ref('')
 const currentOptimizeStep = ref(0)
+const optimizationPromptKey = ref<string | null>(null)
 const presetTags = [
   '测验成绩不理想，需要强化复习',
   '概念过于抽象，增加图解和案例',
@@ -700,7 +701,6 @@ async function handleGenerateResources(node: CoursePathNodeDTO) {
         { agent_id: 'ppt', enabled: true, priority: 5 },
       ],
       agent_configs: {},
-      output_options: { output_format: 'json' },
     }
     const res = await generatePathNodeResources(node.id, defaultPayload)
     if (coursePath.value) {
@@ -784,7 +784,7 @@ async function handleSubmitQuiz(node: CoursePathNodeDTO) {
 function viewResource(node: CoursePathNodeDTO) {
   if (node.resource_id) {
     router.push({
-      name: 'ResourceDetail',
+      name: 'PathResourceDetail',
       params: { id: node.resource_id },
       query: {
         pathId: coursePath.value?.id,
@@ -796,7 +796,7 @@ function viewResource(node: CoursePathNodeDTO) {
 }
 
 function openOptimizationDialog() {
-  customFeedback.value = ''
+  customFeedback.value = pathEvaluation.value?.optimization_tips?.join('\n') || ''
   showOptimizeDialog.value = true
 }
 
@@ -844,15 +844,29 @@ function formatStrategyReport(text: string) {
 async function refreshPathEvaluation() {
   if (!coursePath.value?.id) {
     pathEvaluation.value = null
+    optimizationPromptKey.value = null
     return
   }
 
   try {
     const res = await getPathLearningEvaluation(coursePath.value.id)
     pathEvaluation.value = res.data.data
+    maybePromptOptimization()
   } catch (error) {
     console.warn('[LearnPath] load path evaluation failed:', error)
   }
+}
+
+function maybePromptOptimization() {
+  if (!pathEvaluation.value?.needs_optimization) return
+  const tips = pathEvaluation.value.optimization_tips || []
+  const nextKey = `${coursePath.value?.id || 0}:${tips.join('|')}`
+  if (!tips.length || optimizationPromptKey.value === nextKey || showOptimizeDialog.value || isOptimizing.value) {
+    return
+  }
+  optimizationPromptKey.value = nextKey
+  customFeedback.value = tips.join('\n')
+  showOptimizeDialog.value = true
 }
 
 async function refreshPathSummary(silent = false) {

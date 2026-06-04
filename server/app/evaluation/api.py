@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user, get_current_user_flexible
-from app.evaluation.schemas import LearningEventCreate
+from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
 from app.evaluation.service import bg_apply_profile_update_from_learning_event, evaluation_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
@@ -29,28 +29,47 @@ async def record_learning_event(
         user_id=current_user.id,
         payload=payload,
     )
-    if event is not None:
-        background_tasks.add_task(
-            bg_apply_profile_update_from_learning_event,
-            current_user.id,
-            {
-                "event_type": event.event_type,
-                "session_id": event.session_id,
-                "resource_id": event.resource_id,
-                "resource_item_id": event.resource_item_id,
-                "path_id": event.path_id,
-                "path_node_id": event.path_node_id,
-                "node_id": event.node_id,
-                "course": event.course,
-                "topic": event.topic,
-                "score": event.score,
-                "duration_seconds": event.duration_seconds,
-                "feedback": event.feedback,
-                "metadata": event.metadata_json or {},
-            },
-        )
+    background_tasks.add_task(
+        bg_apply_profile_update_from_learning_event,
+        current_user.id,
+        {
+            "event_type": event.event_type,
+            "session_id": event.session_id,
+            "resource_id": event.resource_id,
+            "resource_item_id": event.resource_item_id,
+            "path_id": event.path_id,
+            "path_node_id": event.path_node_id,
+            "node_id": event.node_id,
+            "course": event.course,
+            "topic": event.topic,
+            "score": event.score,
+            "feedback": event.feedback,
+            "metadata": event.metadata_json or {},
+        },
+    )
     logger.info("[EvalAPI] 学习事件记录: user_id=%s event_type=%s", current_user.id, payload.event_type)
-    return HttpResponse.success(data={"id": event.id if event else None})
+    return HttpResponse.success(data={"id": event.id})
+
+
+@router.post("/evaluation/sessions")
+async def record_learning_session(
+    payload: LearningSessionCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """记录一次学习会话（前端离开学习页面时上报）。"""
+    learning_session = await evaluation_service.record_session(
+        session,
+        user_id=current_user.id,
+        payload=payload,
+    )
+    logger.info(
+        "[EvalAPI] 学习会话记录: user_id=%s page=%s duration=%ss",
+        current_user.id,
+        payload.source_page,
+        payload.duration_seconds,
+    )
+    return HttpResponse.success(data={"id": learning_session.id})
 
 
 @router.get("/evaluation/summary")
@@ -73,6 +92,7 @@ async def get_learning_time_stats(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """学习时长统计 — 从 LearningSession 表聚合。"""
     stats = await evaluation_service.get_time_stats(
         session,
         user_id=current_user.id,

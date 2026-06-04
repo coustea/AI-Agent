@@ -30,12 +30,8 @@ SUMMARY_KEEP_RECENT: Final[int] = 10
 PROFILE_MIN_COVERAGE: Final[int] = 60
 MEMORY_UPDATE_COOLDOWN_SECONDS: Final[float] = 300.0
 LTM_PERIODIC_THRESHOLD: Final[int] = 10
+PROFILE_TOKEN_THRESHOLD: Final[int] = 1500
 
-PROFILE_UPDATE_INTERVALS: Final[dict[str, dict[str, Any]]] = {
-    "low": {"max_coverage": 0.4, "interval": 3},
-    "medium": {"max_coverage": 0.8, "interval": 8},
-    "high": {"max_coverage": 1.0, "interval": 15},
-}
 
 LTM_CATEGORIES: Final[tuple[str, ...]] = (
     "learning_background",

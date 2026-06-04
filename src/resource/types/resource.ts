@@ -3,10 +3,10 @@
 export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
-export type ResourceStreamEventName = 'agent' | 'done'
+type ResourceStreamEventName = 'agent' | 'done'
 
 /** Agent 状态值 */
-export type AgentStatus = 'running' | 'finished' | 'failed' | 'skipped'
+type AgentStatus = 'running' | 'finished' | 'failed' | 'skipped'
 
 /** 单条 SSE 事件数据 — 与后端 AgentEvent 对齐 */
 export interface ResourceStreamEvent {

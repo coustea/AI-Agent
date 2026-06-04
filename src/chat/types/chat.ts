@@ -1,29 +1,29 @@
 // src/types/chat.ts — 聊天相关类型定义
 
-export interface AttachmentInfo {
+interface AttachmentInfo {
   url: string
   type: string  // "image" | "document"
   name: string
 }
 
-export type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy'
-export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
+type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy'
+type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
 
 // ---- 1. 对比图 ----
-export interface ComparisonEntity {
+interface ComparisonEntity {
   name: string
   core_label: string
   short_desc: string
 }
 
-export interface ComparisonDimension {
+interface ComparisonDimension {
   name: string
   left: string
   right: string
   highlight?: string | null
 }
 
-export interface VisualSummary {
+interface VisualSummary {
   left_keyword: string
   right_keyword: string
   center_conclusion: string
@@ -39,14 +39,14 @@ export interface ComparisonPayload {
 // ---- 2. 流程图 ----
 export type FlowchartNodeType = 'start' | 'process' | 'decision' | 'end' | 'danger'
 
-export interface FlowchartNode {
+interface FlowchartNode {
   id: string
   title: string
   short_desc?: string
   type: FlowchartNodeType
 }
 
-export interface FlowchartEdge {
+interface FlowchartEdge {
   from: string
   to: string
   label?: string | null
@@ -59,7 +59,7 @@ export interface FlowchartPayload {
 }
 
 // ---- 3. 时序图 ----
-export interface SequenceMessage {
+interface SequenceMessage {
   from: string
   to: string
   label: string
@@ -72,7 +72,7 @@ export interface SequencePayload {
 }
 
 // ---- 4. 知识框架图 ----
-export interface FrameworkModule {
+interface FrameworkModule {
   title: string
   items: string[]
 }
@@ -83,7 +83,7 @@ export interface FrameworkPayload {
 }
 
 // ---- 5. 总结卡片图 ----
-export interface SummaryCard {
+interface SummaryCard {
   title: string
   short_desc: string
 }
@@ -93,7 +93,7 @@ export interface SummaryPayload {
 }
 
 // ---- 6. 层级概括图 ----
-export interface HierarchyBranch {
+interface HierarchyBranch {
   title: string
   children: string[]
 }
@@ -104,7 +104,7 @@ export interface HierarchyPayload {
 }
 
 // ---- 辅助文字 ----
-export interface TeachingContent {
+interface TeachingContent {
   core_explanation: string
   key_points: string[]
   common_mistakes?: string[]

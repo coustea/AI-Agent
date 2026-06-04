@@ -1,4 +1,4 @@
-export interface AgentStage {
+interface AgentStage {
   stage_id: string
   title: string
   description: string
@@ -66,7 +66,7 @@ export interface CoursePathSummaryResponse {
   error_message: string | null
 }
 
-export interface LearningSignalSnapshot {
+interface LearningSignalSnapshot {
   average_score: number | null
   weak_topics: string[]
   preferred_resources: string[]
@@ -120,5 +120,4 @@ export interface PathNodeResourceRequest {
     priority: number
   }[]
   agent_configs?: Record<string, unknown>
-  output_options?: { output_format: 'json' }
 }

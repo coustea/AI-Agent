@@ -29,7 +29,6 @@ def _build_learning_event_item(event: LearningEvent) -> LearningEventItem:
         course=event.course,
         topic=event.topic,
         score=event.score,
-        duration_seconds=event.duration_seconds,
         feedback=event.feedback,
         created_at=event.created_at,
     )
@@ -214,7 +213,6 @@ async def record_path_learning_event(
             "course": event.course,
             "topic": event.topic,
             "score": event.score,
-            "duration_seconds": event.duration_seconds,
             "feedback": event.feedback,
             "metadata": event.metadata_json or {},
         },

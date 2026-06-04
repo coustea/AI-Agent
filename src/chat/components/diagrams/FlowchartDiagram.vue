@@ -147,9 +147,8 @@ const layoutEdges = computed(() => {
   min-width: 130px;
   max-width: 160px;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   text-align: center;
   transform: translate(-50%, 0);
@@ -182,22 +181,22 @@ const layoutEdges = computed(() => {
 }
 
 .flow-node.start {
-  border: 2px solid rgba(59, 130, 246, 0.5);
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(219, 234, 254, 0.8) 100%);
+  border: 2px solid #3b82f6;
+  background: #eff6ff;
   border-radius: 999px;
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
 }
 
 .flow-node.end {
-  border: 2px solid rgba(16, 185, 129, 0.5);
-  background: linear-gradient(135deg, rgba(236, 253, 245, 0.95) 0%, rgba(209, 250, 229, 0.8) 100%);
+  border: 2px solid #10b981;
+  background: #ecfdf5;
   border-radius: 999px;
   box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
 }
 
 .flow-node.decision {
-  border: 2px solid rgba(245, 158, 11, 0.5);
-  background: linear-gradient(135deg, rgba(254, 252, 232, 0.95) 0%, rgba(254, 240, 138, 0.6) 100%);
+  border: 2px solid #f59e0b;
+  background: #fefce8;
   border-radius: 8px;
   transform: translate(-50%, 0) rotate(2deg);
 }
@@ -207,8 +206,8 @@ const layoutEdges = computed(() => {
 }
 
 .flow-node.danger {
-  border: 2px solid rgba(239, 68, 68, 0.5);
-  background: linear-gradient(135deg, rgba(254, 242, 242, 0.95) 0%, rgba(254, 202, 202, 0.8) 100%);
+  border: 2px solid #ef4444;
+  background: #fef2f2;
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
 }
 </style>

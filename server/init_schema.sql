@@ -543,3 +543,31 @@ CREATE INDEX IF NOT EXISTS ix_course_path_resource_bindings_resource
     ON course_path_resource_bindings (resource_id);
 CREATE INDEX IF NOT EXISTS ix_course_path_resource_bindings_resource_item_id
     ON course_path_resource_bindings (resource_item_id);
+
+-- ============================================================
+-- 18. course_path_summaries
+-- ============================================================
+CREATE TABLE IF NOT EXISTS course_path_summaries (
+    id                  SERIAL          PRIMARY KEY,
+    path_id             INTEGER         NOT NULL REFERENCES course_paths(id),
+    user_id             INTEGER         NOT NULL,
+    summary_markdown    TEXT,
+    mastery_scores      JSONB,
+    weak_points         JSONB,
+    next_suggestions    JSONB,
+    status              VARCHAR(20)     NOT NULL DEFAULT 'pending',
+    error_message       TEXT,
+    created_at          TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_course_path_summaries_path_id
+    ON course_path_summaries (path_id);
+CREATE INDEX IF NOT EXISTS ix_course_path_summaries_user_id
+    ON course_path_summaries (user_id);
+CREATE INDEX IF NOT EXISTS ix_course_path_summaries_status
+    ON course_path_summaries (status);
+
+-- Composite index
+CREATE INDEX IF NOT EXISTS ix_course_path_summaries_user_path
+    ON course_path_summaries (user_id, path_id);

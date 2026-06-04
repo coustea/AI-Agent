@@ -44,8 +44,8 @@ defineProps<{
 
 .actor-badge {
   padding: 8px 16px;
-  background: linear-gradient(135deg, rgba(236, 253, 245, 0.9) 0%, rgba(209, 250, 229, 0.5) 100%);
-  border: 1px solid rgba(167, 243, 208, 0.8);
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
@@ -62,7 +62,7 @@ defineProps<{
   transform: translateX(-50%);
   width: 2px;
   height: 100vh;
-  background: linear-gradient(to bottom, rgba(167, 243, 208, 0.6) 0%, transparent 100%);
+  background: linear-gradient(to bottom, #a7f3d0 0%, transparent 100%);
   z-index: 0;
 }
 
@@ -78,9 +78,8 @@ defineProps<{
 
 .message-item {
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   transition: transform 0.2s ease, box-shadow 0.2s ease;

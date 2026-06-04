@@ -6,6 +6,7 @@ const MainLayout = () => import('../layouts/MainLayout.vue')
 const Home = () => import('@/dashboard/views/Home.vue')
 const ResourceGenerator = () => import('../resource/views/ResourceGenerator.vue')
 const LearnPath = () => import('@/learning/views/LearnPath.vue')
+const PathResourceDetail = () => import('@/learning/views/PathResourceDetail.vue')
 const Tutor = () => import('../chat/views/Tutor.vue')
 const Profile = () => import('@/profile/views/Profile.vue')
 const ResourceDetail = () => import('@/resource/views/ResourceDetail.vue')
@@ -27,6 +28,7 @@ const routes = [
       { path: 'tutor', name: 'Tutor', component: Tutor },
       { path: 'profile', name: 'Profile', component: Profile },
       { path: 'resource-detail/:id', name: 'ResourceDetail', component: ResourceDetail },
+      { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank }
     ]
   }

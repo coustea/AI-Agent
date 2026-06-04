@@ -26,13 +26,14 @@ from app.memory.types import (
     ONBOARDING_REQUIRED_FIELDS,
     OPTIONAL_COURSE_FIELDS,
     PROFILE_MIN_COVERAGE,
-    PROFILE_UPDATE_INTERVALS,
+    PROFILE_TOKEN_THRESHOLD,
     RESOURCE_PREFERENCE_TO_WEIGHT_KEY,
     RESOURCE_WEIGHT_DEFAULTS,
     TutoringInferenceOutput,
     confidence_label,
     days_ago,
     dedupe_strings,
+    estimate_token_count,
     has_profile_signal,
     make_default_profile_json,
     make_default_score_json,
@@ -342,11 +343,6 @@ def calculate_score(profile_json: dict[str, Any]) -> dict[str, Any]:
     return score_json
 
 
-def _get_update_interval(coverage: float) -> int:
-    for tier_info in PROFILE_UPDATE_INTERVALS.values():
-        if coverage <= tier_info["max_coverage"]:
-            return tier_info["interval"]
-    return PROFILE_UPDATE_INTERVALS["high"]["interval"]
 
 
 class ProfileBuilder:
@@ -506,16 +502,39 @@ class ProfileBuilder:
         profile = (
             await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
         ).first()
+        if profile is None:
+            return True
+
         score = profile.profile_score_json if profile and profile.profile_score_json else {}
         coverage = int(score.get("section_coverage") or 0)
 
-        if profile is None or coverage < PROFILE_MIN_COVERAGE:
-            return True
+        # 1. 覆盖率低于 60% 时的兜底保护：每 3 轮强制触发更新以丰富画像
+        if coverage < PROFILE_MIN_COVERAGE:
+            return turn_count > 0 and turn_count % 3 == 0
+
+        # 2. 正则表达式信号即时触发
         if has_profile_signal(user_message):
             return True
 
-        interval = _get_update_interval(coverage / 100.0)
-        return turn_count > 0 and turn_count % interval == 0
+        # 3. 动态查询上次更新以来的消息总 Token 计数周期触发
+        stmt = select(ChatMessage).where(
+            ChatMessage.user_id == user_id,
+            ChatMessage.session_id == session_id,
+            ChatMessage.module == self.module,
+        )
+        if profile.updated_at:
+            stmt = stmt.where(ChatMessage.created_at > profile.updated_at)
+
+        messages = list((await db.exec(stmt)).all())
+
+        accumulated_tokens = 0
+        for msg in messages:
+            if msg.usage_metadata and "total_tokens" in msg.usage_metadata:
+                accumulated_tokens += int(msg.usage_metadata["total_tokens"])
+            else:
+                accumulated_tokens += estimate_token_count(msg.content)
+
+        return accumulated_tokens >= PROFILE_TOKEN_THRESHOLD
 
     def _build_onboarding_profile(self, onboarding: dict[str, Any], old_json: dict[str, Any] | None) -> dict[str, Any]:
         profile = deepcopy(old_json) if old_json else make_default_profile_json()

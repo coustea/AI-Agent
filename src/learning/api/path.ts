@@ -1,11 +1,9 @@
 import http from '@/shared/utils/http'
 import type { ApiResponse } from '@/shared/utils/http'
 import type {
-  AgentStage,
   CoursePathNodeDTO,
   CoursePathResponse,
   CoursePathSummaryResponse,
-  LearningSignalSnapshot,
   PathLearningEvaluationResponse,
   PathPlanFeedbackRequest,
   GenerateCoursePathParams,
@@ -14,20 +12,14 @@ import type {
 } from '@/learning/types/path'
 
 export type {
-  AgentStage,
   CoursePathNodeDTO,
   CoursePathResponse,
   CoursePathSummaryResponse,
-  LearningSignalSnapshot,
   PathLearningEvaluationResponse,
   PathPlanFeedbackRequest,
   GenerateCoursePathParams,
   PathGenerationTaskResponse,
   PathNodeResourceRequest,
-}
-
-export function getPathPlan() {
-  return getActiveCoursePath()
 }
 
 export function adjustCoursePath(payload: PathPlanFeedbackRequest) {

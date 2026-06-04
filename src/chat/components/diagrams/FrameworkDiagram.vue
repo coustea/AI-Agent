@@ -29,8 +29,8 @@ defineProps<{
 .center-node {
   justify-self: center;
   padding: 14px 28px;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(219, 234, 254, 0.8) 100%);
-  border: 2px solid rgba(59, 130, 246, 0.5);
+  background: #eff6ff;
+  border: 2px solid #3b82f6;
   border-radius: 999px;
   font-size: 18px;
   font-weight: 800;
@@ -48,9 +48,8 @@ defineProps<{
 
 .module-card {
   padding: 16px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
