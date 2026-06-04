@@ -45,8 +45,6 @@ DB_POOL_SIZE = get("database.pool_size", 10)
 DB_MAX_OVERFLOW = get("database.max_overflow", 20)
 DB_POOL_RECYCLE = get("database.pool_recycle", 1800)
 DB_POOL_TIMEOUT = get("database.pool_timeout", 30)
-DB_INIT_RETRIES = 5
-DB_INIT_RETRY_DELAY = 1.5
 
 # ============ JWT ============
 JWT_SECRET = get("jwt.secret_key", "")
@@ -96,7 +94,6 @@ AVATAR_URL = get("avatar.url", "")
 AVATAR_ANCHOR = get("avatar.anchor_id", "")
 AVATAR_VCN = get("avatar.vcn", "")
 AVATAR_IAT_URL = get("avatar.iat_url", "")
-AVATAR_BRIDGE_PORT = get("avatar.bridge_port", 8765)
 ASR_APP_ID = get("avatar.asr_app_id", "")
 ASR_API_KEY = get("avatar.asr_api_key", "")
 ASR_API_SECRET = get("avatar.asr_api_secret", "")
@@ -105,13 +102,6 @@ ASR_API_SECRET = get("avatar.asr_api_secret", "")
 SPARK_APP_ID = get("spark.app_id", "")
 SPARK_API_KEY = get("spark.api_key", "")
 SPARK_API_SECRET = get("spark.api_secret", "")
-
-# ============ Memory ============
-PROFILE_GATE = get("memory.profile_gate_turns", 2)
-MSG_LIMIT = get("memory.msg_limit", 10)
-CHAT_BUDGET = get("memory.chat_budget", 700)
-LTM_BUDGET = get("memory.ltm_budget", 1600)
-SUMMARY_BUDGET = get("memory.summary_budget", 900)
 
 # ============ Chat 附件与保护机制 ============
 MAX_FILE_CONTENT_CHARS = get("chat.max_file_content_chars", 15000)

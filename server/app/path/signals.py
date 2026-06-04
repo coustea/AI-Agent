@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlmodel import col, select
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.logging import get_logger

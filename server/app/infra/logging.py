@@ -190,11 +190,6 @@ def configure_logging(*, debug: bool = False) -> None:
     setup_logging(level=level, force=True)
 
 
-def get_loguru_logger(name: str):
-    """可选：直接拿 loguru logger（新代码可用），带上 logger_name。"""
-    return _loguru_logger.bind(logger_name=name)
-
-
 def _parse_level(raw: str) -> str:
     value = (raw or "").strip().upper()
     return value if value in {"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"

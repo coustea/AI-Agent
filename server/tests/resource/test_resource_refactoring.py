@@ -317,6 +317,19 @@ def test_path_node_resource_request_rejects_backend_owned_context_fields():
         )
 
 
+def test_path_node_resource_request_rejects_unknown_frontend_fields():
+    from app.path.schemas import PathNodeResourceRequest
+
+    with pytest.raises(ValidationError):
+        PathNodeResourceRequest.model_validate(
+            {
+                "selected_agents": [],
+                "agent_configs": {},
+                "output_options": {"output_format": "json"},
+            }
+        )
+
+
 def test_path_node_resource_status_defaults_to_not_started():
     from app.infra.models import CoursePathNode
 

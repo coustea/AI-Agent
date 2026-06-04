@@ -6,8 +6,8 @@ app:
 
 # 数据库配置
 database:
-#  url: "postgresql+asyncpg://coustea:Aa123456@101.43.200.154:5432/agent"
-  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://coustea:Aa123456@101.43.200.154:5432/agent"
+#  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 10
   max_overflow: 20

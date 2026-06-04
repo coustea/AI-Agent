@@ -151,10 +151,10 @@ async def check_all() -> HealthReport:
 
 
 async def init_db() -> None:
-    """初始化数据库：验证连接 + 按需导入学校数据。
+    """初始化数据库：验证连接 + 自动创建缺失的表 + 按需导入学校数据。
 
-    表结构由人工运行 init_schema.sql 管理，后端不负责创建/删除表。
-    学校数据仅在表为空时导入，已有数据则跳过。
+    使用 SQLModel.metadata.create_all，仅创建不存在的表，
+    不会修改已有表结构或删除数据。
     """
     if not await _test_connection():
         logger.error(
@@ -165,6 +165,13 @@ async def init_db() -> None:
 
     logger.info("[Database] 数据库连接验证通过: url=%s debug=%s",
                 engine.url.render_as_string(hide_password=True), DEBUG)
+
+    # 自动创建缺失的表（不会修改或删除已有表）
+    from sqlmodel import SQLModel
+    import app.infra.models  # noqa: F401 — 确保 REGISTERED_MODELS 被加载
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    logger.info("[Database] 表结构验证完成")
 
     # 按需导入学校数据（表为空时才导入）
     try:

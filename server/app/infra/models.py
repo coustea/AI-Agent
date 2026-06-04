@@ -724,12 +724,3 @@ REGISTERED_MODELS = (
     User,
     School,
 )
-
-
-def import_all_models() -> tuple[type, ...]:
-    """返回已注册的模型类元组，同时确保所有模型类被导入以触发 SQLModel 元数据注册。
-    init_db() 调用此函数后再执行 create_all，才能正确建表。"""
-    logger.debug("[Models] 已注册 %d 个模型: %s",
-                 len(REGISTERED_MODELS),
-                 [m.__name__ for m in REGISTERED_MODELS])
-    return REGISTERED_MODELS
