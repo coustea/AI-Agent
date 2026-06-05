@@ -397,7 +397,7 @@ import {
 } from '@/learning/api/evaluation'
 import { pollResourceStatus } from '@/resource/api/resource'
 import type { ResourceTaskStatus } from '@/resource/types/resource'
-import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import MarkdownPreview from '@/shared/components/MarkdownPreview.vue'
 
 const router = useRouter()
 

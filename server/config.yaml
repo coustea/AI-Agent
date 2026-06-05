@@ -6,8 +6,8 @@ app:
 
 # 数据库配置
 database:
-  url: "postgresql+asyncpg://coustea:Aa123456@101.43.200.154:5432/agent"
-#  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
+#  url: "postgresql+asyncpg://coustea:Aa123456@101.43.200.154:5432/agent"
+  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 10
   max_overflow: 20
@@ -29,6 +29,10 @@ models:
   # Spark Pro: generalv3; Spark Max: generalv3.5; Spark Pro-128K: pro-128k
   model_name: "generalv3"
   concurrency: 5
+
+#  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+#  api_key: "6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx"
+#  model_name: "astron-code-latest"
 
   
   # 图片理解模型（独立配置）

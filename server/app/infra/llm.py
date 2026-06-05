@@ -293,6 +293,10 @@ class Llm:
             desc = function_description or f"Return {schema.__name__}"
             errors: list[str] = []
 
+            # ============ 提前准备兜底用消息（注入强制 Schema 指令） ============
+            # 将提示词增强（显式注入 Schema）提前，无论是哪一层调用都能受益
+            enhanced_messages = self._prepare_messages_for_json(input_data, schema)
+
             # ============ Tier 1: Tool Calling (函数调用) ============
             tools = [{
                 "type": "function",
@@ -309,7 +313,8 @@ class Llm:
                     tools, 
                     tool_choice={"type": "function", "function": {"name": name}}
                 )
-                resp = await runnable.ainvoke(input_data)
+                # [关键优化] 把带有详细 Schema 指令的 enhanced_messages 传给大模型
+                resp = await runnable.ainvoke(enhanced_messages)
                 
                 # 检查是否按预期返回了 tool_calls
                 tool_calls = getattr(resp, "tool_calls", []) or []
@@ -321,7 +326,27 @@ class Llm:
                     if args:
                         if isinstance(args, str):
                             args = json.loads(args)
-                        return schema.model_validate(args)
+                            
+                        # [关键优化] 递归清理嵌套的 JSON 字符串 (Stringified JSON)
+                        # 防止部分模型在 Tool Calling 时，把复杂的嵌套对象输出成了格式化字符串
+                        def _clean_nested_json(data: Any) -> Any:
+                            if isinstance(data, dict):
+                                return {k: _clean_nested_json(v) for k, v in data.items()}
+                            elif isinstance(data, list):
+                                return [_clean_nested_json(v) for v in data]
+                            elif isinstance(data, str):
+                                s = data.strip()
+                                if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
+                                    try:
+                                        parsed = json.loads(s)
+                                        if isinstance(parsed, (dict, list)):
+                                            return parsed
+                                    except json.JSONDecodeError:
+                                        pass
+                            return data
+                            
+                        cleaned_args = _clean_nested_json(args)
+                        return schema.model_validate(cleaned_args)
 
                 # 特殊情况处理：有些奇葩模型即使用 bind_tools 也会把 JSON 塞在普通文本(content)里
                 content = getattr(resp, "content", "") or ""
@@ -332,14 +357,11 @@ class Llm:
                 errors.append(f"tier1(tool_calling)={type(exc).__name__}: {exc}")
                 logger.debug("[LLM] Tool Calling 失败: %s", exc)
 
-            # ============ 准备兜底用消息（注入强制 Schema 指令） ============
-            fallback_messages = self._prepare_messages_for_json(input_data, schema)
-
             # ============ Tier 2: JSON Mode (原生 JSON 模式) ============
             try:
                 # 开启 json_object 强校验模式（如果 API 支持的话）
                 fallback_model = model.bind(response_format={"type": "json_object"})
-                resp = await fallback_model.ainvoke(fallback_messages)
+                resp = await fallback_model.ainvoke(enhanced_messages)
                 content = getattr(resp, "content", "") or ""
                 parsed = parse_first_json_object(content)
                 return schema.model_validate(parsed)
@@ -350,7 +372,7 @@ class Llm:
             # ============ Tier 3: Text Prompting (纯文本解析兜底) ============
             # 如果前面两层全挂了（比如本地老模型），直接当做普通对话聊天，然后我们自己清洗
             try:
-                resp = await model.ainvoke(fallback_messages)
+                resp = await model.ainvoke(enhanced_messages)
                 content = getattr(resp, "content", "") or ""
                 
                 # _iter_json_objects 能在混杂各种解释文本（甚至 Markdown 语法）的内容中找出所有的 JSON 块

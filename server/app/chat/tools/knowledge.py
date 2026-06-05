@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -147,10 +148,20 @@ def format_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[s
     return "\n\n".join(parts), rows
 
 
+async def aretrieve_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str, Any]]:
+    """Async wrapper for local knowledge retrieval."""
+    return await asyncio.to_thread(retrieve_knowledge, query, top_k=top_k)
+
+
+async def aformat_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[str, list[dict[str, Any]]]:
+    """Async wrapper for formatted local knowledge context."""
+    return await asyncio.to_thread(format_knowledge_context, query, top_k=top_k)
+
+
 @tool("search_knowledge_base")
-def search_knowledge_base(query: str) -> str:
+async def search_knowledge_base(query: str) -> str:
     """搜索本地课程知识库，返回教材相关内容片段。适用于查询学术概念、定义、理论等教材内容。"""
-    context, rows = format_knowledge_context(query)
+    context, rows = await aformat_knowledge_context(query)
     if not rows:
         return "本地知识库没有检索到相关内容，或知识库尚未正确加载。"
     return context

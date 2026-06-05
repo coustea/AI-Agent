@@ -41,6 +41,7 @@ class TutorAgentContext(BaseModel):
     preferred_diagram_type: Optional["TeachingDiagramType"] = None
     generate_video: bool = False
     resource_mode: str = "none"
+    evaluation_summary_context: str = ""
     memory_reader: MemoryReader | None = None
 
 

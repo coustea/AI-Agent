@@ -21,9 +21,10 @@ logger = get_logger(__name__)
 
 
 class SessionCompressor:
-    """按触发条件把旧消息压缩为 Markdown 概要。"""
+    """会话压缩器：将短期对话历史压缩为摘要。"""
 
     def __init__(self, *, module: str = "mentor") -> None:
+        """初始化压缩器，指定模块名。"""
         self.module = module
         self.llm = get_llm()
 
@@ -37,12 +38,14 @@ class SessionCompressor:
         force: bool = False,
         reason: str = "post_turn",
     ):
+        """按条件触发压缩，force=True 时强制执行。"""
         should_compress = force or await self._should_compress(db=db, user_id=user_id, session_id=session_id)
         if not should_compress:
             return None
         return await self._compress(db=db, user_id=user_id, session_id=session_id, keep_recent=keep_recent, reason=reason)
 
     async def _should_compress(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
+        """判断是否需要压缩：token 数或消息数超过阈值。"""
         chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
         token_count = chat_session.summary_token_count if chat_session else 0
         if token_count >= SUMMARY_TOKEN_THRESHOLD:
@@ -59,6 +62,7 @@ class SessionCompressor:
         return count_result > SUMMARY_MESSAGE_THRESHOLD
 
     async def _compress(self, *, db: AsyncSession, user_id: int, session_id: str, keep_recent: int = SUMMARY_KEEP_RECENT, reason: str = "manual"):
+        """执行压缩：LLM 生成摘要 → 保存 → 删除已压缩的旧消息。"""
         filters = [
             ChatMessage.user_id == user_id,
             ChatMessage.session_id == session_id,

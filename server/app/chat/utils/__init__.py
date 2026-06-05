@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import time
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, Generator
 
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
@@ -16,36 +15,6 @@ from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Prompt 加载
-# ---------------------------------------------------------------------------
-
-def load_prompts(agent_dir: Path) -> dict[str, str]:
-    """从 prompt.md 读取提示词，按 ## 标题拆分为区段。
-
-    Args:
-        agent_dir: Agent 所在目录路径。
-
-    Returns:
-        包含各提示词区段的字典。
-    """
-    prompt_path = agent_dir / "prompt.md"
-    content = prompt_path.read_text(encoding="utf-8")
-    sections: dict[str, str] = {}
-    current = None
-    for line in content.split("\n"):
-        stripped = line.strip()
-        # 识别区段标题 (## xxx)
-        if stripped.startswith("## "):
-            current = stripped[3:].strip()
-            sections[current] = ""
-            continue
-        # 追加到当前区段
-        if current:
-            sections[current] += line + "\n"
-    return sections
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +166,7 @@ def classify_route(state: dict) -> str:
         路由目标节点名称。
     """
     route = state.get("route", "direct")
-    valid_routes = {"direct", "diagram_only", "search", "knowledge", "attachment_needed"}
+    valid_routes = {"direct", "diagram_only", "search", "attachment_needed"}
     return route if route in valid_routes else "direct"
 
 

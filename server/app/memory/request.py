@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class CourseBaseInfoInput(BaseModel):
+    """课程基础信息输入。"""
     course: str
     foundation_level: str
     current_topic: str | None = None
@@ -16,7 +17,9 @@ class CourseBaseInfoInput(BaseModel):
 
 
 class OnboardingUpdate(BaseModel):
+    """入门信息更新请求。"""
     school: str
+    school_level: str | None = None
     major: str
     grade: str
     daily_study_time: str
@@ -24,10 +27,12 @@ class OnboardingUpdate(BaseModel):
     courses: list[CourseBaseInfoInput] = Field(default_factory=list, max_length=3)
     resource_preference: list[str] = Field(default_factory=list)
     programming_languages: list[str] = Field(default_factory=list)
+    learning_style_tags: list[str] = Field(default_factory=list)
     self_description: str | None = None
 
 
 class EvidenceInput(BaseModel):
+    """单条维度证据输入。"""
     source: str = Field(default="tutoring")
     signal_type: str
     summary: str
@@ -37,6 +42,7 @@ class EvidenceInput(BaseModel):
 
 
 class TutoringProfileUpdate(BaseModel):
+    """辅导过程中画像增量更新请求。"""
     session_id: str | None = None
     active_course: str | None = None
     active_topic: str | None = None

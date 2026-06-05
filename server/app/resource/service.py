@@ -16,7 +16,6 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
-from app.resource.agents.base import AGENT_REGISTRY
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import (
     AgentSelection,
@@ -39,7 +38,7 @@ PPT_REVIEW_AGENT_ID = "ppt_review"
 REVIEW_CONTENT_LIMIT = 12_000
 
 
-class ResourceUsecases:
+class ResourceService:
     """资源生成用例。"""
 
     def __init__(self, session: AsyncSession):
@@ -117,9 +116,7 @@ class ResourceUsecases:
         resource = await self.get_resource(user_id, resource_id)
         if resource is None:
             return None
-        db_items: list[GeneratedResourceItemModel] = []
-        if hasattr(self.session, "exec"):
-            db_items = await self.list_resource_items(user_id, resource_id)
+        db_items = await self.list_resource_items(user_id, resource_id)
         return {
             "resource_id": resource_id,
             "status": resource.status,
@@ -185,47 +182,6 @@ class ResourceUsecases:
         return ""
 
     @staticmethod
-    def _request_context(
-        *,
-        request: ResourceGenerationRequest,
-        profile: dict[str, Any],
-        blueprint: Any | None,
-    ) -> dict[str, Any]:
-        return {
-            "learning_need": request.learning_need,
-            "learning_scenario": request.learning_scenario,
-            "profile_summary": ResourceService._profile_summary(profile),
-            "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
-        }
-
-    @staticmethod
-    def _audit_resource_item(agent_id: str, result: WorkerResult) -> dict[str, Any]:
-        return {
-            "agent_id": agent_id,
-            "title": result.title,
-            "summary": result.summary,
-            "audit_content": ResourceService._bounded_content(result.content),
-        }
-
-    @staticmethod
-    def _source_reference_item(agent_id: str, result: WorkerResult) -> dict[str, Any]:
-        return {
-            "agent_id": agent_id,
-            "title": result.title,
-            "summary": result.summary,
-            "source_content": ResourceService._bounded_content(result.content),
-        }
-
-    @staticmethod
-    def _completeness_item(agent_id: str, result: WorkerResult | None) -> dict[str, Any]:
-        return {
-            "agent_id": agent_id,
-            "title": result.title if result else "",
-            "summary": result.summary if result else "",
-            "has_content": ResourceService._has_generated_content(result),
-        }
-
-    @staticmethod
     def build_pre_audit_envelope(
         *,
         request: ResourceGenerationRequest,
@@ -245,22 +201,33 @@ class ResourceUsecases:
             if not ResourceService._has_generated_content(results.get(agent_id))
         ]
         deep_audit_resources = [
-            ResourceService._audit_resource_item(agent_id, results[agent_id])
+            {
+                "agent_id": agent_id,
+                "title": results[agent_id].title,
+                "summary": results[agent_id].summary,
+                "audit_content": ResourceService._bounded_content(results[agent_id].content),
+            }
             for agent_id in selected_agents
             if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
         ]
         completeness_only = [
-            ResourceService._completeness_item(agent_id, results.get(agent_id))
+            {
+                "agent_id": agent_id,
+                "title": results.get(agent_id).title if results.get(agent_id) else "",
+                "summary": results.get(agent_id).summary if results.get(agent_id) else "",
+                "has_content": ResourceService._has_generated_content(results.get(agent_id)),
+            }
             for agent_id in selected_agents
             if agent_id in COMPLETENESS_ONLY_AGENT_IDS
         ]
         return {
             "mode": "pre_audit",
-            "request_context": ResourceService._request_context(
-                request=request,
-                profile=profile,
-                blueprint=blueprint,
-            ),
+            "request_context": {
+                "learning_need": request.learning_need,
+                "learning_scenario": request.learning_scenario,
+                "profile_summary": ResourceService._profile_summary(profile),
+                "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
+            },
             "deep_audit_resources": deep_audit_resources,
             "completeness_only": completeness_only,
         }, missing_resources
@@ -279,22 +246,33 @@ class ResourceUsecases:
         if PPT_AGENT_ID in selected_agents and not ResourceService._has_generated_content(ppt_result):
             missing_resources.append(PPT_AGENT_ID)
         approved_sources = [
-            ResourceService._source_reference_item(agent_id, results[agent_id])
+            {
+                "agent_id": agent_id,
+                "title": results[agent_id].title,
+                "summary": results[agent_id].summary,
+                "source_content": ResourceService._bounded_content(results[agent_id].content),
+            }
             for agent_id in selected_agents
             if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
         ]
         ppt_resource = (
-            ResourceService._audit_resource_item(PPT_AGENT_ID, ppt_result)
+            {
+                "agent_id": PPT_AGENT_ID,
+                "title": ppt_result.title,
+                "summary": ppt_result.summary,
+                "audit_content": ResourceService._bounded_content(ppt_result.content),
+            }
             if ResourceService._has_generated_content(ppt_result)
             else None
         )
         return {
             "mode": "ppt_audit",
-            "request_context": ResourceService._request_context(
-                request=request,
-                profile=profile,
-                blueprint=blueprint,
-            ),
+            "request_context": {
+                "learning_need": request.learning_need,
+                "learning_scenario": request.learning_scenario,
+                "profile_summary": ResourceService._profile_summary(profile),
+                "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
+            },
             "approved_sources": approved_sources,
             "ppt_resource": ppt_resource,
         }, missing_resources
@@ -567,12 +545,8 @@ class ResourceUsecases:
             metadata=metadata,
         )
 
-    def _envelope_from_item(self, item: GeneratedResourceItemModel) -> dict[str, Any]:
-        """从 DB 资源明细提取 content_json envelope，兜底为空字典。"""
-        return dict(item.content_json) if isinstance(item.content_json, dict) else {}
-
     def _db_item_to_resource_item(self, item: GeneratedResourceItemModel) -> GeneratedResourceItem:
-        envelope = self._envelope_from_item(item)
+        envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
         content = envelope.get("content") if item.content_json is not None else item.content_text
         return GeneratedResourceItem(
             id=str(item.id),
@@ -591,7 +565,7 @@ class ResourceUsecases:
         )
 
     def _db_item_to_worker_result(self, item: GeneratedResourceItemModel) -> WorkerResult:
-        envelope = self._envelope_from_item(item)
+        envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
         content = envelope.get("content") if item.content_json is not None else item.content_text
         if not isinstance(content, str):
             content = json.dumps(content, ensure_ascii=False)
@@ -662,7 +636,7 @@ async def run_multi_agent_generation(
     from app.resource.schemas import WorkerState, LearningBlueprint, AgentInstruction
 
     async with session_scope() as session:
-        usecases = ResourceUsecases(session)
+        usecases = ResourceService(session)
         enabled_agents = request.enabled_agent_ids()
 
         # 实例化事件发射器，贯穿所有 Agent 的生命周期
@@ -1007,7 +981,7 @@ async def run_single_agent_generation(
     from app.resource.schemas import WorkerState
 
     async with session_scope() as session:
-        usecases = ResourceUsecases(session)
+        usecases = ResourceService(session)
 
         emitter = AgentEventEmitter(resource_id=resource_id)
 
@@ -1102,12 +1076,3 @@ async def _update_node_resource_status(
             session.add(binding)
 
     await session.commit()
-
-
-# ---------------------------------------------------------------------------
-# 向后兼容别名（逐步迁移后移除）
-# ---------------------------------------------------------------------------
-
-
-# Alias for api.py compatibility
-ResourceService = ResourceUsecases

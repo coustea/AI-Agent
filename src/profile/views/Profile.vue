@@ -1222,6 +1222,7 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
       })),
       resource_preference: [],
       programming_languages: profileForm.preferred_language ? [profileForm.preferred_language] : [],
+      learning_style_tags: [],
       self_description: null,
     }
     const res = await updateProfileOnboarding(payload)

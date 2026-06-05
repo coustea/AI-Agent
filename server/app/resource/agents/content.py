@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -19,10 +18,9 @@ class ContentAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, state: WorkerState) -> WorkerResult:
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
         from app.prompts import registry
 
-        parts = build_worker_base_context(state)
         config = state.agent_config
         if config:
             cfg = ["## 内容配置"]
@@ -31,12 +29,11 @@ class ContentAgent(BaseResourceAgent):
             cfg.append(f"- 关注模式: {config.get('focus_mode', 'key_concepts')}")
             cfg.append("- 包含示例和代码说明" if config.get("include_examples", True) else "- 不包含示例")
             cfg.append("- 包含常见误区和易错点" if config.get("include_common_mistakes", True) else "- 不包含常见误区")
-            parts.append("\n".join(cfg))
-        parts.append("请生成专业课程讲解文档，只输出 Markdown 内容。")
+            input_text += f"\n\n{chr(10).join(cfg)}"
+        input_text += "\n\n请生成专业课程讲解文档，只输出 Markdown 内容。"
 
         prompt = registry.get("resource/content")
-        full_input = f"{prompt}\n\n{'\n\n'.join(parts)}"
-        response = await self.llm.ainvoke(full_input, temperature=0.3)
+        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
         content = response.content if hasattr(response, "content") else str(response)
         content = _clean_markdown_fences(content)
 

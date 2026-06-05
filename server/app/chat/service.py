@@ -113,6 +113,7 @@ class ChatUseCases:
         self._memory_service = get_memory_service()
         self.file_store: LocalFileStore = LocalFileStore()
         self._bg_semaphore = asyncio.Semaphore(20)
+        self._background_tasks: set[asyncio.Task] = set()
 
     # ── 会话 ──
 
@@ -385,10 +386,28 @@ class ChatUseCases:
         )
         attachment_analysis_context = str((attachment_analysis or {}).get("analysis_context", "")).strip()
 
+        # 获取学习评估数据
+        from app.infra.database import session_scope
+        from app.evaluation.service import evaluation_service
+        
+        evaluation_summary_context = "暂无近期学习测验评估记录。"
+        try:
+            async with session_scope() as db:
+                eval_data = await evaluation_service.get_summary(db, user_id=user_id, limit=5)
+                if eval_data.event_count > 0:
+                    evaluation_summary_context = f"平均测验分: {eval_data.average_score if eval_data.average_score is not None else 'N/A'}\n"
+                    if eval_data.weak_topics:
+                        evaluation_summary_context += f"当前薄弱点: {', '.join(eval_data.weak_topics)}\n"
+                    if eval_data.recommendations:
+                        evaluation_summary_context += f"系统建议: {', '.join(eval_data.recommendations)}"
+        except Exception as exc:
+            logger.warning("[ChatUseCases] 无法获取评估数据: %s", exc)
+
         system_prompt = registry.get("chat/tutor_system").format(
             session_summary_context=session_summary_context,
             file_context=file_info_str,
             attachment_analysis_context=attachment_analysis_context or "本轮没有可用的附件预分析内容。",
+            evaluation_summary_context=evaluation_summary_context,
         )
 
         return TutorAgentContext(
@@ -405,6 +424,7 @@ class ChatUseCases:
             need_teaching_diagram=need_teaching_diagram,
             diagram_mode="requested" if need_teaching_diagram else "off",
             generate_video=generate_video,
+            evaluation_summary_context=evaluation_summary_context,
             memory_reader=DefaultMemoryReader(
                 user_id=user_id,
                 memory_service=self._memory_service,
@@ -541,6 +561,17 @@ class ChatUseCases:
 
         has_assistant_output = bool(full_answer.strip()) or teaching_diagram is not None
         
+        # 内容安全过滤
+        if full_answer.strip():
+            from app.chat.utils.safety import safety_filter
+            safety_result = await safety_filter.check(full_answer)
+            if safety_result.has_violation:
+                full_answer = safety_result.sanitized_text
+                yield {
+                    "event": "status",
+                    "data": {"stage": "safety_filter", "message": "内容触发安全策略，已进行敏感词过滤"},
+                }
+
         tool_calls = completion_event.get("data", {}).get("tool_calls") if completion_event else None
         usage_metadata = completion_event.get("data", {}).get("usage_metadata") if completion_event else None
 
@@ -636,7 +667,9 @@ class ChatUseCases:
             loop = None
 
         if loop and loop.is_running():
-            asyncio.ensure_future(_run())
+            task = asyncio.ensure_future(_run())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
         else:
             logger.warning("[ChatUseCases] 无法在非事件循环中启动后台任务 label=%s", label)
 

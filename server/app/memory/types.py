@@ -14,26 +14,27 @@ class ConcurrentUpdateError(Exception):
 
 
 class ModuleName:
+    """模块名称常量。"""
     MENTOR: Final[str] = "mentor"
     RESOURCE: Final[str] = "resource"
     AVATAR: Final[str] = "avatar"
 
 
-DIALOGUE_ROLES: Final[frozenset[str]] = frozenset({"user", "assistant"})
-MESSAGE_EXPIRE_DAYS: Final[int] = 7
-DEFAULT_SESSION_TITLE: Final[str] = "新对话"
-TITLE_MAX_LENGTH: Final[int] = 100
+DIALOGUE_ROLES: Final[frozenset[str]] = frozenset({"user", "assistant"})  # 参与对话的角色集合
+MESSAGE_EXPIRE_DAYS: Final[int] = 7  # 消息过期天数
+DEFAULT_SESSION_TITLE: Final[str] = "新对话"  # 新会话默认标题
+TITLE_MAX_LENGTH: Final[int] = 100  # 会话标题最大长度
 
-SUMMARY_TOKEN_THRESHOLD: Final[int] = 150
-SUMMARY_MESSAGE_THRESHOLD: Final[int] = 30
-SUMMARY_KEEP_RECENT: Final[int] = 10
-PROFILE_MIN_COVERAGE: Final[int] = 60
-MEMORY_UPDATE_COOLDOWN_SECONDS: Final[float] = 300.0
-LTM_PERIODIC_THRESHOLD: Final[int] = 10
-PROFILE_TOKEN_THRESHOLD: Final[int] = 1500
+SUMMARY_TOKEN_THRESHOLD: Final[int] = 150  # 触发压缩的 token 阈值
+SUMMARY_MESSAGE_THRESHOLD: Final[int] = 30  # 触发压缩的消息数阈值
+SUMMARY_KEEP_RECENT: Final[int] = 10  # 压缩时保留的最近消息数
+PROFILE_MIN_COVERAGE: Final[int] = 60  # 画像最低覆盖率（百分比）
+MEMORY_UPDATE_COOLDOWN_SECONDS: Final[float] = 300.0  # 长期记忆更新冷却时间（秒）
+LTM_PERIODIC_THRESHOLD: Final[int] = 10  # 周期性长期记忆更新的轮次间隔
+PROFILE_TOKEN_THRESHOLD: Final[int] = 1500  # 触发画像更新的累积 token 阈值
 
 
-LTM_CATEGORIES: Final[tuple[str, ...]] = (
+LTM_CATEGORIES: Final[tuple[str, ...]] = (  # 长期记忆分类键
     "learning_background",
     "long_term_goals",
     "learning_preferences",
@@ -43,7 +44,7 @@ LTM_CATEGORIES: Final[tuple[str, ...]] = (
     "corrections",
 )
 
-LTM_CATEGORY_NAMES: Final[dict[str, str]] = {
+LTM_CATEGORY_NAMES: Final[dict[str, str]] = {  # 分类键到中文名的映射
     "learning_background": "学习背景",
     "long_term_goals": "长期目标",
     "learning_preferences": "学习偏好",
@@ -55,14 +56,17 @@ LTM_CATEGORY_NAMES: Final[dict[str, str]] = {
 
 
 def now() -> datetime:
+    """返回当前 UTC 时间。"""
     return datetime.now(timezone.utc)
 
 
 def days_ago(days: int) -> datetime:
+    """返回 N 天前的 UTC 时间。"""
     return now() - timedelta(days=max(days, 0))
 
 
 def estimate_token_count(text: str) -> int:
+    """粗略估算文本 token 数（中文按 4 字符/token，英文按空格分词）。"""
     stripped = (text or "").strip()
     if not stripped:
         return 0
@@ -70,6 +74,7 @@ def estimate_token_count(text: str) -> int:
 
 
 def truncate_text(text: str, char_budget: int, suffix: str = "...") -> str:
+    """按字符预算截断文本，超出时追加后缀。"""
     if len(text) <= char_budget:
         return text
     return text[: max(char_budget - len(suffix), 0)].rstrip() + suffix
@@ -90,6 +95,7 @@ def extract_fallback_summary_markdown(chat_text: str, max_lines: int = 8, char_b
 
 
 class ProfileDimension:
+    """画像维度键常量。"""
     MAJOR_BACKGROUND: Final[str] = "major_background"
     STUDENT_STAGE: Final[str] = "student_stage"
     COURSE_CONTEXT: Final[str] = "course_context"
@@ -102,7 +108,7 @@ class ProfileDimension:
     PRACTICE_PROFILE: Final[str] = "practice_profile"
 
 
-ALL_DIMENSIONS: Final[tuple[str, ...]] = (
+ALL_DIMENSIONS: Final[tuple[str, ...]] = (  # 所有画像维度，用于覆盖率计算
     ProfileDimension.MAJOR_BACKGROUND,
     ProfileDimension.STUDENT_STAGE,
     ProfileDimension.COURSE_CONTEXT,
@@ -115,7 +121,7 @@ ALL_DIMENSIONS: Final[tuple[str, ...]] = (
     ProfileDimension.PRACTICE_PROFILE,
 )
 
-DIMENSION_NAMES: Final[dict[str, str]] = {
+DIMENSION_NAMES: Final[dict[str, str]] = {  # 维度键到中文名的映射
     ProfileDimension.MAJOR_BACKGROUND: "专业背景",
     ProfileDimension.STUDENT_STAGE: "学习阶段",
     ProfileDimension.COURSE_CONTEXT: "课程上下文",
@@ -128,12 +134,13 @@ DIMENSION_NAMES: Final[dict[str, str]] = {
     ProfileDimension.PRACTICE_PROFILE: "实践能力",
 }
 
-CONFIDENCE_HIGH: Final[float] = 0.7
-CONFIDENCE_MEDIUM: Final[float] = 0.4
-CONFIDENCE_LOW: Final[float] = 0.0
+CONFIDENCE_HIGH: Final[float] = 0.7  # 高置信度阈值
+CONFIDENCE_MEDIUM: Final[float] = 0.4  # 中置信度阈值
+CONFIDENCE_LOW: Final[float] = 0.0  # 低置信度基线
 
 
 def confidence_label(value: float) -> str:
+    """将置信度数值转换为标签（high/medium/low/empty）。"""
     if value >= CONFIDENCE_HIGH:
         return "high"
     if value >= CONFIDENCE_MEDIUM:
@@ -143,7 +150,7 @@ def confidence_label(value: float) -> str:
     return "empty"
 
 
-ONBOARDING_REQUIRED_FIELDS: Final[tuple[str, ...]] = (
+ONBOARDING_REQUIRED_FIELDS: Final[tuple[str, ...]] = (  # 入门必填字段
     "school",
     "major",
     "grade",
@@ -152,24 +159,25 @@ ONBOARDING_REQUIRED_FIELDS: Final[tuple[str, ...]] = (
     "courses",
 )
 
-ONBOARDING_REQUIRED_COURSE_FIELDS: Final[tuple[str, ...]] = (
+ONBOARDING_REQUIRED_COURSE_FIELDS: Final[tuple[str, ...]] = (  # 课程必填字段
     "course",
     "foundation_level",
 )
 
-ONBOARDING_OPTIONAL_FIELDS: Final[tuple[str, ...]] = (
+ONBOARDING_OPTIONAL_FIELDS: Final[tuple[str, ...]] = (  # 入门选填字段
     "resource_preference",
     "programming_languages",
+    "learning_style_tags",
     "self_description",
 )
 
-OPTIONAL_COURSE_FIELDS: Final[tuple[str, ...]] = (
+OPTIONAL_COURSE_FIELDS: Final[tuple[str, ...]] = (  # 课程选填字段
     "current_topic",
     "course_learning_goal",
     "weak_points",
 )
 
-DAILY_STUDY_TIME_TO_PACE: Final[dict[str, str]] = {
+DAILY_STUDY_TIME_TO_PACE: Final[dict[str, str]] = {  # 每日学习时长到节奏的映射
     "30min以下": "slow",
     "30-60min": "slow",
     "1-2h": "medium",
@@ -177,14 +185,14 @@ DAILY_STUDY_TIME_TO_PACE: Final[dict[str, str]] = {
     "3h以上": "intensive",
 }
 
-FOUNDATION_LEVEL_TO_KNOWLEDGE_LEVEL: Final[dict[str, str]] = {
+FOUNDATION_LEVEL_TO_KNOWLEDGE_LEVEL: Final[dict[str, str]] = {  # 基础水平到知识等级的映射
     "薄弱": "weak",
     "一般": "medium_low",
     "较好": "good",
     "熟练": "advanced",
 }
 
-GOAL_TO_PROFILE_GOAL: Final[dict[str, str]] = {
+GOAL_TO_PROFILE_GOAL: Final[dict[str, str]] = {  # 学习目标到画像目标类型的映射
     "期末复习": "exam_oriented",
     "考研学习": "exam_oriented",
     "考研强化": "exam_oriented",
@@ -194,7 +202,7 @@ GOAL_TO_PROFILE_GOAL: Final[dict[str, str]] = {
     "补基础": "foundation_repair",
 }
 
-RESOURCE_WEIGHT_DEFAULTS: Final[dict[str, float]] = {
+RESOURCE_WEIGHT_DEFAULTS: Final[dict[str, float]] = {  # 各资源类型的默认权重
     "document": 0.55,
     "diagram": 0.55,
     "exercise": 0.55,
@@ -204,7 +212,7 @@ RESOURCE_WEIGHT_DEFAULTS: Final[dict[str, float]] = {
     "video_animation": 0.4,
 }
 
-RESOURCE_PREFERENCE_TO_WEIGHT_KEY: Final[dict[str, str]] = {
+RESOURCE_PREFERENCE_TO_WEIGHT_KEY: Final[dict[str, str]] = {  # 中文资源偏好到权重键的映射
     "文档": "document",
     "图解": "diagram",
     "练习题": "exercise",
@@ -219,6 +227,7 @@ RESOURCE_PREFERENCE_TO_WEIGHT_KEY: Final[dict[str, str]] = {
 
 
 def dedupe_strings(items: list[str] | None) -> list[str]:
+    """去重并清理字符串列表。"""
     result: list[str] = []
     seen: set[str] = set()
     for item in items or []:
@@ -230,11 +239,13 @@ def dedupe_strings(items: list[str] | None) -> list[str]:
 
 
 def slugify(value: str | None) -> str | None:
+    """\u5c06\u6587\u672c\u8f6c\u4e3a URL \u5b89\u5168\u7684 slug \u683c\u5f0f\uff0c\u4fdd\u7559\u4e2d\u82f1\u6587\u548c\u6570\u5b57\u3002"""
     text = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "_", str(value or "").strip()).strip("_").lower()
     return text or None
 
 
 def make_default_profile_json() -> dict[str, Any]:
+    """生成空白画像 JSON，含所有结构的默认值。"""
     return {
         "schema_version": 1,
         "base_info": {
@@ -246,6 +257,7 @@ def make_default_profile_json() -> dict[str, Any]:
             "global_learning_goal": None,
             "resource_preference": [],
             "programming_languages": [],
+            "learning_style_tags": [],
             "self_description": None,
             "courses": [],
         },
@@ -265,6 +277,7 @@ def make_default_profile_json() -> dict[str, Any]:
 
 
 def make_default_score_json() -> dict[str, Any]:
+    """生成空白画像评分 JSON。"""
     return {
         "profile_score_version": 2,
         "format": "profile_score_json",
@@ -279,6 +292,7 @@ def make_default_score_json() -> dict[str, Any]:
 
 
 def make_default_memory_markdown() -> str:
+    """生成空白长期记忆 Markdown 模板。"""
     lines = ["# 长期记忆", "", "## 学习背景", "暂无学习背景信息。"]
     for key in LTM_CATEGORIES[1:]:
         lines.extend(["", f"## {LTM_CATEGORY_NAMES[key]}", "暂无信息。"])
@@ -286,6 +300,7 @@ def make_default_memory_markdown() -> str:
 
 
 class EvidenceRecord(BaseModel):
+    """维度证据记录。"""
     source: str = Field(default="system")
     signal_type: str
     course: str | None = None
@@ -295,12 +310,14 @@ class EvidenceRecord(BaseModel):
 
 
 class MemoryUpdateOutput(BaseModel):
+    """长期记忆更新结果。"""
     need_update: bool = False
     memory_markdown: str | None = None
     update_reason: str = ""
 
 
 class TutoringInferenceOutput(BaseModel):
+    """辅导推理输出，包含画像增量 patch。"""
     should_update: bool = False
     global_profile_patch: dict[str, Any] = Field(default_factory=dict)
     course_profile_patch: dict[str, Any] | None = None
@@ -310,19 +327,20 @@ class TutoringInferenceOutput(BaseModel):
     update_reason: str = ""
 
 
-STABLE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+STABLE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (  # 匹配稳定学习特征的正则模式
     re.compile(r"(总是|经常|一直|老是|反复).*(出错|不会|卡住|记不住|搞不清|混淆|薄弱|边界)"),
     re.compile(r"(喜欢|不喜欢|更喜欢|偏好|习惯)"),
     re.compile(r"(在学|正在学|学过|准备|打算|想要).*(考研|提高|练习|项目)"),
     re.compile(r"(专业|年级|方向|课程|考试|证书|竞赛|实习|面试|项目)"),
 )
 
-NON_SIGNIFICANT_TEXTS: Final[frozenset[str]] = frozenset(
+NON_SIGNIFICANT_TEXTS: Final[frozenset[str]] = frozenset(  # 无意义的短文本，不作为信号
     {"谢谢", "好的", "收到", "明白了", "继续", "再来一道题", "ok", "OK"}
 )
 
 
 def has_stable_signal(text: str) -> bool:
+    """检测文本是否包含稳定的学习特征信号。"""
     normalized = " ".join((text or "").strip().split())
     if not normalized or normalized in NON_SIGNIFICANT_TEXTS:
         return False
@@ -338,22 +356,9 @@ PROFILE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
 
 
 def has_profile_signal(text: str) -> bool:
+    """检测文本是否包含画像更新信号（偏好、困难、节奏等）。"""
     normalized = " ".join((text or "").strip().split())
     return bool(normalized) and any(pattern.search(normalized) for pattern in PROFILE_SIGNAL_PATTERNS)
 
 
-SUMMARY_RECALL_TRIGGERS: Final[tuple[str, ...]] = (
-    "之前",
-    "前面",
-    "刚才",
-    "上次",
-    "继续",
-    "那个方案",
-    "前文",
-    "我们刚",
-)
-
-
-def should_include_session_summary(user_message: str) -> bool:
-    normalized = (user_message or "").strip()
-    return bool(normalized) and any(trigger in normalized for trigger in SUMMARY_RECALL_TRIGGERS)
+NON_SIGNIFICANT_TEXTS

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -19,25 +18,23 @@ class MindmapAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, state: WorkerState) -> WorkerResult:
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
         from app.prompts import registry
 
-        parts = build_worker_base_context(state)
         config = state.agent_config
         if config:
             cfg = ["## 思维导图配置"]
             cfg.append(f"- 导图类型: {config.get('map_type', 'knowledge_tree')}")
             cfg.append(f"- 最大深度: {config.get('max_depth', 4)}")
             cfg.append("- 用粗体高亮标注薄弱知识点" if config.get("highlight_weak", True) else "- 不高亮薄弱知识点")
-            parts.append("\n".join(cfg))
-        parts.append(
-            "请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
+            input_text += f"\n\n{chr(10).join(cfg)}"
+        input_text += (
+            "\n\n请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
             "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题和列表文本。"
         )
 
         prompt = registry.get("resource/mindmap")
-        full_input = f"{prompt}\n\n{'\n\n'.join(parts)}"
-        response = await self.llm.ainvoke(full_input, temperature=0.3)
+        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
         content = response.content if hasattr(response, "content") else str(response)
         content = _clean_markdown(content)
 

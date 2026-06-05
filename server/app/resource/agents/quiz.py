@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context, salvage_json_from_llm
+from app.resource.agents.common import salvage_json_from_llm
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -45,10 +45,9 @@ class QuizAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, state: WorkerState) -> WorkerResult:
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
         from app.prompts import registry
 
-        parts = build_worker_base_context(state)
         config = state.agent_config
         if config:
             cfg = ["## 习题配置"]
@@ -56,10 +55,10 @@ class QuizAgent(BaseResourceAgent):
             cfg.append(f"- 难度模式: {config.get('difficulty_mode', 'basic')}")
             cfg.append(f"- 考试风格: {config.get('exam_style', 'school')}")
             cfg.append("- 每题包含详细解析" if config.get("include_analysis", True) else "- 不包含解析")
-            parts.append("\n".join(cfg))
+            input_text += f"\n\n{chr(10).join(cfg)}"
 
         prompt = registry.get("resource/quiz")
-        full_prompt = f"{prompt}\n\n{'\n\n'.join(parts)}\n\n请生成习题集，以 JSON 格式输出。"
+        full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
         try:
             result = await self.llm.ainvoke_json(

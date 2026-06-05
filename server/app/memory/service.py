@@ -41,6 +41,7 @@ class MemoryService:
     """统一入口：所有记忆相关操作通过此门面调用。"""
 
     def __init__(self, *, module: str = ModuleName.MENTOR) -> None:
+        """初始化记忆服务门面，创建子组件实例。"""
         self.module = module
         self.compressor = SessionCompressor(module=module)
         self.ltm_extractor = LongTermMemoryExtractor(module=module)
@@ -50,6 +51,7 @@ class MemoryService:
     # ── 会话 ──
 
     async def create_session(self, *, user_id: int, title: str = DEFAULT_SESSION_TITLE) -> Any:
+        """创建新的聊天会话。"""
         async with session_scope() as db:
             chat_session = ChatSession(user_id=user_id, module=self.module, title=title)
             db.add(chat_session)
@@ -58,10 +60,12 @@ class MemoryService:
             return chat_session
 
     async def get_session(self, session_id: str) -> Any:
+        """按 ID 获取会话。"""
         async with session_scope() as db:
             return (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
 
     async def list_sessions(self, *, user_id: int, limit: int = 20) -> list[Any]:
+        """获取用户的未归档会话列表，按更新时间倒序。"""
         async with session_scope() as db:
             stmt = select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_archived.is_(False))
             stmt = stmt.where(ChatSession.module == self.module)
@@ -69,6 +73,7 @@ class MemoryService:
             return list(result.all())
 
     async def archive_session(self, *, user_id: int, session_id: str) -> bool:
+        """归档会话，返回是否成功。"""
         async with session_scope() as db:
             chat_session = (
                 await db.exec(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
@@ -82,6 +87,7 @@ class MemoryService:
             return True
 
     async def update_session_title(self, *, user_id: int, session_id: str, title: str) -> bool:
+        """更新会话标题，超长自动截断。"""
         async with session_scope() as db:
             chat_session = (
                 await db.exec(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
@@ -95,6 +101,7 @@ class MemoryService:
             return True
 
     async def update_attachment_analyses(self, *, user_id: int, session_id: str, analyses: dict[str, Any]) -> bool:
+        """更新会话的附件分析结果。"""
         async with session_scope() as db:
             chat_session = (
                 await db.exec(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
@@ -108,6 +115,7 @@ class MemoryService:
             return True
 
     async def generate_session_title(self, *, user_id: int, session_id: str, first_message: str) -> str | None:
+        """根据首条消息用 LLM 生成会话标题，失败返回 None。"""
         if not (first_message or "").strip():
             return None
         prompt = f"""请根据用户的第一条消息生成一个简短的会话标题（10字以内）。
@@ -147,6 +155,7 @@ class MemoryService:
         teaching_diagram: dict[str, Any] | None = None,
         usage_metadata: dict[str, Any] | None = None,
     ) -> None:
+        """保存一条聊天消息，同时确保会话存在。"""
         async with session_scope() as db:
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
             if chat_session:
@@ -172,6 +181,7 @@ class MemoryService:
             await db.commit()
 
     async def list_messages(self, *, user_id: int, session_id: str, limit: int | None = None, only_unexpired: bool = True) -> list[Any]:
+        """获取会话消息列表，可限制数量和排除过期消息。"""
         async with session_scope() as db:
             filters = [
                 ChatMessage.user_id == user_id,
@@ -187,6 +197,7 @@ class MemoryService:
             return list((await db.exec(stmt)).all())
 
     async def count_messages(self, *, user_id: int, session_id: str) -> int:
+        """统计会话消息总数。"""
         async with session_scope() as db:
             return (
                 await db.exec(
@@ -199,6 +210,7 @@ class MemoryService:
             ).one()
 
     async def delete_short_term_messages(self, *, user_id: int, session_id: str) -> int:
+        """删除会话的所有短期消息，返回删除数量。"""
         async with session_scope() as db:
             messages = (
                 await db.exec(
@@ -215,6 +227,7 @@ class MemoryService:
             return len(messages)
 
     async def reset_session_counters(self, *, user_id: int, session_id: str) -> None:
+        """重置会话的 token 和轮次计数器（压缩后调用）。"""
         async with session_scope() as db:
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
             if chat_session:
@@ -225,6 +238,7 @@ class MemoryService:
     # ── 概要 ──
 
     async def list_summaries(self, *, user_id: int, session_id: str, limit: int = 3) -> list[Any]:
+        """获取会话的压缩概要列表，按时间倒序。"""
         async with session_scope() as db:
             stmt = (
                 select(ChatSessionSummary)
@@ -239,6 +253,7 @@ class MemoryService:
             return list((await db.exec(stmt)).all())
 
     async def get_session_summary_context(self, *, user_id: int, session_id: str) -> str:
+        """拼接最近概要为上下文字符串，供 LLM 使用。"""
         summaries = await self.list_summaries(user_id=user_id, session_id=session_id, limit=2)
         if not summaries:
             return "暂无会话概要。"
@@ -251,12 +266,14 @@ class MemoryService:
     # ── 画像 ──
 
     async def get_profile(self, *, user_id: int) -> Any:
+        """获取用户画像记录，不存在返回 None。"""
         async with session_scope() as db:
             return (
                 await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
             ).first()
 
     async def get_or_create_profile(self, *, user_id: int) -> Any:
+        """获取用户画像，不存在则创建默认画像。"""
         async with session_scope() as db:
             profile = UserProfile(
                 user_id=user_id,
@@ -286,6 +303,7 @@ class MemoryService:
         onboarding: dict[str, Any] | None = None,
         reason: str = "manual",
     ) -> Any:
+        """创建或更新用户画像，委托给 ProfileBuilder。"""
         async with session_scope() as db:
             return await self.profile_builder.upsert(db=db, user_id=user_id, session_id=session_id, onboarding=onboarding, reason=reason)
 
@@ -295,10 +313,12 @@ class MemoryService:
         user_id: int,
         payload: dict[str, Any],
     ) -> Any:
+        """应用辅导过程中的画像增量更新。"""
         async with session_scope() as db:
             return await self.profile_builder.apply_tutoring_update(db=db, user_id=user_id, payload=payload)
 
     async def list_profile_history(self, *, user_id: int, limit: int = 20) -> list[Any]:
+        """获取用户画像变更历史记录。"""
         async with session_scope() as db:
             stmt = (
                 select(UserProfileHistory)
@@ -309,18 +329,21 @@ class MemoryService:
             return list((await db.exec(stmt)).all())
 
     async def get_onboarding(self, *, user_id: int) -> dict[str, Any]:
+        """获取用户入门信息（委托给 ProfileBuilder）。"""
         async with session_scope() as db:
             return await self.profile_builder.get_onboarding(db=db, user_id=user_id)
 
     # ── 长期记忆 ──
 
     async def get_long_term_memory(self, *, user_id: int) -> Any:
+        """获取用户长期记忆记录。"""
         async with session_scope() as db:
             return (
                 await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
             ).first()
 
     async def get_or_create_long_term_memory(self, *, user_id: int) -> Any:
+        """获取或创建用户长期记忆（不存在时初始化默认模板）。"""
         async with session_scope() as db:
             existing = (
                 await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
@@ -341,6 +364,7 @@ class MemoryService:
     # ── 只读 Agent 上下文 ──
 
     async def get_profile_markdown(self, user_id: int, dimension: str | None = None) -> str:
+        """获取用户画像的 Markdown 文本，可指定只看单个维度。"""
         async with session_scope() as db:
             profile = (
                 await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
@@ -359,6 +383,7 @@ class MemoryService:
             return "暂无画像信息。"
 
     async def get_memory_markdown(self, user_id: int, category: str | None = None) -> str:
+        """获取用户长期记忆的 Markdown 文本，可指定只看某个分类。"""
         async with session_scope() as db:
             memory = (
                 await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
@@ -381,6 +406,7 @@ class MemoryService:
             return memory.memory_markdown
 
     def build_file_context(self, attachments: list[str]) -> str:
+        """将附件 URL 列表转为 LLM 可读的文本上下文。"""
         IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
         image_urls, file_urls = [], []
         for url in attachments:
@@ -411,6 +437,7 @@ class MemoryService:
         assistant_reply: str,
         usage_metadata: dict[str, Any] | None = None,
     ) -> None:
+        """单轮对话后处理：更新 token 计数并触发记忆管线。"""
         if usage_metadata and "total_tokens" in usage_metadata:
             delta = usage_metadata["total_tokens"]
         else:
@@ -519,27 +546,6 @@ class MemoryService:
         except Exception as exc:
             logger.error("[MemoryService] 登出画像更新失败: %s", exc)
 
-    # ── Token 计数 ──
-
-    async def add_session_token_count(self, *, session_id: str, user_id: int, delta: int) -> int:
-        async with session_scope() as db:
-            chat_session = (
-                await db.exec(
-                    select(ChatSession).where(
-                        ChatSession.id == session_id,
-                        ChatSession.user_id == user_id,
-                        ChatSession.module == self.module,
-                    )
-                )
-            ).first()
-            if not chat_session:
-                chat_session = ChatSession(id=session_id, user_id=user_id, module=self.module, title=DEFAULT_SESSION_TITLE)
-            chat_session.summary_token_count = max(0, (chat_session.summary_token_count or 0) + delta)
-            chat_session.updated_at = now()
-            db.add(chat_session)
-            await db.commit()
-            await db.refresh(chat_session)
-            return chat_session.summary_token_count
 
 
 # ============ 模块级单例工厂 ============

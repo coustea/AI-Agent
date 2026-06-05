@@ -6,7 +6,7 @@ import json
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_worker_base_context, salvage_json_from_llm
+from app.resource.agents.common import salvage_json_from_llm
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -21,10 +21,9 @@ class PptAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, state: WorkerState) -> WorkerResult:
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
         from app.prompts import registry
 
-        parts = build_worker_base_context(state)
         config = state.agent_config
         if config:
             cfg = ["## PPT 配置"]
@@ -32,25 +31,25 @@ class PptAgent(BaseResourceAgent):
             cfg.append(f"- 设计风格: {config.get('style', 'professional')}")
             cfg.append(f"- 主题色: {config.get('theme_color', 'blue')}")
             cfg.append("- 包含动画效果" if config.get("include_animation", False) else "- 不包含动画效果")
-            parts.append("\n".join(cfg))
-        parts.append("请生成 PPT 演示文稿内容，以 JSON 格式输出幻灯片列表。")
+            input_text += f"\n\n{chr(10).join(cfg)}"
+        input_text += "\n\n请生成 PPT 演示文稿内容，以 JSON 格式输出幻灯片列表。"
 
         prompt = registry.get("resource/ppt")
-        full_input = f"{prompt}\n\n{'\n\n'.join(parts)}"
+        full_input = f"{prompt}\n\n{input_text}"
 
         try:
-            from pydantic import BaseModel, Field
+            from pydantic import BaseModel as _Base, Field as _Field
 
-            class PptSlide(BaseModel):
-                slide_number: int = Field(description="幻灯片序号")
-                title: str = Field(description="幻灯片标题")
-                content: str = Field(description="幻灯片内容（Markdown）")
-                notes: str = Field(default="", description="演讲者备注")
+            class PptSlide(_Base):
+                slide_number: int = _Field(description="幻灯片序号")
+                title: str = _Field(description="幻灯片标题")
+                content: str = _Field(description="幻灯片内容（Markdown）")
+                notes: str = _Field(default="", description="演讲者备注")
 
-            class PptPayload(BaseModel):
-                title: str = Field(description="演示文稿标题")
-                theme: str = Field(default="professional", description="设计主题")
-                slides: list[PptSlide] = Field(default_factory=list, description="幻灯片列表")
+            class PptPayload(_Base):
+                title: str = _Field(description="演示文稿标题")
+                theme: str = _Field(default="professional", description="设计主题")
+                slides: list[PptSlide] = _Field(default_factory=list, description="幻灯片列表")
 
             result = await self.llm.ainvoke_json(
                 PptPayload,

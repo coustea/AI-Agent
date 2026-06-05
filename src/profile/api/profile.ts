@@ -46,14 +46,6 @@ export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
   return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload)
 }
 
-export interface OnboardingParsePayload {
-  text: string
-}
-
-export function parseOnboardingDialogue(payload: OnboardingParsePayload) {
-  return http.post<ApiResponse<BaseInfoData>>('/ai/profile/onboarding/parse', payload)
-}
-
 export function updateProfileFromTutoring(payload: TutoringProfileUpdatePayload) {
   return http.patch<ApiResponse<TutoringProfileUpdateResult>>('/ai/profile/tutoring-update', payload)
 }

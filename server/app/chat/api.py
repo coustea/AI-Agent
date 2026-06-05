@@ -17,8 +17,6 @@ from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.chat.request import ChatHistoryMessage
-from pydantic import BaseModel
-from app.infra.llm import get_llm
 from app.chat.runtime import latest_user_message
 from app.chat.service import get_chat_usecases
 from app.memory import OnboardingResponse, OnboardingUpdate, TutoringProfileUpdate
@@ -435,50 +433,6 @@ async def get_profile_onboarding(
     memory = _get_memory_service()
     data = await memory.get_onboarding(user_id=current_user.id)
     return HttpResponse.success(data=OnboardingResponse(**data).model_dump())
-
-class OnboardingParseRequest(BaseModel):
-    text: str
-
-
-@router.post("/profile/onboarding/parse")
-async def parse_onboarding_dialogue(
-    payload: OnboardingParseRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """通过 LLM 将自然语言对话/自我介绍解析为 OnboardingUpdate 数据。"""
-    llm = get_llm()
-    prompt = f"""你是一个智能画像抽取助手。请仔细阅读用户的自我介绍或对话内容，提取出冷启动画像所需的所有关键字段，并按照指定的 JSON 格式输出。
-
-用户输入：
-"{payload.text}"
-
-注意：
-1. school：学校名称，如“北京大学”等。
-2. major：专业，如“软件工程”、“计算机科学与技术”等。
-3. grade：年级，必须是以下之一：'大一', '大二', '大三', '大四', '研一', '研二', '研三'。如果无法确定，请结合语境推测一个最合理的值，或默认为“大一”。
-4. daily_study_time：每日学习时长，必须是以下之一：'30min以下', '30-60min', '1-2h', '2-3h', '3h以上'。默认“1-2h”。
-5. global_learning_goal：全局学习目标，必须是以下之一或自定义目标：'期末复习', '考研学习', '进阶学习', '补基础', '项目实战'。
-6. courses：课程列表（最多3门），每个课程包含：
-   - course：课程名称（如“数据结构”）
-   - foundation_level：基础水平，必须是以下之一：'薄弱', '一般', '较好', '熟练'（若未提及，请默认“一般”）。
-   - current_topic：当前学习主题或章节（如有）。
-   - course_learning_goal：该课程的具体目标（如有）。
-   - weak_points：薄弱知识点列表（如有）。
-7. resource_preference：资源偏好列表，可以是以下值的子集：'文档', '图解', '练习题', '代码案例', '思维导图', 'PPT', '视频动画'。
-8. programming_languages：编程语言偏好列表，如 ['Python', 'Java', 'C++']。
-9. self_description：填入用户的原始输入文本。
-"""
-    try:
-        parsed = await llm.ainvoke_json(
-            OnboardingUpdate,
-            prompt,
-            temperature=0.1,
-        )
-        return HttpResponse.success(data=parsed.model_dump())
-    except Exception as e:
-        logger.error("[OnboardingParse] Failed to parse: %s", e)
-        return HttpResponse.error(code=500, message=f"解析失败: {e}")
-
 
 @router.patch("/profile/onboarding")
 async def update_profile_onboarding(

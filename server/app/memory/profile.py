@@ -46,6 +46,7 @@ logger = get_logger(__name__)
 
 
 def normalize_onboarding(data: dict[str, Any] | None) -> dict[str, Any]:
+    """标准化入门数据：清洗字段、去重列表、填充默认值。"""
     src = data or {}
     result: dict[str, Any] = {}
 
@@ -53,7 +54,7 @@ def normalize_onboarding(data: dict[str, Any] | None) -> dict[str, Any]:
         if field == "courses":
             result["courses"] = _normalize_courses(src.get("courses"))
             continue
-        if field in {"resource_preference", "programming_languages"}:
+        if field in {"resource_preference", "programming_languages", "learning_style_tags"}:
             raw = src.get(field, [])
             values = raw if isinstance(raw, list) else [raw]
             result[field] = dedupe_strings([str(item) for item in values])
@@ -66,6 +67,7 @@ def normalize_onboarding(data: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _normalize_courses(raw_courses: Any) -> list[dict[str, Any]]:
+    """标准化课程列表：去重、清洗字段、最多保留 3 门。"""
     values = raw_courses if isinstance(raw_courses, list) else []
     courses: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -90,7 +92,34 @@ def _normalize_courses(raw_courses: Any) -> list[dict[str, Any]]:
     return courses
 
 
+def _infer_cognitive_style(tags: list[str]) -> str | None:
+    """根据学习风格标签推理认知风格类型。"""
+    tag_text = " ".join(tags)
+    if not tag_text:
+        return None
+    wants_examples = any(keyword in tag_text for keyword in ("例子", "案例", "示例"))
+    wants_visuals = any(keyword in tag_text for keyword in ("图解", "视觉", "画图", "思维导图"))
+    wants_practice = any(keyword in tag_text for keyword in ("做题", "练习", "刷题", "实践"))
+    wants_steps = any(keyword in tag_text for keyword in ("步骤", "拆解", "慢慢", "递进"))
+    wants_reading = any(keyword in tag_text for keyword in ("文档", "阅读", "教材"))
+
+    if wants_visuals and wants_examples:
+        return "visual_example_first"
+    if wants_visuals:
+        return "visual_first"
+    if wants_examples:
+        return "example_first"
+    if wants_practice:
+        return "practice_first"
+    if wants_steps:
+        return "step_by_step"
+    if wants_reading:
+        return "reading_first"
+    return "balanced"
+
+
 def is_onboarding_complete(data: dict[str, Any] | None) -> bool:
+    """检查入门数据是否完整：必填字段和课程基础信息均已填写。"""
     normalized = normalize_onboarding(data)
     for field in ONBOARDING_REQUIRED_FIELDS:
         if field == "courses":
@@ -105,10 +134,12 @@ def is_onboarding_complete(data: dict[str, Any] | None) -> bool:
 
 
 def _now_iso() -> str:
+    """返回当前 UTC 时间的 ISO 格式字符串。"""
     return now().isoformat()
 
 
 def _clamp_confidence(value: Any) -> float:
+    """将任意值安全转换为 [0.0, 1.0] 范围的置信度。"""
     try:
         return round(max(0.0, min(1.0, float(value))), 2)
     except (TypeError, ValueError):
@@ -116,6 +147,7 @@ def _clamp_confidence(value: Any) -> float:
 
 
 def _avg_confidence(profile_json: dict[str, Any]) -> float:
+    """计算画像中所有已填充维度的平均置信度。"""
     values: list[float] = []
     global_profile = ((profile_json.get("learning_profile") or {}).get("global_profile") or {})
     course_profiles = ((profile_json.get("learning_profile") or {}).get("course_profiles") or [])
@@ -134,6 +166,7 @@ def _avg_confidence(profile_json: dict[str, Any]) -> float:
 
 
 def _compute_coverage(profile_json: dict[str, Any]) -> int:
+    """计算画像覆盖率（0-100），基于已填充维度数。"""
     coverage_units = 0
     target_units = len(ALL_DIMENSIONS)
     global_profile = ((profile_json.get("learning_profile") or {}).get("global_profile") or {})
@@ -165,6 +198,7 @@ def _compute_coverage(profile_json: dict[str, Any]) -> int:
 
 
 def _make_field(value: Any, source: str, confidence: float, evidence: list[str] | None = None) -> dict[str, Any]:
+    """构建单个画像维度字段结构（含 value、source、confidence、evidence）。"""
     return {
         "value": value,
         "source": source,
@@ -175,6 +209,7 @@ def _make_field(value: Any, source: str, confidence: float, evidence: list[str] 
 
 
 def _summarize_field(field: dict[str, Any] | None) -> tuple[str | None, list[str], float]:
+    """将单个维度字段压缩为（摘要文本、证据列表、置信度）三元组。"""
     if not isinstance(field, dict):
         return None, [], 0.0
     value = field.get("value")
@@ -200,6 +235,7 @@ def _summarize_field(field: dict[str, Any] | None) -> tuple[str | None, list[str
 
 
 def render_profile_markdown(profile_json: dict[str, Any]) -> str:
+    """将画像 JSON 渲染为人类可读的 Markdown 文本。"""
     lines = ["# 用户画像"]
     base_info = profile_json.get("base_info") or {}
     learning_profile = profile_json.get("learning_profile") or {}
@@ -264,6 +300,7 @@ def render_profile_markdown(profile_json: dict[str, Any]) -> str:
 
 
 def render_profile_dimension(profile_json: dict[str, Any], dimension: str) -> str:
+    """渲染单个画像维度的 Markdown 文本。"""
     learning_profile = profile_json.get("learning_profile") or {}
     global_profile = learning_profile.get("global_profile") or {}
     for key, value in global_profile.items():
@@ -293,6 +330,7 @@ def render_profile_dimension(profile_json: dict[str, Any], dimension: str) -> st
 
 
 def calculate_score(profile_json: dict[str, Any]) -> dict[str, Any]:
+    """计算画像评分：各维度得分、总评分、覆盖率、证据质量。"""
     learning_profile = profile_json.get("learning_profile") or {}
     global_profile = learning_profile.get("global_profile") or {}
     course_profiles = learning_profile.get("course_profiles") or []
@@ -343,16 +381,16 @@ def calculate_score(profile_json: dict[str, Any]) -> dict[str, Any]:
     return score_json
 
 
-
-
 class ProfileBuilder:
-    """Builds onboarding and tutoring-driven user profiles."""
+    """画像构建器：从入门数据、长期记忆和学习事件中推理用户画像。"""
 
     def __init__(self, *, module: str = "mentor") -> None:
+        """初始化画像构建器，指定模块名。"""
         self.module = module
         self.llm = get_llm()
 
     async def get_onboarding(self, *, db: AsyncSession, user_id: int) -> dict[str, Any]:
+        """从画像中提取入门信息，供前端回显。"""
         profile = (
             await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
         ).first()
@@ -363,6 +401,7 @@ class ProfileBuilder:
 
     @staticmethod
     def _build_student_profile(base_info: dict[str, Any]) -> dict[str, Any]:
+        """从入门基础信息构建学生画像摘要。"""
         courses = base_info.get("courses") or []
         course_names = [c.get("course", "") if isinstance(c, dict) else str(c) for c in courses]
         return {
@@ -386,6 +425,7 @@ class ProfileBuilder:
         onboarding: dict[str, Any] | None = None,
         reason: str = "manual",
     ):
+        """创建或更新画像：有 onboarding 时走冷启动，否则从对话推理。"""
         old = (
             await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
         ).first()
@@ -436,6 +476,7 @@ class ProfileBuilder:
         user_id: int,
         payload: dict[str, Any],
     ) -> UserProfile | None:
+        """应用辅导过程中的画像增量更新（推理 patch 并合并）。"""
         profile = (
             await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
         ).first()
@@ -476,6 +517,7 @@ class ProfileBuilder:
         assistant_reply: str,
         turn_count: int = 0,
     ) -> bool:
+        """条件触发画像更新：覆盖率低/有信号/token 累积超阈值时执行。"""
         try:
             if not await self._should_update(
                 db=db,
@@ -499,6 +541,7 @@ class ProfileBuilder:
         user_message: str,
         turn_count: int,
     ) -> bool:
+        """判断是否应该触发画像更新（覆盖率低/有信号/token 累积）。"""
         profile = (
             await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
         ).first()
@@ -537,6 +580,7 @@ class ProfileBuilder:
         return accumulated_tokens >= PROFILE_TOKEN_THRESHOLD
 
     def _build_onboarding_profile(self, onboarding: dict[str, Any], old_json: dict[str, Any] | None) -> dict[str, Any]:
+        """从入门数据构建完整画像（冷启动）。"""
         profile = deepcopy(old_json) if old_json else make_default_profile_json()
         base_info = deepcopy(profile.get("base_info") or {})
         learning_profile = deepcopy(profile.get("learning_profile") or {})
@@ -553,6 +597,7 @@ class ProfileBuilder:
         global_goal = onboarding.get("global_learning_goal")
         programming_languages = onboarding.get("programming_languages") or []
         resource_preference = onboarding.get("resource_preference") or []
+        learning_style_tags = onboarding.get("learning_style_tags") or []
 
         global_profile["major_background"] = _make_field(slugify(major), "user_onboarding", 0.95, [f"专业: {major}"])
         global_profile["student_stage"] = _make_field(slugify(grade), "user_onboarding", 0.95, [f"年级: {grade}"])
@@ -577,6 +622,12 @@ class ProfileBuilder:
             "rule_mapping",
             0.75,
             [f"资源偏好: {'、'.join(resource_preference)}"] if resource_preference else [],
+        )
+        global_profile["cognitive_style"] = _make_field(
+            _infer_cognitive_style(learning_style_tags),
+            "rule_mapping",
+            0.75 if learning_style_tags else 0.0,
+            [f"学习方式: {'、'.join(learning_style_tags)}"] if learning_style_tags else [],
         )
 
         if school_level:
@@ -683,6 +734,7 @@ class ProfileBuilder:
         session_id: str | None,
         old_json: dict[str, Any],
     ) -> tuple[bool, bool, dict[str, Any]]:
+        """从近期对话中用 LLM 推理画像增量，返回 (成功, 有更新, 新画像)。"""
         long_term = (
             await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
         ).first()
@@ -724,6 +776,7 @@ class ProfileBuilder:
         payload: dict[str, Any],
         old_json: dict[str, Any],
     ) -> dict[str, Any]:
+        """用 LLM 从辅导证据中推理画像增量 patch。"""
         long_term = (
             await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
         ).first()
@@ -774,6 +827,7 @@ class ProfileBuilder:
         session_id: str | None,
         limit: int = 40,
     ) -> str:
+        """获取用户近期对话文本，供 LLM 推理画像。"""
         if not session_id:
             return "暂无近期原始对话。"
         filters = [
@@ -798,6 +852,7 @@ class ProfileBuilder:
         return "\n".join(lines)[-6000:] or "暂无近期原始对话。"
 
     def _build_resource_weights(self, preferences: list[str]) -> dict[str, float]:
+        """根据用户资源偏好计算各资源类型的权重。"""
         weights = deepcopy(RESOURCE_WEIGHT_DEFAULTS)
         for item in preferences:
             key = RESOURCE_PREFERENCE_TO_WEIGHT_KEY.get(str(item))
@@ -811,6 +866,7 @@ class ProfileBuilder:
         course_profiles: list[dict[str, Any]],
         school_level: str | None,
     ) -> dict[str, Any]:
+        """根据入门数据构建初始辅导策略（资源优先级、难度控制等）。"""
         priorities = ["document", "exercise"]
         preferences = onboarding.get("resource_preference") or []
         for item in preferences:
@@ -838,6 +894,7 @@ class ProfileBuilder:
         }
 
     def _merge_tutoring_patch(self, old_json: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+        """将辅导推理产生的增量 patch 合并到已有画像中。"""
         merged = deepcopy(old_json)
         merged.setdefault("learning_profile", {})
         merged["learning_profile"].setdefault("global_profile", {})
@@ -890,6 +947,7 @@ class ProfileBuilder:
         return merged
 
     def _merge_field(self, existing: Any, incoming: Any) -> Any:
+        """合并两个维度字段，高置信度优先。"""
         if incoming in (None, "", [], {}):
             return existing
         if not isinstance(incoming, dict):
@@ -912,6 +970,7 @@ class ProfileBuilder:
         return merged
 
     def _find_course_profile(self, course_profiles: list[dict[str, Any]], course_name: str) -> dict[str, Any] | None:
+        """按课程名查找已有的课程画像。"""
         for course_profile in course_profiles:
             context = ((course_profile.get("course_context") or {}).get("value") or {})
             if context.get("course") == course_name:
@@ -923,6 +982,7 @@ class ProfileBuilder:
         existing: list[dict[str, Any]],
         incoming: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        """合并知识掌握度列表，按 (课程, 知识点) 去重并更新分数。"""
         index: dict[tuple[str, str], dict[str, Any]] = {}
         for item in existing:
             key = (str(item.get("course") or ""), str(item.get("knowledge_point") or ""))
@@ -948,6 +1008,7 @@ class ProfileBuilder:
         return list(index.values())
 
     def _merge_evidence(self, existing: list[dict[str, Any]], incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """合并证据列表，去重并限制最多 50 条。"""
         merged = deepcopy(existing)
         for item in incoming:
             if item not in merged:
@@ -968,6 +1029,7 @@ class ProfileBuilder:
         confidence: float = 0.7,
         expected_version: int | None = None,
     ) -> UserProfile:
+        """持久化画像到数据库，同时记录变更历史，支持乐观并发控制。"""
         profile = (
             await db.exec(select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.module == self.module))
         ).first()

@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import MarkdownPreview from '@/shared/components/MarkdownPreview.vue'
 import { getMarkdownContent, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{

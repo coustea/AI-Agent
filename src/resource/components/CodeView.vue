@@ -82,7 +82,7 @@ import { Timer, Warning, EditPen } from '@element-plus/icons-vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import { ElMessage } from 'element-plus'
-import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import MarkdownPreview from '@/shared/components/MarkdownPreview.vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{

@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import serpapi
 import re
-import requests
+import httpx
+from typing import Any
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 
-from app.config import SERPAPI_KEY, TAVILY_KEY,SPARK_SEARCH_KEY
+from app.config import SERPAPI_KEY, TAVILY_KEY, SPARK_SEARCH_KEY
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+
+_duckduckgo_search_tool = DuckDuckGoSearchRun()
+_tavily_search_tool = TavilySearch(tavily_api_key=TAVILY_KEY, max_results=3) if (TAVILY_KEY or "").strip() else None
 
 
 def _redact_url_query_secrets(text: object) -> str:
@@ -24,11 +29,10 @@ def _redact_url_query_secrets(text: object) -> str:
 
 
 @tool("duckduckgo_search")
-def duckduckgo_search(query: str) -> str:
+async def duckduckgo_search(query: str) -> str:
     """使用 DuckDuckGo 搜索网页，返回文本结果摘要。"""
     try:
-        search_tool = DuckDuckGoSearchRun()
-        result = search_tool.run(query)
+        result = await asyncio.to_thread(_duckduckgo_search_tool.run, query)
         logger.info(
             "[duckduckgo_search] query=%r result_preview=%r",
             query,
@@ -40,14 +44,13 @@ def duckduckgo_search(query: str) -> str:
         return f"DuckDuckGo 搜索失败: {exc}"
 
 @tool("tavily_search")
-def tavily_search(query: str) -> str:
+async def tavily_search(query: str) -> str:
     """使用 Tavily 搜索网页，返回结构化搜索结果摘要。"""
-    if not (TAVILY_KEY or "").strip():
+    if _tavily_search_tool is None:
         return "Tavily 搜索不可用: 未配置 TAVILY_KEY"
 
     try:
-        search_tool = TavilySearch(tavily_api_key=TAVILY_KEY, max_results=3)
-        result = search_tool.run(query)
+        result = await asyncio.to_thread(_tavily_search_tool.run, query)
         logger.info(
             "[tavily_search] query=%r result_preview=%r",
             query,
@@ -59,7 +62,7 @@ def tavily_search(query: str) -> str:
         return f"Tavily 搜索失败: {exc}"
 
 @tool("serp_search")
-def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str = "cn") -> str:
+async def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str = "cn") -> str:
     """使用 SerpApi 搜索网页，返回结构化搜索结果摘要。
 
     Args:
@@ -75,14 +78,17 @@ def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str 
         return "SerpApi 搜索不可用: 未配置 SERPAPI_KEY"
 
     try:
-        client = serpapi.Client(api_key=SERPAPI_KEY)
-        results = client.search({
-            "q": query,
-            "location": location,
-            "hl": hl,
-            "gl": gl,
-            "google_domain": "google.com"
-        })
+        def _search() -> dict[str, Any]:
+            client = serpapi.Client(api_key=SERPAPI_KEY)
+            return client.search({
+                "q": query,
+                "location": location,
+                "hl": hl,
+                "gl": gl,
+                "google_domain": "google.com"
+            })
+
+        results = await asyncio.to_thread(_search)
 
         # 提取有机搜索结果
         organic_results = results.get("organic_results", [])
@@ -111,7 +117,7 @@ def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str 
 
 
 @tool("spark_search")
-def spark_search(query: str):
+async def spark_search(query: str):
     """
     讯飞搜索封装函数
     """
@@ -135,12 +141,12 @@ def spark_search(query: str):
         "Content-Type": "application/json"
     }
 
-    response = requests.post(
-        url,
-        headers=headers,
-        json=payload,
-        timeout=60
-    )
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post(
+            url,
+            headers=headers,
+            json=payload,
+        )
 
     response.raise_for_status()
     data = response.json()
@@ -175,4 +181,3 @@ def spark_search(query: str):
         "query": query,
         "results": results
     }
-

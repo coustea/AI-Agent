@@ -20,7 +20,8 @@ class ReviewAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, state: WorkerState) -> WorkerResult:
+    async def run(self, state: WorkerState) -> WorkerResult:
+        """ReviewAgent 自行构建输入，不走通用 build_worker_base_context。"""
         from app.prompts import registry
 
         prompt = registry.get("resource/review")

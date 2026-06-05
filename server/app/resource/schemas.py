@@ -302,9 +302,6 @@ class ResourceBundle(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-ResourceGenerationRequest.model_rebuild()
-
-
 # ======================================================================
 # 响应模型
 # ======================================================================

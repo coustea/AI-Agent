@@ -15,6 +15,7 @@ export interface BaseInfoData {
   global_learning_goal: string | null
   resource_preference: string[]
   programming_languages: string[]
+  learning_style_tags: string[]
   self_description?: string | null
   courses: CourseBaseInfo[]
 }
@@ -64,6 +65,7 @@ export interface ProfileOnboardingUpdate {
   courses: CourseBaseInfo[]
   resource_preference: string[]
   programming_languages: string[]
+  learning_style_tags: string[]
   self_description: string | null
 }
 

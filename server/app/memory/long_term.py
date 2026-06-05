@@ -22,9 +22,10 @@ logger = get_logger(__name__)
 
 
 class LongTermMemoryExtractor:
-    """双层触发：正则即时 + 周期性 LLM 判断。"""
+    """长期记忆提取器：双层触发（正则即时 + 周期性 LLM 判断）。"""
 
     def __init__(self, *, module: str = "mentor") -> None:
+        """初始化长期记忆提取器，指定模块名。"""
         self.module = module
         self.llm = get_llm()
 
@@ -34,6 +35,7 @@ class LongTermMemoryExtractor:
         user_message: str,
         assistant_reply: str,
     ) -> bool:
+        """检测对话中是否包含稳定信号，决定是否考虑更新长期记忆。"""
         if has_stable_signal(user_message):
             return True
         return has_stable_signal(assistant_reply) and any(
@@ -50,6 +52,7 @@ class LongTermMemoryExtractor:
         assistant_reply: str,
         turn_count: int = 0,
     ) -> bool:
+        """双层触发更新：信号即时触发或周期性 LLM 判断，返回是否更新成功。"""
         signal_detected = self.should_consider_update(user_message=user_message, assistant_reply=assistant_reply)
         periodic_trigger = turn_count > 0 and turn_count % LTM_PERIODIC_THRESHOLD == 0
 

@@ -19,8 +19,8 @@ class PlanningAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, state: WorkerState) -> WorkerResult:
-        """PlanningAgent 直接用 run() 中的 emit，_execute 只做 LLM 调用。"""
+    async def run(self, state: WorkerState) -> WorkerResult:
+        """PlanningAgent 自行构建输入，不走通用 build_worker_base_context。"""
         from app.prompts import registry
 
         prompt = registry.get("resource/planning")
@@ -46,6 +46,10 @@ class PlanningAgent(BaseResourceAgent):
                 },
             },
         )
+        
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        # PlanningAgent overrides run directly, so this is just to satisfy ABC.
+        raise NotImplementedError
 
     def _build_planning_input(self, state: WorkerState) -> str:
         parts = [
