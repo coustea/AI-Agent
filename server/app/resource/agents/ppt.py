@@ -6,7 +6,6 @@ import json
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import salvage_json_from_llm
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -37,36 +36,28 @@ class PptAgent(BaseResourceAgent):
         prompt = registry.get("resource/ppt")
         full_input = f"{prompt}\n\n{input_text}"
 
-        try:
-            from pydantic import BaseModel as _Base, Field as _Field
+        from pydantic import BaseModel as _Base, Field as _Field
 
-            class PptSlide(_Base):
-                slide_number: int = _Field(description="幻灯片序号")
-                title: str = _Field(description="幻灯片标题")
-                content: str = _Field(description="幻灯片内容（Markdown）")
-                notes: str = _Field(default="", description="演讲者备注")
+        class PptSlide(_Base):
+            slide_number: int = _Field(description="幻灯片序号")
+            title: str = _Field(description="幻灯片标题")
+            content: str = _Field(description="幻灯片内容（Markdown）")
+            notes: str = _Field(default="", description="演讲者备注")
 
-            class PptPayload(_Base):
-                title: str = _Field(description="演示文稿标题")
-                theme: str = _Field(default="professional", description="设计主题")
-                slides: list[PptSlide] = _Field(default_factory=list, description="幻灯片列表")
+        class PptPayload(_Base):
+            title: str = _Field(description="演示文稿标题")
+            theme: str = _Field(default="professional", description="设计主题")
+            slides: list[PptSlide] = _Field(default_factory=list, description="幻灯片列表")
 
-            result = await self.llm.ainvoke_json(
-                PptPayload,
-                full_input,
-                temperature=0.3,
-                function_name="generate_ppt",
-                function_description="生成PPT大纲",
-            )
-            ppt_data = result.model_dump(mode="json")
-            content = json.dumps(ppt_data, ensure_ascii=False, indent=2)
-        except Exception as exc:
-            response = await self.llm.ainvoke(full_input, temperature=0.3)
-            raw = response.content if hasattr(response, "content") else str(response)
-            ppt_data = salvage_json_from_llm(raw, require_key="slides")
-            if ppt_data is None:
-                return WorkerResult(success=False, error=f"PPT JSON 解析失败: {exc}")
-            content = json.dumps(ppt_data, ensure_ascii=False, indent=2)
+        result = await self.llm.ainvoke_json(
+            PptPayload,
+            full_input,
+            temperature=0.3,
+            function_name="generate_ppt",
+            function_description="生成PPT结构",
+        )
+        ppt_data = result.model_dump(mode="json")
+        content = json.dumps(ppt_data, ensure_ascii=False, indent=2)
 
         slides = ppt_data.get("slides", []) if isinstance(ppt_data, dict) else []
 

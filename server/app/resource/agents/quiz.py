@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import salvage_json_from_llm
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -29,7 +28,7 @@ class QuizQuestion(BaseModel):
 
 
 class QuizPayload(BaseModel):
-    title: str = Field(description="习题集标题")
+    title: str = Field(default="随堂练习", description="习题集标题")
     summary: str = Field(default="", description="考查重点简介")
     questions: list[QuizQuestion] = Field(default_factory=list, description="题目列表")
 
@@ -60,28 +59,15 @@ class QuizAgent(BaseResourceAgent):
         prompt = registry.get("resource/quiz")
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
-        try:
-            result = await self.llm.ainvoke_json(
-                QuizPayload,
-                full_prompt,
-                temperature=0.3,
-                function_name="generate_quiz",
-                function_description="生成习题集",
-            )
-            quiz_data = result.model_dump(mode="json")
-            content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
-        except Exception as exc:
-            response = await self.llm.ainvoke(full_prompt, temperature=0.3)
-            raw = response.content if hasattr(response, "content") else str(response)
-            quiz_data = salvage_json_from_llm(raw, require_key="questions")
-            if quiz_data is None:
-                return WorkerResult(success=False, error=f"习题 JSON 解析失败: {exc}")
-            try:
-                validated = QuizPayload.model_validate(quiz_data)
-                quiz_data = validated.model_dump(mode="json")
-            except Exception:
-                pass
-            content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
+        result = await self.llm.ainvoke_json(
+            QuizPayload,
+            full_prompt,
+            temperature=0.3,
+            function_name="generate_quiz",
+            function_description="生成习题集",
+        )
+        quiz_data = result.model_dump(mode="json")
+        content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
 
         questions = quiz_data.get("questions", [])
         difficulty_dist: dict[str, int] = {}

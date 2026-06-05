@@ -112,7 +112,6 @@ class ChatUseCases:
     def __init__(self) -> None:
         self._memory_service = get_memory_service()
         self.file_store: LocalFileStore = LocalFileStore()
-        self._bg_semaphore = asyncio.Semaphore(20)
         self._background_tasks: set[asyncio.Task] = set()
 
     # ── 会话 ──
@@ -652,14 +651,13 @@ class ChatUseCases:
     # ── 后台任务 ──
 
     def _spawn_background(self, coro, *, label: str = "") -> None:
-        """启动后台任务，受信号量控制。"""
+        """启动后台任务。"""
 
         async def _run() -> None:
-            async with self._bg_semaphore:
-                try:
-                    await coro
-                except Exception as exc:
-                    logger.error("[ChatUseCases] 后台任务失败 label=%s err=%s", label, exc)
+            try:
+                await coro
+            except Exception as exc:
+                logger.error("[ChatUseCases] 后台任务失败 label=%s err=%s", label, exc)
 
         try:
             loop = asyncio.get_running_loop()

@@ -48,6 +48,10 @@ class ReviewAgent(BaseResourceAgent):
             },
         )
 
+    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        # ReviewAgent overrides run directly, so this is just to satisfy ABC.
+        raise NotImplementedError
+
     def _build_review_input(self, state: WorkerState) -> str:
         parts = ["## 待审核内容"]
         review_envelope = state.agent_config.get("review_envelope", {})

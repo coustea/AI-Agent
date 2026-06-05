@@ -3,7 +3,7 @@
 职责：
 - 从 config.yaml 加载模型配置
 - 提供统一的文本生成和结构化输出接口
-- 并发控制：Semaphore 限制并发调用
+- 重试：Tenacity 自动重试机制
 
 使用方式：
     llm = get_llm()
@@ -74,8 +74,6 @@ class Llm:
     def __init__(self):
         self._text_model: ChatOpenAI | None = None
         self._vision_model: ChatOpenAI | None = None
-        self._text_semaphore: asyncio.Semaphore | None = None
-        self._vision_semaphore: asyncio.Semaphore | None = None
         self._agent_models: dict[str, ChatOpenAI] = {}
         self._text_base_url: str = ""
         self._init()
@@ -88,7 +86,7 @@ class Llm:
         return self._text_model
 
     def _init(self):
-        """初始化模型和并发控制。"""
+        """初始化模型。"""
         # 文本模型配置
         text_cfg = get("models", {})
         text_cfg = {k: v for k, v in text_cfg.items() if k != "vision"}
@@ -104,10 +102,7 @@ class Llm:
                 max_retries=text_cfg.get("max_retries", 2),
                 timeout=text_cfg.get("timeout", 300),
             )
-            limit = text_cfg.get("concurrency", 10)
-            if limit > 0:
-                self._text_semaphore = asyncio.Semaphore(limit)
-            logger.info("[LLM] 文本模型初始化: model=%s base_url=%s concurrency=%s", text_cfg["model_name"], self._text_base_url, limit)
+            logger.info("[LLM] 文本模型初始化: model=%s base_url=%s", text_cfg["model_name"], self._text_base_url)
 
         # 图片理解模型配置
         vision_cfg = get("models.vision", {})
@@ -121,21 +116,7 @@ class Llm:
                 max_retries=vision_cfg.get("max_retries", 2),
                 timeout=vision_cfg.get("timeout", 300),
             )
-            limit = vision_cfg.get("concurrency", 10)
-            if limit > 0:
-                self._vision_semaphore = asyncio.Semaphore(limit)
-            logger.info("[LLM] 视觉模型初始化: model=%s concurrency=%s", vision_cfg["model_name"], limit)
-
-    async def _acquire(self, sem: asyncio.Semaphore | None) -> asyncio.Semaphore | None:
-        """获取并发槽位。"""
-        if not sem:
-            return None
-        try:
-            await asyncio.wait_for(sem.acquire(), timeout=300)
-        except asyncio.TimeoutError as e:
-            logger.error("[LLM] 并发超限，获取信号量超时")
-            raise ServiceError("并发超限") from e
-        return sem
+            logger.info("[LLM] 视觉模型初始化: model=%s", vision_cfg["model_name"])
 
     # ============ 核心方法 ============
 
@@ -176,18 +157,13 @@ class Llm:
         Returns:
             模型响应。
         """
-        sem = await self._acquire(self._text_semaphore)
-        try:
-            runnable = self._bind_text_model(
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            result = await runnable.ainvoke(input_data)
-            return result
-        finally:
-            if sem:
-                sem.release()
+        runnable = self._bind_text_model(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        result = await runnable.ainvoke(input_data)
+        return result
 
     async def astream(
         self,
@@ -207,19 +183,14 @@ class Llm:
         Yields:
             流式响应块。
         """
-        sem = await self._acquire(self._text_semaphore)
-        try:
-            runnable = self._bind_text_model(
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            # Force provider streaming even when the reusable base model defaults to non-streaming invokes.
-            async for chunk in runnable.astream(input_data, stream=True):
-                yield chunk
-        finally:
-            if sem:
-                sem.release()
+        runnable = self._bind_text_model(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        # Force provider streaming even when the reusable base model defaults to non-streaming invokes.
+        async for chunk in runnable.astream(input_data, stream=True):
+            yield chunk
 
     def _prepare_messages_for_json(self, input_data: Any, schema: type) -> list[BaseMessage]:
         """将不同格式的输入安全转换为 BaseMessage 列表，并强行注入 JSON 格式指令。
@@ -286,119 +257,113 @@ class Llm:
         2. [降级] JSON Mode: 开启 json_object 模式，要求模型直接吐出原生 JSON。
         3. [兜底] Text Prompt: 关闭高级功能，纯靠正则匹配和大括号清洗兜底提取。
         """
-        sem = await self._acquire(self._text_semaphore)
+        model = self._bind_text_model(temperature=temperature)
+        name = function_name or schema.__name__
+        desc = function_description or f"Return {schema.__name__}"
+        errors: list[str] = []
+
+        # ============ 提前准备兜底用消息（注入强制 Schema 指令） ============
+        # 将提示词增强（显式注入 Schema）提前，无论是哪一层调用都能受益
+        enhanced_messages = self._prepare_messages_for_json(input_data, schema)
+
+        # ============ Tier 1: Tool Calling (函数调用) ============
+        tools = [{
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": desc,
+                # 注意：为了最大化适配星火、Qwen等第三方模型，这里去掉了 "strict": True
+                "parameters": schema.model_json_schema(),
+            },
+        }]
         try:
-            model = self._bind_text_model(temperature=temperature)
-            name = function_name or schema.__name__
-            desc = function_description or f"Return {schema.__name__}"
-            errors: list[str] = []
+            # 使用最高兼容性的 tool_choice 格式：精准定向具体的工具名称，防止模型自由发挥
+            runnable = model.bind_tools(
+                tools, 
+                tool_choice={"type": "function", "function": {"name": name}}
+            )
+            # [关键优化] 把带有详细 Schema 指令的 enhanced_messages 传给大模型
+            resp = await runnable.ainvoke(enhanced_messages)
+            
+            # 检查是否按预期返回了 tool_calls
+            tool_calls = getattr(resp, "tool_calls", []) or []
+            for tool_call in tool_calls:
+                call_name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
+                if call_name and call_name != name:
+                    continue
+                args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
+                if args:
+                    if isinstance(args, str):
+                        args = json.loads(args)
+                        
+                    # [关键优化] 递归清理嵌套的 JSON 字符串 (Stringified JSON)
+                    # 防止部分模型在 Tool Calling 时，把复杂的嵌套对象输出成了格式化字符串
+                    def _clean_nested_json(data: Any) -> Any:
+                        if isinstance(data, dict):
+                            return {k: _clean_nested_json(v) for k, v in data.items()}
+                        elif isinstance(data, list):
+                            return [_clean_nested_json(v) for v in data]
+                        elif isinstance(data, str):
+                            s = data.strip()
+                            if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
+                                try:
+                                    parsed = json.loads(s)
+                                    if isinstance(parsed, (dict, list)):
+                                        return parsed
+                                except json.JSONDecodeError:
+                                    pass
+                        return data
+                        
+                    cleaned_args = _clean_nested_json(args)
+                    return schema.model_validate(cleaned_args)
 
-            # ============ 提前准备兜底用消息（注入强制 Schema 指令） ============
-            # 将提示词增强（显式注入 Schema）提前，无论是哪一层调用都能受益
-            enhanced_messages = self._prepare_messages_for_json(input_data, schema)
-
-            # ============ Tier 1: Tool Calling (函数调用) ============
-            tools = [{
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "description": desc,
-                    # 注意：为了最大化适配星火、Qwen等第三方模型，这里去掉了 "strict": True
-                    "parameters": schema.model_json_schema(),
-                },
-            }]
-            try:
-                # 使用最高兼容性的 tool_choice 格式：精准定向具体的工具名称，防止模型自由发挥
-                runnable = model.bind_tools(
-                    tools, 
-                    tool_choice={"type": "function", "function": {"name": name}}
-                )
-                # [关键优化] 把带有详细 Schema 指令的 enhanced_messages 传给大模型
-                resp = await runnable.ainvoke(enhanced_messages)
-                
-                # 检查是否按预期返回了 tool_calls
-                tool_calls = getattr(resp, "tool_calls", []) or []
-                for tool_call in tool_calls:
-                    call_name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
-                    if call_name and call_name != name:
-                        continue
-                    args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
-                    if args:
-                        if isinstance(args, str):
-                            args = json.loads(args)
-                            
-                        # [关键优化] 递归清理嵌套的 JSON 字符串 (Stringified JSON)
-                        # 防止部分模型在 Tool Calling 时，把复杂的嵌套对象输出成了格式化字符串
-                        def _clean_nested_json(data: Any) -> Any:
-                            if isinstance(data, dict):
-                                return {k: _clean_nested_json(v) for k, v in data.items()}
-                            elif isinstance(data, list):
-                                return [_clean_nested_json(v) for v in data]
-                            elif isinstance(data, str):
-                                s = data.strip()
-                                if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
-                                    try:
-                                        parsed = json.loads(s)
-                                        if isinstance(parsed, (dict, list)):
-                                            return parsed
-                                    except json.JSONDecodeError:
-                                        pass
-                            return data
-                            
-                        cleaned_args = _clean_nested_json(args)
-                        return schema.model_validate(cleaned_args)
-
-                # 特殊情况处理：有些奇葩模型即使用 bind_tools 也会把 JSON 塞在普通文本(content)里
-                content = getattr(resp, "content", "") or ""
-                if content:
-                    parsed = parse_first_json_object(content)
-                    return schema.model_validate(parsed)
-            except Exception as exc:
-                errors.append(f"tier1(tool_calling)={type(exc).__name__}: {exc}")
-                logger.debug("[LLM] Tool Calling 失败: %s", exc)
-
-            # ============ Tier 2: JSON Mode (原生 JSON 模式) ============
-            try:
-                # 开启 json_object 强校验模式（如果 API 支持的话）
-                fallback_model = model.bind(response_format={"type": "json_object"})
-                resp = await fallback_model.ainvoke(enhanced_messages)
-                content = getattr(resp, "content", "") or ""
+            # 特殊情况处理：有些奇葩模型即使用 bind_tools 也会把 JSON 塞在普通文本(content)里
+            content = getattr(resp, "content", "") or ""
+            if content:
                 parsed = parse_first_json_object(content)
                 return schema.model_validate(parsed)
-            except Exception as exc:
-                errors.append(f"tier2(json_mode)={type(exc).__name__}: {exc}")
-                logger.debug("[LLM] JSON Mode 失败: %s", exc)
+        except Exception as exc:
+            errors.append(f"tier1(tool_calling)={type(exc).__name__}: {exc}")
+            logger.debug("[LLM] Tool Calling 失败: %s", exc)
 
-            # ============ Tier 3: Text Prompting (纯文本解析兜底) ============
-            # 如果前面两层全挂了（比如本地老模型），直接当做普通对话聊天，然后我们自己清洗
-            try:
-                resp = await model.ainvoke(enhanced_messages)
-                content = getattr(resp, "content", "") or ""
-                
-                # _iter_json_objects 能在混杂各种解释文本（甚至 Markdown 语法）的内容中找出所有的 JSON 块
-                candidates = _iter_json_objects(content)
-                if not candidates:
-                    parsed = parse_first_json_object(content)
-                    return schema.model_validate(parsed)
-                
-                last_error: Exception | None = None
-                # 如果找出了多个 JSON 块，依次试探，看哪个能通过 Pydantic 校验
-                for candidate in candidates:
-                    try:
-                        return schema.model_validate(candidate)
-                    except Exception as e:
-                        last_error = e
-                        continue
-                raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象") from last_error
+        # ============ Tier 2: JSON Mode (原生 JSON 模式) ============
+        try:
+            # 开启 json_object 强校验模式（如果 API 支持的话）
+            fallback_model = model.bind(response_format={"type": "json_object"})
+            resp = await fallback_model.ainvoke(enhanced_messages)
+            content = getattr(resp, "content", "") or ""
+            parsed = parse_first_json_object(content)
+            return schema.model_validate(parsed)
+        except Exception as exc:
+            errors.append(f"tier2(json_mode)={type(exc).__name__}: {exc}")
+            logger.debug("[LLM] JSON Mode 失败: %s", exc)
 
-            except Exception as exc:
-                errors.append(f"tier3(text_prompt)={type(exc).__name__}: {exc}")
-                logger.error("[LLM] ainvoke_json 全部失败: schema=%s errors=%s", schema.__name__, "; ".join(errors))
-                raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
+        # ============ Tier 3: Text Prompting (纯文本解析兜底) ============
+        # 如果前面两层全挂了（比如本地老模型），直接当做普通对话聊天，然后我们自己清洗
+        try:
+            resp = await model.ainvoke(enhanced_messages)
+            content = getattr(resp, "content", "") or ""
+            
+            # _iter_json_objects 能在混杂各种解释文本（甚至 Markdown 语法）的内容中找出所有的 JSON 块
+            candidates = _iter_json_objects(content)
+            if not candidates:
+                parsed = parse_first_json_object(content)
+                return schema.model_validate(parsed)
+            
+            last_error: Exception | None = None
+            # 如果找出了多个 JSON 块，依次试探，看哪个能通过 Pydantic 校验
+            for candidate in candidates:
+                try:
+                    return schema.model_validate(candidate)
+                except Exception as e:
+                    last_error = e
+                    continue
+            raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象") from last_error
 
-        finally:
-            if sem:
-                sem.release()
+        except Exception as exc:
+            errors.append(f"tier3(text_prompt)={type(exc).__name__}: {exc}")
+            logger.error("[LLM] ainvoke_json 全部失败: schema=%s errors=%s", schema.__name__, "; ".join(errors))
+            raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
     async def vision(
         self,
@@ -418,16 +383,11 @@ class Llm:
         if not self._vision_model:
             raise ServiceError("图片理解模型配置缺失")
 
-        sem = await self._acquire(self._vision_semaphore)
-        try:
-            model = self._vision_model
-            if temperature != 0.3:
-                model = model.bind(temperature=temperature)
-            result = await model.ainvoke(input_data)
-            return result
-        finally:
-            if sem:
-                sem.release()
+        model = self._vision_model
+        if temperature != 0.3:
+            model = model.bind(temperature=temperature)
+        result = await model.ainvoke(input_data)
+        return result
 
 # ============ 单例 ============
 

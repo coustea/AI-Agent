@@ -28,7 +28,6 @@ models:
   api_key: "fsUxWflgdQvAuDDKwAau:wyIMVaJXZGgQwFohkdhS"
   # Spark Pro: generalv3; Spark Max: generalv3.5; Spark Pro-128K: pro-128k
   model_name: "generalv3"
-  concurrency: 5
 
 #  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
 #  api_key: "6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx"
@@ -40,7 +39,6 @@ models:
     base_url: "https://open.bigmodel.cn/api/paas/v4/"
     api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
     model_name: "glm-4.6v-flash"
-    concurrency: 10
 
 # 星火 WebSocket API（Vision 用）
 spark:
