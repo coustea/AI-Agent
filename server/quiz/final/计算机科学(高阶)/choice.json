@@ -8493,32 +8493,6 @@
     "split": "test"
   },
   {
-    "id": "mmlu_pro_10634",
-    "source": "MMLU-Pro",
-    "subject": "计算机科学(高阶)",
-    "subject_en": "computer science",
-    "type": "选择题",
-    "difficulty": 4,
-    "bloom_level": "分析",
-    "content": "Which of the following is false?",
-    "options": {
-      "A": "Semantic segmentation models predict the class of each pixel, while multiclass image classifiers predict the class of entire image.",
-      "B": "A bounding box with an IoU (intersection over union) equal to $96\\%$ would likely be considered at true positive.",
-      "C": "When a predicted bounding box does not correspond to any object in the scene, it is considered a false positive.",
-      "D": "A bounding box with an IoU (intersection over union) equal to $3\\%$ would likely be considered at false negative."
-    },
-    "answer": "D",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "computer science",
-      "英文题",
-      "高阶"
-    ],
-    "language": "en",
-    "split": "test"
-  },
-  {
     "id": "mmlu_pro_10635",
     "source": "MMLU-Pro",
     "subject": "计算机科学(高阶)",

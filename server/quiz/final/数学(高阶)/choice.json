@@ -1651,38 +1651,6 @@
     "split": "test"
   },
   {
-    "id": "mmlu_pro_7739",
-    "source": "MMLU-Pro",
-    "subject": "数学(高阶)",
-    "subject_en": "math",
-    "type": "选择题",
-    "difficulty": 4,
-    "bloom_level": "分析",
-    "content": "Which statement is true?",
-    "options": {
-      "A": "If f′(c) ≠ 0, then f has a local maximum or minimum at (c, f(c)).",
-      "B": "If f′(c) = 0, then f has a local maximum or minimum at (c, f (c)).",
-      "C": "If f is differentiable at x = c, then f is continuous at x = c.",
-      "D": "If f(x) is discontinuous at x = c, then f might be differentiable at x = c.",
-      "E": "If f is differentiable at x = c, then f′(c) might or might not exist.",
-      "F": "If f(x) is continuous at x = c, then the graph of f has a minimum or maximum at (c, f(c)).",
-      "G": "If f(x) is continuous at x = c, then f′(c) exists.",
-      "H": "If f′′(c) = 0, then the graph of f has an inflection point at (c, f (c)).",
-      "I": "If f′(c) = 0, then f(x) is constant for all x.",
-      "J": "If f′′(c) ≠ 0, then the graph of f has an inflection point at (c, f(c))."
-    },
-    "answer": "C",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "math",
-      "英文题",
-      "高阶"
-    ],
-    "language": "en",
-    "split": "test"
-  },
-  {
     "id": "mmlu_pro_7740",
     "source": "MMLU-Pro",
     "subject": "数学(高阶)",
@@ -10406,38 +10374,6 @@
       "H": "Only II is likely, while I and III are not",
       "I": "II only",
       "J": "I and II are likely, but III is not"
-    },
-    "answer": "D",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "math",
-      "英文题",
-      "高阶"
-    ],
-    "language": "en",
-    "split": "test"
-  },
-  {
-    "id": "mmlu_pro_8015",
-    "source": "MMLU-Pro",
-    "subject": "数学(高阶)",
-    "subject_en": "math",
-    "type": "选择题",
-    "difficulty": 4,
-    "bloom_level": "分析",
-    "content": "Which is the best buy?",
-    "options": {
-      "A": "17 bars of soap for $38.72",
-      "B": "16 bars of soap for $36.48",
-      "C": "12 bars of soap for $27.60",
-      "D": "20 bars of soap for $45.00",
-      "E": "11 bars of soap for $25.08",
-      "F": "10 bars of soap for $23.20",
-      "G": "15 bars of soap for $34.50",
-      "H": "18 bars of soap for $40.68",
-      "I": "14 bars of soap for $31.92",
-      "J": "13 bars of soap for $29.51"
     },
     "answer": "D",
     "analysis": "",
@@ -42752,38 +42688,6 @@
       "J": "$\\frac{1}{3}$"
     },
     "answer": "G",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "math",
-      "英文题",
-      "高阶"
-    ],
-    "language": "en",
-    "split": "test"
-  },
-  {
-    "id": "mmlu_pro_9039",
-    "source": "MMLU-Pro",
-    "subject": "数学(高阶)",
-    "subject_en": "math",
-    "type": "选择题",
-    "difficulty": 4,
-    "bloom_level": "分析",
-    "content": "5.4-19. A doorman at a hotel is trying to get three taxicabs for three different couples. The arrival of empty cabs has an exponential distribution with mean 2 minutes. Assuming independence, what is the probability that the doorman will get all three couples taken care of within 6 minutes?",
-    "options": {
-      "A": "$0.7234$",
-      "B": " $0.5768$",
-      "C": "$0.5012$",
-      "D": "$0.6523$",
-      "E": "$0.3894$",
-      "F": "$0.6981$",
-      "G": "$0.9142$",
-      "H": "$0.8413$",
-      "I": "$0.4321$",
-      "J": "$0.3215$"
-    },
-    "answer": "B",
     "analysis": "",
     "knowledge_points": [],
     "tags": [

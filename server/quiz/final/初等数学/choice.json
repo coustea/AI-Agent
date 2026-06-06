@@ -62,8 +62,8 @@
       "C": "12",
       "D": "1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -86,8 +86,8 @@
       "C": "+5",
       "D": "+2"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -230,8 +230,8 @@
       "C": "9",
       "D": "4.5"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -278,8 +278,8 @@
       "C": "$2500+2500(1+x)+2500(1+x)^{2}=9100$",
       "D": "$2500(1+x\\%)^{2}=9100$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -302,8 +302,8 @@
       "C": "590",
       "D": "620"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -350,8 +350,8 @@
       "C": "是负数，也是分数 ",
       "D": "是负数，不是分数"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -374,8 +374,8 @@
       "C": "0个",
       "D": "不确定"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -398,8 +398,8 @@
       "C": "$\\frac{1}{4}\\pi a^{2}$",
       "D": "$a-\\pi a^{2}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -422,8 +422,8 @@
       "C": "110",
       "D": "105"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -446,8 +446,8 @@
       "C": "7",
       "D": "3"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -470,8 +470,8 @@
       "C": "3个",
       "D": "4个"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -494,8 +494,8 @@
       "C": "x+3×4.25%x=33825 ",
       "D": "x+4.25%x=33825"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -518,8 +518,8 @@
       "C": "50°,50°",
       "D": "65°，65°"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -542,8 +542,8 @@
       "C": "a: c=b: d ",
       "D": "ad=bc"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -566,8 +566,8 @@
       "C": "第四象限 ",
       "D": "第三象限"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -590,8 +590,8 @@
       "C": "百分之100",
       "D": "百分之20"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -614,8 +614,8 @@
       "C": "15",
       "D": "18"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -638,8 +638,8 @@
       "C": "25",
       "D": "26"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -662,8 +662,8 @@
       "C": "120",
       "D": "125"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -686,8 +686,8 @@
       "C": "-4",
       "D": "2或-2"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -734,8 +734,8 @@
       "C": "{(x,y)|x>0,y>0}",
       "D": "{(x,y)|x<0,y>0}"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -806,8 +806,8 @@
       "C": "-2＜k＜0",
       "D": "k＜2且k≠1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -830,8 +830,8 @@
       "C": "$\\sqrt{3}$",
       "D": "$-\\sqrt{3}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -878,8 +878,8 @@
       "C": "⽛膏",
       "D": "易拉罐"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -902,8 +902,8 @@
       "C": "3.2*20-0.1",
       "D": "3.2*10/3.2"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -950,8 +950,8 @@
       "C": "$64\\pi $",
       "D": "$69\\pi $"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -998,8 +998,8 @@
       "C": "-1",
       "D": "1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1022,8 +1022,8 @@
       "C": "10个 ",
       "D": "4个"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1046,8 +1046,8 @@
       "C": "19元 ",
       "D": "25元"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1070,8 +1070,8 @@
       "C": "3",
       "D": "10"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1118,8 +1118,8 @@
       "C": "十二边形",
       "D": "八边形"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1142,8 +1142,8 @@
       "C": "$5\\times10^{2}$",
       "D": "$2\\times10^{2}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1166,8 +1166,8 @@
       "C": "6或4",
       "D": "6"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1190,8 +1190,8 @@
       "C": "20克 ",
       "D": "$\\frac{1}{4}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1214,8 +1214,8 @@
       "C": "$54cm^{2}$",
       "D": "$90cm^{2}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1238,8 +1238,8 @@
       "C": "-4 ,2 ",
       "D": "4,-2"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1262,8 +1262,8 @@
       "C": "8",
       "D": "11"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1310,8 +1310,8 @@
       "C": "$\\sqrt{(-3)^{2}}=-2$",
       "D": "$\\sqrt[3]{-5}=\\sqrt[3]{5}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1334,8 +1334,8 @@
       "C": "-1/3",
       "D": "-3"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1358,8 +1358,8 @@
       "C": "7",
       "D": "11"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1382,8 +1382,8 @@
       "C": "2",
       "D": "36"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1406,8 +1406,8 @@
       "C": "2023",
       "D": "2022"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1430,8 +1430,8 @@
       "C": "|-8|=|8|",
       "D": "|-8|=8"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1454,8 +1454,8 @@
       "C": "5.0",
       "D": "4.8"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1478,8 +1478,8 @@
       "C": "$-\\frac{1}{36}$",
       "D": "$\\frac{1}{12}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1502,8 +1502,8 @@
       "C": "7组",
       "D": "4组"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1526,8 +1526,8 @@
       "C": "二、四象限",
       "D": "一、二象限"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1550,8 +1550,8 @@
       "C": "2",
       "D": "-1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1574,8 +1574,8 @@
       "C": "3999",
       "D": "4001"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1622,8 +1622,8 @@
       "C": "6⼈",
       "D": "4⼈"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1646,8 +1646,8 @@
       "C": "0",
       "D": "$\\pm 1$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1694,8 +1694,8 @@
       "C": "没有实数根 ",
       "D": "只有⼀个实数根"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1718,8 +1718,8 @@
       "C": "$\\angle C=\\angle C'$",
       "D": "$\\angle B=\\angle B'$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1742,8 +1742,8 @@
       "C": "$1.61\\times 10^{9}$",
       "D": "$1.61\\times 10^{11}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1766,8 +1766,8 @@
       "C": "$x^{2}-2x+1$",
       "D": "$x^{2}+y$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1838,8 +1838,8 @@
       "C": "16.5*0.024 ",
       "D": "16.5*24.8"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1862,8 +1862,8 @@
       "C": "-1",
       "D": "$\\pm 1$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1886,8 +1886,8 @@
       "C": " 295786 ",
       "D": "305997"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1910,8 +1910,8 @@
       "C": "900",
       "D": "700"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1934,8 +1934,8 @@
       "C": "$m\\lt \\frac{3}{4}$",
       "D": "$m\\gt 4$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -1982,8 +1982,8 @@
       "C": "c",
       "D": "c+18"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2006,8 +2006,8 @@
       "C": "被除数为0除数不为0",
       "D": "两个数都为0"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2030,8 +2030,8 @@
       "C": "$36x^{3}+72x^{2}$",
       "D": "$21x^{3}+42x^{2}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2054,8 +2054,8 @@
       "C": "⼀样⼤ ",
       "D": "⻓⽅体体积⼤"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2078,8 +2078,8 @@
       "C": "⼀样⾼",
       "D": "⽆法判断"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2102,32 +2102,8 @@
       "C": "166",
       "D": "188"
     },
-    "answer": "D",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "elementary_mathematics"
-    ],
-    "language": "zh",
-    "split": "test"
-  },
-  {
-    "id": "cmmlu_elementary_mathematics_test_0084",
-    "source": "CMMLU",
-    "subject": "初等数学",
-    "subject_en": "elementary_mathematics",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "下列计算正确的是",
-    "options": {
-      "A": "$3\\sqrt{2}-\\sqrt{2}=2\\sqrt{2}$",
-      "B": "2a+3a=6a",
-      "C": "$(-3a)^{2}=6a^{2}$",
-      "D": "$(x-y)^{2}=x^{2}-y^{2}$"
-    },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2174,8 +2150,8 @@
       "C": "16",
       "D": "12"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2246,8 +2222,8 @@
       "C": "$mn=-m^{2}$",
       "D": "$2m+2n=0$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2270,8 +2246,8 @@
       "C": "圆锥形 ",
       "D": "正⽅形"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2294,8 +2270,8 @@
       "C": "12",
       "D": "11.7"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2318,8 +2294,8 @@
       "C": "18",
       "D": "20"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2342,8 +2318,8 @@
       "C": "x是单项式",
       "D": "$4xy^{3}+3x^{2}y$的次数是7"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2366,8 +2342,8 @@
       "C": "x",
       "D": "x-1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2390,8 +2366,8 @@
       "C": "0是最⼩的正数",
       "D": "0是最⼩的整数"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2414,8 +2390,8 @@
       "C": "2",
       "D": "1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2438,8 +2414,8 @@
       "C": "不成⽐例",
       "D": "不确定"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2462,8 +2438,8 @@
       "C": "3种",
       "D": "2种"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2510,8 +2486,8 @@
       "C": "秋天的树叶从树上随⻛飘落 ",
       "D": "“神⾈”六号宇宙⻜船绕地球运动"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2582,8 +2558,8 @@
       "C": "80%",
       "D": "85%"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2606,8 +2582,8 @@
       "C": "{x|x=2k} ",
       "D": "{x|x=2k， K是⾃然数}"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2630,8 +2606,8 @@
       "C": "14",
       "D": "11"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2654,8 +2630,8 @@
       "C": "任何数的绝对值都是正数",
       "D": "任何数的绝对值都不是负数"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2678,8 +2654,8 @@
       "C": "-300",
       "D": "-900"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2702,8 +2678,8 @@
       "C": "既不是正数，也不是负数 ",
       "D": "既是正数，也是负数"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2750,8 +2726,8 @@
       "C": "5cm~6cm之间",
       "D": "6cm~7cm之间"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2774,8 +2750,8 @@
       "C": "不等式x+2>0的解集全体 ",
       "D": "不⼩于0的所有偶数"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2798,8 +2774,8 @@
       "C": "40",
       "D": "60"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2822,8 +2798,8 @@
       "C": "120/x=90/(x+20) ",
       "D": "120/(x-20)=90/x"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2870,8 +2846,8 @@
       "C": "甲与⼄的⽐是2：3 ",
       "D": "⼄⽐甲少50%"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2894,8 +2870,8 @@
       "C": "向左平移2个单位",
       "D": "向右平移8个单位"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2966,8 +2942,8 @@
       "C": "48",
       "D": "48或80"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -2990,8 +2966,8 @@
       "C": "(-2,-6) ",
       "D": "(-2,6)"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3014,8 +2990,8 @@
       "C": "0.1 ",
       "D": "十分位"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3038,8 +3014,8 @@
       "C": "增加21%",
       "D": "增加100%"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3062,8 +3038,8 @@
       "C": "15/11/2023",
       "D": "11/02/2023"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3110,8 +3086,8 @@
       "C": "2",
       "D": "4"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3158,8 +3134,8 @@
       "C": "90%",
       "D": "10%"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3182,8 +3158,8 @@
       "C": "90%",
       "D": "10%"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3206,8 +3182,8 @@
       "C": "9：1 ",
       "D": "2：3"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3230,8 +3206,8 @@
       "C": "230",
       "D": "232"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3254,8 +3230,8 @@
       "C": "直角三角形",
       "D": "钝角三角形"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3278,8 +3254,8 @@
       "C": "1.997",
       "D": "2.00"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -3302,8 +3278,8 @@
       "C": "37.5",
       "D": "28"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "elementary_mathematics"
@@ -5197,30 +5173,6 @@
       "B": "35至70",
       "C": "15至30",
       "D": "5至40"
-    },
-    "answer": "D",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [
-      "elementary_mathematics"
-    ],
-    "language": "zh",
-    "split": "test"
-  },
-  {
-    "id": "cmmlu_elementary_mathematics_test_0213",
-    "source": "CMMLU",
-    "subject": "初等数学",
-    "subject_en": "elementary_mathematics",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "下列说法正确的是",
-    "options": {
-      "A": "如果甲数比乙数多1/4，乙数就比甲数少1/4",
-      "B": "(a+b)/c=a+b/c",
-      "C": "4/7*6表示求6个4/7的和",
-      "D": "(a+b)*c=a+b*c"
     },
     "answer": "D",
     "analysis": "",

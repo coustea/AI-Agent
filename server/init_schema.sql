@@ -385,7 +385,6 @@ CREATE TABLE IF NOT EXISTS learning_events (
     course              VARCHAR(200),
     topic               VARCHAR(200),
     score               FLOAT,
-    duration_seconds    INTEGER,
     feedback            TEXT,
     metadata_json       JSONB,
     created_at          TIMESTAMPTZ     DEFAULT NOW()
@@ -432,6 +431,8 @@ CREATE TABLE IF NOT EXISTS course_paths (
     strategy_report         TEXT,
     search_evidence         JSONB,
     learning_signal_snapshot JSONB,
+    auto_adjustment_pending BOOLEAN         DEFAULT FALSE,
+    pending_adjustment_json JSONB,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW()
 );

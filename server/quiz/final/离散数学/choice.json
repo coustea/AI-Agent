@@ -4558,28 +4558,6 @@
     "split": "dev"
   },
   {
-    "id": "SYSU-Exam_discrete_mathematics_c0025",
-    "source": "SYSU-Exam",
-    "subject": "离散数学",
-    "subject_en": "discrete_mathematics",
-    "type": "多选题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "下面哪些说法是正确的？",
-    "options": {
-      "A": "在等值变换时，必须将公式A的一个子公式B的所有出现都置换为与B等值的公式B′。",
-      "B": "要证明两个一阶逻辑公式A和B逻辑等值，可使用等值演算或构造真值表的方法。",
-      "C": "如果公式A和B逻辑等值，那么对任意个体变量x，公式∀xA和∀xB也逻辑等值。",
-      "D": "如果公式A和B逻辑等值，那么对任意个体变量x，公式∃xA和∃xB也逻辑等值。"
-    },
-    "answer": "C,D",
-    "analysis": "",
-    "knowledge_points": [],
-    "tags": [],
-    "language": "zh",
-    "split": "dev"
-  },
-  {
     "id": "SYSU-Exam_discrete_mathematics_c0026",
     "source": "SYSU-Exam",
     "subject": "离散数学",
