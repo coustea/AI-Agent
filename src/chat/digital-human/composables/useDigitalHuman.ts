@@ -46,6 +46,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let calibratedRevealCharsPerSecond = 0
     let targetRevealCharsPerSecond = 0
 
+    let cacheDebounceTimer: ReturnType<typeof setTimeout> | null = null
     function updateCache(text: string, append = true) {
         if (append) {
             generationCache.value += text
@@ -53,11 +54,14 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             generationCache.value = text
         }
 
-        if (generationCache.value) {
-            localStorage.setItem(CACHE_KEY, generationCache.value)
-        } else {
-            localStorage.removeItem(CACHE_KEY)
-        }
+        if (cacheDebounceTimer) clearTimeout(cacheDebounceTimer)
+        cacheDebounceTimer = setTimeout(() => {
+            if (generationCache.value) {
+                localStorage.setItem(CACHE_KEY, generationCache.value)
+            } else {
+                localStorage.removeItem(CACHE_KEY)
+            }
+        }, 300)
     }
 
     // --- Idle auto-disconnect ---

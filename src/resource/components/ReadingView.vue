@@ -1,6 +1,6 @@
 <template>
   <div class="reading-resource" :class="{ compact }">
-    <div v-if="readingData && resources.length" class="technical-frame reading-container">
+    <ResourceCardWrapper v-if="readingData && resources.length" :compact="compact" class="reading-container">
 
 
       <div v-if="!compact && readingData.summary" class="reading-summary">
@@ -54,7 +54,7 @@
         <span class="mono-tag">知识同步完成</span>
         <div class="footer-line"></div>
       </div>
-    </div>
+    </ResourceCardWrapper>
     
     <div v-else class="reading-empty-hud">
       <div class="empty-frame">
@@ -68,6 +68,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { User, ArrowRight, Reading } from '@element-plus/icons-vue'
+import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { normalizeReadingArtifact, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -117,43 +118,20 @@ const getDifficultyText = (difficulty?: string) => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
-
 .reading-resource {
   width: 100%;
-  --primary: #475569; /* Slate 600 */
-  --bg: #FFFFFF;
-  --fg: #334155; /* Slate 700 */
-  --border: #E2E8F0;
-  --accent: #6366F1; /* Indigo 500 */
+  --primary: var(--color-primary); /* Slate 600 */
+  --bg: var(--color-surface);
+  --fg: var(--color-text); /* Slate 700 */
+  --border: var(--color-border);
+  --accent: var(--color-primary); /* Indigo 500 */
 }
 
-/* 技术框架样式 */
-.technical-frame {
-  position: relative;
-  background: var(--bg);
-  border: none;
-  border-radius: 4px;
-  padding: 24px 32px 32px;
-  box-shadow: none;
-  transition: all 0.3s ease;
+.reading-container {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
-
-.frame-corners {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--primary);
-  pointer-events: none;
-}
-
-.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
-.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
-.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 
 /* 头部 HUD */
 .frame-header {
@@ -182,7 +160,7 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .technical-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--primary);
   letter-spacing: 1px;
@@ -197,7 +175,7 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .mono-tag {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--primary);
   background: rgba(0, 0, 0, 0.1);
@@ -215,9 +193,9 @@ const getDifficultyText = (difficulty?: string) => {
   display: flex;
   gap: 16px;
   padding: 20px;
-  background: white;
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: none;
   box-shadow: none;
 }
 
@@ -228,7 +206,7 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .summary-text {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
   color: var(--fg);
   line-height: 1.6;
@@ -242,21 +220,21 @@ const getDifficultyText = (difficulty?: string) => {
 
 .reading-item {
   padding: 24px;
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--accent);
+  border: none;
+  border-left: 3px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
-  background: #FFFFFF;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  background: transparent;
+  transition: all 0.3s ease;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
 }
 
 .reading-item:hover {
-  border-color: #CBD5E1;
-  border-left-color: #4F46E5;
-  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
-  transform: translateY(-2px);
+  background: rgba(0, 0, 0, 0.03);
+  border-left-color: var(--primary);
+  box-shadow: none;
+  transform: translateX(4px);
 }
 
 .reading-header {
@@ -267,7 +245,7 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .reading-type {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   padding: 2px 8px;
   background: var(--primary);
@@ -277,7 +255,7 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .reading-title {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--fg);
@@ -288,9 +266,9 @@ const getDifficultyText = (difficulty?: string) => {
   display: flex;
   align-items: center;
   gap: 20px;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   margin-bottom: 16px;
 }
 
@@ -303,29 +281,29 @@ const getDifficultyText = (difficulty?: string) => {
 .difficulty-tag {
   font-size: 0.7rem;
   padding: 1px 8px;
-  border: 1px solid #CBD5E1;
+  border: 1px solid var(--color-border-hover);
   border-radius: 2px;
-  color: #64748B;
+  color: var(--color-text-muted);
 }
 
 .difficulty-tag.basic { color: var(--accent); border-color: var(--accent); }
-.difficulty-tag.medium { color: #F59E0B; border-color: #F59E0B; } /* Amber 500 */
-.difficulty-tag.advanced { color: #EF4444; border-color: #EF4444; } /* Red 500 */
+.difficulty-tag.medium { color: var(--color-warning); border-color: var(--color-warning); } /* Amber 500 */
+.difficulty-tag.advanced { color: var(--color-danger); border-color: var(--color-danger); } /* Red 500 */
 
 .reading-reason {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   color: var(--fg);
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.02);
   padding: 16px;
-  border-radius: 4px;
+  border-radius: 8px;
   margin-bottom: 16px;
   line-height: 1.6;
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .reason-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: bold;
   color: var(--primary);
@@ -333,9 +311,9 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .reading-desc {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
-  color: #475569;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
@@ -348,7 +326,7 @@ const getDifficultyText = (difficulty?: string) => {
   border: 1px solid var(--primary);
   border-radius: 4px;
   color: var(--primary);
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   letter-spacing: 0.6px;
   text-decoration: none;
@@ -366,7 +344,7 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .more-btn-hud {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   letter-spacing: 1px;
 }
@@ -385,7 +363,7 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .empty-icon {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 2rem;
   color: var(--primary);
   opacity: 0.3;
@@ -393,14 +371,14 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .empty-frame p {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   letter-spacing: 1px;
 }
 
 /* 紧凑模式 */
-.compact .technical-frame {
+.compact .reading-container {
   padding: 0;
   border: none;
   background: transparent;

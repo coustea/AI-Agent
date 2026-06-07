@@ -143,7 +143,7 @@ watch(profileRefreshTrigger, () => {
 .profile-card {
   padding: 14px;
   border-radius: 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   background: #fff;
 }
 
@@ -151,7 +151,7 @@ watch(profileRefreshTrigger, () => {
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .profile-card h4 {
@@ -160,7 +160,7 @@ watch(profileRefreshTrigger, () => {
 
 .profile-card p {
   margin: 0;
-  color: #475569;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
@@ -188,7 +188,7 @@ watch(profileRefreshTrigger, () => {
 .strategy-list {
   margin: 0;
   padding-left: 18px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .strategy-list li {
@@ -196,6 +196,6 @@ watch(profileRefreshTrigger, () => {
 }
 
 .empty-state {
-  color: #94a3b8;
+  color: var(--color-text-faint);
 }
 </style>

@@ -72,7 +72,7 @@ const parsePoint = (point: string): ParsedPoint => {
 .logic-blue-slide {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, #EFF6FF 100%);
   padding: 60px 80px;
   box-sizing: border-box;
   overflow: hidden;
@@ -104,7 +104,7 @@ const parsePoint = (point: string): ParsedPoint => {
 
 .slide-title {
   font-size: 38px;
-  color: #0F172A;
+  color: var(--color-text);
   font-weight: 800;
   line-height: 1.3;
   margin: 0 0 16px 0;
@@ -114,14 +114,14 @@ const parsePoint = (point: string): ParsedPoint => {
 .title-decor-line {
   width: 60px;
   height: 2px;
-  background: #E2E8F0;
+  background: var(--color-border);
   margin-bottom: 12px;
 }
 
 .title-sub-desc {
   font-size: 11px;
   font-weight: 600;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   letter-spacing: 1.5px;
   margin: 0;
 }
@@ -139,8 +139,8 @@ const parsePoint = (point: string): ParsedPoint => {
 }
 
 .bullet-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 18px 24px;
   display: flex;
@@ -192,7 +192,7 @@ const parsePoint = (point: string): ParsedPoint => {
   font-size: 12px;
   font-weight: 700;
   background: #EFF6FF;
-  color: #2563EB;
+  color: var(--color-info);
   padding: 2px 8px;
   border-radius: 4px;
   border: 1px solid #DBEAFE;
@@ -206,7 +206,7 @@ const parsePoint = (point: string): ParsedPoint => {
 }
 
 .point-text.with-badge {
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 /* 动效 */

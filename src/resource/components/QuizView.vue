@@ -1,7 +1,7 @@
 <template>
   <div class="quiz-resource" :class="{ compact }">
     <div v-if="questions.length" class="quiz-list">
-      <article v-for="(question, index) in visibleQuestions" :key="index" class="technical-frame quiz-item">
+      <ResourceCardWrapper v-for="(question, index) in visibleQuestions" :key="index" :compact="compact" class="quiz-item">
         <div class="quiz-stem">
           <span class="quiz-index">Q{{ index + 1 }}</span>
           <div class="quiz-title">
@@ -119,7 +119,7 @@
             </div>
           </div>
         </template>
-      </article>
+      </ResourceCardWrapper>
 
       <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
         <el-button type="primary" link class="more-btn-hud">
@@ -141,6 +141,7 @@
 import { computed, ref } from 'vue'
 import { Select, ArrowRight, Close } from '@element-plus/icons-vue'
 import { renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
+import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { normalizeQuizQuestions, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -241,33 +242,21 @@ const getQuestionTypeText = (questionType?: string) => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
-
 .quiz-resource {
   width: 100%;
-  --primary: #475569;
-  --bg: #ffffff;
-  --fg: #334155;
-  --border: #e2e8f0;
-  --accent: #6366f1;
-  --success: #10b981;
-  --error: #ef4444;
+  --primary: var(--color-primary);
+  --bg: var(--color-surface);
+  --fg: var(--color-text);
+  --border: var(--color-border);
+  --accent: var(--color-primary);
+  --success: var(--color-success);
+  --error: var(--color-danger);
 }
 
 .quiz-list {
   display: flex;
   flex-direction: column;
   gap: 32px;
-}
-
-.technical-frame {
-  position: relative;
-  background: var(--bg);
-  border: none;
-  border-radius: 4px;
-  padding: 24px 32px 32px;
-  box-shadow: none;
-  transition: all 0.3s ease;
 }
 
 .quiz-stem {
@@ -277,7 +266,7 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-index {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 1.8rem;
   font-weight: 400;
   color: var(--primary);
@@ -301,7 +290,7 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .quiz-meta,
 .quiz-difficulty {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   padding: 2px 8px;
   border-radius: 2px;
@@ -325,7 +314,7 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-text {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 1.05rem;
   font-weight: 500;
   color: var(--fg);
@@ -345,23 +334,20 @@ const getQuestionTypeText = (questionType?: string) => {
   align-items: center;
   gap: 16px;
   padding: 14px 20px;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
 }
 
 .quiz-option-item:not(.is-readonly):hover {
   background: rgba(0, 0, 0, 0.03);
-  border-color: var(--primary);
   transform: translateX(4px);
 }
 
 .quiz-option-item.is-selected {
-  background: #eef2ff;
-  border-color: var(--accent);
-  box-shadow: none;
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .option-check {
@@ -385,14 +371,14 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .option-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--primary);
 }
 
 .option-content {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
   color: var(--fg);
   flex: 1;
@@ -400,8 +386,7 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-option-item.is-correct {
-  border-color: var(--success);
-  background: #ecfdf5;
+  background: rgba(16, 185, 129, 0.08);
 }
 
 .is-correct .check-box {
@@ -410,8 +395,7 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-option-item.is-wrong {
-  border-color: var(--error);
-  background: #fef2f2;
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .is-wrong .check-box {
@@ -446,9 +430,9 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .hint-text {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   letter-spacing: 1px;
 }
 
@@ -470,7 +454,7 @@ const getQuestionTypeText = (questionType?: string) => {
   background: var(--accent);
   color: white;
   border: none;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   padding: 10px 24px;
   border-radius: 4px;
@@ -484,22 +468,22 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .hud-btn-primary:disabled {
-  background: #cbd5e1;
+  background: var(--color-border-hover);
   cursor: not-allowed;
-  color: #94a3b8;
+  color: var(--color-text-faint);
 }
 
 .quiz-answer,
 .quiz-explanation {
   margin-top: 20px;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.02);
+  border: none;
+  border-radius: 8px;
 }
 
 .header-tag {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   background: var(--accent);
   color: white;
@@ -512,7 +496,7 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .header-text {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   color: var(--fg);
   font-weight: 700;
@@ -521,7 +505,7 @@ const getQuestionTypeText = (questionType?: string) => {
 .answer-content {
   margin-top: 12px;
   margin-left: 20px;
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 1.1rem;
   color: var(--success);
   font-weight: 700;
@@ -529,18 +513,18 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .explanation-content {
   margin-top: 12px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .ref-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--primary);
   margin-bottom: 8px;
 }
 
 .analysis-text {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
   line-height: 1.6;
 }
@@ -553,7 +537,7 @@ const getQuestionTypeText = (questionType?: string) => {
 .short-answer-input {
   width: 100%;
   padding: 16px;
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
   color: var(--fg);
   background: white;
@@ -572,14 +556,14 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .short-answer-input:disabled {
   background: rgba(0, 0, 0, 0.03);
-  color: #64748b;
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
 .more-btn-hud {
   width: 100%;
   margin-top: 16px;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   letter-spacing: 1px;
 }
@@ -592,13 +576,14 @@ const getQuestionTypeText = (questionType?: string) => {
 
 .empty-frame {
   text-align: center;
-  border: 1px dashed var(--border);
+  border: none;
+  background: rgba(0, 0, 0, 0.02);
   padding: 40px 60px;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .empty-icon {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 2rem;
   color: var(--primary);
   opacity: 0.3;
@@ -606,9 +591,9 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .empty-frame p {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--color-text-faint);
   letter-spacing: 1px;
 }
 
@@ -656,7 +641,7 @@ const getQuestionTypeText = (questionType?: string) => {
   margin-top: 8px;
 }
 
-.compact .technical-frame {
+.compact .quiz-item {
   padding: 0;
   border: none;
   background: transparent;

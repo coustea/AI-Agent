@@ -7,7 +7,7 @@ const LEARNING_ROUTE_NAMES = new Set([
   'ResourceDetail',
   'PathResourceDetail',
   'Tutor',
-  'LearnPath',
+  'LearningPathNode',
   'QuestionBank',
 ])
 
@@ -35,8 +35,11 @@ function getContextFromRoute(route: Router['currentRoute']['value']): TrackingCo
     return { sourcePage: 'tutor' }
   }
 
-  if (name === 'LearnPath') {
-    return { sourcePage: 'path' }
+  if (name === 'LearningPathNode') {
+    return {
+      sourcePage: 'path_node',
+      pathNodeId: route.params.nodeId ? Number(route.params.nodeId) : undefined,
+    }
   }
 
   if (name === 'QuestionBank') {

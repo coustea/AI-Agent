@@ -1,13 +1,13 @@
 <template>
   <div class="mindmap-resource" :class="{ compact }">
-    <div v-if="markdownContent" class="technical-frame mindmap-container">
+    <ResourceCardWrapper v-if="markdownContent" :compact="compact" class="mindmap-container">
       <div ref="markmapRef" class="markmap-shell"></div>
 
       <div class="frame-footer">
         <span class="mono-tag">导图同步中</span>
         <div class="footer-line"></div>
       </div>
-    </div>
+    </ResourceCardWrapper>
     <div v-else class="mindmap-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
@@ -18,7 +18,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -28,6 +29,7 @@ const props = defineProps<{
 
 type MarkmapInstance = {
   setData: (root: unknown) => void
+  destroy?: () => void
 }
 
 type MarkmapRuntime = {
@@ -55,7 +57,7 @@ const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
           paddingX: 30,
           style: (id: string) => `
             .${id}-g {
-              font-family: 'Fira Code', monospace;
+              font-family: var(--font-mono);
               font-size: 15px;
             }
             .${id}-g foreignObject {
@@ -78,6 +80,11 @@ const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
         })
         return {
           setData: (root: unknown) => { instance.setData(root as any) },
+          destroy: () => { 
+            if (instance && typeof instance.destroy === 'function') {
+              instance.destroy()
+            }
+          }
         }
       }
 
@@ -111,12 +118,16 @@ const markdownContent = computed<string>(() => {
   }
 
   if (typeof content === 'object' && content !== null) {
+    if ((content as Record<string, any>).root) {
+      return JSON.stringify(content)
+    }
     if (content.markdown_content) return content.markdown_content
     if (content.outline) return content.outline
     if (content.source) return content.source
     if (content.markdown) return content.markdown
   }
 
+  if (data.root) return JSON.stringify(data)
   if (data.markdown_content) return data.markdown_content
   if (data.outline) return data.outline
   if (data.source) return data.source
@@ -127,6 +138,11 @@ const markdownContent = computed<string>(() => {
 
 const preprocessContent = (text: string): string => {
   let content = text.trim()
+  const parsedJson = parseJsonObject(content)
+  if (parsedJson?.root && typeof parsedJson.root === 'object') {
+    return rootTreeToMarkdown(parsedJson.root as Record<string, any>)
+  }
+
   if (content.startsWith('```')) {
     content = content.replace(/^```[a-z]*\n/i, '').replace(/\n```$/, '').trim()
   }
@@ -171,6 +187,32 @@ const preprocessContent = (text: string): string => {
   }
 
   return markdownLines.join('\n')
+}
+
+const rootTreeToMarkdown = (root: Record<string, any>): string => {
+  const lines: string[] = []
+
+  const walk = (node: Record<string, any>, depth: number) => {
+    const label = String(node.content || node.title || node.name || '').trim()
+    if (!label) return
+    if (depth === 0) {
+      lines.push(`# ${label}`)
+    } else if (depth === 1) {
+      lines.push(`## ${label}`)
+    } else {
+      lines.push(`${'  '.repeat(depth - 2)}- ${label}`)
+    }
+
+    const children = Array.isArray(node.children) ? node.children : []
+    for (const child of children) {
+      if (child && typeof child === 'object' && !Array.isArray(child)) {
+        walk(child as Record<string, any>, depth + 1)
+      }
+    }
+  }
+
+  walk(root, 0)
+  return lines.join('\n')
 }
 
 const renderMarkmap = async (rawContent: string) => {
@@ -219,44 +261,32 @@ onMounted(() => {
     void renderMarkmap(markdownContent.value)
   }
 })
+
+onBeforeUnmount(() => {
+  if (markmapInstance?.destroy) {
+    markmapInstance.destroy()
+  }
+  markmapInstance = null
+  if (markmapRef.value) {
+    markmapRef.value.innerHTML = ''
+  }
+})
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
-
 .mindmap-resource {
   width: 100%;
-  --primary: #000000;
-  --bg: #FFFFFF;
-  --fg: #000000;
-  --border: #E5E7EB;
-  --accent: #000000;
+  --primary: var(--color-primary);
+  --bg: var(--color-surface);
+  --fg: var(--color-text);
+  --border: var(--color-border);
+  --accent: var(--color-primary);
 }
 
-.technical-frame {
-  position: relative;
-  background: var(--bg);
-  border: none;
-  border-radius: 4px;
-  padding: 24px 32px 32px;
-  box-shadow: none;
-  transition: all 0.3s ease;
+.mindmap-container {
   display: flex;
   flex-direction: column;
 }
-
-.frame-corners {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--primary);
-  pointer-events: none;
-}
-
-.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
-.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
-.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 
 .frame-header {
   position: absolute;
@@ -284,7 +314,7 @@ onMounted(() => {
 }
 
 .technical-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--primary);
   letter-spacing: 1px;
@@ -298,7 +328,7 @@ onMounted(() => {
 }
 
 .mono-tag {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--primary);
   background: rgba(0, 0, 0, 0.1);
@@ -315,9 +345,9 @@ onMounted(() => {
 .markmap-shell {
   width: 100%;
   min-height: 420px;
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
   overflow: hidden;
   background-image: none;
   background-size: 32px 32px;
@@ -345,15 +375,15 @@ onMounted(() => {
 
 .markmap-error {
   padding: 20px;
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.02);
+  border: none;
+  border-radius: 8px;
   color: #000000;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
 }
 
-.compact .technical-frame {
+.compact .mindmap-container {
   padding: 0;
   border: none;
   background: transparent;
@@ -388,7 +418,7 @@ onMounted(() => {
 }
 
 .empty-icon {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 2rem;
   color: var(--primary);
   opacity: 0.3;
@@ -396,9 +426,9 @@ onMounted(() => {
 }
 
 .empty-frame p {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   letter-spacing: 1px;
 }
 

@@ -41,7 +41,7 @@ defineProps<{
   width: 100%;
   height: 100%;
   padding: 60px 80px;
-  background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, #EFF6FF 100%);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -66,7 +66,7 @@ defineProps<{
 
 .slide-title {
   font-size: 38px;
-  color: #0F172A;
+  color: var(--color-text);
   margin: 0;
   font-weight: 800;
   letter-spacing: -0.5px;
@@ -83,8 +83,8 @@ defineProps<{
 }
 
 .card-item {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 16px;
   padding: 28px;
   display: flex;
@@ -106,14 +106,14 @@ defineProps<{
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
-  border-bottom: 1px solid #F1F5F9;
+  border-bottom: 1px solid var(--color-surface-hover);
   padding-bottom: 12px;
 }
 
 .card-index {
   font-size: 24px;
   font-weight: 800;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   font-family: "JetBrains Mono", Consolas, monospace;
 }
 
@@ -125,7 +125,7 @@ defineProps<{
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #E2E8F0;
+  background: var(--color-border);
   transition: all 0.3s;
 }
 
@@ -144,7 +144,7 @@ defineProps<{
 
 .card-title {
   font-size: 22px;
-  color: #1E293B;
+  color: var(--color-text-strong);
   font-weight: 700;
   margin: 0 0 14px 0;
   line-height: 1.3;
@@ -152,14 +152,14 @@ defineProps<{
 
 .card-desc {
   font-size: 16px;
-  color: #64748B;
+  color: var(--color-text-muted);
   line-height: 1.6;
   margin: 0;
   font-weight: 500;
 }
 
 .card-item:hover .card-desc {
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 /* 动效 */

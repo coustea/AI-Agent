@@ -1,29 +1,21 @@
 import http from '@/shared/utils/http'
 import type { ApiResponse } from '@/shared/utils/http'
 import type {
-  CourseBaseInfo,
-  BaseInfoData,
   ProfileData,
   ProfileOnboardingData,
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
-  TutoringProfileUpdatePayload,
-  TutoringProfileUpdateResult,
   ProfileScoreData,
   ProfileHistoryItem,
 } from '@/profile/types/profile'
 
 export type {
-  CourseBaseInfo,
-  BaseInfoData,
   ProfileData,
   ProfileOnboardingData,
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
-  TutoringProfileUpdatePayload,
-  TutoringProfileUpdateResult,
   ProfileScoreData,
   ProfileHistoryItem,
 }
@@ -44,10 +36,6 @@ export function getProfileOnboarding() {
 
 export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
   return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload)
-}
-
-export function updateProfileFromTutoring(payload: TutoringProfileUpdatePayload) {
-  return http.patch<ApiResponse<TutoringProfileUpdateResult>>('/ai/profile/tutoring-update', payload)
 }
 
 export function getProfileHistory(limit = 20, userId?: number | string) {

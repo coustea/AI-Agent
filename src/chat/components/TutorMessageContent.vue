@@ -135,7 +135,7 @@ onBeforeUnmount(() => {
   margin: 1rem 0;
   border-radius: 8px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid #e5e7eb;
 }
 
@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.65rem 0.85rem;
-  background: #f8fafc;
+  background: var(--color-bg);
   border-bottom: 1px solid #e5e7eb;
 }
 
@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   font-weight: 600;
   user-select: none;
@@ -162,9 +162,9 @@ onBeforeUnmount(() => {
 
 .stream-markdown :deep(.code-block-copy-btn) {
   flex: 0 0 auto;
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid #e5e7eb;
-  color: #64748b;
+  color: var(--color-text-muted);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
@@ -176,13 +176,13 @@ onBeforeUnmount(() => {
 }
 
 .stream-markdown :deep(.code-block-copy-btn:hover) {
-  background: #f1f5f9;
+  background: var(--color-surface-hover);
   color: #334155;
 }
 
 .stream-markdown :deep(.code-block-copy-btn.copied) {
-  color: #10b981;
-  border-color: #10b981;
+  color: var(--color-success);
+  border-color: var(--color-success);
 }
 
 .stream-markdown :deep(.code-block-wrapper pre) {

@@ -248,8 +248,8 @@
                   </div>
                 </div>
 
-                <div v-if="msg.teachingDiagram" class="msg-teaching-diagram" @click="previewTeachingDiagram(msg.teachingDiagram)">
-                  <TeachingDiagramCard :diagram="msg.teachingDiagram" compact />
+                <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
+                  <TeachingDiagramCard :diagram="msg.teachingDiagram" compact @expand="previewTeachingDiagram" />
                 </div>
 
                 <div v-if="msg.role === 'ai' && msg.knowledgeSources && msg.knowledgeSources.length > 0" class="knowledge-sources">
@@ -459,6 +459,9 @@
           <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
         </div>
         <div class="preview-footer">
+          <el-button type="success" :loading="isCapturing" @click="handleDownloadDiagram">
+            <el-icon><Download /></el-icon> 保存为图片
+          </el-button>
           <el-button type="primary" plain @click="copyTeachingDiagramJson(teachingDiagramPreviewData)">复制图解 JSON</el-button>
           <el-button @click="teachingDiagramPreviewVisible = false">关闭</el-button>
         </div>
@@ -468,18 +471,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, computed, watch } from 'vue'
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Microphone, Document, ChatDotRound, ChatLineSquare,
   Delete, Close, Top, Paperclip,
   EditPen, Search, Timer, VideoCamera, DataLine,
-  CircleCheckFilled
+  CircleCheckFilled, Download
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getErrorMessage } from '@/shared/utils/http'
 import TutorMessageContent from '@/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/chat/components/TeachingDiagramCard.vue'
+
+import { useDiagramCapture } from '@/chat/composables/useDiagramCapture'
 
 import { triggerGlobalProfileRefresh } from '@/profile/composables/useGlobalProfile'
 import { useChatStreamManager } from '@/chat/composables/useChatStreamManager'
@@ -752,6 +757,23 @@ const clearAvatarThinkingTimeout = () => {
   }
 }
 
+const detachCurrentStreamCallbacks = () => {
+  if (!currentSessionId.value) return
+  const streamState = streamManager.getStreamState(currentSessionId.value)
+  if (streamState?.status === 'streaming') {
+    streamManager.resubscribe(currentSessionId.value, {})
+  }
+}
+
+const pauseForegroundStreaming = () => {
+  detachCurrentStreamCallbacks()
+  stopStreamFlushLoop()
+  if (streamingMsgId.value !== null) {
+    commitStreamTextToMessage(streamingMsgId.value)
+  }
+  streamingMsgRef.value = null
+}
+
 const stopTeachingDiagramGeneratingForCurrentAi = () => {
   const target = (
     (streamingMsgId.value !== null
@@ -870,9 +892,29 @@ const digitalHumanStatusText = computed(() => {
 const teachingDiagramPreviewVisible = ref(false)
 const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
 
+const { isCapturing, captureToDataUrl, downloadImage } = useDiagramCapture()
+
 const previewTeachingDiagram = (diagram: TeachingDiagram) => {
   teachingDiagramPreviewData.value = diagram
   teachingDiagramPreviewVisible.value = true
+}
+
+const handleDownloadDiagram = async () => {
+  if (!teachingDiagramPreviewData.value) return
+  
+  const dataUrl = await captureToDataUrl('capture-target', {
+    pixelRatio: 2,
+    backgroundColor: '#ffffff',
+    style: {
+      padding: '24px',
+      borderRadius: '16px'
+    }
+  })
+  
+  if (dataUrl) {
+    downloadImage(dataUrl, `${teachingDiagramPreviewData.value.title || '图解说明'}_高清截图`)
+    ElMessage.success('图解说明已保存至本地')
+  }
 }
 
 const copyTeachingDiagramJson = async (diagram: TeachingDiagram) => {
@@ -2011,8 +2053,36 @@ onMounted(async () => {
   }
 })
 
+let tutorWasDeactivated = false
+
+onActivated(async () => {
+  if (!tutorWasDeactivated) return
+  tutorWasDeactivated = false
+  resetDimTimer()
+  document.addEventListener('mousedown', handleGlobalClick)
+  document.addEventListener('touchstart', handleGlobalClick, { passive: true })
+
+  if (currentSessionId.value) {
+    await switchSession(currentSessionId.value)
+  }
+})
+
+onDeactivated(() => {
+  tutorWasDeactivated = true
+  clearAvatarThinkingTimeout()
+  pauseForegroundStreaming()
+  showFabMenu.value = false
+  document.removeEventListener('mousedown', handleGlobalClick)
+  document.removeEventListener('touchstart', handleGlobalClick)
+  if (dimTimer) {
+    clearTimeout(dimTimer)
+    dimTimer = null
+  }
+})
+
 onBeforeUnmount(() => {
   clearAvatarThinkingTimeout()
+  detachCurrentStreamCallbacks()
   disconnectAvatar()
   flushPendingStreamText()
   stopStreamFlushLoop()
@@ -2334,35 +2404,7 @@ onBeforeUnmount(() => {
   }
 }
 
-.teaching-diagram-generating {
-  margin-top: var(--space-3);
-  padding: var(--space-4);
-  width: min(100%, 680px);
-  max-width: 100%;
-  background: var(--color-surface);
-  border: 1px solid var(--color-surface-hover);
-  border-radius: var(--radius-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
-}
 
-.teaching-diagram-generating::after {
-  content: '';
-  position: absolute;
-  top: 0; left: -150%; width: 50%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  transform: skewX(-20deg);
-  animation: diagram-shimmer 2.5s infinite ease-in-out;
-  pointer-events: none;
-}
-
-@keyframes diagram-shimmer {
-  100% { left: 150%; }
-}
 
 .kg-gen-header {
   display: flex;
@@ -2796,7 +2838,7 @@ onBeforeUnmount(() => {
 }
 
 .mode-digital_human .message-row.ai .sender {
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .digital-human-bubble {
@@ -2820,7 +2862,7 @@ onBeforeUnmount(() => {
   font-size: 1.08rem;
   line-height: 1.9;
   letter-spacing: 0.01em;
-  color: #0f172a;
+  color: var(--color-text);
   text-align: left;
 }
 
@@ -2837,7 +2879,7 @@ onBeforeUnmount(() => {
 .mode-digital_human .digital-human-bubble :deep(h3),
 .mode-digital_human .digital-human-bubble :deep(h4) {
   text-align: left;
-  color: #0f172a;
+  color: var(--color-text);
 }
 
 .mode-digital_human .digital-human-bubble :deep(ul),
@@ -2902,7 +2944,7 @@ onBeforeUnmount(() => {
 /* 用户气泡：现代渐变蓝紫与发光阴影 */
 .message-row.user .bubble {
   background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
-  color: #ffffff;
+  color: var(--color-surface);
   border: none !important;
   border-radius: var(--radius-xl);
   border-top-right-radius: 4px;
@@ -2911,7 +2953,7 @@ onBeforeUnmount(() => {
 
 /* 覆盖用户气泡内的 Markdown 颜色 */
 .message-row.user :deep(.markdown-body) {
-  color: #ffffff !important;
+  color: var(--color-surface) !important;
 }
 .message-row.user :deep(.markdown-body a) {
   color: rgba(255, 255, 255, 0.9) !important;
@@ -2919,7 +2961,7 @@ onBeforeUnmount(() => {
 }
 .message-row.user :deep(.markdown-body code:not(pre code)) {
   background: rgba(255, 255, 255, 0.2) !important;
-  color: #ffffff !important;
+  color: var(--color-surface) !important;
   border: none;
 }
 

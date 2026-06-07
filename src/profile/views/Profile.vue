@@ -1143,8 +1143,8 @@ const loadLearningStats = async () => {
 const loadResourceHistory = async () => {
   resourceHistoryLoading.value = true
   try {
-    const res = await getGeneratedResources(20)
-    resourceHistory.value = res.data.data || []
+    const res = await getGeneratedResources(1, 20)
+    resourceHistory.value = res.data.data?.items || []
   } catch (e) {
     console.warn('后端资源历史加载失败：', e)
     resourceHistory.value = []
@@ -1476,20 +1476,20 @@ const getStatusClass = (status: string) => {
 .custom-edit-btn {
   position: absolute; right: 0; top: 0;
   display: inline-flex; align-items: center; gap: 4px;
-  background: #FFFFFF; border: 1px solid var(--color-border);
+  background: var(--color-surface); border: 1px solid var(--color-border);
   color: var(--color-text-strong); font-size: 0.8rem; font-weight: 600;
   padding: 6px 14px; border-radius: 100px; cursor: pointer;
   transition: all 0.25s ease; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 .custom-edit-btn:hover {
-  color: var(--color-primary); border-color: #CBD5E1;
+  color: var(--color-primary); border-color: var(--color-border-hover);
   box-shadow: 0 4px 8px rgba(15, 23, 42, 0.06); transform: translateY(-1px);
 }
 
 /* 2. 自定义丝滑分段控制器 (近期任务 / 资源历史) */
 .custom-pill-group {
   display: inline-flex;
-  background: var(--color-surface-hover, #F1F5F9);
+  background: var(--color-surface-hover, var(--color-surface-hover));
   border-radius: 8px;
   padding: 3px;
   gap: 2px;
@@ -1518,7 +1518,7 @@ const getStatusClass = (status: string) => {
   color: var(--color-text-strong);
 }
 .custom-pill-group .pill-btn.active {
-  background: #FFFFFF;
+  background: var(--color-surface);
   color: var(--color-primary);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
   font-weight: 700;
@@ -1527,12 +1527,12 @@ const getStatusClass = (status: string) => {
 /* 3. 自定义原生风格下拉菜单 (课程切换) */
 .custom-dropdown {
   position: relative; display: inline-flex; align-items: center;
-  background: #FFFFFF; border: 1px solid var(--color-border);
+  background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: 8px; font-size: 0.82rem; font-weight: 600;
   color: var(--color-text-strong); cursor: pointer; user-select: none;
   min-width: 140px; transition: all 0.2s ease; outline: none;
 }
-.custom-dropdown:hover { border-color: #CBD5E1; }
+.custom-dropdown:hover { border-color: var(--color-border-hover); }
 .custom-dropdown.is-open { border-color: var(--color-primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1); }
 .dropdown-selected {
   display: flex; justify-content: space-between; align-items: center;
@@ -1543,7 +1543,7 @@ const getStatusClass = (status: string) => {
 .custom-dropdown.is-open .dropdown-arrow { transform: rotate(180deg); }
 .dropdown-options {
   position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-  background: #FFFFFF; border: 1px solid var(--color-border);
+  background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: 8px; padding: 4px; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.1);
   z-index: 100; max-height: 200px; overflow-y: auto; list-style: none; margin: 0;
 }
@@ -1636,8 +1636,8 @@ const getStatusClass = (status: string) => {
 
 /* 滚动条优化 */
 .history-card :deep(.el-scrollbar__bar.is-vertical) { width: 6px !important; }
-.history-card :deep(.el-scrollbar__thumb) { background-color: #CBD5E1 !important; border-radius: 4px; }
-.history-card :deep(.el-scrollbar__thumb:hover) { background-color: #94A3B8 !important; }
+.history-card :deep(.el-scrollbar__thumb) { background-color: var(--color-border-hover) !important; border-radius: 4px; }
+.history-card :deep(.el-scrollbar__thumb:hover) { background-color: var(--color-text-faint) !important; }
 
 /* Compact dialog styles */
 .profile-editor-dialog :deep(.el-dialog) {
@@ -1810,29 +1810,29 @@ const getStatusClass = (status: string) => {
 
 /* 独立按钮：单独赋予形状、边框和阴影 */
 .switcher-btn {
-  background: #FFFFFF;
-  border: 1px solid var(--color-border, #E2E8F0);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border, var(--color-border));
   padding: 6px 18px;
   border-radius: 100px;
   font-size: 0.82rem;
   font-weight: 600;
-  color: var(--color-text-secondary, #64748B);
+  color: var(--color-text-secondary, var(--color-text-muted));
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .switcher-btn:hover {
-  color: var(--color-text-strong, #0F172A);
-  border-color: #CBD5E1;
+  color: var(--color-text-strong, var(--color-text));
+  border-color: var(--color-border-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 6px rgba(15, 23, 42, 0.05);
 }
 
 .switcher-btn.active {
-  background: var(--color-primary, #4F46E5);
-  color: #FFFFFF;
-  border-color: var(--color-primary, #4F46E5);
+  background: var(--color-primary, var(--color-primary));
+  color: var(--color-surface);
+  border-color: var(--color-primary, var(--color-primary));
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
   transform: translateY(-1px);
 }
@@ -1843,11 +1843,11 @@ const getStatusClass = (status: string) => {
   width: 6px;
 }
 .profile-tabs-content::-webkit-scrollbar-thumb {
-  background: var(--color-border, #E2E8F0);
+  background: var(--color-border, var(--color-border));
   border-radius: 4px;
 }
 .profile-tabs-content::-webkit-scrollbar-thumb:hover {
-  background: #CBD5E1;
+  background: var(--color-border-hover);
 }
 
 .dimensions-list {
@@ -1865,13 +1865,13 @@ const getStatusClass = (status: string) => {
   margin-bottom: 4px;
 }
 .dimension-item:hover {
-  border-color: var(--color-primary-hover, #4F46E5);
+  border-color: var(--color-primary-hover, var(--color-primary));
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.05);
   background: var(--color-surface-hover, #FAF9FF);
 }
 .dimension-item.is-active {
-  border-color: var(--color-primary, #4F46E5);
-  background: var(--color-primary-soft, #EEF2FF);
+  border-color: var(--color-primary, var(--color-primary));
+  background: var(--color-primary-soft, var(--color-primary-soft));
 }
 .dim-main-row {
   display: flex;
@@ -1888,7 +1888,7 @@ const getStatusClass = (status: string) => {
   align-items: center;
   justify-content: center;
   background: rgba(79, 70, 229, 0.08);
-  color: var(--color-primary, #4F46E5);
+  color: var(--color-primary, var(--color-primary));
   font-size: 0.95rem;
 }
 .dim-name {
@@ -1903,14 +1903,14 @@ const getStatusClass = (status: string) => {
   display: inline-flex;
   align-items: center;
 }
-.dim-trend.up { color: var(--color-success, #10B981); }
-.dim-trend.down { color: var(--color-danger, #EF4444); }
-.dim-trend.stable { color: var(--color-text-faint, #94A3B8); }
+.dim-trend.up { color: var(--color-success, var(--color-success)); }
+.dim-trend.down { color: var(--color-danger, var(--color-danger)); }
+.dim-trend.stable { color: var(--color-text-faint, var(--color-text-faint)); }
 
 .dim-progress-track {
   width: 100%;
   height: 6px;
-  background: var(--color-border, #E2E8F0);
+  background: var(--color-border, var(--color-border));
   border-radius: 3px;
   margin-top: 10px;
   overflow: hidden;
@@ -1918,11 +1918,11 @@ const getStatusClass = (status: string) => {
 .dim-progress-bar {
   height: 100%;
   border-radius: 3px;
-  background-color: var(--color-primary, #4F46E5);
+  background-color: var(--color-primary, var(--color-primary));
   transition: width 0.4s ease;
 }
 .dim-progress-bar.weakness_points {
-  background-color: var(--color-warning, #F59E0B);
+  background-color: var(--color-warning, var(--color-warning));
 }
 
 .dim-summary-short {
@@ -1966,7 +1966,7 @@ const getStatusClass = (status: string) => {
 .evidence-item-tag {
   font-size: 0.72rem;
   padding: 2px 6px;
-  background: #FFFFFF;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 4px;
   color: var(--color-text-muted);
@@ -2060,7 +2060,7 @@ const getStatusClass = (status: string) => {
 .history-compare-panel {
   margin-top: 16px;
   padding: 14px;
-  border: 1px solid var(--color-primary-border, #C7D2FE);
+  border: 1px solid var(--color-primary-border, var(--color-primary-border));
   border-radius: 8px;
   background: #F9FAFF;
   animation: fadeIn var(--transition-slow);
@@ -2160,7 +2160,7 @@ const getStatusClass = (status: string) => {
   border-radius: 8px !important;
   box-shadow: var(--shadow-lg), 0 4px 20px rgba(0,0,0,0.1) !important; /* 增加阴影，增强层级感 */
   border: 1px solid var(--color-border) !important;
-  background: var(--color-surface, #ffffff) !important; /* 强制白色背景，防止内容穿透重叠 */
+  background: var(--color-surface, var(--color-surface)) !important; /* 强制白色背景，防止内容穿透重叠 */
   z-index: 9999 !important; /* 提升层级 */
 }
 .all-courses-popover-content .popover-title {

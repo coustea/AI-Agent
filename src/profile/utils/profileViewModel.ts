@@ -1,61 +1,96 @@
-import type { ProfileData } from '@/profile/api/profile'
-
-interface DisplayItem {
-  label: string
-  value: string
-}
-
-interface CourseProfileCard {
-  name: string
-  level: string
-  goal: string
-  weakPoints: string[]
-}
-
-type KnowledgeMasteryItem = Record<string, any>
-
-function getLearningProfile(profile: ProfileData | null) {
-  return (profile?.learning_profile as any) || {}
-}
-
-export function getGlobalProfileCards(profile: ProfileData | null): DisplayItem[] {
-  const globalProfile = getLearningProfile(profile).global_profile || {}
-
-  return [
-    { label: '专业背景', value: globalProfile.major_background?.value || '暂无' },
-    { label: '学习阶段', value: globalProfile.student_stage?.value || '暂无' },
-    { label: '学习节奏', value: globalProfile.learning_pace?.value || '暂无' },
-    { label: '认知风格', value: globalProfile.cognitive_style?.value || '暂无' },
+export function getRadarChartData(scoreData: any) {
+  const scores = scoreData?.metrics?.dimension_scores || {}
+  const backendDimensions = Array.isArray(scoreData?.dimensions) ? scoreData.dimensions : []
+  const dimensionMapping: Array<{ key: string; label: string }> = [
+    { key: 'major_background', label: '专业背景' },
+    { key: 'student_stage', label: '学习阶段' },
+    { key: 'course_context', label: '课程上下文' },
+    { key: 'knowledge_level', label: '知识基础' },
+    { key: 'learning_goal_type', label: '学习目标' },
+    { key: 'weak_knowledge_points', label: '薄弱知识点' },
+    { key: 'cognitive_style', label: '认知风格' },
+    { key: 'resource_preference_weight', label: '资源偏好' },
+    { key: 'learning_pace', label: '学习节奏' },
+    { key: 'practice_profile', label: '实践能力' }
   ]
-}
 
-export function getCourseProfileCards(profile: ProfileData | null): CourseProfileCard[] {
-  const courses = (getLearningProfile(profile).course_profiles || []) as any[]
+  const dimensions = backendDimensions.length > 0
+    ? backendDimensions
+    : dimensionMapping.map((item) => ({
+      key: item.key,
+      label: item.label,
+      score: scores[item.key] ?? null,
+      missing: scores[item.key] === undefined || scores[item.key] === null
+    }))
 
-  return courses.map((course) => ({
-    name: course.course_context?.value?.course || '未命名课程',
-    level: course.knowledge_level?.value || '暂无',
-    goal: ((course.learning_goal_type?.value || []) as string[]).join(' / ') || '暂无目标',
-    weakPoints: (course.weak_knowledge_points?.value || []).map((item: any) => item.name || item),
-  }))
-}
+  const indicators = []
+  const values = []
 
-export function getStrategyList(profile: ProfileData | null): string[] {
-  const strategy = profile?.initial_strategy || {}
+  for (const item of dimensions) {
+    indicators.push({ name: item.label || item.key, max: 100 })
+    values.push(typeof item.score === 'number' ? item.score : 0)
+  }
 
-  return [
-    strategy.strategy_summary,
-    strategy.path_planning_strategy,
-    strategy.tutor_strategy,
-  ].filter(Boolean) as string[]
-}
-
-function getMasteryItems(profile: ProfileData | null): KnowledgeMasteryItem[] {
-  return (profile?.knowledge_mastery || []) as KnowledgeMasteryItem[]
-}
-
-export function getMasteryTop(profile: ProfileData | null, limit = 4): KnowledgeMasteryItem[] {
-  return [...getMasteryItems(profile)]
-    .sort((a, b) => (a.mastery_score || 0) - (b.mastery_score || 0))
-    .slice(0, limit)
+  return {
+    radar: {
+      indicator: indicators,
+      shape: 'polygon',
+      splitNumber: 4,
+      axisName: {
+        color: '#64748B',
+        fontSize: 12,
+        fontWeight: 500
+      },
+      splitArea: {
+        areaStyle: {
+          color: ['rgba(79, 70, 229, 0.05)', 'rgba(79, 70, 229, 0.02)', 'rgba(79, 70, 229, 0.01)', 'transparent'],
+          shadowColor: 'rgba(0, 0, 0, 0.02)',
+          shadowBlur: 10
+        }
+      },
+      axisLine: {
+        lineStyle: {
+          color: 'rgba(203, 213, 225, 0.5)'
+        }
+      },
+      splitLine: {
+        lineStyle: {
+          color: 'rgba(203, 213, 225, 0.5)'
+        }
+      }
+    },
+    series: [
+      {
+        name: '能力画像',
+        type: 'radar',
+        data: [
+          {
+            value: values,
+            name: '当前评估',
+            symbol: 'circle',
+            symbolSize: 6,
+            itemStyle: {
+              color: '#4F46E5',
+              borderColor: '#fff',
+              borderWidth: 2
+            },
+            areaStyle: {
+              color: 'rgba(79, 70, 229, 0.2)'
+            },
+            lineStyle: {
+              width: 2,
+              color: '#4F46E5'
+            }
+          }
+        ]
+      }
+    ],
+    tooltip: {
+      trigger: 'item',
+      formatter: () => dimensions.map((item: any) => {
+        const score = typeof item.score === 'number' ? `${Math.round(item.score)}分` : '暂无评分'
+        return `${item.label || item.key}：${score}`
+      }).join('<br/>')
+    }
+  }
 }

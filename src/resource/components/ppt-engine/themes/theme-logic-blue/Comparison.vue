@@ -64,7 +64,7 @@ const maxRows = computed(() => {
   width: 100%;
   height: 100%;
   padding: 60px 80px;
-  background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, #EFF6FF 100%);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -89,7 +89,7 @@ const maxRows = computed(() => {
 
 .slide-title {
   font-size: 38px;
-  color: #0F172A;
+  color: var(--color-text);
   margin: 0;
   font-weight: 800;
   letter-spacing: -0.5px;
@@ -99,8 +99,8 @@ const maxRows = computed(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 16px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
   overflow: hidden;
@@ -108,8 +108,8 @@ const maxRows = computed(() => {
 
 .comparison-headers {
   display: flex;
-  background: #F8FAFC;
-  border-bottom: 1px solid #E2E8F0;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
   position: relative;
 }
 
@@ -121,7 +121,7 @@ const maxRows = computed(() => {
 }
 
 .left-header {
-  border-right: 1px dashed #E2E8F0;
+  border-right: 1px dashed var(--color-border);
 }
 
 .header-label {
@@ -131,7 +131,7 @@ const maxRows = computed(() => {
 }
 
 .right-header .header-label {
-  color: #2563EB; /* 右侧重点栏颜色 */
+  color: var(--color-info); /* 右侧重点栏颜色 */
 }
 
 .comparison-table {
@@ -144,7 +144,7 @@ const maxRows = computed(() => {
 .table-row {
   display: flex;
   align-items: stretch;
-  border-bottom: 1px solid #F1F5F9;
+  border-bottom: 1px solid var(--color-surface-hover);
   position: relative;
 }
 
@@ -153,7 +153,7 @@ const maxRows = computed(() => {
 }
 
 .zebra-row {
-  background-color: #F8FAFC;
+  background-color: var(--color-bg);
 }
 
 .table-cell {
@@ -167,7 +167,7 @@ const maxRows = computed(() => {
 }
 
 .left-cell {
-  border-right: 1px dashed #E2E8F0;
+  border-right: 1px dashed var(--color-border);
 }
 
 .row-marker {
@@ -178,7 +178,7 @@ const maxRows = computed(() => {
 }
 
 .marker-left {
-  color: #94A3B8;
+  color: var(--color-text-faint);
 }
 
 .marker-right {
@@ -187,7 +187,7 @@ const maxRows = computed(() => {
 
 .cell-text {
   font-size: 18px;
-  color: #475569;
+  color: var(--color-text-secondary);
   line-height: 1.55;
   font-weight: 500;
 }

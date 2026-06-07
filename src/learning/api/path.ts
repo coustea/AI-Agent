@@ -1,69 +1,69 @@
 import http from '@/shared/utils/http'
 import type { ApiResponse } from '@/shared/utils/http'
 import type {
-  CoursePathNodeDTO,
-  CoursePathResponse,
-  CoursePathSummaryResponse,
-  PathLearningEvaluationResponse,
-  PathPlanFeedbackRequest,
-  GenerateCoursePathParams,
-  PathGenerationTaskResponse,
-  PathNodeResourceRequest,
+  AuxiliaryResourceRequest,
+  CreateLearningPathRequest,
+  LearningPathHistoryItem,
+  LearningPathOverview,
+  LearningPathWorkspace,
+  PathQuizRound,
+  PathQuizSubmitRequest,
+  PathQuizSubmitResponse,
+  PathResourceDetail,
 } from '@/learning/types/path'
 
 export type {
-  CoursePathNodeDTO,
-  CoursePathResponse,
-  CoursePathSummaryResponse,
-  PathLearningEvaluationResponse,
-  PathPlanFeedbackRequest,
-  GenerateCoursePathParams,
-  PathGenerationTaskResponse,
-  PathNodeResourceRequest,
+  AuxiliaryResourceRequest,
+  CreateLearningPathRequest,
+  LearningPathHistoryItem,
+  LearningPathOverview,
+  LearningPathWorkspace,
+  PathQuizRound,
+  PathQuizSubmitRequest,
+  PathQuizSubmitResponse,
+  PathResourceDetail,
 }
 
-export function adjustCoursePath(payload: PathPlanFeedbackRequest) {
-  return http.patch<ApiResponse<CoursePathResponse>>('/ai/path-plan', payload)
+export function createLearningPath(payload: CreateLearningPathRequest) {
+  return http.post<ApiResponse<LearningPathOverview>>('/ai/path-plan', payload)
 }
 
-export function getActiveCoursePath(module = 'mentor') {
-  return http.get<ApiResponse<CoursePathResponse>>('/ai/path-plan/active', {
+export function generateLearningPath(payload: CreateLearningPathRequest) {
+  return http.post<ApiResponse<LearningPathOverview>>('/ai/path-plan/generate', payload)
+}
+
+export function getCurrentLearningPath(module = 'mentor') {
+  return http.get<ApiResponse<LearningPathOverview | null>>('/ai/path-plan/active', {
     params: { module },
   })
 }
 
-export function generateCoursePath(params: GenerateCoursePathParams) {
-  return http.post<ApiResponse<PathGenerationTaskResponse>>('/ai/path-plan/generate', params)
+export function getLearningPathById(pathId: number) {
+  return http.get<ApiResponse<LearningPathOverview>>(`/ai/path-plan/${pathId}`)
 }
 
-export function getActiveCoursePathTask(module = 'mentor') {
-  return http.get<ApiResponse<PathGenerationTaskResponse | null>>('/ai/path-plan/tasks/active', {
+export function getLearningPathHistory(module = 'mentor') {
+  return http.get<ApiResponse<LearningPathHistoryItem[]>>('/ai/path-plan/history', {
     params: { module },
   })
 }
 
-export function getCoursePathTaskStatus(taskId: number) {
-  return http.get<ApiResponse<PathGenerationTaskResponse>>(`/ai/path-plan/tasks/${taskId}/status`)
+export function activateLearningPath(pathId: number) {
+  return http.post<ApiResponse<LearningPathOverview>>(`/ai/path-plan/${pathId}/activate`)
 }
 
-export function generatePathNodeResources(
-  nodeId: number,
-  payload: PathNodeResourceRequest,
-) {
-  return http.post<ApiResponse<{ resource_id: number; node_id: number; status: string }>>(
-    `/ai/path-plan/nodes/${nodeId}/generate-resources`,
-    payload,
-  )
+export function getLearningNodeWorkspace(nodeId: number) {
+  return http.get<ApiResponse<LearningPathWorkspace>>(`/ai/path-plan/nodes/${nodeId}/workspace`)
 }
 
-export function startCoursePathNode(nodeId: number) {
-  return http.post<ApiResponse<CoursePathResponse>>(`/ai/path-plan/nodes/${nodeId}/start`)
+export function generateNodeQuestions(nodeId: number) {
+  return http.post<ApiResponse<PathQuizRound>>(`/ai/path-plan/nodes/${nodeId}/questions`)
 }
 
-export function completeCoursePathNode(nodeId: number) {
-  return http.post<ApiResponse<CoursePathResponse>>(`/ai/path-plan/nodes/${nodeId}/complete`)
+export function submitNodeQuiz(nodeId: number, payload: PathQuizSubmitRequest) {
+  return http.post<ApiResponse<PathQuizSubmitResponse>>(`/ai/path-plan/nodes/${nodeId}/quiz-submit`, payload)
 }
 
-export function getCoursePathSummary(pathId: number) {
-  return http.get<ApiResponse<CoursePathSummaryResponse | null>>(`/ai/path-plan/${pathId}/summary`)
+export function generateAuxiliaryResource(nodeId: number, payload: AuxiliaryResourceRequest) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/resources`, payload)
 }

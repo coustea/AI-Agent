@@ -1,6 +1,6 @@
 <template>
   <div class="ppt-resource" :class="{ compact }">
-    <article class="technical-frame ppt-item">
+    <ResourceCardWrapper :compact="compact" class="ppt-item">
       
       <!-- PptPlayer wrapper -->
       <div class="player-wrapper" v-if="pptDocument">
@@ -9,13 +9,14 @@
       <div v-else class="empty-state">
         <p>正在渲染 PPT 文稿... / RENDERING</p>
       </div>
-    </article>
+    </ResourceCardWrapper>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { type ResourceArtifactLike, parseJsonObject } from './resourceViewUtils'
+import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import PptPlayer from './ppt-engine/PptPlayer.vue'
 import type { PPTDocument } from './ppt-engine/types/ppt'
 
@@ -45,38 +46,11 @@ const pptDocument = computed<PPTDocument | null>(() => {
   width: 100%;
 }
 
-.technical-frame {
-  position: relative;
-  background: #FFFFFF;
-  border-radius: 4px;
-  padding: 24px 32px 32px;
-  box-shadow: none;
-  transition: all 0.3s ease;
-}
-
-.technical-frame.ppt-item {
+.ppt-item {
   padding: 0 !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
-}
-
-.compact .technical-frame {
-  padding: 0;
-  background: transparent;
-}
-
-.frame-header {
-  position: absolute;
-  top: 12px;
-  left: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.compact .frame-header {
-  display: none;
 }
 
 .status-indicator {
@@ -88,9 +62,9 @@ const pptDocument = computed<PPTDocument | null>(() => {
 }
 
 .technical-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .player-wrapper {
@@ -100,8 +74,8 @@ const pptDocument = computed<PPTDocument | null>(() => {
   max-height: 75vh;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #E2E8F0;
-  background: #E5E7EB;
+  border: none;
+  background: transparent;
 }
 
 .compact .player-wrapper {
@@ -122,11 +96,11 @@ const pptDocument = computed<PPTDocument | null>(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F8FAFC;
-  color: #94A3B8;
-  font-family: 'Share Tech Mono', monospace;
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
   font-size: 0.9rem;
-  border: 1px solid #E2E8F0;
+  border: none;
   border-radius: 8px;
 }
 </style>

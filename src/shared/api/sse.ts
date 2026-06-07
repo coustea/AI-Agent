@@ -4,7 +4,7 @@
  * 将 SSE data 字段的原始文本解析为结构化数据。
  * 优先 JSON.parse，失败则原样返回字符串。
  */
-export function normalizeSsePayload(payload: string): unknown {
+function normalizeSsePayload(payload: string): unknown {
   const trimmed = payload.trim()
   if (!trimmed) return ''
   try {
@@ -18,7 +18,7 @@ export function normalizeSsePayload(payload: string): unknown {
  * 将原始 SSE 文本按双换行拆分为独立帧。
  * 返回已完成帧列表和未完成的尾部（下次拼接用）。
  */
-export function parseSseFrames(raw: string): { frames: string[]; rest: string } {
+function parseSseFrames(raw: string): { frames: string[]; rest: string } {
   const normalized = raw.replace(/\r\n/g, '\n')
   const parts = normalized.split('\n\n')
   const rest = parts.pop() || ''

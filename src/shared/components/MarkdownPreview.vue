@@ -45,8 +45,8 @@ const renderedContent = computed(() => renderStreamingMarkdownHtml(normalizedCon
 
 .app-markdown-preview :deep(pre),
 .app-markdown-preview :deep(pre code) {
-  background-color: #FFFFFF !important;
-  color: #1E293B !important;
+  background-color: var(--color-surface) !important;
+  color: var(--color-text-strong) !important;
 }
 
 .app-markdown-preview :deep(pre .title),
@@ -66,7 +66,7 @@ const renderedContent = computed(() => renderStreamingMarkdownHtml(normalizedCon
 }
 
 .app-markdown-preview :deep(pre .comment) {
-  color: #475569 !important;
+  color: var(--color-text-secondary) !important;
   font-style: italic;
 }
 

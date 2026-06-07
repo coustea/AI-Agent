@@ -97,7 +97,7 @@ defineProps<{
 
 .main-title {
   font-size: 52px;
-  color: #F8FAFC;
+  color: var(--color-bg);
   font-weight: 800;
   letter-spacing: -0.5px;
   margin: 0 0 16px 0;
@@ -107,7 +107,7 @@ defineProps<{
 
 .sub-title {
   font-size: 22px;
-  color: #64748B; /* 柔和暗灰 */
+  color: var(--color-text-muted); /* 柔和暗灰 */
   font-weight: 400;
   margin: 0;
   text-align: left;
@@ -144,7 +144,7 @@ defineProps<{
 
 .meta-value {
   font-size: 18px;
-  color: #E2E8F0;
+  color: var(--color-border);
   font-weight: 500;
 }
 

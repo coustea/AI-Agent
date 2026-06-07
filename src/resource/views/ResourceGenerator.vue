@@ -1,13 +1,20 @@
 <template>
   <div class="elegant-generator-layout">
+    <div class="omni-ambient-bg">
+      <div class="ambient-glow glow-blue"></div>
+      <div class="ambient-glow glow-indigo"></div>
+      <div class="omni-pattern-bg"></div>
+    </div>
+    
+    <!-- Floating History Entry -->
+    <div class="floating-history-btn" @click="router.push('/resource-history')">
+      <el-icon><Timer /></el-icon>
+      <span>历史记录</span>
+    </div>
+
     <transition name="page-slide" mode="out-in">
 
       <div v-if="currentPhase === 'input'" class="phase-view omni-input-view" key="input">
-        <div class="omni-ambient-bg">
-          <div class="ambient-glow glow-blue"></div>
-          <div class="ambient-glow glow-indigo"></div>
-          <div class="omni-pattern-bg"></div>
-        </div>
         
         <div class="omni-container">
           <div class="omni-hero-header">
@@ -71,11 +78,6 @@
       </div>
 
       <div v-else-if="currentPhase === 'personalize'" class="phase-view personalize-view" key="personalize">
-        <div class="omni-ambient-bg">
-          <div class="ambient-glow glow-blue"></div>
-          <div class="ambient-glow glow-indigo"></div>
-          <div class="omni-pattern-bg"></div>
-        </div>
         <div class="personalize-container">
           <div class="view-header">
             <el-tag size="small" effect="dark" round class="header-badge">AI CONFIGURATION</el-tag>
@@ -179,16 +181,16 @@
                     <div class="ctrl-group">
                       <label>案例难度级别</label>
                       <el-radio-group v-model="agentConfigs.code.difficulty" size="small" class="custom-radio-group">
-                        <el-radio-button label="beginner">入门</el-radio-button>
-                        <el-radio-button label="intermediate">进阶</el-radio-button>
-                        <el-radio-button label="advanced">挑战</el-radio-button>
+                        <el-radio-button value="beginner">入门</el-radio-button>
+                        <el-radio-button value="intermediate">进阶</el-radio-button>
+                        <el-radio-button value="advanced">挑战</el-radio-button>
                       </el-radio-group>
                     </div>
                     <div class="ctrl-group">
                       <label>案例交付形态</label>
                       <el-radio-group v-model="agentConfigs.code.case_type" size="small" class="custom-radio-group">
-                        <el-radio-button label="basic_demo">基础教学</el-radio-button>
-                        <el-radio-button label="algorithm_template">算法模板</el-radio-button>
+                        <el-radio-button value="basic_demo">基础教学</el-radio-button>
+                        <el-radio-button value="algorithm_template">算法模板</el-radio-button>
                       </el-radio-group>
                     </div>
                   </template>
@@ -197,18 +199,18 @@
                     <div class="ctrl-group">
                       <label>测验难度引擎</label>
                       <el-radio-group v-model="agentConfigs.quiz.difficulty_mode" size="small" class="custom-radio-group">
-                        <el-radio-button label="basic">基础巩固</el-radio-button>
-                        <el-radio-button label="adaptive">动态自适应</el-radio-button>
-                        <el-radio-button label="exam">硬核考研</el-radio-button>
+                        <el-radio-button value="basic">基础巩固</el-radio-button>
+                        <el-radio-button value="adaptive">动态自适应</el-radio-button>
+                        <el-radio-button value="exam">硬核考研</el-radio-button>
                       </el-radio-group>
                     </div>
                     <div class="ctrl-group">
                       <label>题型偏好（可多选）</label>
                       <el-checkbox-group v-model="agentConfigs.quiz.question_types" class="question-type-group">
-                        <el-checkbox label="single">单选题</el-checkbox>
-                        <el-checkbox label="multiple">多选题</el-checkbox>
-                        <el-checkbox label="judge">判断题</el-checkbox>
-                        <el-checkbox label="fill">填空题</el-checkbox>
+                        <el-checkbox value="single">单选题</el-checkbox>
+                        <el-checkbox value="multiple">多选题</el-checkbox>
+                        <el-checkbox value="judge">判断题</el-checkbox>
+                        <el-checkbox value="fill">填空题</el-checkbox>
                       </el-checkbox-group>
                     </div>
                     <div class="ctrl-group">
@@ -232,9 +234,9 @@
                     <div class="ctrl-group">
                       <label>资料语言偏好</label>
                       <el-radio-group v-model="agentConfigs.reading.language_preference" size="small" class="custom-radio-group">
-                        <el-radio-button label="chinese">中文优先</el-radio-button>
-                        <el-radio-button label="both">中英双语</el-radio-button>
-                        <el-radio-button label="english">英文原版</el-radio-button>
+                        <el-radio-button value="chinese">中文优先</el-radio-button>
+                        <el-radio-button value="both">中英双语</el-radio-button>
+                        <el-radio-button value="english">英文原版</el-radio-button>
                       </el-radio-group>
                     </div>
                     <div class="ctrl-group">
@@ -258,9 +260,9 @@
                     <div class="ctrl-group">
                       <label>内容深度/难度</label>
                       <el-radio-group v-model="agentConfigs.ppt.difficulty" size="small" class="custom-radio-group">
-                        <el-radio-button label="beginner">入门演示</el-radio-button>
-                        <el-radio-button label="intermediate">进阶讲解</el-radio-button>
-                        <el-radio-button label="advanced">硬核干货</el-radio-button>
+                        <el-radio-button value="beginner">入门演示</el-radio-button>
+                        <el-radio-button value="intermediate">进阶讲解</el-radio-button>
+                        <el-radio-button value="advanced">硬核干货</el-radio-button>
                       </el-radio-group>
                     </div>
                     <div class="ctrl-group">
@@ -306,11 +308,6 @@
       </div>
 
       <div v-else-if="currentPhase === 'generating'" class="phase-view generating-view workflow-stage-page" key="generating">
-        <div class="stage-background-layer">
-          <div class="stage-grid-bg"></div>
-          <div class="stage-glow stage-glow-left"></div>
-          <div class="stage-glow stage-glow-right"></div>
-        </div>
 
         <header class="stage-topbar">
           <div class="stage-title-area">
@@ -362,60 +359,161 @@
             </div>
 
             <div class="dispatch-stage dag-flow-wrapper">
-              <transition-group name="dag-col-anim" tag="div" class="dag-flow-container">
-                <div class="dag-col" v-for="(col, colIndex) in dagColumns" :key="'col-'+colIndex">
-                  <transition-group name="dag-node-anim" tag="div" class="dag-col-inner">
-                    <div
-                      v-for="(node, nodeIdx) in col"
-                      :key="node.id"
-                      class="dag-node-card"
-                      :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id }]"
-                      :style="{ transitionDelay: `${nodeIdx * 0.1}s` }"
-                      @click="selectedDagNodeId = node.id"
-                    >
-                      <div class="node-indicator"></div>
-                      
-                      <div class="node-inner">
-                        <div class="node-head">
-                          <div class="node-icon">
-                            <span>{{ node.icon }}</span> 
-                          </div>
-                          <div class="node-title-group">
-                            <strong>{{ node.label }}</strong>
-                            <span class="node-sub">
-                              {{ node.status === 'success' ? '已就绪' : node.status === 'running' ? '执行指令中' : '挂起等待' }}
-                            </span>
-                          </div>
-                          <div class="node-status-pill">
-                            {{ node.status === 'success' ? '100%' : (node.progress + '%') }}
-                          </div>
+              <div class="execution-stage-grid">
+                <div class="execution-rail">
+                  <article
+                    v-for="node in leadingStageNodes"
+                    :key="node.id"
+                    class="dag-node-card stage-node-card"
+                    :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id }]"
+                    @click="selectedDagNodeId = node.id"
+                  >
+                    <div class="node-indicator"></div>
+                    <div class="node-inner">
+                      <div class="node-head">
+                        <div class="node-icon"><span>{{ node.icon }}</span></div>
+                        <div class="node-title-group">
+                          <strong>{{ node.label }}</strong>
+                          <span class="node-sub">{{ getNodeStageLabel(node) }}</span>
                         </div>
-                        
-                        <div class="node-divider"></div>
-                        
-                        <div class="node-body">
-                          <div class="meta-row">
-                            <span class="meta-label">
-                              {{ node.status === 'running' ? '当前动作' : node.status === 'success' ? '最终状态' : '依赖事件' }}
-                            </span>
-                            <span class="meta-time" v-if="node.status !== 'waiting'">
-                              {{ getCurrentTimeStr() }}
-                            </span>
-                            <span class="meta-time" v-else>等待上游</span>
-                          </div>
-                          <p class="node-message" :class="{'is-error': node.status === 'failed'}">
-                            {{ node.status === 'failed' ? '执行失败，请检查审核日志' : (node.currentMessage || '等待前置任务就绪') }}
-                          </p>
-                        </div>
+                        <div class="node-status-pill">{{ getNodeProgressLabel(node) }}</div>
                       </div>
-
-                      <transition name="fade-edge">
-                        <div class="dag-edge-out" v-if="colIndex < dagColumns.length - 1 && node.status !== 'waiting'"></div>
-                      </transition>
+                      <div class="node-divider"></div>
+                      <div class="node-body">
+                        <div class="meta-row">
+                          <span class="meta-label">{{ getNodePhaseLabel(node) }}</span>
+                          <span class="meta-time">{{ getNodeTimeLabel(node) }}</span>
+                        </div>
+                        <p class="node-message" :class="{ 'is-error': node.status === 'failed' }">
+                          {{ getNodeDisplayMessage(node) }}
+                        </p>
+                      </div>
                     </div>
-                  </transition-group>
+                  </article>
+
+                  <section
+                    class="parallel-pool-card"
+                    :class="{ 'is-selected': selectedDagNodeId === COORDINATOR_AGENT_ID }"
+                    @click="selectedDagNodeId = COORDINATOR_AGENT_ID"
+                  >
+                    <div class="pool-header">
+                      <div>
+                        <span class="panel-eyebrow">PARALLEL POOL</span>
+                        <h4>并行资源生成池</h4>
+                      </div>
+                      <div class="pool-status">
+                        <strong>{{ poolRunningCount }}</strong>
+                        <span>运行 / {{ parallelPoolNodes.length }}</span>
+                      </div>
+                    </div>
+                    <div class="pool-summary">
+                      {{ parallelPoolSummary }}
+                    </div>
+                    <transition-group name="dag-node-anim" tag="div" class="parallel-agent-grid">
+                      <article
+                        v-for="node in parallelPoolNodes"
+                        :key="node.id"
+                        class="dag-node-card pool-agent-card"
+                        :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id }]"
+                        @click.stop="selectedDagNodeId = node.id"
+                      >
+                        <div class="node-indicator"></div>
+                        <div class="node-inner">
+                          <div class="node-head">
+                            <div class="node-icon"><span>{{ node.icon }}</span></div>
+                            <div class="node-title-group">
+                              <strong>{{ node.label }}</strong>
+                              <span class="node-sub">{{ getNodeStageLabel(node) }}</span>
+                            </div>
+                            <div class="node-status-pill">{{ getNodeProgressLabel(node) }}</div>
+                          </div>
+                          <div class="node-body compact">
+                            <p class="node-message" :class="{ 'is-error': node.status === 'failed' }">
+                              {{ getNodeDisplayMessage(node) }}
+                            </p>
+                          </div>
+                        </div>
+                      </article>
+                    </transition-group>
+                  </section>
+
+                  <article
+                    v-for="node in trailingStageNodes"
+                    :key="node.id"
+                    class="dag-node-card stage-node-card"
+                    :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id }]"
+                    @click="selectedDagNodeId = node.id"
+                  >
+                    <div class="node-indicator"></div>
+                    <div class="node-inner">
+                      <div class="node-head">
+                        <div class="node-icon"><span>{{ node.icon }}</span></div>
+                        <div class="node-title-group">
+                          <strong>{{ node.label }}</strong>
+                          <span class="node-sub">{{ getNodeStageLabel(node) }}</span>
+                        </div>
+                        <div class="node-status-pill">{{ getNodeProgressLabel(node) }}</div>
+                      </div>
+                      <div class="node-divider"></div>
+                      <div class="node-body">
+                        <div class="meta-row">
+                          <span class="meta-label">{{ getNodePhaseLabel(node) }}</span>
+                          <span class="meta-time">{{ getNodeTimeLabel(node) }}</span>
+                        </div>
+                        <p class="node-message" :class="{ 'is-error': node.status === 'failed' }">
+                          {{ getNodeDisplayMessage(node) }}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
                 </div>
-              </transition-group>
+
+                <aside class="agent-focus-panel" v-if="selectedDagNode">
+                  <div class="focus-panel-header">
+                    <div class="focus-agent-icon">{{ selectedDagNode.icon }}</div>
+                    <div>
+                      <span class="panel-eyebrow">FOCUS AGENT</span>
+                      <h4>{{ selectedDagNode.label }}</h4>
+                    </div>
+                  </div>
+                  <div class="focus-status-line" :class="'status-' + selectedDagNode.status">
+                    <span>{{ getNodeStageLabel(selectedDagNode) }}</span>
+                    <strong>{{ getNodeProgressLabel(selectedDagNode) }}</strong>
+                  </div>
+                  <div class="focus-progress-track">
+                    <span :style="{ width: `${Math.min(100, Math.max(0, selectedDagNode.progress))}%` }"></span>
+                  </div>
+                  <dl class="focus-metrics">
+                    <div>
+                      <dt>当前阶段</dt>
+                      <dd>{{ getNodePhaseLabel(selectedDagNode) }}</dd>
+                    </div>
+                    <div>
+                      <dt>运行耗时</dt>
+                      <dd>{{ formatElapsed(selectedDagNode.elapsedMs) }}</dd>
+                    </div>
+                    <div>
+                      <dt>最近更新</dt>
+                      <dd>{{ getNodeTimeLabel(selectedDagNode) }}</dd>
+                    </div>
+                    <div>
+                      <dt>产物状态</dt>
+                      <dd>{{ hasGeneratedResource(selectedDagNode.id) ? '已进入产物坞' : '等待生成' }}</dd>
+                    </div>
+                  </dl>
+                  <div class="focus-message">
+                    {{ getNodeDisplayMessage(selectedDagNode) }}
+                  </div>
+                  <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
+                    <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
+                  </div>
+                  <div class="focus-history">
+                    <span class="panel-eyebrow">RECENT STEPS</span>
+                    <p v-for="step in selectedDagNode.stepHistory.slice(-4)" :key="step">{{ step }}</p>
+                    <p v-if="!selectedDagNode.stepHistory.length">等待该智能体上报执行步骤</p>
+                  </div>
+                </aside>
+              </div>
             </div>
           </section>
         </main>
@@ -495,7 +593,12 @@
                   class="premium-res-card"
                   :class="getResourceToneClass(res.type)"
                   :style="{...getBentoCardGridStyle(index, resultResources.length), animationDelay: `${index * 0.08}s`}"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`预览 ${formatBentoTitle(res.title, res.type)}`"
                   @click="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
+                  @keydown.enter.prevent="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
+                  @keydown.space.prevent="handlePreview({ agentId: res.type, resultData: res.content, title: res.title })"
               >
                 <div class="card-bg-glow"></div>
                 <div class="card-header">
@@ -535,7 +638,7 @@
 
     </transition>
 
-    <el-dialog v-model="previewVisible" :title="previewData?.title || '资源预览'" width="78%" top="6vh" destroy-on-close :class="['elegant-dialog', { 'is-ppt-dialog': previewData?.agentId === 'ppt' }]">
+    <el-dialog v-model="previewVisible" :title="previewData ? getResourceTypeLabel(previewData.agentId) : '资源预览'" width="78%" top="6vh" destroy-on-close :class="['elegant-dialog', { 'is-ppt-dialog': previewData?.agentId === 'ppt' }]">
       <div v-if="previewData" class="preview-dialog-body" :class="{ 'is-ppt-preview': previewData.agentId === 'ppt' }">
         <MindmapView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
         <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
@@ -549,12 +652,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, shallowRef, reactive, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  ArrowRight, RefreshLeft,
-  Clock, Odometer, Top, StarFilled,
+  ArrowRight, RefreshLeft, Cpu, Position, CircleCheckFilled,
+  Clock, Odometer, Top, StarFilled, Timer
 } from '@element-plus/icons-vue'
 
 import MindmapView from '@/resource/components/MindmapView.vue'
@@ -583,6 +686,8 @@ import {
   PPT_AGENT_ID,
   PRE_REVIEW_AGENT_ID,
   PPT_REVIEW_AGENT_ID,
+  COORDINATOR_AGENT_ID,
+  BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   MIN_AGENTS,
   AGENT_DISPLAY,
@@ -620,6 +725,8 @@ type GeneratedResourceItem = Record<string, any> & {
 // ===================== 核心状态管理 =====================
 type Phase = 'input' | 'personalize' | 'generating' | 'result'
 const currentPhase = ref<Phase>('input')
+
+const router = useRouter()
 
 const naturalInput = ref('')
 const isInputFocused = ref(false)
@@ -675,8 +782,8 @@ const goToPersonalize = () => {
 }
 
 // ===================== 异步工作流大盘画布引擎 =====================
-const generatedResources = ref<GeneratedResourceItem[]>([])
-const finalBundle = ref<any | null>(null)
+const generatedResources = shallowRef<GeneratedResourceItem[]>([])
+const finalBundle = shallowRef<any | null>(null)
 const isGenerating = ref(false)
 const generationError = ref<string | null>(null)
 const resultWarning = ref('')
@@ -685,6 +792,7 @@ const latestWorkflowMessage = ref('')
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const resourceStreamController = ref<EventSource | null>(null)
 const generationFinalized = ref(false)
+const activeResourceId = ref<number | null>(null)
 
 const dagNodeStates = ref<Record<string, DagNodeState>>({})
 const selectedDagNodeId = ref('planning')
@@ -704,6 +812,11 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
   // 1. 顶层规划节点
   nodes.push(dagNodeStates.value['planning'] || {
     id: 'planning', label: '规划任务', icon: '🎯',
+    status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
+  })
+
+  nodes.push(dagNodeStates.value[COORDINATOR_AGENT_ID] || {
+    id: COORDINATOR_AGENT_ID, label: '并行调度中枢', icon: '⚙️',
     status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
 
@@ -735,8 +848,8 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
   }
 
   // 4. 打包输出节点
-  nodes.push(dagNodeStates.value['bundle'] || {
-    id: 'bundle', label: '资源组装', icon: '📦',
+  nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || {
+    id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦',
     status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true,
   })
 
@@ -757,36 +870,154 @@ const visibleWorkflowNodes = computed(() => {
   return dagNodesV2.value.filter(node => hasNodeEntered(node))
 })
 
-// ===================== DAG 拓扑视图列分组 (严丝合缝对齐后端架构) =====================
-const dagColumns = computed(() => {
-  const nodes = visibleWorkflowNodes.value;
-  
-  // 1. 顶层规划 (Stage 1: Planning Agent)
-  const col1 = nodes.filter(n => n.id === 'planning');
-  
-  // 2. 基础资源并行层 (Stage 2: Parallel Worker Agents)
-  const col2 = nodes.filter(n => ['content', 'mindmap', 'quiz', 'code', 'reading'].includes(n.id));
-  
-  // 3. 前置事实与安全审核 (Stage 3: Pre Review)
-  const col3 = nodes.filter(n => n.id === PRE_REVIEW_AGENT_ID);
-  
-  // 4. 演示文稿生成 (Stage 3 延伸: 严格依赖预审通过的内容)
-  const col4 = nodes.filter(n => n.id === PPT_AGENT_ID);
-  
-  // 5. 演示文稿专项审核 (Stage 3 延伸: PPT Review)
-  const col5 = nodes.filter(n => n.id === PPT_REVIEW_AGENT_ID);
-  
-  // 6. 数据打包与组装落库 (Stage 4: Assembler / Save)
-  const col6 = nodes.filter(n => n.id === 'bundle');
+function getStageNode(id: string) {
+  return dagNodeStates.value[id] || createDagNode(id, SYSTEM_AGENT_IDS.includes(id))
+}
 
-  // 过滤掉空列
-  return [col1, col2, col3, col4, col5, col6].filter(col => col.length > 0);
-});
+const leadingStageNodes = computed(() => [getStageNode('planning')])
 
-const getCurrentTimeStr = () => {
-  const d = new Date();
-  return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
-};
+const trailingStageNodes = computed(() => {
+  const nodes = [getStageNode(PRE_REVIEW_AGENT_ID)]
+  if (dagSelectedAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId)) {
+    nodes.push(getStageNode(PPT_AGENT_ID), getStageNode(PPT_REVIEW_AGENT_ID))
+  }
+  nodes.push(getStageNode(BUNDLE_AGENT_ID))
+  return nodes
+})
+
+const agentStatusRank: Record<DagNodeState['status'], number> = {
+  failed: 0,
+  running: 1,
+  success: 2,
+  waiting: 3,
+  skipped: 4,
+}
+
+const parallelPoolNodes = computed(() => {
+  return baseGenerationAgentIds.value
+    .map(agentId => getStageNode(agentId))
+    .sort((a, b) => {
+      const rankDiff = agentStatusRank[a.status] - agentStatusRank[b.status]
+      if (rankDiff !== 0) return rankDiff
+      return b.progress - a.progress
+    })
+})
+
+const selectedDagNode = computed(() => {
+  if (selectedDagNodeId.value === COORDINATOR_AGENT_ID) return getStageNode(COORDINATOR_AGENT_ID)
+  return dagNodeStates.value[selectedDagNodeId.value] || getStageNode(selectedDagNodeId.value)
+})
+
+const poolRunningCount = computed(() => parallelPoolNodes.value.filter(node => node.status === 'running').length)
+
+const parallelPoolSummary = computed(() => {
+  const failed = parallelPoolNodes.value.filter(node => node.status === 'failed').length
+  const finished = parallelPoolNodes.value.filter(node => node.status === 'success').length
+  if (failed) return `${failed} 个资源智能体需要关注，${finished} 个已完成`
+  if (poolRunningCount.value) return `${poolRunningCount.value} 个智能体正在并行生成，${finished} 个资源已就绪`
+  if (finished) return `${finished} 个基础资源已生成，等待进入审核阶段`
+  return '规划完成后，基础资源智能体会在这里并行展开'
+})
+
+function getNodeProgressLabel(node: DagNodeState) {
+  if (node.status === 'failed') return '失败'
+  if (node.status === 'skipped') return '跳过'
+  return `${node.progress}%`
+}
+
+function getNodeStageLabel(node: DagNodeState) {
+  if (node.status === 'success') return '已就绪'
+  if (node.status === 'failed') return '执行失败'
+  if (node.status === 'skipped') return '已跳过'
+  if (node.status === 'running') {
+    if (node.phase === 'llm_generating') return '模型生成中'
+    if (node.phase === 'validating') return '解析校验中'
+    if (node.phase === 'artifact_saved') return '产物已保存'
+    if (node.phase === 'bundling') return '资源打包中'
+    return '执行中'
+  }
+  return '等待依赖'
+}
+
+function getNodePhaseLabel(node: DagNodeState) {
+  const phaseMap: Record<string, string> = {
+    planning_blueprint: '规划蓝图',
+    llm_generating: '模型调用',
+    validating: '解析校验',
+    reviewing_sources: '前置审核',
+    reviewing_ppt: 'PPT 审核',
+    ppt_waiting_sources: '等待事实来源',
+    pre_review_waiting_sources: '等待基础资源',
+    artifact_saved: '产物保存',
+    bundling: '资源组装',
+    finished: '完成',
+    failed: '失败',
+  }
+  if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
+  if (node.status === 'waiting') return '等待上游'
+  if (node.status === 'success') return '完成'
+  if (node.status === 'failed') return '失败'
+  return '执行阶段'
+}
+
+function getNodeDisplayMessage(node: DagNodeState) {
+  if (node.status === 'failed') return node.currentMessage || '执行失败，请检查该智能体输出'
+  if (node.currentMessage) return node.currentMessage
+  if (node.id === PPT_AGENT_ID) return '等待前置审核通过后生成演示文稿'
+  if (node.id === PRE_REVIEW_AGENT_ID) return '等待基础资源完成后进行事实性与安全审核'
+  if (node.id === PPT_REVIEW_AGENT_ID) return '等待 PPT 生成后进行专项审核'
+  if (node.id === BUNDLE_AGENT_ID) return '等待资源和审核结果完成后组装资源包'
+  return getNodeFallbackMessage(node)
+}
+
+function formatElapsed(ms?: number | null) {
+  if (!ms || ms < 0) return '未开始'
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return `${minutes}m ${rest}s`
+}
+
+function getNodeTimeLabel(node: DagNodeState) {
+  if (node.status === 'waiting') return '等待上游'
+  if (!node.lastUpdatedAt) return formatElapsed(node.elapsedMs)
+  const seconds = Math.max(0, Math.floor((Date.now() - node.lastUpdatedAt) / 1000))
+  if (seconds < 3) return '刚刚更新'
+  if (seconds < 60) return `${seconds}s 前更新`
+  return `${Math.floor(seconds / 60)}m 前更新`
+}
+
+function getMetricChips(node: DagNodeState) {
+  const metrics = node.metrics || {}
+  return Object.entries(metrics)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .slice(0, 4)
+    .map(([key, value]) => `${key}: ${String(value)}`)
+}
+
+function updateOverallProgressFromDag() {
+  const stages = [
+    { weight: 15, progress: getStageNode('planning').progress },
+    {
+      weight: 45,
+      progress: parallelPoolNodes.value.length
+        ? parallelPoolNodes.value.reduce((sum, node) => sum + node.progress, 0) / parallelPoolNodes.value.length
+        : 0,
+    },
+    { weight: 10, progress: getStageNode(PRE_REVIEW_AGENT_ID).progress },
+    ...(dagSelectedAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId)
+      ? [
+          { weight: 15, progress: getStageNode(PPT_AGENT_ID).progress },
+          { weight: 5, progress: getStageNode(PPT_REVIEW_AGENT_ID).progress },
+        ]
+      : []),
+    { weight: 10, progress: getStageNode(BUNDLE_AGENT_ID).progress },
+  ]
+  const weightTotal = stages.reduce((sum, item) => sum + item.weight, 0)
+  const weighted = stages.reduce((sum, item) => sum + item.progress * item.weight, 0)
+  overallProgress.value = Math.round(weighted / weightTotal)
+}
 
 const dagHeroMessage = computed(() => {
   const running = Object.values(dagNodeStates.value).find(n => n.status === 'running')
@@ -868,8 +1099,9 @@ const previewGeneratedResource = (resource: any) => {
 function initializeWaitingNodes() {
   const nodes: Record<string, DagNodeState> = {
     planning: createDagNode('planning', true),
+    [COORDINATOR_AGENT_ID]: createDagNode(COORDINATOR_AGENT_ID, true),
     [PRE_REVIEW_AGENT_ID]: createDagNode(PRE_REVIEW_AGENT_ID, true),
-    bundle: createDagNode('bundle', true),
+    [BUNDLE_AGENT_ID]: createDagNode(BUNDLE_AGENT_ID, true),
   }
   if (enabledAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId)) {
     nodes[PPT_REVIEW_AGENT_ID] = createDagNode(PPT_REVIEW_AGENT_ID, true)
@@ -879,6 +1111,7 @@ function initializeWaitingNodes() {
   })
   dagNodeStates.value = nodes
   selectedDagNodeId.value = 'planning'
+  updateOverallProgressFromDag()
 }
 
 function applyAgentEvent(event: ResourceStreamEvent) {
@@ -887,11 +1120,27 @@ function applyAgentEvent(event: ResourceStreamEvent) {
     event.agent_id,
     SYSTEM_AGENT_IDS.includes(event.agent_id),
   )
-  if (event.status) node.status = event.status === 'finished' ? 'success' : event.status
-  node.currentMessage = event.message || ''
+  if (event.status) {
+    node.status = event.status === 'finished' ? 'success' : event.status
+  }
+  if (event.progress != null) {
+    node.progress = Math.max(node.progress, event.progress)
+  }
+  if (event.phase) node.phase = event.phase
+  if (event.elapsed_ms != null) node.elapsedMs = event.elapsed_ms
+  if (event.metrics) node.metrics = { ...(node.metrics || {}), ...event.metrics }
+  if (event.artifact_id) node.artifactId = event.artifact_id
+  node.lastUpdatedAt = Date.now()
+  if (event.message) {
+    node.currentMessage = event.message
+    if (node.stepHistory[node.stepHistory.length - 1] !== event.message) {
+      node.stepHistory = [...node.stepHistory.slice(-7), event.message]
+    }
+  }
   dagNodeStates.value[event.agent_id] = node
+  updateOverallProgressFromDag()
 
-  if (event.status === 'running') {
+  if (event.status === 'running' || event.event_type === 'agent.heartbeat' || event.event_type === 'agent.step') {
     selectedDagNodeId.value = event.agent_id
   }
 }
@@ -900,6 +1149,7 @@ function applyTaskStatus(taskStatus: ResourceTaskStatus) {
   if (Array.isArray(taskStatus.resources)) {
     generatedResources.value = taskStatus.resources
   }
+  updateOverallProgressFromDag()
 }
 
 async function completeGeneration(resourceId: number, taskStatus: ResourceTaskStatus) {
@@ -946,8 +1196,15 @@ function startPollingFallback(resourceId: number) {
   }, 1500)
 }
 
+function syncStatusSoon(resourceId: number) {
+  void checkStatusOnce(resourceId).catch((err: any) => {
+    console.warn('[ResourceGenerator] 状态同步失败:', err)
+  })
+}
+
 function startResourceStream(resourceId: number) {
   stopResourceStream()
+  startPollingFallback(resourceId)
   resourceStreamController.value = streamResourceEvents(
     resourceId,
     (event) => {
@@ -955,10 +1212,16 @@ function startResourceStream(resourceId: number) {
       if (event.message) {
         latestWorkflowMessage.value = event.message
       }
+      if (event.status === 'finished') {
+        syncStatusSoon(resourceId)
+      }
     },
     (event) => {
       if (isGenerating.value && !generationFinalized.value) {
-        void completeGeneration(resourceId, { resource_id: resourceId, status: event.success ? 'completed' : 'failed' })
+        void checkStatusOnce(resourceId).catch((err: any) => {
+          console.warn('[ResourceGenerator] 完成态同步失败:', err)
+          void completeGeneration(resourceId, { resource_id: resourceId, status: event.success ? 'completed' : 'failed' })
+        })
       }
     },
     (err) => {
@@ -993,6 +1256,7 @@ const startGeneration = async () => {
       agent_configs: requestAgentConfigs,
     }
     const { resource_id } = (await startResourceGeneration(requestParams)).data.data
+    activeResourceId.value = resource_id
 
     startResourceStream(resource_id)
   } catch (err: any) {
@@ -1011,6 +1275,7 @@ const resetGenerationState = () => {
   latestWorkflowMessage.value = ''
   isGenerating.value = false
   generationFinalized.value = false
+  activeResourceId.value = null
   dagNodeStates.value = {}
   selectedDagNodeId.value = 'planning'
 }
@@ -1029,6 +1294,27 @@ const stopResourceStream = () => {
   }
 }
 
+const pauseLiveGenerationUpdates = () => {
+  stopPolling()
+  stopResourceStream()
+}
+
+const resumeLiveGenerationUpdates = async () => {
+  const resourceId = activeResourceId.value
+  if (!resourceId || !isGenerating.value || generationFinalized.value) return
+
+  try {
+    await checkStatusOnce(resourceId)
+  } catch (err: any) {
+    latestWorkflowMessage.value = '状态同步失败，正在重试实时连接'
+    console.warn('[ResourceGenerator] 恢复任务状态失败:', err)
+  }
+
+  if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) {
+    startResourceStream(resourceId)
+  }
+}
+
 
 
 
@@ -1039,9 +1325,16 @@ onMounted(() => {
   }
 })
 
+onActivated(() => {
+  void resumeLiveGenerationUpdates()
+})
+
+onDeactivated(() => {
+  pauseLiveGenerationUpdates()
+})
+
 onBeforeUnmount(() => {
-  stopPolling()
-  stopResourceStream()
+  pauseLiveGenerationUpdates()
 })
 
 const resetGenerator = () => {
@@ -1062,7 +1355,41 @@ const handlePreview = (data: any) => {
 
 <style scoped>
 /* ================= 全局基础排版与转场 ================= */
-.elegant-generator-layout { width: 100%; min-height: calc(100vh - 64px); background: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; overflow-x: hidden; position: relative; padding-top: var(--space-5); }
+.elegant-generator-layout {
+  min-height: calc(100vh - 64px);
+  position: relative;
+  background: var(--color-bg);
+  overflow-x: hidden;
+  font-family: var(--font-sans);
+}
+
+.floating-history-btn {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-history-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
 .phase-view { position: relative; width: 100%; min-height: calc(100vh - 64px); display: flex; flex-direction: column; background: transparent; backdrop-filter: blur(20px); }
 .page-slide-enter-active, .page-slide-leave-active { transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
@@ -1073,7 +1400,7 @@ const handlePreview = (data: any) => {
   align-items: center;
   justify-content: center;
   position: relative;
-  background: #F8FAFC;
+  background: transparent;
 }
 
 /* Ambient Background */
@@ -1093,7 +1420,7 @@ const handlePreview = (data: any) => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: radial-gradient(circle, #CBD5E1 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--color-border-hover) 1px, transparent 1px);
   background-size: 24px 24px;
   opacity: 0.6;
   z-index: 1;
@@ -1103,7 +1430,7 @@ const handlePreview = (data: any) => {
   content: '';
   position: absolute;
   top: 0; left: 0; width: 100%; height: 100%;
-  background: radial-gradient(circle at center, transparent 0%, #F8FAFC 90%);
+  background: radial-gradient(circle at center, transparent 0%, var(--color-bg) 90%);
 }
 
 .omni-container {
@@ -1131,24 +1458,25 @@ const handlePreview = (data: any) => {
 .hero-title {
   font-size: 2.8rem;
   font-weight: 800;
-  color: #0F172A;
+  color: var(--color-text);
   letter-spacing: -0.03em;
   margin: 0 0 12px 0;
-  background: linear-gradient(135deg, #1E293B, #3B82F6);
+  background: linear-gradient(135deg, var(--color-text-strong), #3B82F6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 .hero-subtitle {
   font-size: 1.1rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   font-weight: 500;
   margin: 0;
 }
 
 .omni-spotlight-wrapper {
   width: 100%;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 20px;
   box-shadow: 
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
@@ -1177,7 +1505,7 @@ const handlePreview = (data: any) => {
   background: transparent;
   box-shadow: none !important;
   font-size: 1.15rem;
-  color: #1E293B;
+  color: var(--color-text-strong);
   padding: 18px 20px 8px;
   line-height: 1.6;
   resize: none;
@@ -1191,7 +1519,7 @@ const handlePreview = (data: any) => {
   height: 0;
 }
 .omni-textarea :deep(.el-textarea__inner)::placeholder {
-  color: #94A3B8;
+  color: var(--color-text-faint);
   font-weight: 400;
 }
 .omni-actions {
@@ -1202,7 +1530,7 @@ const handlePreview = (data: any) => {
 }
 .omni-hint {
   font-size: 0.9rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -1212,8 +1540,8 @@ const handlePreview = (data: any) => {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #F1F5F9;
-  color: #94A3B8;
+  background: var(--color-surface-hover);
+  color: var(--color-text-faint);
   border: none;
   display: flex;
   align-items: center;
@@ -1224,12 +1552,12 @@ const handlePreview = (data: any) => {
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn {
   background: #3B82F6;
-  color: #FFFFFF;
+  color: var(--color-surface);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn:hover {
   transform: translateY(-2px) scale(1.05);
-  background: #2563EB;
+  background: var(--color-info);
 }
 
 /* Rich Inspiration Grid */
@@ -1245,8 +1573,9 @@ const handlePreview = (data: any) => {
   100% { opacity: 1; transform: translateY(0); }
 }
 .inspiration-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 16px;
   padding: 16px;
   display: flex;
@@ -1257,7 +1586,7 @@ const handlePreview = (data: any) => {
   box-shadow: 0 2px 8px rgba(148, 163, 184, 0.04);
 }
 .inspiration-card:hover {
-  border-color: #CBD5E1;
+  border-color: var(--color-border-hover);
   transform: translateY(-3px);
   box-shadow: 0 10px 20px rgba(148, 163, 184, 0.08);
 }
@@ -1274,12 +1603,12 @@ const handlePreview = (data: any) => {
   margin: 0 0 6px 0;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-text-strong);
 }
 .ins-content p {
   margin: 0;
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-text-muted);
   line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1289,33 +1618,33 @@ const handlePreview = (data: any) => {
 }
 
 /* ================= Phase 2: 参数定制配置 ================= */
-.personalize-view { background: #F8FAFC; align-items: center; overflow-y: auto; padding: 60px var(--space-5); position: relative; }
+.personalize-view { background: transparent; align-items: center; overflow-y: auto; padding: 60px var(--space-5); position: relative; }
 .personalize-container { width: 100%; max-width: 1160px; display: flex; flex-direction: column; gap: var(--space-12); position: relative; z-index: 10; }
 .view-header { text-align: center; margin-bottom: 0; }
-.header-badge { margin-bottom: var(--space-4); font-weight: 700; letter-spacing: 0.05em; background: #E2E8F0 !important; color: #475569 !important; border: none; padding: 0 12px; }
+.header-badge { margin-bottom: var(--space-4); font-weight: 700; letter-spacing: 0.05em; background: var(--color-border) !important; color: var(--color-text-secondary) !important; border: none; padding: 0 12px; }
 .view-header h2 { 
   font-size: 2.5rem; 
   font-weight: 800; 
   margin: 0 0 12px 0; 
   letter-spacing: -0.02em; 
-  background: linear-gradient(135deg, #1E293B, #3B82F6);
+  background: linear-gradient(135deg, var(--color-text-strong), #3B82F6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.view-header p { font-size: 1.1rem; color: #64748B; margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+.view-header p { font-size: 1.1rem; color: var(--color-text-muted); margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
 .scenario-selector-v2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
-.scenario-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: var(--space-5); display: flex; align-items: center; gap: var(--space-4); cursor: pointer; transition: all 0.2s ease; position: relative; box-shadow: 0 2px 8px rgba(148, 163, 184, 0.04); }
-.scenario-card:hover { transform: translateY(-2px); border-color: #CBD5E1; box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08); }
+.scenario-card { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 16px; padding: var(--space-5); display: flex; align-items: center; gap: var(--space-4); cursor: pointer; transition: all 0.2s ease; position: relative; box-shadow: 0 2px 8px rgba(148, 163, 184, 0.04); }
+.scenario-card:hover { transform: translateY(-2px); border-color: var(--color-border-hover); box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08); }
 .scenario-card.active { border-color: #3B82F6; box-shadow: 0 8px 24px rgba(59, 130, 246, 0.12); border-width: 1px; }
-.scenario-icon-box { width: 44px; height: 44px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: #475569; transition: background-color 0.2s, transform 0.2s; }
-.scenario-card.active .scenario-icon-box { background: #3B82F6; color: #FFFFFF; border-color: #3B82F6; }
+.scenario-icon-box { width: 44px; height: 44px; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: var(--color-text-secondary); transition: background-color 0.2s, transform 0.2s; }
+.scenario-card.active .scenario-icon-box { background: #3B82F6; color: var(--color-surface); border-color: #3B82F6; }
 .scenario-info { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
-.s-name { font-weight: 700; font-size: 1rem; color: #1E293B; }
-.s-desc { font-size: 0.75rem; color: #64748B; line-height: 1.4; }
+.s-name { font-weight: 700; font-size: 1rem; color: var(--color-text-strong); }
+.s-desc { font-size: 0.75rem; color: var(--color-text-muted); line-height: 1.4; }
 .active-dot { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; background: #3B82F6; border-radius: 50%; }
 .config-section-v2 { margin-top: var(--space-2); }
 .agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-6); }
-.config-card-v2 { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 24px rgba(148, 163, 184, 0.06); }
+.config-card-v2 { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 24px rgba(148, 163, 184, 0.06); }
 .config-card-v2:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(148, 163, 184, 0.12); }
 .cc-header-v2 { padding: var(--space-5) var(--space-5) 12px; display: flex; align-items: center; gap: var(--space-3); }
 .cc-icon-wrap { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
@@ -1350,27 +1679,24 @@ const handlePreview = (data: any) => {
 .custom-slider-v2 { padding: 0 var(--space-2); }
 .personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: 24px; margin-top: 16px; padding-bottom: 60px; }
 .footer-btns { display: flex; justify-content: center; gap: 20px; }
-.selected-agents-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid #E2E8F0; border-radius: 24px; padding: 16px 24px; max-width: 860px; box-shadow: 0 4px 24px rgba(148, 163, 184, 0.08); }
-.sab-label { font-size: 0.9rem; color: #64748B; font-weight: 700; white-space: nowrap; }
+.selected-agents-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid var(--color-border); border-radius: 24px; padding: 16px 24px; max-width: 860px; box-shadow: 0 4px 24px rgba(148, 163, 184, 0.08); }
+.sab-label { font-size: 0.9rem; color: var(--color-text-muted); font-weight: 700; white-space: nowrap; }
 .sab-pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.sab-pills :deep(.el-tag.sab-pill) { background: #F8FAFC !important; border: 1px solid #E2E8F0 !important; color: #475569 !important; border-radius: 99px !important; padding: 0 16px !important; height: 32px !important; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; }
+.sab-pills :deep(.el-tag.sab-pill) { background: var(--color-bg) !important; border: 1px solid var(--color-border) !important; color: var(--color-text-secondary) !important; border-radius: 99px !important; padding: 0 16px !important; height: 32px !important; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; }
 .sab-pills :deep(.el-tag.sab-pill) .el-icon { color: #3B82F6; font-size: 1rem; }
-.sab-hint { font-size: 0.8rem; color: #64748B; font-weight: 600; margin-left: 8px; }
-.footer-back-btn { font-weight: 600; color: #64748B; border: 1px solid #E2E8F0; background: #FFFFFF; }
-.footer-back-btn:hover { color: #1E293B; border-color: #CBD5E1; background: #F8FAFC; }
-.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: #3B82F6 !important; color: #FFFFFF !important; border: none; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
-.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4); background: #2563EB !important; }
+.sab-hint { font-size: 0.8rem; color: var(--color-text-muted); font-weight: 600; margin-left: 8px; }
+.footer-back-btn { font-weight: 600; color: var(--color-text-muted); border: 1px solid var(--color-border); background: var(--color-surface); }
+.footer-back-btn:hover { color: var(--color-text-strong); border-color: var(--color-border-hover); background: var(--color-bg); }
+.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: #3B82F6 !important; color: var(--color-surface) !important; border: none; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
+.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4); background: var(--color-info) !important; }
 
 /* ==================== 第三部分：多智能体工作流控制台 ==================== */
 .generating-view {
-  background:
-    radial-gradient(ellipse at 0% 0%, rgba(79, 70, 229, 0.12) 0%, transparent 40%),
-    radial-gradient(ellipse at 100% 100%, rgba(99, 102, 241, 0.1) 0%, transparent 40%),
-    linear-gradient(180deg, #F5F4FF 0%, #F0F4FF 40%, #F8FAFC 100%);
+  background: transparent;
   overflow-y: auto;
 }
 .workflow-stage-page {
-  background: #F8FAFC;
+  background: transparent;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px 18px 16px;
@@ -1409,16 +1735,16 @@ const handlePreview = (data: any) => {
   justify-content: space-between;
   gap: 18px;
   align-items: center;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 22px;
   padding: 14px 18px;
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
-  backdrop-filter: blur(18px);
 }
 .stage-title-area { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.stage-title-area h2 { margin: 0; font-size: 1.24rem; font-weight: 900; color: #0F172A; }
-.stage-title-area p { margin: 0; color: #64748B; font-size: 0.9rem; }
+.stage-title-area h2 { margin: 0; font-size: 1.24rem; font-weight: 900; color: var(--color-text); }
+.stage-title-area p { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; }
 .stage-route-progress { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .route-step {
   display: inline-flex;
@@ -1426,32 +1752,32 @@ const handlePreview = (data: any) => {
   height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  background: #F1F5F9;
-  color: #94A3B8;
+  background: var(--color-surface-hover);
+  color: var(--color-text-faint);
   font-size: 0.72rem;
   font-weight: 800;
 }
 .route-step.done { background: #ECFDF5; color: #059669; }
-.route-step.active { background: #EFF6FF; color: #2563EB; box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16); }
-.route-line { width: 28px; height: 2px; border-radius: 99px; background: #CBD5E1; }
+.route-step.active { background: #EFF6FF; color: var(--color-info); box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16); }
+.route-line { width: 28px; height: 2px; border-radius: 99px; background: var(--color-border-hover); }
 .route-line.done { background: #34D399; }
-.route-line.active { background: linear-gradient(90deg, #34D399, #2563EB); }
+.route-line.active { background: linear-gradient(90deg, #34D399, var(--color-info)); }
 .stage-stat-group { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .stage-stat-card {
   min-width: 92px;
   padding: 10px 14px;
   border-radius: 18px;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .stage-stat-card.wide { min-width: 110px; }
-.stage-stat-card span { color: #64748B; font-size: 0.72rem; font-weight: 700; }
-.stage-stat-card strong { color: #0F172A; font-size: 1.22rem; line-height: 1; font-weight: 900; }
-.stage-stat-card small { color: #94A3B8; font-size: 0.78rem; margin-left: 2px; }
-.stage-log-btn { height: 42px; border-color: #BFDBFE !important; color: #2563EB !important; font-weight: 800; background: #FFFFFF !important; }
+.stage-stat-card span { color: var(--color-text-muted); font-size: 0.72rem; font-weight: 700; }
+.stage-stat-card strong { color: var(--color-text); font-size: 1.22rem; line-height: 1; font-weight: 900; }
+.stage-stat-card small { color: var(--color-text-faint); font-size: 0.78rem; margin-left: 2px; }
+.stage-log-btn { height: 42px; border-color: #BFDBFE !important; color: var(--color-info) !important; font-weight: 800; background: var(--color-surface) !important; }
 .stage-generation-error { position: relative; z-index: 2; border-radius: 16px; }
 .agent-stage-layout {
   position: relative;
@@ -1463,10 +1789,10 @@ const handlePreview = (data: any) => {
   flex: 1;
 }
 .agent-stage-canvas {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(18px);
   position: relative;
   border-radius: 28px;
   padding: 16px;
@@ -1481,27 +1807,326 @@ const handlePreview = (data: any) => {
   z-index: 8;
   padding: 0 2px 8px;
 }
-.panel-eyebrow { display: inline-block; font-size: 0.68rem; font-weight: 900; color: #2563EB; letter-spacing: 0.08em; text-transform: uppercase; }
-.stage-canvas-header h3 { margin: 4px 0 0; font-size: 1.05rem; font-weight: 900; color: #0F172A; }
+.panel-eyebrow { display: inline-block; font-size: 0.68rem; font-weight: 900; color: var(--color-info); letter-spacing: 0.08em; text-transform: uppercase; }
+.stage-canvas-header h3 { margin: 4px 0 0; font-size: 1.05rem; font-weight: 900; color: var(--color-text); }
 .stage-control-pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.control-pill { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; border-radius: 999px; background: #F8FAFC; color: #64748B; border: 1px solid #E2E8F0; font-size: 0.72rem; font-weight: 800; }
-.control-pill.active { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
+.control-pill { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; border-radius: 999px; background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); font-size: 0.72rem; font-weight: 800; }
+.control-pill.active { background: #EFF6FF; color: var(--color-info); border-color: #BFDBFE; }
 .live-dot { width: 7px; height: 7px; border-radius: 999px; background: #22C55E; box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.14); }
 
 /* ================= 严格后面对齐的 DAG 画布样式 ================= */
 .dag-flow-wrapper {
   position: relative;
   min-height: 580px;
-  background: #F8FAFC;
+  background: transparent;
   border-radius: 16px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 40px;
+  overflow: hidden;
+  padding: 18px;
   /* 科技感背景暗网格 */
   background-image:
     linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
     linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.execution-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.execution-rail {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 16px 4px 18px;
+  scrollbar-width: thin;
+}
+
+.execution-rail > .stage-node-card,
+.execution-rail > .parallel-pool-card {
+  flex: 0 0 auto;
+}
+
+.stage-node-card {
+  width: 238px;
+}
+
+.stage-node-card::after,
+.parallel-pool-card::after {
+  content: '';
+  position: absolute;
+  right: -18px;
+  top: 50%;
+  width: 18px;
+  height: 2px;
+  background-image: linear-gradient(90deg, #3B82F6 50%, transparent 50%);
+  background-size: 12px 2px;
+  animation: dagDashMove 0.7s linear infinite;
+  opacity: 0.55;
+}
+
+.execution-rail > :last-child::after {
+  display: none;
+}
+
+.parallel-pool-card {
+  position: relative;
+  width: min(520px, 46vw);
+  min-width: 380px;
+  border-radius: 20px;
+  padding: 16px;
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 16px 34px rgba(15, 23, 42, 0.055);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.parallel-pool-card:hover,
+.parallel-pool-card.is-selected {
+  border-color: #93C5FD;
+  box-shadow: 0 18px 36px rgba(37, 99, 235, 0.10);
+  transform: translateY(-2px);
+}
+
+.pool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.pool-header h4 {
+  margin: 3px 0 0;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.pool-status {
+  min-width: 74px;
+  border-radius: 14px;
+  padding: 8px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  text-align: right;
+}
+
+.pool-status strong {
+  display: block;
+  color: var(--color-info);
+  font-size: 1.1rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.pool-status span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  margin-top: 3px;
+}
+
+.pool-summary {
+  min-height: 20px;
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.parallel-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pool-agent-card {
+  width: auto;
+  min-width: 0;
+  border-radius: 14px;
+}
+
+.pool-agent-card .node-inner {
+  padding: 11px 12px 11px 16px;
+}
+
+.pool-agent-card .node-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
+}
+
+.pool-agent-card .node-title-group strong {
+  font-size: 0.8rem;
+}
+
+.pool-agent-card .node-status-pill {
+  font-size: 0.66rem;
+  padding: 2px 6px;
+}
+
+.node-body.compact {
+  margin-top: 8px;
+}
+
+.node-body.compact .node-message {
+  height: 31px;
+  font-size: 0.7rem;
+}
+
+.agent-focus-panel {
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.07);
+  min-width: 0;
+}
+
+.focus-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.focus-agent-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  font-size: 1.25rem;
+}
+
+.focus-panel-header h4 {
+  margin: 3px 0 0;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.focus-status-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: 900;
+}
+
+.focus-status-line.status-running {
+  color: var(--color-info);
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+}
+
+.focus-status-line.status-success {
+  color: var(--color-success);
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+}
+
+.focus-status-line.status-failed {
+  color: var(--color-danger);
+  background: #FEF2F2;
+  border-color: #FECACA;
+}
+
+.focus-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-border);
+  overflow: hidden;
+  margin: 14px 0;
+}
+
+.focus-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3B82F6, #10B981);
+  transition: width 0.35s ease;
+}
+
+.focus-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.focus-metrics div {
+  padding: 9px 10px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.84);
+  border: 1px solid var(--color-border);
+}
+
+.focus-metrics dt {
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 850;
+}
+
+.focus-metrics dd {
+  margin: 4px 0 0;
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.focus-message {
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  border: 1px solid var(--color-border);
+}
+
+.focus-metric-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.focus-metric-chips span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.focus-history {
+  margin-top: 14px;
+}
+
+.focus-history p {
+  margin: 8px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid #BFDBFE;
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .dag-flow-container {
@@ -1578,10 +2203,10 @@ const handlePreview = (data: any) => {
 /* --- 智能体卡片核心设计 --- */
 .dag-node-card {
   width: 270px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
   border-radius: 14px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
   position: relative;
   cursor: pointer;
@@ -1600,11 +2225,11 @@ const handlePreview = (data: any) => {
   left: -1px; top: -1px; bottom: -1px; width: 4px;
   border-top-left-radius: 14px;
   border-bottom-left-radius: 14px;
-  background: #CBD5E1; 
+  background: var(--color-border-hover); 
 }
-.status-success .node-indicator { background: #10B981; }
+.status-success .node-indicator { background: var(--color-success); }
 .status-running .node-indicator { background: #3B82F6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); }
-.status-failed .node-indicator { background: #EF4444; }
+.status-failed .node-indicator { background: var(--color-danger); }
 
 .node-inner { padding: 14px 16px 14px 20px; }
 
@@ -1612,43 +2237,43 @@ const handlePreview = (data: any) => {
 .node-head { display: flex; align-items: center; gap: 12px; }
 .node-icon {
   width: 38px; height: 38px; border-radius: 10px;
-  background: #F1F5F9; color: #64748B;
+  background: var(--color-surface-hover); color: var(--color-text-muted);
   display: flex; align-items: center; justify-content: center;
   font-size: 1.15rem; border: 1px solid rgba(0,0,0,0.03);
 }
-.status-success .node-icon { background: #D1FAE5; color: #10B981; }
+.status-success .node-icon { background: #D1FAE5; color: var(--color-success); }
 .status-running .node-icon { background: #DBEAFE; color: #3B82F6; }
-.status-failed .node-icon { background: #FEE2E2; color: #EF4444; }
+.status-failed .node-icon { background: #FEE2E2; color: var(--color-danger); }
 
 .node-title-group { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.node-title-group strong { color: #0F172A; font-size: 0.92rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.node-title-group .node-sub { color: #94A3B8; font-size: 0.72rem; }
+.node-title-group strong { color: var(--color-text); font-size: 0.92rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node-title-group .node-sub { color: var(--color-text-faint); font-size: 0.72rem; }
 
 .node-status-pill {
   font-family: var(--font-mono, monospace);
   font-size: 0.72rem; font-weight: 800;
-  background: #F8FAFC; padding: 3px 8px; border-radius: 6px;
-  color: #64748B;
+  background: var(--color-bg); padding: 3px 8px; border-radius: 6px;
+  color: var(--color-text-muted);
 }
-.status-running .node-status-pill { background: #EFF6FF; color: #2563EB; }
-.status-success .node-status-pill { background: #ECFDF5; color: #10B981; }
+.status-running .node-status-pill { background: #EFF6FF; color: var(--color-info); }
+.status-success .node-status-pill { background: #ECFDF5; color: var(--color-success); }
 
-.node-divider { margin: 12px 0; border-top: 1px dashed #E2E8F0; }
+.node-divider { margin: 12px 0; border-top: 1px dashed var(--color-border); }
 
 /* 底部状态消息区 */
 .meta-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
 .meta-label { font-size: 0.75rem; font-weight: 700; color: #3B82F6; }
-.status-waiting .meta-label { color: #94A3B8; }
-.status-success .meta-label { color: #10B981; }
-.meta-time { font-size: 0.75rem; color: #94A3B8; font-family: var(--font-mono, monospace); }
+.status-waiting .meta-label { color: var(--color-text-faint); }
+.status-success .meta-label { color: var(--color-success); }
+.meta-time { font-size: 0.75rem; color: var(--color-text-faint); font-family: var(--font-mono, monospace); }
 
 .node-message {
-  margin: 0; font-size: 0.78rem; color: #475569;
+  margin: 0; font-size: 0.78rem; color: var(--color-text-secondary);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; height: 34px; line-height: 1.45;
 }
-.status-running .node-message { color: #1E293B; }
-.node-message.is-error { color: #EF4444; font-weight: 600; }
+.status-running .node-message { color: var(--color-text-strong); }
+.node-message.is-error { color: var(--color-danger); font-weight: 600; }
 
 /* --- 核心动画：数据流转虚线 --- */
 .dag-edge-out {
@@ -1664,11 +2289,11 @@ const handlePreview = (data: any) => {
   animation: dagDashMove 0.7s linear infinite;
 }
 /* 等待态：虚线静止并变灰 */
-.status-waiting .dag-edge-out { background-image: linear-gradient(90deg, #CBD5E1 50%, transparent 50%); animation: none; }
+.status-waiting .dag-edge-out { background-image: linear-gradient(90deg, var(--color-border-hover) 50%, transparent 50%); animation: none; }
 /* 成功态：虚线静止并变绿 */
-.status-success .dag-edge-out { background-image: linear-gradient(90deg, #10B981 50%, transparent 50%); animation: none; }
+.status-success .dag-edge-out { background-image: linear-gradient(90deg, var(--color-success) 50%, transparent 50%); animation: none; }
 /* 失败态：虚线静止并变红 */
-.status-failed .dag-edge-out { background-image: linear-gradient(90deg, #EF4444 50%, transparent 50%); animation: none; }
+.status-failed .dag-edge-out { background-image: linear-gradient(90deg, var(--color-danger) 50%, transparent 50%); animation: none; }
 
 @keyframes dagDashMove {
   from { background-position: 0 0; }
@@ -1688,48 +2313,49 @@ const handlePreview = (data: any) => {
   min-height: 56px;
   padding: 8px 12px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(226, 232, 240, 0.96);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
-  backdrop-filter: blur(18px);
 }
 .output-dock-heading { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .output-dock-heading > div { display: flex; flex-direction: column; gap: 4px; }
-.output-dock-heading strong { color: #0F172A; font-size: 0.98rem; font-weight: 900; line-height: 1.2; }
-.output-dock-heading p { margin: 0; color: #64748B; font-size: 0.74rem; line-height: 1.5; }
+.output-dock-heading strong { color: var(--color-text); font-size: 0.98rem; font-weight: 900; line-height: 1.2; }
+.output-dock-heading p { margin: 0; color: var(--color-text-muted); font-size: 0.74rem; line-height: 1.5; }
 .output-dock-list { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 10px; min-width: 0; }
-.output-dock-item { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid #E2E8F0; border-radius: 16px; background: #F8FAFC; opacity: 0.72; transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; cursor: default; }
+.output-dock-item { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg); opacity: 0.72; transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; cursor: default; }
 .output-dock-item.ready { opacity: 1; background: #F0FDF4; border-color: #A7F3D0; cursor: pointer; }
 .output-dock-item.ready:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(16, 185, 129, 0.10); }
-.output-dock-item > span { width: 26px; height: 26px; border-radius: 8px; background: #FFFFFF; display: grid; place-items: center; flex-shrink: 0; font-size: 0.9rem; }
-.output-dock-item strong { display: block; color: #0F172A; font-size: 0.72rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.output-dock-item p { margin: 1px 0 0; color: #64748B; font-size: 0.65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.output-dock-empty { min-height: 40px; display: flex; align-items: center; justify-content: center; border: 1px dashed #CBD5E1; border-radius: 12px; color: #64748B; background: #F8FAFC; font-size: 0.78rem; font-weight: 800; }
+.output-dock-item > span { width: 26px; height: 26px; border-radius: 8px; background: var(--color-surface); display: grid; place-items: center; flex-shrink: 0; font-size: 0.9rem; }
+.output-dock-item strong { display: block; color: var(--color-text); font-size: 0.72rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.output-dock-item p { margin: 1px 0 0; color: var(--color-text-muted); font-size: 0.65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.output-dock-empty { min-height: 40px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--color-border-hover); border-radius: 12px; color: var(--color-text-muted); background: var(--color-bg); font-size: 0.78rem; font-weight: 800; }
 
-.workflow-log-drawer :deep(.el-drawer__header) { margin-bottom: 0; padding: 20px 22px; border-bottom: 1px solid #E2E8F0; font-weight: 900; color: #0F172A; }
+.workflow-log-drawer :deep(.el-drawer__header) { margin-bottom: 0; padding: 20px 22px; border-bottom: 1px solid var(--color-border); font-weight: 900; color: var(--color-text); }
 .drawer-log-list { display: flex; flex-direction: column; gap: 14px; padding: 4px; }
-.drawer-log-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 16px; background: #F8FAFC; border: 1px solid #E2E8F0; }
-.drawer-log-dot { width: 10px; height: 10px; border-radius: 999px; background: #CBD5E1; margin-top: 5px; flex-shrink: 0; }
+.drawer-log-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 16px; background: var(--color-bg); border: 1px solid var(--color-border); }
+.drawer-log-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--color-border-hover); margin-top: 5px; flex-shrink: 0; }
 .drawer-log-item.is-running .drawer-log-dot { background: #F97316; box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.12); }
-.drawer-log-item.is-success .drawer-log-dot { background: #10B981; }
-.drawer-log-item.is-failed .drawer-log-dot { background: #EF4444; }
-.drawer-log-item strong { color: #0F172A; font-size: 0.86rem; font-weight: 900; }
-.drawer-log-item p { margin: 4px 0 0; color: #64748B; font-size: 0.78rem; line-height: 1.45; }
+.drawer-log-item.is-success .drawer-log-dot { background: var(--color-success); }
+.drawer-log-item.is-failed .drawer-log-dot { background: var(--color-danger); }
+.drawer-log-item strong { color: var(--color-text); font-size: 0.86rem; font-weight: 900; }
+.drawer-log-item p { margin: 4px 0 0; color: var(--color-text-muted); font-size: 0.78rem; line-height: 1.45; }
 
 
 /* ================= Phase 4: 交付中心看板 (Bento Layout) ================= */
-.results-view { background: #F9FAFB; overflow-y: auto; padding-bottom: 80px; position: relative; }
-.result-hero-compact { display: flex; justify-content: space-between; align-items: center; padding: var(--space-4) var(--space-8); background: #FFFFFF; border-bottom: 1px solid #E5E7EB; margin-bottom: var(--space-6); border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: sticky; top: 0; z-index: 100; }
+.results-view { background: transparent; overflow-y: auto; padding-bottom: 80px; position: relative; }
+.result-hero-compact { display: flex; justify-content: space-between; align-items: center; padding: var(--space-4) var(--space-8); background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.8); margin-bottom: var(--space-6); border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: sticky; top: 0; z-index: 100; }
 .hero-content-left { display: flex; flex-direction: column; gap: var(--space-1); }
 .hero-status-tag-mini { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--color-success); font-size: 0.75rem; font-weight: var(--weight-extrabold); }
 .hero-title-compact { margin: 0; font-size: 1.25rem; font-weight: var(--weight-extrabold); color: var(--color-text-strong); }
 .hero-subtitle-compact { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); }
 .hero-actions-right { display: flex; gap: var(--space-3); align-items: center; }
 .results-body-bento { max-width: 1440px; margin: 0 auto; padding: var(--space-10) 60px; display: flex; flex-direction: column; gap: var(--space-10); position: relative; z-index: 1; }
-.premium-resource-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; align-items: stretch; }
-.premium-res-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px; position: relative; overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03); cursor: pointer; animation: fadeSlideUp 0.6s ease-out backwards; }
+.premium-resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; align-items: stretch; }
+.premium-res-card { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px; position: relative; overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03); cursor: pointer; animation: fadeSlideUp 0.6s ease-out backwards; }
 @keyframes fadeSlideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
 .premium-res-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-color: #D1D5DB; }
+.premium-res-card:focus-visible { outline: 2px solid var(--color-info); outline-offset: 2px; }
 .card-bg-glow { display: none; }
 
 .premium-res-card .card-header, .premium-res-card .card-body, .premium-res-card .card-footer { position: relative; z-index: 1; }
@@ -1741,12 +2367,12 @@ const handlePreview = (data: any) => {
 .premium-res-card.tone-indigo .type-icon-box { color: var(--color-primary); }
 .premium-res-card.tone-pink .type-icon-box { color: #DB2777; }
 
-.premium-res-card .card-title { margin: 0; font-size: 1.15rem; font-weight: var(--weight-extrabold); color: var(--color-text); line-height: 1.45; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.premium-res-card .card-title { margin: 0; font-size: 1.15rem; font-weight: var(--weight-extrabold); color: var(--color-text); line-height: 1.45; text-wrap: balance; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .premium-res-card .card-summary { margin: 0; font-size: 0.95rem; color: var(--color-text-secondary); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card-metrics-modern { display: flex; gap: var(--space-3); margin-top: auto; padding-top: var(--space-3); }
 .metric-badge { display: inline-flex; align-items: center; gap: var(--space-1); background: var(--color-bg); color: var(--color-text-secondary); padding: var(--space-1) var(--space-3); border: 1px solid rgba(15, 23, 42, 0.04); border-radius: var(--radius-md); font-size: 0.8rem; font-weight: var(--weight-bold); }
 .premium-res-card .card-footer { border-top: 1px solid rgba(226, 232, 240, 0.6); padding-top: var(--space-5); margin-top: var(--space-1); display: flex; justify-content: space-between; align-items: center; }
-.modern-text-btn { background: transparent; border: none; color: var(--color-text); font-weight: var(--weight-extrabold); font-size: 0.95rem; padding: 0; cursor: pointer; display: flex; align-items: center; gap: var(--space-2); transition: color var(--transition-base); }
+.modern-text-btn { background: transparent; border: none; color: var(--color-text); font-weight: var(--weight-extrabold); font-size: 0.95rem; padding: 0; cursor: pointer; display: flex; align-items: center; gap: var(--space-2); transition: color var(--transition-base); pointer-events: none; tabindex: -1; }
 .modern-text-btn span { transition: transform var(--transition-slow); }
 .premium-res-card:hover .modern-text-btn { color: var(--color-info); }
 .premium-res-card:hover .modern-text-btn span { transform: translateX(4px); }
@@ -1762,9 +2388,39 @@ const handlePreview = (data: any) => {
   .agent-configs-grid { grid-template-columns: repeat(2, 1fr); }
   .premium-resource-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
   .results-body-bento { padding: var(--space-6) var(--space-8); }
+  .execution-stage-grid { grid-template-columns: 1fr; }
+  .agent-focus-panel { order: 2; }
+  .parallel-pool-card { width: min(560px, 58vw); }
 }
 @media (max-width: 900px) {
   .workflow-stage-page { overflow: auto; }
+  .stage-topbar { flex-direction: column; align-items: stretch; }
+  .stage-stat-group { flex-wrap: wrap; }
+  .agent-stage-canvas { min-height: 0; }
+  .dag-flow-wrapper { overflow: visible; }
+  .execution-rail {
+    flex-direction: column;
+    align-items: stretch;
+    overflow: visible;
+    padding: 10px 0;
+  }
+  .stage-node-card,
+  .parallel-pool-card {
+    width: 100%;
+    min-width: 0;
+  }
+  .stage-node-card::after,
+  .parallel-pool-card::after {
+    right: auto;
+    left: 28px;
+    top: auto;
+    bottom: -18px;
+    width: 2px;
+    height: 18px;
+    background-image: linear-gradient(180deg, #3B82F6 50%, transparent 50%);
+    background-size: 2px 12px;
+  }
+  .parallel-agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .output-dock-heading { flex-direction: column; align-items: flex-start; }
   .output-dock-heading p { text-align: left; max-width: none; }
   .output-dock-section .output-dock-list { grid-template-columns: 1fr; }
@@ -1777,6 +2433,8 @@ const handlePreview = (data: any) => {
   .results-body-bento { padding: var(--space-4); }
   .premium-resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .premium-res-card { grid-column: span 1 !important; }
+  .parallel-agent-grid { grid-template-columns: 1fr; }
+  .focus-metrics { grid-template-columns: 1fr; }
 }
 @media (max-width: 520px) {
   .premium-resource-grid { grid-template-columns: 1fr; }
@@ -1784,13 +2442,35 @@ const handlePreview = (data: any) => {
 }
 
 /* Element Plus 弹窗深度订制 */
-.elegant-dialog :deep(.el-dialog) { border-radius: var(--radius-2xl); overflow: hidden; box-shadow: var(--shadow-xl); }
-.elegant-dialog :deep(.el-dialog__header) { padding: var(--space-6) var(--space-8) var(--space-5); margin-right: 0; border-bottom: 1px solid var(--color-surface-hover); }
+.elegant-dialog :deep(.el-dialog) { 
+  border-radius: var(--radius-2xl); 
+  overflow: hidden; 
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.elegant-dialog :deep(.el-dialog__header) { padding: var(--space-6) var(--space-8) var(--space-5); margin-right: 0; border-bottom: 1px solid rgba(0, 0, 0, 0.05); }
 .elegant-dialog :deep(.el-dialog__title) { font-weight: var(--weight-extrabold); font-size: 1.2rem; color: var(--color-text); }
-.elegant-dialog :deep(.el-dialog__body) { padding: var(--space-8); background: var(--color-bg); }
+.elegant-dialog :deep(.el-dialog__body) { padding: var(--space-8); background: transparent; }
+
+/* 彻底解决三层嵌套问题：在弹窗内部署的资源卡片必须完全融入，去除独立边框与背景 */
+.elegant-dialog :deep(.resource-card-wrapper) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+.elegant-dialog :deep(.resource-card-wrapper:hover) {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
 
 /* PPT 预览弹窗专属沉浸式样式 */
-.is-ppt-dialog :deep(.el-dialog__body) { padding: 0 !important; background: #F8FAFC !important; }
+.is-ppt-dialog :deep(.el-dialog__body) { padding: 0 !important; background: transparent !important; }
 .preview-dialog-body.is-ppt-preview { padding: 0 !important; background: transparent !important; border: none !important; box-shadow: none !important; }
 .preview-dialog-body.is-ppt-preview :deep(.player-wrapper) { margin-top: 0 !important; border: none !important; border-radius: 0 !important; }
 

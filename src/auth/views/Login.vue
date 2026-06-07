@@ -157,7 +157,7 @@ const handleLogin = async (formEl: any) => {
         const { data } = res.data
         if (data.token) {
           localStorage.setItem('token', data.token)
-          ElMessage.success({ message: '登录成功！', duration: 1000 })
+          ElMessage.success({ message: '登录成功！', duration: 2000, offset: 20 })
           if (data.user?.is_first_login) {
             router.push('/dashboard?onboarding=true')
           } else {
@@ -165,7 +165,7 @@ const handleLogin = async (formEl: any) => {
           }
         }
       } catch (err: any) {
-        ElMessage.error(getErrorMessage(err, '登录失败，请检查用户名和密码输入是否有误'))
+        ElMessage.error({ message: getErrorMessage(err, '登录失败，请检查用户名和密码输入是否有误'), duration: 2000, offset: 20 })
       } finally {
         isLoading.value = false
       }

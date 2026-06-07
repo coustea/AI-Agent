@@ -1,4 +1,3 @@
-import { ref, onBeforeUnmount } from 'vue'
 import { recordLearningSession } from '@/learning/api/evaluation'
 import type { LearningSessionCreate } from '@/learning/types/evaluation'
 
@@ -88,26 +87,4 @@ export function stopTracking() {
   recordLearningSession(payload).catch(() => {
     // 静默失败，学习时长上报不应阻塞用户操作
   })
-}
-
-export function useLearningTracker() {
-  const isTracking = ref(false)
-
-  function start(context: TrackingContext) {
-    startTracking(context)
-    isTracking.value = true
-  }
-
-  function stop() {
-    stopTracking()
-    isTracking.value = false
-  }
-
-  onBeforeUnmount(() => {
-    if (isTracking.value) {
-      stop()
-    }
-  })
-
-  return { start, stop, isTracking }
 }

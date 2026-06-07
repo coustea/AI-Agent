@@ -46,7 +46,7 @@ defineProps<{
 .logic-blue-slide {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, #EFF6FF 100%);
   padding: 60px 80px;
   box-sizing: border-box;
   display: flex;
@@ -72,7 +72,7 @@ defineProps<{
 
 .slide-title {
   font-size: 38px;
-  color: #0F172A; /* 深海蓝/黑 */
+  color: var(--color-text); /* 深海蓝/黑 */
   margin: 0;
   font-weight: 800;
   letter-spacing: -0.5px;
@@ -99,7 +99,7 @@ defineProps<{
   top: 15px;
   bottom: 15px;
   width: 2px;
-  background: #E2E8F0;
+  background: var(--color-border);
   z-index: 1;
 }
 
@@ -122,8 +122,8 @@ defineProps<{
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  background: #FFFFFF;
-  border: 2px solid #E2E8F0;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,7 +135,7 @@ defineProps<{
 .node-number {
   font-size: 18px;
   font-weight: 700;
-  color: #64748B;
+  color: var(--color-text-muted);
   font-family: "JetBrains Mono", Consolas, monospace;
 }
 
@@ -150,8 +150,8 @@ defineProps<{
 
 .agenda-card {
   flex: 1;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 16px 28px;
   display: flex;
@@ -177,7 +177,7 @@ defineProps<{
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #CBD5E1;
+  background: var(--color-border-hover);
   transition: all 0.3s;
 }
 

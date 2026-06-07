@@ -14,7 +14,7 @@
               v-for="item in navItems"
               :key="item.path"
               :class="['nav-item', { active: activePath === item.path }]"
-              @click="router.push(item.path)"
+              @click="navigateTo(item.path)"
               :title="item.label"
           >
             <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
@@ -70,7 +70,7 @@
       <router-view v-slot="{ Component }">
         <transition name="fade-slide" mode="out-in">
           <keep-alive include="ResourceGenerator,Tutor">
-            <component :is="Component" />
+            <component :is="Component" :key="route.path" />
           </keep-alive>
         </transition>
       </router-view>
@@ -100,6 +100,7 @@ import { useAuthPolling } from '@/auth/composables/useAuthPolling'
 const route = useRoute()
 const router = useRouter()
 const onboardingDialogVisible = ref(false)
+const pendingPath = ref<string | null>(null)
 
 const navItems = [
   { path: '/dashboard', label: '全景中枢', icon: Menu },
@@ -111,7 +112,7 @@ const navItems = [
 
 useAuthPolling(60000)
 
-const activePath = computed(() => route.path)
+const activePath = computed(() => pendingPath.value || route.path)
 
 const currentTime = ref('')
 let timer: number
@@ -126,6 +127,7 @@ const loadOnboardingStatus = () => {
 watch(
   () => route.fullPath,
   () => {
+    pendingPath.value = null
     if (route.query.onboarding === 'true') {
       onboardingDialogVisible.value = true
     } else {
@@ -133,6 +135,14 @@ watch(
     }
   }
 )
+
+const navigateTo = (path: string) => {
+  if (route.path === path) return
+  pendingPath.value = path
+  router.push(path).catch(() => {
+    pendingPath.value = null
+  })
+}
 
 onMounted(() => {
   const updateTime = () => {
@@ -168,7 +178,7 @@ const handleCommand = async (command: string) => {
   padding: 8px !important;
   border-radius: 12px !important;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
-  border: 1px solid #E2E8F0 !important;
+  border: 1px solid var(--color-border) !important;
 }
 
 .custom-user-dropdown .el-dropdown-menu {
@@ -183,7 +193,7 @@ const handleCommand = async (command: string) => {
   padding: 8px 16px;
   margin: 2px 0 4px 0;
   background: transparent;
-  color: #475569;
+  color: var(--color-text-secondary);
   border-radius: 6px;
   font-size: 14px;
   font-weight: normal;
@@ -193,7 +203,7 @@ const handleCommand = async (command: string) => {
 
 .dropdown-header-block .el-icon {
   font-size: 16px;
-  color: #64748B;
+  color: var(--color-text-muted);
   transition: all 0.2s ease;
 }
 
@@ -213,36 +223,36 @@ const handleCommand = async (command: string) => {
   border-radius: 6px;
   margin: 2px 0;
   padding: 8px 16px;
-  color: #475569;
+  color: var(--color-text-secondary);
   font-size: 14px;
   transition: all 0.2s ease;
 }
 
 .custom-user-dropdown .el-dropdown-menu__item:hover {
-  background-color: #F8FAFC !important;
-  color: #0F172A !important;
+  background-color: var(--color-bg) !important;
+  color: var(--color-text) !important;
 }
 
 .custom-user-dropdown .el-dropdown-menu__item i {
   margin-right: 10px;
   font-size: 16px;
-  color: #64748B;
+  color: var(--color-text-muted);
 }
 
 .dropdown-divider {
   height: 1px;
-  background-color: #F1F5F9;
+  background-color: var(--color-surface-hover);
   margin: 8px 0;
 }
 
 /* 退出登录专属样式：使用组合选择器提高优先级，防止颜色被通用样式覆盖 */
 .custom-user-dropdown .el-dropdown-menu__item.logout-item {
-  color: #64748B !important;
+  color: var(--color-text-muted) !important;
 }
 
 .custom-user-dropdown .el-dropdown-menu__item.logout-item:hover {
   color: #DF5B5B !important; /* 悬停变为图片所示的红色 */
-  background-color: #F8FAFC !important;
+  background-color: var(--color-bg) !important;
 }
 
 .custom-user-dropdown .el-dropdown-menu__item.logout-item:hover i {

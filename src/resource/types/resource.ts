@@ -4,6 +4,11 @@ export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 type ResourceStreamEventName = 'agent' | 'done'
+  | 'agent.snapshot'
+  | 'agent.step'
+  | 'agent.heartbeat'
+  | 'agent.metric'
+  | 'agent.artifact_ready'
 
 /** Agent 状态值 */
 type AgentStatus = 'running' | 'finished' | 'failed' | 'skipped'
@@ -14,6 +19,14 @@ export interface ResourceStreamEvent {
   agent_id?: string | null
   status?: AgentStatus | null
   message?: string | null
+  progress: number
+  run_id?: string | null
+  span_id?: string | null
+  phase?: string | null
+  elapsed_ms?: number | null
+  metrics?: Record<string, any>
+  dependency?: string | null
+  artifact_id?: string | null
   /** done 事件专用 */
   success?: boolean | null
   timestamp: number

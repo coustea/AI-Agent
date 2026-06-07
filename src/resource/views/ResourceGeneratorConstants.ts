@@ -11,11 +11,14 @@ import {
 export const PPT_AGENT_ID = 'ppt'
 export const PRE_REVIEW_AGENT_ID = 'pre_review'
 export const PPT_REVIEW_AGENT_ID = 'ppt_review'
-export const SYSTEM_AGENT_IDS = ['planning', PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, 'review', 'bundle']
+export const COORDINATOR_AGENT_ID = 'coordinator'
+export const BUNDLE_AGENT_ID = 'bundle'
+export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, 'review', BUNDLE_AGENT_ID]
 export const MIN_AGENTS = 3
 
 export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   planning: { label: '规划任务', icon: '🎯' },
+  coordinator: { label: '并行调度中枢', icon: '⚙️' },
   content: { label: '讲义生成助手', icon: '📝' },
   mindmap: { label: '导图绘制助手', icon: '🧠' },
   quiz: { label: '自测题生成助手', icon: '📋' },
@@ -178,6 +181,11 @@ export interface DagNodeState {
   currentMessage: string
   stepHistory: string[]
   isSystem: boolean
+  phase?: string
+  elapsedMs?: number
+  metrics?: Record<string, any>
+  artifactId?: string
+  lastUpdatedAt?: number
 }
 
 export function createDagNode(id: string, isSystem: boolean): DagNodeState {
@@ -202,36 +210,12 @@ export function getNodeFallbackMessage(node: DagNodeState) {
   return '正在处理任务'
 }
 
-export function getPipelineFallbackMessage(agentId: string) {
-  const messageMap: Record<string, string> = {
-    [PRE_REVIEW_AGENT_ID]: '基础资源生成后，检查内容完整性、事实性与安全风险',
-    [PPT_AGENT_ID]: '前置审核通过后，根据已审内容生成在线演示文稿',
-    [PPT_REVIEW_AGENT_ID]: 'PPT 生成后，仅审核演示文稿内容安全与事实一致性',
-    bundle: '整理各类学习资料，为您生成最终专属学习包',
-  }
-  return messageMap[agentId] || '等待上游节点完成'
-}
-
-export function isAuditNode(agentId: string) {
-  return agentId === PRE_REVIEW_AGENT_ID || agentId === PPT_REVIEW_AGENT_ID || agentId === 'review'
-}
-
 export function getDagNodeIcon(type: string): string {
   return AGENT_DISPLAY[type]?.icon || '📄'
 }
 
-export function getBentoCardGridStyle(index: number, total: number) {
-  const baseCols = 4
-  const totalRows = Math.ceil(total / baseCols)
-  const rowIndex = Math.floor(index / baseCols)
-  const isLastRow = rowIndex === totalRows - 1
-  if (!isLastRow) return {}
-
-  const remainder = total % baseCols
-  if (remainder === 0) return {}
-
-  const spanMap: Record<number, number> = { 1: 12, 2: 6, 3: 4 }
-  return { gridColumn: `span ${spanMap[remainder] || 3}` }
+export function getBentoCardGridStyle(_index: number, _total: number) {
+  return {}
 }
 
 export function stringifyCompact(value: any, maxLength = 80): string {

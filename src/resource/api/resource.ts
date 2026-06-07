@@ -24,13 +24,24 @@ export function streamResourceEvents(
   const url = `/api/v1/ai/resources/${resourceId}/events${token ? `?token=${encodeURIComponent(token)}` : ''}`
   const es = new EventSource(url)
 
-  es.addEventListener('agent', (e: MessageEvent) => {
+  const handleAgentLikeEvent = (e: MessageEvent) => {
     try {
       const data: ResourceStreamEvent = JSON.parse(e.data)
       onEvent(data)
     } catch (err) {
       console.error('Failed to parse agent event:', err)
     }
+  }
+
+  ;[
+    'agent',
+    'agent.snapshot',
+    'agent.step',
+    'agent.heartbeat',
+    'agent.metric',
+    'agent.artifact_ready',
+  ].forEach((eventName) => {
+    es.addEventListener(eventName, handleAgentLikeEvent)
   })
 
   es.addEventListener('done', (e: MessageEvent) => {
@@ -64,6 +75,5 @@ export function pollResourceStatus(resourceId: number) {
 }
 
 export function getResourceBundle(resourceId: number) {
-  return http.get<ApiResponse<any>>(`/ai/resources/${resourceId}/bundle`)
+  return http.get<ApiResponse<any>>(`/ai/resources/${resourceId}`)
 }
-

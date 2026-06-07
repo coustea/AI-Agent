@@ -130,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, shallowRef, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Clock, Document, WarningFilled, CircleCheckFilled, Loading, Cpu, Edit, Collection, DataBoard, Share, Download, VideoCamera } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -143,16 +143,15 @@ import PptView from '@/resource/components/PptView.vue'
 import VideoView from '@/resource/components/VideoView.vue'
 import { getGeneratedResourceDetail } from '@/resource/api/resource-history'
 import type { GeneratedResourceBundle, ResourceItemDetail } from '@/resource/api/resource-history'
-import { getMockResourceDetail } from '@/resource/utils/mockResourceData'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(true)
 const error = ref(false)
-const resource = ref<GeneratedResourceBundle | null>(null)
+const resource = shallowRef<GeneratedResourceBundle | null>(null)
+const previewItem = shallowRef<ResourceItemDetail | null>(null)
 const previewVisible = ref(false)
-const previewItem = ref<ResourceItemDetail | null>(null)
 
 const previewTitle = computed(() => {
   if (!previewItem.value) return '资源预览'
@@ -174,35 +173,17 @@ const loadResource = async () => {
   loading.value = true
   error.value = false
 
-  // 优先拦截并直接渲染 Mock 数据以提升演示体验并避免无效的后端报错
-  const mockDetail = getMockResourceDetail(resourceId.value)
-  if (mockDetail) {
-    resource.value = mockDetail
-    loading.value = false
-    return
-  }
-
   try {
     const res = await getGeneratedResourceDetail(resourceId.value)
     if (res.data && res.data.data) {
       resource.value = res.data.data
     } else {
-      const fallbackMock = getMockResourceDetail(resourceId.value)
-      if (fallbackMock) {
-        resource.value = fallbackMock
-      } else {
-        error.value = true
-      }
+      error.value = true
     }
   } catch (e) {
-    console.error('Failed to load resource detail, checking fallback', e)
-    const fallbackMock = getMockResourceDetail(resourceId.value)
-    if (fallbackMock) {
-      resource.value = fallbackMock
-    } else {
-      error.value = true
-      ElMessage.error('加载资源详情失败')
-    }
+    console.error('Failed to load resource detail:', e)
+    error.value = true
+    ElMessage.error('加载资源详情失败')
   } finally {
     loading.value = false
   }
@@ -412,7 +393,7 @@ const formatTime = (time: string | null) => {
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 999px;
-  color: #475569;
+  color: var(--color-text-secondary);
   font-family: var(--font-sans);
   font-size: 0.9rem;
   font-weight: 700;
@@ -424,8 +405,8 @@ const formatTime = (time: string | null) => {
 
 .back-capsule-btn:hover {
   background: rgba(255, 255, 255, 0.95);
-  color: var(--color-primary, #4F46E5);
-  border-color: var(--color-primary-border, #C7D2FE);
+  color: var(--color-primary, var(--color-primary));
+  border-color: var(--color-primary-border, var(--color-primary-border));
   box-shadow: 0 8px 24px rgba(79, 70, 229, 0.12);
   transform: translateY(-1px);
 }
@@ -445,7 +426,7 @@ const formatTime = (time: string | null) => {
 
 .loading-container,
 .error-container {
-  background: #FFFFFF;
+  background: var(--color-surface);
   border-radius: 24px;
   padding: 60px;
   margin: 40px 60px;
@@ -458,7 +439,7 @@ const formatTime = (time: string | null) => {
   position: relative;
   margin: 24px 60px 40px;
   padding: 48px 54px;
-  background: #FFFFFF;
+  background: var(--color-surface);
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 32px;
   display: flex;
@@ -498,14 +479,14 @@ const formatTime = (time: string | null) => {
   box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); animation: pulse-success 2s infinite alternate;
 }
 .hero-status-tag.processing-glow {
-  background: rgba(59, 130, 246, 0.1); color: #2563EB; border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.1); color: var(--color-info); border: 1px solid rgba(59, 130, 246, 0.2);
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); animation: pulse-primary 2s infinite alternate;
 }
 .hero-status-tag.danger-glow {
   background: rgba(225, 29, 72, 0.1); color: #E11D48; border: 1px solid rgba(225, 29, 72, 0.2);
 }
 .hero-status-tag.info-glow {
-  background: rgba(100, 116, 139, 0.1); color: #475569; border: 1px solid rgba(100, 116, 139, 0.2);
+  background: rgba(100, 116, 139, 0.1); color: var(--color-text-secondary); border: 1px solid rgba(100, 116, 139, 0.2);
 }
 
 @keyframes pulse-success { 0% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.1); } 100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.3); } }
@@ -516,7 +497,7 @@ const formatTime = (time: string | null) => {
   font-size: 2.2rem;
   font-weight: 900;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #0F172A 0%, #334155 100%);
+  background: linear-gradient(135deg, var(--color-text) 0%, #334155 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -535,8 +516,8 @@ const formatTime = (time: string | null) => {
   font-size: 0.95rem;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
 }
-.pill-label { color: #64748B; font-weight: 800; margin-right: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.8rem; }
-.pill-value { color: #0F172A; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.pill-label { color: var(--color-text-muted); font-weight: 800; margin-right: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.8rem; }
+.pill-value { color: var(--color-text); font-weight: 600; display: flex; align-items: center; gap: 6px; }
 
 .detail-body-bento {
   padding: 0 60px 60px;
@@ -545,7 +526,7 @@ const formatTime = (time: string | null) => {
 }
 
 .section-header { margin-bottom: 24px; }
-.section-header h3 { margin: 0; font-size: 1.4rem; font-weight: 800; color: #0F172A; letter-spacing: -0.01em; }
+.section-header h3 { margin: 0; font-size: 1.4rem; font-weight: 800; color: var(--color-text); letter-spacing: -0.01em; }
 
 .premium-resource-grid {
   display: grid;
@@ -599,11 +580,11 @@ const formatTime = (time: string | null) => {
 
 .premium-res-card.tone-blue .card-glow-bubble { background: #3B82F6; }
 .premium-res-card.tone-purple .card-glow-bubble { background: #8B5CF6; }
-.premium-res-card.tone-amber .card-glow-bubble { background: #F59E0B; }
+.premium-res-card.tone-amber .card-glow-bubble { background: var(--color-warning); }
 .premium-res-card.tone-rose .card-glow-bubble { background: #F43F5E; }
-.premium-res-card.tone-emerald .card-glow-bubble { background: #10B981; }
+.premium-res-card.tone-emerald .card-glow-bubble { background: var(--color-success); }
 .premium-res-card.tone-indigo .card-glow-bubble { background: #6366F1; }
-.premium-res-card.tone-slate .card-glow-bubble { background: #64748B; }
+.premium-res-card.tone-slate .card-glow-bubble { background: var(--color-text-muted); }
 
 .premium-res-card.is-clickable { cursor: pointer; }
 .premium-res-card.is-clickable:hover,
@@ -656,21 +637,21 @@ const formatTime = (time: string | null) => {
   display: flex; align-items: center; justify-content: center;
   font-size: 1.5rem; background: rgba(15, 23, 42, 0.03); border: 1px solid rgba(15, 23, 42, 0.04);
 }
-.premium-res-card.tone-blue .type-icon-box { color: #2563EB; }
+.premium-res-card.tone-blue .type-icon-box { color: var(--color-info); }
 .premium-res-card.tone-purple .type-icon-box { color: #7C3AED; }
 .premium-res-card.tone-amber .type-icon-box { color: #D97706; }
 .premium-res-card.tone-rose .type-icon-box { color: #E11D48; }
 .premium-res-card.tone-emerald .type-icon-box { color: #059669; }
 .premium-res-card.tone-indigo .type-icon-box { color: #6366F1; }
-.premium-res-card.tone-slate .type-icon-box { color: #475569; }
+.premium-res-card.tone-slate .type-icon-box { color: var(--color-text-secondary); }
 
 .type-info { display: flex; flex-direction: column; gap: 4px; }
-.type-label { font-size: 0.95rem; font-weight: 800; color: #0F172A; }
+.type-label { font-size: 0.95rem; font-weight: 800; color: var(--color-text); }
 .status-badge { font-weight: 700; border: none; }
 
 .card-body { display: flex; flex-direction: column; gap: 12px; flex: 1; }
-.card-title { margin: 0; font-size: 1.15rem; font-weight: 800; color: #0F172A; line-height: 1.45; }
-.card-summary { margin: 0; font-size: 0.95rem; color: #475569; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-title { margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--color-text); line-height: 1.45; }
+.card-summary { margin: 0; font-size: 0.95rem; color: var(--color-text-secondary); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 .item-error {
   display: flex; align-items: center; gap: 8px;
@@ -683,24 +664,24 @@ const formatTime = (time: string | null) => {
   padding-top: 20px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;
 }
 .modern-text-btn {
-  background: transparent; border: none; color: #0F172A; font-weight: 800; font-size: 0.95rem; padding: 0;
+  background: transparent; border: none; color: var(--color-text); font-weight: 800; font-size: 0.95rem; padding: 0;
   display: flex; align-items: center; gap: 8px; transition: color 0.2s ease; cursor: pointer;
 }
-.modern-text-btn.disabled { color: #94A3B8; cursor: not-allowed; }
+.modern-text-btn.disabled { color: var(--color-text-faint); cursor: not-allowed; }
 .modern-text-btn span { transition: transform 0.3s ease; }
 .premium-res-card.is-clickable:hover .modern-text-btn:not(.disabled),
-.premium-res-card.is-clickable:focus-visible .modern-text-btn:not(.disabled) { color: #2563EB; }
+.premium-res-card.is-clickable:focus-visible .modern-text-btn:not(.disabled) { color: var(--color-info); }
 .premium-res-card.is-clickable:hover .modern-text-btn:not(.disabled) span,
 .premium-res-card.is-clickable:focus-visible .modern-text-btn:not(.disabled) span { transform: translateX(4px); }
 
 /* 导出按钮动画样式 */
 .export-btn {
-  color: #64748B !important;
+  color: var(--color-text-muted) !important;
   transition: color 0.2s ease, transform 0.2s ease !important;
 }
 .premium-res-card.is-clickable:hover .export-btn,
 .premium-res-card.is-clickable:focus-visible .export-btn {
-  color: #2563EB !important;
+  color: var(--color-info) !important;
 }
 .export-btn:hover {
   transform: translateY(-2px) scale(1.1);
@@ -708,13 +689,13 @@ const formatTime = (time: string | null) => {
 }
 
 .resource-preview-dialog :deep(.el-dialog) { border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25); }
-.resource-preview-dialog :deep(.el-dialog__header) { padding: 24px 32px 20px; margin-right: 0; border-bottom: 1px solid #F1F5F9; }
-.resource-preview-dialog :deep(.el-dialog__body) { background: #F8FAFC; padding: 24px 32px 32px; }
+.resource-preview-dialog :deep(.el-dialog__header) { padding: 24px 32px 20px; margin-right: 0; border-bottom: 1px solid var(--color-surface-hover); }
+.resource-preview-dialog :deep(.el-dialog__body) { background: var(--color-bg); padding: 24px 32px 32px; }
 
 /* PPT 预览弹窗专属沉浸式样式 */
 .is-ppt-dialog :deep(.el-dialog__body) {
   padding: 0 !important;
-  background: #F8FAFC !important;
+  background: var(--color-bg) !important;
 }
 
 .preview-dialog-body.is-ppt-preview {
@@ -732,7 +713,7 @@ const formatTime = (time: string | null) => {
 }
 
 .preview-dialog-body {
-  max-height: 70vh; overflow-y: auto; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px;
+  max-height: 70vh; overflow-y: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 24px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 </style>

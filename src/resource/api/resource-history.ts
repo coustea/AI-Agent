@@ -1,5 +1,6 @@
 import http from '@/shared/utils/http'
 import type { ApiResponse } from '@/shared/utils/http'
+import type { PathResourceDetail } from '@/learning/types/path'
 
 // ==========================================
 // 类型定义
@@ -48,12 +49,24 @@ export interface GeneratedResourceBundle {
 // 资源生成历史 API
 // ==========================================
 
-export function getGeneratedResources(limit = 20) {
-  return http.get<ApiResponse<GeneratedResourceItem[]>>('/ai/resources', {
-    params: { limit }
+export function getGeneratedResources(page = 1, limit = 20) {
+  const offset = (page - 1) * limit
+  return http.get<ApiResponse<{ items: GeneratedResourceItem[], total: number }>>('/ai/resources', {
+    params: { limit, offset }
   })
 }
 
 export function getGeneratedResourceDetail(resourceId: number) {
   return http.get<ApiResponse<GeneratedResourceBundle>>(`/ai/resources/${resourceId}`)
 }
+
+export interface PathGeneratedResourceItem extends GeneratedResourceItem {
+  path_id: number | null
+  node_id: string | null
+  path_node_id: number | null
+  node_title: string | null
+  resource_type?: string | null
+  title?: string | null
+}
+
+export type { PathResourceDetail }

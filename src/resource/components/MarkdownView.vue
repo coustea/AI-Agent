@@ -1,6 +1,6 @@
 <template>
   <div class="markdown-resource" :class="{ compact }">
-    <div v-if="content" class="technical-frame">
+    <ResourceCardWrapper v-if="content" :compact="compact">
 
 
       <MarkdownPreview class="markdown-shell" :content="content" />
@@ -9,7 +9,7 @@
         <span class="mono-tag">EOF_READY</span>
         <div class="footer-line"></div>
       </div>
-    </div>
+    </ResourceCardWrapper>
     <div v-else class="markdown-empty">
       <div class="empty-icon">!</div>
       <div class="empty-text">NULL_CONTENT: NO_MARKDOWN_RECEIVED</div>
@@ -20,6 +20,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import MarkdownPreview from '@/shared/components/MarkdownPreview.vue'
+import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { getMarkdownContent, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -30,30 +31,19 @@ const props = defineProps<{
 const content = computed(() => getMarkdownContent(props.resultData))
 </script>
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
-
 .markdown-resource {
   min-width: 0;
   width: 100%;
 
-  --primary: #475569;
-  --bg: #ffffff;
-  --fg: #334155;
-  --muted: #64748b;
-  --border: #e2e8f0;
-  --soft-bg: #f8fafc;
-  --code-bg: #f9fafb;
-  --inline-code-bg: #eef2ff;
-  --accent: #6366f1;
-}
-
-.technical-frame {
-  position: relative;
-  background: var(--bg);
-  border-radius: 8px;
-  padding: 24px 32px 32px;
-  box-shadow: none;
-  transition: all 0.3s ease;
+  --primary: var(--color-primary);
+  --bg: var(--color-surface);
+  --fg: var(--color-text);
+  --muted: var(--color-text-muted);
+  --border: var(--color-border);
+  --soft-bg: var(--color-bg);
+  --code-bg: var(--color-bg);
+  --inline-code-bg: var(--color-primary-soft);
+  --accent: var(--color-primary);
 }
 
 .frame-footer {
@@ -64,10 +54,10 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 .mono-tag {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--primary);
-  background: #f1f5f9;
+  background: var(--color-surface-hover);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -83,22 +73,17 @@ const content = computed(() => getMarkdownContent(props.resultData))
   color: var(--fg);
   line-height: 1.75;
   overflow-wrap: anywhere;
-  font-family:
-      'Fira Code',
-      Consolas,
-      Monaco,
-      'Courier New',
-      monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
-  background: #ffffff;
+  background: transparent;
 }
 
 /* 标题 */
 .markdown-shell :deep(h1),
 .markdown-shell :deep(h2),
 .markdown-shell :deep(h3) {
-  font-family: 'Share Tech Mono', monospace;
-  color: #1e293b;
+  font-family: var(--font-mono);
+  color: var(--color-text-strong);
   border-bottom: 1px dashed var(--border);
   padding-bottom: 0.5em;
   margin-top: 2em;
@@ -133,49 +118,49 @@ const content = computed(() => getMarkdownContent(props.resultData))
   margin-bottom: 0.5em;
 }
 
-/* 引用块：浅色背景 */
+/* 引用块：无边界风格 */
 .markdown-shell :deep(blockquote) {
-  border-left: 4px solid #c7d2fe;
-  background: #f8fafc;
-  padding: 12px 20px;
+  border-left: 3px solid rgba(0, 0, 0, 0.1);
+  background: transparent;
+  padding: 8px 16px;
   margin: 1.5em 0;
-  border-radius: 6px;
-  color: #475569;
-  font-style: normal;
+  color: var(--color-text-secondary);
+  font-style: italic;
 }
 
-/* 表格 */
+/* 表格：无感斑马纹 */
 .markdown-shell :deep(table) {
   width: 100%;
   border-collapse: collapse;
   margin: 1.5em 0;
-  background: #ffffff;
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
 }
 
 .markdown-shell :deep(th),
 .markdown-shell :deep(td) {
-  border: 1px solid var(--border);
-  padding: 10px 12px;
+  border: none;
+  padding: 12px 16px;
   color: var(--fg);
 }
 
 .markdown-shell :deep(th) {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
   font-weight: 600;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.05);
 }
 
 .markdown-shell :deep(tr:nth-child(even)) {
-  background: #f8fafc;
+  background: rgba(0, 0, 0, 0.02);
 }
 
-/* 代码块：浅色背景，禁止黑色背景 */
+/* 代码块：透明微底色，无边框 */
 .markdown-shell :deep(pre) {
   position: relative;
-  border-radius: 10px;
-  background: #f8fafc !important;
-  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03) !important;
+  border: none;
   padding: 20px;
   margin: 1.5em 0;
   overflow: auto;
@@ -185,12 +170,7 @@ const content = computed(() => getMarkdownContent(props.resultData))
 /* 代码块内部 code */
 .markdown-shell :deep(pre code) {
   display: block;
-  font-family:
-      'Fira Code',
-      Consolas,
-      Monaco,
-      'Courier New',
-      monospace;
+  font-family: var(--font-mono);
   font-size: 0.88rem;
   line-height: 1.7;
   background: transparent !important;
@@ -202,14 +182,9 @@ const content = computed(() => getMarkdownContent(props.resultData))
 .markdown-shell :deep(p > code),
 .markdown-shell :deep(li > code),
 .markdown-shell :deep(td > code) {
-  font-family:
-      'Fira Code',
-      Consolas,
-      Monaco,
-      'Courier New',
-      monospace;
-  background: #eef2ff !important;
-  color: #4338ca;
+  font-family: var(--font-mono);
+  background: var(--color-primary-soft) !important;
+  color: var(--color-primary-hover);
   padding: 0.18em 0.4em;
   border-radius: 5px;
   font-size: 0.86em;
@@ -222,10 +197,10 @@ const content = computed(() => getMarkdownContent(props.resultData))
   position: absolute;
   top: 8px;
   right: 12px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
   font-size: 0.7rem;
   letter-spacing: 1px;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* 复制按钮：浅色风格 */
@@ -233,10 +208,10 @@ const content = computed(() => getMarkdownContent(props.resultData))
   position: absolute;
   top: 10px;
   right: 12px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-  font-family: 'Share Tech Mono', monospace;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-hover);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   padding: 4px 8px;
   border-radius: 5px;
@@ -251,9 +226,9 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 .markdown-shell :deep(.copy-code-btn:hover) {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #4338ca;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-hover);
 }
 
 .markdown-shell :deep(.copy-code-btn.copied) {
@@ -287,14 +262,14 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 .markdown-shell :deep(.hljs-comment) {
-  color: #94a3b8;
+  color: var(--color-text-faint);
   font-style: italic;
 }
 
 .markdown-shell :deep(.hljs-built_in),
 .markdown-shell :deep(.hljs-type),
 .markdown-shell :deep(.hljs-class .hljs-title) {
-  color: #2563eb;
+  color: var(--color-info);
 }
 
 .markdown-shell :deep(.hljs-variable),
@@ -304,7 +279,7 @@ const content = computed(() => getMarkdownContent(props.resultData))
 
 /* Shiki 浅色主题兜底 */
 .markdown-shell :deep(.shiki) {
-  background: #f8fafc !important;
+  background: var(--color-bg) !important;
   color: #334155 !important;
 }
 
@@ -321,17 +296,6 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 /* 紧凑模式 */
-.compact .technical-frame {
-  padding: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
-.compact .frame-footer {
-  display: none;
-}
-
 .compact .markdown-shell {
   max-height: 300px;
   overflow: hidden;
@@ -352,7 +316,7 @@ const content = computed(() => getMarkdownContent(props.resultData))
   padding: 48px;
   border: 1px dashed var(--border);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--color-bg);
   color: var(--primary);
   text-align: center;
   display: flex;
@@ -362,13 +326,13 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 .empty-icon {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 2rem;
   opacity: 0.5;
 }
 
 .empty-text {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   letter-spacing: 1px;
 }

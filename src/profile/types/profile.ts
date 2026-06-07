@@ -102,6 +102,13 @@ export interface TutoringProfileUpdateResult {
   updated_at?: string | null
 }
 
+export interface ProfileScoreDimension {
+  key: string
+  label: string
+  score: number | null
+  missing: boolean
+}
+
 export interface ProfileScoreData {
   user_id: number | null
   module: string | null
@@ -115,6 +122,7 @@ export interface ProfileScoreData {
     uncertainty_handling?: number | null
     content_richness?: number | null
   }
+  dimensions?: ProfileScoreDimension[]
   missing_sections: string[]
   scored_at: string | null
   updated_at: string | null

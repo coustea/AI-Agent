@@ -1,13 +1,17 @@
 <template>
-  <article class="diagram-card" :class="{ compact: props.compact }">
+  <article 
+    class="diagram-card" 
+    :class="{ compact: props.compact, 'is-interactive': props.compact }"
+    @click="props.compact && emit('expand', props.diagram)"
+  >
     <header class="card-header animate-block">
       <div>
-        <p class="card-kicker">{{ typeLabel }}</p>
+        <p class="card-kicker">{{ typeLabel[props.diagram.graph_type] || '图解说明' }}</p>
         <h3>{{ props.diagram.title }}</h3>
         <p v-if="props.diagram.subtitle && !props.compact" class="card-subtitle">{{ props.diagram.subtitle }}</p>
       </div>
       <div v-if="!props.compact" class="header-meta">
-        <span class="difficulty-badge" :class="props.diagram.difficulty">{{ difficultyLabel }}</span>
+        <span class="difficulty-badge" :class="props.diagram.difficulty">{{ difficultyLabel[props.diagram.difficulty] || props.diagram.difficulty }}</span>
         <span v-if="props.diagram.course" class="course-badge">{{ props.diagram.course }}</span>
       </div>
     </header>
@@ -17,13 +21,28 @@
       <p>{{ props.diagram.teaching_goal }}</p>
     </section>
 
-    <section class="visual-section animate-block" style="animation-delay: 0.2s;">
-      <ComparisonDiagram v-if="props.diagram.graph_type === 'comparison'" :payload="props.diagram.visual_content as ComparisonPayload" />
-      <FlowchartDiagram v-else-if="props.diagram.graph_type === 'flowchart'" :payload="props.diagram.visual_content as FlowchartPayload" />
-      <SequenceDiagram v-else-if="props.diagram.graph_type === 'sequence'" :payload="props.diagram.visual_content as SequencePayload" />
-      <FrameworkDiagram v-else-if="props.diagram.graph_type === 'framework'" :payload="props.diagram.visual_content as FrameworkPayload" />
-      <SummaryDiagram v-else-if="props.diagram.graph_type === 'summary'" :payload="props.diagram.visual_content as SummaryPayload" />
-      <HierarchyDiagram v-else-if="props.diagram.graph_type === 'hierarchy'" :payload="props.diagram.visual_content as HierarchyPayload" />
+    <section class="visual-section animate-block" :class="{ 'compact-visual': props.compact }" style="animation-delay: 0.2s;">
+      <div class="visual-wrapper" :id="props.compact ? '' : 'capture-target'">
+        <ComparisonDiagram v-if="props.diagram.graph_type === 'comparison'" :payload="props.diagram.visual_content as ComparisonPayload" />
+        <FlowchartDiagram v-else-if="props.diagram.graph_type === 'flowchart'" :payload="props.diagram.visual_content as FlowchartPayload" />
+        <SequenceDiagram v-else-if="props.diagram.graph_type === 'sequence'" :payload="props.diagram.visual_content as SequencePayload" />
+        <FrameworkDiagram v-else-if="props.diagram.graph_type === 'framework'" :payload="props.diagram.visual_content as FrameworkPayload" />
+        <SummaryDiagram v-else-if="props.diagram.graph_type === 'summary'" :payload="props.diagram.visual_content as SummaryPayload" />
+        <HierarchyDiagram v-else-if="props.diagram.graph_type === 'hierarchy'" :payload="props.diagram.visual_content as HierarchyPayload" />
+      </div>
+      
+      <!-- Overlay for compact mode -->
+      <div v-if="props.compact" class="zoom-overlay">
+        <div class="zoom-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="zoom-icon">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+          <span>点击查看高清大图</span>
+        </div>
+      </div>
     </section>
 
     <section v-if="!props.compact" class="teaching-section animate-block" style="animation-delay: 0.3s;">
@@ -81,13 +100,17 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
+const emit = defineEmits<{
+  (e: 'expand', diagram: TeachingDiagram): void
+}>()
+
 const typeLabel: Record<string, string> = {
-  comparison: '对比图板',
-  flowchart: '流程图板',
-  sequence: '时序图板',
-  framework: '框架图板',
-  summary: '总结图板',
-  hierarchy: '层级图板',
+  comparison: '对比图解',
+  flowchart: '流程图解',
+  sequence: '时序图解',
+  framework: '框架图解',
+  summary: '总结图解',
+  hierarchy: '层级图解',
 }
 
 const difficultyLabel: Record<string, string> = {
@@ -109,12 +132,12 @@ const difficultyLabel: Record<string, string> = {
   --c-primary: #3b82f6;
   --c-teal: #0d9488;
   --c-amber: #d97706;
-  --c-red: #ef4444;
-  --c-ink: #0f172a;
-  --c-muted: #64748b;
-  --c-border: #e2e8f0;
-  --c-bg: #f8fafc;
-  --c-white: #ffffff;
+  --c-red: var(--color-danger);
+  --c-ink: var(--color-text);
+  --c-muted: var(--color-text-muted);
+  --c-border: var(--color-border);
+  --c-bg: var(--color-bg);
+  --c-white: var(--color-surface);
 
   display: grid;
   gap: 16px;
@@ -124,12 +147,24 @@ const difficultyLabel: Record<string, string> = {
   border: 1px solid var(--c-border);
   border-radius: 12px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s;
 }
 
 .diagram-card:not(.compact):hover {
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 20px 25px -5px rgba(0, 0, 0, 0.06);
   transform: translateY(-2px);
+}
+
+.diagram-card.is-interactive {
+  cursor: pointer;
+  border: 1px solid #bfdbfe;
+  box-shadow: 0 4px 15px -3px rgba(59, 130, 246, 0.1);
+}
+
+.diagram-card.is-interactive:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.2);
+  transform: translateY(-4px);
 }
 
 .card-header {
@@ -197,12 +232,12 @@ h3 {
 
 .course-badge {
   padding: 3px 10px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .goal-section {
@@ -231,6 +266,66 @@ h3 {
 .visual-section {
   display: grid;
   gap: 12px;
+  position: relative;
+  background: var(--color-bg);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+}
+
+.compact-visual {
+  max-height: 220px;
+  overflow: hidden;
+  position: relative;
+  padding: 0;
+}
+
+.compact-visual .visual-wrapper {
+  transform: scale(0.6);
+  transform-origin: top left;
+  width: 166%; /* 1 / 0.6 */
+  pointer-events: none;
+}
+
+.zoom-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.4) 60%, rgba(255,255,255,0) 100%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 24px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 10;
+}
+
+.diagram-card.is-interactive:hover .zoom-overlay {
+  opacity: 1;
+}
+
+.zoom-icon-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #3b82f6;
+  color: white;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+  transform: translateY(10px);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.diagram-card.is-interactive:hover .zoom-icon-wrapper {
+  transform: translateY(0);
+}
+
+.zoom-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .teaching-section {
@@ -243,7 +338,7 @@ h3 {
 .teaching-mistakes,
 .teaching-examples {
   padding: 14px 16px;
-  background: #ffffff;
+  background: var(--color-surface);
   border: 1px solid var(--c-border);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
@@ -284,7 +379,7 @@ h3 {
   top: 8px;
   width: 5px;
   height: 5px;
-  background: #94a3b8;
+  background: var(--color-text-faint);
   border-radius: 50%;
 }
 
@@ -294,7 +389,7 @@ h3 {
 
 .card-footer {
   padding: 14px 16px;
-  background: #f8fafc;
+  background: var(--color-bg);
   border: 1px solid var(--c-border);
   border-radius: 10px;
 }
@@ -309,31 +404,18 @@ h3 {
 
 .compact {
   gap: 12px;
-  padding: 14px;
-  border: 0;
-  box-shadow: none;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  overflow: hidden;
 }
 
 .compact .card-header {
   align-items: start;
+  padding: 16px 16px 0 16px;
 }
 
 .compact h3 {
   font-size: 18px;
-}
-
-.compact .card-kicker {
-  display: none;
-}
-
-@media (max-width: 640px) {
-  .card-header {
-    flex-direction: column;
-    align-items: start;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
 }
 </style>

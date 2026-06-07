@@ -1,6 +1,6 @@
 <template>
   <div class="code-resource" :class="{ compact }" @click="handleMessageClick">
-    <div v-if="parsedData || markdownContent" class="technical-frame code-card-content">
+    <ResourceCardWrapper v-if="parsedData || markdownContent" :compact="compact" class="code-card-content">
 
       <!-- 顶部信息栏：简述 -->
       <div v-if="!compact && parsedData?.explanation" class="code-header-meta">
@@ -65,7 +65,7 @@
         <span class="mono-tag">可执行</span>
         <div class="footer-line"></div>
       </div>
-    </div>
+    </ResourceCardWrapper>
     
     <div v-else class="code-empty-hud">
       <div class="empty-frame">
@@ -83,6 +83,7 @@ import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import { ElMessage } from 'element-plus'
 import MarkdownPreview from '@/shared/components/MarkdownPreview.vue'
+import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
 const props = defineProps<{
@@ -216,44 +217,21 @@ watch(pureCode, performHighlight)
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
-
 .code-resource {
   min-width: 0;
   width: 100%;
-  --primary: #475569; /* Slate 600 */
-  --bg: #FFFFFF;
-  --fg: #334155; /* Slate 700 */
-  --border: #E2E8F0;
-  --accent: #6366F1; /* Indigo 500 */
+  --primary: var(--color-primary); /* Slate 600 */
+  --bg: var(--color-surface);
+  --fg: var(--color-text); /* Slate 700 */
+  --border: var(--color-border);
+  --accent: var(--color-primary); /* Indigo 500 */
 }
 
-/* 技术框架样式 */
-.technical-frame {
-  position: relative;
-  background: var(--bg);
-  border: none;
-  border-radius: 4px;
-  padding: 24px 32px 32px;
-  box-shadow: none;
-  transition: all 0.3s ease;
+.code-card-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-
-.frame-corners {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--primary);
-  pointer-events: none;
-}
-
-.top-left { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-.top-right { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
-.bottom-left { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
-.bottom-right { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
 
 /* 头部 HUD */
 .frame-header {
@@ -282,7 +260,7 @@ watch(pureCode, performHighlight)
 }
 
 .technical-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--primary);
   letter-spacing: 1px;
@@ -297,7 +275,7 @@ watch(pureCode, performHighlight)
 }
 
 .mono-tag {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--primary);
   background: rgba(0, 0, 0, 0.1);
@@ -316,9 +294,9 @@ watch(pureCode, performHighlight)
 }
 
 .code-summary-text {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.95rem;
-  color: #475569;
+  color: var(--color-text-secondary);
   font-weight: 500;
   line-height: 1.5;
 }
@@ -328,14 +306,14 @@ watch(pureCode, performHighlight)
   color: var(--fg);
   line-height: 1.65;
   overflow-wrap: anywhere;
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
 }
 
 /* 统一代码块外观 */
 :deep(pre), .pure-code-block pre {
   border-radius: 8px;
-  background: #FFFFFF !important;
-  border: 1px solid #334155;
+  background: rgba(0, 0, 0, 0.03) !important;
+  border: none;
   padding: 20px;
   margin: 1.2em 0;
   overflow: auto;
@@ -360,7 +338,7 @@ watch(pureCode, performHighlight)
   background: rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(0, 0, 0, 0.2);
   color: var(--primary);
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   padding: 4px 8px;
   border-radius: 4px;
@@ -386,7 +364,7 @@ watch(pureCode, performHighlight)
 }
 
 :deep(code), .pure-code-block code {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   background: transparent !important;
 }
@@ -394,7 +372,7 @@ watch(pureCode, performHighlight)
 /* 优化代码高亮对比度，拒绝灰色和浅色 */
 :deep(.hljs-comment), .pure-code-block .hljs-comment,
 :deep(.hljs-quote), .pure-code-block .hljs-quote {
-  color: #475569 !important; /* 深蓝灰色，提高对比度 */
+  color: var(--color-text-secondary) !important; /* 深蓝灰色，提高对比度 */
   font-style: italic;
 }
 
@@ -432,10 +410,10 @@ watch(pureCode, performHighlight)
 /* 页脚扩展信息 */
 .code-footer-extras {
   margin-top: 16px;
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.02);
   padding: 20px;
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .footer-divider {
@@ -446,7 +424,7 @@ watch(pureCode, performHighlight)
 }
 
 .divider-label {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--primary);
   letter-spacing: 1px;
@@ -475,7 +453,7 @@ watch(pureCode, performHighlight)
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   font-weight: bold;
   color: var(--primary);
@@ -483,7 +461,7 @@ watch(pureCode, performHighlight)
 }
 
 .extra-content {
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   color: #334155;
 }
@@ -499,9 +477,9 @@ watch(pureCode, performHighlight)
 .tips-list {
   margin: 0;
   padding-left: 20px;
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.88rem;
-  color: #475569;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
@@ -519,7 +497,7 @@ watch(pureCode, performHighlight)
   background: white;
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   color: #334155;
   align-items: flex-start;
@@ -532,7 +510,7 @@ watch(pureCode, performHighlight)
 }
 
 .ex-num {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   color: var(--primary);
   background: rgba(0, 0, 0, 0.1);
@@ -544,7 +522,7 @@ watch(pureCode, performHighlight)
 .ml-4 { margin-left: 16px; }
 
 /* 紧凑模式 */
-.compact .technical-frame {
+.compact .code-card-content {
   padding: 0;
   border: none;
   background: transparent;
@@ -572,13 +550,14 @@ watch(pureCode, performHighlight)
 
 .empty-frame {
   text-align: center;
-  border: 1px dashed var(--border);
+  border: none;
+  background: rgba(0, 0, 0, 0.02);
   padding: 40px 60px;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .empty-icon {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 2rem;
   color: var(--primary);
   opacity: 0.3;
@@ -586,9 +565,9 @@ watch(pureCode, performHighlight)
 }
 
 .empty-frame p {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: #94A3B8;
+  color: var(--color-text-faint);
   letter-spacing: 1px;
 }
 

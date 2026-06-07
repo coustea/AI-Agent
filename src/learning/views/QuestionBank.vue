@@ -662,13 +662,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue';
+import { ref, shallowRef, computed, onMounted, onUnmounted, reactive, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   Collection, Cpu,
   Close, Checked, Timer, CircleCheck, CircleClose,
   Opportunity, Finished, DataLine, WarningFilled, DocumentChecked,
-  ArrowDown, Filter, Search
+  ArrowDown, Filter, Search, FolderOpened
 } from '@element-plus/icons-vue';
 // 引入中文配置与 ConfigProvider
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
@@ -683,6 +683,9 @@ type KatexModule = {
 
 let katexModule: KatexModule | null = null;
 let katexRuntimePromise: Promise<KatexModule | null> | null = null;
+const katexRenderVersion = ref(0);
+const markdownHtmlCache = new Map<string, string>();
+const MARKDOWN_CACHE_LIMIT = 800;
 
 const loadKatexRuntime = async () => {
   if (!katexRuntimePromise) {
@@ -695,6 +698,8 @@ const loadKatexRuntime = async () => {
         render: mod.render.bind(mod),
         renderToString: mod.renderToString.bind(mod),
       };
+      markdownHtmlCache.clear();
+      katexRenderVersion.value += 1;
       return katexModule;
     });
   }
@@ -722,7 +727,7 @@ interface Question {
 // ------------------------------
 const activeView = ref<'bank' | 'exam'>('bank');
 const activeSidebarTab = ref('challenge');
-const allQuestions = ref<Question[]>([]);
+const allQuestions = shallowRef<Question[]>([]);
 const quizBankLoading = ref(false);
 const learnerCourses = ref<string[]>([]);
 const totalQuestions = ref(0);
@@ -922,7 +927,17 @@ const renderQuizKatexHtml = (text: string) => {
 };
 
 const renderMarkdown = (text: string) => {
-  return renderQuizKatexHtml(text || '');
+  const source = text || '';
+  const cacheKey = `${katexRenderVersion.value}:${source}`;
+  const cached = markdownHtmlCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const html = renderQuizKatexHtml(source);
+  if (markdownHtmlCache.size >= MARKDOWN_CACHE_LIMIT) {
+    markdownHtmlCache.clear();
+  }
+  markdownHtmlCache.set(cacheKey, html);
+  return html;
 };
 const subjects = ref<string[]>([]);
 const difficulties = ref<string[]>([]);
@@ -996,7 +1011,7 @@ const initializeQuizBank = async () => {
     }
     loadNewRandomQuestion();
   } catch {
-    ElMessage.error('题库加载失败，请稍后重试');
+    ElMessage.error({ message: '题库加载失败，请稍后重试', duration: 2000, offset: 20 });
   } finally {
     quizBankLoading.value = false;
   }
@@ -1046,7 +1061,8 @@ const submitRandomAnswer = () => {
   ElMessage({
     type: correct ? 'success' : 'error',
     message: correct ? '回答正确！知识点掌握牢固。' : '回答有误，看看下方的解析吧！',
-    duration: 2000
+    duration: 2000,
+    offset: 20
   });
 };
 
@@ -1084,7 +1100,7 @@ const reloadFilteredQuestions = async () => {
     allQuestions.value = result.items;
     totalQuestions.value = result.total;
   } catch {
-    ElMessage.error('题库筛选失败，请稍后重试');
+    ElMessage.error({ message: '题库筛选失败，请稍后重试', duration: 2000, offset: 20 });
   } finally {
     quizBankLoading.value = false;
   }
@@ -1095,7 +1111,7 @@ watch(
     () => [filters.query, filters.subject, filters.difficulty, filters.type],
     () => {
       currentPage.value = 1;
-      expandedQuestionIds.value.clear(); // 清空已展开的解析状态
+      expandedQuestionIds.value = new Set(); // 清空已展开的解析状态
       void reloadFilteredQuestions();
       scrollToTop();
     }
@@ -1132,11 +1148,13 @@ const browserSubmitted = ref<Record<string, boolean>>({});
 const browserCorrect = ref<Record<string, boolean>>({});
 
 const toggleQuestionDetail = (id: string) => {
-  if (expandedQuestionIds.value.has(id)) {
-    expandedQuestionIds.value.delete(id);
+  const next = new Set(expandedQuestionIds.value);
+  if (next.has(id)) {
+    next.delete(id);
   } else {
-    expandedQuestionIds.value.add(id);
+    next.add(id);
   }
+  expandedQuestionIds.value = next;
 };
 const isDetailExpanded = (id: string) => expandedQuestionIds.value.has(id);
 
@@ -1150,7 +1168,7 @@ const submitBrowserAnswer = (question: Question) => {
   const correct = evaluateAnswer(question, browserAnswers.value[question.id]);
   browserSubmitted.value[question.id] = true;
   browserCorrect.value[question.id] = correct;
-  expandedQuestionIds.value.add(question.id);
+  expandedQuestionIds.value = new Set(expandedQuestionIds.value).add(question.id);
   saveGlobalStats(1, correct ? 1 : 0);
 };
 
@@ -1175,7 +1193,7 @@ const generateSmartExam = () => {
   }
 
   if (pool.length === 0) {
-    ElMessage.warning('当前题库中暂无可用的匹配题目，请重新配置！');
+    ElMessage.warning({ message: '当前题库中暂无可用的匹配题目，请重新配置！', duration: 2000, offset: 20 });
     return;
   }
 
@@ -1189,7 +1207,7 @@ const generateSmartExam = () => {
   const generatedPaper = [...choices, ...multiples, ...judges, ...fills, ...analysis];
 
   if (generatedPaper.length === 0) {
-    ElMessage.warning('组卷数量不能全为 0，请合理设置题目数量！');
+    ElMessage.warning({ message: '组卷数量不能全为 0，请合理设置题目数量！', duration: 2000, offset: 20 });
     return;
   }
 
@@ -1212,7 +1230,7 @@ function shuffleArray<T>(array: T[]): T[] {
 // ------------------------------
 // 模拟考试模式逻辑
 // ------------------------------
-const examPaper = ref<Question[]>([]);
+const examPaper = shallowRef<Question[]>([]);
 const examTitle = ref('');
 const examAnswers = ref<Record<string, any>>({});
 const currentExamIndex = ref(0);
@@ -1259,7 +1277,8 @@ const startExam = (paper: Question[], title: string) => {
 
   ElMessage.success({
     message: `试卷生成成功！共计 ${paper.length} 道题，请开始答题。`,
-    duration: 3500
+    duration: 2000,
+    offset: 20
   });
 };
 
@@ -1484,16 +1503,16 @@ onUnmounted(() => {
 .question-bank-container {
   --primary-color: #5A52FF;
   --primary-glow: rgba(90, 82, 255, 0.15);
-  --success-color: #10B981;
-  --warning-color: #F59E0B;
-  --danger-color: #EF4444;
-  --text-dark: #0F172A;
-  --text-muted: #64748B;
-  --border-light: #E2E8F0;
+  --success-color: var(--color-success);
+  --warning-color: var(--color-warning);
+  --danger-color: var(--color-danger);
+  --text-dark: var(--color-text);
+  --text-muted: var(--color-text-muted);
+  --border-light: var(--color-border);
 
   height: calc(100vh - 64px);
   padding: 24px;
-  background-color: #F8FAFC;
+  background-color: var(--color-bg);
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   position: relative;
@@ -1612,7 +1631,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  background: #F8FAFC;
+  background: var(--color-bg);
   border: 1px solid var(--border-light);
   padding: 10px 6px;
   border-radius: 12px;
@@ -1622,8 +1641,8 @@ onUnmounted(() => {
 
 .left-stat-item:hover {
   transform: translateY(-2px);
-  border-color: #C7D2FE;
-  background: #EEF2FF;
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
   box-shadow: 0 4px 10px rgba(90, 82, 255, 0.05);
 }
 
@@ -1750,7 +1769,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  background: #F8FAFC;
+  background: var(--color-bg);
   border: 1px solid var(--border-light);
   border-radius: 12px;
   cursor: pointer;
@@ -1758,8 +1777,8 @@ onUnmounted(() => {
 }
 
 .option-item:hover {
-  background: #EEF2FF;
-  border-color: #C7D2FE;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
 }
 
 .option-item.selected {
@@ -1797,17 +1816,17 @@ onUnmounted(() => {
 
 .option-item.selected .option-key {
   background: var(--primary-color);
-  color: #FFFFFF;
+  color: var(--color-surface);
 }
 
 .option-item.correct .option-key {
   background: var(--success-color);
-  color: #FFFFFF;
+  color: var(--color-surface);
 }
 
 .option-item.wrong .option-key {
   background: var(--danger-color);
-  color: #FFFFFF;
+  color: var(--color-surface);
 }
 
 .option-val {
@@ -1865,7 +1884,7 @@ onUnmounted(() => {
   margin-top: 16px;
   padding: 16px;
   border-top: 1px dashed #FCD34D;
-  border-left: 4px solid #F59E0B;
+  border-left: 4px solid var(--color-warning);
   background: #FFFDF5;
   border-radius: 8px;
 }
@@ -1886,7 +1905,7 @@ onUnmounted(() => {
 
 .analysis-body {
   font-size: 0.9rem;
-  color: #475569;
+  color: var(--color-text-secondary);
   line-height: 1.6;
   margin-bottom: 12px;
 }
@@ -1904,7 +1923,7 @@ onUnmounted(() => {
 }
 
 .kp-tag {
-  background: #FFFFFF !important;
+  background: var(--color-surface) !important;
   border-color: var(--border-light) !important;
 }
 
@@ -1965,7 +1984,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #F8FAFC;
+  background: var(--color-bg);
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--border-light);
@@ -2014,7 +2033,7 @@ onUnmounted(() => {
   position: relative;
   z-index: 1;
   margin-bottom: 20px;
-  background: #FFFFFF;
+  background: var(--color-surface);
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--border-light);
@@ -2100,7 +2119,7 @@ onUnmounted(() => {
   margin-bottom: 8px;
   font-size: 0.76rem;
   line-height: 1.3;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   word-break: break-all;
 }
@@ -2180,7 +2199,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
-  background: #F8FAFC;
+  background: var(--color-bg);
   padding: 12px;
   border-radius: 10px;
   margin-top: 12px;
@@ -2206,8 +2225,8 @@ onUnmounted(() => {
 .mini-option {
   font-size: 0.88rem;
   color: var(--text-secondary);
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   padding: 8px 12px;
   border-radius: 8px;
   display: flex;
@@ -2320,7 +2339,7 @@ onUnmounted(() => {
 .next-question-btn {
   background-color: var(--primary-color) !important;
   border-color: var(--primary-color) !important;
-  color: #EEF2FF !important;
+  color: var(--color-primary-soft) !important;
   font-weight: 600 !important;
   border-radius: 8px !important;
   padding: 6px 14px !important;
@@ -2329,7 +2348,7 @@ onUnmounted(() => {
 .next-question-btn:hover {
   background-color: #4B42E6 !important;
   border-color: #4B42E6 !important;
-  color: #FFFFFF !important;
+  color: var(--color-surface) !important;
 }
 
 .review-toggle-btn {
@@ -2350,7 +2369,7 @@ onUnmounted(() => {
   margin-top: 16px;
   padding: 16px;
   border-top: 1px dashed #FCD34D;
-  border-left: 4px solid #F59E0B;
+  border-left: 4px solid var(--color-warning);
   background: #FFFDF5;
   border-radius: 8px;
 }
@@ -2397,7 +2416,7 @@ onUnmounted(() => {
 .empty-icon {
   font-size: 3rem;
   margin-bottom: 12px;
-  color: #CBD5E1;
+  color: var(--color-border-hover);
 }
 
 /* ================= 模拟考试视图 ================= */
@@ -2408,7 +2427,7 @@ onUnmounted(() => {
 }
 
 .exam-header-bar {
-  background: #FFFFFF;
+  background: var(--color-surface);
   border: 1px solid var(--border-light);
   border-radius: 16px;
   padding: 16px 24px;
@@ -2466,8 +2485,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #EEF2FF;
-  border: 1px solid #C7D2FE;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-border);
   padding: 8px 16px;
   border-radius: 10px;
   color: var(--primary-color);
@@ -2517,7 +2536,7 @@ onUnmounted(() => {
 }
 
 .exam-question-card {
-  background: #FFFFFF;
+  background: var(--color-surface);
   border: 1px solid var(--border-light);
   border-radius: 16px;
   padding: 24px;
@@ -2572,7 +2591,7 @@ onUnmounted(() => {
   display: flex;
   align-items: flex-start;
   padding: 14px 18px;
-  background: #F8FAFC;
+  background: var(--color-bg);
   border: 1px solid var(--border-light);
   border-radius: 12px;
   cursor: pointer;
@@ -2580,7 +2599,7 @@ onUnmounted(() => {
 }
 
 .exam-option-item:hover {
-  background: #EEF2FF;
+  background: var(--color-primary-soft);
 }
 
 .exam-option-item.selected {
@@ -2604,7 +2623,7 @@ onUnmounted(() => {
 
 .exam-option-item.selected .indicator {
   background: var(--primary-color);
-  color: #FFFFFF;
+  color: var(--color-surface);
 }
 
 .exam-option-item .text {
@@ -2636,7 +2655,7 @@ onUnmounted(() => {
 }
 
 .status-sidebar-card {
-  background: #FFFFFF;
+  background: var(--color-surface);
   border: 1px solid var(--border-light);
   border-radius: 16px;
   padding: 20px;
@@ -2676,7 +2695,7 @@ onUnmounted(() => {
 }
 
 .legend-item .dot.todo {
-  background: #CBD5E1;
+  background: var(--color-border-hover);
 }
 
 .navigator-grid {
@@ -2693,8 +2712,8 @@ onUnmounted(() => {
   margin: 0;
   aspect-ratio: 1;
   border-radius: 8px;
-  border: 1px solid #E2E8F0;
-  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   color: var(--text-muted);
   font-weight: bold;
   font-size: 0.95rem;
@@ -2709,7 +2728,7 @@ onUnmounted(() => {
 
 .nav-grid-item.has-answered {
   background: var(--primary-color);
-  color: #FFFFFF;
+  color: var(--color-surface);
   border-color: var(--primary-color);
 }
 
@@ -2825,7 +2844,7 @@ onUnmounted(() => {
 
 .back-bank-btn {
   background: var(--primary-color) !important;
-  color: #FFFFFF !important;
+  color: var(--color-surface) !important;
   font-weight: bold;
   border-radius: 10px;
   padding: 10px 20px !important;
@@ -2844,7 +2863,7 @@ onUnmounted(() => {
 
 .exam-option-item.is-correct .indicator {
   background-color: var(--success-color) !important;
-  color: #FFFFFF !important;
+  color: var(--color-surface) !important;
 }
 
 .exam-option-item.is-wrong {
@@ -2855,7 +2874,7 @@ onUnmounted(() => {
 
 .exam-option-item.is-wrong .indicator {
   background-color: var(--danger-color) !important;
-  color: #FFFFFF !important;
+  color: var(--color-surface) !important;
 }
 
 .exam-option-item.is-disabled {
@@ -2883,7 +2902,7 @@ onUnmounted(() => {
 .exam-text-answer-review {
   margin-top: 15px;
   padding: 14px 18px;
-  background: #F8FAFC;
+  background: var(--color-bg);
   border-left: 4px solid var(--primary-color);
   border-radius: 4px 12px 12px 4px;
   display: flex;
@@ -2922,7 +2941,7 @@ onUnmounted(() => {
 .standard-answer-review {
   font-size: 0.92rem;
   color: var(--text-dark);
-  background: #F1F5F9;
+  background: var(--color-surface-hover);
   padding: 10px 14px;
   border-radius: 8px;
   line-height: 1.5;
@@ -2938,7 +2957,7 @@ onUnmounted(() => {
   margin-top: 16px;
   padding: 16px;
   border-top: 1px dashed #FCD34D;
-  border-left: 4px solid #F59E0B;
+  border-left: 4px solid var(--color-warning);
   background: #FFFDF5;
   border-radius: 8px;
   font-size: 0.9rem;
@@ -2975,20 +2994,20 @@ onUnmounted(() => {
 
 .nav-grid-item.review-correct {
   background: var(--success-color) !important;
-  color: #FFFFFF !important;
+  color: var(--color-surface) !important;
   border-color: var(--success-color) !important;
 }
 
 .nav-grid-item.review-wrong {
   background: var(--danger-color) !important;
-  color: #FFFFFF !important;
+  color: var(--color-surface) !important;
   border-color: var(--danger-color) !important;
 }
 
 .bottom-report-summary {
   margin-top: 20px;
   padding: 16px;
-  background: #F8FAFC;
+  background: var(--color-bg);
   border-radius: 12px;
   border: 1px solid var(--border-light);
 }
@@ -3024,7 +3043,7 @@ onUnmounted(() => {
 .review-score-eval {
   text-align: center;
   padding: 8px 12px;
-  background: #FFFFFF;
+  background: var(--color-surface);
   border-radius: 8px;
   border: 1px solid rgba(226, 232, 240, 0.6);
   margin-bottom: 16px;
@@ -3098,7 +3117,7 @@ onUnmounted(() => {
 
 .toggle-filters-btn.is-expanded {
   background: linear-gradient(135deg, var(--primary-color) 0%, #7C3AED 100%);
-  color: #FFFFFF;
+  color: var(--color-surface);
   border-color: transparent;
   box-shadow: 0 4px 12px rgba(90, 82, 255, 0.16);
 }
@@ -3140,7 +3159,7 @@ onUnmounted(() => {
 
 .action-toggle-analysis-btn.is-expanded {
   background: linear-gradient(135deg, var(--primary-color) 0%, #7C3AED 100%);
-  color: #FFFFFF;
+  color: var(--color-surface);
   border-color: transparent;
   box-shadow: 0 4px 10px rgba(90, 82, 255, 0.15);
 }
@@ -3183,14 +3202,14 @@ onUnmounted(() => {
 
 .pagination-container :deep(.el-pagination.is-background .el-pager li:not(.is-disabled).is-active) {
   background-color: var(--primary-color);
-  color: #FFFFFF;
+  color: var(--color-surface);
   font-weight: 700;
   border-radius: 8px;
 }
 
 .pagination-container :deep(.el-pagination.is-background .el-pager li) {
   border-radius: 8px;
-  background-color: #F8FAFC;
+  background-color: var(--color-bg);
   border: 1px solid transparent;
   transition: all 0.2s ease;
 }
