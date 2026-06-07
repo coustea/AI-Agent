@@ -1,0 +1,2356 @@
+[
+  {
+    "id": "CS-Bench_计算机组成原理_999_59fed349",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "高速缓存Cache通常存放在哪里？()",
+    "options": null,
+    "answer": "CPU",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1000_adb73c22",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "存放欲执行指令的寄存器是 ( ).",
+    "options": null,
+    "answer": "IR",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1001_c5fb3fb7",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若一个8位的计算机系统以 16 位来表示地址，则该计算机系统有 ( )个地址空间",
+    "options": null,
+    "answer": "65536",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1002_9aa11386",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "( )是程序运行时的存储位置，包括所需的数据。",
+    "options": null,
+    "answer": "主存",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1003_f7e0c853",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 CPU 的寄存器中，( ) 对用户是完全透明的。",
+    "options": null,
+    "answer": "指令寄存器",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1004_c3b9a80f",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "从用户观点看，评价计算机系统性能的综合参数是 ( ).",
+    "options": null,
+    "answer": "吞吐率",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1005_e5b5afb8",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "二进制数1101.011转换为八进制数是多少？()",
+    "options": null,
+    "answer": "15.3",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1006_267048be",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在海明（汉明）校验码中，若信息位数为4位，至少需要多少位()校验位？",
+    "options": null,
+    "answer": "3位",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1007_15873a88",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若一个浮点数的指数部分使用了8位二进制表示，那么它可以表示的最大指数值是多少？()",
+    "options": null,
+    "answer": "255",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1008_559e9ad8",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在IEEE754标准的规格化长浮点数中，指数部分使用了多少位二进制表示？()",
+    "options": null,
+    "answer": "11位",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1009_16622623",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在补码表示法中，一个8位机器数的真值零的补码表示是什么？()",
+    "options": null,
+    "answer": "0",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1010_31b3aabf",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若寄存器内容为 11111111，若它等于+127，则为( )",
+    "options": null,
+    "answer": "移码",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1011_86b49b17",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若寄存器内容为00000000，若它等于-128，则为()",
+    "options": null,
+    "answer": "移码",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1012_b741e954",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在计算机中，通常用来表示主存地址的是 ( )。",
+    "options": null,
+    "answer": "无符号数",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1013_5addf3a0",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "浮点数的IEEE 754 标准对尾数编码采用的是 ( )",
+    "options": null,
+    "answer": "原码",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1014_a048abc2",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "两个数7E5H和4D3H相加，得( )",
+    "options": null,
+    "answer": "CB8H",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1015_bf12bfa1",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定一个十进制数为-66，按补码形式存放在一个8位寄存器中，该寄存器的内容用十六进制表示为 ( )。",
+    "options": null,
+    "answer": "BEH",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1016_57cf311b",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设机器数采用补码表示(含1位符号位)，若寄存器内容为9BH，则对应的十进制数为()。",
+    "options": null,
+    "answer": "-101",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1017_a11878df",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若寄存器内容为11111111，若它等于-128，则为（）",
+    "options": null,
+    "answer": "补码",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1018_985156dc",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若二进制定点小数真值是-0.1101，机器表示为 1.0010，则为( )",
+    "options": null,
+    "answer": "反码",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1019_2ac4b0d0",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "ALU作为运算器的核心部件，其属于什么类型的电路？",
+    "options": null,
+    "answer": "组合逻辑电路",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1020_706fbea2",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "实现 N 位(不包括符号位)补码一位乘时，乘积为 ( )位。",
+    "options": null,
+    "answer": "2N+1",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1021_e95c8748",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "按照IEEE 754 标准规定的32位单精度浮点数41A4C000H对应的十进制数是( )",
+    "options": null,
+    "answer": "20.59375",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1022_0e826726",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在存储器中，易失性存储器是指什么类型的存储器？()",
+    "options": null,
+    "answer": "RAM",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1023_86c053df",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "某一 SRAM 芯片，其容量为 1024x8 位，除电源和接地端外，该芯片的引脚的最小数目为( )。",
+    "options": null,
+    "answer": "21",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1024_e5751cf3",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定用若千 16Kx8 位的存储芯片组成一个 64Kx8 位的存储器，芯片各单元采用交叉编址方式，则地址 BFFFH 所在的芯片的最小地址为",
+    "options": null,
+    "answer": "0003H",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1025_ac38ddf5",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "80386DX是32位系统，以4B为编址单位，当在该系统中用 8KB(8Kx8位)的存储 芯片构造32KB的存储体时，应完成存储器的 ( )设计",
+    "options": null,
+    "answer": "位扩展",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1026_73e67bc9",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在高速缓存系统中，主存容量为12MB，Cache容量为400KB，则该存储系统的容量为( )",
+    "options": null,
+    "answer": "12MB",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1027_3b653d48",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "有效容量为128KB的Cache，每块16B，采用8路组相联。字节地址为1234567H的单元调入该Cache，则其Tag应为( )",
+    "options": null,
+    "answer": "048DH",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1028_d7f65ce3",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "某指令系统有 200 条指，对操作码采用固定长度二进制编码，最少需要用( )位",
+    "options": null,
+    "answer": "8",
+    "analysis": "",
+    "knowledge_points": [
+      "Instruction System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1029_be620b3d",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "() 便于处理数组问题。",
+    "options": null,
+    "answer": "变址寻址",
+    "analysis": "",
+    "knowledge_points": [
+      "Instruction System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1030_a4952f1b",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "能够完成两个数的算术运算的单地址指令，地址码指明一个操作数，另一个操作数来自()方式",
+    "options": null,
+    "answer": "隐含寻址",
+    "analysis": "",
+    "knowledge_points": [
+      "Instruction System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1031_5a2c8170",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "设机器字长为32位，一个容量为 16MB 的存储器，CPU 按半字寻址，其寻址单元数是()",
+    "options": null,
+    "answer": "2^23",
+    "analysis": "",
+    "knowledge_points": [
+      "Instruction System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1032_5a9966e4",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个计算机系统采用 32 位单字长指令，地址码为 12 位，若定义了 250 条二地址指令，则还可以有 ( )条单地址指令。",
+    "options": null,
+    "answer": "24K",
+    "analysis": "",
+    "knowledge_points": [
+      "Instruction System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1033_e9747adb",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在微指令的编码方式中，哪种方式的微指令定义并执行几种并行的基本操作？()",
+    "options": null,
+    "answer": "水平型",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1034_11f56e68",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "高级语言编写的程序在执行前必须转换成什么形式？()",
+    "options": null,
+    "answer": "机器语言",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1035_c462f889",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在微程序控制器中，控制存储器(CM)的作用是什么？()",
+    "options": null,
+    "answer": "存储微程序",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1036_972f8804",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在流水线技术中，流水线段之间的数据传递通常通过什么方式实现？()",
+    "options": null,
+    "answer": "数据总线",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1037_037e9bd0",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在超流水线技术中，一个时钟周期内一个功能部件使用多少次？()",
+    "options": null,
+    "answer": "多次",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1038_1f3476c1",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "控制器部件从数据总线接收什么信息？()",
+    "options": null,
+    "answer": "控制信号",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1039_13f72811",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在CPU中，控制存储器(CM)的作用是什么？()",
+    "options": null,
+    "answer": "存储微程序",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1040_82923c7b",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 CPU中，跟踪后继指令地址的寄存器是 ( )。",
+    "options": null,
+    "answer": "程序计数器",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1041_26a7f320",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "条件转移指令执行时所依据的条件来自 ( )。",
+    "options": null,
+    "answer": "标志寄存器",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1042_8e2b9f19",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "指令寄存器的位数取决于 ( )。",
+    "options": null,
+    "answer": "指令字长",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1043_c873d6f1",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "CPU中通用寄存器的位数取决于 ( )。",
+    "options": null,
+    "answer": "机器字长",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1044_affe43e1",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "采用 DMA 方式传递数据时，每传送一个数据就要占用 ( )。",
+    "options": null,
+    "answer": "存取周期",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1045_3c6d8448",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "微程序控制存储器属于 ( )的一部分。",
+    "options": null,
+    "answer": "CPU",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1046_050b4f25",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "某带中断的计算机指令系统共有 101 种操作，采用微程序控制方式时，控制存储器中相应最少有 ( )个微程序。",
+    "options": null,
+    "answer": "103",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1047_2156f89f",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "具有一个控制部件和多个处理单元的计算机系统属于 ( ) 结构。",
+    "options": null,
+    "answer": "SIMD",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1048_1e2921c6",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准专为高度集成的外围部件、扩充插板和处理器/存储器系统而设计的互联机制，支持即插即用，与处理器时钟频率无关？()",
+    "options": null,
+    "answer": "PCI总线",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1049_b4dce8d8",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准专用于连接主存和图形存储器，为传输视频和三维图形数据提供了解决方案？()",
+    "options": null,
+    "answer": "AGP",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1050_3bf2d36f",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在总线操作的四个阶段中，哪个阶段主模块通过总线发出本次要访问的从模块的地址及有关命令？()",
+    "options": null,
+    "answer": "寻址阶段",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1051_69c70bc3",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准是一种连接外部设备的I/O总线标准，具有较高的传输速率，属于设备总线？()",
+    "options": null,
+    "answer": "USB总线",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1052_c0b8f483",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在计算机总线中，哪个总线用来传输控制信息，包括CPU送出的控制命令和主存（或外设）返回CPU的反馈信号？()",
+    "options": null,
+    "answer": "控制总线",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1053_f045f621",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在总线仲裁中，哪种方式选择一个主设备优先获得总线控制权，离总线控制器越近的部件其优先级越高？()",
+    "options": null,
+    "answer": "链式查询方式",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1054_d3731a06",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准专用于连接硬盘和光驱，通过IDE接口与主板连接？()",
+    "options": null,
+    "answer": "IDE总线",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1055_d2a63da7",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准是一种用于传输视频和三维图形数据的专用接口标准，连接主存和图形存储器？()",
+    "options": null,
+    "answer": "AGP",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1056_b719bd30",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准用于传输音频和声音数据，连接到计算机系统的音频设备？()",
+    "options": null,
+    "answer": "AC'97总线",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1057_2ae562c3",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准用于连接外部设备的I/O总线标准，具有即插即用、热插拔等优点，有很强的连接能力？()",
+    "options": null,
+    "answer": "USB总线",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1058_b0a176b8",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在RAID中，哪种方案提供了最高的容错能力，可以随时替换受损的磁盘而不损失数据？()",
+    "options": null,
+    "answer": "RAID1",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1059_3f6086d7",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在计算机中，用于存放I/O设备传来的数据的寄存器被称为什么？()",
+    "options": null,
+    "answer": "数据缓冲寄存器",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1061_6777faf3",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在计算机中，哪种I/O控制方式通过只在I/O设备准备就绪并向CPU发出中断请求时才予以响应？()",
+    "options": null,
+    "answer": "程序中断方式",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1062_7e2e9fa7",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在I/O接口的类型中，哪一种接口用于实现主机和外设的通信联络控制？()",
+    "options": null,
+    "answer": "外部接口",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1063_7fba1039",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DMA方式中，数据传送完毕后通常会触发什么机构提出中断请求？()",
+    "options": null,
+    "answer": "中断服务程序",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1064_253d8abf",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "中断服务程序的最后一条指令通常是什么？()",
+    "options": null,
+    "answer": "中断返回指令",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1065_fc5096d5",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在RAID中，哪种方案采用块交叉奇偶校验来提高数据容错性？()",
+    "options": null,
+    "answer": "RAID4",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1066_647a7322",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在中断响应周期中，由 ()将允许中断触发器置",
+    "options": null,
+    "answer": "中断隐指令",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1067_132f3fa1",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "CPU响应 DMA 请求的条件是当前( )执行完",
+    "options": null,
+    "answer": "机器周期",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1068_54fee7c7",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "什么是存储程序原理？按此原理，计算机应具有哪几大功能?",
+    "options": null,
+    "answer": "存储程序是指将指令以代码的形式事先输入计算机主存储器，然后按其在存储器中的首地址执行程序的第一条指令，以后就按该程序的规定顺序执行其他指令，直至程序执行结束。计算机按照此原理应该具有 5 大功能：数据传送功能、数据存储功能、数据处理功能、操作控制功能、操作判断功能。",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1069_b9b2dce2",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "用一台40MHz的处理器执行标准测试程序，它所包含的混合指令数和响应所需的时钟周期为：指令类型算数和逻辑cpi为1，指令混合比60%；指令类型转移cpi为4，指令混合比12%；指令类型高速缓存命中的访存cpi为2，指令混合比18%；告诉缓存失效的访存cpi8，指令混合比10%。求有效的CPI、MIPS速率和程序的执行时间(Ⅰ为程序的指令条数).",
+    "options": null,
+    "answer": "CPI即执行一条指令所需的时钟周期数。本标准测试程序共包含4种指令，则CPI就是这4种指令的数学期望，即：CPI = 1×60%+2×18%+4×12%+8×10%=2.24。MIPS即每秒执行的百万条指令数。已知处理器时钟频率为40MHz,即每秒包含40M个时钟周期，因此MIPS =40/CPI= 40/2.24= 17.9。程序的执行时间T= CPI×T_IC*I，其中T_IC是一个CPU时钟的时间长度，是CPU时钟频率f的倒数，因此有T=CPIxT_ICxI =CPI×(1/f)×I=5.6×10-8×I秒。本题中的Ⅰ对于解题应无作用，程序的执行时间应是指令的期望即CPI乘以时钟的时间长度，即T=CPI×T_IC.",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1070_e50f9ec2",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "微机A和B是采用不同主频的CPU芯片，片内逻辑电路完全相同。若A机的CPU主频为8MHz，B机为12MHz，则A机的CPU时钟周期为多少?2）若A机的平均指令执行速度为0.4MIPS，则A机的平均指令周期为多少?",
+    "options": null,
+    "answer": "A机的CPU主频为8MHz，所以A机的CPU时钟周期=1/8MHz=0.125us.",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1071_62d9d869",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "微机A和B是采用不同主频的CPU芯片，片内逻辑电路完全相同。若A机的平均指令执行速度为0.4MIPS，则A机的平均指令周期为多少?",
+    "options": null,
+    "answer": "A机的平均指令周期= 1/0.4MIPS= 2.5us.",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1072_4cbee901",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "微机A和B是采用不同主频的CPU芯片，片内逻辑电路完全相同。B机的平均指令执行速度为多少?",
+    "options": null,
+    "answer": "A机平均每条指令的时钟周期数=2.5us/0.125us= 20。因微机A和B的片内逻辑电路完全相同，所以B机平均每条指令的时钟周期数也为20。由于B机的CPU主频为12MHz，所以B机的CPU时钟周期=1/12MHz= 1/12us。B机的平均指令周期=20×(1/12) - 5/3us。B机的平均指令执行速度=1/(5/3)us = 0.6MIPS。",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1073_0d79a6a6",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "什么是浮点数的溢出？什么情况下发生上溢出?什么情况下发生下溢出?",
+    "options": null,
+    "answer": "因微机A和B的片内逻辑电路完全相同，所以B机平均每条指令的时钟周期数也为20。由于B机的CPU主频为12MHz，所以B机的CPU时钟周期=1/12MHz= 1/12us。机的平均指令周期=20×(1/12) - 5/3us。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1074_5240ee29",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知32位寄存器Rl中存放的变量x的机器码为8000 0004H,请问:当x是unsigned int类型时，x的真值是多少? x/2的真值是多少?x/2存放在R1中的机器码是什么?2x的真值是多少?2x存放在Rl中的机器码是什么?",
+    "options": null,
+    "answer": "对于无符号整数，所有二进制位均为数值位。x的真值为2^31+2^2.乘2和除2，相当于无符号数的左移和右移运算。x/2的真值为2^30+2，存放在R1中的机器码是4000 0002H。2x的真值为2^32+2^3，发生溢出，存放在R1中的机器码是0000 0008H。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1075_cf025263",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "已知32位寄存器Rl中存放的变量x的机器码为8000 0004H,请问:当x是int类型时，乘除法采用移位操作，x的真值是多少? x/2的真值是多少? x/2存放在R1中的机器码是什么?2x的真值是多少?2x存放在R1中的机器码是什么?",
+    "options": null,
+    "answer": "对于有符号数（补码)，最高位为符号位。8000 0004H对应二进制数的最高位为 1，为负数，真值为-0111 1111 1111 1111 1111 1111 1111 1100，即十进制的-(2^31-2^3)。乘2和除2，相当于补码的左移和右移运算。x/2的真值为-(2^30-2)，存放在R1中的机器码是C000 0002H。2x的真值为-(2^32-2^3)，发生溢出，存放在R1中的机器码是0000 0008H。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1076_693dce08",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对下列的IEEE 754单精度数值，解释它们所表示的是哪种数字类型（规格化数、非规格化数、无穷大、0 )。当它们表示某个具体数值时，请给出该数值：0b0000 0000 0000 0000 0000 0000 0000 0000",
+    "options": null,
+    "answer": "由于该数的阶码字段内容为0，符号位为0，尾数字段内容也为0，所以它表示IEEE浮点格式的+0。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1077_6d5c7360",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对下列的IEEE 754单精度数值，解释它们所表示的是哪种数字类型（规格化数、非规格化数、无穷大、0 )。当它们表示某个具体数值时，请给出该数值：0b0100 0010 0100 0000 0000 0000 0000 0000",
+    "options": null,
+    "answer": "该数的阶码字段内容为132，尾数字段内容为100 0000 0000 0000 0000 0000，由于阶码字段的内容既不全部为0，也不全部为1，所以它表示一个规格化数，其实际值为(1.1)_2×2^5=48。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1078_face33c7",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对下列的IEEE 754单精度数值，解释它们所表示的是哪种数字类型（规格化数、非规格化数、无穷大、0 )。当它们表示某个具体数值时，请给出该数值：0b1000 0000 0100 0000 0000 0000 0000 0000",
+    "options": null,
+    "answer": "由于该数的阶码字段内容全部为0，且尾数字段内容不全部为0，所以它表示一个非规格化数，其实际值为(-0.1)_2×2^-126 =-2^-127=-5.877×10^-39(表示成4位有效数字形式)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1079_3ecd2dcd",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对下列的IEEE 754单精度数值，解释它们所表示的是哪种数字类型（规格化数、非规格化数、无穷大、0 )。当它们表示某个具体数值时，请给出该数值：0b1111 1111 1000 0000 0000 0000 0000 0000",
+    "options": null,
+    "answer": "由于该数的阶码字段内容全部为1，且尾数字段内容为0，符号位为1，所以它表示负无穷大。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1080_56ca405b",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "两个规格化浮点数进行加减法运算，最后对结果规格化时，能否确定需要右规的次数？能否确定需要左规的次数？",
+    "options": null,
+    "answer": "B机的平均指令执行速度=1/(5/3)us = 0.6MIPS。",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Representation and Operation"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1081_1bd6df2e",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定某处理器可通过软件对高速缓存设置不同的写策略，若处理器主要运行包含大量存储器写操作的数据访问密集型应用，应设置成什么策略?为什么?",
+    "options": null,
+    "answer": "采用Write Back 策略较好，可减少访存次数。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1082_c4f58577",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假定某处理器可通过软件对高速缓存设置不同的写策略，若处理器主要运行包含大量存储器写操作的数据访问密集型应用同时但安全性要求高得多，不允许有任何数据不一致的情况发生，应设置成什么策略?为什么?",
+    "options": null,
+    "answer": "采用Write Through 策略较好，能保证数据的一致性。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1083_9ad5b92c",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "某个两级存储器系统的平均访问时间为 12ns，该存储器系统中顶层存储器的命中率为90%，访问时间是 5ns，该存储器系统中底层存储器的访问时间是多少(假设采用同时访问两级存储器的方式)?",
+    "options": null,
+    "answer": "设底层存储器访问时间为 T，则有 12ns=(0.90x5ns)+(0.10xT)，求得T=75ns。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1084_9ca5071f",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "CPU执行一段程序时，Cache 完成存取的次数为1900，主存完成存取的次数为100，已知Cache 存取周期为 50ns，主存存取周期为250ns。设主存与Cache同时访问。问Cache/主存系统的效率是多少。",
+    "options": null,
+    "answer": "命中率H =N_c (N_c+ N_m)= 1900/(1900+100)=0.95。主存访问时间与Cache 访问时间的倍率r=T_m/T_c。= 250ns/50ns = 5 ;Cache 主存系统的效率e=访问Cache的时间/平均访存时间。访问效率e= 1/[H+(1 - H)r]= 1/[0.95+(1-0.95)×5]=83.3%。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1085_10a49576",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "CPU执行一段程序时，Cache 完成存取的次数为1900，主存完成存取的次数为100，已知Cache 存取周期为 50ns，主存存取周期为250ns。设主存与Cache同时访问。问平均访问时间是多少。",
+    "options": null,
+    "answer": "平均访问时间T_a=T_c/e = 50 ns/0.833= 60ns 。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1086_e43926ff",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在显示适配器中，用于存放显示信息的存储器称为刷新存储器，它的重要性能指标是带宽。具体工作中，显示适配器的多个功能部分要争用刷新存储器的带宽。设总带宽50%用于刷新屏幕，保留50%的带宽用于其他非刷新功能，且采用分辨率为1024×768像素、颜色深度为3B、刷新频率为72Hz的工作方式。为达到这样高的刷新存储器带宽，应采取何种技术措施?",
+    "options": null,
+    "answer": "要提高刷新存储器带宽，可采用以下技术:采用高速 DRAM芯片，采用多体交叉存储结构;刷新存储器至显示控制器的内部总线宽度加倍:采用双端口存储器将刷新端口和更新端口分开。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1087_a1fa4f62",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个四体并行交又存储器，每个模块容量是64K×32位，存取周期为200ns，在一个存取周期中，存储器能向CPU提供多少位二进制信息?",
+    "options": null,
+    "answer": "一个存取周期，四体并行交叉存储器可取32位×4= 128位，其中32位为总线宽度，4为交叉存储器内的存储体个数。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1088_015c8fcb",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个四体并行交又存储器，每个模块容量是64K×32位，存取周期为200ns，若存取周期为400ns，则在0.1us内每个体可向CPU提供32位二进制信息，该说法是否正确，为什么。",
+    "options": null,
+    "answer": "该说法不正确。因为在0.1us内整个存储器可向CPU提供 32位二进制信息，但每个存储体必须经过400ns才能向CPU提供32位二进制信息。",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1089_35f4332f",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个处理器中共有32个寄存器，使用16位立即数，其指令系统结构中共有142条指令。在某个给定的程序中，20%的指令带有一个输入寄存器和一个输出寄存器;30%的指令带有两个输入寄存器和一个输出寄存器;25%的指令带有一个输入寄存器、一个输出寄存器、一个立即数寄存器;其余25%的指令带有一个立即数输入寄存器和一个输出寄存器。与使用定长指令集编码相比，当采用变长指令集编码时，该程序能够少占用多少存储器空间?",
+    "options": null,
+    "answer": "由于变长指令最长的长度为40位，所以定长指令编码每条指令的长度均为40位。而采用变长编码，将各个指令长度和其概率相乘，得出平均长度为30位。所以该程序中，变长编码能比定长编码少占用25%的存储空间。",
+    "analysis": "",
+    "knowledge_points": [
+      "Instruction System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1090_40628379",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "CPU中有哪些专用寄存器?",
+    "options": null,
+    "answer": "CPU中的专用寄存器有程序计数器（PC)、指令寄存器（IR)、存储器数据寄存器(MDR)、存储器地址寄存器（MAR）和程序状态字寄存器（PSW)。",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1091_ad5ad6a2",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "中断周期之前是CPU的什么工作周期?",
+    "options": null,
+    "answer": "中断周期之前是执行周期。",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1092_cc48829a",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在异步串行传输方式下，起始位为1位，数据位为7位，偶校验位为1位，停止位为 1位，假设每秒传输 1200 比特，试问有效数据传输率为多少?",
+    "options": null,
+    "answer": "在这样的一个数据帧中，有效数据位是7位，传输过程中发送的代码位共有1+7+1+1=10所以有效数据传输率为 1200x7/(1+7+1+1)840b/s。",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1093_2ff36760",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "某总线的时钟频率为66MHz，在一个64位总线中，总线数据传输的周期是7个时钟周期传输6个字的数据块。总线的数据传输率是多少?",
+    "options": null,
+    "answer": "总线周期为7个时钟周期，总线频率为66/7MHz。总线在一个完整的操作周期中传输了一个数据块，总线在一个周期内传输的数据量为64bit/8×6=48B，所以总线的宽度为48B，传输率为48B×66/7MHz=452.6MB/s。",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1094_6914cc31",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "某总线的时钟频率为66MHz，在一个64位总线中，总线数据传输的周期是7个时钟周期传输6个字的数据块。若不改变数据块的大小，而将时钟频率减半，这时总线的数据传输率是多少?",
+    "options": null,
+    "answer": "时钟频率减半时的总线频率为(66/7)/2MHz，因数据块大小不变，因此总线宽度仍为48B，传输率为48B*33/7MHz= 226.3MB/s。",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1095_c6dbaf6c",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个完整的指令周期包括哪些CPU工作周期?",
+    "options": null,
+    "answer": "一个完整的指令周期包括取指周期、间址周期、执行周期和中断周期。其中取指周期和执行周期是每条指令均有的。",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1096_b752b033",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "中断周期之后是CPU的什么工作周期?",
+    "options": null,
+    "answer": "中断周期之后是下一条指令的取指周期。",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1097_b67ec29a",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DMA周期前和DMA周期后各是CPU的什么工作周期?",
+    "options": null,
+    "answer": "DMA周期前可以是取指周期、间址周期、执行周期或中断周期，DMA周期后也可以是取指周期、间址周期、执行周期或中断周期。总之DMA周期前后都是机器周期。",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_1098_18d111bb",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 DMA 方式下，主存和 I/O设备之间有一条物理通路相连吗?",
+    "options": null,
+    "answer": "在直接存储器存取（DMA）方式下，主存和I/O设备之间确实存在一条物理通路。这条通路允许I/O设备直接与主存交换数据，而不需要CPU的介入。DMA控制器负责管理这个数据传输过程，它可以接管系统总线，以便直接在I/O设备和主存之间传输数据。这样做可以大大提高数据传输的效率，因为它减少了CPU的负载，并且可以在数据传输时让CPU执行其他任务。",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_114_88be6490",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在CPU中，跟踪下一条要执行的指令的地址的寄存器是 ( ).",
+    "options": null,
+    "answer": "PC",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_115_9752a53f",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "地址总线A。(高位)~As(低位)，用4Kx4位的存储芯片组成16KB存储器，则产生片选信号的译码器的输入地址线应该是 ( )。",
+    "options": null,
+    "answer": "A2A3",
+    "analysis": "",
+    "knowledge_points": [
+      "Storage System"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_116_6b840260",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为了缩短指今中某个地址段的位数，有效的方法是采取 ()",
+    "options": null,
+    "answer": "寄存器寻址",
+    "analysis": "",
+    "knowledge_points": [
+      "Instruction System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_117_5fe8f7bb",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "按照 Flynn 提出的计算机系统分类方法，多处理机属于 ( )。",
+    "options": null,
+    "answer": "MIMD",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_118_5948e6b8",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "哪种总线标准广泛应用于笔记本电脑中的一种接口标准，可即插即用？()",
+    "options": null,
+    "answer": "PCMCIA",
+    "analysis": "",
+    "knowledge_points": [
+      "Bus"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_119_878e9bad",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在I/O接口中，哪个部分用于实现主机和外设的通信联络控制？()",
+    "options": null,
+    "answer": "控制端口",
+    "analysis": "",
+    "knowledge_points": [
+      "Input/Output System"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_120_1ba226d6",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "指令和数据都存于存储器中，CPU如何区分它们?",
+    "options": null,
+    "answer": "通常完成一条指令可分为取指阶段和执行阶段。在取指阶段通过访问存储器可将指令取出:在执行阶段通过访问存储器可以将操作数取出。因此，虽然指令和数据都以二进制代码形式存放在存储器中，但 CPU 可根据指周期的不同阶段判断从存储器取出的二进制代码是指还是数据。",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机组成原理_121_6e83ba3c",
+    "source": "CS-Bench",
+    "subject": "计算机组成原理",
+    "subject_en": "computer_organization",
+    "type": "填空题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "假设某机器有80条指令，平均每条指令由4条微指令组成，其中有一条取指微指令是所有指令公用的。已知微指令长度为32位，请估算控制存储器CM容量.",
+    "options": null,
+    "answer": "总的微指令条数=(4-1)×80 +1=241条，每条微指令占一个控制存储器单元，控制存储器CM的容量为2的n次幂，而241刚好小于256，所以CM的容量=256×32位=1KB。",
+    "analysis": "",
+    "knowledge_points": [
+      "Central Processing Unit"
+    ],
+    "tags": [
+      "computer_organization",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  }
+]
