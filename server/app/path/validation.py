@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from app.infra.logging import get_logger
-from app.path.schemas import ALLOWED_RESOURCE_TYPES, AgentCoursePathPlan, AgentPathNode
+from app.path.schemas import ALLOWED_RESOURCE_TYPES, AgentLearningPathPlan, AgentPathNode
 
 logger = get_logger(__name__)
 
@@ -99,7 +99,7 @@ def _filter_resource_types(types: list[str] | None) -> list[str]:
     return [t for t in types if t in ALLOWED_RESOURCE_TYPES]
 
 
-def normalize_path_plan(plan: AgentCoursePathPlan) -> AgentCoursePathPlan:
+def normalize_path_plan(plan: AgentLearningPathPlan) -> AgentLearningPathPlan:
     """Fill in missing resource_policy and generation_focus deterministically.
 
     Must run *before* validate_path_plan so validation sees a structurally
@@ -164,7 +164,7 @@ def normalize_path_plan(plan: AgentCoursePathPlan) -> AgentCoursePathPlan:
     return plan
 
 
-def validate_path_plan(plan: AgentCoursePathPlan) -> None:
+def validate_path_plan(plan: AgentLearningPathPlan) -> None:
     """Validate a generated path before persistence or replanning updates.
 
     Assumes normalize_path_plan has already been called, so resource_policy
@@ -274,7 +274,7 @@ def validate_path_plan(plan: AgentCoursePathPlan) -> None:
     _validate_stage_node_coverage(plan, stage_ids)
 
 
-def _validate_stage_node_coverage(plan: AgentCoursePathPlan, stage_ids: set[str]) -> None:
+def _validate_stage_node_coverage(plan: AgentLearningPathPlan, stage_ids: set[str]) -> None:
     """Ensure every stage has at least one node."""
     stages_with_nodes: set[str] = set()
     for node in plan.nodes:

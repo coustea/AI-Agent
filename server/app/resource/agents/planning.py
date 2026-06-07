@@ -23,13 +23,42 @@ class PlanningAgent(BaseResourceAgent):
         """PlanningAgent 自行构建输入，不走通用 build_worker_base_context。"""
         from app.prompts import registry
 
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="正在分析学习需求并构建执行计划",
+                progress=10,
+            )
+
         prompt = registry.get("resource/planning")
         input_text = self._build_planning_input(state)
+
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="正在调用大模型生成教学蓝图与各智能体指令",
+                progress=25,
+            )
+
         plan = await self.llm.ainvoke_json(
             ExecutionPlan,
             f"{prompt}\n\n{input_text}",
             temperature=0.3,
         )
+
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="蓝图已生成，正在提取各智能体个性化指令",
+                progress=85,
+            )
+
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="finished",
+                message="教学蓝图与执行计划已生成",
+                progress=100,
+            )
 
         return WorkerResult(
             success=True,

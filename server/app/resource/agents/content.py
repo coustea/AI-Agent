@@ -32,8 +32,23 @@ class ContentAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += "\n\n请生成专业课程讲解文档，只输出 Markdown 内容。"
 
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="正在构建课程讲解提示词",
+                progress=25,
+            )
+
         prompt = registry.get("resource/content")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
+
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="大模型已返回，正在清洗格式",
+                progress=85,
+            )
+
         content = response.content if hasattr(response, "content") else str(response)
         content = _clean_markdown_fences(content)
 

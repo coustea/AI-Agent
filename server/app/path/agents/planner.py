@@ -1,6 +1,7 @@
+import asyncio
 import json
 import re
-from typing import Any, TypedDict
+from typing import Any, Awaitable, Callable, TypedDict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
@@ -9,44 +10,23 @@ from pydantic import BaseModel, Field
 
 from app.chat.tools.search import duckduckgo_search, serp_search, spark_search, tavily_search
 from app.infra.llm import get_llm
-from app.path.schemas import AgentCoursePathPlan, AgentPathNode, AgentStage, GeneratePathRequest
+from app.path.schemas import AgentLearningPathPlan, AgentPathNode, AgentStage, GeneratePathRequest
 
-
-class StrategyReport(BaseModel):
-    strategy_report: str = Field(description="详细的个性化诊断与裁剪策略报告")
-
-
-class MacroStages(BaseModel):
-    stages: list[AgentStage] = Field(description="宏观阶段骨架列表")
+ProgressCallback = Callable[[str, int, str], Awaitable[None]]
 
 
 class PathState(TypedDict):
     request: GeneratePathRequest
     profile: dict[str, Any]
     search_evidence: list[dict[str, Any]]
+    progress_callback: ProgressCallback | None
 
     # Internal state
     strategy_report: str
     macro_stages: list[AgentStage]
 
     # Final output
-    final_plan: AgentCoursePathPlan
-
-
-class AdjustState(TypedDict):
-    active_path: Any
-    completed_nodes: list[Any]
-    remaining_nodes: list[Any]
-    profile: dict[str, Any]
-    feedback: str
-    weak_points: list[str]
-    resource_context: str
-
-    # Internal state
-    diagnosis_report: str
-
-    # Final output
-    final_plan: AgentCoursePathPlan
+    final_plan: AgentLearningPathPlan
 
 
 class PathPlannerAgent:
@@ -64,13 +44,14 @@ class PathPlannerAgent:
         self.max_search_evidence_chars = 6000
         self.system_prompt = NODE_STRATEGIST_SYSTEM_PROMPT
         self.generate_graph = self._build_generate_graph()
-        self.adjust_graph = self._build_adjust_graph()
 
     def _build_generate_graph(self):
         workflow = StateGraph(PathState)
 
         async def research_node(state: PathState) -> dict:
             logger.info("LangGraph [Path Research] starting...")
+            if state["request"].enable_search:
+                await emit_progress(state.get("progress_callback"), "researching", 30, "正在检索高价值参考资料")
             evidence_records = await self._collect_search_evidence(
                 request=state["request"],
                 profile=state["profile"],
@@ -78,155 +59,53 @@ class PathPlannerAgent:
             logger.info("LangGraph [Path Research] finished with %d evidence records.", len(evidence_records))
             return {"search_evidence": evidence_records}
 
-        async def profile_analyst_node(state: PathState) -> dict:
-            logger.info("LangGraph [Profile Analyst] starting...")
+        async def node_strategist_node(state: PathState) -> dict:
+            logger.info("LangGraph [Node Strategist] starting...")
+            await emit_progress(state.get("progress_callback"), "analyzing", 44, "正在分析画像、目标与课程结构")
+            await emit_progress(state.get("progress_callback"), "strategizing", 58, "正在生成阶段、节点与资源策略")
             profile_json = json.dumps(state["profile"], ensure_ascii=False, indent=2)
             request_context = format_path_request_context(state["request"])
             search_context = format_evidence_for_prompt(state.get("search_evidence", []))
-            sys_msg = SystemMessage(content="""你是一个世界顶级的学习画像诊断专家。
-                你的任务是对比用户的学习目标与他们的个人画像，输出一份诊断与裁剪策略。
-                如果用户在某方面已经掌握，你需要明确指出"可跳过或快速复习"；
-                如果用户缺乏某前置基础，你需要明确指出"必须补充前置基础"。
-                重点分析其认知风格和薄弱点，为后续的规划定下基调。
-                引用检索资料时必须标明出处，不得编造检索资料未支持的事实。"""
-                )
+            sys_msg = SystemMessage(content=INTEGRATED_PATH_PLANNER_SYSTEM_PROMPT)
             human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n当前画像:\n{profile_json}")
 
-            result = await self.llm.ainvoke_json(StrategyReport, [sys_msg, human_msg])
-            logger.info("LangGraph [Profile Analyst] finished.")
-            return {
-                "strategy_report": result.strategy_report
-            }
-
-        async def curriculum_architect_node(state: PathState) -> dict:
-            logger.info("LangGraph [Curriculum Architect] starting...")
-            request_context = format_path_request_context(state["request"])
-            search_context = format_evidence_for_prompt(state.get("search_evidence", []))
-            sys_msg = SystemMessage(content="""你是一个世界顶级的课程架构师。
-                你的任务是根据用户的学习目标、主题和个性化诊断策略，设计出宏观的学习阶段骨架（stages）。
-                通常分为 3-6 个阶段（如基础入门、核心进阶、实战演练等）。必须严格遵照诊断策略中的"跳过"或"补充"建议！
-                只需输出 stages 列表，不要拆分具体节点。
-                引用检索资料时必须标明出处，不得编造检索资料未支持的事实。"""
-            )
-            human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n诊断策略:\n{state['strategy_report']}")
-
-            result = await self.llm.ainvoke_json(MacroStages, [sys_msg, human_msg])
-            logger.info(f"LangGraph [Curriculum Architect] finished with {len(result.stages)} stages.")
-            return {"macro_stages": result.stages}
-
-        async def node_strategist_node(state: PathState) -> dict:
-            logger.info("LangGraph [Node Strategist] starting...")
-            stages_json = json.dumps([s.model_dump() for s in state["macro_stages"]], ensure_ascii=False, indent=2)
-            request_context = format_path_request_context(state["request"])
-            search_context = format_evidence_for_prompt(state.get("search_evidence", []))
-            sys_msg = SystemMessage(content=NODE_STRATEGIST_SYSTEM_PROMPT)
-            human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n诊断策略:\n{state['strategy_report']}\n\n宏观阶段骨架:\n{stages_json}")
-
-            result = await self.llm.ainvoke_json(AgentCoursePathPlan, [sys_msg, human_msg])
+            result = await self.llm.ainvoke_json(AgentLearningPathPlan, [sys_msg, human_msg])
             result = repair_generated_plan_from_macro_stages(
                 plan=result,
-                macro_stages=state["macro_stages"],
+                macro_stages=result.stages,
                 request=state["request"],
-                strategy_report=state["strategy_report"],
+                strategy_report=result.strategy_report,
             )
             logger.info(f"LangGraph [Node Strategist] finished with {len(result.nodes)} nodes.")
             return {"final_plan": result}
 
         workflow.add_node("research", research_node)
-        workflow.add_node("analyst", profile_analyst_node)
-        workflow.add_node("architect", curriculum_architect_node)
         workflow.add_node("strategist", node_strategist_node)
 
         workflow.add_edge(START, "research")
-        workflow.add_edge("research", "analyst")
-        workflow.add_edge("analyst", "architect")
-        workflow.add_edge("architect", "strategist")
+        workflow.add_edge("research", "strategist")
         workflow.add_edge("strategist", END)
 
-        return workflow.compile()
-
-    def _build_adjust_graph(self):
-        workflow = StateGraph(AdjustState)
-
-        async def feedback_analyst_node(state: AdjustState) -> dict:
-            logger.info("LangGraph [Feedback Analyst] starting...")
-            profile_json = json.dumps(state["profile"], ensure_ascii=False, indent=2)
-            weak_points_text = "、".join(state["weak_points"]) if state["weak_points"] else "无明确薄弱点"
-            sys_msg = SystemMessage(content="""你是一个世界顶级的学习反馈诊断师。
-你的任务是根据用户当前的学习进展、画像以及最新的反馈/测试成绩，诊断后续课程存在的问题，并给出微调策略。
-明确指出：哪些待学内容需要删减，哪些待学内容需要增加实操或降低难度。""")
-            human_msg = HumanMessage(
-                content=(
-                    f"当前课程: {state['active_path'].title}\n"
-                    f"用户反馈: {state['feedback']}\n"
-                    f"薄弱知识点: {weak_points_text}\n"
-                    f"关联资源上下文:\n{state['resource_context'] or '无'}\n\n"
-                    f"画像:\n{profile_json}"
-                )
-            )
-
-            result = await self.llm.ainvoke_json(StrategyReport, [sys_msg, human_msg])
-            logger.info("LangGraph [Feedback Analyst] finished.")
-            return {"diagnosis_report": result.strategy_report}
-
-        async def node_replanner_node(state: AdjustState) -> dict:
-            logger.info("LangGraph [Node Replanner] starting...")
-            completed_data = [
-                {
-                    "node_id": n.node_id,
-                    "stage_id": n.stage_id,
-                    "title": n.title,
-                }
-                for n in state["completed_nodes"]
-            ]
-            remaining_data = [
-                {
-                    "node_id": n.node_id,
-                    "stage_id": n.stage_id,
-                    "title": n.title,
-                    "prerequisites": n.prerequisites or [],
-                }
-                for n in state["remaining_nodes"]
-            ]
-            completed_json = json.dumps(completed_data, ensure_ascii=False, indent=2)
-            remaining_json = json.dumps(remaining_data, ensure_ascii=False, indent=2)
-
-            sys_msg = SystemMessage(content="""你是一个路径重构专家。
-请根据反馈诊断师的策略报告，重构剩余的路径节点。
-规范：
-1. 必须原样保留所有已完成的节点（保持其 node_id, stage_id, title 不变）。
-2. 对后续未完成节点进行精细化调整增删改，必须在 adjustment_rationale 中说明。
-3. 返回全新的阶段与所有节点结构。""")
-            human_msg = HumanMessage(content=f"诊断策略:\n{state['diagnosis_report']}\n\n已完成节点(需保留):\n{completed_json}\n\n原定剩余节点(可调整):\n{remaining_json}")
-
-            result = await self.llm.ainvoke_json(AgentCoursePathPlan, [sys_msg, human_msg])
-            result.strategy_report = state["diagnosis_report"]
-            logger.info("LangGraph [Node Replanner] finished.")
-            return {"final_plan": result}
-
-        workflow.add_node("feedback_analyst", feedback_analyst_node)
-        workflow.add_node("replanner", node_replanner_node)
-        workflow.add_edge(START, "feedback_analyst")
-        workflow.add_edge("feedback_analyst", "replanner")
-        workflow.add_edge("replanner", END)
         return workflow.compile()
 
     async def generate_plan(
         self,
         request: GeneratePathRequest,
         profile: dict[str, Any],
-    ) -> tuple[AgentCoursePathPlan, list[dict[str, Any]]]:
+        progress_callback: ProgressCallback | None = None,
+    ) -> tuple[AgentLearningPathPlan, list[dict[str, Any]]]:
         """执行多智能体路径规划 (LangGraph版)。
 
         Returns:
             (plan, search_evidence_records) — 规划结果和结构化搜索证据列表。
         """
-        logger.info(f"PathPlannerAgent (LangGraph) 开始规划路径 - Topic: {request.topic}")
+        logger.info("PathPlannerAgent 开始规划路径 - Topic: {}", request.topic)
         try:
             initial_state = {
                 "request": request,
                 "profile": profile,
                 "search_evidence": [],
+                "progress_callback": progress_callback,
                 "strategy_report": "",
                 "macro_stages": [],
                 "final_plan": None
@@ -236,36 +115,6 @@ class PathPlannerAgent:
             return final_state["final_plan"], search_evidence
         except Exception as e:
             logger.error(f"PathPlannerAgent 路径规划失败: {str(e)}")
-            raise e
-
-    async def adjust_plan(
-        self,
-        active_path: Any,
-        completed_nodes: list[Any],
-        remaining_nodes: list[Any],
-        profile: dict[str, Any],
-        feedback: str,
-        weak_points: list[str] | None = None,
-        resource_context: str = "",
-    ) -> AgentCoursePathPlan:
-        """根据画像和反馈动态微调未完成的路径节点 (LangGraph版)。"""
-        logger.info(f"PathPlannerAgent (LangGraph) 开始微调路径 - Path ID: {active_path.id}")
-        try:
-            initial_state = {
-                "active_path": active_path,
-                "completed_nodes": completed_nodes,
-                "remaining_nodes": remaining_nodes,
-                "profile": profile,
-                "feedback": feedback,
-                "weak_points": weak_points or [],
-                "resource_context": resource_context,
-                "diagnosis_report": "",
-                "final_plan": None
-            }
-            final_state = await self.adjust_graph.ainvoke(initial_state)
-            return final_state["final_plan"]
-        except Exception as e:
-            logger.error(f"PathPlannerAgent 路径微调失败: {str(e)}")
             raise e
 
     async def _collect_search_evidence(
@@ -301,8 +150,25 @@ class PathPlannerAgent:
     async def _run_search_tool_calls(self, tool_calls: list[Any]) -> list[dict[str, Any]]:
         """Execute search tool calls and return structured evidence records."""
         tools_by_name = {tool.name: tool for tool in self.search_tools}
-        all_records: list[dict[str, Any]] = []
-        for tool_call in tool_calls:
+        record_groups = await asyncio.gather(*[
+            self._run_single_search_tool_call(tool_call, tools_by_name)
+            for tool_call in tool_calls
+        ])
+        all_records = [record for records in record_groups for record in records]
+
+        total_chars = sum(len(json.dumps(r, ensure_ascii=False)) for r in all_records)
+        if total_chars > self.max_search_evidence_chars:
+            all_records = _truncate_evidence_records(all_records, self.max_search_evidence_chars)
+
+        return all_records
+
+    async def _run_single_search_tool_call(
+        self,
+        tool_call: Any,
+        tools_by_name: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Execute one search tool call and parse its evidence records."""
+        try:
             tool_name, tool_args = parse_tool_call(tool_call)
             query = tool_args.get("query", "")
             result = await self._invoke_search_tool(
@@ -317,14 +183,10 @@ class PathPlannerAgent:
                 records = _parse_text_evidence(tool_name, query, result)
             else:
                 records = []
-
-            all_records.extend(records)
-
-        total_chars = sum(len(json.dumps(r, ensure_ascii=False)) for r in all_records)
-        if total_chars > self.max_search_evidence_chars:
-            all_records = _truncate_evidence_records(all_records, self.max_search_evidence_chars)
-
-        return all_records
+            return records
+        except Exception as exc:
+            logger.warning("[PathPlannerAgent] search tool call parsing failed: %s", exc)
+            return []
 
     async def _invoke_search_tool(
         self,
@@ -348,11 +210,11 @@ class PathPlannerAgent:
 
 def repair_generated_plan_from_macro_stages(
     *,
-    plan: AgentCoursePathPlan,
+    plan: AgentLearningPathPlan,
     macro_stages: list[AgentStage],
     request: GeneratePathRequest,
     strategy_report: str,
-) -> AgentCoursePathPlan:
+) -> AgentLearningPathPlan:
     """Recover a structurally usable plan from the architect stage output.
 
     The planner is designed as a single LLM pass after research/profile/stage
@@ -397,15 +259,30 @@ def repair_generated_plan_from_macro_stages(
     return plan
 
 
-NODE_STRATEGIST_SYSTEM_PROMPT = """你是一个世界顶级的课程节点规划师。
-你的任务是将架构师给出的宏观阶段骨架（stages），拆解为具体的拓扑节点（nodes）。
+async def emit_progress(
+    callback: ProgressCallback | None,
+    status: str,
+    progress: int,
+    message: str,
+) -> None:
+    if callback is None:
+        return
+    await callback(status, progress, message)
+
+
+INTEGRATED_PATH_PLANNER_SYSTEM_PROMPT = """你是一个世界顶级的学习画像诊断专家、课程架构师和课程节点规划师。
+你的任务是在一次结构化输出中完成完整课程路径规划：诊断画像与目标、设计宏观阶段（stages）、拆解拓扑节点（nodes）、指定每个节点的资源策略（resource_policy）。
 1. 请提供一个精心设计的宏观课程标题。
-2. adjustment_rationale 必须是字符串数组，每项写出一条基于画像或学习输入的调整依据。
-3. confidence 必须是 0-100 的整数百分比。
-4. 必须原样包含前面规划好的 stages。
-5. 必须为所有阶段生成具体学习节点（nodes），不能只生成第一个阶段。
-6. 每个节点应该是一个不可再分的最小知识点或能力点，明确指出前置依赖（prerequisites），形成无环拓扑结构。
-7. 每个节点必须包含 resource_policy，指定该节点推荐生成的资源类型和策略：
+2. strategy_report 必须写出个性化诊断与裁剪策略：
+   - 如果用户在某方面已经掌握，明确指出"可跳过或快速复习"。
+   - 如果用户缺乏某前置基础，明确指出"必须补充前置基础"。
+   - 重点分析认知风格、薄弱点、学习节奏和目标约束。
+3. adjustment_rationale 必须是字符串数组，每项写出一条基于画像或学习输入的调整依据。
+4. confidence 必须是 0-100 的整数百分比。
+5. stages 通常为 3-6 个阶段，必须覆盖完整学习路径，并严格遵照 strategy_report 中的"跳过"或"补充"建议。
+6. 必须为所有阶段生成具体学习节点（nodes），不能只生成第一个阶段。
+7. 每个节点应该是一个不可再分的最小知识点或能力点，明确指出前置依赖（prerequisites），形成无环拓扑结构。
+8. 每个节点必须包含 resource_policy，指定该节点推荐生成的资源类型和策略：
    - primary_resource_type: 主要资源类型（只能是 content/quiz/code/reading/ppt/mindmap）
    - required_resource_types: 必须生成的资源类型列表（只能是上述六种之一）
    - optional_resource_types: 可选增强资源类型列表
@@ -413,18 +290,21 @@ NODE_STRATEGIST_SYSTEM_PROMPT = """你是一个世界顶级的课程节点规划
    - generation_focus: 资源生成内容重点提示（如 ["概念解释", "基础练习"]）
    - personalization_reason: 为什么此策略适合该学习者
    - expected_resource_count: 预期生成资源数量（1-6）
-8. 资源策略参考规则：
+9. 资源策略参考规则：
    - 基础概念节点：primary=content, required=[content, quiz], optional=[mindmap]
    - 结构关系节点：primary=content, required=[content, mindmap, quiz]
    - 算法/编程节点：primary=content, required=[content, code, quiz]
    - 拓展提升节点：primary=reading, required=[reading, quiz]
    - 阶段总结节点：primary=ppt, required=[ppt, quiz]
-9. 每个节点必须填写 recommendation_reason，说明为什么推荐学习该节点。
-10. 防幻觉与证据归属要求：
+10. 每个节点必须填写 recommendation_reason，说明为什么推荐学习该节点。
+11. 防幻觉与证据归属要求：
    - 引用检索资料时必须标明出处编号（如"基于[检索1]的结论"、"参考[检索2]的建议"）。
    - 不得编造检索资料未支持的事实，不得将不确定的搜索摘要写成确定结论。
    - adjustment_rationale 中应区分"基于画像"和"基于检索参考"的不同依据。
    - 如果某项规划没有检索证据支撑，应明确标注"基于画像/经验判断"而非虚构来源。"""
+
+
+NODE_STRATEGIST_SYSTEM_PROMPT = INTEGRATED_PATH_PLANNER_SYSTEM_PROMPT
 
 
 SEARCH_FAILURE_MARKERS = (

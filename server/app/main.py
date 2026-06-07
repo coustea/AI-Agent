@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.auth.api import router as auth_router
 from app.auth.security import AuthError, _resolve_current_user_from_token
 from app.chat.api import router as chat_router
+from app.dashboard.api import router as dashboard_router
 from app.evaluation.api import router as evaluation_router
 from app.path.api import router as path_router
 from app.resource.api import router as resource_router
@@ -20,6 +21,7 @@ from app.avatar.bridge.manager import avatar_bridge_manager
 from app.infra.database import init_db, check_all
 from app.infra.logging import configure_logging
 from app.infra.response import HttpResponse
+from app.prompts import init_prompts
 from app.config import DEBUG
 
 configure_logging(debug=DEBUG)
@@ -34,6 +36,7 @@ except ModuleNotFoundError as exc:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_prompts()
     await init_db()
     await check_all()
     yield
@@ -64,6 +67,7 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(chat_router, prefix="/api/v1/ai", tags=["ai"])
+app.include_router(dashboard_router, prefix="/api/v1/ai", tags=["dashboard"])
 app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
 app.include_router(path_router, prefix="/api/v1/ai", tags=["path"])
 app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])

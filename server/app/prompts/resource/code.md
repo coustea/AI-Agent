@@ -9,9 +9,9 @@
 ## 输入信息
 
 - 学习需求：由下方 `## 学习需求` 提供
-- 编程语言：`{programming_language}`
-- 案例类型：`{case_type}`
-- 生成模式：`generation_mode`
+- 编程语言：`<programming_language>`
+- 案例类型：`<case_type>`
+- 生成模式：`<generation_mode>`
 - 后端上下文：可能包含 `## 学习者画像摘要`、`## 依赖交接报告`、`## 上游结果摘要`
 
 ---

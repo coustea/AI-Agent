@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import random
 import re
-import string
 from datetime import datetime
 from pathlib import Path
 
@@ -21,9 +19,6 @@ class LocalFileStore:
         self.allowed_doc_ext = {".pdf", ".docx", ".txt", ".md", ".log", ".xlsx", ".xls", ".csv", ".tsv"}
         self.max_image_size = 5 * 1024 * 1024
         self.max_doc_size = 10 * 1024 * 1024
-
-    def ensure_roots(self) -> None:
-        self.upload_dir.mkdir(parents=True, exist_ok=True)
 
     def list_files(self, *, user_id: int, session_id: str) -> list[Path]:
         """列出用户某次会话中已上传的文件。"""
@@ -68,55 +63,6 @@ class LocalFileStore:
         return UploadResponse(
             url=f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/{safe_name}",
             file_type=file_type,
-            original_name=filename,
-            size_bytes=len(content),
-        ).model_dump()
-
-    async def save_diagram_image(
-        self,
-        *,
-        filename: str,
-        content: bytes,
-        user_id: int,
-        session_id: str,
-    ) -> dict:
-        """保存图解 PNG 图片到 diagrams 子目录。
-
-        Args:
-            filename: 原始文件名。
-            content: PNG 文件内容。
-            user_id: 用户ID。
-            session_id: 会话ID。
-
-        Returns:
-            保存结果，包含 url、file_type 等字段。
-
-        Raises:
-            ValueError: 文件类型不支持或大小超限。
-        """
-        # 验证文件类型
-        suffix = Path(filename).suffix.lower()
-        if suffix != ".png":
-            raise ValueError("图解仅支持 PNG 格式")
-
-        if len(content) > self.max_image_size:
-            raise ValueError(f"文件大小超过限制（{self.max_image_size // (1024 * 1024)}MB）")
-
-        # 保存到 diagrams 子目录
-        diagram_dir = self.upload_dir / str(user_id) / session_id / "diagrams"
-        diagram_dir.mkdir(parents=True, exist_ok=True)
-
-        # 生成唯一文件名：diagram_{timestamp}_{random}.png
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        random_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        safe_name = f"diagram_{timestamp}_{random_suffix}.png"
-
-        file_path = diagram_dir / safe_name
-        file_path.write_bytes(content)
-
-        return UploadResponse(
-            url=f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/diagrams/{safe_name}",
-            file_type="image",
             original_name=filename,
             size_bytes=len(content),
         ).model_dump()
@@ -170,6 +116,3 @@ class LocalFileStore:
         if not file_path.exists() or not file_path.is_file():
             raise FileNotFoundError("文件不存在")
         return file_path
-
-
-local_file_store = LocalFileStore()

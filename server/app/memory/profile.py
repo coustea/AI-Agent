@@ -746,6 +746,10 @@ class ProfileBuilder:
             knowledge_mastery=json.dumps(old_json.get("knowledge_mastery") or [], ensure_ascii=False, indent=2),
             recent_dialogue=recent_dialogue,
             long_term_memory=(long_term.memory_markdown if long_term and long_term.memory_markdown else "暂无长期记忆。")[:3000],
+            active_course="",
+            active_topic="",
+            evidence="[]",
+            behavior_signals="{}",
         )
         try:
             resp = await self.llm.ainvoke_json(

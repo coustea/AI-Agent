@@ -59,6 +59,13 @@ class QuizAgent(BaseResourceAgent):
         prompt = registry.get("resource/quiz")
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="正在构建习题集提示词",
+                progress=25,
+            )
+
         result = await self.llm.ainvoke_json(
             QuizPayload,
             full_prompt,
@@ -66,6 +73,14 @@ class QuizAgent(BaseResourceAgent):
             function_name="generate_quiz",
             function_description="生成习题集",
         )
+
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="习题已生成，正在解析题目结构",
+                progress=85,
+            )
+
         quiz_data = result.model_dump(mode="json")
         content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
 
