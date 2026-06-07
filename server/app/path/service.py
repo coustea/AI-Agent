@@ -27,7 +27,6 @@ from app.path.schemas import (
     AgentLearningPathPlan,
     AuxiliaryResourceRequest,
     CreateLearningPathRequest,
-    GeneratePathRequest,
     LearningPathHistoryItem,
     LearningPathNodeDTO,
     LearningPathNodeWorkspaceResponse,
@@ -66,7 +65,7 @@ class LearningPathService:
         plan = repair_generated_plan_from_macro_stages(
             plan=plan,
             macro_stages=list(getattr(plan, "stages", []) or []),
-            request=GeneratePathRequest(**request.model_dump()),
+            request=request,
             strategy_report=getattr(plan, "strategy_report", ""),
         )
 
@@ -116,7 +115,7 @@ class LearningPathService:
             await self.session.refresh(node)
         return self._build_path_overview(path, nodes)
 
-    async def get_current_path(self, user_id: int, module: str = "mentor") -> LearningPathOverviewResponse | None:
+    async def get_active_path_overview(self, user_id: int, module: str = "mentor") -> LearningPathOverviewResponse | None:
         path = await self._get_active_path_record(user_id, module)
         if path is None:
             return None
@@ -401,15 +400,6 @@ class LearningPathService:
             payload=payload,
         )
 
-    async def get_active_path(self, user_id: int, module: str = "mentor") -> LearningPathOverviewResponse | None:
-        return await self.get_current_path(user_id, module)
-
-    async def generate_path(self, user_id: int, request: GeneratePathRequest) -> LearningPathOverviewResponse:
-        return await self.create_path(
-            user_id=user_id,
-            request=CreateLearningPathRequest(**request.model_dump()),
-        )
-
     async def list_path_resources(self, user_id: int, limit: int, offset: int) -> dict[str, Any]:
         stmt = (
             select(PathNodeResource)
@@ -452,25 +442,6 @@ class LearningPathService:
         if resource is None or resource.user_id != user_id:
             return None
         return self._to_resource_dto(resource)
-
-    async def start_node(self, *, user_id: int, node_id: int) -> LearningPathOverviewResponse:
-        workspace = await self.get_node_workspace(user_id, node_id)
-        node = await self._must_get_node(user_id, node_id)
-        if node.status == "available":
-            node.status = "available"
-            node.started_at = node.started_at or datetime.now(timezone.utc)
-            await self.session.commit()
-        return workspace.path
-
-    async def complete_node(self, *, user_id: int, node_id: int) -> LearningPathOverviewResponse:
-        node = await self._must_get_node(user_id, node_id)
-        path = await self._must_get_path(user_id, node.path_id)
-        node.status = "completed"
-        node.completed_at = datetime.now(timezone.utc)
-        await self._unlock_successors(path.id)
-        await self._update_path_progress(path)
-        await self.session.commit()
-        return await self._build_path_response(path)
 
     async def _archive_active_paths(self, user_id: int, module: str, exclude_path_id: int | None = None) -> None:
         stmt = select(LearningPath).where(
@@ -721,7 +692,7 @@ class LearningPathService:
         profile: dict[str, Any],
     ) -> AgentLearningPathPlan:
         plan, _search = await self.path_planner.generate_plan(
-            GeneratePathRequest(**request.model_dump()),
+            request,
             profile,
         )
         return plan

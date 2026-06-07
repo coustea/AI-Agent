@@ -28,10 +28,6 @@ export function createLearningPath(payload: CreateLearningPathRequest) {
   return http.post<ApiResponse<LearningPathOverview>>('/ai/path-plan', payload)
 }
 
-export function generateLearningPath(payload: CreateLearningPathRequest) {
-  return http.post<ApiResponse<LearningPathOverview>>('/ai/path-plan/generate', payload)
-}
-
 export function getCurrentLearningPath(module = 'mentor') {
   return http.get<ApiResponse<LearningPathOverview | null>>('/ai/path-plan/active', {
     params: { module },

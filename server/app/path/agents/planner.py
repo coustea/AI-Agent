@@ -10,13 +10,13 @@ from pydantic import BaseModel, Field
 
 from app.chat.tools.search import duckduckgo_search, serp_search, spark_search, tavily_search
 from app.infra.llm import get_llm
-from app.path.schemas import AgentLearningPathPlan, AgentPathNode, AgentStage, GeneratePathRequest
+from app.path.schemas import AgentLearningPathPlan, AgentPathNode, AgentStage, CreateLearningPathRequest
 
 ProgressCallback = Callable[[str, int, str], Awaitable[None]]
 
 
 class PathState(TypedDict):
-    request: GeneratePathRequest
+    request: CreateLearningPathRequest
     profile: dict[str, Any]
     search_evidence: list[dict[str, Any]]
     progress_callback: ProgressCallback | None
@@ -90,7 +90,7 @@ class PathPlannerAgent:
 
     async def generate_plan(
         self,
-        request: GeneratePathRequest,
+        request: CreateLearningPathRequest,
         profile: dict[str, Any],
         progress_callback: ProgressCallback | None = None,
     ) -> tuple[AgentLearningPathPlan, list[dict[str, Any]]]:
@@ -119,7 +119,7 @@ class PathPlannerAgent:
 
     async def _collect_search_evidence(
         self,
-        request: GeneratePathRequest,
+        request: CreateLearningPathRequest,
         profile: dict[str, Any],
     ) -> list[dict[str, Any]]:
         """Let the path planner call search tools when external evidence is useful.
@@ -212,7 +212,7 @@ def repair_generated_plan_from_macro_stages(
     *,
     plan: AgentLearningPathPlan,
     macro_stages: list[AgentStage],
-    request: GeneratePathRequest,
+    request: CreateLearningPathRequest,
     strategy_report: str,
 ) -> AgentLearningPathPlan:
     """Recover a structurally usable plan from the architect stage output.
@@ -315,7 +315,7 @@ SEARCH_FAILURE_MARKERS = (
     "所有搜索引擎调用均失败",
 )
 
-def format_path_request_context(request: GeneratePathRequest) -> str:
+def format_path_request_context(request: CreateLearningPathRequest) -> str:
     """Format learner request fields consistently for every planner agent."""
     current_knowledge = "、".join(request.current_knowledge) if request.current_knowledge else "未提供"
     preferences = (
@@ -340,7 +340,7 @@ def is_usable_search_result(result: object) -> bool:
     return not any(marker in text for marker in SEARCH_FAILURE_MARKERS)
 
 
-def build_search_research_messages(request: GeneratePathRequest, profile: dict[str, Any]) -> list[Any]:
+def build_search_research_messages(request: CreateLearningPathRequest, profile: dict[str, Any]) -> list[Any]:
     """Build messages that let the planner choose search tools."""
     profile_context = (
         json.dumps(profile, ensure_ascii=False, indent=2)

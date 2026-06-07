@@ -14,17 +14,6 @@ from pydantic import BaseModel, Field, field_validator
 # ======================================================================
 
 
-class GeneratePathRequest(BaseModel):
-    """路径生成请求。"""
-
-    goal: str = Field(description="学习目标")
-    topic: str = Field(default="", description="学习主题")
-    module: str = Field(default="mentor", description="模块名称")
-    current_knowledge: list[str] = Field(default_factory=list, description="当前已掌握的知识点")
-    preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
-    enable_search: bool = Field(default=False, description="是否为路径规划启用联网搜索参考")
-
-
 class CreateLearningPathRequest(BaseModel):
     """新学习路径创建请求。"""
 
@@ -272,7 +261,8 @@ class PathLearningEvaluationResponse(BaseModel):
 
 __all__ = [
     # Request
-    "GeneratePathRequest",
+    "CreateLearningPathRequest",
+    "AuxiliaryResourceRequest",
     # Agent output
     "AgentPathNode",
     "AgentStage",

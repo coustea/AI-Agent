@@ -6,19 +6,16 @@ from app.evaluation.response import LearningEventItem
 from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import bg_apply_profile_update_from_learning_event
 from app.infra.database import get_session
-from app.infra.logging import get_logger
 from app.infra.models import LearningEvent, User
 from app.infra.response import HttpResponse
 from app.path.schemas import (
     AuxiliaryResourceRequest,
     CreateLearningPathRequest,
-    GeneratePathRequest,
     PathQuizSubmitRequest,
 )
 from app.path.service import LearningPathService
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
-logger = get_logger(__name__)
 
 
 def _build_learning_event_item(event: LearningEvent) -> LearningEventItem:
@@ -36,19 +33,6 @@ def _build_learning_event_item(event: LearningEvent) -> LearningEventItem:
         feedback=event.feedback,
         created_at=event.created_at,
     )
-
-
-@router.post("/generate")
-async def generate_path(
-    request: GeneratePathRequest,
-    _background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    logger.info("[PathAPI] 创建学习路径 user=%s goal=%s", current_user.id, request.goal)
-    service = LearningPathService(session)
-    result = await service.generate_path(current_user.id, request)
-    return HttpResponse.success(data=result.model_dump(mode="json"), status_code=201)
 
 
 @router.post("")
@@ -69,7 +53,7 @@ async def get_active_path(
     session: AsyncSession = Depends(get_session),
 ):
     service = LearningPathService(session)
-    response = await service.get_active_path(current_user.id, module)
+    response = await service.get_active_path_overview(current_user.id, module)
     return HttpResponse.success(data=response.model_dump(mode="json") if response else None)
 
 
@@ -239,4 +223,3 @@ async def get_path_learning_evaluation(
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=evaluation.model_dump(mode="json") if evaluation else None)
-
