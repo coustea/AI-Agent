@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.prompt_manager import resource_prompts
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -19,8 +20,6 @@ class CodeAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        from app.prompts import registry
-
         config = state.agent_config
         language = config.get("programming_language") or config.get("language") or "python"
         case_type = config.get("case_type") or "basic_demo"
@@ -41,7 +40,7 @@ class CodeAgent(BaseResourceAgent):
                 progress=25,
             )
 
-        prompt = registry.get("resource/code")
+        prompt = resource_prompts.get("code")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
 
         if self.emitter:

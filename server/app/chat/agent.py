@@ -11,6 +11,7 @@ import re
 import time
 from typing import Any
 
+from app.chat.prompt_manager import chat_prompts
 from app.chat.request import ChatHistoryMessage
 from app.chat.schemas import TeachingDiagram, TutorAgentContext, TutorState
 from app.infra.context import runtime_context as chat_runtime_context
@@ -71,29 +72,9 @@ def _graph_stream_kwargs(agent: "TutorAgent | None" = None) -> dict[str, Any]:
     return kwargs
 
 
-def parse_markdown_sections(text: str) -> dict[str, str]:
-    """解析 Markdown 文件中的各个章节，以一级标题（#）分割。"""
-    sections = {}
-    current_header = None
-    current_lines = []
-    for line in text.splitlines():
-        if line.startswith("#"):
-            if current_header:
-                sections[current_header] = "\n".join(current_lines).strip()
-            current_header = line.lstrip("#").strip()
-            current_lines = []
-        elif current_header is not None:
-            current_lines.append(line)
-    if current_header:
-        sections[current_header] = "\n".join(current_lines).strip()
-    return sections
-
-
 def _load_answer_policy_sections() -> dict[str, str]:
     """从 Prompts 注册中心读取并解析答复策略 Markdown 文件。"""
-    from app.prompts import registry
-    content = registry.get("chat/answer_policy")
-    return parse_markdown_sections(content)
+    return chat_prompts.answer_policy_sections()
 
 
 def _answer_generation_policy(user_message: str) -> str:
@@ -306,13 +287,11 @@ async def collect_search_context(
     attachment_context: str = "",
 ) -> tuple[str, list[dict[str, Any]]]:
     """联网搜索上下文收集。"""
-    from app.prompts import registry
-
     attachment_context_section = f"\n\n附件预分析上下文：\n{attachment_context}" if attachment_context else ""
-    search_instruction_template = registry.get("chat/search_instruction")
-
     search_instruction = HumanMessage(
-        content=search_instruction_template.format(attachment_context_section=attachment_context_section)
+        content=chat_prompts.render_search_instruction(
+            attachment_context_section=attachment_context_section
+        )
     )
     full_messages = build_messages(system_prompt, list(messages) + [search_instruction])
 
@@ -397,9 +376,11 @@ async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> 
         node_name = "spark_summary"
         with node_timer("spark_summary", user=user_id, session=session_id):
             logger.debug("[TutorAgent] Spark 总结回答：question=%s", truncate(question, 180))
-            sections_dict = _load_answer_policy_sections()
-            summary_template = sections_dict.get("搜索总结提示词", "")
-            prompt_content = summary_template.format(question=question, search_result=search_result)
+            prompt_content = chat_prompts.render_answer_policy_section(
+                "搜索总结提示词",
+                question=question,
+                search_result=search_result,
+            )
             scoped_prompt = _scoped_answer_prompt(
                 system_prompt,
                 question=question,
@@ -622,8 +603,6 @@ async def generate_teaching_diagram(
     state: TutorState,
 ) -> TeachingDiagram:
     """使用注入的上下文生成经过验证的面向学习者的图板。"""
-    from app.prompts import registry
-
     profile_context = str(state.get("retrieved_profile_context", "")).strip()
     long_term_memory_context = str(state.get("retrieved_memory_context", "")).strip()
     session_summary_context = str(state.get("session_summary_context", "")).strip()
@@ -648,7 +627,7 @@ async def generate_teaching_diagram(
     )
     return await agent.llm.ainvoke_json(
         TeachingDiagram,
-        [SystemMessage(content=registry.get("chat/teaching_diagram")), HumanMessage(content=prompt)],
+        [SystemMessage(content=chat_prompts.teaching_diagram_system()), HumanMessage(content=prompt)],
         temperature=0.1,
     )
 

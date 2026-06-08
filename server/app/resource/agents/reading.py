@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.prompt_manager import resource_prompts
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -56,8 +57,6 @@ class ReadingAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        from app.prompts import registry
-
         config = state.agent_config
         reading_depth = config.get("reading_depth") or config.get("reading_type") or "course_extended"
         max_items = config.get("max_items") or 5
@@ -77,7 +76,7 @@ class ReadingAgent(BaseResourceAgent):
                 progress=25,
             )
 
-        prompt = registry.get("resource/reading")
+        prompt = resource_prompts.get("reading")
         result = await self.llm.ainvoke_json(
             ReadingPayload,
             f"{prompt}\n\n{input_text}",

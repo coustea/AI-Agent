@@ -6,10 +6,11 @@ from typing import Any, Awaitable, Callable, TypedDict
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from loguru import logger
-from pydantic import BaseModel, Field
+
 
 from app.chat.tools.search import duckduckgo_search, serp_search, spark_search, tavily_search
 from app.infra.llm import get_llm
+from app.path.prompt_manager import path_prompts
 from app.path.schemas import AgentLearningPathPlan, AgentPathNode, AgentStage, CreateLearningPathRequest
 
 ProgressCallback = Callable[[str, int, str], Awaitable[None]]
@@ -42,7 +43,7 @@ class PathPlannerAgent:
         ]
         self.max_search_tool_calls = 3
         self.max_search_evidence_chars = 6000
-        self.system_prompt = NODE_STRATEGIST_SYSTEM_PROMPT
+        self.system_prompt = path_prompts.planner_system()
         self.generate_graph = self._build_generate_graph()
 
     def _build_generate_graph(self):
@@ -66,7 +67,7 @@ class PathPlannerAgent:
             profile_json = json.dumps(state["profile"], ensure_ascii=False, indent=2)
             request_context = format_path_request_context(state["request"])
             search_context = format_evidence_for_prompt(state.get("search_evidence", []))
-            sys_msg = SystemMessage(content=INTEGRATED_PATH_PLANNER_SYSTEM_PROMPT)
+            sys_msg = SystemMessage(content=path_prompts.planner_system())
             human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n当前画像:\n{profile_json}")
 
             result = await self.llm.ainvoke_json(AgentLearningPathPlan, [sys_msg, human_msg])
@@ -270,43 +271,6 @@ async def emit_progress(
     await callback(status, progress, message)
 
 
-INTEGRATED_PATH_PLANNER_SYSTEM_PROMPT = """你是一个世界顶级的学习画像诊断专家、课程架构师和课程节点规划师。
-你的任务是在一次结构化输出中完成完整课程路径规划：诊断画像与目标、设计宏观阶段（stages）、拆解拓扑节点（nodes）、指定每个节点的资源策略（resource_policy）。
-1. 请提供一个精心设计的宏观课程标题。
-2. strategy_report 必须写出个性化诊断与裁剪策略：
-   - 如果用户在某方面已经掌握，明确指出"可跳过或快速复习"。
-   - 如果用户缺乏某前置基础，明确指出"必须补充前置基础"。
-   - 重点分析认知风格、薄弱点、学习节奏和目标约束。
-3. adjustment_rationale 必须是字符串数组，每项写出一条基于画像或学习输入的调整依据。
-4. confidence 必须是 0-100 的整数百分比。
-5. stages 通常为 3-6 个阶段，必须覆盖完整学习路径，并严格遵照 strategy_report 中的"跳过"或"补充"建议。
-6. 必须为所有阶段生成具体学习节点（nodes），不能只生成第一个阶段。
-7. 每个节点应该是一个不可再分的最小知识点或能力点，明确指出前置依赖（prerequisites），形成无环拓扑结构。
-8. 每个节点必须包含 resource_policy，指定该节点推荐生成的资源类型和策略：
-   - primary_resource_type: 主要资源类型（只能是 content/quiz/code/reading/ppt/mindmap）
-   - required_resource_types: 必须生成的资源类型列表（只能是上述六种之一）
-   - optional_resource_types: 可选增强资源类型列表
-   - assessment_type: 掌握度评估方式（quiz/code/none）
-   - generation_focus: 资源生成内容重点提示（如 ["概念解释", "基础练习"]）
-   - personalization_reason: 为什么此策略适合该学习者
-   - expected_resource_count: 预期生成资源数量（1-6）
-9. 资源策略参考规则：
-   - 基础概念节点：primary=content, required=[content, quiz], optional=[mindmap]
-   - 结构关系节点：primary=content, required=[content, mindmap, quiz]
-   - 算法/编程节点：primary=content, required=[content, code, quiz]
-   - 拓展提升节点：primary=reading, required=[reading, quiz]
-   - 阶段总结节点：primary=ppt, required=[ppt, quiz]
-10. 每个节点必须填写 recommendation_reason，说明为什么推荐学习该节点。
-11. 防幻觉与证据归属要求：
-   - 引用检索资料时必须标明出处编号（如"基于[检索1]的结论"、"参考[检索2]的建议"）。
-   - 不得编造检索资料未支持的事实，不得将不确定的搜索摘要写成确定结论。
-   - adjustment_rationale 中应区分"基于画像"和"基于检索参考"的不同依据。
-   - 如果某项规划没有检索证据支撑，应明确标注"基于画像/经验判断"而非虚构来源。"""
-
-
-NODE_STRATEGIST_SYSTEM_PROMPT = INTEGRATED_PATH_PLANNER_SYSTEM_PROMPT
-
-
 SEARCH_FAILURE_MARKERS = (
     "搜索不可用",
     "搜索失败",
@@ -348,21 +312,11 @@ def build_search_research_messages(request: CreateLearningPathRequest, profile: 
         else "未提供"
     )
     return [
-        SystemMessage(
-            content=(
-                "你是课程路径规划 Agent 的联网检索子步骤。你可以调用搜索工具补充外部参考，"
-                "但最多只提出少量高价值检索。重点查证：前置知识、合理学习顺序、"
-                "课程阶段、实践能力目标。不要生成最终学习路径。"
-                "检索时优先选择权威来源（官方文档、教材、学术论文），"
-                "避免引用广告、营销页面或不可靠的博客。"
-                "每条检索结果必须能追溯到具体来源。"
-            )
-        ),
+        SystemMessage(content=path_prompts.search_research_system()),
         HumanMessage(
-            content=(
-                f"{format_path_request_context(request)}\n\n"
-                f"用户画像:\n{profile_context}\n\n"
-                "请判断需要检索哪些资料，并调用合适的搜索工具。"
+            content=path_prompts.render_search_research_user(
+                request_context=format_path_request_context(request),
+                profile_context=profile_context,
             )
         ),
     ]

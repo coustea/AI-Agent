@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, UserLongTermMemory, UserProfile, UserProfileHistory
+from app.memory.prompt_manager import memory_prompts
 from app.memory.types import (
     ALL_DIMENSIONS,
     ConcurrentUpdateError,
@@ -40,14 +41,21 @@ from app.memory.types import (
     now,
     slugify,
 )
-from app.prompts import registry
 
 logger = get_logger(__name__)
 
 
 def normalize_onboarding(data: dict[str, Any] | None) -> dict[str, Any]:
     """标准化入门数据：清洗字段、去重列表、填充默认值。"""
-    src = data or {}
+    src = dict(data or {})
+    if "education_level" in src and "school_level" not in src:
+        src["school_level"] = src.get("education_level")
+    if "learning_goal" in src and "global_learning_goal" not in src:
+        src["global_learning_goal"] = src.get("learning_goal")
+    if "preferred_language" in src and "programming_languages" not in src:
+        preferred = str(src.get("preferred_language") or "").strip()
+        src["programming_languages"] = [preferred] if preferred else []
+
     result: dict[str, Any] = {}
 
     for field in ONBOARDING_REQUIRED_FIELDS + ONBOARDING_OPTIONAL_FIELDS:
@@ -66,9 +74,12 @@ def normalize_onboarding(data: dict[str, Any] | None) -> dict[str, Any]:
     return result
 
 
-def _normalize_courses(raw_courses: Any) -> list[dict[str, Any]]:
-    """标准化课程列表：去重、清洗字段、最多保留 3 门。"""
+def _normalize_courses(raw_courses: Any) -> list[Any]:
+    """标准化课程列表：兼容旧版字符串列表和新版对象列表。"""
     values = raw_courses if isinstance(raw_courses, list) else []
+    if values and all(not isinstance(item, dict) for item in values):
+        return dedupe_strings([str(item) for item in values])[:3]
+
     courses: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in values[:3]:
@@ -121,6 +132,15 @@ def _infer_cognitive_style(tags: list[str]) -> str | None:
 def is_onboarding_complete(data: dict[str, Any] | None) -> bool:
     """检查入门数据是否完整：必填字段和课程基础信息均已填写。"""
     normalized = normalize_onboarding(data)
+    if (
+        normalized.get("major")
+        and normalized.get("grade")
+        and normalized.get("global_learning_goal")
+        and normalized.get("courses")
+        and isinstance(normalized["courses"][0], str)
+    ):
+        return True
+
     for field in ONBOARDING_REQUIRED_FIELDS:
         if field == "courses":
             if not normalized.get("courses"):
@@ -739,8 +759,7 @@ class ProfileBuilder:
             await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
         ).first()
         recent_dialogue = await self._build_recent_dialogue(db=db, user_id=user_id, session_id=session_id)
-        prompt = registry.render(
-            "memory/profile",
+        prompt = memory_prompts.render_profile(
             base_info=json.dumps(old_json.get("base_info") or {}, ensure_ascii=False, indent=2),
             learning_profile=json.dumps(old_json.get("learning_profile") or {}, ensure_ascii=False, indent=2),
             knowledge_mastery=json.dumps(old_json.get("knowledge_mastery") or [], ensure_ascii=False, indent=2),
@@ -784,8 +803,7 @@ class ProfileBuilder:
         long_term = (
             await db.exec(select(UserLongTermMemory).where(UserLongTermMemory.user_id == user_id, UserLongTermMemory.module == self.module))
         ).first()
-        prompt = registry.render(
-            "memory/profile",
+        prompt = memory_prompts.render_profile(
             base_info=json.dumps(old_json.get("base_info") or {}, ensure_ascii=False, indent=2),
             learning_profile=json.dumps(old_json.get("learning_profile") or {}, ensure_ascii=False, indent=2),
             knowledge_mastery=json.dumps(old_json.get("knowledge_mastery") or [], ensure_ascii=False, indent=2),

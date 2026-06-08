@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_worker_base_context
+from app.resource.prompt_manager import resource_prompts
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -114,13 +115,11 @@ class PptAgent(BaseResourceAgent):
         return result
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        from app.prompts import registry
-
         config = state.agent_config or {}
         page_count = int(config.get("page_count") or config.get("slide_count") or 6)
         difficulty = config.get("difficulty") or "intermediate"
 
-        prompt = registry.get("resource/ppt")
+        prompt = resource_prompts.get("ppt")
         result = await self.llm.ainvoke_json(
             PptPayload,
             f"{prompt}\n\n{input_text}",
@@ -166,4 +165,3 @@ class PptAgent(BaseResourceAgent):
                 "difficulty": difficulty,
             },
         )
-

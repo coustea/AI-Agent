@@ -8,6 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import ChatSessionSummary, UserLongTermMemory
+from app.memory.prompt_manager import memory_prompts
 from app.memory.types import (
     LTM_PERIODIC_THRESHOLD,
     MEMORY_UPDATE_COOLDOWN_SECONDS,
@@ -16,7 +17,6 @@ from app.memory.types import (
     make_default_memory_markdown,
     now,
 )
-from app.prompts import registry
 
 logger = get_logger(__name__)
 
@@ -95,8 +95,7 @@ class LongTermMemoryExtractor:
                     .limit(1)
                 )
             ).first()
-            prompt = registry.render(
-                "memory/ltm_update",
+            prompt = memory_prompts.render_ltm_update(
                 user_message=user_message[:1000],
                 assistant_reply=assistant_reply[:1000],
                 session_summary=latest_summary.summary_markdown if latest_summary else "暂无会话概要。",

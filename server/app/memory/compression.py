@@ -8,6 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, ChatSessionSummary
+from app.memory.prompt_manager import memory_prompts
 from app.memory.types import (
     DIALOGUE_ROLES,
     SUMMARY_KEEP_RECENT,
@@ -15,7 +16,6 @@ from app.memory.types import (
     SUMMARY_TOKEN_THRESHOLD,
     extract_fallback_summary_markdown,
 )
-from app.prompts import registry
 
 logger = get_logger(__name__)
 
@@ -80,7 +80,7 @@ class SessionCompressor:
         chat_text = "\n".join(f"[{msg.created_at:%m-%d %H:%M}] {msg.role}: {msg.content[:500]}" for msg in target)
         summary_markdown = None
         try:
-            prompt = registry.render("memory/compression", dialogue_text=chat_text[:5000])
+            prompt = memory_prompts.render_compression(dialogue_text=chat_text[:5000])
             logger.info("[MemoryCompression] LLM 开始会话压缩。")
 
             from langchain_core.messages import HumanMessage, SystemMessage
