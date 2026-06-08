@@ -26,7 +26,7 @@ from app.infra.models import (
 )
 from app.infra.response import HttpResponse
 from app.memory.types import ALL_DIMENSIONS, DIMENSION_NAMES
-from app.resource.service import STANDALONE_RESOURCE_SOURCES
+from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

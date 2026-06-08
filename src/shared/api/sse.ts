@@ -1,5 +1,7 @@
 // src/api/sse.ts — 共享 SSE 流解析工具
 
+import { getAuthToken } from '@/shared/auth/token'
+
 /**
  * 将 SSE data 字段的原始文本解析为结构化数据。
  * 优先 JSON.parse，失败则原样返回字符串。
@@ -61,7 +63,7 @@ export function createSseStream(config: SseStreamConfig): void {
     onError,
   } = config
 
-  const token = localStorage.getItem('token')
+  const token = getAuthToken()
 
   fetch(url, {
     method,

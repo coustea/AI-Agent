@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -17,7 +16,24 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
+from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 from app.resource.events import AgentEventEmitter, AgentRunTracker
+from app.resource.items import (
+    content_envelope,
+    db_item_to_resource_item,
+    db_item_to_worker_result,
+)
+from app.resource.review import (
+    BUNDLE_AGENT_ID,
+    COORDINATOR_AGENT_ID,
+    PPT_AGENT_ID,
+    PPT_REVIEW_AGENT_ID,
+    PRE_REVIEW_AGENT_ID,
+    build_ppt_audit_envelope,
+    build_pre_audit_envelope,
+    failed_review_result,
+    review_result_from_worker,
+)
 from app.resource.schemas import (
     AgentSelection,
     ExecutionPlan,
@@ -31,15 +47,7 @@ from app.infra.logging import get_module_logger
 
 logger = get_module_logger("resource", sub="workflow")
 
-SOURCE_AUDIT_AGENT_IDS = ("content", "reading")
-COMPLETENESS_ONLY_AGENT_IDS = ("quiz", "mindmap", "code")
-PPT_AGENT_ID = "ppt"
-COORDINATOR_AGENT_ID = "coordinator"
-PRE_REVIEW_AGENT_ID = "pre_review"
-PPT_REVIEW_AGENT_ID = "ppt_review"
-BUNDLE_AGENT_ID = "bundle"
-REVIEW_CONTENT_LIMIT = 12_000
-STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
+
 class ResourceService:
     """资源生成用例。"""
 
@@ -125,238 +133,6 @@ class ResourceService:
             raise exc
         await self.session.refresh(obj)
 
-    
-    @staticmethod
-    def _has_generated_content(result: WorkerResult | None) -> bool:
-        if result is None or not result.success:
-            return False
-        content = result.content
-        if content is None:
-            return False
-        if isinstance(content, str):
-            return bool(content.strip())
-        return True
-
-    @staticmethod
-    def _bounded_content(content: Any) -> str:
-        if isinstance(content, str):
-            text = content
-        else:
-            text = json.dumps(content, ensure_ascii=False)
-        if len(text) <= REVIEW_CONTENT_LIMIT:
-            return text
-        return f"{text[:REVIEW_CONTENT_LIMIT]}\n\n[内容已截断用于审核上下文控制]"
-
-    @staticmethod
-    def _profile_summary(profile: dict[str, Any]) -> str:
-        for key in ("profile_markdown", "summary", "profile_summary"):
-            value = profile.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        profile_data = profile.get("profile_data")
-        if isinstance(profile_data, dict):
-            return json.dumps(profile_data, ensure_ascii=False)
-        return ""
-
-    @staticmethod
-    def build_pre_audit_envelope(
-        *,
-        request: ResourceGenerationRequest,
-        results: dict[str, WorkerResult],
-        profile: dict[str, Any],
-        blueprint: Any | None,
-    ) -> tuple[dict[str, Any], list[str]]:
-        selected_agents = request.enabled_agent_ids()
-        checked_agents = [
-            agent_id
-            for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS or agent_id in COMPLETENESS_ONLY_AGENT_IDS
-        ]
-        missing_resources = [
-            agent_id
-            for agent_id in checked_agents
-            if not ResourceService._has_generated_content(results.get(agent_id))
-        ]
-        deep_audit_resources = [
-            {
-                "agent_id": agent_id,
-                "title": results[agent_id].title,
-                "summary": results[agent_id].summary,
-                "audit_content": ResourceService._bounded_content(results[agent_id].content),
-            }
-            for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
-        ]
-        completeness_only = [
-            {
-                "agent_id": agent_id,
-                "title": results.get(agent_id).title if results.get(agent_id) else "",
-                "summary": results.get(agent_id).summary if results.get(agent_id) else "",
-                "has_content": ResourceService._has_generated_content(results.get(agent_id)),
-            }
-            for agent_id in selected_agents
-            if agent_id in COMPLETENESS_ONLY_AGENT_IDS
-        ]
-        return {
-            "mode": "pre_audit",
-            "request_context": {
-                "learning_need": request.learning_need,
-                "learning_scenario": request.learning_scenario,
-                "profile_summary": ResourceService._profile_summary(profile),
-                "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
-            },
-            "deep_audit_resources": deep_audit_resources,
-            "completeness_only": completeness_only,
-        }, missing_resources
-
-    @staticmethod
-    def build_ppt_audit_envelope(
-        *,
-        request: ResourceGenerationRequest,
-        results: dict[str, WorkerResult],
-        profile: dict[str, Any],
-        blueprint: Any | None,
-    ) -> tuple[dict[str, Any], list[str]]:
-        selected_agents = request.enabled_agent_ids()
-        missing_resources: list[str] = []
-        ppt_result = results.get(PPT_AGENT_ID)
-        if PPT_AGENT_ID in selected_agents and not ResourceService._has_generated_content(ppt_result):
-            missing_resources.append(PPT_AGENT_ID)
-        approved_sources = [
-            {
-                "agent_id": agent_id,
-                "title": results[agent_id].title,
-                "summary": results[agent_id].summary,
-                "source_content": ResourceService._bounded_content(results[agent_id].content),
-            }
-            for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
-        ]
-        ppt_resource = (
-            {
-                "agent_id": PPT_AGENT_ID,
-                "title": ppt_result.title,
-                "summary": ppt_result.summary,
-                "audit_content": ResourceService._bounded_content(ppt_result.content),
-            }
-            if ResourceService._has_generated_content(ppt_result)
-            else None
-        )
-        return {
-            "mode": "ppt_audit",
-            "request_context": {
-                "learning_need": request.learning_need,
-                "learning_scenario": request.learning_scenario,
-                "profile_summary": ResourceService._profile_summary(profile),
-                "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
-            },
-            "approved_sources": approved_sources,
-            "ppt_resource": ppt_resource,
-        }, missing_resources
-
-    @staticmethod
-    def failed_review_result(
-        *,
-        status: str,
-        message: str,
-        revision_targets: list[str],
-        review_mode: str,
-    ) -> ReviewResult:
-        payload = {
-            "status": status,
-            "checks": {
-                "need_alignment": "not_checked",
-                "content_completeness": "fail",
-                "factuality": "not_checked",
-                "hallucination": "not_checked",
-                "safety": "not_checked",
-                "grounding": "not_checked",
-            },
-            "violations": [{"type": "missing_or_failed_resource", "resources": revision_targets}],
-            "revision_targets": revision_targets,
-            "mode": review_mode,
-        }
-        return ReviewResult(
-            passed=False,
-            overall_score=0,
-            consistency_score=0,
-            personalization_score=0,
-            issues=[message],
-            suggestions=[json.dumps(payload, ensure_ascii=False)],
-            failed_agents=revision_targets,
-        )
-
-    @staticmethod
-    def review_result_from_worker(result: WorkerResult) -> ReviewResult:
-        parsed = result.metadata.get("parsed_review")
-        status = result.metadata.get("review_status") or ("pass" if result.success else "blocked")
-        issues: list[str] = []
-        failed_agents: list[str] = []
-        if isinstance(parsed, dict):
-            violations = parsed.get("violations")
-            if isinstance(violations, list):
-                issues = [
-                    item if isinstance(item, str) else json.dumps(item, ensure_ascii=False)
-                    for item in violations
-                ]
-            revision_targets = parsed.get("revision_targets")
-            if isinstance(revision_targets, list):
-                failed_agents = [str(item) for item in revision_targets]
-        if not result.success and not issues:
-            issues = [result.error or f"review status: {status}"]
-        return ReviewResult(
-            passed=result.success,
-            overall_score=100 if result.success else 0,
-            consistency_score=100 if result.success else 0,
-            personalization_score=100 if result.success else 0,
-            issues=issues,
-            suggestions=[result.content] if result.content else [],
-            failed_agents=failed_agents,
-        )
-
-    def _content_envelope(self, result: WorkerResult) -> tuple[dict[str, Any] | None, str | None]:
-        """根据格式拆分 WorkerResult 内容为 content_json 和 content_text。"""
-        fmt = result.file_type.lower()
-        content = result.content
-        envelope = {
-            "title": result.title,
-            "summary": result.summary,
-            "summary_data": result.summary_data,
-            "metadata": result.metadata,
-            "format": result.file_type,
-            "content": content,
-        }
-        if fmt in {"markdown", "mermaid", "text", "code"}:
-            if isinstance(content, str):
-                return envelope, content
-            return envelope, json.dumps(content, ensure_ascii=False)
-        if fmt == "json":
-            if isinstance(content, dict):
-                envelope["content"] = content
-                return envelope, None
-            if isinstance(content, list):
-                envelope["content"] = {"items": content}
-                return envelope, None
-            if isinstance(content, str):
-                try:
-                    parsed = json.loads(content)
-                except json.JSONDecodeError:
-                    return envelope, content
-                if isinstance(parsed, dict):
-                    envelope["content"] = parsed
-                    return envelope, None
-                if isinstance(parsed, list):
-                    envelope["content"] = {"items": parsed}
-                    return envelope, None
-                envelope["content"] = {"value": parsed}
-                return envelope, None
-            envelope["content"] = {"value": content}
-            return envelope, None
-        if isinstance(content, str):
-            return envelope, content
-        envelope["content"] = {"value": content}
-        return envelope, None
-
     async def save_worker_result(
         self,
         *,
@@ -369,7 +145,7 @@ class ResourceService:
             raise ValueError("仅能保存已成功生成且含内容的资源")
         agent_id = str(result.metadata.get("agent_id") or "")
         title = result.title or f"{agent_id} 资源"
-        content_json, content_text = self._content_envelope(result)
+        content_json, content_text = content_envelope(result)
         resource_item = GeneratedResourceItemModel(
             resource_id=resource_id,
             user_id=user_id,
@@ -525,38 +301,10 @@ class ResourceService:
         )
 
     def _db_item_to_resource_item(self, item: GeneratedResourceItemModel) -> GeneratedResourceItem:
-        envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
-        content = envelope.get("content") if item.content_json is not None else item.content_text
-        return GeneratedResourceItem(
-            id=str(item.id),
-            type=item.agent_type,
-            title=envelope.get("title") or item.title or f"学习资源 - {item.agent_type}",
-            format=envelope.get("format") or item.content_format,
-            content=content,
-            summary=envelope.get("summary") or item.summary or "",
-            summary_data=envelope.get("summary_data") or {},
-            execution_report=item.execution_report,
-            metadata=envelope.get("metadata") or item.metadata_json or {},
-            status=item.status,
-            error_message=item.error_message,
-            created_at=item.created_at.isoformat() if item.created_at else None,
-            updated_at=item.updated_at.isoformat() if item.updated_at else None,
-        )
+        return db_item_to_resource_item(item)
 
     def _db_item_to_worker_result(self, item: GeneratedResourceItemModel) -> WorkerResult:
-        envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
-        content = envelope.get("content") if item.content_json is not None else item.content_text
-        if not isinstance(content, str):
-            content = json.dumps(content, ensure_ascii=False)
-        return WorkerResult(
-            success=True,
-            content=content,
-            file_type=envelope.get("format") or item.content_format,
-            title=envelope.get("title") or item.title or "",
-            summary=envelope.get("summary") or item.summary or "",
-            summary_data=envelope.get("summary_data") or {},
-            metadata=envelope.get("metadata") or item.metadata_json or {},
-        )
+        return db_item_to_worker_result(item)
 
     async def get_resource(
         self,
@@ -816,7 +564,7 @@ async def run_multi_agent_generation(
 
             failed_results = {aid: r for aid, r in results.items() if not r.success}
             review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
-            pre_audit_envelope, missing_resources = ResourceService.build_pre_audit_envelope(
+            pre_audit_envelope, missing_resources = build_pre_audit_envelope(
                 request=request,
                 results=review_results,
                 profile=profile,
@@ -825,7 +573,7 @@ async def run_multi_agent_generation(
             source_audit_required = bool(pre_audit_envelope["deep_audit_resources"])
 
             if missing_resources:
-                review_result = ResourceService.failed_review_result(
+                review_result = failed_review_result(
                     status="needs_revision",
                     message=f"资源生成不完整: {', '.join(missing_resources)}",
                     revision_targets=missing_resources,
@@ -863,7 +611,7 @@ async def run_multi_agent_generation(
                         success=pre_review_worker_result.success,
                         metrics={"review_status": pre_review_worker_result.metadata.get("review_status")},
                     )
-                pre_review_result = ResourceService.review_result_from_worker(pre_review_worker_result)
+                pre_review_result = review_result_from_worker(pre_review_worker_result)
                 review_result = pre_review_result
                 review_passed = pre_review_result.passed
                 logger.info(
@@ -872,7 +620,7 @@ async def run_multi_agent_generation(
                     pre_review_worker_result.metadata.get("review_status"),
                 )
             elif source_audit_required:
-                review_result = ResourceService.failed_review_result(
+                review_result = failed_review_result(
                     status="blocked",
                     message="审核智能体不可用，无法完成前置安全审核",
                     revision_targets=["review"],
@@ -917,14 +665,14 @@ async def run_multi_agent_generation(
                 await emitter.emit_agent("ppt_review", status="running", message="PPT 内容审核中", progress=90)
                 failed_results = {aid: r for aid, r in results.items() if not r.success}
                 review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
-                ppt_audit_envelope, ppt_missing_resources = ResourceService.build_ppt_audit_envelope(
+                ppt_audit_envelope, ppt_missing_resources = build_ppt_audit_envelope(
                     request=request,
                     results=review_results,
                     profile=profile,
                     blueprint=blueprint,
                 )
                 if ppt_missing_resources:
-                    review_result = ResourceService.failed_review_result(
+                    review_result = failed_review_result(
                         status="needs_revision",
                         message=f"PPT 生成不完整: {', '.join(ppt_missing_resources)}",
                         revision_targets=ppt_missing_resources,
@@ -962,7 +710,7 @@ async def run_multi_agent_generation(
                             success=ppt_review_worker_result.success,
                             metrics={"review_status": ppt_review_worker_result.metadata.get("review_status")},
                         )
-                    ppt_review_result = ResourceService.review_result_from_worker(ppt_review_worker_result)
+                    ppt_review_result = review_result_from_worker(ppt_review_worker_result)
                     if pre_review_result.suggestions:
                         ppt_review_result.suggestions = [
                             *pre_review_result.suggestions,
@@ -976,7 +724,7 @@ async def run_multi_agent_generation(
                         ppt_review_worker_result.metadata.get("review_status"),
                     )
                 else:
-                    review_result = ResourceService.failed_review_result(
+                    review_result = failed_review_result(
                         status="blocked",
                         message="审核智能体不可用，无法完成 PPT 安全审核",
                         revision_targets=["review"],
@@ -1173,3 +921,5 @@ async def run_single_agent_generation(
         total_elapsed = time.perf_counter() - start_time
         logger.info("单智能体生成结束: agent=%s, success=%s, 耗时=%.2fs", agent_id, success, total_elapsed)
         
+
+ResourceUsecases = ResourceService

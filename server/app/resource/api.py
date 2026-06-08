@@ -24,11 +24,11 @@ from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
+from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 from app.resource.events import resource_event_bus
 from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import (
     ResourceService,
-    STANDALONE_RESOURCE_SOURCES,
     run_multi_agent_generation,
     run_single_agent_generation,
 )

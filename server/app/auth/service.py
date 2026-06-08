@@ -55,6 +55,7 @@ class UserAccountStore:
         user_read = _read_user(user)
         token = await create_token(user.id, session)
         # 注：不再在登录时自动标记 is_first_login = False，改为由引导页面完成或用户选择不再弹出时显示调用接口设置
+        logger.info("[Auth] 登录成功: user_id=%s", user.id)
         return {"token": token, "user": user_read}
 
     async def update(self, session: AsyncSession, user_id: int, data: UserUpdate) -> User | None:
