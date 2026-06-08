@@ -205,4 +205,10 @@
 2. **图面内容精简**：节点标题 ≤35字，描述 ≤60字，避免文字过多导致图面拥挤。
 3. **图解与回答互补**：图解内容应补充文字回答的视觉理解，而不是简单重复文字内容。
 4. **teaching_content 必须完整**：core_explanation 和 summary 必填，key_points 至少 1 条。
-5. **节点数量适中**：flowchart 2-20 个节点，sequence 2-6 个参与者，framework 2-8 个模块，summary 2-8 张卡片，hierarchy 2-8 个分支。
+5. **为适配前端 UI 的渲染限制，必须严格遵守以下节点约束**：
+   - `flowchart`：2-6 个节点（因前端为线性布局，节点过多会导致水平溢出）。
+   - `sequence`：2-5 个参与者，3-8 条消息。**绝对禁止自环消息（即 from 和 to 相同的消息，前端无法渲染）**。
+   - `framework`：2-6 个模块。
+   - `hierarchy`：2-6 个分支，且 children 必须为单层的字符串数组，不支持对象的嵌套。
+   - `summary`：2-8 张卡片。
+   - `comparison`：前端暂未专门渲染 dimension 中的 highlight 字段，如果某维度有关键差异，请直接通过 left 或 right 文本的前缀（如 "【优势】"）体现。

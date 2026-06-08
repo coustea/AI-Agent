@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import bcrypt
 import jwt
@@ -52,7 +53,7 @@ def _is_expired(expires_at: datetime | None) -> bool:
 
 async def create_token(user_id: int, session: AsyncSession) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE)
-    payload = {"sub": str(user_id), "exp": expire}
+    payload = {"sub": str(user_id), "exp": expire, "jti": uuid4().hex}
     token = jwt.encode(
         payload,
         JWT_SECRET or "dev-secret-change-in-production-long-enough",

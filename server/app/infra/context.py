@@ -34,21 +34,3 @@ def runtime_context(user_id: int, session_id: str | None = None) -> Iterator[Non
             _CURRENT_SESSION_ID.set(None)
 
 
-def get_current_user_id() -> int | None:
-    """Get the current user ID from context."""
-    return _CURRENT_USER_ID.get()
-
-
-def get_current_session_id() -> str | None:
-    """Get the current session ID from context."""
-    return _CURRENT_SESSION_ID.get()
-
-
-def set_user_id(user_id: int | None) -> None:
-    """Set the current user ID in context."""
-    _CURRENT_USER_ID.set(user_id)
-
-
-def set_session_id(session_id: str | None) -> None:
-    """Set the current session ID in context."""
-    _CURRENT_SESSION_ID.set(session_id)

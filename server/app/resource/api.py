@@ -24,9 +24,14 @@ from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
+from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 from app.resource.events import resource_event_bus
 from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
-from app.resource.service import ResourceService, run_multi_agent_generation, run_single_agent_generation
+from app.resource.service import (
+    ResourceService,
+    run_multi_agent_generation,
+    run_single_agent_generation,
+)
 from app.memory.service import MemoryService
 from app.infra.response import HttpResponse
 
@@ -119,7 +124,11 @@ async def get_generation_status(
 ):
     """查询后台生成任务的状态。"""
     usecases = ResourceService(session)
-    status_data = await usecases.get_generation_status(user_id=current_user.id, resource_id=resource_id)
+    status_data = await usecases.get_generation_status(
+        user_id=current_user.id,
+        resource_id=resource_id,
+        allowed_sources=STANDALONE_RESOURCE_SOURCES,
+    )
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
 
@@ -184,12 +193,19 @@ async def list_agents():
 @router.get("/resources")
 async def list_resources(
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源列表。"""
     usecases = ResourceService(session)
-    resources = await usecases.list_resources(current_user.id, limit)
+    resources = await usecases.list_resources(
+        current_user.id,
+        limit,
+        offset,
+        sources=STANDALONE_RESOURCE_SOURCES,
+    )
+    total = await usecases.count_resources(current_user.id, sources=STANDALONE_RESOURCE_SOURCES)
     type_summary = await usecases.list_resource_type_summary(
         user_id=current_user.id,
         resource_ids=[value.id for value in resources if value.id is not None],
@@ -207,7 +223,7 @@ async def list_resources(
                 "updated_at": value.updated_at,
             }
         )
-    return HttpResponse.success(data=items)
+    return HttpResponse.success(data={"items": items, "total": total})
 
 
 
@@ -219,7 +235,11 @@ async def get_resource(
 ):
     """查询资源详情。"""
     usecases = ResourceService(session)
-    bundle = await usecases.get_resource_bundle(current_user.id, resource_id)
+    bundle = await usecases.get_resource_bundle(
+        current_user.id,
+        resource_id,
+        allowed_sources=STANDALONE_RESOURCE_SOURCES,
+    )
     if bundle is None:
         return HttpResponse.error(code=404, message="资源不存在")
     return HttpResponse.success(data=bundle.model_dump(mode="json"))

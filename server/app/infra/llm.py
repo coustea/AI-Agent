@@ -74,7 +74,6 @@ class Llm:
     def __init__(self):
         self._text_model: ChatOpenAI | None = None
         self._vision_model: ChatOpenAI | None = None
-        self._agent_models: dict[str, ChatOpenAI] = {}
         self._text_base_url: str = ""
         self._init()
 

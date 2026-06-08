@@ -1,0 +1,3177 @@
+[
+  {
+    "id": "CS-Bench_计算机网络_1443_fdd8ba52",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "MAC帧首部+尾部的总长度为18字节。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1444_dabe1c04",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在数据链路层，常见的协议包括ARP、ICMP、IP和OSPF。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1445_9734a1ec",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "冲突域是指能收到信号的站点数量。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1446_664ee090",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "MAC帧的总长度范围是从46字节到1500字节。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1447_e7171f65",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "MAC帧的控制部分占18字节。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1448_f03202af",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IP数据报的标志字段中，DF表示允许分片，MF表示不是最后一个分片。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1449_5fa12282",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "路由器的主要工作层次是数据链路层。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1450_abdccda0",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "计算机网络的功能包括连接各计算机、实现资源共享、传递消息和使各计算机相对独立。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1451_8d2fe5a5",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "计算机软件是属于资源子网的设备。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1452_c38220ee",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "计算机网络分为广域网、城域网和局域网的划分主要依据是网络的作用范围。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1453_8be5bad3",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "城域网是为淘汰局城网和广城网而提出的一种新技术。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1454_380ca997",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "广域网的拓扑结构通常采用总线形。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1455_37fa60e4",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在n个结点的星形拓扑结构中，有 n-1 条物理链路。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1456_406001d4",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在OSI参考模型中，第n层与它之上的第n+1层的关系是第n层和第n+1层相互没有影响。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1457_954603df",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在 OSI参考模型中，实现端到端的应答、分组排序和流量控制功能的协议层是传输层。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1458_64595f03",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "奈奎斯特定理限制的是带宽。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1459_2e21c944",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "香农定理适用于带宽受限的情况。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1460_254aaca4",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在计算机网络中，机械特性主要关注时序。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1461_c40078f6",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "集线器的特点是具备信号的定向传送能力。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1462_d469f303",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果奈奎斯特定理和香农定理的条件都满足，应选择取小的那个来限制。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1463_465871f7",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "波特率为2400且每个波特内有4个比特时，比特率为4800 bps。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1464_2990840d",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在香农定理中，带宽指的是传输介质的宽度。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1465_2c44fafc",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "电路交换的主要缺点是低开销。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1466_9797e548",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "影响信道最大传输速率的因素主要有发送功率和噪声功率。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1467_23e5ec04",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "双绞线是用两根绝缘导线绞合而成的，绞合的目的是减少干扰。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1468_6e126de2",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "利用一根同轴电缆互连主机构成以太网，主机间的通信方式为不确定。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1469_f76fe96b",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "同轴电缆比双绞线的传输速率更快，得益于同轴电缆具有更高的屏蔽性，同时有更好的抗嗓声性。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1470_a845d14e",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一般来说，集线器连接的网络在拓扑结构上属于网状。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1471_4f40e8a9",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "信息传输速率是指通信信道上每秒传输的码元数。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1472_22d4afbb",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "分组交换对报文交换的主要改进是使路由算法更加简单。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1473_fe6edfe0",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "电路交换方式不提供差错控制功能。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1474_0c1b84b6",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "CSMA/CD主要用于广域网。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1475_5af72fe8",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IEEE 802.3以太网采用的是CSMA/CD访问控制方式。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1476_156e5778",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在零比特填充法中，帧开始和帧结束的标志是1111110。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1477_ec268454",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "数据链路层设备中的高速缓冲存储器的主要作用是缓存主存与CPU之间的数据。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1478_b4227da6",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在CSMA/CD中，采用的是随机退避算法。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1479_04574ac1",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在CSMA/CA中的预约信道过程中，接收方返回的是ACK帧。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1480_68f8f0a3",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "数据链路层的最基本服务是提供可靠的数据传输。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1481_62b6285e",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "数据链路层的主要协议是以太网。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1482_84af16da",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "循环冗余校验码CRC是根据数据的长度而产生的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1483_eb8077b7",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在数据链路层的总线型拓扑结构中，当拓扑结构太复杂时可能会发生冲突。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1484_caaf804e",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "数据链路层协议的功能不包括定义数据格式。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1485_0bcd9dbf",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "网卡实现的主要功能在物理层和数据链路层。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1486_c9feeaa8",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IEEE 802局域网标准对应OSI参考模型的数据链路层和网络层。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1487_5730b4a4",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "吉比特以太网同时支持全双工模式和半双工模式。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1488_23956b6b",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "链路聚合不是虚拟局域网（VLAN）的优点。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1489_d7ffd0cc",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "HDLC常用的操作方式中，传输过程只能由主站启动的是异步响应模式。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1490_a75aeaca",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "交换机是一种设备，它不能分割碰域。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1491_ed418378",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "通过交换机连接的一组工作站组成一个广播域，但不是一个冲突域。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1492_6fdbbee8",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "奇偶校验码具有的特征是能够检测出长度任意一个比特的错误。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1493_5de74fec",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "对于10位要传输的数据，如果采用汉明校验码，需要增加的冗余信息位数是6位。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1494_7533353d",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "若采用后退 N 帧的 ARO 协议进行流量控制，编号字段为 7 位，则发送窗口的最大长度为 127。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1495_a4227f97",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "TDM 所用传输介质的性质是介质的位速率大于单个信号的位速率。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1496_532cc8d3",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "计算机网络更多地使用 TDM 而非 FDM 是因为 TDM 能更充分地利用带宽。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1497_88f6d862",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "多路复用器的主要功能是结合来自两条或更多条线路的传输。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1498_c7404eed",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "HDLC 协议为实现透明传输，采用的填充方法是字符填充的首尾定界符法。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1499_d88b93bf",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在使用以太网交换机的局域网中，交换机的多个端口可以并行传输。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1500_299ddc06",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IP地址的分类中，A类地址的首字节范围是64-127。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1501_be00f074",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IP地址为192.168.1.100，子网掩码为255.255.255.0，它所在的子网范围是192.168.1.0 - 192.168.1.63。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1502_277121e7",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "RIP协议的全称是Routing Information Protocol。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1503_92d6b10a",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在ICMP协议中，Ping命令属于Echo Reply消息类型。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1504_c516cd83",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IP数据包分片的原因是为了防止数据包丢失。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1505_e856a36d",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IP数据包大小为3500B，并且MTU为1500B，因此数据包将被分片。在分片后的数据包中，第一个分片的偏移量为0。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1506_0af62581",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "ARP协议用于解析MAC地址。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1507_0e9f5472",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IPv6地址中有96位用于网络标识。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1508_efd6c760",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "TTL字段在IP数据报中的作用是限制数据报的寿命。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1509_d711d29d",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "Ping应用的主要功能是测试网络故障。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1510_c45cc22e",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个管理域是自治系统（AS）。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1511_0cab9f7f",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个IPv4地址有32位。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1512_f05d1973",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "ICMP协议的报文封装在UDP协议中。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1513_f0d8aa5c",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "集线器是能够分隔广播域的设备。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1514_364fe170",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在IP 首部的字段中，与分片和重组无关的字段是标识。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1515_9612bf8c",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "255.255.255.0是属于本地回路地址的一个例子。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1516_7c9f1cb2",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一台主机有两个IP地址，一个地址是192.168.11.25，另一个地址可能是192.168.11.24。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1517_5340484e",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "根据 NAT 协议，192.172.56.23 不允许出现在因特网上。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1518_ee043374",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "路由表的分组转发部分由输入端口组成。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1519_f6a0a398",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在链路状态路由算法中，每个路由器都得到网络的完整拓扑结构后，使用Dijkstra最短路径算法来找出它到其他路由器的路径长度。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1520_501eec0b",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "如果一个路由器收到的IPv6数据包因太大无法转发到链路上，那么路由器将把该数据包转发至能支持该数据包的链路上。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1521_4176573a",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "通常的路由器可以支持多种网络层协议，并提供不同协议之间的分组转发。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1522_573a47de",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "决定路由器转发表中的值的算法是路由算法。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1523_825cd631",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "传输层常见的两个协议是TCP和UDP。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1524_1e44e78f",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "传输层连接的建立是通过同步阶段实现的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1525_11019cc2",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "多路复用是通过MAC地址实现的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1526_3fdb2618",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "超时重传的时间间隔通常由往返时间决定。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1527_989b9599",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "传输层负责处理物理层的信号传输。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1528_a795fbf7",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "传输层为路由器之间提供逻辑通信。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1529_8a2dd99c",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "UDP数据报首部不包含UDP 数据报首部长度。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1530_9340f804",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "服务器的TCP协议规定HTTP进程的端口号为80。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1531_a0bb7124",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "为保证数据传输的可靠性，TCP采用了对报文段的确认机制。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1532_2a868b92",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "TCP采用的差错检测机制是摘要算法。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1533_f0517dfe",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在四次挥手的过程中，第二次挥手是由客户端发起的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1534_5d13721d",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "TCP拥塞控制的方法主要包括窗口机制和流量控制。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1535_9505a50e",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "TCP连接的建立阶段是通过两次握手完成的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1536_61e9ccc8",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "UDP协议的特点之一是提供可靠传输。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1537_447b5f16",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "拥塞控制的方法包括慢开始算法和拥塞避免算法。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1538_93392242",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "TCP和UDP的主要区别之一是TCP是面向字节流的协议。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1539_de5cbe49",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在DNS中，负责将域名解析为IP地址的记录是PTR记录。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1540_deb110c2",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "SMTP协议用于进行远程登录。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1541_b4b7f3de",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在HTTP协议中，DELETE请求方法用于向服务器提交数据。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1542_3c64cdb5",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DHCP协议的作用是进行路由选择。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1543_f74aa691",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DHCP协议属于网络层。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1544_cc9f089f",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DNS协议使用的传输层协议是UDP。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1545_959e4f24",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DHCP协议使用的传输层协议是UDP。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1546_664b8994",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DHCP协议主要用于在局域网中为用户分配IP地址。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1547_9e190b60",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "用户提出服务请求，网络将用户请求传送到服务器，服务器执行用户请求，完成所要求的操作并将结果送回用户，这种工作模式称为C/S 模型。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1548_c8c80129",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "文件传输协议 (FTP)的一个主要特征是允许客户指明文件的类型与格式。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1549_b22564d5",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "控制信息是带外传送的协议是 FTP。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1550_4a73bbd6",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "一个FTP用户发送了一个LIST命令来获取服务器的文件列表，这时服务器应通过21端口来传输该列表。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1551_e7847f39",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "当一台计算机从 FTP 服务器下载文件时，该 FTP 服务器上对数据进行封装的5个转换是数据、数据段、数据报、数据帧和比特。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1552_5ee2d6a4",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "SMTP基于传输层的UDP协议，POP3基于传输层的UDP协议。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1553_5a82f700",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "TCP和UDP的一些端口保留给一些特定的应用使用。为HTTP保留的端口号为TCP的80端口。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1554_4532cc48",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "使用PUT方法的HTTP请求报文仅需Web服务器对HTTP报文进行响应，而不需要返回请求对象。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_1555_077eed7c",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "FTP工作模型中，用于控制连接的TCP连接在服务器端使用的熟知端口号为21。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_157_f6ad1b4d",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "OSI参考模型中的数据链路层不具有拥塞控制功能。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Overview and Architecture"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_158_50be7225",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "波特率等于每秒传输的字节数。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Physical Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_159_6b40d629",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "MTU的路径值是由数据链路层的数据帧长度决定的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_160_1e3580a9",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "帧的CRC校验用于检测帧的错误。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Data Link Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_161_a79216f8",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "OSPF协议支持广播路由。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "OSPF支持广播多路访问网络类型",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_162_8dc230f9",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IPv4分组头的长度是可变的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_163_d02f872f",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "IP 规定每个C类网络最多可以有254台主机或路由器。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_164_f3de54e3",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "路由器的路由选择部分仅包括路由选择处理机。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Network Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_165_d1a57675",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "UDP数据报中的长度字段不记录数据的长度。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_166_edac7afc",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "在TCP协议中，发送方的窗口大小取决于发送方允许的窗口和拥塞窗口。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Transport Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "reasoning"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_167_098dd168",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "三次握手的第一次是由双方同时发起的。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_168_1de740ee",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "拥塞控制与流量控制的区别是拥塞控制考虑点对点通信量。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "B",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_169_7a5e7c13",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "DNS解决的问题是IP地址记忆问题。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  },
+  {
+    "id": "CS-Bench_计算机网络_170_55a80b37",
+    "source": "CS-Bench",
+    "subject": "计算机网络",
+    "subject_en": "computer_network",
+    "type": "判断题",
+    "difficulty": null,
+    "bloom_level": null,
+    "content": "HTTP请求报文方式中，用于请求指定页面信息的是GET。",
+    "options": {
+      "A": "对",
+      "B": "错"
+    },
+    "answer": "A",
+    "analysis": "",
+    "knowledge_points": [
+      "Application Layer"
+    ],
+    "tags": [
+      "computer_network",
+      "knowledge"
+    ],
+    "language": "zh",
+    "split": "dev"
+  }
+]

@@ -1,20 +1,21 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
-from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.response import LearningEventItem
+from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import bg_apply_profile_update_from_learning_event
 from app.infra.database import get_session
-from app.infra.logging import get_logger
 from app.infra.models import LearningEvent, User
-from app.path.schemas import GeneratePathRequest, PathNodeResourceRequest, PathPlanFeedbackRequest
-from app.path.service import CoursePathService, bg_generate_path_task, bg_path_summary_task
-from app.resource.service import run_multi_agent_generation
 from app.infra.response import HttpResponse
+from app.path.schemas import (
+    AuxiliaryResourceRequest,
+    CreateLearningPathRequest,
+    PathQuizSubmitRequest,
+)
+from app.path.service import LearningPathService
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
-logger = get_logger(__name__)
 
 
 def _build_learning_event_item(event: LearningEvent) -> LearningEventItem:
@@ -34,50 +35,15 @@ def _build_learning_event_item(event: LearningEvent) -> LearningEventItem:
     )
 
 
-@router.post("/generate")
-async def generate_path(
-    request: GeneratePathRequest,
-    background_tasks: BackgroundTasks,
+@router.post("")
+async def create_path(
+    request: CreateLearningPathRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """创建异步路径规划任务，避免慢速模型调用阻塞 HTTP 请求。"""
-    logger.info("[PathAPI] 路径规划请求: user_id=%s topic=%s", current_user.id, request.topic)
-    service = CoursePathService(session)
-    result = await service.start_generation_task(user_id=current_user.id, request=request)
-    if result["should_schedule"]:
-        background_tasks.add_task(bg_generate_path_task, result["task"].task_id)
-    return HttpResponse.success(data=result["task"].model_dump(mode="json"), status_code=201)
-
-
-@router.get("/tasks/active")
-async def get_active_generation_task(
-    module: str = "mentor",
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """读取刷新页面后仍在运行的路径规划任务。"""
-    response = await CoursePathService(session).get_active_generation_task(
-        user_id=current_user.id,
-        module=module,
-    )
-    return HttpResponse.success(data=response.model_dump(mode="json") if response else None)
-
-
-@router.get("/tasks/{task_id}/status")
-async def get_generation_task_status(
-    task_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """读取路径规划任务的真实持久化阶段状态。"""
-    response = await CoursePathService(session).get_generation_task(
-        user_id=current_user.id,
-        task_id=task_id,
-    )
-    if response is None:
-        return HttpResponse.error(code=404, message="路径规划任务不存在")
-    return HttpResponse.success(data=response.model_dump(mode="json"))
+    service = LearningPathService(session)
+    result = await service.create_path(current_user.id, request)
+    return HttpResponse.success(data=result.model_dump(mode="json"), status_code=201)
 
 
 @router.get("/active")
@@ -86,99 +52,129 @@ async def get_active_path(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """获取当前活跃的学习路径。"""
-    service = CoursePathService(session)
-    response = await service.get_active_path(user_id=current_user.id, module=module)
-    if response is None:
-        return HttpResponse.success(data=None)
-    return HttpResponse.success(data=response.model_dump(mode="json"))
+    service = LearningPathService(session)
+    response = await service.get_active_path_overview(current_user.id, module)
+    return HttpResponse.success(data=response.model_dump(mode="json") if response else None)
 
 
-@router.post("/nodes/{node_id}/generate-resources")
-async def generate_node_resources(
-    node_id: int,
-    payload: PathNodeResourceRequest,
-    background_tasks: BackgroundTasks,
+@router.get("/history")
+async def get_path_history(
+    module: str = "mentor",
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """为路径节点生成学习资源。后端根据节点内容自动构造 learning_need。"""
-    logger.info("[PathAPI] 节点资源生成: user_id=%s node_id=%s", current_user.id, node_id)
-    service = CoursePathService(session)
+    service = LearningPathService(session)
+    items = await service.list_path_history(current_user.id, module)
+    return HttpResponse.success(data=[item.model_dump(mode="json") for item in items])
 
+
+@router.post("/{path_id}/activate")
+async def activate_history_path(
+    path_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = LearningPathService(session)
     try:
-        result = await service.generate_node_resources(
-            user_id=current_user.id,
-            node_id=node_id,
-            selected_agents=payload.selected_agents,
-            agent_configs=payload.agent_configs,
-        )
+        result = await service.activate_history_path(current_user.id, path_id)
     except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-
-    if result["should_schedule"]:
-        background_tasks.add_task(
-            run_multi_agent_generation,
-            user_id=current_user.id,
-            request=result["request"],
-            profile=result["profile"],
-            resource_id=result["resource_id"],
-            node_id=node_id,
-        )
-
-    return HttpResponse.success(data={
-        "resource_id": result["resource_id"],
-        "node_id": node_id,
-        "status": result["status"],
-    })
+        return HttpResponse.error(code=404, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.post("/nodes/{node_id}/start")
-async def start_node(
+@router.get("/nodes/{node_id}/workspace")
+async def get_node_workspace(
     node_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Start learning when a node's generated resources are ready."""
-    service = CoursePathService(session)
+    service = LearningPathService(session)
     try:
-        response = await service.start_node(user_id=current_user.id, node_id=node_id)
+        result = await service.get_node_workspace(current_user.id, node_id)
     except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=response.model_dump(mode="json"))
+        return HttpResponse.error(code=404, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.post("/nodes/{node_id}/complete")
-async def complete_node(
+@router.post("/nodes/{node_id}/questions")
+async def generate_node_questions(
     node_id: int,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Complete a node, update path progress, and unlock eligible successors."""
-    service = CoursePathService(session)
+    service = LearningPathService(session)
     try:
-        response = await service.complete_node(user_id=current_user.id, node_id=node_id)
+        result = await service.generate_node_questions(current_user.id, node_id)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
-    if response.should_generate_summary and response.summary_id:
-        background_tasks.add_task(bg_path_summary_task, response.summary_id)
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/quiz-submit")
+async def submit_node_quiz(
+    node_id: int,
+    payload: PathQuizSubmitRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = LearningPathService(session)
+    try:
+        result = await service.submit_node_quiz(current_user.id, node_id, payload)
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/resources")
+async def generate_node_resource(
+    node_id: int,
+    payload: AuxiliaryResourceRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = LearningPathService(session)
+    try:
+        result = await service.generate_node_resource(current_user.id, node_id, payload)
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.get("/resources")
+async def list_path_resources(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await LearningPathService(session).list_path_resources(current_user.id, limit, offset)
+    return HttpResponse.success(data=result)
+
+
+@router.get("/resources/{resource_id}")
+async def get_path_resource(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await LearningPathService(session).get_path_resource_bundle(current_user.id, resource_id)
+    if result is None:
+        return HttpResponse.error(code=404, message="路径资源不存在")
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.get("/{path_id}")
+async def get_path_by_id(
+    path_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = LearningPathService(session)
+    try:
+        response = await service.get_path_by_id(current_user.id, path_id)
+    except ValueError as exc:
+        return HttpResponse.error(code=404, message=str(exc))
     return HttpResponse.success(data=response.model_dump(mode="json"))
-
-
-@router.patch("")
-async def adjust_path(
-    request: PathPlanFeedbackRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """根据用户反馈或当前画像，动态纠偏并重新编排后续学习节点。"""
-    service = CoursePathService(session)
-    try:
-        updated_path = await service.adjust_path(user_id=current_user.id, request=request)
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=updated_path.model_dump(mode="json"))
 
 
 @router.post("/{path_id}/events")
@@ -189,14 +185,9 @@ async def record_path_learning_event(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """记录路径学习过程中的行为、测验和反馈信号。"""
-    service = CoursePathService(session)
+    service = LearningPathService(session)
     try:
-        event = await service.record_learning_event(
-            user_id=current_user.id,
-            path_id=path_id,
-            payload=payload,
-        )
+        event = await service.record_learning_event(current_user.id, path_id, payload)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     background_tasks.add_task(
@@ -226,26 +217,9 @@ async def get_path_learning_evaluation(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """获取路径内学习效果评估与自适应优化提示。"""
-    service = CoursePathService(session)
+    service = LearningPathService(session)
     try:
-        evaluation = await service.get_learning_evaluation(user_id=current_user.id, path_id=path_id)
+        evaluation = await service.get_learning_evaluation(current_user.id, path_id)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
-    if evaluation is None:
-        return HttpResponse.success(data=None)
-    return HttpResponse.success(data=evaluation.model_dump(mode="json"))
-
-
-@router.get("/{path_id}/summary")
-async def get_path_summary(
-    path_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """获取路径的学习完成总结。"""
-    service = CoursePathService(session)
-    summary = await service.get_path_summary(user_id=current_user.id, path_id=path_id)
-    if summary is None:
-        return HttpResponse.success(data=None)
-    return HttpResponse.success(data=summary.model_dump(mode="json"))
+    return HttpResponse.success(data=evaluation.model_dump(mode="json") if evaluation else None)

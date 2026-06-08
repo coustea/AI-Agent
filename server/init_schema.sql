@@ -260,6 +260,7 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     personalization     JSONB,
     selected_agents     JSONB,
     agent_configs       JSONB,
+    source              VARCHAR(255),
     status              VARCHAR(50)     DEFAULT 'pending',
     error_message       TEXT,
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
@@ -268,6 +269,8 @@ CREATE TABLE IF NOT EXISTS generated_resources (
 
 CREATE INDEX IF NOT EXISTS ix_generated_resources_user_id
     ON generated_resources (user_id);
+CREATE INDEX IF NOT EXISTS ix_generated_resources_source
+    ON generated_resources (source);
 
 -- ============================================================
 -- 11. generated_resource_items
@@ -370,6 +373,36 @@ CREATE INDEX IF NOT EXISTS ix_quiz_questions_raw_record
     ON quiz_questions USING GIN (raw_record);
 
 -- ============================================================
+-- 12b. programming_problems
+-- ============================================================
+CREATE TABLE IF NOT EXISTS programming_problems (
+    id                  SERIAL          PRIMARY KEY,
+    problem_slug        VARCHAR(255)    NOT NULL UNIQUE,
+    title               VARCHAR(500)    NOT NULL,
+    difficulty          VARCHAR(50),
+    category            VARCHAR(100),   -- 算法分类: 数组/链表/动态规划/图论/贪心 等
+    description         TEXT            NOT NULL,
+    input_format        TEXT,
+    output_format       TEXT,
+    examples            JSONB,
+    hints               JSONB,
+    code_snippets       JSONB,
+    test_cases          JSONB,
+    tags                JSONB,
+    created_at          TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_programming_problems_problem_slug
+    ON programming_problems (problem_slug);
+CREATE INDEX IF NOT EXISTS ix_programming_problems_difficulty
+    ON programming_problems (difficulty);
+CREATE INDEX IF NOT EXISTS ix_programming_problems_category
+    ON programming_problems (category);
+CREATE INDEX IF NOT EXISTS ix_programming_problems_tags
+    ON programming_problems USING GIN (tags);
+
+-- ============================================================
 -- 13. learning_events
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learning_events (
@@ -385,7 +418,6 @@ CREATE TABLE IF NOT EXISTS learning_events (
     course              VARCHAR(200),
     topic               VARCHAR(200),
     score               FLOAT,
-    duration_seconds    INTEGER,
     feedback            TEXT,
     metadata_json       JSONB,
     created_at          TIMESTAMPTZ     DEFAULT NOW()
@@ -412,162 +444,207 @@ CREATE INDEX IF NOT EXISTS ix_learning_events_metadata_json
     ON learning_events USING GIN (metadata_json);
 
 -- ============================================================
--- 14. course_paths (must come before course_path_generation_tasks due to FK)
+-- 13b. learning_sessions
 -- ============================================================
-CREATE TABLE IF NOT EXISTS course_paths (
-    id                      SERIAL          PRIMARY KEY,
-    user_id                 INTEGER         NOT NULL,
-    module                  VARCHAR         NOT NULL DEFAULT 'mentor',
-    title                   VARCHAR(200)    NOT NULL,
-    goal                    TEXT            NOT NULL,
-    overall_progress        INTEGER         DEFAULT 0,
-    current_stage_id        VARCHAR(50),
-    current_node_id         VARCHAR(50),
-    eta_days                INTEGER         DEFAULT 14,
-    confidence              INTEGER         DEFAULT 60,
-    version                 INTEGER         DEFAULT 1,
-    status                  VARCHAR(30)     NOT NULL DEFAULT 'active',
-    stages_json             JSONB,
-    adjustment_rationale    JSONB,
-    strategy_report         TEXT,
-    search_evidence         JSONB,
-    learning_signal_snapshot JSONB,
-    created_at              TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_course_paths_user_id ON course_paths (user_id);
-CREATE INDEX IF NOT EXISTS ix_course_paths_module ON course_paths (module);
-CREATE INDEX IF NOT EXISTS ix_course_paths_status ON course_paths (status);
-
--- Composite index
-CREATE INDEX IF NOT EXISTS ix_course_paths_user_module_status
-    ON course_paths (user_id, module, status);
-
--- GIN indexes for JSONB
-CREATE INDEX IF NOT EXISTS ix_course_paths_stages_json
-    ON course_paths USING GIN (stages_json);
-
--- ============================================================
--- 15. course_path_generation_tasks (FK → course_paths)
--- ============================================================
-CREATE TABLE IF NOT EXISTS course_path_generation_tasks (
+CREATE TABLE IF NOT EXISTS learning_sessions (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
-    module              VARCHAR         NOT NULL DEFAULT 'mentor',
-    goal                TEXT            NOT NULL,
-    topic               TEXT            NOT NULL DEFAULT '',
-    current_knowledge   JSONB,
-    preferences         JSONB,
-    status              VARCHAR(30)     NOT NULL DEFAULT 'pending',
-    progress            INTEGER         DEFAULT 0,
-    latest_message      TEXT            NOT NULL DEFAULT '规划任务已创建，等待开始',
-    error_message       TEXT,
-    generated_path_id   INTEGER         REFERENCES course_paths(id) ON DELETE SET NULL,
-    created_at          TIMESTAMPTZ     DEFAULT NOW(),
-    started_at          TIMESTAMPTZ,
-    completed_at        TIMESTAMPTZ,
-    updated_at          TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_course_path_generation_tasks_user_id
-    ON course_path_generation_tasks (user_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_generation_tasks_module
-    ON course_path_generation_tasks (module);
-CREATE INDEX IF NOT EXISTS ix_course_path_generation_tasks_status
-    ON course_path_generation_tasks (status);
-CREATE INDEX IF NOT EXISTS ix_course_path_generation_tasks_generated_path_id
-    ON course_path_generation_tasks (generated_path_id);
-
--- Composite index
-CREATE INDEX IF NOT EXISTS ix_path_generation_tasks_user_module_status
-    ON course_path_generation_tasks (user_id, module, status);
-
--- ============================================================
--- 16. course_path_nodes
--- ============================================================
-CREATE TABLE IF NOT EXISTS course_path_nodes (
-    id                      SERIAL          PRIMARY KEY,
-    path_id                 INTEGER         NOT NULL REFERENCES course_paths(id) ON DELETE CASCADE,
-    user_id                 INTEGER         NOT NULL,
-    node_id                 VARCHAR(50)     NOT NULL,
-    stage_id                VARCHAR(50)     NOT NULL,
-    title                   VARCHAR(200)    NOT NULL,
-    status                  VARCHAR(20)     NOT NULL DEFAULT 'locked',
-    resource_status         VARCHAR(20)     NOT NULL DEFAULT 'not_started',
-    progress                INTEGER         DEFAULT 0,
-    priority                INTEGER         DEFAULT 50,
-    prerequisites           JSONB,
-    mastery_target          TEXT,
-    estimated_minutes       INTEGER,
-    difficulty              VARCHAR(30),
-    recommendation_reason   TEXT,
-    resource_policy         JSONB,
-    started_at              TIMESTAMPTZ,
-    completed_at            TIMESTAMPTZ,
-    created_at              TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_course_path_nodes_path_id ON course_path_nodes (path_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_nodes_user_id ON course_path_nodes (user_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_nodes_node_id ON course_path_nodes (node_id);
-
--- Composite indexes
-CREATE INDEX IF NOT EXISTS ix_course_path_nodes_path_stage
-    ON course_path_nodes (path_id, stage_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_nodes_user_status
-    ON course_path_nodes (user_id, status);
-
--- GIN index for prerequisites
-CREATE INDEX IF NOT EXISTS ix_course_path_nodes_prerequisites
-    ON course_path_nodes USING GIN (prerequisites);
-
--- ============================================================
--- 17. course_path_resource_bindings
--- ============================================================
-CREATE TABLE IF NOT EXISTS course_path_resource_bindings (
-    id                  SERIAL          PRIMARY KEY,
-    user_id             INTEGER         NOT NULL,
-    node_id             INTEGER         NOT NULL REFERENCES course_path_nodes(id) ON DELETE CASCADE,
-    resource_id         INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
-    resource_item_id    INTEGER,
+    source_page         VARCHAR(50)     NOT NULL,
+    started_at          TIMESTAMPTZ     NOT NULL,
+    ended_at            TIMESTAMPTZ     NOT NULL,
+    duration_seconds    INTEGER         NOT NULL,
+    resource_id         INTEGER,
+    path_id             INTEGER,
+    path_node_id        INTEGER,
+    node_id             VARCHAR(50),
+    course              VARCHAR(200),
+    topic               VARCHAR(200),
+    metadata_json       JSONB,
     created_at          TIMESTAMPTZ     DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS ix_course_path_resource_bindings_user_id
-    ON course_path_resource_bindings (user_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_resource_bindings_node
-    ON course_path_resource_bindings (node_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_resource_bindings_resource
-    ON course_path_resource_bindings (resource_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_resource_bindings_resource_item_id
-    ON course_path_resource_bindings (resource_item_id);
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_id ON learning_sessions (user_id);
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_started_at ON learning_sessions (started_at);
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_source_page ON learning_sessions (source_page);
+
+-- Composite indexes
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_started_at
+    ON learning_sessions (user_id, started_at);
+CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_source_page
+    ON learning_sessions (user_id, source_page);
 
 -- ============================================================
--- 18. course_path_summaries
+-- 14. learning_paths
 -- ============================================================
-CREATE TABLE IF NOT EXISTS course_path_summaries (
-    id                  SERIAL          PRIMARY KEY,
-    path_id             INTEGER         NOT NULL REFERENCES course_paths(id),
-    user_id             INTEGER         NOT NULL,
-    summary_markdown    TEXT,
-    mastery_scores      JSONB,
-    weak_points         JSONB,
-    next_suggestions    JSONB,
-    status              VARCHAR(20)     NOT NULL DEFAULT 'pending',
-    error_message       TEXT,
-    created_at          TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ     DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS learning_paths (
+    id                   SERIAL          PRIMARY KEY,
+    user_id              INTEGER         NOT NULL,
+    module               VARCHAR         NOT NULL DEFAULT 'mentor',
+    title                VARCHAR(200)    NOT NULL,
+    goal                 TEXT            NOT NULL,
+    topic                TEXT,
+    overall_progress     INTEGER         DEFAULT 0,
+    current_node_key     VARCHAR(80),
+    eta_days             INTEGER         DEFAULT 14,
+    confidence           INTEGER         DEFAULT 60,
+    status               VARCHAR(30)     NOT NULL DEFAULT 'active',
+    stages_json          JSONB,
+    strategy_report      TEXT,
+    adjustment_rationale JSONB,
+    created_at           TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ     DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS ix_course_path_summaries_path_id
-    ON course_path_summaries (path_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_summaries_user_id
-    ON course_path_summaries (user_id);
-CREATE INDEX IF NOT EXISTS ix_course_path_summaries_status
-    ON course_path_summaries (status);
+CREATE INDEX IF NOT EXISTS ix_learning_paths_user_id ON learning_paths (user_id);
+CREATE INDEX IF NOT EXISTS ix_learning_paths_module ON learning_paths (module);
+CREATE INDEX IF NOT EXISTS ix_learning_paths_status ON learning_paths (status);
+CREATE INDEX IF NOT EXISTS ix_learning_paths_current_node_key ON learning_paths (current_node_key);
+CREATE INDEX IF NOT EXISTS ix_learning_paths_user_module_status
+    ON learning_paths (user_id, module, status);
+CREATE INDEX IF NOT EXISTS ix_learning_paths_user_module_updated
+    ON learning_paths (user_id, module, updated_at);
+CREATE INDEX IF NOT EXISTS ix_learning_paths_stages_json
+    ON learning_paths USING GIN (stages_json);
 
--- Composite index
-CREATE INDEX IF NOT EXISTS ix_course_path_summaries_user_path
-    ON course_path_summaries (user_id, path_id);
+-- ============================================================
+-- 15. path_nodes
+-- ============================================================
+CREATE TABLE IF NOT EXISTS path_nodes (
+    id                    SERIAL          PRIMARY KEY,
+    path_id               INTEGER         NOT NULL REFERENCES learning_paths(id) ON DELETE CASCADE,
+    user_id               INTEGER         NOT NULL,
+    node_id               VARCHAR(80)     NOT NULL,
+    stage_id              VARCHAR(80)     NOT NULL,
+    title                 VARCHAR(200)    NOT NULL,
+    status                VARCHAR(32)     NOT NULL DEFAULT 'locked',
+    priority              INTEGER         DEFAULT 0,
+    attempt_count         INTEGER         DEFAULT 0,
+    current_tutorial_id   INTEGER,
+    prerequisites         JSONB,
+    mastery_target        TEXT,
+    estimated_minutes     INTEGER,
+    difficulty            VARCHAR(30),
+    recommendation_reason TEXT,
+    created_at            TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ     DEFAULT NOW(),
+    started_at            TIMESTAMPTZ,
+    completed_at          TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS ix_path_nodes_path_id ON path_nodes (path_id);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_user_id ON path_nodes (user_id);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_node_id ON path_nodes (node_id);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_stage_id ON path_nodes (stage_id);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_status ON path_nodes (status);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_current_tutorial_id ON path_nodes (current_tutorial_id);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_path_stage
+    ON path_nodes (path_id, stage_id);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_user_status
+    ON path_nodes (user_id, status);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_path_priority
+    ON path_nodes (path_id, priority);
+CREATE INDEX IF NOT EXISTS ix_path_nodes_prerequisites
+    ON path_nodes USING GIN (prerequisites);
+
+-- ============================================================
+-- 16. path_node_tutorials
+-- ============================================================
+CREATE TABLE IF NOT EXISTS path_node_tutorials (
+    id                    SERIAL          PRIMARY KEY,
+    path_id               INTEGER         NOT NULL REFERENCES learning_paths(id) ON DELETE CASCADE,
+    node_id               INTEGER         NOT NULL REFERENCES path_nodes(id) ON DELETE CASCADE,
+    user_id               INTEGER         NOT NULL,
+    tutorial_type         VARCHAR(32)     NOT NULL DEFAULT 'primary',
+    version_no            INTEGER         NOT NULL DEFAULT 1,
+    based_on_tutorial_id  INTEGER,
+    is_current            BOOLEAN         NOT NULL DEFAULT TRUE,
+    title                 VARCHAR(200)    NOT NULL,
+    summary               TEXT,
+    content_markdown      TEXT            NOT NULL,
+    knowledge_points      JSONB,
+    weak_knowledge_points JSONB,
+    created_at            TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_path_id ON path_node_tutorials (path_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_node_id ON path_node_tutorials (node_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_user_id ON path_node_tutorials (user_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_type ON path_node_tutorials (tutorial_type);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_current ON path_node_tutorials (is_current);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_based_on_tutorial_id ON path_node_tutorials (based_on_tutorial_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_node_current
+    ON path_node_tutorials (node_id, is_current);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_node_type
+    ON path_node_tutorials (node_id, tutorial_type);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_knowledge_points
+    ON path_node_tutorials USING GIN (knowledge_points);
+CREATE INDEX IF NOT EXISTS ix_path_node_tutorials_weak_points
+    ON path_node_tutorials USING GIN (weak_knowledge_points);
+
+-- ============================================================
+-- 17. path_node_questions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS path_node_questions (
+    id               SERIAL          PRIMARY KEY,
+    path_id          INTEGER         NOT NULL REFERENCES learning_paths(id) ON DELETE CASCADE,
+    node_id          INTEGER         NOT NULL REFERENCES path_nodes(id) ON DELETE CASCADE,
+    tutorial_id      INTEGER         REFERENCES path_node_tutorials(id) ON DELETE SET NULL,
+    user_id          INTEGER         NOT NULL,
+    round_no         INTEGER         NOT NULL DEFAULT 1,
+    question_no      INTEGER         NOT NULL DEFAULT 1,
+    mode             VARCHAR(32)     NOT NULL DEFAULT 'quiz',
+    type             VARCHAR(32)     NOT NULL DEFAULT 'single_choice',
+    question         TEXT            NOT NULL,
+    choice           JSONB,
+    answer           TEXT            NOT NULL,
+    response         TEXT,
+    analysis         TEXT,
+    knowledge_points JSONB,
+    is_correct       BOOLEAN,
+    created_at       TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ     DEFAULT NOW(),
+    submitted_at     TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_path_id ON path_node_questions (path_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_node_id ON path_node_questions (node_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_tutorial_id ON path_node_questions (tutorial_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_user_id ON path_node_questions (user_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_is_correct ON path_node_questions (is_correct);
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_node_round
+    ON path_node_questions (node_id, round_no);
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_tutorial_round
+    ON path_node_questions (tutorial_id, round_no);
+CREATE INDEX IF NOT EXISTS ix_path_node_questions_knowledge_points
+    ON path_node_questions USING GIN (knowledge_points);
+
+-- ============================================================
+-- 18. path_node_resources
+-- ============================================================
+CREATE TABLE IF NOT EXISTS path_node_resources (
+    id             SERIAL          PRIMARY KEY,
+    path_id        INTEGER         NOT NULL REFERENCES learning_paths(id) ON DELETE CASCADE,
+    node_id        INTEGER         NOT NULL REFERENCES path_nodes(id) ON DELETE CASCADE,
+    tutorial_id    INTEGER         REFERENCES path_node_tutorials(id) ON DELETE SET NULL,
+    user_id        INTEGER         NOT NULL,
+    resource_type  VARCHAR(32)     NOT NULL,
+    version_no     INTEGER         NOT NULL DEFAULT 1,
+    title          VARCHAR(200)    NOT NULL,
+    content_format VARCHAR(32)     NOT NULL DEFAULT 'markdown',
+    content_text   TEXT,
+    content_json   JSONB,
+    metadata_json  JSONB,
+    created_at     TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_path_id ON path_node_resources (path_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_node_id ON path_node_resources (node_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_tutorial_id ON path_node_resources (tutorial_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_user_id ON path_node_resources (user_id);
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_resource_type ON path_node_resources (resource_type);
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_node_type
+    ON path_node_resources (node_id, resource_type);
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_content_json
+    ON path_node_resources USING GIN (content_json);

@@ -7,16 +7,33 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
-from app.resource.events import AgentEventEmitter
+from app.resource.constants import STANDALONE_RESOURCE_SOURCES
+from app.resource.events import AgentEventEmitter, AgentRunTracker
+from app.resource.items import (
+    content_envelope,
+    db_item_to_resource_item,
+    db_item_to_worker_result,
+)
+from app.resource.review import (
+    BUNDLE_AGENT_ID,
+    COORDINATOR_AGENT_ID,
+    PPT_AGENT_ID,
+    PPT_REVIEW_AGENT_ID,
+    PRE_REVIEW_AGENT_ID,
+    build_ppt_audit_envelope,
+    build_pre_audit_envelope,
+    failed_review_result,
+    review_result_from_worker,
+)
 from app.resource.schemas import (
     AgentSelection,
     ExecutionPlan,
@@ -29,13 +46,6 @@ from app.resource.schemas import (
 from app.infra.logging import get_module_logger
 
 logger = get_module_logger("resource", sub="workflow")
-
-SOURCE_AUDIT_AGENT_IDS = ("content", "reading")
-COMPLETENESS_ONLY_AGENT_IDS = ("quiz", "mindmap", "code")
-PPT_AGENT_ID = "ppt"
-PRE_REVIEW_AGENT_ID = "pre_review"
-PPT_REVIEW_AGENT_ID = "ppt_review"
-REVIEW_CONTENT_LIMIT = 12_000
 
 
 class ResourceService:
@@ -52,52 +62,22 @@ class ResourceService:
         user_id: int,
         request: ResourceGenerationRequest,
         source: str = "standalone",
-        node_id: int | None = None,
         profile: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """统一入口：创建资源任务记录，并原子绑定路径节点任务。
-
-        实际后台任务调度由 API 层负责（需要 FastAPI BackgroundTasks）。
-        """
+        """统一入口：创建资源任务记录。"""
         resource = GeneratedResource(
             user_id=user_id,
             learning_need=request.learning_need,
             personalization={},
             selected_agents=request.enabled_agent_ids(),
             agent_configs=request.agent_configs.model_dump(mode="json"),
+            source=source,
             status="pending",
         )
         self.session.add(resource)
         try:
             await self.session.flush()
             resource_id = int(getattr(resource, "id", 0) or 0)
-            if node_id is not None:
-                from app.infra.models import CoursePathNode, CoursePathResourceBinding
-
-                node = await self.session.get(CoursePathNode, node_id)
-                if node is None or node.user_id != user_id:
-                    raise ValueError("路径节点不存在或不属于当前用户")
-                node.resource_status = "generating"
-                binding_stmt = (
-                    select(CoursePathResourceBinding)
-                    .where(
-                        CoursePathResourceBinding.node_id == node_id,
-                        CoursePathResourceBinding.user_id == user_id,
-                    )
-                    .order_by(col(CoursePathResourceBinding.created_at).desc())
-                )
-                binding = (await self.session.exec(binding_stmt)).first()
-                if binding:
-                    binding.resource_id = resource_id
-                    binding.resource_item_id = None
-                else:
-                    self.session.add(
-                        CoursePathResourceBinding(
-                            user_id=user_id,
-                            node_id=node_id,
-                            resource_id=resource_id,
-                        )
-                    )
             await self.session.commit()
         except Exception:
             await self.session.rollback()
@@ -107,13 +87,18 @@ class ResourceService:
         return {
             "resource_id": resource_id,
             "status": "pending",
-            "node_id": node_id,
             "source": source,
         }
 
-    async def get_generation_status(self, user_id: int, resource_id: int) -> dict[str, Any] | None:
+    async def get_generation_status(
+        self,
+        user_id: int,
+        resource_id: int,
+        *,
+        allowed_sources: tuple[str, ...] | None = None,
+    ) -> dict[str, Any] | None:
         """读取任务总状态及已生成资源列表。"""
-        resource = await self.get_resource(user_id, resource_id)
+        resource = await self.get_resource(user_id, resource_id, allowed_sources=allowed_sources)
         if resource is None:
             return None
         db_items = await self.list_resource_items(user_id, resource_id)
@@ -148,238 +133,6 @@ class ResourceService:
             raise exc
         await self.session.refresh(obj)
 
-    
-    @staticmethod
-    def _has_generated_content(result: WorkerResult | None) -> bool:
-        if result is None or not result.success:
-            return False
-        content = result.content
-        if content is None:
-            return False
-        if isinstance(content, str):
-            return bool(content.strip())
-        return True
-
-    @staticmethod
-    def _bounded_content(content: Any) -> str:
-        if isinstance(content, str):
-            text = content
-        else:
-            text = json.dumps(content, ensure_ascii=False)
-        if len(text) <= REVIEW_CONTENT_LIMIT:
-            return text
-        return f"{text[:REVIEW_CONTENT_LIMIT]}\n\n[内容已截断用于审核上下文控制]"
-
-    @staticmethod
-    def _profile_summary(profile: dict[str, Any]) -> str:
-        for key in ("profile_markdown", "summary", "profile_summary"):
-            value = profile.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        profile_data = profile.get("profile_data")
-        if isinstance(profile_data, dict):
-            return json.dumps(profile_data, ensure_ascii=False)
-        return ""
-
-    @staticmethod
-    def build_pre_audit_envelope(
-        *,
-        request: ResourceGenerationRequest,
-        results: dict[str, WorkerResult],
-        profile: dict[str, Any],
-        blueprint: Any | None,
-    ) -> tuple[dict[str, Any], list[str]]:
-        selected_agents = request.enabled_agent_ids()
-        checked_agents = [
-            agent_id
-            for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS or agent_id in COMPLETENESS_ONLY_AGENT_IDS
-        ]
-        missing_resources = [
-            agent_id
-            for agent_id in checked_agents
-            if not ResourceService._has_generated_content(results.get(agent_id))
-        ]
-        deep_audit_resources = [
-            {
-                "agent_id": agent_id,
-                "title": results[agent_id].title,
-                "summary": results[agent_id].summary,
-                "audit_content": ResourceService._bounded_content(results[agent_id].content),
-            }
-            for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
-        ]
-        completeness_only = [
-            {
-                "agent_id": agent_id,
-                "title": results.get(agent_id).title if results.get(agent_id) else "",
-                "summary": results.get(agent_id).summary if results.get(agent_id) else "",
-                "has_content": ResourceService._has_generated_content(results.get(agent_id)),
-            }
-            for agent_id in selected_agents
-            if agent_id in COMPLETENESS_ONLY_AGENT_IDS
-        ]
-        return {
-            "mode": "pre_audit",
-            "request_context": {
-                "learning_need": request.learning_need,
-                "learning_scenario": request.learning_scenario,
-                "profile_summary": ResourceService._profile_summary(profile),
-                "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
-            },
-            "deep_audit_resources": deep_audit_resources,
-            "completeness_only": completeness_only,
-        }, missing_resources
-
-    @staticmethod
-    def build_ppt_audit_envelope(
-        *,
-        request: ResourceGenerationRequest,
-        results: dict[str, WorkerResult],
-        profile: dict[str, Any],
-        blueprint: Any | None,
-    ) -> tuple[dict[str, Any], list[str]]:
-        selected_agents = request.enabled_agent_ids()
-        missing_resources: list[str] = []
-        ppt_result = results.get(PPT_AGENT_ID)
-        if PPT_AGENT_ID in selected_agents and not ResourceService._has_generated_content(ppt_result):
-            missing_resources.append(PPT_AGENT_ID)
-        approved_sources = [
-            {
-                "agent_id": agent_id,
-                "title": results[agent_id].title,
-                "summary": results[agent_id].summary,
-                "source_content": ResourceService._bounded_content(results[agent_id].content),
-            }
-            for agent_id in selected_agents
-            if agent_id in SOURCE_AUDIT_AGENT_IDS and ResourceService._has_generated_content(results.get(agent_id))
-        ]
-        ppt_resource = (
-            {
-                "agent_id": PPT_AGENT_ID,
-                "title": ppt_result.title,
-                "summary": ppt_result.summary,
-                "audit_content": ResourceService._bounded_content(ppt_result.content),
-            }
-            if ResourceService._has_generated_content(ppt_result)
-            else None
-        )
-        return {
-            "mode": "ppt_audit",
-            "request_context": {
-                "learning_need": request.learning_need,
-                "learning_scenario": request.learning_scenario,
-                "profile_summary": ResourceService._profile_summary(profile),
-                "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
-            },
-            "approved_sources": approved_sources,
-            "ppt_resource": ppt_resource,
-        }, missing_resources
-
-    @staticmethod
-    def failed_review_result(
-        *,
-        status: str,
-        message: str,
-        revision_targets: list[str],
-        review_mode: str,
-    ) -> ReviewResult:
-        payload = {
-            "status": status,
-            "checks": {
-                "need_alignment": "not_checked",
-                "content_completeness": "fail",
-                "factuality": "not_checked",
-                "hallucination": "not_checked",
-                "safety": "not_checked",
-                "grounding": "not_checked",
-            },
-            "violations": [{"type": "missing_or_failed_resource", "resources": revision_targets}],
-            "revision_targets": revision_targets,
-            "mode": review_mode,
-        }
-        return ReviewResult(
-            passed=False,
-            overall_score=0,
-            consistency_score=0,
-            personalization_score=0,
-            issues=[message],
-            suggestions=[json.dumps(payload, ensure_ascii=False)],
-            failed_agents=revision_targets,
-        )
-
-    @staticmethod
-    def review_result_from_worker(result: WorkerResult) -> ReviewResult:
-        parsed = result.metadata.get("parsed_review")
-        status = result.metadata.get("review_status") or ("pass" if result.success else "blocked")
-        issues: list[str] = []
-        failed_agents: list[str] = []
-        if isinstance(parsed, dict):
-            violations = parsed.get("violations")
-            if isinstance(violations, list):
-                issues = [
-                    item if isinstance(item, str) else json.dumps(item, ensure_ascii=False)
-                    for item in violations
-                ]
-            revision_targets = parsed.get("revision_targets")
-            if isinstance(revision_targets, list):
-                failed_agents = [str(item) for item in revision_targets]
-        if not result.success and not issues:
-            issues = [result.error or f"review status: {status}"]
-        return ReviewResult(
-            passed=result.success,
-            overall_score=100 if result.success else 0,
-            consistency_score=100 if result.success else 0,
-            personalization_score=100 if result.success else 0,
-            issues=issues,
-            suggestions=[result.content] if result.content else [],
-            failed_agents=failed_agents,
-        )
-
-    def _content_envelope(self, result: WorkerResult) -> tuple[dict[str, Any] | None, str | None]:
-        """根据格式拆分 WorkerResult 内容为 content_json 和 content_text。"""
-        fmt = result.file_type.lower()
-        content = result.content
-        envelope = {
-            "title": result.title,
-            "summary": result.summary,
-            "summary_data": result.summary_data,
-            "metadata": result.metadata,
-            "format": result.file_type,
-            "content": content,
-        }
-        if fmt in {"markdown", "mermaid", "text", "code"}:
-            if isinstance(content, str):
-                return envelope, content
-            return envelope, json.dumps(content, ensure_ascii=False)
-        if fmt == "json":
-            if isinstance(content, dict):
-                envelope["content"] = content
-                return envelope, None
-            if isinstance(content, list):
-                envelope["content"] = {"items": content}
-                return envelope, None
-            if isinstance(content, str):
-                try:
-                    parsed = json.loads(content)
-                except json.JSONDecodeError:
-                    return envelope, content
-                if isinstance(parsed, dict):
-                    envelope["content"] = parsed
-                    return envelope, None
-                if isinstance(parsed, list):
-                    envelope["content"] = {"items": parsed}
-                    return envelope, None
-                envelope["content"] = {"value": parsed}
-                return envelope, None
-            envelope["content"] = {"value": content}
-            return envelope, None
-        if isinstance(content, str):
-            return envelope, content
-        envelope["content"] = {"value": content}
-        return envelope, None
-
     async def save_worker_result(
         self,
         *,
@@ -392,7 +145,7 @@ class ResourceService:
             raise ValueError("仅能保存已成功生成且含内容的资源")
         agent_id = str(result.metadata.get("agent_id") or "")
         title = result.title or f"{agent_id} 资源"
-        content_json, content_text = self._content_envelope(result)
+        content_json, content_text = content_envelope(result)
         resource_item = GeneratedResourceItemModel(
             resource_id=resource_id,
             user_id=user_id,
@@ -511,9 +264,11 @@ class ResourceService:
         self,
         user_id: int,
         resource_id: int,
+        *,
+        allowed_sources: tuple[str, ...] | None = None,
     ) -> ResourceBundle | None:
         """从数据库读取并组装前端资源包。"""
-        resource = await self.get_resource(user_id, resource_id)
+        resource = await self.get_resource(user_id, resource_id, allowed_sources=allowed_sources)
         if resource is None:
             return None
 
@@ -546,47 +301,21 @@ class ResourceService:
         )
 
     def _db_item_to_resource_item(self, item: GeneratedResourceItemModel) -> GeneratedResourceItem:
-        envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
-        content = envelope.get("content") if item.content_json is not None else item.content_text
-        return GeneratedResourceItem(
-            id=str(item.id),
-            type=item.agent_type,
-            title=envelope.get("title") or item.title or f"学习资源 - {item.agent_type}",
-            format=envelope.get("format") or item.content_format,
-            content=content,
-            summary=envelope.get("summary") or item.summary or "",
-            summary_data=envelope.get("summary_data") or {},
-            execution_report=item.execution_report,
-            metadata=envelope.get("metadata") or item.metadata_json or {},
-            status=item.status,
-            error_message=item.error_message,
-            created_at=item.created_at.isoformat() if item.created_at else None,
-            updated_at=item.updated_at.isoformat() if item.updated_at else None,
-        )
+        return db_item_to_resource_item(item)
 
     def _db_item_to_worker_result(self, item: GeneratedResourceItemModel) -> WorkerResult:
-        envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
-        content = envelope.get("content") if item.content_json is not None else item.content_text
-        if not isinstance(content, str):
-            content = json.dumps(content, ensure_ascii=False)
-        return WorkerResult(
-            success=True,
-            content=content,
-            file_type=envelope.get("format") or item.content_format,
-            title=envelope.get("title") or item.title or "",
-            summary=envelope.get("summary") or item.summary or "",
-            summary_data=envelope.get("summary_data") or {},
-            metadata=envelope.get("metadata") or item.metadata_json or {},
-        )
+        return db_item_to_worker_result(item)
 
     async def get_resource(
         self,
         user_id: int,
         resource_id: int,
+        *,
+        allowed_sources: tuple[str, ...] | None = None,
     ) -> GeneratedResource | None:
         """获取资源详情。"""
         resource = await self.session.get(GeneratedResource, resource_id)
-        if resource and resource.user_id == user_id:
+        if resource and resource.user_id == user_id and self._source_allowed(resource.source, allowed_sources):
             return resource
         return None
 
@@ -594,16 +323,37 @@ class ResourceService:
         self,
         user_id: int,
         limit: int = 20,
+        offset: int = 0,
+        *,
+        sources: tuple[str, ...] | None = None,
     ) -> list[GeneratedResource]:
         """列出用户资源。"""
-        statement = (
-            select(GeneratedResource)
-            .where(GeneratedResource.user_id == user_id)
-            .order_by(col(GeneratedResource.id).desc())
-            .limit(limit)
-        )
+        statement = select(GeneratedResource).where(GeneratedResource.user_id == user_id)
+        if sources:
+            statement = statement.where(col(GeneratedResource.source).in_(sources))
+        statement = statement.order_by(col(GeneratedResource.id).desc()).offset(offset).limit(limit)
         result = await self.session.exec(statement)
         return list(result.all())
+
+    async def count_resources(
+        self,
+        user_id: int,
+        *,
+        sources: tuple[str, ...] | None = None,
+    ) -> int:
+        """统计用户资源总数。"""
+        from sqlmodel import func
+        statement = select(func.count(GeneratedResource.id)).where(GeneratedResource.user_id == user_id)
+        if sources:
+            statement = statement.where(col(GeneratedResource.source).in_(sources))
+        result = await self.session.exec(statement)
+        return result.one()
+
+    @staticmethod
+    def _source_allowed(source: str | None, allowed_sources: tuple[str, ...] | None) -> bool:
+        if not allowed_sources:
+            return True
+        return (source or "standalone") in allowed_sources
 
 
 async def run_multi_agent_generation(
@@ -640,12 +390,20 @@ async def run_multi_agent_generation(
         enabled_agents = request.enabled_agent_ids()
 
         # 实例化事件发射器，贯穿所有 Agent 的生命周期
-        emitter = AgentEventEmitter(resource_id=resource_id)
+        run_id = f"resource-{resource_id}-{uuid4().hex[:8]}"
+        emitter = AgentEventEmitter(resource_id=resource_id, run_id=run_id)
 
         success = False
+        done_emitted = False
         start_time = time.perf_counter()
         try:
-            logger.info("启动资源生成: user_id=%s, resource_id=%s, agents=%s", user_id, resource_id, enabled_agents)
+            logger.info(
+                "启动资源生成: run_id=%s user_id=%s, resource_id=%s, agents=%s",
+                run_id,
+                user_id,
+                resource_id,
+                enabled_agents,
+            )
             
             # ==========================================
             # 阶段 1: 规划阶段 (Planning Agent)
@@ -657,8 +415,19 @@ async def run_multi_agent_generation(
                 profile=profile,
                 agent_config={"enabled_agents": enabled_agents},
             )
-            await emitter.emit_agent("planning", status="running", message="正在规划生成蓝图...")
-            planning_result = await AGENT_REGISTRY["planning"](emitter).run(planning_state)
+            async with AgentRunTracker(
+                emitter=emitter,
+                agent_id="planning",
+                phase="planning_blueprint",
+                message="正在规划生成蓝图",
+                progress=5,
+            ) as planning_tracker:
+                planning_result = await AGENT_REGISTRY["planning"](emitter).run(planning_state)
+                await planning_tracker.finish(
+                    "教学蓝图与执行计划已生成" if planning_result.success else (planning_result.error or "规划失败"),
+                    success=planning_result.success,
+                    metrics={"enabled_agents": len(enabled_agents)},
+                )
 
             blueprint = None
             instruction_map: dict[str, AgentInstruction] = {}
@@ -684,14 +453,14 @@ async def run_multi_agent_generation(
             # 职责: 先生成非 PPT 资源，PPT 必须等待 source pre-audit 通过后再生成
             # ==========================================
             worker_start = time.perf_counter()
-            await emitter.emit_agent("coordinator", status="running", message="并行生成基础资源")
+            await emitter.emit_agent(COORDINATOR_AGENT_ID, status="running", message="并行生成基础资源", progress=18)
             results: dict[str, WorkerResult] = {}
 
             async def run_one(agent_id: str, agent_config_extra: dict[str, Any] | None = None) -> None:
                 """独立运行单个 Worker Agent 的协程函数"""
                 agent_start = time.perf_counter()
                 try:
-                    logger.info("Agent[%s] 启动", agent_id)
+                    logger.info("Agent[%s] 启动: run_id=%s resource_id=%s", agent_id, run_id, resource_id)
                     agent_config = request.agent_configs.get(agent_id, {})
                     if agent_config_extra:
                         agent_config = {**agent_config, **agent_config_extra}
@@ -707,7 +476,24 @@ async def run_multi_agent_generation(
                         profile=profile,                             # 共享用户画像
                     )
                     agent = AGENT_REGISTRY[agent_id](emitter)
-                    result = await agent.run(state)
+                    async with AgentRunTracker(
+                        emitter=emitter,
+                        agent_id=agent_id,
+                        phase="llm_generating",
+                        message=f"{agent_id} 模型生成中",
+                        progress=25,
+                    ) as tracker:
+                        result = await agent.run(state)
+                        await tracker.step(
+                            "validating",
+                            f"{agent_id} 已返回，正在校验与整理结果",
+                            progress=86,
+                        )
+                        await tracker.finish(
+                            result.summary if result.success else (result.error or f"{agent_id} 生成失败"),
+                            success=result.success,
+                            metrics=result.summary_data,
+                        )
                     results[agent_id] = result
                     
                     agent_elapsed = time.perf_counter() - agent_start
@@ -718,13 +504,17 @@ async def run_multi_agent_generation(
                         
                     # 如果该 Worker 成功，立刻将其成果独立保存入库，避免阻塞
                     if result.success and result.content:
-                        await usecases.save_worker_result(
+                        resource_item = await usecases.save_worker_result(
                             user_id=user_id,
                             resource_id=resource_id,
                             result=result,
                         )
-                        # 发送资源就绪事件给前端
-                        # resource saved to DB, frontend polls status
+                        await emitter.emit_artifact_ready(
+                            agent_id,
+                            message=f"{agent_id} 资源已保存，可在产物坞预览",
+                            artifact_id=str(resource_item.id),
+                            metrics=result.summary_data,
+                        )
                 except Exception as exc:
                     agent_elapsed = time.perf_counter() - agent_start
                     logger.error("Agent[%s] 异常: %.2fs", agent_id, agent_elapsed, exc_info=True)
@@ -740,7 +530,7 @@ async def run_multi_agent_generation(
                 for a in enabled_agents
                 if a in AGENT_REGISTRY and a not in ("planning", "review", PPT_AGENT_ID)
             ]
-            logger.info("开始并行基础 Worker 生成: agents=%s", worker_agents)
+            logger.info("开始并行基础 Worker 生成: run_id=%s agents=%s", run_id, worker_agents)
             
             # 使用 asyncio.gather 实现高并发执行
             await asyncio.gather(*(run_one(agent_id) for agent_id in worker_agents))
@@ -749,19 +539,32 @@ async def run_multi_agent_generation(
             success_count = sum(1 for r in results.values() if r.success)
             fail_count = sum(1 for r in results.values() if not r.success)
             logger.info("基础 Worker 完成: 成功=%s, 失败=%s, 耗时=%.2fs", success_count, fail_count, worker_elapsed)
+            coordinator_status = "failed" if worker_agents and success_count == 0 else "finished"
+            await emitter.emit_agent(
+                COORDINATOR_AGENT_ID,
+                status=coordinator_status,
+                message=f"基础资源并行生成完成：成功 {success_count} 个，失败 {fail_count} 个",
+                progress=70,
+            )
 
             # ==========================================
             # 阶段 3: 前置审核 + PPT 生成 + PPT 单独审核
             # 职责: source 先过安全/事实性审核，PPT 只在通过后生成并单独审核
             # ==========================================
-            await emitter.emit_agent("pre_review", status="running", message="前置内容安全审核中")
+            await emitter.emit_agent(
+                "pre_review",
+                status="running",
+                message="前置内容安全审核中",
+                progress=70,
+                phase="pre_review_waiting_sources",
+            )
             pre_review_result = ReviewResult(passed=True, overall_score=100)
             review_result = pre_review_result
             review_passed = True
 
             failed_results = {aid: r for aid, r in results.items() if not r.success}
             review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
-            pre_audit_envelope, missing_resources = ResourceService.build_pre_audit_envelope(
+            pre_audit_envelope, missing_resources = build_pre_audit_envelope(
                 request=request,
                 results=review_results,
                 profile=profile,
@@ -770,7 +573,7 @@ async def run_multi_agent_generation(
             source_audit_required = bool(pre_audit_envelope["deep_audit_resources"])
 
             if missing_resources:
-                review_result = ResourceService.failed_review_result(
+                review_result = failed_review_result(
                     status="needs_revision",
                     message=f"资源生成不完整: {', '.join(missing_resources)}",
                     revision_targets=missing_resources,
@@ -781,6 +584,7 @@ async def run_multi_agent_generation(
                     PRE_REVIEW_AGENT_ID,
                     status="failed",
                     message="前置审核未通过：资源生成不完整",
+                    progress=80,
                 )
                 logger.warning("前置审核跳过: missing_resources=%s", missing_resources)
             elif source_audit_required and "review" in AGENT_REGISTRY:
@@ -794,8 +598,20 @@ async def run_multi_agent_generation(
                         "progress_agent_id": PRE_REVIEW_AGENT_ID,
                     },
                 )
-                pre_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(pre_review_state)
-                pre_review_result = ResourceService.review_result_from_worker(pre_review_worker_result)
+                async with AgentRunTracker(
+                    emitter=emitter,
+                    agent_id=PRE_REVIEW_AGENT_ID,
+                    phase="reviewing_sources",
+                    message="正在审核基础资源事实性与安全性",
+                    progress=72,
+                ) as pre_review_tracker:
+                    pre_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(pre_review_state)
+                    await pre_review_tracker.finish(
+                        "前置审核完成",
+                        success=pre_review_worker_result.success,
+                        metrics={"review_status": pre_review_worker_result.metadata.get("review_status")},
+                    )
+                pre_review_result = review_result_from_worker(pre_review_worker_result)
                 review_result = pre_review_result
                 review_passed = pre_review_result.passed
                 logger.info(
@@ -804,7 +620,7 @@ async def run_multi_agent_generation(
                     pre_review_worker_result.metadata.get("review_status"),
                 )
             elif source_audit_required:
-                review_result = ResourceService.failed_review_result(
+                review_result = failed_review_result(
                     status="blocked",
                     message="审核智能体不可用，无法完成前置安全审核",
                     revision_targets=["review"],
@@ -815,17 +631,25 @@ async def run_multi_agent_generation(
                     PRE_REVIEW_AGENT_ID,
                     status="failed",
                     message="审核智能体不可用，前置安全审核已阻断",
+                    progress=80,
                 )
             else:
                 await emitter.emit_agent(
                     PRE_REVIEW_AGENT_ID,
                     status="skipped",
                     message="无需深度审核，跳过前置审核",
+                    progress=80,
                 )
                 logger.info("未选择 content/reading 或 review agent 不可用，跳过前置 LLM 审核")
 
             if review_passed and PPT_AGENT_ID in enabled_agents:
-                await emitter.emit_agent("ppt", status="running", message="正在生成 PPT")
+                await emitter.emit_agent(
+                    "ppt",
+                    status="running",
+                    message="前置审核通过，正在生成 PPT",
+                    progress=80,
+                    phase="ppt_waiting_sources",
+                )
                 approved_sources = [
                     {
                         "agent_id": item["agent_id"],
@@ -838,17 +662,17 @@ async def run_multi_agent_generation(
                 if PPT_AGENT_ID in AGENT_REGISTRY:
                     await run_one(PPT_AGENT_ID, {"approved_sources": approved_sources})
 
-                await emitter.emit_agent("ppt_review", status="running", message="PPT 内容审核中")
+                await emitter.emit_agent("ppt_review", status="running", message="PPT 内容审核中", progress=90)
                 failed_results = {aid: r for aid, r in results.items() if not r.success}
                 review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
-                ppt_audit_envelope, ppt_missing_resources = ResourceService.build_ppt_audit_envelope(
+                ppt_audit_envelope, ppt_missing_resources = build_ppt_audit_envelope(
                     request=request,
                     results=review_results,
                     profile=profile,
                     blueprint=blueprint,
                 )
                 if ppt_missing_resources:
-                    review_result = ResourceService.failed_review_result(
+                    review_result = failed_review_result(
                         status="needs_revision",
                         message=f"PPT 生成不完整: {', '.join(ppt_missing_resources)}",
                         revision_targets=ppt_missing_resources,
@@ -859,6 +683,7 @@ async def run_multi_agent_generation(
                         PPT_REVIEW_AGENT_ID,
                         status="failed",
                         message="PPT 审核未通过：PPT 生成不完整",
+                        progress=95,
                     )
                     logger.warning("PPT 审核跳过: missing_resources=%s", ppt_missing_resources)
                 elif "review" in AGENT_REGISTRY:
@@ -872,8 +697,20 @@ async def run_multi_agent_generation(
                             "progress_agent_id": PPT_REVIEW_AGENT_ID,
                         },
                     )
-                    ppt_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(ppt_review_state)
-                    ppt_review_result = ResourceService.review_result_from_worker(ppt_review_worker_result)
+                    async with AgentRunTracker(
+                        emitter=emitter,
+                        agent_id=PPT_REVIEW_AGENT_ID,
+                        phase="reviewing_ppt",
+                        message="正在审核 PPT 内容安全与事实一致性",
+                        progress=92,
+                    ) as ppt_review_tracker:
+                        ppt_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(ppt_review_state)
+                        await ppt_review_tracker.finish(
+                            "PPT 审核完成",
+                            success=ppt_review_worker_result.success,
+                            metrics={"review_status": ppt_review_worker_result.metadata.get("review_status")},
+                        )
+                    ppt_review_result = review_result_from_worker(ppt_review_worker_result)
                     if pre_review_result.suggestions:
                         ppt_review_result.suggestions = [
                             *pre_review_result.suggestions,
@@ -887,7 +724,7 @@ async def run_multi_agent_generation(
                         ppt_review_worker_result.metadata.get("review_status"),
                     )
                 else:
-                    review_result = ResourceService.failed_review_result(
+                    review_result = failed_review_result(
                         status="blocked",
                         message="审核智能体不可用，无法完成 PPT 安全审核",
                         revision_targets=["review"],
@@ -898,46 +735,67 @@ async def run_multi_agent_generation(
                         PPT_REVIEW_AGENT_ID,
                         status="failed",
                         message="审核智能体不可用，PPT 安全审核已阻断",
+                        progress=95,
                     )
             elif PPT_AGENT_ID in enabled_agents:
                 await emitter.emit_agent(
                     PPT_AGENT_ID,
                     status="skipped",
                     message="前置审核未通过，已跳过 PPT 生成",
+                    progress=80,
                 )
                 await emitter.emit_agent(
                     PPT_REVIEW_AGENT_ID,
                     status="skipped",
                     message="PPT 未生成，已跳过 PPT 审核",
+                    progress=80,
                 )
 
             # ==========================================
             # 阶段 4: 持久化与打包 (Save Final Results)
             # 职责: 将整个生成周期的数据打包落库，并通知前端完成
             # ==========================================
-            await usecases.save_generation_results(
-                user_id=user_id,
-                resource_id=resource_id,
-                request=request,
-                results=results,
-                review_result=review_result,
-                plan=ExecutionPlan(
-                    blueprint=blueprint or LearningBlueprint(topic=request.learning_need),
-                    agent_instructions=list(instruction_map.values()),
-                ) if blueprint else ExecutionPlan(
-                    blueprint=LearningBlueprint(topic=request.learning_need),
-                    agent_instructions=[],
-                ),
+            await emitter.emit_agent(
+                BUNDLE_AGENT_ID,
+                status="running",
+                message="正在组装资源包并保存结果",
+                progress=95,
+                phase="bundling",
             )
+            try:
+                await usecases.save_generation_results(
+                    user_id=user_id,
+                    resource_id=resource_id,
+                    request=request,
+                    results=results,
+                    review_result=review_result,
+                    plan=ExecutionPlan(
+                        blueprint=blueprint or LearningBlueprint(topic=request.learning_need),
+                        agent_instructions=list(instruction_map.values()),
+                    ) if blueprint else ExecutionPlan(
+                        blueprint=LearningBlueprint(topic=request.learning_need),
+                        agent_instructions=[],
+                    ),
+                )
 
-            # 组装最终 Bundle 发送结束事件
-            bundle = await usecases.get_resource_bundle(user_id, resource_id)
-            await emitter.emit_done(success=True)
-
-            saved_items = await usecases.list_resource_items(user_id, resource_id)
-            resource = await usecases.get_resource(user_id, resource_id)
-            current_status = resource.status if resource else "failed"
-            success = current_status in ("completed", "partial_completed") and len(saved_items) > 0
+                saved_items = await usecases.list_resource_items(user_id, resource_id)
+                resource = await usecases.get_resource(user_id, resource_id)
+                current_status = resource.status if resource else "failed"
+                success = current_status in ("completed", "partial_completed") and len(saved_items) > 0
+                await emitter.emit_agent(
+                    BUNDLE_AGENT_ID,
+                    status="finished" if success else "failed",
+                    message="资源包组装完成" if success else "资源包组装失败",
+                    progress=100,
+                )
+            except Exception:
+                await emitter.emit_agent(BUNDLE_AGENT_ID, status="failed", message="资源包组装异常", progress=0)
+                raise
+            await emitter.emit_done(
+                success=success,
+                message="资源生成完成" if success else "资源生成失败",
+            )
+            done_emitted = True
             total_elapsed = time.perf_counter() - start_time
             logger.info("资源生成结束: resource_id=%s, success=%s, 耗时=%.2fs", resource_id, success, total_elapsed)
         except Exception:
@@ -946,13 +804,8 @@ async def run_multi_agent_generation(
 
         if not success:
             await usecases.update_resource_status(resource_id, "failed")
-        if node_id:
-            await _update_node_resource_status(
-                session, node_id, "ready" if success else "failed",
-                resource_id if success else None, user_id,
-            )
-
-
+            if not done_emitted:
+                await emitter.emit_done(success=False, message="资源生成失败")
 async def run_single_agent_generation(
     user_id: int,
     resource_id: int,
@@ -983,22 +836,48 @@ async def run_single_agent_generation(
     async with session_scope() as session:
         usecases = ResourceService(session)
 
-        emitter = AgentEventEmitter(resource_id=resource_id)
+        run_id = f"resource-{resource_id}-{uuid4().hex[:8]}"
+        emitter = AgentEventEmitter(resource_id=resource_id, run_id=run_id)
 
         success = False
         start_time = time.perf_counter()
         try:
-            logger.info("启动单智能体生成: user_id=%s, resource_id=%s, agent=%s", user_id, resource_id, agent_id)
+            logger.info(
+                "启动单智能体生成: run_id=%s user_id=%s, resource_id=%s, agent=%s",
+                run_id,
+                user_id,
+                resource_id,
+                agent_id,
+            )
             
             # ==========================================
             # 执行阶段: 独立唤醒特定 Agent
             # 注意：单 Agent 模式下没有 PlanningAgent 派发的蓝图，全靠自身的 System Prompt
             # ==========================================
             state = WorkerState(
+                resource_id=resource_id,
                 learning_need=learning_need,
+                agent_name=agent_id,
                 profile=profile,
             )
-            result = await AGENT_REGISTRY[agent_id](emitter).run(state)
+            async with AgentRunTracker(
+                emitter=emitter,
+                agent_id=agent_id,
+                phase="llm_generating",
+                message=f"{agent_id} 模型生成中",
+                progress=20,
+            ) as tracker:
+                result = await AGENT_REGISTRY[agent_id](emitter).run(state)
+                await tracker.step(
+                    "validating",
+                    f"{agent_id} 已返回，正在校验与整理结果",
+                    progress=86,
+                )
+                await tracker.finish(
+                    result.summary if result.success else (result.error or f"{agent_id} 生成失败"),
+                    success=result.success,
+                    metrics=result.summary_data,
+                )
 
             agent_elapsed = time.perf_counter() - start_time
             if result.success:
@@ -1011,17 +890,19 @@ async def run_single_agent_generation(
             # ==========================================
             if result.success and result.content:
                 # 1. 结果立刻落库
-                await usecases.save_worker_result(
+                resource_item = await usecases.save_worker_result(
                     user_id=user_id,
                     resource_id=resource_id,
                     result=result,
                 )
-                # 2. 通过 SSE 推送给前端（触发前端界面的卡片渲染）
-                # resource saved to DB, frontend polls status
+                await emitter.emit_artifact_ready(
+                    agent_id,
+                    message=f"{agent_id} 资源已保存，可在产物坞预览",
+                    artifact_id=str(resource_item.id),
+                    metrics=result.summary_data,
+                )
                 success = True
 
-            # 发送全局结束信号
-            await emitter.emit_done(success=True)
         except Exception:
             logger.error("单智能体生成异常: agent=%s, resource_id=%s", agent_id, resource_id, exc_info=True)
 
@@ -1032,47 +913,13 @@ async def run_single_agent_generation(
             await usecases.update_resource_status(resource_id, "failed")
         else:
             await usecases.update_resource_status(resource_id, "completed")
+        await emitter.emit_done(
+            success=success,
+            message="资源生成完成" if success else "资源生成失败",
+        )
             
         total_elapsed = time.perf_counter() - start_time
         logger.info("单智能体生成结束: agent=%s, success=%s, 耗时=%.2fs", agent_id, success, total_elapsed)
         
-        # 如果这个任务关联了某个具体的学习路径节点，通知该节点状态已就绪
-        if node_id:
-            await _update_node_resource_status(
-                session, node_id, "ready" if success else "failed",
-                resource_id if success else None, user_id,
-            )
 
-
-
-
-async def _update_node_resource_status(
-    session: AsyncSession,
-    node_id: int,
-    status: str,
-    resource_id: int | None,
-    user_id: int,
-) -> None:
-    """更新路径节点的资源状态，可选绑定资源 ID。"""
-    from app.infra.models import CoursePathNode, CoursePathResourceBinding
-
-    node = await session.get(CoursePathNode, node_id)
-    if node:
-        node.resource_status = status
-
-    if status == "ready" and resource_id is not None:
-        # Check if binding already exists
-        binding_stmt = select(CoursePathResourceBinding).where(
-            CoursePathResourceBinding.node_id == node_id,
-            CoursePathResourceBinding.resource_id == resource_id,
-        )
-        existing = (await session.exec(binding_stmt)).first()
-        if not existing:
-            binding = CoursePathResourceBinding(
-                user_id=user_id,
-                node_id=node_id,
-                resource_id=resource_id,
-            )
-            session.add(binding)
-
-    await session.commit()
+ResourceUsecases = ResourceService

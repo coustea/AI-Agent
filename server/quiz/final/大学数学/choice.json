@@ -14,8 +14,8 @@
       "C": "结论不确定",
       "D": "第二类间断点"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -38,8 +38,8 @@
       "C": "3",
       "D": "2"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -62,8 +62,8 @@
       "C": "$2^x+C$",
       "D": "$2^x \\ln 2+C$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -86,8 +86,8 @@
       "C": "f(2x)",
       "D": "2xf(x^2)"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -110,8 +110,8 @@
       "C": "$\\varphi[f(x)]$",
       "D": "$f[\\varphi(x)]$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -134,8 +134,8 @@
       "C": "$(-2)^n|A||B|^{-1}$",
       "D": "$-2|A||B|^{-1}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -158,8 +158,8 @@
       "C": "$x=0， x=1$ 都是 $f(x)$ 的第二类间断点;",
       "D": "$x=0$ 是 $f(x)$ 的第二类间断点， $x=1$ 是 $f(x)$ 的第一类间断点"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -182,8 +182,8 @@
       "C": "$f(x)=\\sqrt{x^2}， g(x)=x$",
       "D": "$f(x)=\\frac{x^2-1}{x+1}， g(x)=x-1$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -254,8 +254,8 @@
       "C": "$a_1 a_2 a_3 a_4+b_1 b_2 b_3 b_4$;",
       "D": "$a_1 a_2 a_3 a_4-b_1 b_2 b_3 b_4$;"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -278,8 +278,8 @@
       "C": "1",
       "D": "3"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -302,8 +302,8 @@
       "C": "$A， B$ 相互独立",
       "D": "$A \\bigcup B=\\Omega$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -326,8 +326,8 @@
       "C": "都等于n",
       "D": "必有一个等于零"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -350,8 +350,8 @@
       "C": "$y'''-y''-y'+y=0$",
       "D": "$y'''-6y''+11y'-6y=0$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -374,8 +374,8 @@
       "C": "矩阵 $A=({\\alpha}_1，\\cdots，{\\alpha}_m)$ 与矩阵 $B=({\\beta}_1，\\cdots，{\\beta}_m)$ 等价",
       "D": "向量组 ${\\alpha}_1，{\\alpha}_2，\\cdots，{\\alpha}_m$ 可由向量组 ${\\beta}_1，{\\beta}_2，\\cdots，{\\beta}_m$ 线性表示."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -398,8 +398,8 @@
       "C": "$A_2， A_3， A_4$ 两两独立",
       "D": "$A_2， A_3， A_4$ 相互独立"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -422,8 +422,8 @@
       "C": "等于 2",
       "D": "不存在"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -518,8 +518,8 @@
       "C": "偶函数",
       "D": "单调函数"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -542,8 +542,8 @@
       "C": "$f(0)=0$ 且 $f_{-}^{\\prime}(0)$ 存在",
       "D": "$f(0)=1$ 且 $f_{-}^{\\prime}(0)$ 存在"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -566,8 +566,8 @@
       "C": "$f^{\\prime}(x)=\\frac{1}{1-x}$",
       "D": "$f^{\\prime}(x)=\\frac{1}{|x-1|}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -686,8 +686,8 @@
       "C": "$A， B， \\bar{A} \\bar{C}$",
       "D": "$A， B， A+C$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -758,8 +758,8 @@
       "C": "连续， 但不一定可导",
       "D": "必可导"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -782,8 +782,8 @@
       "C": "$1>I_2>I_1$",
       "D": "$I_2>I_1>1$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -806,8 +806,8 @@
       "C": "$a=1， b=\\frac{1}{3}$",
       "D": "$a=1， b=\\frac{1}{6}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -830,8 +830,8 @@
       "C": "若B=PAQ$，则A的行（列）向量组与B的行（列）向量组等价",
       "D": "若A的行 (列) 向量组与B的行 (列) 向量组等价，则A与B等价"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -854,8 +854,8 @@
       "C": "2",
       "D": "1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -902,8 +902,8 @@
       "C": "$x=0， x=1$ 都是 $f(x)$ 的第二类间断点;",
       "D": "$x=0， x=1$ 都是 $f(x)$ 的第一类间断点;"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -926,8 +926,8 @@
       "C": "$\\frac{1}{5}$",
       "D": "$\\frac{3}{10}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -974,8 +974,8 @@
       "C": "若A，B可逆，则AB可逆",
       "D": "若A+B可逆，则A，B都可逆"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -998,8 +998,8 @@
       "C": "增减不定",
       "D": "保持不变"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1046,8 +1046,8 @@
       "C": "$E\\left(X^2\\right)-[E(X)]^2=E\\left(Y^2\\right)-[E(Y)]^2$",
       "D": "$E\\left(X^2\\right)=E\\left(Y^2\\right)$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1094,8 +1094,8 @@
       "C": "有定义且有极限",
       "D": "有定义但无极限"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1142,8 +1142,8 @@
       "C": "$R=\\frac{1}{2}$， 在切线的上方",
       "D": "$R=2$， 在切线的上方"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1166,8 +1166,8 @@
       "C": "设 $\\boldsymbol{\\alpha}_1， \\boldsymbol{\\alpha}_2， \\boldsymbol{\\alpha}_3， \\boldsymbol{\\alpha}_4$ 是 3 维列向量， 且两两正交， 则其中至少有一个零向量.",
       "D": "若 $\\boldsymbol{\\alpha}_1， \\boldsymbol{\\alpha}_2， \\cdots， \\boldsymbol{\\alpha}_n$ 线性相关， 则其中任一向量都可由其余向量线性表示."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1214,8 +1214,8 @@
       "C": "$F(x)+G(x)$",
       "D": "$F\\left(x^2\\right)$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1238,8 +1238,8 @@
       "C": "当|A|=0时，|B|=0",
       "D": "当$|A|=a(a \\neq 0)时，|B|=-a"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1262,8 +1262,8 @@
       "C": "等于 1",
       "D": "等于 3"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1310,8 +1310,8 @@
       "C": "2条",
       "D": "4条"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1334,8 +1334,8 @@
       "C": "$p$ 随着 $\\mu$ 的增加而减少",
       "D": "$p$ 随着 $\\mu$ 的增加而增加"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1358,8 +1358,8 @@
       "C": "不存在",
       "D": "$-a$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1406,8 +1406,8 @@
       "C": "$\\mathrm{e}^x+\\frac{1}{2} \\mathrm{e}^{2 x}+C$",
       "D": "$x+x \\ln x+C$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1430,8 +1430,8 @@
       "C": "$f^{\\prime \\prime}(0)=\\frac{1}{2}$",
       "D": "$f^{\\prime \\prime}(0)$ 不存在"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1454,8 +1454,8 @@
       "C": "$Q \\leq P \\leq N$",
       "D": "$N \\leq Q \\leq P$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1478,8 +1478,8 @@
       "C": "$a=b$ 或 $a+2 b \\neq 0$",
       "D": "$a \\neq b$ 且 $a+2 b \\neq 0$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1502,8 +1502,8 @@
       "C": "可去间断点",
       "D": "振荡间断点"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1550,8 +1550,8 @@
       "C": "$\\boldsymbol{\\delta}$ 必不可由 $\\boldsymbol{\\alpha}， \\boldsymbol{\\beta}， \\boldsymbol{\\gamma}$ 线性表示.",
       "D": "$\\boldsymbol{\\alpha}$ 必可由 $\\boldsymbol{\\beta}， \\boldsymbol{\\gamma}， \\boldsymbol{\\delta}$ 线性表示;"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1598,8 +1598,8 @@
       "C": "$P(C) \\leq P+P(B)-1$",
       "D": "$P(C)=P(A \\cup B)$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1646,8 +1646,8 @@
       "C": "当 $m>n$ 时， 必有 $|\\boldsymbol{A} \\boldsymbol{B}|=0$",
       "D": "当 $n>m$ 时， 必有 $|\\boldsymbol{A} \\boldsymbol{B}| \\neq 0$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1670,8 +1670,8 @@
       "C": "去掉任一向量 $\\boldsymbol{\\alpha}_i$ 后， $\\boldsymbol{\\alpha}_1， \\cdots， \\boldsymbol{\\alpha}_{i-1}， \\boldsymbol{\\alpha}_{i+1}， \\cdots， \\boldsymbol{\\alpha}_s$ 线性无关",
       "D": "添加向量 $\\boldsymbol{\\beta}$ 后， $\\boldsymbol{\\alpha}_1， \\boldsymbol{\\alpha}_2， \\cdots， \\boldsymbol{\\alpha}_s， \\boldsymbol{\\beta}$ 线性无关"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1694,8 +1694,8 @@
       "C": "可导",
       "D": "连续， 但不可导"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1718,8 +1718,8 @@
       "C": "$e^x \\ln 2$",
       "D": "$e^x+\\ln 2$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1742,8 +1742,8 @@
       "C": "$\\rho<0$",
       "D": "$\\rho=0$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1766,8 +1766,8 @@
       "C": "$x+x^2+\\frac{x^3}{2 !}+\\cdots+\\frac{x^n}{(n-1) !}+\\frac{\\mathrm{e}^{\\theta x}(n+1+\\theta x)}{(n+1) !} x^{n+1}， 0<\\theta<1$",
       "D": "$1+x+\\frac{x^2}{2 !}+\\ldots+\\frac{x^{n-1}}{(n-1) !}+\\frac{\\mathrm{e}^{\\theta x}(n+\\theta x)}{n !} x^{n+1}， 0<\\theta<1$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1814,8 +1814,8 @@
       "C": "向量组 $\\boldsymbol{\\alpha}_1， \\boldsymbol{\\alpha}_2， \\cdots， \\boldsymbol{\\alpha}_s， \\boldsymbol{\\beta}_1， \\boldsymbol{\\beta}_2， \\cdots， \\boldsymbol{\\beta}_s$ 的秩为 $r_1$",
       "D": "向量组 $\\boldsymbol{\\alpha}_1+\\boldsymbol{\\beta}_1， \\boldsymbol{\\alpha}_2+\\boldsymbol{\\beta}_2， \\cdots， \\boldsymbol{\\alpha}_s+\\boldsymbol{\\beta}_s$ 的秩为 $r_1+r_2$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1838,8 +1838,8 @@
       "C": "$P(A_1+A_2)=P(A_1 \\mid B)+P(A_2 \\mid B)$",
       "D": "$P(B)=P(A_1) P(B \\mid A_1)+P(A_2) P(B \\mid A_2)$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1862,8 +1862,8 @@
       "C": "不相关的充分必要条件",
       "D": "独立的充分条件， 但不是必要条件"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1886,8 +1886,8 @@
       "C": "$E\\left[(X-C)^2\\right] \\geq E\\left[(X-\\mu)^2\\right]$",
       "D": "$E\\left[(X-C)^2\\right]=E\\left[(X-\\mu)^2\\right]$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1910,8 +1910,8 @@
       "C": "$x^2 f\\left(x^4\\right)$",
       "D": "$4 x^2 f\\left(x^4\\right)$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1934,8 +1934,8 @@
       "C": "$x \\cos x-\\sin x$",
       "D": "$\\int_0^x \\frac{\\sin t^2}{t} d t$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -1982,8 +1982,8 @@
       "C": "$(\\begin{array}{cc}\\boldsymbol{O} & 3 \\boldsymbol{A}^* \\\\ 2 \\boldsymbol{B}^* & \\boldsymbol{O}\\end{array})$;",
       "D": "$(\\begin{array}{cc}\\boldsymbol{O} & 2 \\boldsymbol{A}^* \\\\ 3 \\boldsymbol{B}^* & \\boldsymbol{O}\\end{array})$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2006,8 +2006,8 @@
       "C": "1",
       "D": "4"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2030,8 +2030,8 @@
       "C": "$\\boldsymbol{A}$ 的列向量组线性相关， $\\boldsymbol{B}$ 的行向量组线性相关.",
       "D": "$\\boldsymbol{A}$ 的行向量组线性相关， $\\boldsymbol{B}$ 的行向量组线性相关."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2054,8 +2054,8 @@
       "C": "$\\boldsymbol{\\alpha}_1-\\boldsymbol{\\alpha}_2， \\boldsymbol{\\alpha}_2-\\boldsymbol{\\alpha}_3， \\boldsymbol{\\alpha}_3-\\boldsymbol{\\alpha}_4， \\boldsymbol{\\alpha}_4-\\boldsymbol{\\alpha}_1$ 线性无关",
       "D": "$\\boldsymbol{\\alpha}_1+\\boldsymbol{\\alpha}_2， \\boldsymbol{\\alpha}_2+\\boldsymbol{\\alpha}_3， \\boldsymbol{\\alpha}_3-\\boldsymbol{\\alpha}_4， \\boldsymbol{\\alpha}_4-\\boldsymbol{\\alpha}_1$ 线性无关"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2102,8 +2102,8 @@
       "C": "若 $A B=\\varnothing$， 则 $A， B$ 一定不相互独立",
       "D": "若 $A B \\neq \\varnothing$， 则 $A， B$ 一定相互独立"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2150,8 +2150,8 @@
       "C": "1",
       "D": "0"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2198,8 +2198,8 @@
       "C": "不存在最大值和最小值",
       "D": "最大值是 $\\mathrm{e}^{\\frac{1}{e}}$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2222,8 +2222,8 @@
       "C": "-3",
       "D": "-2"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2270,8 +2270,8 @@
       "C": "在点 $x_1$ 及 $x_2$ 处有定义， 且 $x_1<x_2$ 时， 必有 $f\\left(x_1\\right)>f\\left(x_2\\right)$",
       "D": "在点 $x_1$ 及 $x_2$ 处有定义， 且 $x_1<x_2$ 时， 必有 $f\\left(x_1\\right)<f\\left(x_2\\right)$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2294,8 +2294,8 @@
       "C": "$P(A-B)=P(A)$",
       "D": "$P(A \\cup B)=P(A) P(B)$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2342,8 +2342,8 @@
       "C": "3",
       "D": "1"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2366,8 +2366,8 @@
       "C": "$f(x)=\\cos |x|$",
       "D": "$f(x)=|x| \\sin |x|$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2390,8 +2390,8 @@
       "C": "$f(x)+\\sin x$",
       "D": "$|f(x)|$"
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2414,8 +2414,8 @@
       "C": "$K>M>N$.",
       "D": "$K>N>M$."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2438,8 +2438,8 @@
       "C": "$a b=0$.",
       "D": "$a b=2$."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "A",
+    "analysis": "CMMLU答案修正: D -> A",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2462,8 +2462,8 @@
       "C": "$\\int_{-1}^0 f(x) \\mathrm{d} x>\\int_0^1 f(x) \\mathrm{d} x$.",
       "D": "$\\int_{-1}^0 f(x) \\mathrm{d} x<\\int_0^1 f(x) \\mathrm{d} x$."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2486,8 +2486,8 @@
       "C": "当 $\\lim _{n \\rightarrow \\infty}\\left(x_n+x_n^2\\right)=0$ 时， $\\lim _{n \\rightarrow \\infty} x_n=0$.",
       "D": "当 $\\lim _{n \\rightarrow \\infty}(x_n+\\sin x_n\\right)=0$ 时， $\\lim _{n \\rightarrow \\infty} x_n=0$."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2510,8 +2510,8 @@
       "C": "$A \\mathrm{e}^{2 x}+x \\mathrm{e}^{2 x}(B \\cos 2 x+C \\sin 2 x)$.",
       "D": "$A x \\mathrm{e}^{2 x}+x \\mathrm{e}^{2 x}(B \\cos 2 x+C \\sin 2 x)$."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "C",
+    "analysis": "CMMLU答案修正: D -> C",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"
@@ -2558,8 +2558,8 @@
       "C": "$a=\\frac{1}{2}， b=1$",
       "D": "$a=-\\frac{1}{2}， b=1$."
     },
-    "answer": "D",
-    "analysis": "",
+    "answer": "B",
+    "analysis": "CMMLU答案修正: D -> B",
     "knowledge_points": [],
     "tags": [
       "college_mathematics"

@@ -7,33 +7,28 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from app.resource.schemas import AgentConfigs, AgentSelection
-
+from pydantic import BaseModel, Field, field_validator
 
 # ======================================================================
 # 请求模型
 # ======================================================================
 
 
-class GeneratePathRequest(BaseModel):
-    """路径生成请求。"""
+class CreateLearningPathRequest(BaseModel):
+    """新学习路径创建请求。"""
 
     goal: str = Field(description="学习目标")
     topic: str = Field(default="", description="学习主题")
     module: str = Field(default="mentor", description="模块名称")
     current_knowledge: list[str] = Field(default_factory=list, description="当前已掌握的知识点")
     preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
-    enable_search: bool = Field(default=True, description="是否为路径规划启用联网搜索参考")
+    enable_search: bool = Field(default=False, description="是否允许规划阶段检索外部资料")
 
 
-class PathNodeResourceRequest(BaseModel):
-    """路径节点资源生成请求 — 不允许前端提交 learning_need、profile、user_id 或 node_id。"""
-    model_config = ConfigDict(extra="forbid")
+class AuxiliaryResourceRequest(BaseModel):
+    """节点辅助资源生成请求。"""
 
-    selected_agents: list[AgentSelection] = Field(default_factory=list)
-    agent_configs: AgentConfigs = Field(default_factory=AgentConfigs)
+    resource_type: str = Field(description="mindmap / code / ppt")
 
 
 # ======================================================================
@@ -80,6 +75,129 @@ class LearningSignalSnapshot(BaseModel):
     recommendations: list[str] = Field(default_factory=list, description="系统调整建议")
 
 
+class LearningPathTutorialDTO(BaseModel):
+    id: int
+    tutorial_type: str
+    version_no: int
+    based_on_tutorial_id: int | None = None
+    title: str
+    summary: str | None = None
+    content_markdown: str
+    knowledge_points: list[str] = Field(default_factory=list)
+    weak_knowledge_points: list[str] = Field(default_factory=list)
+    created_at: str
+
+
+class LearningPathQuestionDTO(BaseModel):
+    id: int
+    question_no: int
+    round_no: int
+    mode: str
+    type: str
+    question: str
+    choice: dict[str, Any] = Field(default_factory=dict)
+    answer: str
+    response: str | None = None
+    analysis: str | None = None
+    knowledge_points: list[str] = Field(default_factory=list)
+    is_correct: bool | None = None
+
+
+class LearningPathResourceDTO(BaseModel):
+    id: int
+    resource_type: str
+    version_no: int
+    title: str
+    content_format: str
+    content_text: str | None = None
+    content_json: dict[str, Any] | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
+class LearningPathNodeDTO(BaseModel):
+    id: int
+    node_id: str
+    stage_id: str
+    title: str
+    status: str
+    priority: int
+    attempt_count: int
+    mastery_target: str | None = None
+    estimated_minutes: int | None = None
+    difficulty: str | None = None
+    recommendation_reason: str | None = None
+    prerequisites: list[str] = Field(default_factory=list)
+    current_tutorial_id: int | None = None
+
+
+class LearningPathOverviewResponse(BaseModel):
+    id: int
+    module: str
+    title: str
+    goal: str
+    topic: str | None = None
+    overall_progress: int
+    eta_days: int
+    confidence: int
+    status: str
+    current_node_key: str | None = None
+    strategy_report: str | None = None
+    adjustment_rationale: list[str] = Field(default_factory=list)
+    stages: list[dict[str, Any]] = Field(default_factory=list)
+    nodes: list[LearningPathNodeDTO] = Field(default_factory=list)
+    created_at: str
+    updated_at: str
+
+
+class LearningPathHistoryItem(BaseModel):
+    id: int
+    title: str
+    goal: str
+    topic: str | None = None
+    overall_progress: int
+    status: str
+    current_node_key: str | None = None
+    updated_at: str
+
+
+class LearningPathNodeWorkspaceResponse(BaseModel):
+    path: LearningPathOverviewResponse
+    node: LearningPathNodeDTO
+    current_tutorial: LearningPathTutorialDTO | None = None
+    tutorials: list[LearningPathTutorialDTO] = Field(default_factory=list)
+    resources: list[LearningPathResourceDTO] = Field(default_factory=list)
+    current_round: int = 0
+    quiz_available: bool = False
+
+
+class PathQuizRoundResponse(BaseModel):
+    node_id: int
+    tutorial_id: int | None = None
+    round_no: int
+    questions: list[LearningPathQuestionDTO] = Field(default_factory=list)
+
+
+class PathQuizAnswerItem(BaseModel):
+    question_id: int
+    response: str
+
+
+class PathQuizSubmitRequest(BaseModel):
+    answers: list[PathQuizAnswerItem] = Field(default_factory=list, min_length=5, max_length=5)
+
+
+class PathQuizSubmitResponse(BaseModel):
+    node_id: int
+    round_no: int
+    score: int
+    passed: bool
+    outcome: str
+    weak_knowledge_points: list[str] = Field(default_factory=list)
+    next_node_id: int | None = None
+    current_tutorial_id: int | None = None
+
+
 class AgentPathNode(BaseModel):
     """规划 Agent 输出的单个路径节点。"""
 
@@ -103,7 +221,7 @@ class AgentStage(BaseModel):
     description: str = Field(description="阶段描述")
 
 
-class AgentCoursePathPlan(BaseModel):
+class AgentLearningPathPlan(BaseModel):
     """规划 Agent 的结构化输出。"""
 
     title: str = Field(description="路径标题")
@@ -130,137 +248,39 @@ class AgentCoursePathPlan(BaseModel):
         return value
 
 
-# ======================================================================
-# 响应模型
-# ======================================================================
-
-
-class CoursePathNodeDTO(BaseModel):
-    """课程路径节点 DTO。"""
-
-    id: int | None = None
-    node_id: str = ""
-    stage_id: str = ""
-    title: str = ""
-    status: str = "pending"
-    resource_status: str = "not_started"
-    progress: float = 0.0
-    priority: int = 0
-    prerequisites: list[str] = Field(default_factory=list)
-    mastery_target: str | None = None
-    estimated_minutes: int | None = None
-    difficulty: str | None = None
-    recommendation_reason: str | None = None
-    resource_id: int | None = None
-    resource_policy: dict | None = None
-    recommended_agents: list[str] = Field(default_factory=list)
-    resource_generation_reason: str | None = None
-
-
-class CoursePathResponse(BaseModel):
-    """课程路径响应。"""
-
-    id: int | None = None
-    module: str = ""
-    title: str = ""
-    goal: str | None = None
-    overall_progress: float = 0.0
-    current_stage_id: str | None = None
-    current_node_id: str | None = None
-    eta_days: int = 0
-    confidence: int = 0
-    status: str = "pending"
-    strategy_report: str | None = None
-    stages: list[dict[str, Any]] = Field(default_factory=list)
-    nodes: list[CoursePathNodeDTO] = Field(default_factory=list)
-    needs_optimization: bool = False
-    optimization_tips: list[str] = Field(default_factory=list)
-    search_evidence: list[dict[str, Any]] = Field(default_factory=list)
-    created_at: str = ""
-    should_generate_summary: bool = False
-    summary_id: int | None = None
-
-
 class PathLearningEvaluationResponse(BaseModel):
     """路径内学习效果评估响应。"""
 
     path_id: int
     overall_progress: float = 0.0
-    current_stage_id: str | None = None
-    current_node_id: str | None = None
+    current_node_key: str | None = None
     signal_snapshot: LearningSignalSnapshot = Field(default_factory=LearningSignalSnapshot)
     needs_optimization: bool = False
     optimization_tips: list[str] = Field(default_factory=list)
 
 
-class PathGenerationTaskResponse(BaseModel):
-    """异步路径规划任务状态响应。"""
-
-    task_id: int
-    module: str = "mentor"
-    goal: str = ""
-    status: str = "pending"
-    progress: int = 0
-    latest_message: str = ""
-    error_message: str | None = None
-    generated_path_id: int | None = None
-
-
-# ======================================================================
-# Re-exports from request.py
-# ======================================================================
-
-from app.path.request import PathPlanFeedbackRequest  # noqa: E402
-
-
-# ======================================================================
-# 路径完成总结
-# ======================================================================
-
-
-class PathSummarySchema(BaseModel):
-    """LLM 结构化输出 schema — 路径完成总结。"""
-
-    summary_markdown: str = Field(description="学习总结报告 Markdown")
-    mastery_scores: dict[str, Any] = Field(
-        description="各节点掌握度 {node_id: {score: 85, topic: '...', status: 'completed'}}"
-    )
-    weak_points: list[dict[str, Any]] = Field(
-        description="薄弱知识点列表 [{topic: '...', score: 55, suggestion: '...'}]"
-    )
-    next_suggestions: list[dict[str, Any]] = Field(
-        description="后续学习建议 [{title: '...', reason: '...'}]"
-    )
-
-
-class CoursePathSummaryResponse(BaseModel):
-    """路径完成总结 API 响应 DTO。"""
-
-    id: int | None = None
-    path_id: int = 0
-    status: str = "pending"
-    summary_markdown: str | None = None
-    mastery_scores: dict | None = None
-    weak_points: list | None = None
-    next_suggestions: list | None = None
-    error_message: str | None = None
-
 __all__ = [
     # Request
-    "GeneratePathRequest",
-    "PathNodeResourceRequest",
-    "PathPlanFeedbackRequest",
+    "CreateLearningPathRequest",
+    "AuxiliaryResourceRequest",
     # Agent output
     "AgentPathNode",
     "AgentStage",
-    "AgentCoursePathPlan",
+    "AgentLearningPathPlan",
     # Resource policy
     "NodeResourcePolicy",
     "LearningSignalSnapshot",
     "ALLOWED_RESOURCE_TYPES",
     # Response
-    "CoursePathNodeDTO",
-    "CoursePathResponse",
+    "LearningPathQuestionDTO",
+    "LearningPathResourceDTO",
+    "LearningPathTutorialDTO",
+    "LearningPathNodeDTO",
+    "LearningPathOverviewResponse",
+    "LearningPathHistoryItem",
+    "LearningPathNodeWorkspaceResponse",
+    "PathQuizRoundResponse",
+    "PathQuizSubmitRequest",
+    "PathQuizSubmitResponse",
     "PathLearningEvaluationResponse",
-    "PathGenerationTaskResponse",
 ]

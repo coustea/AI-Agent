@@ -33,8 +33,23 @@ class MindmapAgent(BaseResourceAgent):
             "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题和列表文本。"
         )
 
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="正在构建知识导图提示词",
+                progress=25,
+            )
+
         prompt = registry.get("resource/mindmap")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
+
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="导图已生成，正在解析分支结构",
+                progress=85,
+            )
+
         content = response.content if hasattr(response, "content") else str(response)
         content = _clean_markdown(content)
 

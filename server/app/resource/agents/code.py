@@ -22,17 +22,35 @@ class CodeAgent(BaseResourceAgent):
         from app.prompts import registry
 
         config = state.agent_config
+        language = config.get("programming_language") or config.get("language") or "python"
+        case_type = config.get("case_type") or "basic_demo"
+        difficulty = config.get("difficulty") or config.get("complexity") or "beginner"
         if config:
             cfg = ["## 代码配置"]
-            cfg.append(f"- 代码语言: {config.get('language', 'Python')}")
-            cfg.append(f"- 复杂度: {config.get('complexity', 'basic')}")
-            cfg.append(f"- 代码风格: {config.get('style', 'educational')}")
+            cfg.append(f"- programming_language: {language}")
+            cfg.append(f"- case_type: {case_type}")
+            cfg.append(f"- difficulty: {difficulty}")
             cfg.append("- 包含详细注释" if config.get("include_comments", True) else "- 不包含注释")
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += "\n\n请生成教学代码示例，包含代码注释和说明，输出为 Markdown 格式（代码块内为代码）。"
 
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="正在构建代码示例提示词",
+                progress=25,
+            )
+
         prompt = registry.get("resource/code")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
+
+        if self.emitter:
+            await self.emitter.emit_agent(
+                self.agent_id, status="running",
+                message="代码已生成，正在提取元信息",
+                progress=85,
+            )
+
         content = response.content if hasattr(response, "content") else str(response)
 
         return WorkerResult(
@@ -41,6 +59,6 @@ class CodeAgent(BaseResourceAgent):
             file_type="markdown",
             title=f"{state.learning_need[:32]} - 代码示例",
             summary="生成教学代码示例",
-            summary_data={"language": config.get("language", "Python") if config else "Python"},
-            metadata={"agent_id": "code"},
+            summary_data={"language": language, "case_type": case_type, "difficulty": difficulty},
+            metadata={"agent_id": "code", "language": language, "case_type": case_type, "difficulty": difficulty},
         )

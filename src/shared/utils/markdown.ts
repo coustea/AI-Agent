@@ -550,7 +550,7 @@ function containsMathSyntax(text: string): boolean {
   return /(^|[^\\])\$(?!\s)|^\s*\$\$\s*$|\\\(|\\\[|\\begin\{(?:cases|aligned|array|matrix|pmatrix|bmatrix)\}/m.test(normalized)
 }
 
-export function repairCopiedCodeBlocks(text: string): string {
+function repairCopiedCodeBlocks(text: string): string {
   if (!text) return text
   const lines = text.split('\n')
   const repaired: string[] = []

@@ -1,18 +1,7 @@
 """
 Bridge service state management.
-Defines states and message types for avatar WebSocket communication.
+Defines message types for avatar WebSocket communication.
 """
-
-from enum import Enum
-
-
-class BridgeState(Enum):
-    """Bridge service state enumeration."""
-    IDLE = "idle"                      # Idle
-    RECEIVING_AUDIO = "receiving_audio"  # Receiving audio
-    RECOGNIZING = "recognizing"        # Recognizing speech
-    GENERATING = "generating"          # Generating response
-    SPEAKING = "speaking"              # Avatar speaking
 
 
 class MessageType:

@@ -876,28 +876,6 @@ class AvatarBridgeManager:
         if bridge:
             await bridge.close()
 
-    async def cleanup_all(self) -> int:
-        """Cleanup all user bridges and return cleaned count."""
-        bridges = list(self._bridges.values())
-        self._bridges.clear()
-        self._locks.clear()
-
-        if not bridges:
-            return 0
-
-        results = await asyncio.gather(
-            *(bridge.close() for bridge in bridges),
-            return_exceptions=True,
-        )
-        failed = 0
-        for err in results:
-            if isinstance(err, Exception):
-                failed += 1
-                logger.error("[Bridge] cleanup_all 失败: %s", err)
-        cleaned = len(bridges) - failed
-        logger.info("[Bridge] cleanup_all : total=%s cleaned=%s failed=%s", len(bridges), cleaned, failed)
-        return cleaned
-
 
 # 全局单例
 avatar_bridge_manager = AvatarBridgeManager()

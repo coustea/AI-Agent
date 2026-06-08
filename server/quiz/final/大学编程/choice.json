@@ -12034,7 +12034,6 @@
     "bloom_level": null,
     "content": "Question: Which of the following can have different meaning in different contexts?",
     "options": {
-      "A": "",
       "B": "*",
       "C": "Both of the above",
       "D": "There are no such operators in C"
@@ -24557,8 +24556,7 @@
       "A": "8. Choose the correct alternative that utilizes the indexed property such that a group named class has indexed property which stores or retrieves value to/from an array of 5 numbers?",
       "B": "group[3] = 34;",
       "C": "group g = group();",
-      "D": "Console.WriteLine(group[3]);",
-      "E": ""
+      "D": "Console.WriteLine(group[3]);"
     },
     "answer": "B",
     "analysis": "A. This option is a statement, not a code snippet, and does not demonstrate how to use the property to store a value in the array.\n  B. This option correctly uses the write-only property to assign a value to the array. It implies the use of an indexed property to set a value at a specific index.\n  C. This option attempts to instantiate an object but uses incorrect syntax. The correct syntax should be `group g = new group();`.\n  D. This option attempts to read a value using an index, which is not possible with a write-only property as it does not have a getter.",
@@ -34897,30 +34895,6 @@
     },
     "answer": "A",
     "analysis": "A. Compilation Error: Python does not have a compilation step like compiled languages, but this option implies a fundamental issue preventing execution, such as incorrect file mode.\n  B. Syntax Error: This would occur if there were issues like missing colons or incorrect indentation. However, the main issue here is not syntax but file mode.\n  C. Displays Output: This implies the code runs successfully and outputs the file content, which is incorrect due to the file mode issue.\n  D. None of the mentioned: This suggests an unexpected outcome, but the primary issue is already identified.",
-    "knowledge_points": [],
-    "tags": [
-      "programming"
-    ],
-    "language": "en",
-    "split": "train"
-  },
-  {
-    "id": "coding_mcq_1816",
-    "source": "Coding-MCQ",
-    "subject": "大学编程",
-    "subject_en": "college_programming",
-    "type": "选择题",
-    "difficulty": null,
-    "bloom_level": null,
-    "content": "Question: To declare the version of XML, the correct syntax is",
-    "options": {
-      "A": "",
-      "B": "<*xml version=\\'1.0\\'/>",
-      "C": "",
-      "D": ""
-    },
-    "answer": "C",
-    "analysis": "A. <*xml version=\\'1.0\\'/>: This syntax is incorrect because it uses an asterisk (*) instead of the correct question mark (?) and also incorrectly uses single quotes.\n  B. <?xml version=\"1.0\"?>: This is the correct syntax for declaring the XML version. It uses the correct question mark and double quotes.\n  C. <?xml version=\\'1.0\\'/>: This syntax is incorrect because it uses single quotes instead of double quotes and incorrectly includes a self-closing tag.\n  D. <xml version=\"1.0\">: This is incorrect because it lacks the necessary question marks and does not follow the standard XML declaration format.",
     "knowledge_points": [],
     "tags": [
       "programming"

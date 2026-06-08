@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, Text, Column, Index, UniqueConstraint, func
+from sqlalchemy import ForeignKey, Integer, Text, Column, Index, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
 from sqlmodel import SQLModel, Field
 
@@ -332,6 +332,7 @@ class GeneratedResource(SQLModel, table=True):
     personalization: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     selected_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     agent_configs: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    source: str | None = Field(default=None, max_length=255, index=True)
 
     # 状态
     status: str = Field(default="pending", max_length=50)
@@ -415,10 +416,8 @@ class QuizQuestion(SQLModel, table=True):
         UniqueConstraint("question_id", name="uq_quiz_questions_question_id"),
         Index("ix_quiz_questions_subject_type", "subject", "question_type"),
         Index("ix_quiz_questions_subject_en_type", "subject_en", "question_type"),
-        Index("ix_quiz_questions_options_json", "options_json", postgresql_using="gin"),
-        Index("ix_quiz_questions_knowledge_points", "knowledge_points", postgresql_using="gin"),
+        Index("ix_quiz_questions_difficulty", "difficulty"),
         Index("ix_quiz_questions_tags", "tags", postgresql_using="gin"),
-        Index("ix_quiz_questions_raw_record", "raw_record", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -439,6 +438,47 @@ class QuizQuestion(SQLModel, table=True):
     split: str | None = Field(default=None, max_length=64, index=True)
     source_file: str | None = Field(default=None, max_length=500)
     raw_record: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+    )
+
+
+# ---------------------------------------------------------------------------
+# Programming Problem - 编程题（力扣/洛谷等 OJ 来源）
+# ---------------------------------------------------------------------------
+
+class ProgrammingProblem(SQLModel, table=True):
+    """编程题主表。"""
+    __tablename__ = "programming_problems"
+    __table_args__ = (
+        UniqueConstraint("problem_slug", name="uq_programming_problems_slug"),
+        Index("ix_prog_problems_difficulty", "difficulty"),
+        Index("ix_prog_problems_tags", "tags", postgresql_using="gin"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    problem_slug: str = Field(max_length=255, index=True)  # URL 标识
+    title: str = Field(max_length=500)
+    difficulty: str | None = Field(default=None, max_length=50, index=True)  # 简单/中等/困难
+    category: str | None = Field(default=None, max_length=100, index=True)  # 算法分类: 数组/链表/动态规划/图论 等
+
+    description: str = Field(sa_column=Column(Text))  # 题面 (Markdown)
+    input_format: str | None = Field(default=None, sa_column=Column(Text))
+    output_format: str | None = Field(default=None, sa_column=Column(Text))
+
+    examples: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # [{input, output, explanation}]
+    hints: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+
+    code_snippets: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # {python: "...", cpp: "..."}
+    test_cases: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # [{input, output}]
+
+    tags: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -511,83 +551,34 @@ class LearningSession(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Path — 课程级学习路径规划 (Course Path)
+# Learning Path V2 — 新学习路径域
 # ---------------------------------------------------------------------------
 
-class CoursePathGenerationTask(SQLModel, table=True):
-    """路径规划任务表 — 保存慢速规划过程的真实进度快照。"""
-    __tablename__ = "course_path_generation_tasks"
+class LearningPath(SQLModel, table=True):
+    """学习路径主表。"""
+    __tablename__ = "learning_paths"
     __table_args__ = (
-        Index("ix_path_generation_tasks_user_module_status", "user_id", "module", "status"),
+        Index("ix_learning_paths_user_module_status", "user_id", "module", "status"),
+        Index("ix_learning_paths_user_module_updated", "user_id", "module", "updated_at"),
+        Index("ix_learning_paths_stages_json", "stages_json", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     module: str = Field(default="mentor", index=True)
-    goal: str = Field(sa_column=Column(Text))
-    topic: str = Field(default="", sa_column=Column(Text))
-    current_knowledge: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    preferences: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-
-    status: str = Field(default="pending", max_length=30, index=True)
-    progress: int = Field(default=0, ge=0, le=100)
-    latest_message: str = Field(default="规划任务已创建，等待开始", sa_column=Column(Text))
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
-    generated_path_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("course_paths.id", ondelete="SET NULL"), index=True))
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
-    )
-
-
-class CoursePath(SQLModel, table=True):
-    """课程级学习路径表 — 记录用户在特定目标下的学习路线图。"""
-    __tablename__ = "course_paths"
-    __table_args__ = (
-        Index("ix_course_paths_user_module_status", "user_id", "module", "status"),
-        Index("ix_course_paths_stages_json", "stages_json", postgresql_using="gin"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
-    module: str = Field(default="mentor", index=True)
-
-    # 路径配置
     title: str = Field(max_length=200)
     goal: str = Field(sa_column=Column(Text))
-    
-    # 进度信息
-    overall_progress: int = Field(default=0, ge=0, le=100)
-    current_stage_id: str | None = Field(default=None, max_length=50)
-    current_node_id: str | None = Field(default=None, max_length=50)
+    topic: str | None = Field(default=None, sa_column=Column(Text))
 
-    # 预估信息
+    overall_progress: int = Field(default=0, ge=0, le=100)
+    current_node_key: str | None = Field(default=None, max_length=80, index=True)
     eta_days: int = Field(default=14, ge=1)
     confidence: int = Field(default=60, ge=0, le=100)
+    status: str = Field(default="active", max_length=30, index=True)
 
-    # 版本与状态
-    version: int = Field(default=1)
-    status: str = Field(default="active", max_length=30, index=True)  # active, completed, archived
-
-    # 宏观阶段框架 (来自大模型生成的 Stages)
-    stages_json: list[dict] | None = Field(default=None, sa_column=Column(JSONB))
-
-    # 规划原因/依据 (来自大模型)
-    adjustment_rationale: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
-    # 个性化诊断与裁剪策略报告 (来自多智能体规划第一棒)
+    stages_json: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
     strategy_report: str | None = Field(default=None, sa_column=Column(Text))
-
-    # 搜索证据与学习效果摘要
-    search_evidence: list[dict] | None = Field(default=None, sa_column=Column(JSONB), description="搜索证据摘要")
-    learning_signal_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="学习效果摘要")
+    adjustment_rationale: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -599,46 +590,74 @@ class CoursePath(SQLModel, table=True):
     )
 
 
-class CoursePathNode(SQLModel, table=True):
-    """课程路径节点表 — 记录地图上的每一个学习节点（能力点/知识点）。"""
-    __tablename__ = "course_path_nodes"
+class PathNode(SQLModel, table=True):
+    """学习路径节点表。"""
+    __tablename__ = "path_nodes"
     __table_args__ = (
-        Index("ix_course_path_nodes_path_stage", "path_id", "stage_id"),
-        Index("ix_course_path_nodes_user_status", "user_id", "status"),
-        Index("ix_course_path_nodes_prerequisites", "prerequisites", postgresql_using="gin"),
+        Index("ix_path_nodes_path_stage", "path_id", "stage_id"),
+        Index("ix_path_nodes_user_status", "user_id", "status"),
+        Index("ix_path_nodes_path_priority", "path_id", "priority"),
+        Index("ix_path_nodes_prerequisites", "prerequisites", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    path_id: int = Field(sa_column=Column(Integer, ForeignKey("course_paths.id", ondelete="CASCADE"), index=True))
+    path_id: int = Field(sa_column=Column(Integer, ForeignKey("learning_paths.id", ondelete="CASCADE"), index=True))
     user_id: int = Field(index=True)
 
-    # 节点标识
-    node_id: str = Field(max_length=50, index=True)  # 节点唯一标识
-    stage_id: str = Field(max_length=50)  # 所属阶段 (如 foundation, core, extension)
+    node_id: str = Field(max_length=80, index=True)
+    stage_id: str = Field(max_length=80, index=True)
     title: str = Field(max_length=200)
 
-    # 节点状态
-    status: str = Field(default="locked", max_length=20)  # locked, available, in_progress, completed
-    resource_status: str = Field(default="not_started", max_length=20)  # not_started, generating, ready, failed
-    progress: int = Field(default=0, ge=0, le=100)
-    priority: int = Field(default=50, ge=0, le=100)
+    status: str = Field(default="locked", max_length=32, index=True)
+    priority: int = Field(default=0)
+    attempt_count: int = Field(default=0, ge=0)
+    current_tutorial_id: int | None = Field(default=None, index=True)
 
-    # 节点元数据
-    prerequisites: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 前置节点 ID 列表
-    mastery_target: str | None = Field(default=None, sa_column=Column(Text))  # 掌握目标
-    estimated_minutes: int | None = Field(default=None)  # 预计花费时间
-    difficulty: str | None = Field(default=None, max_length=30)  # beginner, intermediate, advanced
-
-    # 推荐原因（基于画像维度的推荐理由）
+    prerequisites: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    mastery_target: str | None = Field(default=None, sa_column=Column(Text))
+    estimated_minutes: int | None = Field(default=None)
+    difficulty: str | None = Field(default=None, max_length=30)
     recommendation_reason: str | None = Field(default=None, sa_column=Column(Text))
 
-    # 资源推送策略
-    resource_policy: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="资源推送策略")
-
-    # 完成信息
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+    )
     started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
     completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
 
+
+class PathNodeTutorial(SQLModel, table=True):
+    """节点教程版本表。"""
+    __tablename__ = "path_node_tutorials"
+    __table_args__ = (
+        Index("ix_path_node_tutorials_node_current", "node_id", "is_current"),
+        Index("ix_path_node_tutorials_node_type", "node_id", "tutorial_type"),
+        Index("ix_path_node_tutorials_based_on", "based_on_tutorial_id"),
+        Index("ix_path_node_tutorials_knowledge_points", "knowledge_points", postgresql_using="gin"),
+        Index("ix_path_node_tutorials_weak_points", "weak_knowledge_points", postgresql_using="gin"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    path_id: int = Field(sa_column=Column(Integer, ForeignKey("learning_paths.id", ondelete="CASCADE"), index=True))
+    node_id: int = Field(sa_column=Column(Integer, ForeignKey("path_nodes.id", ondelete="CASCADE"), index=True))
+    user_id: int = Field(index=True)
+
+    tutorial_type: str = Field(default="primary", max_length=32, index=True)
+    version_no: int = Field(default=1, ge=1)
+    based_on_tutorial_id: int | None = Field(default=None, index=True)
+    is_current: bool = Field(default=True, index=True)
+
+    title: str = Field(max_length=200)
+    summary: str | None = Field(default=None, sa_column=Column(Text))
+    content_markdown: str = Field(sa_column=Column(Text))
+    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    weak_knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -649,45 +668,66 @@ class CoursePathNode(SQLModel, table=True):
     )
 
 
-class CoursePathResourceBinding(SQLModel, table=True):
-    """课程路径节点与实际生成资源的绑定关系。"""
-    __tablename__ = "course_path_resource_bindings"
+class PathNodeQuestion(SQLModel, table=True):
+    """节点测验题与作答快照表。"""
+    __tablename__ = "path_node_questions"
     __table_args__ = (
-        Index("ix_course_path_resource_bindings_node", "node_id"),
-        Index("ix_course_path_resource_bindings_resource", "resource_id"),
+        Index("ix_path_node_questions_node_round", "node_id", "round_no"),
+        Index("ix_path_node_questions_tutorial_round", "tutorial_id", "round_no"),
+        Index("ix_path_node_questions_knowledge_points", "knowledge_points", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    path_id: int = Field(sa_column=Column(Integer, ForeignKey("learning_paths.id", ondelete="CASCADE"), index=True))
+    node_id: int = Field(sa_column=Column(Integer, ForeignKey("path_nodes.id", ondelete="CASCADE"), index=True))
+    tutorial_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("path_node_tutorials.id", ondelete="SET NULL"), index=True))
     user_id: int = Field(index=True)
-    
-    node_id: int = Field(sa_column=Column(Integer, ForeignKey("course_path_nodes.id", ondelete="CASCADE"), index=True))
-    resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
-    resource_item_id: int | None = Field(default=None, index=True)
+
+    round_no: int = Field(default=1, ge=1)
+    question_no: int = Field(default=1, ge=1, le=5)
+    mode: str = Field(default="quiz", max_length=32)
+    type: str = Field(default="single_choice", max_length=32)
+
+    question: str = Field(sa_column=Column(Text))
+    choice: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    answer: str = Field(sa_column=Column(Text))
+    response: str | None = Field(default=None, sa_column=Column(Text))
+    analysis: str | None = Field(default=None, sa_column=Column(Text))
+    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    is_correct: bool | None = Field(default=None, index=True)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+    )
+    submitted_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
 
 
-class CoursePathSummary(SQLModel, table=True):
-    """路径学习总结表 — 记录路径完成后的掌握度分析、薄弱点回顾和后续建议。"""
-    __tablename__ = "course_path_summaries"
+class PathNodeResource(SQLModel, table=True):
+    """节点额外资源表。"""
+    __tablename__ = "path_node_resources"
     __table_args__ = (
-        Index("ix_course_path_summaries_user_path", "user_id", "path_id"),
+        Index("ix_path_node_resources_node_type", "node_id", "resource_type"),
+        Index("ix_path_node_resources_content_json", "content_json", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    path_id: int = Field(index=True, foreign_key="course_paths.id")
+    path_id: int = Field(sa_column=Column(Integer, ForeignKey("learning_paths.id", ondelete="CASCADE"), index=True))
+    node_id: int = Field(sa_column=Column(Integer, ForeignKey("path_nodes.id", ondelete="CASCADE"), index=True))
+    tutorial_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("path_node_tutorials.id", ondelete="SET NULL"), index=True))
     user_id: int = Field(index=True)
 
-    summary_markdown: str | None = Field(default=None, sa_column=Column(Text))
-    mastery_scores: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    weak_points: list[dict] | None = Field(default=None, sa_column=Column(JSONB))
-    next_suggestions: list[dict] | None = Field(default=None, sa_column=Column(JSONB))
-
-    status: str = Field(default="pending", max_length=20, index=True)  # pending, generating, completed, failed
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
+    resource_type: str = Field(max_length=32, index=True)
+    version_no: int = Field(default=1, ge=1)
+    title: str = Field(max_length=200)
+    content_format: str = Field(default="markdown", max_length=32)
+    content_text: str | None = Field(default=None, sa_column=Column(Text))
+    content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -714,13 +754,14 @@ REGISTERED_MODELS = (
     GeneratedResource,
     GeneratedResourceItem,
     QuizQuestion,
+    ProgrammingProblem,
     LearningEvent,
     LearningSession,
-    CoursePathGenerationTask,
-    CoursePath,
-    CoursePathNode,
-    CoursePathResourceBinding,
-    CoursePathSummary,
+    LearningPath,
+    PathNode,
+    PathNodeTutorial,
+    PathNodeQuestion,
+    PathNodeResource,
     User,
     School,
 )

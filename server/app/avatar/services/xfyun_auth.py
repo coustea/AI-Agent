@@ -28,13 +28,6 @@ class Url:
         self.schema = schema
 
 
-def _sha256_base64(data: bytes) -> str:
-    """Calculate SHA256 hash and encode to base64."""
-    sha256 = hashlib.sha256()
-    sha256.update(data)
-    return base64.b64encode(sha256.digest()).decode(encoding="utf-8")
-
-
 def _parse_url(request_url: str) -> Url:
     """Parse URL into components."""
     stidx = request_url.index("://")

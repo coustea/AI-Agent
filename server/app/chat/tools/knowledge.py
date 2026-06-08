@@ -148,11 +148,6 @@ def format_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[s
     return "\n\n".join(parts), rows
 
 
-async def aretrieve_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str, Any]]:
-    """Async wrapper for local knowledge retrieval."""
-    return await asyncio.to_thread(retrieve_knowledge, query, top_k=top_k)
-
-
 async def aformat_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[str, list[dict[str, Any]]]:
     """Async wrapper for formatted local knowledge context."""
     return await asyncio.to_thread(format_knowledge_context, query, top_k=top_k)

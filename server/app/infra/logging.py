@@ -141,8 +141,6 @@ class LoguruLoggerProxy:
         msg, fmt_args = self._format_message(message, args)
         self._logger.opt(exception=True).error(msg, *fmt_args, **kwargs)
 
-    def critical(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._log("CRITICAL", message, *args, **kwargs)
 
 
 def get_logger(name: str) -> LoguruLoggerProxy:
@@ -169,11 +167,6 @@ def get_module_logger(module: str, *, sub: str = "") -> LoguruLoggerProxy:
 
 # Global flag for debug mode
 _APP_DEBUG_MODE: bool = False
-
-
-def is_debug_mode() -> bool:
-    """Check if the application is running in debug mode."""
-    return _APP_DEBUG_MODE
 
 
 def configure_logging(*, debug: bool = False) -> None:
