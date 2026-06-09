@@ -130,6 +130,7 @@ class ChatMessage(SQLModel, table=True):
         Index("ix_chat_messages_user_session_module_created_at", "user_id", "session_id", "module", "created_at"),
         Index("ix_chat_messages_attachments", "attachments", postgresql_using="gin"),
         Index("ix_chat_messages_tool_calls", "tool_calls", postgresql_using="gin"),
+        Index("ix_chat_messages_knowledge_sources", "knowledge_sources", postgresql_using="gin"),
         Index("ix_chat_messages_teaching_diagram", "teaching_diagram", postgresql_using="gin"),
         Index("ix_chat_messages_usage_metadata", "usage_metadata", postgresql_using="gin"),
     )
@@ -144,6 +145,7 @@ class ChatMessage(SQLModel, table=True):
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
+    knowledge_sources: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
     teaching_diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 教学图解数据
     usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 记录该条消息消耗的精准 Token
     created_at: datetime = Field(
@@ -740,6 +742,48 @@ class PathNodeResource(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
+# Wrong Question — 错题本
+# ---------------------------------------------------------------------------
+
+class WrongQuestion(SQLModel, table=True):
+    """错题本表 — 记录用户答错的题目"""
+    __tablename__ = "wrong_questions"
+    __table_args__ = (
+        Index("ix_wrong_questions_user_id", "user_id"),
+        Index("ix_wrong_questions_user_question", "user_id", "question_id", unique=True),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    question_id: str = Field(max_length=255, index=True)  # 关联 QuizQuestion.question_id
+
+    # 快照字段（避免题目被删除后无法查看）
+    subject: str = Field(max_length=255)
+    question_type: str = Field(max_length=100)
+    content: str = Field(sa_column=Column(Text))
+    options_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    standard_answer: str | None = Field(default=None, sa_column=Column(Text))
+    analysis: str | None = Field(default=None, sa_column=Column(Text))
+
+    # 错误信息
+    user_answer: str | None = Field(default=None, sa_column=Column(Text))  # 用户当时答错的答案
+    wrong_count: int = Field(default=1)  # 累计错误次数
+
+    # 用户标记
+    note: str | None = Field(default=None, sa_column=Column(Text))  # 用户笔记
+    is_archived: bool = Field(default=False)  # 是否已归档（手动移除）
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+    )
+
+
+# ---------------------------------------------------------------------------
 # Model registration — init_db() 通过此元组获取所有需要建表的模型类
 # ---------------------------------------------------------------------------
 
@@ -764,4 +808,5 @@ REGISTERED_MODELS = (
     PathNodeResource,
     User,
     School,
+    WrongQuestion,
 )

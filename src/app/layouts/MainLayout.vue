@@ -89,7 +89,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Menu, Connection, Cpu, ChatDotRound,
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
-  User, DataBoard, Collection
+  User, DataBoard, Collection, Close
 } from '@element-plus/icons-vue'
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
@@ -109,6 +109,7 @@ const navItems = [
   { path: '/path-planner', label: '路径规划', icon: Connection },
   { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
   { path: '/question-bank', label: '学习题库', icon: Collection },
+  { path: '/wrong-questions', label: '错题本', icon: Close },
 ]
 
 useAuthPolling(60000)

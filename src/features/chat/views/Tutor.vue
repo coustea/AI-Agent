@@ -138,8 +138,7 @@
       <section class="chat-container">
 
         <div v-if="chatMode === 'digital_human'" class="digital-human-stage">
-          <!-- DigitalHumanCanvas removed — TODO: re-enable when component is restored -->
-          <!-- <DigitalHumanCanvas
+          <DigitalHumanCanvas
               :is-ready="isAvatarReady"
               :is-connected="isAvatarConnected"
               :audio-enabled="avatarAudioEnabled"
@@ -148,7 +147,7 @@
               @enable-audio="enableAvatarAudio"
               @disconnect="disconnectAvatar"
               @reconnect="handleAvatarReconnect"
-          /> -->
+          />
 
           <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking || isVadListening || isAsrProcessing }">
             <div class="speech-wave" v-if="isAIThinking || isAvatarSpeaking">
@@ -252,18 +251,6 @@
                   <TeachingDiagramCard :diagram="msg.teachingDiagram" compact @expand="previewTeachingDiagram" />
                 </div>
 
-                <div v-if="msg.role === 'ai' && msg.knowledgeSources && msg.knowledgeSources.length > 0" class="knowledge-sources">
-                  <div class="knowledge-sources-title">回答来源</div>
-                  <div
-                    v-for="item in msg.knowledgeSources"
-                    :key="`${item.rank}-${item.source}-${item.chunk_index}`"
-                    class="knowledge-source-item"
-                  >
-                    <span class="knowledge-source-rank">[{{ item.rank }}]</span>
-                    <span class="knowledge-source-name">{{ item.file_name || item.source }}</span>
-                    <span v-if="item.chunk_index !== undefined" class="knowledge-source-meta">片段 {{ item.chunk_index }}</span>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -310,17 +297,6 @@
                           <ellipse cx="12" cy="12" rx="5" ry="10"></ellipse>
                           <line x1="12" y1="2" x2="12" y2="22"></line>
                           <line x1="2" y1="12" x2="22" y2="12"></line>
-                        </svg>
-                      </el-icon>
-                    </button>
-                  </el-tooltip>
-
-                  <el-tooltip content="知识库检索" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-amber': enableKnowledgeBase }" @click="enableKnowledgeBase = !enableKnowledgeBase" :aria-label="enableKnowledgeBase ? '关闭知识库检索' : '开启知识库检索'">
-                      <el-icon aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                         </svg>
                       </el-icon>
                     </button>
@@ -504,7 +480,7 @@ import type {
 } from '@/features/chat/model/chat'
 import { getMe } from '@/features/auth/api/auth'
 import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
-// import DigitalHumanCanvas from '@/digital-human/views/DigitalHumanCanvas.vue' // TODO: re-enable when DigitalHumanCanvas.vue is restored
+import DigitalHumanCanvas from '@/features/chat/digital-human/views/DigitalHumanCanvas.vue'
 import {
   type PendingFile,
   type Attachment,
@@ -544,7 +520,6 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isExpandedInput = ref(false)
 
 const enableWebSearch = ref(false)
-const enableKnowledgeBase = ref(false)
 const needTeachingDiagram = ref(false)
 const generateVideo = ref(false)
 const hasToggledMedia = ref(false)
@@ -556,17 +531,14 @@ const hasSpeechDetected = ref(false)
 const lastAsrCommittedText = ref('')
 let lastAsrCommitAt = 0
 
-const canvasRef = ref<any>(null) // was InstanceType<typeof DigitalHumanCanvas> — TODO: restore when component is back
+const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
 const {
   isConnected: isAvatarConnected,
-  // @ts-expect-error — used by digital-human template (commented out)
   isAvatarReady,
   isSpeaking: isAvatarSpeaking,
   isListening: isVadListening,
-  // @ts-expect-error — used by digital-human template (commented out)
   audioEnabled: avatarAudioEnabled,
   speechRate: avatarSpeechRate,
-  // @ts-expect-error — used by digital-human template (commented out)
   idleCountdown: avatarIdleCountdown,
   connect: connectAvatar,
   disconnect: disconnectAvatar,
@@ -575,7 +547,6 @@ const {
   setNeedDiagram: setAvatarNeedDiagram,
   startVad,
   stopVad,
-  // @ts-expect-error — used by digital-human template (commented out)
   enableAudio: enableAvatarAudio,
   setPlayerContainer,
 } = useDigitalHuman({
@@ -1560,9 +1531,6 @@ const switchSession = async (sessionId: string) => {
           aiMsg.searchStage = undefined
           aiMsg.searchMessage = undefined
           aiMsg.teachingDiagramGenerating = false
-          if (Array.isArray(payload?.knowledge_sources)) {
-            aiMsg.knowledgeSources = payload.knowledge_sources
-          }
           if (diagram) {
             aiMsg.teachingDiagram = diagram
           }
@@ -1647,7 +1615,6 @@ const getAvatarCapabilities = () => ({
   session_id: digitalHumanSessionId.value,
   history: buildStreamHistory().map(item => ({ role: item.role, content: item.content })),
   enable_web_search: enableWebSearch.value,
-  enable_knowledge_base: enableKnowledgeBase.value,
   generate_video: generateVideo.value,
 })
 
@@ -1732,7 +1699,6 @@ const handleVoiceChatToggle = async () => {
   }
 }
 
-// @ts-expect-error — used by digital-human template (commented out)
 const handleAvatarReconnect = async () => {
   disconnectAvatar()
   await connectAvatar()
@@ -1895,7 +1861,6 @@ const handleSend = async () => {
         need_teaching_diagram: shouldGenerateTeachingDiagram,
         generate_video: generateVideo.value,
         enable_web_search: enableWebSearch.value,
-        enable_knowledge_base: enableKnowledgeBase.value,
       },
       {
         onChunk: (chunk) => {
@@ -1989,9 +1954,6 @@ const handleSend = async () => {
             aiMsg.searchStage = undefined
             aiMsg.searchMessage = undefined
             aiMsg.teachingDiagramGenerating = false
-            if (Array.isArray(payload?.knowledge_sources)) {
-              aiMsg.knowledgeSources = payload.knowledge_sources
-            }
             if (!diagram) return
             aiMsg.teachingDiagram = diagram
             scrollToBottom()
@@ -3112,48 +3074,6 @@ onBeforeUnmount(() => {
 .attachment-link:hover {
   border-color: var(--color-border-hover);
   background: var(--color-bg);
-}
-
-.knowledge-sources {
-  margin-top: var(--space-3);
-  padding: var(--space-3);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.knowledge-sources-title {
-  font-size: 0.8rem;
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-2);
-}
-
-.knowledge-source-item {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 0.78rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
-}
-
-.knowledge-source-item + .knowledge-source-item {
-  margin-top: 6px;
-}
-
-.knowledge-source-rank {
-  color: var(--color-text-faint);
-}
-
-.knowledge-source-name {
-  color: var(--color-text);
-  word-break: break-word;
-}
-
-.knowledge-source-meta {
-  color: var(--color-text-faint);
-  white-space: nowrap;
 }
 
 /* ================= 针对极简输入框的优化 ================= */

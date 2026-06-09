@@ -152,6 +152,7 @@ class MemoryService:
         content: str,
         attachments: list[dict[str, Any]] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
+        knowledge_sources: list[dict[str, Any]] | None = None,
         teaching_diagram: dict[str, Any] | None = None,
         usage_metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -174,6 +175,7 @@ class MemoryService:
                     content=content,
                     attachments=attachments,
                     tool_calls=tool_calls,
+                    knowledge_sources=knowledge_sources,
                     teaching_diagram=teaching_diagram,
                     usage_metadata=usage_metadata,
                 )

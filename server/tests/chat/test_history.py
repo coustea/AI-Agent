@@ -24,6 +24,7 @@ class FakeMessage:
     created_at: datetime
     attachments: list[dict] | None = None
     tool_calls: list[dict] | None = None
+    knowledge_sources: list[dict] | None = None
     teaching_diagram: dict | None = None
 
 
@@ -60,3 +61,27 @@ def test_chat_history_does_not_filter_out_expired_short_term_messages(monkeypatc
     assert items[0].content == "历史回答"
     assert items[0].teaching_diagram == {"type": "journey", "title": "握手过程"}
     assert FakeMemoryService.calls[0]["only_unexpired"] is False
+
+
+def test_chat_history_includes_knowledge_sources(monkeypatch):
+    from app.chat import service
+
+    class FakeMemoryServiceWithKnowledge(FakeMemoryService):
+        async def list_messages(self, **kwargs):
+            self.calls.append(kwargs)
+            return [
+                FakeMessage(
+                    role="assistant",
+                    content="answer",
+                    created_at=datetime(2026, 4, 1, 8, 0),
+                    knowledge_sources=[{"rank": 1, "source": "chapter1.md", "file_name": "chapter1.md"}],
+                )
+            ]
+
+    FakeMemoryServiceWithKnowledge.calls = []
+    monkeypatch.setattr(service, "MemoryService", FakeMemoryServiceWithKnowledge)
+
+    store = service.ConversationStore(memory_service=FakeMemoryServiceWithKnowledge(module="mentor"))
+    items = asyncio.run(store.get_history(user_id=7, session_id="s-1"))
+
+    assert items[0].knowledge_sources == [{"rank": 1, "source": "chapter1.md", "file_name": "chapter1.md"}]

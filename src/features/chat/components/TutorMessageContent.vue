@@ -21,6 +21,32 @@ const props = defineProps<{
 const streamingHtml = ref('')
 let renderTimer: ReturnType<typeof setTimeout> | null = null
 
+const normalizeComparisonTables = (text: string): string => {
+  if (!text || !text.includes('对比项')) return text
+
+  return text
+    .split('\n')
+    .map((line) => {
+      if (!line.trim()) return line
+      if (line.includes('对比项') && !line.includes('|')) {
+        return line.replace(/\s{2,}/g, ' | ').replace(/^/, '| ').replace(/$/, ' |')
+      }
+      if (/^-{3,}\s+-{3,}/.test(line.trim()) && !line.includes('|')) {
+        return line.replace(/\s{2,}/g, ' | ').replace(/^/, '| ').replace(/$/, ' |')
+      }
+      if (/^\S+\s{2,}\S+/.test(line) && !line.includes('|')) {
+        return line.replace(/\s{2,}/g, ' | ').replace(/^/, '| ').replace(/$/, ' |')
+      }
+      return line
+    })
+    .join('\n')
+}
+
+const renderContentHtml = () => {
+  const normalized = normalizeComparisonTables(props.content || '')
+  streamingHtml.value = renderStreamingMarkdownHtml(normalized)
+}
+
 const handleContentClick = async (event: MouseEvent) => {
   const target = event.target as HTMLElement
   if (!target.classList.contains('code-block-copy-btn')) return
@@ -53,7 +79,7 @@ const shouldRenderMarkdownNow = (text: string): boolean => {
 
 const commitStreamingHtml = () => {
   renderTimer = null
-  streamingHtml.value = renderStreamingMarkdownHtml(props.content || '')
+  renderContentHtml()
 }
 
 watch(
@@ -123,6 +149,31 @@ onBeforeUnmount(() => {
 
 .stream-markdown :deep(pre) {
   overflow-x: auto;
+}
+
+.stream-markdown :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.stream-markdown :deep(th),
+.stream-markdown :deep(td) {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.stream-markdown :deep(th) {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.stream-markdown :deep(tr:nth-child(even) td) {
+  background: #fcfcfd;
 }
 
 .stream-markdown :deep(.hljs-comment),
