@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from app.chat.agent import TutorAgent
+from app.chat.prompt_manager import chat_prompts
 from app.chat.request import ChatHistoryMessage
 from app.chat.runtime import (
     _classify_attachments,
@@ -32,7 +33,6 @@ from app.config import (
 )
 from app.infra.logging import get_logger
 from app.memory.service import get_memory_service
-from app.prompts import registry
 from app.chat.utils.storage import LocalFileStore
 from app.chat.utils.vision import VisionService
 
@@ -408,7 +408,7 @@ class ChatUseCases:
         except Exception as exc:
             logger.warning("[ChatUseCases] 无法获取评估数据: %s", exc)
 
-        system_prompt = registry.get("chat/tutor_system").format(
+        system_prompt = chat_prompts.render_tutor_system(
             session_summary_context=session_summary_context,
             file_context=file_info_str,
             attachment_analysis_context=attachment_analysis_context or "本轮没有可用的附件预分析内容。",

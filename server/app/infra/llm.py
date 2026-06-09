@@ -36,7 +36,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 
 from app.config import get
-from app.infra.utils import ServiceError, parse_first_json_object
+from app.infra.utils import ServiceError, parse_first_json_object, parse_first_json_value
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -304,12 +304,12 @@ class Llm:
                             return [_clean_nested_json(v) for v in data]
                         elif isinstance(data, str):
                             s = data.strip()
-                            if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
+                            if "{" in s or "[" in s:
                                 try:
-                                    parsed = json.loads(s)
+                                    parsed = parse_first_json_value(s)
                                     if isinstance(parsed, (dict, list)):
-                                        return parsed
-                                except json.JSONDecodeError:
+                                        return _clean_nested_json(parsed)
+                                except (json.JSONDecodeError, TypeError):
                                     pass
                         return data
                         

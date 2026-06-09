@@ -2,19 +2,26 @@
   <main class="home-workspace">
     <div class="workspace-grid" v-if="dashboardData">
       <!-- === ROW 1: 推荐行动 + 画像雷达 === -->
-      <article class="card recommend-card span-8">
-        <div class="recommend-badge">
-          <span class="badge-dot"></span>{{ dashboardData.recommendation.label }}
+      <BaseCard class="recommend-card span-8" padding="large">
+        <div class="recommend-bg-decoration"></div>
+        <div class="recommend-content">
+          <div class="recommend-text-area">
+            <BaseTag tone="indigo" pill class="recommend-badge-tag">
+              <span class="badge-dot"></span>{{ dashboardData.recommendation.label }}
+            </BaseTag>
+            <h1 class="recommend-title">{{ dashboardData.recommendation.title }}</h1>
+            <p class="recommend-desc">{{ dashboardData.recommendation.text }}</p>
+          </div>
+          <div class="recommend-action-area">
+            <BaseButton size="large" class="recommend-btn" @click="goTo(dashboardData.recommendation.path)">
+              <el-icon><component :is="getIconComponent(dashboardData.recommendation.icon)" /></el-icon>
+              {{ dashboardData.recommendation.action }}
+            </BaseButton>
+          </div>
         </div>
-        <h1 class="recommend-title">{{ dashboardData.recommendation.title }}</h1>
-        <p class="recommend-desc">{{ dashboardData.recommendation.text }}</p>
-        <button class="recommend-btn" @click="goTo(dashboardData.recommendation.path)">
-          <el-icon><component :is="getIconComponent(dashboardData.recommendation.icon)" /></el-icon>
-          {{ dashboardData.recommendation.action }}
-        </button>
-      </article>
+      </BaseCard>
 
-      <article class="card radar-card span-4">
+      <BaseCard class="radar-card span-4">
         <div class="radar-header">
           <h2 class="card-kicker">画像</h2>
           <button class="text-link" @click="goTo(dashboardData.radar.path)">{{ dashboardData.radar.link_label }}</button>
@@ -23,10 +30,10 @@
           <v-chart class="chart" :option="radarOption" autoresize />
         </div>
         <p class="radar-note">{{ dashboardData.radar.note }}</p>
-      </article>
+      </BaseCard>
 
       <!-- === ROW 2: 功能入口 === -->
-      <article class="card actions-card span-12">
+      <BaseCard class="actions-card span-12">
         <h2 class="card-kicker">功能入口</h2>
         <div class="actions-grid">
           <button
@@ -42,12 +49,12 @@
               <h3>{{ action.label }}</h3>
               <p>{{ action.description }}</p>
             </div>
-            <span class="action-tag" v-if="action.tag">{{ action.tag }}</span>
+            <BaseTag class="action-tag" v-if="action.tag">{{ action.tag }}</BaseTag>
           </button>
         </div>
-      </article>
+      </BaseCard>
 
-      <article class="card modules-card span-12" v-if="dashboardData.recent_modules">
+      <BaseCard class="modules-card span-12" v-if="dashboardData.recent_modules">
         <div class="modules-header">
           <div>
             <h2 class="card-kicker">最近学习动态</h2>
@@ -55,7 +62,7 @@
           </div>
         </div>
         <div class="modules-grid">
-          <button class="module-panel" @click="goTo(resourceModulePath)">
+          <div class="module-panel" role="button" tabindex="0" @click="goTo(resourceModulePath)">
             <div class="module-panel-top">
               <span class="module-panel-badge resource">
                 <span class="module-dot resource"></span>
@@ -65,10 +72,12 @@
             </div>
             <h3 class="module-panel-title">{{ resourceTitle }}</h3>
             <p class="module-panel-detail">{{ resourceDescription }}</p>
-            <span class="module-panel-link">查看资源详情</span>
-          </button>
+            <BaseButton variant="secondary" size="small" class="module-panel-btn" @click.stop="goTo(resourceModulePath)">
+              查看资源详情
+            </BaseButton>
+          </div>
 
-          <button class="module-panel" @click="goTo(pathModulePath)">
+          <div class="module-panel" role="button" tabindex="0" @click="goTo(pathModulePath)">
             <div class="module-panel-top">
               <span class="module-panel-badge path">
                 <span class="module-dot path"></span>
@@ -78,10 +87,12 @@
             </div>
             <h3 class="module-panel-title">{{ pathTitle }}</h3>
             <p class="module-panel-detail">{{ pathDescription }}</p>
-            <span class="module-panel-link">继续路径学习</span>
-          </button>
+            <BaseButton variant="secondary" size="small" class="module-panel-btn" @click.stop="goTo(pathModulePath)">
+              继续路径学习
+            </BaseButton>
+          </div>
 
-          <button class="module-panel" @click="goTo(questionModulePath)">
+          <div class="module-panel" role="button" tabindex="0" @click="goTo(questionModulePath)">
             <div class="module-panel-top">
               <span class="module-panel-badge quiz">
                 <span class="module-dot quiz"></span>
@@ -91,10 +102,12 @@
             </div>
             <h3 class="module-panel-title">{{ questionTitle }}</h3>
             <p class="module-panel-detail">{{ questionDescription }}</p>
-            <span class="module-panel-link">进入题库练习</span>
-          </button>
+            <BaseButton variant="secondary" size="small" class="module-panel-btn" @click.stop="goTo(questionModulePath)">
+              进入题库练习
+            </BaseButton>
+          </div>
         </div>
-      </article>
+      </BaseCard>
     </div>
 
     <section v-else class="home-state-panel" v-loading="loading">
@@ -102,7 +115,7 @@
         <span class="state-badge">{{ loading ? '加载中' : '加载失败' }}</span>
         <h1>{{ loading ? '正在同步学习控制台' : '首页数据加载失败' }}</h1>
         <p>{{ loading ? '正在读取画像、路径、资源和学习事件...' : (loadError || '暂时无法获取数据') }}</p>
-        <button v-if="!loading" class="state-btn" @click="loadData">重新加载</button>
+        <BaseButton v-if="!loading" class="state-btn" @click="loadData">重新加载</BaseButton>
       </div>
     </section>
   </main>
@@ -111,6 +124,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import BaseCard from '@/shared/ui/BaseCard.vue'
+import BaseButton from '@/shared/ui/BaseButton.vue'
+import BaseTag from '@/shared/ui/BaseTag.vue'
 
 import { getHomeDashboard, type HomeDashboardData } from '@/features/dashboard/api/home'
 import { getRadarChartData } from '@/features/profile/model/profileViewModel'
@@ -305,8 +321,8 @@ onMounted(loadData)
 .home-workspace {
   min-height: calc(100vh - 64px);
   padding: 28px 40px;
-  background-color: #F8FAFC;
-  color: #0F172A;
+  background-color: var(--color-bg);
+  color: var(--color-text);
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   overflow-y: auto;
 }
@@ -334,95 +350,82 @@ onMounted(loadData)
   .actions-grid { grid-template-columns: 1fr !important; }
 }
 
-/* Card Base */
-.card {
-  background: #FFFFFF;
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid #E2E8F0;
-}
-
 .card-kicker {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #94A3B8;
+  color: var(--color-text-light);
   margin: 0 0 16px 0;
   letter-spacing: 0.02em;
 }
 
-/* === Recommend Card === */
 .recommend-card {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-height: 300px;
-  padding: 32px;
-  background:
-    linear-gradient(135deg, #EEF2FF 0%, #F8FAFC 50%, #FFFFFF 100%);
-  border-color: #C7D2FE;
+  background: linear-gradient(135deg, var(--color-surface) 0%, #F8FAFC 100%);
+  border: 1px solid rgba(79, 70, 229, 0.1) !important;
 }
 
-.recommend-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #4F46E5;
-  background: rgba(79, 70, 229, 0.08);
-  padding: 4px 12px;
-  border-radius: 999px;
+.recommend-bg-decoration {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.08) 0%, rgba(255, 255, 255, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.recommend-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.recommend-text-area {
+  flex: 1 1 300px;
+}
+
+.recommend-action-area {
+  flex-shrink: 0;
+}
+
+.recommend-badge-tag {
   margin-bottom: 20px;
-  width: fit-content;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
 }
 
 .badge-dot {
+  display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: #4F46E5;
+  background-color: var(--color-primary);
+  margin-right: 4px;
 }
 
 .recommend-title {
   font-size: clamp(1.5rem, 2.5vw, 2.2rem);
   font-weight: 700;
-  color: #0F172A;
+  color: var(--color-text);
   margin: 0 0 10px 0;
   line-height: 1.3;
 }
 
 .recommend-desc {
   font-size: 0.95rem;
-  color: #475569;
-  margin: 0 0 24px 0;
+  color: var(--color-text-secondary);
+  margin: 0;
   line-height: 1.65;
-  max-width: 560px;
 }
-
-.recommend-btn {
-  width: fit-content;
-  min-height: 44px;
-  border: none;
-  border-radius: 12px;
-  padding: 0 22px;
-  color: #FFFFFF;
-  background: #4F46E5;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: background 0.2s, box-shadow 0.2s;
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.2);
-}
-
-.recommend-btn:hover {
-  background: #4338CA;
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.25);
-}
-
-.recommend-btn:active { transform: scale(0.98); }
 
 /* Module Strip */
 .module-dot {
@@ -432,9 +435,9 @@ onMounted(loadData)
   flex-shrink: 0;
 }
 
-.module-dot.resource { background: #6366F1; }
-.module-dot.path { background: #10B981; }
-.module-dot.quiz { background: #F59E0B; }
+.module-dot.resource { background: var(--color-primary); }
+.module-dot.path { background: var(--color-success); }
+.module-dot.quiz { background: var(--color-warning); }
 
 /* === Radar Card === */
 .radar-card {
@@ -455,7 +458,7 @@ onMounted(loadData)
   background: none;
   border: none;
   padding: 4px 8px;
-  color: #4F46E5;
+  color: var(--color-primary);
   font-weight: 600;
   font-size: 0.8rem;
   cursor: pointer;
@@ -474,14 +477,13 @@ onMounted(loadData)
 .radar-note {
   margin-top: 8px;
   font-size: 0.78rem;
-  color: #94A3B8;
+  color: var(--color-text-light);
   line-height: 1.5;
   text-align: center;
 }
 
 /* === Actions Card === */
 .actions-card {
-  padding: 20px 24px;
 }
 
 .actions-grid {
@@ -499,17 +501,17 @@ onMounted(loadData)
   align-items: center;
   gap: 14px;
   padding: 18px;
-  border: 1px solid #F1F5F9;
-  border-radius: 14px;
-  background: #FFFFFF;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
   text-align: left;
 }
 
 .action-tile:hover {
-  border-color: #CBD5E1;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
 }
 
 .action-tile:active { transform: scale(0.99); }
@@ -525,23 +527,23 @@ onMounted(loadData)
   flex-shrink: 0;
 }
 
-.icon-blue { background: #EFF6FF; color: #2563EB; }
-.icon-indigo { background: #EEF2FF; color: #4F46E5; }
-.icon-emerald { background: #ECFDF5; color: #059669; }
-.icon-amber { background: #FFFBEB; color: #D97706; }
+.icon-blue { background: var(--color-primary-soft); color: var(--color-primary); }
+.icon-indigo { background: var(--color-primary-soft); color: var(--color-primary); }
+.icon-emerald { background: rgba(16, 185, 129, 0.1); color: var(--color-success); }
+.icon-amber { background: rgba(245, 158, 11, 0.1); color: var(--color-warning); }
 
 .action-text { flex: 1; min-width: 0; }
 
 .action-text h3 {
   font-size: 0.92rem;
   font-weight: 700;
-  color: #1E293B;
+  color: var(--color-text);
   margin: 0 0 3px 0;
 }
 
 .action-text p {
   font-size: 0.76rem;
-  color: #64748B;
+  color: var(--color-text-regular);
   margin: 0;
   line-height: 1.45;
   display: -webkit-box;
@@ -553,8 +555,8 @@ onMounted(loadData)
 .action-tag {
   font-size: 0.65rem;
   font-weight: 700;
-  color: #4F46E5;
-  background: #EEF2FF;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
   padding: 3px 8px;
   border-radius: 6px;
   white-space: nowrap;
@@ -563,7 +565,6 @@ onMounted(loadData)
 
 /* === Recent Modules === */
 .modules-card {
-  padding: 24px;
 }
 
 .modules-header {
@@ -580,7 +581,7 @@ onMounted(loadData)
 
 .modules-desc {
   margin: 0;
-  color: #64748B;
+  color: var(--color-text-regular);
   font-size: 0.9rem;
   line-height: 1.6;
 }
@@ -594,19 +595,19 @@ onMounted(loadData)
 .module-panel {
   min-height: 188px;
   padding: 20px;
-  border: 1px solid #E2E8F0;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
   display: flex;
   flex-direction: column;
 }
 
 .module-panel:hover {
-  border-color: #C7D2FE;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  border-color: var(--color-primary-light);
+  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
 
@@ -630,22 +631,22 @@ onMounted(loadData)
 }
 
 .module-panel-badge.resource {
-  background: #EEF2FF;
-  color: #4F46E5;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .module-panel-badge.path {
-  background: #ECFDF5;
-  color: #059669;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success);
 }
 
 .module-panel-badge.quiz {
-  background: #FFF7ED;
-  color: #D97706;
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning);
 }
 
 .module-panel-meta {
-  color: #94A3B8;
+  color: var(--color-text-light);
   font-size: 0.78rem;
   font-weight: 600;
   white-space: nowrap;
@@ -653,7 +654,7 @@ onMounted(loadData)
 
 .module-panel-title {
   margin: 0 0 10px 0;
-  color: #0F172A;
+  color: var(--color-text);
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.45;
@@ -661,17 +662,16 @@ onMounted(loadData)
 
 .module-panel-detail {
   margin: 0;
-  color: #64748B;
+  color: var(--color-text-regular);
   font-size: 0.88rem;
   line-height: 1.65;
   flex: 1;
 }
 
-.module-panel-link {
+.module-panel-btn {
   margin-top: 20px;
-  color: #334155;
-  font-size: 0.82rem;
-  font-weight: 700;
+  width: 100%;
+  justify-content: center;
 }
 
 @media (max-width: 1024px) {
@@ -685,13 +685,14 @@ onMounted(loadData)
   min-height: 400px;
   max-width: 600px;
   margin: 0 auto;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 48px;
+  box-shadow: var(--shadow-sm);
 }
 
 .state-copy {
@@ -702,8 +703,8 @@ onMounted(loadData)
 .state-badge {
   display: inline-flex;
   align-items: center;
-  color: #4F46E5;
-  background: #EEF2FF;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
   border-radius: 999px;
   padding: 4px 14px;
   font-size: 0.75rem;
@@ -713,14 +714,14 @@ onMounted(loadData)
 
 .state-copy h1 {
   margin: 0 0 10px 0;
-  color: #0F172A;
+  color: var(--color-text);
   font-size: 1.5rem;
   line-height: 1.3;
 }
 
 .state-copy p {
   margin: 0;
-  color: #64748B;
+  color: var(--color-text-regular);
   font-size: 0.9rem;
   line-height: 1.6;
 }
@@ -728,16 +729,16 @@ onMounted(loadData)
 .state-btn {
   margin-top: 20px;
   border: none;
-  background: #4F46E5;
+  background: var(--color-primary);
   color: #FFFFFF;
-  border-radius: 10px;
+  border-radius: var(--radius-base);
   padding: 10px 20px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--transition-base);
 }
 
-.state-btn:hover { background: #4338CA; }
+.state-btn:hover { background: var(--color-primary-hover); }
 
 /* Focus visible */
 .recommend-btn:focus-visible,
@@ -759,3 +760,4 @@ onMounted(loadData)
   }
 }
 </style>
+

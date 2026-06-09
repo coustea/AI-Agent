@@ -4,6 +4,27 @@
    Design Tokens — White Theme (Indigo accent)
    ============================================================ */
 :root {
+  /* ---- Element Plus Overrides ---- */
+  --el-color-primary: #4F46E5;
+  --el-color-success: #10B981;
+  --el-color-warning: #F59E0B;
+  --el-color-danger: #EF4444;
+  --el-color-info: #2563EB;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 999px;
+  --el-text-color-primary: #0F172A;
+  --el-text-color-regular: #475569;
+  --el-text-color-secondary: #64748B;
+  --el-text-color-placeholder: #94A3B8;
+  --el-border-color: #E2E8F0;
+  --el-border-color-light: #F1F5F9;
+  --el-fill-color-blank: #FFFFFF;
+  --el-fill-color: #F8FAFC;
+  --el-fill-color-light: #F1F5F9;
+  --el-box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --el-box-shadow-light: 0 2px 4px rgba(15, 23, 42, 0.06);
+
   /* ---- Brand Colors ---- */
   --color-primary: #4F46E5;          /* Indigo 600 — main accent */
   --color-primary-hover: #4338CA;    /* Indigo 700 */
@@ -35,15 +56,33 @@
   --color-info: #2563EB;            /* Blue 600 */
   --color-info-soft: #EFF6FF;       /* Blue 50 */
 
-  /* ---- Tone Accents (feature cards) ---- */
-  --tone-blue: #2563EB;
-  --tone-blue-soft: #EFF6FF;
-  --tone-emerald: #059669;
-  --tone-emerald-soft: #ECFDF5;
-  --tone-indigo: #4F46E5;
-  --tone-indigo-soft: #EEF2FF;
-  --tone-amber: #D97706;
-  --tone-amber-soft: #FFFBEB;
+  /* ---- Vibrant Category Accents ---- */
+  --cat-tutor: #3B82F6;          /* Blue 500 */
+  --cat-tutor-soft: #EFF6FF;     /* Blue 50 */
+  --cat-tutor-glow: rgba(59, 130, 246, 0.4);
+
+  --cat-resource: #10B981;       /* Emerald 500 */
+  --cat-resource-soft: #ECFDF5;  /* Emerald 50 */
+  --cat-resource-glow: rgba(16, 185, 129, 0.4);
+
+  --cat-path: #F59E0B;           /* Amber 500 */
+  --cat-path-soft: #FFFBEB;      /* Amber 50 */
+  --cat-path-glow: rgba(245, 158, 11, 0.4);
+
+  --cat-eval: #8B5CF6;           /* Violet 500 */
+  --cat-eval-soft: #F5F3FF;      /* Violet 50 */
+  --cat-eval-glow: rgba(139, 92, 246, 0.4);
+
+  --cat-rose: #F43F5E;           /* Rose 500 */
+  --cat-rose-soft: #FFF1F2;      /* Rose 50 */
+  --cat-rose-glow: rgba(244, 63, 94, 0.4);
+
+  /* ---- Premium Gradients ---- */
+  --gradient-primary: linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%);
+  --gradient-tutor: linear-gradient(135deg, #2563EB 0%, #06B6D4 100%);
+  --gradient-resource: linear-gradient(135deg, #059669 0%, #10B981 100%);
+  --gradient-path: linear-gradient(135deg, #D97706 0%, #F59E0B 100%);
+  --gradient-eval: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
 
   /* ---- Typography ---- */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;

@@ -23,6 +23,7 @@ from app.infra.models import (
 from app.memory.service import MemoryService
 from app.path.agents.planner import PathPlannerAgent
 from app.path.agents.planner import repair_generated_plan_from_macro_stages
+from app.path.prompt_manager import path_prompts
 from app.path.schemas import (
     AgentLearningPathPlan,
     AuxiliaryResourceRequest,
@@ -705,7 +706,16 @@ class LearningPathService:
         tutorial_type: str,
         weak_knowledge_points: list[str],
     ) -> dict[str, Any]:
-        prompt = self._build_tutorial_prompt(path, node, tutorial_type, weak_knowledge_points)
+        weak_points_section = ""
+        if weak_knowledge_points:
+            weak_points_section = f"重点围绕这些薄弱知识点强化：{', '.join(weak_knowledge_points)}"
+        prompt = path_prompts.render_tutorial(
+            path_goal=path.goal,
+            node_title=node.title,
+            mastery_target=node.mastery_target or "掌握该节点核心能力",
+            tutorial_type=tutorial_type,
+            weak_points_section=weak_points_section,
+        )
         response = await self.llm.ainvoke(prompt, temperature=0.3)
         content = response.content if hasattr(response, "content") else str(response)
         return {
@@ -784,24 +794,6 @@ class LearningPathService:
             "content_json": None,
             "metadata": result.metadata,
         }
-
-    def _build_tutorial_prompt(
-        self,
-        path: LearningPath,
-        node: PathNode,
-        tutorial_type: str,
-        weak_knowledge_points: list[str],
-    ) -> str:
-        prompt_parts = [
-            f"学习目标：{path.goal}",
-            f"当前节点：{node.title}",
-            f"掌握目标：{node.mastery_target or '掌握该节点核心能力'}",
-            f"教程类型：{tutorial_type}",
-        ]
-        if weak_knowledge_points:
-            prompt_parts.append(f"重点围绕这些薄弱知识点强化：{', '.join(weak_knowledge_points)}")
-        prompt_parts.append("请输出一份中文 Markdown 教程，结构清晰，直接用于学习。")
-        return "\n".join(prompt_parts)
 
     def _stage_to_dict(self, stage: Any) -> dict[str, Any]:
         if hasattr(stage, "model_dump"):

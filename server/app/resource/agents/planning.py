@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.prompt_manager import resource_prompts
 from app.resource.schemas import ExecutionPlan, WorkerResult, WorkerState
 from app.resource.utils import format_learner_profile_for_prompt
 
@@ -21,8 +22,6 @@ class PlanningAgent(BaseResourceAgent):
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """PlanningAgent 自行构建输入，不走通用 build_worker_base_context。"""
-        from app.prompts import registry
-
         if self.emitter:
             await self.emitter.emit_agent(
                 self.agent_id, status="running",
@@ -30,7 +29,7 @@ class PlanningAgent(BaseResourceAgent):
                 progress=10,
             )
 
-        prompt = registry.get("resource/planning")
+        prompt = resource_prompts.get("planning")
         input_text = self._build_planning_input(state)
 
         if self.emitter:

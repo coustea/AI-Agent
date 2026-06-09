@@ -8,6 +8,7 @@ import re
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import salvage_json_from_llm
+from app.resource.prompt_manager import resource_prompts
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -78,8 +79,6 @@ class ReviewAgent(BaseResourceAgent):
 
     async def run(self, state: WorkerState) -> WorkerResult:
         """两级审核：正则通过则直接放行，正则发现可疑点则触发 LLM 语义判定。"""
-        from app.prompts import registry
-
         progress_agent_id = state.agent_config.get("progress_agent_id") or "review"
         review_envelope = state.agent_config.get("review_envelope", {})
 
@@ -110,7 +109,7 @@ class ReviewAgent(BaseResourceAgent):
                 progress=25,
             )
 
-        prompt = registry.get("resource/review")
+        prompt = resource_prompts.get("review")
         findings_text = json.dumps(findings, ensure_ascii=False, indent=2)
         input_text = f"{self._build_review_input(state)}\n\n## 规则审核发现的可疑点\n{findings_text}"
 

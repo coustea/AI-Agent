@@ -329,6 +329,7 @@ class TutoringInferenceOutput(BaseModel):
 
 STABLE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (  # 匹配稳定学习特征的正则模式
     re.compile(r"(总是|经常|一直|老是|反复).*(出错|不会|卡住|记不住|搞不清|混淆|薄弱|边界)"),
+    re.compile(r"(以后|下次|后续).*(希望|想|请|先|多|少|给|讲|不要|必须|应该|保持|沿用|避免|记住)"),
     re.compile(r"(喜欢|不喜欢|更喜欢|偏好|习惯)"),
     re.compile(r"(在学|正在学|学过|准备|打算|想要).*(考研|提高|练习|项目)"),
     re.compile(r"(专业|年级|方向|课程|考试|证书|竞赛|实习|面试|项目)"),
@@ -348,7 +349,7 @@ def has_stable_signal(text: str) -> bool:
 
 
 PROFILE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
-    re.compile(r"(以后|下次|后续).*(不要|必须|应该|保持|沿用|避免|记住)"),
+    re.compile(r"(以后|下次|后续).*(不要|必须|应该|保持|沿用|避免|记住|希望|想|请)"),
     re.compile(r"(喜欢|不喜欢|更喜欢|偏好|习惯)"),
     re.compile(r"(总是|经常|一直|反复).*(出错|不会|卡住|记不住|混淆|薄弱)"),
     re.compile(r"(我不会|我懂了|我会了|讲慢一点|先举例|先给题)"),
