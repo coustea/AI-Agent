@@ -1,11 +1,6 @@
 <template>
   <div class="elegant-generator-layout">
-    <div class="omni-ambient-bg">
-      <div class="ambient-glow glow-blue"></div>
-      <div class="ambient-glow glow-indigo"></div>
-      <div class="omni-pattern-bg"></div>
-    </div>
-    
+
     <!-- Floating History Entry -->
     <div class="floating-history-btn" @click="router.push('/resource-history')">
       <el-icon><Timer /></el-icon>
@@ -40,14 +35,13 @@
               <span class="omni-hint" v-else>
                 描述考研、期末、或任意技术栈...
               </span>
-              <button
-                  class="omni-submit-btn"
+              <BaseButton variant="primary" class="omni-submit-btn"
                   :disabled="!naturalInput.trim()"
                   aria-label="进入参数配置"
                   @click="goToPersonalize"
               >
                 <el-icon><Top /></el-icon>
-              </button>
+              </BaseButton>
             </div>
           </div>
 
@@ -103,7 +97,7 @@
 
           <div class="config-section-v2">
             <div class="agent-configs-grid">
-              <div class="config-card-v2" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
+              <BaseCard class="config-card-v2" padding="large" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
                 <div class="cc-header-v2">
                   <div class="cc-icon-wrap" :class="agent.colorClass">
                     <el-icon><component :is="agent.icon" /></el-icon>
@@ -275,7 +269,7 @@
                   </template>
 
                 </div>
-              </div>
+              </BaseCard>
             </div>
           </div>
 
@@ -587,10 +581,11 @@
         <main class="results-body-bento">
           <div class="bento-grid-container">
             <div class="premium-resource-grid">
-              <article
+              <BaseCard
                   v-for="(res, index) in resultResources"
                   :key="res.id || res.title"
                   class="premium-res-card"
+                  padding="large"
                   :class="getResourceToneClass(res.type)"
                   :style="{...getBentoCardGridStyle(index, resultResources.length), animationDelay: `${index * 0.08}s`}"
                   role="button"
@@ -626,11 +621,11 @@
                 </div>
 
                 <div class="card-footer">
-                  <button class="modern-text-btn">
+                  <BaseButton variant="ghost" class="modern-text-btn">
                     查看详情 <span>&rarr;</span>
-                  </button>
+                  </BaseButton>
                 </div>
-              </article>
+              </BaseCard>
             </div>
           </div>
         </main>
@@ -653,6 +648,8 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, reactive, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
+import BaseCard from '@/shared/ui/BaseCard.vue'
+import BaseButton from '@/shared/ui/BaseButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -2201,17 +2198,8 @@ const handlePreview = (data: any) => {
 }
 
 /* --- 智能体卡片核心设计 --- */
-.dag-node-card {
-  width: 270px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
-  position: relative;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
+.dag-node-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-4); display: flex; gap: var(--space-3); transition: all var(--transition-base); cursor: pointer; box-shadow: var(--shadow-sm); }
+.dag-node-card:hover { border-color: var(--color-border-hover); box-shadow: var(--shadow-md); transform: translateY(-2px); }
 
 .dag-node-card:hover, .dag-node-card.is-selected {
   box-shadow: 0 12px 28px rgba(37, 99, 235, 0.12);
@@ -2228,7 +2216,7 @@ const handlePreview = (data: any) => {
   background: var(--color-border-hover); 
 }
 .status-success .node-indicator { background: var(--color-success); }
-.status-running .node-indicator { background: #3B82F6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); }
+.status-running .node-indicator { background: #3B82F6; }
 .status-failed .node-indicator { background: var(--color-danger); }
 
 .node-inner { padding: 14px 16px 14px 20px; }

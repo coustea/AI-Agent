@@ -281,7 +281,7 @@
                   </div>
                 </template>
                 <span class="attachment-name" :title="f.name">{{ f.name }}</span>
-                <button class="remove-attachment-btn" @click="removeAttachment(idx)" aria-label="移除附件"><el-icon aria-hidden="true"><Close /></el-icon></button>
+                <BaseButton variant="icon" class="remove-attachment-btn" @click="removeAttachment(idx)" aria-label="移除附件"><el-icon aria-hidden="true"><Close /></el-icon></BaseButton>
               </div>
             </div>
 
@@ -297,13 +297,13 @@
               <div class="minimal-action-bar">
                 <div class="action-left">
                   <el-tooltip content="上传附件" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload" aria-label="上传附件">
+                    <BaseButton variant="icon" class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload" aria-label="上传附件">
                       <el-icon aria-hidden="true"><Paperclip /></el-icon>
-                    </button>
+                    </BaseButton>
                   </el-tooltip>
 
                   <el-tooltip content="联网搜索" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch" :aria-label="enableWebSearch ? '关闭联网搜索' : '开启联网搜索'">
+                    <BaseButton variant="icon" class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch" :aria-label="enableWebSearch ? '关闭联网搜索' : '开启联网搜索'">
                       <el-icon aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <circle cx="12" cy="12" r="10"></circle>
@@ -312,30 +312,30 @@
                           <line x1="2" y1="12" x2="22" y2="12"></line>
                         </svg>
                       </el-icon>
-                    </button>
+                    </BaseButton>
                   </el-tooltip>
 
                   <el-tooltip content="知识库检索" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-amber': enableKnowledgeBase }" @click="enableKnowledgeBase = !enableKnowledgeBase" :aria-label="enableKnowledgeBase ? '关闭知识库检索' : '开启知识库检索'">
+                    <BaseButton variant="icon" class="minimal-icon-btn" :class="{ 'is-active-amber': enableKnowledgeBase }" @click="enableKnowledgeBase = !enableKnowledgeBase" :aria-label="enableKnowledgeBase ? '关闭知识库检索' : '开启知识库检索'">
                       <el-icon aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                         </svg>
                       </el-icon>
-                    </button>
+                    </BaseButton>
                   </el-tooltip>
 
                   <el-tooltip content="生成图解说明" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭图解说明' : '生成图解说明'">
+                    <BaseButton variant="icon" class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭图解说明' : '生成图解说明'">
                       <el-icon aria-hidden="true"><DataLine /></el-icon>
-                    </button>
+                    </BaseButton>
                   </el-tooltip>
 
                   <el-tooltip content="生成视频" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': generateVideo }" @click="handleVideoToggle" :aria-label="generateVideo ? '关闭视频生成' : '生成视频'">
+                    <BaseButton variant="icon" class="minimal-icon-btn" :class="{ 'is-active-teal': generateVideo }" @click="handleVideoToggle" :aria-label="generateVideo ? '关闭视频生成' : '生成视频'">
                       <el-icon aria-hidden="true"><VideoCamera /></el-icon>
-                    </button>
+                    </BaseButton>
                   </el-tooltip>
                 </div>
 
@@ -361,7 +361,7 @@
                       placement="top"
                       :show-after="500"
                   >
-                    <button
+                    <BaseButton variant="icon"
                         class="minimal-icon-btn voice-chat-btn"
                         :class="{ 'is-active': isVoiceChatting }"
                         @click="handleVoiceChatToggle"
@@ -370,18 +370,18 @@
                       <div class="voice-bars-icon" aria-hidden="true">
                         <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
                       </div>
-                    </button>
+                    </BaseButton>
                   </el-tooltip>
 
                   <el-tooltip :content="isRecording ? '结束录音' : '语音提问'" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn voice" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle" :aria-label="isRecording ? '结束录音' : '语音提问'">
+                    <BaseButton variant="icon" class="minimal-icon-btn voice" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle" :aria-label="isRecording ? '结束录音' : '语音提问'">
                       <el-icon aria-hidden="true"><Microphone /></el-icon>
-                    </button>
+                    </BaseButton>
                   </el-tooltip>
 
-                  <button class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend" aria-label="发送消息">
+                  <BaseButton variant="primary" class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend" aria-label="发送消息">
                     <el-icon aria-hidden="true"><Top /></el-icon>
-                  </button>
+                  </BaseButton>
                 </div>
               </div>
             </div>
@@ -481,6 +481,7 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getErrorMessage } from '@/shared/api/http'
+import BaseButton from '@/shared/ui/BaseButton.vue'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 
@@ -2148,7 +2149,7 @@ onBeforeUnmount(() => {
 .session-sidebar {
   position: relative;
   width: 240px;
-  background: var(--color-bg);
+  background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -2561,7 +2562,7 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   flex-direction: row;
-  background: var(--color-surface);
+  background: var(--color-bg);
   position: relative;
   overflow: hidden;
   height: 100%;
@@ -2600,16 +2601,16 @@ onBeforeUnmount(() => {
   bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
   padding: var(--space-3) var(--space-6);
   border-radius: var(--radius-2xl);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   transition: all var(--transition-slow);
   z-index: 10;
 }
@@ -3627,9 +3628,11 @@ onBeforeUnmount(() => {
   bottom: 70px;
   left: 0;
   width: 240px;
-  background: var(--color-surface);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
   border-radius: var(--radius-xl);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
   padding: var(--space-3);
   display: flex;
   flex-direction: column;

@@ -4,6 +4,27 @@
    Design Tokens — White Theme (Indigo accent)
    ============================================================ */
 :root {
+  /* ---- Element Plus Overrides ---- */
+  --el-color-primary: #4F46E5;
+  --el-color-success: #10B981;
+  --el-color-warning: #F59E0B;
+  --el-color-danger: #EF4444;
+  --el-color-info: #2563EB;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 999px;
+  --el-text-color-primary: #0F172A;
+  --el-text-color-regular: #475569;
+  --el-text-color-secondary: #64748B;
+  --el-text-color-placeholder: #94A3B8;
+  --el-border-color: #E2E8F0;
+  --el-border-color-light: #F1F5F9;
+  --el-fill-color-blank: #FFFFFF;
+  --el-fill-color: #F8FAFC;
+  --el-fill-color-light: #F1F5F9;
+  --el-box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --el-box-shadow-light: 0 2px 4px rgba(15, 23, 42, 0.06);
+
   /* ---- Brand Colors ---- */
   --color-primary: #4F46E5;          /* Indigo 600 — main accent */
   --color-primary-hover: #4338CA;    /* Indigo 700 */
