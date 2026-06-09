@@ -89,7 +89,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Menu, Connection, Cpu, ChatDotRound,
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
-  User, DataBoard, Collection
+  User, DataBoard, Collection, Close
 } from '@element-plus/icons-vue'
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
@@ -104,12 +104,12 @@ const onboardingDialogVisible = ref(false)
 const pendingPath = ref<string | null>(null)
 
 const navItems = [
-  { path: '/dashboard', label: '全景中枢', icon: Menu },
-  { path: '/resource-generator', label: '资源引擎', icon: Cpu },
-  { path: '/path-planner', label: '路径规划', icon: Connection },
-  { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
-  { path: '/question-bank', label: '学习题库', icon: Collection },
-  { path: '/wrong-questions', label: '错题本', icon: Close },
+  { path: '/dashboard', label: '全景中枢', icon: Menu, theme: 'nav-theme-dashboard' },
+  { path: '/resource-generator', label: '资源引擎', icon: Cpu, theme: 'nav-theme-resource' },
+  { path: '/path-planner', label: '路径规划', icon: Connection, theme: 'nav-theme-path' },
+  { path: '/tutor', label: '智能辅导', icon: ChatDotRound, theme: 'nav-theme-tutor' },
+  { path: '/question-bank', label: '学习题库', icon: Collection, theme: 'nav-theme-eval' },
+  { path: '/wrong-questions', label: '错题本', icon: Close, theme: 'nav-theme-eval' },
 ]
 
 useAuthPolling(60000)

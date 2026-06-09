@@ -760,4 +760,3 @@ onMounted(loadData)
   }
 }
 </style>
-
