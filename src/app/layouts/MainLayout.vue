@@ -13,7 +13,7 @@
           <div
               v-for="item in navItems"
               :key="item.path"
-              :class="['nav-item', { active: activePath === item.path }]"
+              :class="['nav-item', item.theme, { active: activePath === item.path }]"
               @click="navigateTo(item.path)"
               :title="item.label"
           >
@@ -104,11 +104,11 @@ const onboardingDialogVisible = ref(false)
 const pendingPath = ref<string | null>(null)
 
 const navItems = [
-  { path: '/dashboard', label: '全景中枢', icon: Menu },
-  { path: '/resource-generator', label: '资源引擎', icon: Cpu },
-  { path: '/path-planner', label: '路径规划', icon: Connection },
-  { path: '/tutor', label: '智能辅导', icon: ChatDotRound },
-  { path: '/question-bank', label: '学习题库', icon: Collection },
+  { path: '/dashboard', label: '全景中枢', icon: Menu, theme: 'nav-theme-dashboard' },
+  { path: '/resource-generator', label: '资源引擎', icon: Cpu, theme: 'nav-theme-resource' },
+  { path: '/path-planner', label: '路径规划', icon: Connection, theme: 'nav-theme-path' },
+  { path: '/tutor', label: '智能辅导', icon: ChatDotRound, theme: 'nav-theme-tutor' },
+  { path: '/question-bank', label: '学习题库', icon: Collection, theme: 'nav-theme-eval' },
 ]
 
 useAuthPolling(60000)
@@ -346,11 +346,30 @@ const handleCommand = async (command: string) => {
   color: var(--color-text);
 }
 
+/* Base Active Style */
 .nav-item.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
   font-weight: var(--weight-semibold);
 }
+
+/* Dashboard Theme */
+.nav-item.nav-theme-dashboard:hover { color: var(--color-primary); }
+.nav-item.nav-theme-dashboard.active { background: var(--color-primary-soft); color: var(--color-primary); }
+
+/* Resource Engine Theme (Emerald) */
+.nav-item.nav-theme-resource:hover { color: var(--cat-resource); }
+.nav-item.nav-theme-resource.active { background: var(--cat-resource-soft); color: var(--cat-resource); }
+
+/* Path Planner Theme (Amber) */
+.nav-item.nav-theme-path:hover { color: var(--cat-path); }
+.nav-item.nav-theme-path.active { background: var(--cat-path-soft); color: var(--cat-path); }
+
+/* Tutor Theme (Blue) */
+.nav-item.nav-theme-tutor:hover { color: var(--cat-tutor); }
+.nav-item.nav-theme-tutor.active { background: var(--cat-tutor-soft); color: var(--cat-tutor); }
+
+/* Evaluation/Bank Theme (Violet) */
+.nav-item.nav-theme-eval:hover { color: var(--cat-eval); }
+.nav-item.nav-theme-eval.active { background: var(--cat-eval-soft); color: var(--cat-eval); }
 
 .nav-icon {
   font-size: 1.15rem;

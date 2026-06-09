@@ -10,6 +10,7 @@ import type {
   PathQuizSubmitRequest,
   PathQuizSubmitResponse,
   PathResourceDetail,
+  PathLearningEvaluationResponse,
 } from '@/features/learning/model/path'
 
 export type {
@@ -22,6 +23,7 @@ export type {
   PathQuizSubmitRequest,
   PathQuizSubmitResponse,
   PathResourceDetail,
+  PathLearningEvaluationResponse,
 }
 
 export function createLearningPath(payload: CreateLearningPathRequest) {
@@ -62,4 +64,8 @@ export function submitNodeQuiz(nodeId: number, payload: PathQuizSubmitRequest) {
 
 export function generateAuxiliaryResource(nodeId: number, payload: AuxiliaryResourceRequest) {
   return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/resources`, payload)
+}
+
+export function getLearningEvaluation(pathId: number) {
+  return http.get<ApiResponse<PathLearningEvaluationResponse | null>>(`/ai/path-plan/${pathId}/evaluation`)
 }

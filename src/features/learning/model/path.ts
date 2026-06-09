@@ -4,6 +4,16 @@ export interface LearningPathStage {
   description: string
 }
 
+export interface NodeResourcePolicy {
+  primary_resource_type: string
+  required_resource_types: string[]
+  optional_resource_types: string[]
+  assessment_type: string
+  generation_focus: string[]
+  personalization_reason: string
+  expected_resource_count: number
+}
+
 export interface LearningPathNode {
   id: number
   node_id: string
@@ -17,6 +27,7 @@ export interface LearningPathNode {
   difficulty: string | null
   recommendation_reason: string | null
   prerequisites: string[]
+  resource_policy: NodeResourcePolicy | null
   current_tutorial_id: number | null
 }
 
@@ -145,11 +156,10 @@ interface LearningSignalSnapshot {
   weak_topics: string[]
   preferred_resources: string[]
   negative_feedback: string[]
-  completed_resources: number
-  viewed_resources: number
+  completed_resource_count: number
+  viewed_resource_count: number
   active_minutes: number
   recommendations: string[]
-  metrics: Array<{ label: string; value: string }>
 }
 
 export interface PathLearningEvaluationResponse {

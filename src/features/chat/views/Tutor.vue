@@ -2129,6 +2129,14 @@ onBeforeUnmount(() => {
   animation: pulse-text 1.5s infinite ease-in-out;
 }
 .tutor-dashboard {
+  /* --- Deep Page Colorization (Blue Theme) --- */
+  --color-primary: var(--cat-tutor);
+  --color-primary-hover: #2563eb; /* Blue 600 */
+  --color-primary-soft: var(--cat-tutor-soft);
+  --color-primary-border: #93c5fd; /* Blue 300 */
+  --color-primary-text: #1e40af; /* Blue 800 */
+  --gradient-primary: var(--gradient-tutor);
+
   display: flex;
   flex-direction: column;
   height: 100%;
