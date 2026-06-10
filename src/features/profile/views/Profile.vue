@@ -49,13 +49,6 @@
               </div>
             </div>
             <div class="info-mini-card">
-              <div class="info-icon-box"><el-icon><Reading /></el-icon></div>
-              <div class="info-content-box">
-                <span class="info-label">学历层次</span>
-                <span class="info-value">{{ studentProfile.education_level || '未填写' }}</span>
-              </div>
-            </div>
-            <div class="info-mini-card">
               <div class="info-icon-box"><el-icon><Checked /></el-icon></div>
               <div class="info-content-box">
                 <span class="info-label">年级</span>
@@ -72,7 +65,7 @@
             <div class="info-mini-card">
               <div class="info-icon-box"><el-icon><Cpu /></el-icon></div>
               <div class="info-content-box">
-                <span class="info-label">常用语言</span>
+                <span class="info-label">编程语言</span>
                 <span class="info-value">{{ studentProfile.preferred_language || '未填写' }}</span>
               </div>
             </div>
@@ -142,13 +135,6 @@
                 </button>
                 <button
                     class="switcher-btn"
-                    :class="{ active: profileTab === 'weaknesses' }"
-                    @click="profileTab = 'weaknesses'"
-                >
-                  薄弱环节
-                </button>
-                <button
-                    class="switcher-btn"
                     :class="{ active: profileTab === 'history' }"
                     @click="profileTab = 'history'"
                 >
@@ -194,29 +180,6 @@
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-show="profileTab === 'weaknesses'" class="tab-pane-content">
-                <div class="weakness-details-list">
-                  <div class="section-title-bar">
-                    <span>诊断薄弱点 (共 {{ (studentProfile.weakness_points || []).length }} 项)</span>
-                  </div>
-                  <div class="weak-detail-items" v-if="(studentProfile.weakness_points || []).length > 0">
-                    <div v-for="point in studentProfile.weakness_points" :key="point" class="weak-detail-card">
-                      <div class="weak-card-header">
-                        <strong>{{ point }}</strong>
-                        <el-tag size="small" type="warning" effect="plain">建议攻克</el-tag>
-                      </div>
-                      <p class="weak-rec-text"><b>推荐复习资源：</b>{{ getRecommendedResourceTypes(point) }}</p>
-                      <el-button type="primary" size="small" class="weak-action-btn" @click="generateResourceForWeakPoint(point)">
-                        生成专项资源 <el-icon class="el-icon--right"><Cpu /></el-icon>
-                      </el-button>
-                    </div>
-                  </div>
-                  <div class="empty-state-text" v-else>
-                    暂无明显薄弱点记录，继续保持当前学习节奏。
                   </div>
                 </div>
               </div>
@@ -513,9 +476,9 @@
               <h5 class="section-title">学习目标</h5>
             </div>
 
-            <el-form-item prop="learning_goal">
+            <el-form-item prop="global_learning_goal">
               <template #label><span class="custom-label"><span class="req-star">*</span> 当前学习目标</span></template>
-              <el-select v-model="profileForm.learning_goal" filterable allow-create default-first-option clearable placeholder="请选择目标，列表没有可直接输入后【按回车】">
+              <el-select v-model="profileForm.global_learning_goal" filterable allow-create default-first-option clearable placeholder="请选择目标，列表没有可直接输入后【按回车】">
                 <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
               </el-select>
             </el-form-item>
@@ -538,7 +501,6 @@
                     placeholder="可以直接输入或搜索"
                     clearable
                     class="w-full"
-                    @select="handleSchoolSelect"
                 >
                   <template #prefix><el-icon><Search /></el-icon></template>
                   <template #default="{ item }">
@@ -548,13 +510,6 @@
                 </el-autocomplete>
               </el-form-item>
 
-              <el-form-item prop="education_level">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 学历层次</span></template>
-                <el-select v-model="profileForm.education_level" placeholder="请选择学历层次" filterable>
-                  <el-option v-for="level in PRESET_EDUCATION_LEVELS" :key="level" :label="level" :value="level" />
-                </el-select>
-              </el-form-item>
-
               <el-form-item prop="grade">
                 <template #label><span class="custom-label"><span class="req-star">*</span> 年级</span></template>
                 <el-select v-model="profileForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级">
@@ -562,9 +517,16 @@
                 </el-select>
               </el-form-item>
 
-              <el-form-item prop="preferred_language">
-                <template #label><span class="custom-label">常用编程语言（选填）</span></template>
-                <el-select v-model="profileForm.preferred_language" filterable allow-create default-first-option clearable placeholder="请选择常用语言">
+              <el-form-item>
+                <template #label><span class="custom-label">每天学习时间</span></template>
+                <el-select v-model="profileForm.daily_study_time" clearable placeholder="请选择每天学习时间">
+                  <el-option v-for="t in PRESET_DAILY_STUDY_TIME" :key="t" :label="t" :value="t" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item>
+                <template #label><span class="custom-label">编程语言（选填）</span></template>
+                <el-select v-model="profileForm.programming_languages" multiple filterable allow-create default-first-option clearable placeholder="请选择编程语言">
                   <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
                 </el-select>
               </el-form-item>
@@ -650,14 +612,13 @@ const resourceHistoryLoading = ref(false)
 const courseDropdownOpen = ref(false)
 
 const studentProfile = ref<StudentProfileData & { learning_duration_total?: number }>({
-  education_level: '本科',
+  school: '测试大学',
+  school_level: null,
   grade: '大三',
   major: '人工智能',
   courses: ['深度学习', '计算机视觉', 'Python高级编程'],
   learning_goal: '大厂求职面试',
-  school: '测试大学',
-  school_level: '双一流',
-  preferred_language: 'Python',
+  preferred_language: null,
   learning_duration_total: 0
 })
 
@@ -671,25 +632,23 @@ const selectedHistoryVersion = ref<number | null>(null)
 const compareVersionData = ref<any>(null)
 
 interface ProfileFormData {
-  education_level: string
   grade: string
   major: string
   courses: string[]
-  learning_goal: string
+  global_learning_goal: string
   school: string
-  school_level: string
-  preferred_language: string
+  daily_study_time: string
+  programming_languages: string[]
 }
 
 const profileForm = reactive<ProfileFormData>({
-  education_level: '',
   grade: '',
   major: '',
   courses: [],
-  learning_goal: '',
+  global_learning_goal: '',
   school: '',
-  school_level: '',
-  preferred_language: '',
+  daily_study_time: '',
+  programming_languages: [],
 })
 
 const resourceHistory = ref<GeneratedResourceItem[]>([])
@@ -708,7 +667,7 @@ const PRESET_GOALS = [
   '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
   '系统学习进阶', '零基础快速入门', '竞赛夺奖(ACM/蓝桥)', '个人兴趣拓展', '行业证书考取'
 ]
-const PRESET_EDUCATION_LEVELS = ['高职/专科', '本科', '研究生']
+const PRESET_DAILY_STUDY_TIME = ['30min以下', '30-60min', '1-2h', '2-3h', '3h以上']
 const PRESET_GRADES = [
   '大一', '大二', '大三', '大四',
   '研一', '研二', '研三',
@@ -722,15 +681,14 @@ const PRESET_LANGUAGES = [
 
 const profileRules = {
   school: [{ required: true, message: '请选择或填写院校', trigger: 'change' }],
-  education_level: [{ required: true, message: '请选择学历层次', trigger: 'change' }],
   grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
   major: [{ required: true, message: '请填写或选择专业', trigger: 'change' }],
   courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
-  learning_goal: [{ required: true, message: '请选择或输入当前学习目标', trigger: 'change' }],
+  global_learning_goal: [{ required: true, message: '请选择或输入当前学习目标', trigger: 'change' }],
 }
 
 const profileHeadline = computed(() => {
-  const parts = [studentProfile.value.major, studentProfile.value.education_level, studentProfile.value.school]
+  const parts = [studentProfile.value.major, studentProfile.value.school]
       .filter((item): item is string => Boolean(item))
   return parts.length ? parts.join(' · ') : '学习资料待完善'
 })
@@ -740,33 +698,12 @@ const getDimIcon = (key: string): string => {
     knowledge_foundation: 'Reading',
     learning_goal: 'Aim',
     cognitive_style: 'Cpu',
-    weakness_points: 'InfoFilled',
     mistake_preference: 'Timer',
     practice_ability: 'DataLine',
     interaction_preference: 'Service',
     learning_history: 'Clock',
   }
   return map[key] || 'DataLine'
-}
-
-const getRecommendedResourceTypes = (point: string): string => {
-  if (point.includes('代码') || point.includes('编程') || point.includes('实现')) {
-    return '实战代码沙箱、专业讲解'
-  }
-  if (point.includes('算法') || point.includes('数据结构') || point.includes('二叉树')) {
-    return '知识图谱、实战代码沙箱、自测题训练'
-  }
-  if (point.includes('考试') || point.includes('概念') || point.includes('协议')) {
-    return '核心知识讲解、自测题训练、演示文稿'
-  }
-  return '核心知识讲解、思维导图、自测题训练'
-}
-
-const generateResourceForWeakPoint = (pointName: string) => {
-  router.push({
-    path: '/resource-generator',
-    query: { prompt: `请帮我生成关于“${pointName}”的配套学习资源` }
-  })
 }
 
 const selectHistoryItem = (item: any) => {
@@ -785,13 +722,11 @@ const selectCourse = (c: string) => {
 }
 
 const profileMetadata = computed(() => {
-  const ver = profileData.value?.version || profileScoreData.value?.version || 1
-  const conf = Math.round((profileData.value?.confidence || profileScoreData.value?.confidence || 0.85) * 100)
+  const ver = profileData.value?.version || 1
   const time = profileData.value?.updated_at || profileScoreData.value?.updated_at || new Date().toISOString()
   const reason = profileData.value?.updated_reason || (profileScoreData.value as any)?.change_reason || '结合多维测验与最近生成流诊断'
   return {
     version: ver,
-    confidence: conf,
     updated_at: time,
     updated_reason: reason
   }
@@ -802,7 +737,6 @@ const dimensionsData = computed(() => {
     knowledge_foundation: '知识基础',
     learning_goal: '学习目标',
     cognitive_style: '认知风格',
-    weakness_points: '薄弱点',
     mistake_preference: '易错点偏好',
     practice_ability: '实践能力',
     interaction_preference: '交互偏好',
@@ -821,28 +755,26 @@ const dimensionsData = computed(() => {
     }
   }
 
-  const dimensionsJson = profileData.value?.profile_json?.dimensions || {}
+  const dimJson = profileData.value?.profile_json?.dimensions || {} as Record<string, any>
 
   return Object.entries(dimensionNames).map(([key, name]) => {
-    const dimJson = dimensionsJson[key] || {}
-    const isAuthentic = (dimJson.confidence || 0) >= 0.7
     const rawScore = scores[key] !== undefined && scores[key] !== null ? scores[key] : 0
-    const score = isAuthentic ? rawScore : 0
 
     let trend: 'up' | 'down' | 'stable' = 'stable'
-    if (prevScores[key] !== undefined && isAuthentic) {
-      if (score > prevScores[key]) trend = 'up'
-      else if (score < prevScores[key]) trend = 'down'
+    if (prevScores[key] !== undefined) {
+      if (rawScore > prevScores[key]) trend = 'up'
+      else if (rawScore < prevScores[key]) trend = 'down'
     }
+
+    const dimInfo = dimJson[key] || {} as Record<string, any>
 
     return {
       key,
       name,
-      score,
+      score: rawScore,
       trend,
-      summary: isAuthentic ? (dimJson.summary || '暂无描述') : '数据仍在采集中，暂无确切的评估结论。',
-      evidence: isAuthentic ? (dimJson.evidence || []) : [],
-      isAuthentic
+      summary: dimInfo.summary || '',
+      evidence: dimInfo.evidence || [],
     }
   })
 })
@@ -853,7 +785,6 @@ const compareScoresList = computed(() => {
     knowledge_foundation: '知识基础',
     learning_goal: '学习目标',
     cognitive_style: '认知风格',
-    weakness_points: '薄弱点',
     mistake_preference: '易错点偏好',
     practice_ability: '实践能力',
     interaction_preference: '交互偏好',
@@ -969,15 +900,6 @@ watch(() => studentProfile.value.courses, (newCourses) => {
   }
 }, { immediate: true })
 
-watch(() => profileForm.school, (newVal) => {
-  if (!newVal) {
-    profileForm.school_level = ''
-    return
-  }
-  const matched = profileSchoolOptions.value.find((s: any) => s.name === newVal)
-  profileForm.school_level = matched ? (matched.level || '') : ''
-})
-
 watch(() => route.query.action, () => {
   openProfileEditorFromRoute()
 })
@@ -1074,19 +996,13 @@ const querySearchSchool = async (queryString: string, cb: any) => {
   }
 }
 
-const handleSchoolSelect = (item: any) => {
-  profileForm.school_level = item.level || ''
-}
-
 const fillProfileForm = (payload: StudentProfileData) => {
-  profileForm.education_level = payload.education_level || ''
   profileForm.grade = payload.grade || ''
   profileForm.major = payload.major || ''
   profileForm.courses = Array.isArray(payload.courses) ? [...payload.courses] : []
-  profileForm.learning_goal = payload.learning_goal || ''
+  profileForm.global_learning_goal = payload.learning_goal || ''
   profileForm.school = payload.school || ''
-  profileForm.school_level = payload.school_level || ''
-  profileForm.preferred_language = payload.preferred_language || ''
+  profileForm.programming_languages = payload.preferred_language ? payload.preferred_language.split(',').map(s => s.trim()).filter(Boolean) : []
 }
 
 const loadProfileInfo = async () => {
@@ -1194,7 +1110,7 @@ const openProfileEditorFromRoute = () => {
 
 const nextEditorStep = (formEl: FormInstance | undefined) => {
   if (!formEl) return
-  formEl.validateField(['major', 'courses', 'learning_goal'], (valid) => {
+  formEl.validateField(['major', 'courses', 'global_learning_goal'], (valid) => {
     if (valid) {
       currentEditorStep.value = 2
     } else {
@@ -1210,20 +1126,13 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
   profileSubmitting.value = true
   try {
     const payload: ProfileOnboardingUpdate = {
-      school: profileForm.school || null,
-      school_level: profileForm.school_level || null,
+      school: profileForm.school,
       major: profileForm.major,
       grade: profileForm.grade,
-      global_learning_goal: profileForm.learning_goal || null,
-      daily_study_time: null,
-      courses: profileForm.courses.filter(Boolean).map((course) => ({
-        course: course.trim(),
-        foundation_level: '一般',
-      })),
-      resource_preference: [],
-      programming_languages: profileForm.preferred_language ? [profileForm.preferred_language] : [],
-      learning_style_tags: [],
-      self_description: null,
+      global_learning_goal: profileForm.global_learning_goal,
+      daily_study_time: profileForm.daily_study_time,
+      courses: profileForm.courses.filter(Boolean).map((c) => c.trim()),
+      programming_languages: profileForm.programming_languages,
     }
     const res = await updateProfileOnboarding(payload)
     studentProfile.value = res.data?.data?.onboarding?.student_profile ?? studentProfile.value

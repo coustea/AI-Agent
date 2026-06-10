@@ -7,15 +7,15 @@
     </BaseCard>
 
     <div v-else-if="isGenerating" class="generating-screen">
-      <div class="generating-content">
+        <div class="generating-content">
         <div class="cube-loader">
           <div class="cube cube1"></div>
           <div class="cube cube2"></div>
           <div class="cube cube4"></div>
           <div class="cube cube3"></div>
         </div>
-        <h2>正在逆向推演学习路径</h2>
-        <p class="generating-subtitle">AI 正在根据您的目标生成最佳学习拓扑</p>
+        <h2>正在生成学习路径</h2>
+        <p class="generating-subtitle">系统会先整理阶段与节点，完成后你就可以按节点开始学习。</p>
         <div class="message-log">
           <transition-group name="list">
             <div v-for="(msg, i) in generatingMessages" :key="i" class="log-msg">
@@ -53,12 +53,16 @@
             <strong>{{ path.eta_days }} 天</strong>
           </div>
           <div class="stat-box">
-            <label>当前阶段</label>
+            <label>学习阶段</label>
             <strong>{{ path.stages.length }} 个</strong>
           </div>
           <div class="stat-box">
             <label>知识节点</label>
             <strong>{{ path.nodes.length }} 个</strong>
+          </div>
+          <div class="stat-box">
+            <label>当前节点</label>
+            <strong>{{ currentNode?.title || '等待开始' }}</strong>
           </div>
           <div class="stat-box progress-box">
             <div class="progress-track">
@@ -84,11 +88,11 @@
           <div class="graph-card">
             <div class="card-header">
               <div class="header-text">
-                <h3>技能拓扑图 (Skill Tree)</h3>
-                <p>知识图谱全景：点击节点查看前置依赖并开始学习</p>
+                <h3>学习路径节点</h3>
+                <p>先看整条路径，再点击节点进入教程、测验和专项巩固。</p>
               </div>
               <div class="legend">
-                <span class="legend-item"><i class="dot indigo"></i> 可学习</span>
+                <span class="legend-item"><i class="dot indigo"></i> 当前可学</span>
                 <span class="legend-item"><i class="dot emerald"></i> 已掌握</span>
                 <span class="legend-item"><i class="dot slate"></i> 未解锁</span>
               </div>
@@ -117,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -145,6 +149,13 @@ const selectedNode = ref<LearningPathNode | null>(null)
 const isGenerating = ref(false)
 const generatingMessages = ref<string[]>([])
 let eventSource: EventSource | null = null
+
+const currentNode = computed(() => {
+  if (!path.value) return null
+  return path.value.nodes.find((node) => node.node_id === path.value?.current_node_key)
+    ?? path.value.nodes.find((node) => ['available', 'in_progress', 'remediation'].includes(node.status))
+    ?? null
+})
 
 const handlePathEvent = (e: MessageEvent) => {
   try {
@@ -209,6 +220,7 @@ const loadPath = async () => {
 
     if (path.value.status === 'generating') {
       isGenerating.value = true
+      generatingMessages.value = ['已创建路径记录，正在拆解阶段与节点']
       startSSE(currentPathId)
     } else {
       isGenerating.value = false

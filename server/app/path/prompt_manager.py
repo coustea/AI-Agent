@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.infra.prompts import ModulePromptLoader
+from app.path.schemas import AgentQuestionSet
 
 
 class PathPromptManager:
@@ -43,6 +44,7 @@ class PathPromptManager:
         mastery_target: str,
         tutorial_type: str,
         weak_points_section: str,
+        profile_section: str = "",
     ) -> str:
         return self.loader.render(
             "tutorial",
@@ -51,6 +53,7 @@ class PathPromptManager:
             mastery_target=mastery_target,
             tutorial_type=tutorial_type,
             weak_points_section=weak_points_section,
+            profile_section=profile_section,
         )
 
     def render_question_generation(
@@ -72,6 +75,9 @@ class PathPromptManager:
             tutorial_summary=tutorial_summary,
             round_no=round_no,
         )
+
+    def question_schema(self) -> type[AgentQuestionSet]:
+        return AgentQuestionSet
 
 
 path_prompts = PathPromptManager()

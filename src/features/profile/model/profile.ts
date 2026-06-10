@@ -1,11 +1,3 @@
-export interface CourseBaseInfo {
-  course: string
-  foundation_level: string
-  current_topic?: string | null
-  course_learning_goal?: string | null
-  weak_points?: string[]
-}
-
 export interface BaseInfoData {
   school: string | null
   school_level: string | null
@@ -13,11 +5,8 @@ export interface BaseInfoData {
   grade: string | null
   daily_study_time: string | null
   global_learning_goal: string | null
-  resource_preference: string[]
   programming_languages: string[]
-  learning_style_tags: string[]
-  self_description?: string | null
-  courses: CourseBaseInfo[]
+  courses: string[]
 }
 
 export interface ProfileData {
@@ -32,7 +21,6 @@ export interface ProfileData {
   profile_json: Record<string, unknown> | null
   profile_score_json: Record<string, unknown> | null
   version: number | null
-  confidence: number | null
   updated_reason: string | null
   updated_at: string | null
 }
@@ -44,29 +32,23 @@ export interface ProfileOnboardingData {
 }
 
 export interface StudentProfileData {
-  education_level: string | null
-  grade: string | null
-  major: string | null
-  courses: string[]
-  learning_goal: string | null
   school: string | null
   school_level: string | null
+  major: string | null
+  grade: string | null
+  courses: string[]
+  learning_goal: string | null
   preferred_language: string | null
-  weakness_points?: string[]
 }
 
 export interface ProfileOnboardingUpdate {
-  school: string | null
-  school_level?: string | null
+  school: string
   major: string
   grade: string
-  daily_study_time: string | null
-  global_learning_goal: string | null
-  courses: CourseBaseInfo[]
-  resource_preference: string[]
+  daily_study_time: string
+  global_learning_goal: string
   programming_languages: string[]
-  learning_style_tags: string[]
-  self_description: string | null
+  courses: string[]
 }
 
 export interface ProfileOnboardingUpdateResult {
@@ -87,7 +69,6 @@ export interface TutoringProfileUpdatePayload {
   session_id?: string | null
   active_course?: string | null
   active_topic?: string | null
-  dialogue_excerpt?: string | null
   evidence?: TutoringEvidence[]
   behavior_signals?: Record<string, unknown>
   update_reason?: string
@@ -105,25 +86,17 @@ export interface TutoringProfileUpdateResult {
 export interface ProfileScoreDimension {
   key: string
   label: string
-  score: number | null
-  missing: boolean
+  score: number
 }
 
 export interface ProfileScoreData {
   user_id: number | null
   module: string | null
-  version: number | null
   score: number | null
-  confidence: number | null
   metrics: {
-    dimension_scores?: Record<string, number | null>
-    section_coverage?: number | null
-    evidence_quality?: number | null
-    uncertainty_handling?: number | null
-    content_richness?: number | null
+    dimension_scores?: Record<string, number>
   }
   dimensions?: ProfileScoreDimension[]
-  missing_sections: string[]
   scored_at: string | null
   updated_at: string | null
 }

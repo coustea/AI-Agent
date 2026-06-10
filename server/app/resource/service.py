@@ -53,8 +53,12 @@ class ResourceService:
 
     def __init__(self, session: AsyncSession):
         self.session = session
-        # LLM workers run concurrently, but a single AsyncSession must not commit concurrently.
-        self._write_lock = asyncio.Lock()
+        self._write_locks: dict[int, asyncio.Lock] = {}
+
+    def _get_write_lock(self, resource_id: int) -> asyncio.Lock:
+        if resource_id not in self._write_locks:
+            self._write_locks[resource_id] = asyncio.Lock()
+        return self._write_locks[resource_id]
 
     async def start_resource_task(
         self,
@@ -117,7 +121,7 @@ class ResourceService:
         status: str,
     ) -> None:
         """更新资源状态。"""
-        async with self._write_lock:
+        async with self._get_write_lock(resource_id):
             resource = await self.session.get(GeneratedResource, resource_id)
             if resource:
                 resource.status = status
@@ -160,7 +164,7 @@ class ResourceService:
             status="finished",
             updated_at=datetime.now(timezone.utc),
         )
-        async with self._write_lock:
+        async with self._get_write_lock(resource_id):
             self.session.add(resource_item)
             await self._commit(resource_item)
         return resource_item
@@ -243,7 +247,7 @@ class ResourceService:
             status = "failed"
         else:
             status = "completed"
-        async with self._write_lock:
+        async with self._get_write_lock(resource_id):
             resource = await self.session.get(GeneratedResource, resource_id)
             if resource is None or resource.user_id != user_id:
                 raise ValueError("资源不存在或无权限")
@@ -361,23 +365,21 @@ async def run_multi_agent_generation(
     request: ResourceGenerationRequest,
     profile: dict[str, Any],
     resource_id: int,
-    node_id: int | None = None,
 ) -> None:
     """【核心编排引擎】在后台执行多智能体资源生成任务 (Multi-Agent DAG Workflow)。
 
-    此函数是整个多智能体系统的“总导演”，它按以下 DAG (有向无环图) 流程调度各个智能体：
-    
-    [ 阶段 1 ] : PlanningAgent (规划智能体)
+    此函数是整个多智能体系统的"总导演"，它按以下 DAG (有向无环图) 流程调度各个智能体：
+
+    [ 阶段 1 ] : PlanningAgent (规划智能体) — 串行，必须先完成
                  ↓
                  生成蓝图 (Blueprint) 和 指令分发表 (Instructions)
                  ↓
-    [ 阶段 2 ] : 并行调度所有启用的 Worker Agents (如 PPT, Quiz, Code, Mindmap 等)
-                 (各个 Worker 会拿着专属的 Instruction 并行干活)
+    [ 阶段 2 ] : 并行调度所有启用的 Worker Agents (如 Content, Quiz, Code, Mindmap 等)
+                 (各个 Worker 拿着专属的 Instruction 并行干活)
                  ↓
-                 收集所有 Worker 的生成结果
-                 ↓
-    [ 阶段 3 ] : ReviewAgent (审阅智能体)
-                 (检查所有生成结果的一致性和质量)
+    [ 阶段 3 ] : 审核 + PPT 并行执行（非阻塞审核）
+                 - 前置审核与 PPT 生成并行启动
+                 - 审核发现问题不拦截，记录到 issues 中供前端展示提示
                  ↓
     [ 阶段 4 ] : 组装并落库 (Assembler / Save)
     """
@@ -389,7 +391,6 @@ async def run_multi_agent_generation(
         usecases = ResourceService(session)
         enabled_agents = request.enabled_agent_ids()
 
-        # 实例化事件发射器，贯穿所有 Agent 的生命周期
         run_id = f"resource-{resource_id}-{uuid4().hex[:8]}"
         emitter = AgentEventEmitter(resource_id=resource_id, run_id=run_id)
 
@@ -399,15 +400,13 @@ async def run_multi_agent_generation(
         try:
             logger.info(
                 "启动资源生成: run_id=%s user_id=%s, resource_id=%s, agents=%s",
-                run_id,
-                user_id,
-                resource_id,
-                enabled_agents,
+                run_id, user_id, resource_id, enabled_agents,
             )
-            
+
             # ==========================================
             # 阶段 1: 规划阶段 (Planning Agent)
             # 职责: 拆解用户需求，生成整体教学蓝图，并为每个下游 Agent 分发具体指令
+            # Worker 必须等 Planning 完成后才能拿到蓝图和专属指令
             # ==========================================
             planning_state = WorkerState(
                 learning_need=request.learning_need,
@@ -432,11 +431,9 @@ async def run_multi_agent_generation(
             blueprint = None
             instruction_map: dict[str, AgentInstruction] = {}
             if planning_result.success and planning_result.metadata:
-                # 提取总蓝图
                 blueprint_data = planning_result.metadata.get("blueprint")
                 if blueprint_data:
                     blueprint = LearningBlueprint.model_validate(blueprint_data)
-                # 提取下游 Agent 的“锦囊”指令
                 instructions_data = planning_result.metadata.get("instructions", {})
                 for aid, inst_data in instructions_data.items():
                     if isinstance(inst_data, dict):
@@ -450,11 +447,15 @@ async def run_multi_agent_generation(
 
             # ==========================================
             # 阶段 2: 基础资源并行生成阶段 (Parallel Worker Agents)
-            # 职责: 先生成非 PPT 资源，PPT 必须等待 source pre-audit 通过后再生成
+            # 职责: 基于蓝图并行生成所有非 PPT 资源
             # ==========================================
-            worker_start = time.perf_counter()
             await emitter.emit_agent(COORDINATOR_AGENT_ID, status="running", message="并行生成基础资源", progress=18)
             results: dict[str, WorkerResult] = {}
+
+            worker_agents = [
+                a for a in enabled_agents
+                if a in AGENT_REGISTRY and a not in ("planning", "review", PPT_AGENT_ID)
+            ]
 
             async def run_one(agent_id: str, agent_config_extra: dict[str, Any] | None = None) -> None:
                 """独立运行单个 Worker Agent 的协程函数"""
@@ -464,16 +465,15 @@ async def run_multi_agent_generation(
                     agent_config = request.agent_configs.get(agent_id, {})
                     if agent_config_extra:
                         agent_config = {**agent_config, **agent_config_extra}
-                    # 组装属于该 Agent 的执行上下文
                     state = WorkerState(
                         resource_id=resource_id,
                         learning_need=request.learning_need,
                         learning_scenario=request.learning_scenario,
                         agent_name=agent_id,
                         agent_config=agent_config,
-                        blueprint=blueprint,                         # 共享总蓝图
-                        instruction=instruction_map.get(agent_id),   # 独享专属指令
-                        profile=profile,                             # 共享用户画像
+                        blueprint=blueprint,
+                        instruction=instruction_map.get(agent_id),
+                        profile=profile,
                     )
                     agent = AGENT_REGISTRY[agent_id](emitter)
                     async with AgentRunTracker(
@@ -495,14 +495,13 @@ async def run_multi_agent_generation(
                             metrics=result.summary_data,
                         )
                     results[agent_id] = result
-                    
+
                     agent_elapsed = time.perf_counter() - agent_start
                     if result.success:
                         logger.info("Agent[%s] 完成: %.2fs", agent_id, agent_elapsed)
                     else:
                         logger.warning("Agent[%s] 失败: %.2fs, error=%s", agent_id, agent_elapsed, result.error)
-                        
-                    # 如果该 Worker 成功，立刻将其成果独立保存入库，避免阻塞
+
                     if result.success and result.content:
                         resource_item = await usecases.save_worker_result(
                             user_id=user_id,
@@ -524,18 +523,10 @@ async def run_multi_agent_generation(
                         metadata={"agent_id": agent_id},
                     )
 
-            # 筛选出基础 Worker：PPT 需要在 source pre-audit 后串行生成。
-            worker_agents = [
-                a
-                for a in enabled_agents
-                if a in AGENT_REGISTRY and a not in ("planning", "review", PPT_AGENT_ID)
-            ]
             logger.info("开始并行基础 Worker 生成: run_id=%s agents=%s", run_id, worker_agents)
-            
-            # 使用 asyncio.gather 实现高并发执行
             await asyncio.gather(*(run_one(agent_id) for agent_id in worker_agents))
 
-            worker_elapsed = time.perf_counter() - worker_start
+            worker_elapsed = time.perf_counter() - start_time
             success_count = sum(1 for r in results.values() if r.success)
             fail_count = sum(1 for r in results.values() if not r.success)
             logger.info("基础 Worker 完成: 成功=%s, 失败=%s, 耗时=%.2fs", success_count, fail_count, worker_elapsed)
@@ -548,20 +539,19 @@ async def run_multi_agent_generation(
             )
 
             # ==========================================
-            # 阶段 3: 前置审核 + PPT 生成 + PPT 单独审核
-            # 职责: source 先过安全/事实性审核，PPT 只在通过后生成并单独审核
+            # 阶段 3: 审核 + PPT 并行执行（非阻塞审核）
+            #
+            # 核心优化：审核不再阻塞 PPT 生成。
+            # - 审核与 PPT 并行启动，互不等待
+            # - 审核结果作为附加信息返回前端，不拦截任何资源
+            # - 如果审核发现问题，记录到 review_result.issues 中，前端可展示提示
+            # - PPT 不再等待前置审核通过，直接拿已有的 content/reading 结果生成
             # ==========================================
-            await emitter.emit_agent(
-                "pre_review",
-                status="running",
-                message="前置内容安全审核中",
-                progress=70,
-                phase="pre_review_waiting_sources",
-            )
+
             pre_review_result = ReviewResult(passed=True, overall_score=100)
             review_result = pre_review_result
-            review_passed = True
 
+            # 准备审核数据（从已完成的 Worker 结果中构建）
             failed_results = {aid: r for aid, r in results.items() if not r.success}
             review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
             pre_audit_envelope, missing_resources = build_pre_audit_envelope(
@@ -572,83 +562,105 @@ async def run_multi_agent_generation(
             )
             source_audit_required = bool(pre_audit_envelope["deep_audit_resources"])
 
-            if missing_resources:
-                review_result = failed_review_result(
-                    status="needs_revision",
-                    message=f"资源生成不完整: {', '.join(missing_resources)}",
-                    revision_targets=missing_resources,
-                    review_mode="pre_audit",
-                )
-                review_passed = False
-                await emitter.emit_agent(
-                    PRE_REVIEW_AGENT_ID,
-                    status="failed",
-                    message="前置审核未通过：资源生成不完整",
-                    progress=80,
-                )
-                logger.warning("前置审核跳过: missing_resources=%s", missing_resources)
-            elif source_audit_required and "review" in AGENT_REGISTRY:
-                pre_review_state = WorkerState(
-                    learning_need=request.learning_need,
-                    learning_scenario=request.learning_scenario,
-                    profile=profile,
-                    blueprint=blueprint,
-                    agent_config={
-                        "review_envelope": pre_audit_envelope,
-                        "progress_agent_id": PRE_REVIEW_AGENT_ID,
-                    },
-                )
-                async with AgentRunTracker(
-                    emitter=emitter,
-                    agent_id=PRE_REVIEW_AGENT_ID,
-                    phase="reviewing_sources",
-                    message="正在审核基础资源事实性与安全性",
-                    progress=72,
-                ) as pre_review_tracker:
-                    pre_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(pre_review_state)
-                    await pre_review_tracker.finish(
-                        "前置审核完成",
-                        success=pre_review_worker_result.success,
-                        metrics={"review_status": pre_review_worker_result.metadata.get("review_status")},
-                    )
-                pre_review_result = review_result_from_worker(pre_review_worker_result)
-                review_result = pre_review_result
-                review_passed = pre_review_result.passed
-                logger.info(
-                    "Pre Review 完成: success=%s, status=%s",
-                    pre_review_worker_result.success,
-                    pre_review_worker_result.metadata.get("review_status"),
-                )
-            elif source_audit_required:
-                review_result = failed_review_result(
-                    status="blocked",
-                    message="审核智能体不可用，无法完成前置安全审核",
-                    revision_targets=["review"],
-                    review_mode="pre_audit",
-                )
-                review_passed = False
-                await emitter.emit_agent(
-                    PRE_REVIEW_AGENT_ID,
-                    status="failed",
-                    message="审核智能体不可用，前置安全审核已阻断",
-                    progress=80,
-                )
-            else:
-                await emitter.emit_agent(
-                    PRE_REVIEW_AGENT_ID,
-                    status="skipped",
-                    message="无需深度审核，跳过前置审核",
-                    progress=80,
-                )
-                logger.info("未选择 content/reading 或 review agent 不可用，跳过前置 LLM 审核")
+            # 收集并行任务
+            phase3_tasks: list[asyncio.Task] = []
 
-            if review_passed and PPT_AGENT_ID in enabled_agents:
+            # --- 3a: 前置审核（后台执行，不阻塞 PPT）---
+            async def run_pre_review() -> None:
+                nonlocal pre_review_result, review_result
+                if missing_resources:
+                    # 缺失资源仍记录到审核结果，但不阻塞
+                    pre_review_result = failed_review_result(
+                        status="needs_revision",
+                        message=f"资源生成不完整: {', '.join(missing_resources)}",
+                        revision_targets=missing_resources,
+                        review_mode="pre_audit",
+                    )
+                    review_result = pre_review_result
+                    await emitter.emit_agent(
+                        PRE_REVIEW_AGENT_ID,
+                        status="finished",
+                        message=f"审核发现资源不完整: {', '.join(missing_resources)}（已放行，请留意提示）",
+                        progress=80,
+                        metrics={"review_warning": True, "missing_resources": missing_resources},
+                    )
+                    logger.warning("前置审核发现缺失资源（已放行）: missing_resources=%s", missing_resources)
+                elif source_audit_required and "review" in AGENT_REGISTRY:
+                    pre_review_state = WorkerState(
+                        learning_need=request.learning_need,
+                        learning_scenario=request.learning_scenario,
+                        profile=profile,
+                        blueprint=blueprint,
+                        agent_config={
+                            "review_envelope": pre_audit_envelope,
+                            "progress_agent_id": PRE_REVIEW_AGENT_ID,
+                        },
+                    )
+                    async with AgentRunTracker(
+                        emitter=emitter,
+                        agent_id=PRE_REVIEW_AGENT_ID,
+                        phase="reviewing_sources",
+                        message="正在审核基础资源事实性与安全性",
+                        progress=72,
+                    ) as pre_review_tracker:
+                        pre_review_worker_result = await AGENT_REGISTRY["review"](emitter).run(pre_review_state)
+                        await pre_review_tracker.finish(
+                            "前置审核完成",
+                            success=pre_review_worker_result.success,
+                            metrics={"review_status": pre_review_worker_result.metadata.get("review_status")},
+                        )
+                    pre_review_result = review_result_from_worker(pre_review_worker_result)
+                    review_result = pre_review_result
+                    logger.info(
+                        "Pre Review 完成: success=%s, status=%s",
+                        pre_review_worker_result.success,
+                        pre_review_worker_result.metadata.get("review_status"),
+                    )
+                    if not pre_review_result.passed:
+                        await emitter.emit_agent(
+                            PRE_REVIEW_AGENT_ID,
+                            status="finished",
+                            message=f"审核发现问题: {len(pre_review_result.issues)} 项（已放行，请留意提示）",
+                            progress=80,
+                            metrics={"review_warning": True, "issue_count": len(pre_review_result.issues)},
+                        )
+                elif source_audit_required:
+                    pre_review_result = failed_review_result(
+                        status="blocked",
+                        message="审核智能体不可用，无法完成前置安全审核",
+                        revision_targets=["review"],
+                        review_mode="pre_audit",
+                    )
+                    review_result = pre_review_result
+                    await emitter.emit_agent(
+                        PRE_REVIEW_AGENT_ID,
+                        status="finished",
+                        message="审核智能体不可用，前置安全审核已跳过",
+                        progress=80,
+                        metrics={"review_warning": True, "reason": "agent_unavailable"},
+                    )
+                else:
+                    await emitter.emit_agent(
+                        PRE_REVIEW_AGENT_ID,
+                        status="skipped",
+                        message="无需深度审核，跳过前置审核",
+                        progress=80,
+                    )
+                    logger.info("未选择 content/reading 或 review agent 不可用，跳过前置 LLM 审核")
+
+            # --- 3b: PPT 生成 + PPT 审核（与 pre_review 并行）---
+            async def run_ppt_pipeline() -> None:
+                nonlocal review_result
+                if PPT_AGENT_ID not in enabled_agents or PPT_AGENT_ID not in AGENT_REGISTRY:
+                    return
+
+                # PPT 直接生成，不等待前置审核
                 await emitter.emit_agent(
                     "ppt",
                     status="running",
-                    message="前置审核通过，正在生成 PPT",
+                    message="正在生成 PPT",
                     progress=80,
-                    phase="ppt_waiting_sources",
+                    phase="ppt_generating",
                 )
                 approved_sources = [
                     {
@@ -657,12 +669,23 @@ async def run_multi_agent_generation(
                         "summary": item.get("summary", ""),
                         "source_content": item.get("audit_content", ""),
                     }
-                    for item in pre_audit_envelope["deep_audit_resources"]
+                    for item in pre_audit_envelope.get("deep_audit_resources", [])
                 ]
-                if PPT_AGENT_ID in AGENT_REGISTRY:
-                    await run_one(PPT_AGENT_ID, {"approved_sources": approved_sources})
+                await run_one(PPT_AGENT_ID, {"approved_sources": approved_sources})
 
+                # PPT 审核（非阻塞，记录问题但不拦截）
                 await emitter.emit_agent("ppt_review", status="running", message="PPT 内容审核中", progress=90)
+                ppt_result = results.get(PPT_AGENT_ID)
+                if not ppt_result or not ppt_result.success:
+                    # PPT 生成失败，跳过 PPT 审核
+                    await emitter.emit_agent(
+                        PPT_REVIEW_AGENT_ID,
+                        status="skipped",
+                        message="PPT 未成功生成，跳过 PPT 审核",
+                        progress=95,
+                    )
+                    return
+
                 failed_results = {aid: r for aid, r in results.items() if not r.success}
                 review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
                 ppt_audit_envelope, ppt_missing_resources = build_ppt_audit_envelope(
@@ -672,20 +695,26 @@ async def run_multi_agent_generation(
                     blueprint=blueprint,
                 )
                 if ppt_missing_resources:
-                    review_result = failed_review_result(
+                    ppt_review_result = failed_review_result(
                         status="needs_revision",
                         message=f"PPT 生成不完整: {', '.join(ppt_missing_resources)}",
                         revision_targets=ppt_missing_resources,
                         review_mode="ppt_audit",
                     )
-                    review_passed = False
+                    # 合并审核结果但不阻断
+                    if review_result.passed:
+                        review_result = ppt_review_result
+                    else:
+                        review_result.issues.extend(ppt_review_result.issues)
+                        review_result.failed_agents.extend(ppt_review_result.failed_agents)
                     await emitter.emit_agent(
                         PPT_REVIEW_AGENT_ID,
-                        status="failed",
-                        message="PPT 审核未通过：PPT 生成不完整",
+                        status="finished",
+                        message=f"PPT 审核发现问题: {', '.join(ppt_missing_resources)}（已放行，请留意提示）",
                         progress=95,
+                        metrics={"review_warning": True, "missing_resources": ppt_missing_resources},
                     )
-                    logger.warning("PPT 审核跳过: missing_resources=%s", ppt_missing_resources)
+                    logger.warning("PPT 审核发现缺失（已放行）: missing_resources=%s", ppt_missing_resources)
                 elif "review" in AGENT_REGISTRY:
                     ppt_review_state = WorkerState(
                         learning_need=request.learning_need,
@@ -711,45 +740,83 @@ async def run_multi_agent_generation(
                             metrics={"review_status": ppt_review_worker_result.metadata.get("review_status")},
                         )
                     ppt_review_result = review_result_from_worker(ppt_review_worker_result)
+                    # 合并前置审核和 PPT 审核的建议
                     if pre_review_result.suggestions:
                         ppt_review_result.suggestions = [
                             *pre_review_result.suggestions,
                             *ppt_review_result.suggestions,
                         ]
-                    review_result = ppt_review_result
-                    review_passed = ppt_review_result.passed
+                    # 合并到最终审核结果
+                    if review_result.passed:
+                        review_result = ppt_review_result
+                    else:
+                        review_result.suggestions.extend(ppt_review_result.suggestions)
+                        if ppt_review_result.issues:
+                            review_result.issues.extend(ppt_review_result.issues)
+                        if ppt_review_result.failed_agents:
+                            review_result.failed_agents.extend(ppt_review_result.failed_agents)
                     logger.info(
                         "PPT Review 完成: success=%s, status=%s",
                         ppt_review_worker_result.success,
                         ppt_review_worker_result.metadata.get("review_status"),
                     )
+                    if not ppt_review_result.passed:
+                        await emitter.emit_agent(
+                            PPT_REVIEW_AGENT_ID,
+                            status="finished",
+                            message=f"PPT 审核发现问题: {len(ppt_review_result.issues)} 项（已放行，请留意提示）",
+                            progress=95,
+                            metrics={"review_warning": True, "issue_count": len(ppt_review_result.issues)},
+                        )
                 else:
-                    review_result = failed_review_result(
+                    ppt_review_result = failed_review_result(
                         status="blocked",
                         message="审核智能体不可用，无法完成 PPT 安全审核",
                         revision_targets=["review"],
                         review_mode="ppt_audit",
                     )
-                    review_passed = False
+                    if review_result.passed:
+                        review_result = ppt_review_result
+                    else:
+                        review_result.issues.extend(ppt_review_result.issues)
                     await emitter.emit_agent(
                         PPT_REVIEW_AGENT_ID,
-                        status="failed",
-                        message="审核智能体不可用，PPT 安全审核已阻断",
+                        status="finished",
+                        message="审核智能体不可用，PPT 安全审核已跳过",
                         progress=95,
+                        metrics={"review_warning": True, "reason": "agent_unavailable"},
                     )
+
+            # 并行启动 pre_review 和 PPT pipeline
+            if source_audit_required:
+                phase3_tasks.append(asyncio.create_task(run_pre_review()))
+            else:
+                await emitter.emit_agent(
+                    PRE_REVIEW_AGENT_ID,
+                    status="skipped",
+                    message="无需深度审核，跳过前置审核",
+                    progress=80,
+                )
+
+            if PPT_AGENT_ID in enabled_agents and PPT_AGENT_ID in AGENT_REGISTRY:
+                phase3_tasks.append(asyncio.create_task(run_ppt_pipeline()))
             elif PPT_AGENT_ID in enabled_agents:
                 await emitter.emit_agent(
                     PPT_AGENT_ID,
                     status="skipped",
-                    message="前置审核未通过，已跳过 PPT 生成",
+                    message="PPT 智能体不可用",
                     progress=80,
                 )
                 await emitter.emit_agent(
                     PPT_REVIEW_AGENT_ID,
                     status="skipped",
-                    message="PPT 未生成，已跳过 PPT 审核",
+                    message="PPT 未生成，跳过 PPT 审核",
                     progress=80,
                 )
+
+            # 等待阶段 3 全部完成
+            if phase3_tasks:
+                await asyncio.gather(*phase3_tasks)
 
             # ==========================================
             # 阶段 4: 持久化与打包 (Save Final Results)
@@ -812,13 +879,12 @@ async def run_single_agent_generation(
     agent_id: str,
     learning_need: str,
     profile: dict[str, Any],
-    node_id: int | None = None,
 ) -> None:
     """【轻量级独立执行引擎】在后台执行单智能体资源生成任务。
     
     适用场景：
     - 路径规划中单独生成某个特定知识点的资源 (Course Path Node Generation)
-    - 用户在界面上点击“即调即用”单独唤醒某一个领域的专家 (如：仅生成 PPT)
+    - 用户在界面上点击"即调即用"单独唤醒某一个领域的专家 (如：仅生成 PPT)
 
     工作流程：
     [ 准备 ] : 初始化 SSE 进度条和事件发射器
@@ -920,6 +986,3 @@ async def run_single_agent_generation(
             
         total_elapsed = time.perf_counter() - start_time
         logger.info("单智能体生成结束: agent=%s, success=%s, 耗时=%.2fs", agent_id, success, total_elapsed)
-        
-
-ResourceUsecases = ResourceService

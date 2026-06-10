@@ -1,18 +1,18 @@
 <template>
   <div class="diagnostic-widget">
     <div class="widget-header">
-      <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> 诊断策略</h4>
+      <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> 路径说明</h4>
       <span class="confidence-badge">{{ path.confidence }}% 置信</span>
     </div>
 
     <div class="widget-body scroll-y">
       <div v-if="path.strategy_report" class="section">
-        <h5>AI 诊断结论</h5>
+        <h5>规划摘要</h5>
         <p>{{ path.strategy_report }}</p>
       </div>
 
       <div v-if="path.adjustment_rationale && path.adjustment_rationale.length > 0" class="section">
-        <h5>裁剪优化依据</h5>
+        <h5>生成依据</h5>
         <ul class="dense-list">
           <li v-for="(rationale, index) in path.adjustment_rationale" :key="index">
             {{ rationale }}

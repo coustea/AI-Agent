@@ -4,7 +4,7 @@
     <div class="top-nav">
       <div class="brand">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        <span>知识拓扑推演引擎</span>
+        <span>学习路径规划</span>
       </div>
       <button class="history-btn" @click="router.push('/path-planner/history')">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
@@ -48,14 +48,14 @@
         <!-- The Central Destination Node -->
         <div class="destination-node" :class="{ 'is-focused': isFocused, 'has-input': goal.trim().length > 0 }">
           <div class="node-label">
-            <span class="badge">终点 (Destination)</span>
-            <h3>设定终极学习目标</h3>
+            <span class="badge">学习目标</span>
+            <h3>先定义你想学成什么样</h3>
           </div>
           
           <textarea
             v-model="goal"
             class="destination-input"
-            placeholder="点击输入：例如“系统掌握 FastAPI 高并发架构与部署”..."
+            placeholder="例如：系统掌握 FastAPI 高并发架构与部署"
             @focus="isFocused = true"
             @blur="isFocused = false"
             rows="3"
@@ -64,7 +64,7 @@
           <transition name="fade">
             <div class="node-footer" v-if="goal.trim().length > 0">
               <button class="reverse-btn" :disabled="submitting" @click="handleSubmit">
-                <span class="btn-text">{{ submitting ? '系统逆向解析中...' : '开始逆向推演前置路线' }}</span>
+                <span class="btn-text">{{ submitting ? '正在生成学习路径...' : '生成学习路径' }}</span>
                 <span class="scan-line" v-if="submitting"></span>
               </button>
             </div>
@@ -75,7 +75,7 @@
     </div>
     
     <div class="canvas-hints" v-if="!submitting && !isFocused && !goal">
-      <p>💡 点击中央节点，输入您的终极目标，系统将自动逆向生成所有必需的前置知识与拓扑图。</p>
+      <p>输入目标后，系统会先生成一条可执行的学习路径；进入节点后再按需生成教程、题目和辅助资源。</p>
     </div>
   </main>
 </template>

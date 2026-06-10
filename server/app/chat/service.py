@@ -32,7 +32,7 @@ from app.config import (
     MAX_UPLOAD_FILES_PER_REQUEST,
 )
 from app.infra.logging import get_logger
-from app.memory.service import get_memory_service
+from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
 from app.chat.utils.storage import LocalFileStore
 from app.chat.utils.vision import VisionService
 
@@ -110,7 +110,7 @@ class ChatUseCases:
     """聊天用例：对话流、记忆管理、附件分析、文件上传。"""
 
     def __init__(self) -> None:
-        self._memory_service = get_memory_service()
+        self._memory_service = get_chat_memory_service()
         self.file_store: LocalFileStore = LocalFileStore()
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -684,6 +684,11 @@ def get_chat_usecases() -> ChatUseCases:
     if _chat_usecases is None:
         _chat_usecases = ChatUseCases()
     return _chat_usecases
+
+
+def get_chat_memory_service():
+    """Expose chat memory factory for tests and callers migrating off legacy memory."""
+    return _get_chat_memory_service()
 
 
 def get_avatar_chat_usecases() -> ChatUseCases:

@@ -2,6 +2,13 @@
   <main class="path-resource-detail-page">
     <div class="page-topbar">
       <button class="ghost-btn" @click="router.push('/path-resource-history')">返回路径资源记录</button>
+      <button
+        v-if="pathNodeId"
+        class="ghost-btn"
+        @click="router.push(`/path-planner/node/${pathNodeId}`)"
+      >
+        返回当前节点
+      </button>
       <button class="ghost-btn" @click="router.push('/path-planner/history')">返回路径历史</button>
     </div>
 
@@ -60,6 +67,7 @@ const loading = ref(false)
 const resource = ref<PathResourceDetail | null>(null)
 
 const resourceId = computed(() => Number(route.params.id || 0))
+const pathNodeId = computed(() => Number(route.query.pathNodeId || 0))
 
 const resourceContent = computed(() => {
   if (!resource.value) return null

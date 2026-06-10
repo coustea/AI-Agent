@@ -1,15 +1,18 @@
+"""路径规划服务 — 路径生成、节点工作区、测验、评估一体化。"""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Sequence
+from typing import Any
 
+from sqlalchemy.exc import ProgrammingError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.evaluation.request import LearningEventCreate
-from app.evaluation.service import EvaluationService, build_summary_from_events
-from app.infra.llm import get_llm
+from app.evaluation.response import LearningEventItem
+from app.evaluation.service import EvaluationService, bg_apply_profile_update_from_learning_event, build_summary_from_events
 from app.infra.logging import get_logger
 from app.infra.models import (
     LearningEvent,
@@ -20,10 +23,10 @@ from app.infra.models import (
     PathNodeResource,
     PathNodeTutorial,
 )
-from app.memory.service import MemoryService
-from app.path.agents.planner import PathPlannerAgent
-from app.path.agents.planner import repair_generated_plan_from_macro_stages
-from app.path.prompt_manager import path_prompts
+from app.profile.service import get_profile_service
+from app.path.agents.node_learning import NodeLearningAgent
+from app.path.agents.planner import PathPlannerAgent, repair_generated_plan_from_macro_stages
+from app.path.events import PathEvent, path_event_bus
 from app.path.schemas import (
     AgentLearningPathPlan,
     AuxiliaryResourceRequest,
@@ -41,51 +44,71 @@ from app.path.schemas import (
     PathQuizSubmitRequest,
     PathQuizSubmitResponse,
 )
+from app.path.validation import normalize_path_plan, validate_path_plan
 from app.resource.agents import AGENT_REGISTRY
 from app.resource.schemas import WorkerState
 
 logger = get_logger(__name__)
 
+# ── Constants ────────────────────────────────────────────────────────────────
+
 PASS_SCORE = 3
 QUIZ_SIZE = 5
-AUX_RESOURCE_TYPES = {"mindmap", "code", "ppt"}
+AUX_RESOURCE_TYPES = {"mindmap", "code", "ppt", "content", "reading"}
+ACTIVE_NODE_STATUSES = {"available", "in_progress", "remediation", "reinforced"}
+COMPLETED_NODE_STATUSES = {"completed", "completed_with_gaps"}
+ACCESSIBLE_NODE_STATUSES = ACTIVE_NODE_STATUSES | COMPLETED_NODE_STATUSES
 
 
-class LearningPathService:
+class PathService:
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.memory_service = MemoryService(module="mentor")
-        self.evaluation_service = EvaluationService()
+        self.profile_builder = get_profile_service()
         self.path_planner = PathPlannerAgent()
-        self.llm = get_llm()
+        self.node_learning_agent = NodeLearningAgent()
+        self.evaluation_service = EvaluationService()
 
-    async def create_path(self, user_id: int, request: CreateLearningPathRequest) -> LearningPathOverviewResponse:
+    # ── 路径规划 ────────────────────────────────────────────────────────────
+
+    async def init_path_task(self, user_id: int, request: CreateLearningPathRequest) -> int:
         await self._archive_active_paths(user_id, request.module)
-        profile = await self._get_profile_dict(user_id)
-        plan = await self._generate_path_plan(user_id=user_id, request=request, profile=profile)
-        plan = repair_generated_plan_from_macro_stages(
-            plan=plan,
-            macro_stages=list(getattr(plan, "stages", []) or []),
-            request=request,
-            strategy_report=getattr(plan, "strategy_report", ""),
-        )
-
         path = LearningPath(
             user_id=user_id,
             module=request.module,
-            title=plan.title,
+            title=request.topic or "学习路径",
             goal=request.goal,
             topic=request.topic or None,
             overall_progress=0,
-            eta_days=plan.eta_days,
-            confidence=plan.confidence,
-            status="active",
-            stages_json=[self._stage_to_dict(stage) for stage in plan.stages],
-            strategy_report=getattr(plan, "strategy_report", None),
-            adjustment_rationale=list(getattr(plan, "adjustment_rationale", []) or []),
+            eta_days=0,
+            confidence=0,
+            status="generating",
+            stages_json=[],
         )
         self.session.add(path)
-        await self.session.flush()
+        await self.session.commit()
+        await self.session.refresh(path)
+        return path.id
+
+    async def complete_path_generation(
+        self,
+        path_id: int,
+        user_id: int,
+        request: CreateLearningPathRequest,
+        plan: AgentLearningPathPlan,
+    ) -> None:
+        path = await self.session.get(LearningPath, path_id)
+        if not path:
+            return
+        plan = normalize_path_plan(plan)
+        validate_path_plan(plan)
+
+        path.eta_days = plan.eta_days
+        path.confidence = plan.confidence
+        path.status = "active"
+        path.title = plan.title
+        path.stages_json = [self._stage_to_dict(stage) for stage in plan.stages]
+        path.strategy_report = getattr(plan, "strategy_report", None)
+        path.adjustment_rationale = list(getattr(plan, "adjustment_rationale", []) or [])
 
         completed_keys: set[str] = set()
         nodes: list[PathNode] = []
@@ -101,6 +124,9 @@ class LearningPathService:
                 status=status,
                 priority=index + 1,
                 prerequisites=prerequisites,
+                resource_policy=node_data.resource_policy.model_dump(mode="json")
+                if node_data.resource_policy
+                else None,
                 mastery_target=getattr(node_data, "mastery_target", None),
                 estimated_minutes=getattr(node_data, "estimated_minutes", None),
                 difficulty=getattr(node_data, "difficulty", None),
@@ -111,10 +137,58 @@ class LearningPathService:
         if nodes:
             path.current_node_key = nodes[0].node_id
         await self.session.commit()
-        await self.session.refresh(path)
-        for node in nodes:
-            await self.session.refresh(node)
-        return self._build_path_overview(path, nodes)
+
+    async def run_generation(self, path_id: int, user_id: int, request: CreateLearningPathRequest) -> None:
+        """完整生成管线：画像获取 → 规划 → 修复 → 验证 → 持久化 → 事件发布。"""
+        profile = await self._get_profile_dict(user_id)
+        profile_md = await self.get_user_learning_profile(user_id)
+
+        async def progress_cb(status: str, progress: int, message: str) -> None:
+            await path_event_bus.publish(path_id, PathEvent(
+                event_type="path.step", path_id=path_id, status="generating",
+                message=message, progress=progress,
+            ))
+
+        try:
+            await path_event_bus.publish(path_id, PathEvent(
+                event_type="path.step", path_id=path_id, status="generating",
+                message="正在初始化路径推演引擎", progress=10,
+            ))
+
+            plan = await self.path_planner.generate_plan(
+                request, profile, progress_callback=progress_cb, profile_markdown=profile_md,
+            )
+
+            await path_event_bus.publish(path_id, PathEvent(
+                event_type="path.step", path_id=path_id, status="generating",
+                message="正在生成节点结构", progress=85,
+            ))
+
+            plan = repair_generated_plan_from_macro_stages(
+                plan=plan,
+                macro_stages=list(getattr(plan, "stages", []) or []),
+                request=request,
+                strategy_report=getattr(plan, "strategy_report", ""),
+            )
+
+            await self.complete_path_generation(path_id, user_id, request, plan)
+
+            await path_event_bus.publish(path_id, PathEvent(
+                event_type="path.done", path_id=path_id, status="active",
+                message="路径规划完成", progress=100, success=True,
+            ))
+        except Exception as exc:
+            logger.error(f"路径规划任务异常: {exc}", exc_info=True)
+            path = await self.session.get(LearningPath, path_id)
+            if path:
+                path.status = "failed"
+                await self.session.commit()
+            await path_event_bus.publish(path_id, PathEvent(
+                event_type="path.done", path_id=path_id, status="failed",
+                message=f"路径规划失败: {str(exc)}", progress=0, success=False,
+            ))
+
+    # ── 路径查询 ────────────────────────────────────────────────────────────
 
     async def get_active_path_overview(self, user_id: int, module: str = "mentor") -> LearningPathOverviewResponse | None:
         path = await self._get_active_path_record(user_id, module)
@@ -158,8 +232,16 @@ class LearningPathService:
         await self.session.commit()
         return await self._build_path_response(path)
 
+    # ── 节点工作区 ──────────────────────────────────────────────────────────
+
     async def get_node_workspace(self, user_id: int, node_id: int) -> LearningPathNodeWorkspaceResponse:
         node = await self._must_get_node(user_id, node_id)
+        self._ensure_node_accessible(node)
+        if node.status == "available":
+            node.status = "in_progress"
+            node.started_at = datetime.now(timezone.utc)
+            await self.session.commit()
+            await self.session.refresh(node)
         path = await self._must_get_path(user_id, node.path_id)
         tutorials = await self._get_node_tutorials(node.id)
         current = next((item for item in tutorials if item.is_current), None)
@@ -167,20 +249,58 @@ class LearningPathService:
             current = await self._create_tutorial(path=path, node=node, tutorial_type="primary")
             tutorials = await self._get_node_tutorials(node.id)
         resources = await self._get_node_resources(node.id)
-        current_round = await self._get_latest_round(node.id)
         overview = await self._build_path_response(path)
         return LearningPathNodeWorkspaceResponse(
             path=overview,
-            node=self._to_node_dto(node),
-            current_tutorial=self._to_tutorial_dto(current),
-            tutorials=[self._to_tutorial_dto(item) for item in tutorials],
-            resources=[self._to_resource_dto(item) for item in resources],
-            current_round=current_round,
+            node=LearningPathNodeDTO.from_model(node),
+            current_tutorial=LearningPathTutorialDTO.from_model(current),
+            tutorials=[LearningPathTutorialDTO.from_model(item) for item in tutorials],
+            resources=[LearningPathResourceDTO.from_model(item) for item in resources],
+            current_round=0,
             quiz_available=current is not None,
         )
 
+    async def generate_node_resource(
+        self,
+        user_id: int,
+        node_id: int,
+        payload: AuxiliaryResourceRequest,
+    ) -> LearningPathResourceDTO:
+        if payload.resource_type not in AUX_RESOURCE_TYPES:
+            raise ValueError("仅支持 mindmap、code、ppt")
+        node = await self._must_get_node(user_id, node_id)
+        self._ensure_node_accessible(node)
+        path = await self._must_get_path(user_id, node.path_id)
+        tutorial = await self._get_current_tutorial(node.id)
+        if tutorial is None:
+            tutorial = await self._create_tutorial(path=path, node=node, tutorial_type="primary")
+        generated = await self._generate_auxiliary_resource_payload(
+            path=path, node=node, tutorial=tutorial, resource_type=payload.resource_type,
+        )
+        current_count = await self._count_node_resources(node.id, payload.resource_type)
+        resource = PathNodeResource(
+            path_id=path.id,
+            node_id=node.id,
+            tutorial_id=tutorial.id,
+            user_id=user_id,
+            resource_type=payload.resource_type,
+            version_no=current_count + 1,
+            title=generated["title"],
+            content_format=generated["content_format"],
+            content_text=generated.get("content_text"),
+            content_json=generated.get("content_json"),
+            metadata_json=generated.get("metadata") or {},
+        )
+        self.session.add(resource)
+        await self.session.commit()
+        await self.session.refresh(resource)
+        return LearningPathResourceDTO.from_model(resource)
+
+    # ── 测验 ────────────────────────────────────────────────────────────────
+
     async def generate_node_questions(self, user_id: int, node_id: int) -> PathQuizRoundResponse:
         node = await self._must_get_node(user_id, node_id)
+        self._ensure_node_accessible(node)
         path = await self._must_get_path(user_id, node.path_id)
         tutorial = await self._get_current_tutorial(node.id)
         if tutorial is None:
@@ -188,6 +308,8 @@ class LearningPathService:
 
         round_no = await self._get_latest_round(node.id) + 1
         generated = await self._generate_question_payload(path=path, node=node, tutorial=tutorial, round_no=round_no)
+        if len(generated) != QUIZ_SIZE:
+            raise ValueError("当前节点还没有生成完整的五道题，请稍后重试")
         questions: list[PathNodeQuestion] = []
         for index, item in enumerate(generated[:QUIZ_SIZE], start=1):
             question = PathNodeQuestion(
@@ -214,7 +336,7 @@ class LearningPathService:
             node_id=node.id,
             tutorial_id=tutorial.id,
             round_no=round_no,
-            questions=[self._to_question_dto(item) for item in questions],
+            questions=[LearningPathQuestionDTO.from_model(item) for item in questions],
         )
 
     async def submit_node_quiz(
@@ -258,31 +380,30 @@ class LearningPathService:
             next_node_id = await self._resolve_next_available_node_id(path.id)
             outcome = "passed"
         elif node.attempt_count == 1:
-            tutorial = await self._create_tutorial(
-                path=path,
-                node=node,
-                tutorial_type="remediation",
+            await self._create_tutorial(
+                path=path, node=node, tutorial_type="remediation",
                 weak_knowledge_points=weak_points,
             )
+            node.status = "remediation"
             outcome = "remediation"
             next_node_id = None
         elif node.attempt_count == 2:
             original = await self._get_primary_tutorial(node.id)
-            tutorial = await self._create_tutorial(
-                path=path,
-                node=node,
-                tutorial_type="reinforced",
+            await self._create_tutorial(
+                path=path, node=node, tutorial_type="reinforced",
                 weak_knowledge_points=weak_points,
                 based_on_tutorial_id=original.id if original else None,
             )
-            outcome = "reinforced"
-            next_node_id = None
+            node.status = "completed_with_gaps"
+            node.completed_at = datetime.now(timezone.utc)
+            await self._unlock_successors(path.id)
+            next_node_id = await self._resolve_next_available_node_id(path.id)
+            outcome = "completed_with_gaps"
         else:
             node.status = "completed_with_gaps"
             node.completed_at = datetime.now(timezone.utc)
             await self._unlock_successors(path.id)
             next_node_id = await self._resolve_next_available_node_id(path.id)
-            tutorial = await self._get_current_tutorial(node.id)
             outcome = "completed_with_gaps"
 
         await self._update_path_progress(path)
@@ -290,12 +411,8 @@ class LearningPathService:
 
         current_tutorial = await self._get_current_tutorial(node.id)
         await self._record_quiz_signal(
-            user_id=user_id,
-            path=path,
-            node=node,
-            score=score,
-            weak_points=weak_points,
-            outcome=outcome,
+            user_id=user_id, path=path, node=node,
+            score=score, weak_points=weak_points, outcome=outcome,
         )
 
         return PathQuizSubmitResponse(
@@ -309,43 +426,7 @@ class LearningPathService:
             current_tutorial_id=current_tutorial.id if current_tutorial else None,
         )
 
-    async def generate_node_resource(
-        self,
-        user_id: int,
-        node_id: int,
-        payload: AuxiliaryResourceRequest,
-    ) -> LearningPathResourceDTO:
-        if payload.resource_type not in AUX_RESOURCE_TYPES:
-            raise ValueError("仅支持 mindmap、code、ppt")
-        node = await self._must_get_node(user_id, node_id)
-        path = await self._must_get_path(user_id, node.path_id)
-        tutorial = await self._get_current_tutorial(node.id)
-        if tutorial is None:
-            tutorial = await self._create_tutorial(path=path, node=node, tutorial_type="primary")
-        generated = await self._generate_auxiliary_resource_payload(
-            path=path,
-            node=node,
-            tutorial=tutorial,
-            resource_type=payload.resource_type,
-        )
-        current_count = await self._count_node_resources(node.id, payload.resource_type)
-        resource = PathNodeResource(
-            path_id=path.id,
-            node_id=node.id,
-            tutorial_id=tutorial.id,
-            user_id=user_id,
-            resource_type=payload.resource_type,
-            version_no=current_count + 1,
-            title=generated["title"],
-            content_format=generated["content_format"],
-            content_text=generated.get("content_text"),
-            content_json=generated.get("content_json"),
-            metadata_json=generated.get("metadata") or {},
-        )
-        self.session.add(resource)
-        await self.session.commit()
-        await self.session.refresh(resource)
-        return self._to_resource_dto(resource)
+    # ── 评估 ────────────────────────────────────────────────────────────────
 
     async def get_learning_evaluation(self, user_id: int, path_id: int) -> PathLearningEvaluationResponse | None:
         path = await self._must_get_path(user_id, path_id)
@@ -394,81 +475,36 @@ class LearningPathService:
         user_id: int,
         path_id: int,
         payload: LearningEventCreate,
-    ) -> LearningEvent:
-        return await self.evaluation_service.record_event(
-            self.session,
-            user_id=user_id,
-            payload=payload,
+    ) -> tuple[LearningEvent, dict[str, Any]]:
+        path = await self._must_get_path(user_id, path_id)
+        updates: dict[str, Any] = {"path_id": path.id}
+        if payload.path_node_id is not None:
+            node = await self._must_get_node(user_id, payload.path_node_id)
+            if node.path_id != path.id:
+                raise ValueError("学习事件节点不属于当前学习路径")
+            updates["path_node_id"] = node.id
+            updates["node_id"] = node.node_id
+        payload = payload.model_copy(update=updates)
+        event = await self.evaluation_service.record_event(
+            self.session, user_id=user_id, payload=payload,
         )
-
-    async def list_path_resources(self, user_id: int, limit: int, offset: int) -> dict[str, Any]:
-        stmt = (
-            select(PathNodeResource)
-            .where(PathNodeResource.user_id == user_id)
-            .order_by(col(PathNodeResource.created_at).desc())
-            .offset(offset)
-            .limit(limit)
-        )
-        rows = list((await self.session.exec(stmt)).all())
-        node_map: dict[int, PathNode] = {}
-        if rows:
-            node_ids = {row.node_id for row in rows}
-            node_rows = list((await self.session.exec(select(PathNode).where(PathNode.id.in_(node_ids)))).all())
-            node_map = {node.id: node for node in node_rows if node.id is not None}
-        total_stmt = select(PathNodeResource).where(PathNodeResource.user_id == user_id)
-        total = len(list((await self.session.exec(total_stmt)).all()))
-        return {
-            "items": [
-                {
-                    "id": row.id,
-                    "learning_need": row.title,
-                    "status": "completed",
-                    "resource_types": [row.resource_type],
-                    "resource_type": row.resource_type,
-                    "title": row.title,
-                    "path_id": row.path_id,
-                    "path_node_id": row.node_id,
-                    "node_id": node_map.get(row.node_id).node_id if node_map.get(row.node_id) else None,
-                    "node_title": node_map.get(row.node_id).title if node_map.get(row.node_id) else None,
-                    "created_at": row.created_at.isoformat() if row.created_at else None,
-                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-                }
-                for row in rows
-            ],
-            "total": total,
+        profile_payload = {
+            "event_type": event.event_type,
+            "session_id": event.session_id,
+            "resource_id": event.resource_id,
+            "resource_item_id": event.resource_item_id,
+            "path_id": event.path_id,
+            "path_node_id": event.path_node_id,
+            "node_id": event.node_id,
+            "course": event.course,
+            "topic": event.topic,
+            "score": event.score,
+            "feedback": event.feedback,
+            "metadata": event.metadata_json or {},
         }
+        return event, profile_payload
 
-    async def get_path_resource_bundle(self, user_id: int, resource_id: int) -> LearningPathResourceDTO | None:
-        resource = await self.session.get(PathNodeResource, resource_id)
-        if resource is None or resource.user_id != user_id:
-            return None
-        return self._to_resource_dto(resource)
-
-    async def _archive_active_paths(self, user_id: int, module: str, exclude_path_id: int | None = None) -> None:
-        stmt = select(LearningPath).where(
-            LearningPath.user_id == user_id,
-            LearningPath.module == module,
-            LearningPath.status == "active",
-        )
-        paths = list((await self.session.exec(stmt)).all())
-        for item in paths:
-            if exclude_path_id is not None and item.id == exclude_path_id:
-                continue
-            item.status = "archived"
-            item.updated_at = datetime.now(timezone.utc)
-        await self.session.flush()
-
-    async def _get_active_path_record(self, user_id: int, module: str = "mentor") -> LearningPath | None:
-        stmt = (
-            select(LearningPath)
-            .where(
-                LearningPath.user_id == user_id,
-                LearningPath.module == module,
-                LearningPath.status == "active",
-            )
-            .order_by(col(LearningPath.updated_at).desc())
-        )
-        return (await self.session.exec(stmt)).first()
+    # ── 共享内部方法 ────────────────────────────────────────────────────────
 
     async def _must_get_path(self, user_id: int, path_id: int) -> LearningPath:
         path = await self.session.get(LearningPath, path_id)
@@ -482,29 +518,9 @@ class LearningPathService:
             raise ValueError("路径节点不存在")
         return node
 
-    async def _build_path_response(self, path: LearningPath) -> LearningPathOverviewResponse:
-        nodes = await self._get_nodes_for_path(path.id)
-        return self._build_path_overview(path, nodes)
-
-    def _build_path_overview(self, path: LearningPath, nodes: Sequence[PathNode]) -> LearningPathOverviewResponse:
-        return LearningPathOverviewResponse(
-            id=path.id,
-            module=path.module,
-            title=path.title,
-            goal=path.goal,
-            topic=path.topic,
-            overall_progress=path.overall_progress,
-            eta_days=path.eta_days,
-            confidence=path.confidence,
-            status=path.status,
-            current_node_key=path.current_node_key,
-            strategy_report=path.strategy_report,
-            adjustment_rationale=list(path.adjustment_rationale or []),
-            stages=list(path.stages_json or []),
-            nodes=[self._to_node_dto(item) for item in nodes],
-            created_at=path.created_at.isoformat() if path.created_at else "",
-            updated_at=path.updated_at.isoformat() if path.updated_at else "",
-        )
+    def _ensure_node_accessible(self, node: PathNode) -> None:
+        if node.status not in ACCESSIBLE_NODE_STATUSES:
+            raise ValueError("路径节点尚未解锁")
 
     async def _get_nodes_for_path(self, path_id: int) -> list[PathNode]:
         stmt = (
@@ -556,9 +572,7 @@ class LearningPathService:
         based_on_tutorial_id: int | None = None,
     ) -> PathNodeTutorial:
         payload = await self._generate_tutorial_payload(
-            path=path,
-            node=node,
-            tutorial_type=tutorial_type,
+            path=path, node=node, tutorial_type=tutorial_type,
             weak_knowledge_points=weak_knowledge_points or [],
         )
         current = await self._get_current_tutorial(node.id)
@@ -588,116 +602,6 @@ class LearningPathService:
         await self.session.refresh(tutorial)
         return tutorial
 
-    async def _get_latest_round(self, node_id: int) -> int:
-        stmt = select(PathNodeQuestion).where(PathNodeQuestion.node_id == node_id)
-        questions = list((await self.session.exec(stmt)).all())
-        return max((item.round_no for item in questions), default=0)
-
-    async def _get_round_questions(self, node_id: int, round_no: int) -> list[PathNodeQuestion]:
-        stmt = (
-            select(PathNodeQuestion)
-            .where(PathNodeQuestion.node_id == node_id, PathNodeQuestion.round_no == round_no)
-            .order_by(col(PathNodeQuestion.question_no).asc())
-        )
-        return list((await self.session.exec(stmt)).all())
-
-    async def _unlock_successors(self, path_id: int) -> None:
-        nodes = await self._get_nodes_for_path(path_id)
-        completed = {item.node_id for item in nodes if item.status in {"completed", "completed_with_gaps"}}
-        for node in nodes:
-            if node.status == "locked" and set(node.prerequisites or []).issubset(completed):
-                node.status = "available"
-        if nodes:
-            path = await self.session.get(LearningPath, path_id)
-            next_node = next((item for item in nodes if item.status == "available"), None)
-            if path is not None:
-                path.current_node_key = next_node.node_id if next_node else path.current_node_key
-
-    async def _resolve_next_available_node_id(self, path_id: int) -> int | None:
-        nodes = await self._get_nodes_for_path(path_id)
-        next_node = next((item for item in nodes if item.status == "available"), None)
-        return next_node.id if next_node else None
-
-    async def _update_path_progress(self, path: LearningPath) -> None:
-        nodes = await self._get_nodes_for_path(path.id)
-        if not nodes:
-            path.overall_progress = 0
-            return
-        completed = sum(1 for item in nodes if item.status in {"completed", "completed_with_gaps"})
-        path.overall_progress = round(completed / len(nodes) * 100)
-        next_node = next((item for item in nodes if item.status == "available"), None)
-        path.current_node_key = next_node.node_id if next_node else None
-        if completed == len(nodes):
-            path.status = "completed"
-        path.updated_at = datetime.now(timezone.utc)
-
-    async def _count_node_resources(self, node_id: int, resource_type: str) -> int:
-        stmt = select(PathNodeResource).where(
-            PathNodeResource.node_id == node_id,
-            PathNodeResource.resource_type == resource_type,
-        )
-        return len(list((await self.session.exec(stmt)).all()))
-
-    async def _get_path_active_minutes(self, *, user_id: int, path_id: int) -> int:
-        stmt = select(LearningSession).where(
-            LearningSession.user_id == user_id,
-            LearningSession.path_id == path_id,
-        )
-        sessions = list((await self.session.exec(stmt)).all())
-        return sum(item.duration_seconds or 0 for item in sessions) // 60
-
-    async def _get_current_path_node(self, path_id: int, current_node_key: str | None) -> PathNode | None:
-        if not current_node_key:
-            return None
-        stmt = select(PathNode).where(
-            PathNode.path_id == path_id,
-            PathNode.node_id == current_node_key,
-        )
-        return (await self.session.exec(stmt)).first()
-
-    async def _record_quiz_signal(
-        self,
-        *,
-        user_id: int,
-        path: LearningPath,
-        node: PathNode,
-        score: int,
-        weak_points: list[str],
-        outcome: str,
-    ) -> None:
-        payload = LearningEventCreate(
-            event_type="quiz_submitted",
-            path_id=path.id,
-            path_node_id=node.id,
-            node_id=node.node_id,
-            course=path.title,
-            topic=node.title,
-            score=float(score / QUIZ_SIZE * 100),
-            feedback=None,
-            metadata={
-                "weak_knowledge_points": weak_points,
-                "outcome": outcome,
-            },
-        )
-        await self.evaluation_service.record_event(self.session, user_id=user_id, payload=payload)
-
-    async def _get_profile_dict(self, user_id: int) -> dict[str, Any]:
-        profile = await self.memory_service.get_or_create_profile(user_id=user_id)
-        return profile.profile_json if profile and profile.profile_json else {}
-
-    async def _generate_path_plan(
-        self,
-        *,
-        user_id: int,
-        request: CreateLearningPathRequest,
-        profile: dict[str, Any],
-    ) -> AgentLearningPathPlan:
-        plan, _search = await self.path_planner.generate_plan(
-            request,
-            profile,
-        )
-        return plan
-
     async def _generate_tutorial_payload(
         self,
         *,
@@ -706,64 +610,15 @@ class LearningPathService:
         tutorial_type: str,
         weak_knowledge_points: list[str],
     ) -> dict[str, Any]:
-        weak_points_section = ""
-        if weak_knowledge_points:
-            weak_points_section = f"重点围绕这些薄弱知识点强化：{', '.join(weak_knowledge_points)}"
-        prompt = path_prompts.render_tutorial(
+        profile_md = await self.get_user_learning_profile(path.user_id)
+        return await self.node_learning_agent.generate_tutorial(
             path_goal=path.goal,
             node_title=node.title,
             mastery_target=node.mastery_target or "掌握该节点核心能力",
             tutorial_type=tutorial_type,
-            weak_points_section=weak_points_section,
+            weak_knowledge_points=weak_knowledge_points,
+            profile_markdown=profile_md,
         )
-        response = await self.llm.ainvoke(prompt, temperature=0.3)
-        content = response.content if hasattr(response, "content") else str(response)
-        return {
-            "title": f"{node.title} - {tutorial_type}",
-            "summary": tutorial_type,
-            "content_markdown": content,
-            "knowledge_points": [node.title],
-        }
-
-    async def _generate_question_payload(
-        self,
-        *,
-        path: LearningPath,
-        node: PathNode,
-        tutorial: PathNodeTutorial,
-        round_no: int,
-    ) -> list[dict[str, Any]]:
-        state = WorkerState(
-            learning_need=f"{path.goal}\n当前节点：{node.title}\n教程摘要：{tutorial.summary or tutorial.title}",
-            profile=await self._get_profile_dict(path.user_id),
-            agent_config={
-                "question_count": QUIZ_SIZE,
-                "difficulty_mode": "basic",
-                "include_analysis": True,
-                "question_types": ["single"],
-            },
-        )
-        result = await AGENT_REGISTRY["quiz"]().run(state)
-        payload = json.loads(result.content)
-        questions = payload.get("questions") or []
-        normalized: list[dict[str, Any]] = []
-        for item in questions[:QUIZ_SIZE]:
-            options = item.get("options") or []
-            choice = {}
-            for option in options:
-                if isinstance(option, dict):
-                    choice[str(option.get("label"))] = option.get("content")
-            normalized.append(
-                {
-                    "question": item.get("question", ""),
-                    "choice": choice,
-                    "answer": item.get("answer", ""),
-                    "analysis": item.get("explanation", ""),
-                    "knowledge_points": item.get("knowledge_points") or [node.title],
-                    "type": "single_choice",
-                }
-            )
-        return normalized
 
     async def _generate_auxiliary_resource_payload(
         self,
@@ -795,73 +650,211 @@ class LearningPathService:
             "metadata": result.metadata,
         }
 
+    async def _generate_question_payload(
+        self, *, path: LearningPath, node: PathNode, tutorial: PathNodeTutorial, round_no: int,
+    ) -> list[dict[str, Any]]:
+        return await self.node_learning_agent.generate_questions(
+            path_goal=path.goal,
+            node_title=node.title,
+            mastery_target=node.mastery_target or "掌握该节点核心能力",
+            tutorial_title=tutorial.title,
+            tutorial_summary=tutorial.summary or tutorial.title,
+            round_no=round_no,
+        )
+
+    async def _get_latest_round(self, node_id: int) -> int:
+        stmt = select(PathNodeQuestion).where(PathNodeQuestion.node_id == node_id)
+        questions = list((await self.session.exec(stmt)).all())
+        return max((item.round_no for item in questions), default=0)
+
+    async def _get_round_questions(self, node_id: int, round_no: int) -> list[PathNodeQuestion]:
+        stmt = (
+            select(PathNodeQuestion)
+            .where(PathNodeQuestion.node_id == node_id, PathNodeQuestion.round_no == round_no)
+            .order_by(col(PathNodeQuestion.question_no).asc())
+        )
+        return list((await self.session.exec(stmt)).all())
+
+    async def _unlock_successors(self, path_id: int) -> None:
+        nodes = await self._get_nodes_for_path(path_id)
+        completed = {item.node_id for item in nodes if item.status in COMPLETED_NODE_STATUSES}
+        for node in nodes:
+            if node.status == "locked" and set(node.prerequisites or []).issubset(completed):
+                node.status = "available"
+        if nodes:
+            path = await self.session.get(LearningPath, path_id)
+            next_node = next((item for item in nodes if item.status == "available"), None)
+            if path is not None:
+                path.current_node_key = next_node.node_id if next_node else path.current_node_key
+
+    async def _resolve_next_available_node_id(self, path_id: int) -> int | None:
+        nodes = await self._get_nodes_for_path(path_id)
+        next_node = next((item for item in nodes if item.status == "available"), None)
+        return next_node.id if next_node else None
+
+    async def _update_path_progress(self, path: LearningPath) -> None:
+        nodes = await self._get_nodes_for_path(path.id)
+        if not nodes:
+            path.overall_progress = 0
+            return
+        completed = sum(1 for item in nodes if item.status in COMPLETED_NODE_STATUSES)
+        path.overall_progress = round(completed / len(nodes) * 100)
+        next_node = next((item for item in nodes if item.status in ACTIVE_NODE_STATUSES), None)
+        path.current_node_key = next_node.node_id if next_node else None
+        if completed == len(nodes):
+            path.status = "completed"
+        path.updated_at = datetime.now(timezone.utc)
+
+    async def _record_quiz_signal(
+        self, *, user_id: int, path: LearningPath, node: PathNode,
+        score: int, weak_points: list[str], outcome: str,
+    ) -> None:
+        payload = LearningEventCreate(
+            event_type="quiz_submitted",
+            path_id=path.id,
+            path_node_id=node.id,
+            node_id=node.node_id,
+            course=path.title,
+            topic=node.title,
+            score=float(score / QUIZ_SIZE * 100),
+            feedback=None,
+            metadata={"weak_knowledge_points": weak_points, "outcome": outcome},
+        )
+        event = await self.evaluation_service.record_event(self.session, user_id=user_id, payload=payload)
+        await bg_apply_profile_update_from_learning_event(
+            user_id,
+            {
+                "event_type": event.event_type,
+                "session_id": event.session_id,
+                "resource_id": event.resource_id,
+                "resource_item_id": event.resource_item_id,
+                "path_id": event.path_id,
+                "path_node_id": event.path_node_id,
+                "node_id": event.node_id,
+                "course": event.course,
+                "topic": event.topic,
+                "score": event.score,
+                "feedback": event.feedback,
+                "metadata": event.metadata_json or {},
+            },
+        )
+
+    async def _count_node_resources(self, node_id: int, resource_type: str) -> int:
+        stmt = select(PathNodeResource).where(
+            PathNodeResource.node_id == node_id,
+            PathNodeResource.resource_type == resource_type,
+        )
+        return len(list((await self.session.exec(stmt)).all()))
+
+    async def _get_profile_dict(self, user_id: int) -> dict[str, Any]:
+        try:
+            profile = await self.profile_builder.get_or_create_profile(user_id=user_id)
+            return profile.profile_json if profile and profile.profile_json else {}
+        except ProgrammingError as exc:
+            logger.warning("[PathService] 画像表暂不可用，路径规划降级为空画像: user_id=%s error=%s", user_id, exc)
+            return {}
+
+    async def get_user_learning_profile(self, user_id: int) -> str:
+        try:
+            return await self.profile_builder.get_profile_markdown(user_id)
+        except ProgrammingError as exc:
+            logger.warning("[PathService] 画像文本暂不可用，教程生成降级无画像: user_id=%s error=%s", user_id, exc)
+            return ""
+
+    async def _archive_active_paths(self, user_id: int, module: str, exclude_path_id: int | None = None) -> None:
+        stmt = select(LearningPath).where(
+            LearningPath.user_id == user_id,
+            LearningPath.module == module,
+            LearningPath.status == "active",
+        )
+        paths = list((await self.session.exec(stmt)).all())
+        for item in paths:
+            if exclude_path_id is not None and item.id == exclude_path_id:
+                continue
+            item.status = "archived"
+            item.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+
+    async def _get_active_path_record(self, user_id: int, module: str = "mentor") -> LearningPath | None:
+        stmt = (
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.module == module,
+                LearningPath.status == "active",
+            )
+            .order_by(col(LearningPath.updated_at).desc())
+        )
+        return (await self.session.exec(stmt)).first()
+
+    async def _build_path_response(self, path: LearningPath) -> LearningPathOverviewResponse:
+        nodes = await self._get_nodes_for_path(path.id)
+        return LearningPathOverviewResponse(
+            id=path.id,
+            module=path.module,
+            title=path.title,
+            goal=path.goal,
+            topic=path.topic,
+            overall_progress=path.overall_progress,
+            eta_days=path.eta_days,
+            confidence=path.confidence,
+            status=path.status,
+            current_node_key=path.current_node_key,
+            strategy_report=path.strategy_report,
+            adjustment_rationale=list(path.adjustment_rationale or []),
+            stages=list(path.stages_json or []),
+            nodes=[LearningPathNodeDTO.from_model(item) for item in nodes],
+            created_at=path.created_at.isoformat() if path.created_at else "",
+            updated_at=path.updated_at.isoformat() if path.updated_at else "",
+        )
+
+    async def _get_path_active_minutes(self, *, user_id: int, path_id: int) -> int:
+        stmt = select(LearningSession).where(
+            LearningSession.user_id == user_id,
+            LearningSession.path_id == path_id,
+        )
+        sessions = list((await self.session.exec(stmt)).all())
+        return sum(item.duration_seconds or 0 for item in sessions) // 60
+
+    async def _get_current_path_node(self, path_id: int, current_node_key: str | None) -> PathNode | None:
+        if not current_node_key:
+            return None
+        stmt = select(PathNode).where(
+            PathNode.path_id == path_id,
+            PathNode.node_id == current_node_key,
+        )
+        return (await self.session.exec(stmt)).first()
+
     def _stage_to_dict(self, stage: Any) -> dict[str, Any]:
         if hasattr(stage, "model_dump"):
             return stage.model_dump(mode="json")
-        if isinstance(stage, dict):
-            return stage
-        return {
-            "stage_id": getattr(stage, "stage_id", ""),
-            "title": getattr(stage, "title", ""),
-            "description": getattr(stage, "description", ""),
-        }
+        return dict(stage)
 
-    def _to_node_dto(self, node: PathNode) -> LearningPathNodeDTO:
-        return LearningPathNodeDTO(
-            id=node.id,
-            node_id=node.node_id,
-            stage_id=node.stage_id,
-            title=node.title,
-            status=node.status,
-            priority=node.priority,
-            attempt_count=node.attempt_count,
-            mastery_target=node.mastery_target,
-            estimated_minutes=node.estimated_minutes,
-            difficulty=node.difficulty,
-            recommendation_reason=node.recommendation_reason,
-            prerequisites=list(node.prerequisites or []),
-            current_tutorial_id=node.current_tutorial_id,
-        )
 
-    def _to_tutorial_dto(self, tutorial: PathNodeTutorial) -> LearningPathTutorialDTO:
-        return LearningPathTutorialDTO(
-            id=tutorial.id,
-            tutorial_type=tutorial.tutorial_type,
-            version_no=tutorial.version_no,
-            based_on_tutorial_id=tutorial.based_on_tutorial_id,
-            title=tutorial.title,
-            summary=tutorial.summary,
-            content_markdown=tutorial.content_markdown,
-            knowledge_points=list(tutorial.knowledge_points or []),
-            weak_knowledge_points=list(tutorial.weak_knowledge_points or []),
-            created_at=tutorial.created_at.isoformat() if tutorial.created_at else "",
-        )
+# ── Module-level helpers ─────────────────────────────────────────────────────
 
-    def _to_question_dto(self, question: PathNodeQuestion) -> LearningPathQuestionDTO:
-        return LearningPathQuestionDTO(
-            id=question.id,
-            question_no=question.question_no,
-            round_no=question.round_no,
-            mode=question.mode,
-            type=question.type,
-            question=question.question,
-            choice=dict(question.choice or {}),
-            answer=question.answer,
-            response=question.response,
-            analysis=question.analysis,
-            knowledge_points=list(question.knowledge_points or []),
-            is_correct=question.is_correct,
-        )
 
-    def _to_resource_dto(self, resource: PathNodeResource) -> LearningPathResourceDTO:
-        return LearningPathResourceDTO(
-            id=resource.id,
-            resource_type=resource.resource_type,
-            version_no=resource.version_no,
-            title=resource.title,
-            content_format=resource.content_format,
-            content_text=resource.content_text,
-            content_json=resource.content_json,
-            metadata=dict(resource.metadata_json or {}),
-            created_at=resource.created_at.isoformat() if resource.created_at else "",
-        )
+def build_learning_event_item(event: LearningEvent) -> LearningEventItem:
+    return LearningEventItem(
+        id=event.id or 0,
+        event_type=event.event_type,
+        resource_id=event.resource_id,
+        resource_item_id=event.resource_item_id,
+        path_id=event.path_id,
+        path_node_id=event.path_node_id,
+        node_id=event.node_id,
+        course=event.course,
+        topic=event.topic,
+        score=event.score,
+        feedback=event.feedback,
+        created_at=event.created_at,
+    )
+
+
+async def run_generation_bg(user_id: int, path_id: int, request: CreateLearningPathRequest):
+    """后台任务包装：创建独立会话并执行路径生成。"""
+    from app.infra.database import session_scope
+
+    async with session_scope() as session:
+        service = PathService(session)
+        await service.run_generation(path_id, user_id, request)

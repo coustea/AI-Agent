@@ -3,6 +3,7 @@ import type { ApiResponse } from '@/shared/api/http'
 import type {
   AuxiliaryResourceRequest,
   CreateLearningPathRequest,
+  CreateLearningPathResponse,
   LearningPathHistoryItem,
   LearningPathOverview,
   LearningPathWorkspace,
@@ -16,6 +17,7 @@ import type {
 export type {
   AuxiliaryResourceRequest,
   CreateLearningPathRequest,
+  CreateLearningPathResponse,
   LearningPathHistoryItem,
   LearningPathOverview,
   LearningPathWorkspace,
@@ -27,7 +29,7 @@ export type {
 }
 
 export function createLearningPath(payload: CreateLearningPathRequest) {
-  return http.post<ApiResponse<LearningPathOverview>>('/ai/path-plan', payload)
+  return http.post<ApiResponse<CreateLearningPathResponse>>('/ai/path-plan', payload)
 }
 
 export function getCurrentLearningPath(module = 'mentor') {

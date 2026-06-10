@@ -378,7 +378,7 @@
                           <span class="meta-label">{{ getNodePhaseLabel(node) }}</span>
                           <span class="meta-time">{{ getNodeTimeLabel(node) }}</span>
                         </div>
-                        <p class="node-message" :class="{ 'is-error': node.status === 'failed' }">
+                        <p class="node-message" :class="{ 'is-error': node.status === 'failed', 'is-warning': node.reviewWarning }">
                           {{ getNodeDisplayMessage(node) }}
                         </p>
                       </div>
@@ -422,7 +422,7 @@
                             <div class="node-status-pill">{{ getNodeProgressLabel(node) }}</div>
                           </div>
                           <div class="node-body compact">
-                            <p class="node-message" :class="{ 'is-error': node.status === 'failed' }">
+                            <p class="node-message" :class="{ 'is-error': node.status === 'failed', 'is-warning': node.reviewWarning }">
                               {{ getNodeDisplayMessage(node) }}
                             </p>
                           </div>
@@ -454,7 +454,7 @@
                           <span class="meta-label">{{ getNodePhaseLabel(node) }}</span>
                           <span class="meta-time">{{ getNodeTimeLabel(node) }}</span>
                         </div>
-                        <p class="node-message" :class="{ 'is-error': node.status === 'failed' }">
+                        <p class="node-message" :class="{ 'is-error': node.status === 'failed', 'is-warning': node.reviewWarning }">
                           {{ getNodeDisplayMessage(node) }}
                         </p>
                       </div>
@@ -495,8 +495,11 @@
                       <dd>{{ hasGeneratedResource(selectedDagNode.id) ? '已进入产物坞' : '等待生成' }}</dd>
                     </div>
                   </dl>
-                  <div class="focus-message">
+                  <div class="focus-message" :class="{ 'is-warning': selectedDagNode.reviewWarning }">
                     {{ getNodeDisplayMessage(selectedDagNode) }}
+                  </div>
+                  <div class="focus-review-warning" v-if="selectedDagNode.reviewWarning">
+                    <el-alert type="warning" :closable="false" show-icon title="审核提示" :description="selectedDagNode.currentMessage" />
                   </div>
                   <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
                     <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
@@ -1127,6 +1130,10 @@ function applyAgentEvent(event: ResourceStreamEvent) {
   if (event.elapsed_ms != null) node.elapsedMs = event.elapsed_ms
   if (event.metrics) node.metrics = { ...(node.metrics || {}), ...event.metrics }
   if (event.artifact_id) node.artifactId = event.artifact_id
+  // 审核非阻塞警告：后端用 metrics.review_warning=true 标记
+  if (event.metrics?.review_warning) {
+    node.reviewWarning = true
+  }
   node.lastUpdatedAt = Date.now()
   if (event.message) {
     node.currentMessage = event.message
@@ -2270,6 +2277,9 @@ const handlePreview = (data: any) => {
 }
 .status-running .node-message { color: var(--color-text-strong); }
 .node-message.is-error { color: var(--color-danger); font-weight: 600; }
+.node-message.is-warning { color: var(--color-warning, #E6A23C); font-weight: 500; }
+.focus-message.is-warning { color: var(--color-warning, #E6A23C); }
+.focus-review-warning { margin-top: 8px; }
 
 /* --- 核心动画：数据流转虚线 --- */
 .dag-edge-out {

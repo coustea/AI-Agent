@@ -93,9 +93,9 @@ class AuthUseCases:
 
     async def upsert_profile_on_logout(self, user_id: int) -> None:
         """登出后触发画像构建（懒加载 memory runtime）。"""
-        from app.memory import MemoryService
+        from app.profile.service import get_profile_service
 
-        await MemoryService(module="mentor").upsert_profile(user_id=user_id, reason="logout")
+        await get_profile_service().apply_tutoring_profile_update(user_id=user_id, payload={})
 
 
 # 模块级单例

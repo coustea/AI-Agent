@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from langchain_core.tools import tool
 
-from app.memory.service import MemoryService
+from app.chat.memory.service import ChatMemoryService
 
 if TYPE_CHECKING:
     from app.chat.tools.memory import DefaultMemoryReader
@@ -28,7 +28,7 @@ class MemoryReader(ABC):
 class DefaultMemoryReader(MemoryReader):
     """Memory reader backed by MemoryService."""
 
-    def __init__(self, *, user_id: int, memory_service: MemoryService) -> None:
+    def __init__(self, *, user_id: int, memory_service: ChatMemoryService) -> None:
         self._user_id = user_id
         self._memory_service = memory_service
 

@@ -117,13 +117,14 @@ async def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl
 
 
 @tool("spark_search")
-async def spark_search(query: str):
-    """
-    讯飞搜索封装函数
-    """
+async def spark_search(query: str) -> str:
+    """讯飞搜索，返回结构化搜索结果摘要。"""
+    if not (SPARK_SEARCH_KEY or "").strip():
+        return "讯飞搜索不可用: 未配置 SPARK_SEARCH_KEY"
+
     url = "https://search-api-open.cn-huabei-1.xf-yun.com/v2/search"
     if not query or not query.strip():
-        raise ValueError("query 不能为空")
+        return "讯飞搜索失败: query 不能为空"
 
     payload = {
         "search_params": {
@@ -135,49 +136,40 @@ async def spark_search(query: str):
             }
         }
     }
-
     headers = {
         "Authorization": f"Bearer {SPARK_SEARCH_KEY}",
         "Content-Type": "application/json"
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        response = await client.post(
-            url,
-            headers=headers,
-            json=payload,
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(url, headers=headers, json=payload)
+
+        response.raise_for_status()
+        data = response.json()
+
+        if not data.get("success"):
+            return f"讯飞搜索失败: {data}"
+
+        documents = (
+            data
+            .get("data", {})
+            .get("search_results", {})
+            .get("documents", [])
         )
 
-    response.raise_for_status()
-    data = response.json()
+        if not documents:
+            return "未找到相关搜索结果"
 
-    if not data.get("success"):
-        raise RuntimeError(f"讯飞搜索失败: {data}")
+        summaries = []
+        for i, doc in enumerate(documents[:5], 1):
+            title = doc.get("name", "无标题")
+            link = doc.get("url", "")
+            snippet = doc.get("summary", "") or doc.get("content", "无摘要")
+            summaries.append(f"{i}. {title}\n   链接: {link}\n   摘要: {snippet}")
 
-    documents = (
-        data
-        .get("data", {})
-        .get("search_results", {})
-        .get("documents", [])
-    )
-
-    results = []
-
-    for doc in documents:
-        item = {
-            "title": doc.get("name", ""),
-            "summary": doc.get("summary", ""),
-            "url": doc.get("url", ""),
-            "published_date": doc.get("published_date", "")
-        }
-
-        content = doc.get("content", "")
-        if content:
-            item["content"] = content
-
-        results.append(item)
-
-    return {
-        "query": query,
-        "results": results
-    }
+        return "\n\n".join(summaries)
+    except Exception as exc:
+        error = _redact_url_query_secrets(exc)
+        logger.warning("[spark_search] failed: query=%r error=%s", query, error)
+        return f"讯飞搜索失败: {error}"

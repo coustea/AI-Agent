@@ -19,8 +19,7 @@ export function getRadarChartData(scoreData: any) {
     : dimensionMapping.map((item) => ({
       key: item.key,
       label: item.label,
-      score: scores[item.key] ?? null,
-      missing: scores[item.key] === undefined || scores[item.key] === null
+      score: scores[item.key] ?? 0,
     }))
 
   const indicators = []

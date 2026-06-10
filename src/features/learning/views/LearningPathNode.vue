@@ -14,7 +14,7 @@
 
         <div class="node-summary">
           <span>状态：{{ statusText(workspace.node.status) }}</span>
-          <span>轮次：{{ workspace.node.attempt_count }}</span>
+          <span>尝试次数：{{ workspace.node.attempt_count }}</span>
           <span v-if="workspace.node.estimated_minutes">建议 {{ workspace.node.estimated_minutes }} 分钟</span>
         </div>
       </header>
@@ -60,7 +60,7 @@
                 v-for="resource in workspace.resources"
                 :key="resource.id"
                 class="saved-resource-item"
-                @click="router.push(`/path-resource/${resource.id}`)"
+                @click="openResourceDetail(resource.id)"
               >
                 <strong>{{ resource.title }}</strong>
                 <span>{{ resource.resource_type }}</span>
@@ -108,6 +108,20 @@
               <div v-if="quizResult.weak_knowledge_points.length" class="weak-tags">
                 <span v-for="point in quizResult.weak_knowledge_points" :key="point">{{ point }}</span>
               </div>
+              <button
+                v-if="quizResult.next_node_id"
+                class="primary-btn next-node-btn"
+                @click="router.push(`/path-planner/node/${quizResult.next_node_id}`)"
+              >
+                进入下一个节点
+              </button>
+              <button
+                v-else-if="workspace.path.id"
+                class="ghost-btn next-node-btn"
+                @click="router.push(`/path-planner/overview/${workspace.path.id}`)"
+              >
+                返回路径总览
+              </button>
             </div>
           </section>
         </aside>
@@ -140,6 +154,7 @@ const workspace = ref<LearningPathWorkspace | null>(null)
 const quizRound = ref<PathQuizRound | null>(null)
 const quizResult = ref<PathQuizSubmitResponse | null>(null)
 const answers = ref<Record<number, string>>({})
+const hasStartedTracking = ref(false)
 
 const nodeId = Number(route.params.nodeId || 0)
 
@@ -149,7 +164,8 @@ const loadWorkspace = async () => {
   try {
     const res = await getLearningNodeWorkspace(nodeId)
     workspace.value = res.data.data
-    if (workspace.value) {
+    if (workspace.value && !hasStartedTracking.value) {
+      hasStartedTracking.value = true
       startTracking({
         sourcePage: 'path_node',
         pathId: workspace.value.path.id,
@@ -235,13 +251,26 @@ const createResource = async (type: AuxiliaryResourceRequest['resource_type']) =
   resourceLoading.value = type
   try {
     const res = await generateAuxiliaryResource(workspace.value.node.id, { resource_type: type })
-    router.push(`/path-resource/${res.data.data.id}`)
+    openResourceDetail(res.data.data.id)
   } catch (error) {
     ElMessage.error(getErrorMessage(error, '生成辅助资源失败'))
   } finally {
     resourceLoading.value = ''
     await loadWorkspace()
   }
+}
+
+const openResourceDetail = (resourceId: number) => {
+  if (!workspace.value) return
+  router.push({
+    name: 'PathResourceDetail',
+    params: { id: resourceId },
+    query: {
+      pathId: workspace.value.path.id,
+      pathNodeId: workspace.value.node.id,
+      nodeId: workspace.value.node.node_id,
+    },
+  })
 }
 
 const tutorialTypeText = (value?: string | null) => {
@@ -252,7 +281,9 @@ const tutorialTypeText = (value?: string | null) => {
 
 const statusText = (status: string) => {
   switch (status) {
-    case 'available': return '学习中'
+    case 'available': return '可开始'
+    case 'in_progress': return '学习中'
+    case 'remediation': return '专项巩固中'
     case 'completed': return '已通过'
     case 'completed_with_gaps': return '带缺口完成'
     default: return status
@@ -481,6 +512,11 @@ onBeforeUnmount(() => {
   margin: 0 0 10px;
   color: #475569;
   line-height: 1.6;
+}
+
+.next-node-btn {
+  margin-top: 12px;
+  width: 100%;
 }
 
 .primary-btn,

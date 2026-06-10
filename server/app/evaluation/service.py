@@ -130,7 +130,6 @@ def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> 
         "session_id": event_data.session_id,
         "active_course": event_data.course,
         "active_topic": event_data.topic,
-        "dialogue_excerpt": event_data.feedback,
         "update_reason": "learning_evaluation_signal",
         "behavior_signals": {
             "weak_topics": weak_topics,
@@ -159,9 +158,9 @@ async def bg_apply_profile_update_from_learning_event(user_id: int, event_payloa
         return
 
     try:
-        from app.memory.service import MemoryService
+        from app.profile.service import get_profile_service
 
-        await MemoryService(module="mentor").apply_tutoring_profile_update(
+        await get_profile_service().apply_tutoring_profile_update(
             user_id=user_id,
             payload=update_payload,
         )

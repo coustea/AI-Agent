@@ -25,7 +25,8 @@ from app.infra.models import (
     User,
 )
 from app.infra.response import HttpResponse
-from app.memory.types import ALL_DIMENSIONS, DIMENSION_NAMES
+from app.profile.service import get_profile_service
+from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
 from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -439,8 +440,7 @@ async def get_home_dashboard(
     session: AsyncSession = Depends(get_session),
 ):
     """Get dynamic homepage view model for the current user."""
-    memory = get_chat_usecases()._memory_service
-    profile = await memory.get_or_create_profile(user_id=current_user.id)
+    profile = await get_profile_service().get_or_create_profile(user_id=current_user.id)
     snapshot = await _load_usage_snapshot(session, current_user.id)
 
     # Calculate target topic for question recommendation

@@ -6,7 +6,7 @@
       </svg>
     </div>
     <div class="banner-content">
-      <strong>动态学习建议：</strong>
+      <strong>当前学习建议：</strong>
       <span>{{ evaluation.optimization_tips[0] }}</span>
       <span v-if="evaluation.optimization_tips.length > 1" class="more-tips">
         (共 {{ evaluation.optimization_tips.length }} 条建议)

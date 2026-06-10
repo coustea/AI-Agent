@@ -66,16 +66,11 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     is_archived             BOOLEAN          DEFAULT FALSE,
     created_at              TIMESTAMPTZ      DEFAULT NOW(),
     updated_at              TIMESTAMPTZ      DEFAULT NOW(),
-    summary_token_count     INTEGER          DEFAULT 0,
-    attachment_analyses     JSONB
+    summary_token_count     INTEGER          DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_id ON chat_sessions (user_id);
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_module ON chat_sessions (module);
-
--- GIN index for attachment_analyses JSONB
-CREATE INDEX IF NOT EXISTS ix_chat_sessions_attachment_analyses
-    ON chat_sessions USING GIN (attachment_analyses);
 
 -- ============================================================
 -- 5. chat_messages
@@ -114,38 +109,47 @@ CREATE INDEX IF NOT EXISTS ix_chat_messages_usage_metadata
     ON chat_messages USING GIN (usage_metadata);
 
 -- ============================================================
--- 6. chat_session_summaries
+-- 6. chat_session_summary_blocks
 -- ============================================================
-CREATE TABLE IF NOT EXISTS chat_session_summaries (
+CREATE TABLE IF NOT EXISTS chat_session_summary_blocks (
     id                          SERIAL          PRIMARY KEY,
     user_id                     INTEGER         NOT NULL,
     session_id                  UUID            REFERENCES chat_sessions(id),
     module                      VARCHAR         NOT NULL DEFAULT 'mentor',
+    block_index                 INTEGER         DEFAULT 1,
     summary_markdown            TEXT            NOT NULL,
     summary_type                VARCHAR(50)     DEFAULT 'incremental',
     version                     INTEGER         DEFAULT 1,
     start_message_id            INTEGER,
     end_message_id              INTEGER,
+    start_at                    TIMESTAMPTZ,
+    end_at                      TIMESTAMPTZ,
     summarized_message_count    INTEGER         DEFAULT 0,
+    topics                      JSONB,
+    keywords                    JSONB,
     created_at                  TIMESTAMPTZ     DEFAULT NOW(),
     updated_at                  TIMESTAMPTZ     DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS ix_chat_session_summaries_user_id
-    ON chat_session_summaries (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summaries_session_id
-    ON chat_session_summaries (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summaries_module
-    ON chat_session_summaries (module);
-
--- Composite index
-CREATE INDEX IF NOT EXISTS ix_chat_session_summaries_user_session_created_at
-    ON chat_session_summaries (user_id, session_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_id
+    ON chat_session_summary_blocks (user_id);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_session_id
+    ON chat_session_summary_blocks (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_module
+    ON chat_session_summary_blocks (module);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_block_index
+    ON chat_session_summary_blocks (block_index);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_session_created_at
+    ON chat_session_summary_blocks (user_id, session_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_topics
+    ON chat_session_summary_blocks USING GIN (topics);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_keywords
+    ON chat_session_summary_blocks USING GIN (keywords);
 
 -- ============================================================
--- 7. user_long_term_memories
+-- 7. chat_long_term_memories
 -- ============================================================
-CREATE TABLE IF NOT EXISTS user_long_term_memories (
+CREATE TABLE IF NOT EXISTS chat_long_term_memories (
     id                      SERIAL          PRIMARY KEY,
     user_id                 INTEGER         NOT NULL,
     module                  VARCHAR         NOT NULL DEFAULT 'mentor',
@@ -155,100 +159,71 @@ CREATE TABLE IF NOT EXISTS user_long_term_memories (
     confidence              FLOAT           DEFAULT 0.7,
     source_session_ids      JSONB,
     source_message_ids      JSONB,
-    source_summary_ids      JSONB,
+    source_summary_block_ids JSONB,
     updated_reason          TEXT,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
     UNIQUE (user_id, module)
 );
 
-CREATE INDEX IF NOT EXISTS ix_user_long_term_memories_user_id
-    ON user_long_term_memories (user_id);
-CREATE INDEX IF NOT EXISTS ix_user_long_term_memories_module
-    ON user_long_term_memories (module);
-CREATE INDEX IF NOT EXISTS ix_user_long_term_memories_category
-    ON user_long_term_memories (category);
+CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_user_id
+    ON chat_long_term_memories (user_id);
+CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_module
+    ON chat_long_term_memories (module);
+CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_category
+    ON chat_long_term_memories (category);
 
 -- GIN indexes for JSONB
-CREATE INDEX IF NOT EXISTS ix_user_long_term_memories_source_session_ids
-    ON user_long_term_memories USING GIN (source_session_ids);
-CREATE INDEX IF NOT EXISTS ix_user_long_term_memories_source_message_ids
-    ON user_long_term_memories USING GIN (source_message_ids);
-CREATE INDEX IF NOT EXISTS ix_user_long_term_memories_source_summary_ids
-    ON user_long_term_memories USING GIN (source_summary_ids);
+CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_session_ids
+    ON chat_long_term_memories USING GIN (source_session_ids);
+CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_message_ids
+    ON chat_long_term_memories USING GIN (source_message_ids);
+CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_summary_block_ids
+    ON chat_long_term_memories USING GIN (source_summary_block_ids);
 
 -- ============================================================
--- 8. user_profiles
+-- 8. global_profiles
 -- ============================================================
-CREATE TABLE IF NOT EXISTS user_profiles (
+CREATE TABLE IF NOT EXISTS global_profiles (
     id                      SERIAL          PRIMARY KEY,
     user_id                 INTEGER         NOT NULL,
     module                  VARCHAR         NOT NULL DEFAULT 'mentor',
     profile_json            JSONB,
     profile_score_json      JSONB,
-    profile_markdown        TEXT,
-    version                 INTEGER         DEFAULT 1,
-    confidence              FLOAT           DEFAULT 0.7,
-    source_memory_version   INTEGER,
-    source_session_ids      JSONB,
-    source_summary_ids      JSONB,
-    source_event_ids        JSONB,
-    updated_reason          TEXT,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
     UNIQUE (user_id, module)
 );
 
-CREATE INDEX IF NOT EXISTS ix_user_profiles_user_id ON user_profiles (user_id);
-CREATE INDEX IF NOT EXISTS ix_user_profiles_module ON user_profiles (module);
-
--- GIN indexes for JSONB
-CREATE INDEX IF NOT EXISTS ix_user_profiles_profile_json
-    ON user_profiles USING GIN (profile_json);
-CREATE INDEX IF NOT EXISTS ix_user_profiles_profile_score_json
-    ON user_profiles USING GIN (profile_score_json);
-CREATE INDEX IF NOT EXISTS ix_user_profiles_source_session_ids
-    ON user_profiles USING GIN (source_session_ids);
-CREATE INDEX IF NOT EXISTS ix_user_profiles_source_summary_ids
-    ON user_profiles USING GIN (source_summary_ids);
-CREATE INDEX IF NOT EXISTS ix_user_profiles_source_event_ids
-    ON user_profiles USING GIN (source_event_ids);
+CREATE INDEX IF NOT EXISTS ix_global_profiles_user_id ON global_profiles (user_id);
+CREATE INDEX IF NOT EXISTS ix_global_profiles_module ON global_profiles (module);
+CREATE INDEX IF NOT EXISTS ix_global_profiles_profile_json
+    ON global_profiles USING GIN (profile_json);
+CREATE INDEX IF NOT EXISTS ix_global_profiles_profile_score_json
+    ON global_profiles USING GIN (profile_score_json);
 
 -- ============================================================
--- 9. user_profile_history
+-- 9. course_profiles
 -- ============================================================
-CREATE TABLE IF NOT EXISTS user_profile_history (
+CREATE TABLE IF NOT EXISTS course_profiles (
     id                      SERIAL          PRIMARY KEY,
     user_id                 INTEGER         NOT NULL,
     module                  VARCHAR         NOT NULL DEFAULT 'mentor',
-    version                 INTEGER         NOT NULL,
+    course_name             VARCHAR(200)    NOT NULL,
     profile_json            JSONB,
     profile_score_json      JSONB,
-    profile_markdown        TEXT,
-    change_reason           TEXT,
-    source_memory_version   INTEGER,
-    source_session_ids      JSONB,
-    source_summary_ids      JSONB,
-    source_event_ids        JSONB,
-    created_at              TIMESTAMPTZ     DEFAULT NOW()
+    created_at              TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ     DEFAULT NOW(),
+    UNIQUE (user_id, module, course_name)
 );
 
-CREATE INDEX IF NOT EXISTS ix_user_profile_history_user_id
-    ON user_profile_history (user_id);
-CREATE INDEX IF NOT EXISTS ix_user_profile_history_module
-    ON user_profile_history (module);
-CREATE INDEX IF NOT EXISTS ix_user_profile_history_version
-    ON user_profile_history (version);
-
--- Composite index
-CREATE INDEX IF NOT EXISTS ix_user_profile_history_user_module_version
-    ON user_profile_history (user_id, module, version);
-
--- GIN indexes for JSONB
-CREATE INDEX IF NOT EXISTS ix_user_profile_history_profile_json
-    ON user_profile_history USING GIN (profile_json);
-CREATE INDEX IF NOT EXISTS ix_user_profile_history_profile_score_json
-    ON user_profile_history USING GIN (profile_score_json);
+CREATE INDEX IF NOT EXISTS ix_course_profiles_user_id ON course_profiles (user_id);
+CREATE INDEX IF NOT EXISTS ix_course_profiles_module ON course_profiles (module);
+CREATE INDEX IF NOT EXISTS ix_course_profiles_course_name ON course_profiles (course_name);
+CREATE INDEX IF NOT EXISTS ix_course_profiles_profile_json
+    ON course_profiles USING GIN (profile_json);
+CREATE INDEX IF NOT EXISTS ix_course_profiles_profile_score_json
+    ON course_profiles USING GIN (profile_score_json);
 
 -- ============================================================
 -- 10. generated_resources
@@ -521,6 +496,7 @@ CREATE TABLE IF NOT EXISTS path_nodes (
     attempt_count         INTEGER         DEFAULT 0,
     current_tutorial_id   INTEGER,
     prerequisites         JSONB,
+    resource_policy       JSONB,
     mastery_target        TEXT,
     estimated_minutes     INTEGER,
     difficulty            VARCHAR(30),

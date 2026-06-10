@@ -19,19 +19,20 @@ from app.infra.models import User
 from app.chat.request import ChatHistoryMessage
 from app.chat.runtime import latest_user_message
 from app.chat.service import get_chat_usecases
-from app.memory import OnboardingResponse, OnboardingUpdate, TutoringProfileUpdate
+from app.profile import BaseInfoData, OnboardingResponse, OnboardingUpdate, StudentProfileData, TutoringProfileUpdate
+from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
 
 if TYPE_CHECKING:
-    from app.memory import MemoryService
+    from app.chat.memory.service import ChatMemoryService
 
 # 路由器实例
 router = APIRouter()
 logger = get_logger(__name__)
 
 
-def _get_memory_service() -> "MemoryService":
-    """获取与 ChatUseCases 共享的 MemoryService 单例。"""
+def _get_chat_memory_service() -> "ChatMemoryService":
+    """获取与 ChatUseCases 共享的 chat memory 单例。"""
     return get_chat_usecases()._memory_service
 
 
@@ -379,8 +380,8 @@ async def chat_history(
 @router.get("/profile")
 async def get_profile(current_user: User = Depends(get_current_user)):
     """获取当前用户画像。"""
-    memory = _get_memory_service()
-    profile = await memory.get_or_create_profile(user_id=current_user.id)
+    profile_builder = get_profile_service()
+    profile = await profile_builder.get_or_create_profile(user_id=current_user.id)
     profile_json = profile.profile_json or {}
     return HttpResponse.success(data={
         "user_id": profile.user_id,
@@ -392,10 +393,6 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         "profile_meta": profile_json.get("profile_meta") or {},
         "profile_json": profile.profile_json,
         "profile_score_json": profile.profile_score_json,
-        "profile_markdown": profile.profile_markdown,
-        "version": profile.version,
-        "confidence": profile.confidence,
-        "updated_reason": profile.updated_reason,
         "updated_at": profile.updated_at,
     })
 
@@ -403,23 +400,16 @@ async def get_profile(current_user: User = Depends(get_current_user)):
 @router.get("/profile/score")
 async def get_profile_score(current_user: User = Depends(get_current_user)):
     """获取当前用户画像评分。"""
-    memory = _get_memory_service()
-    profile = await memory.get_or_create_profile(user_id=current_user.id)
+    profile_builder = get_profile_service()
+    profile = await profile_builder.get_or_create_profile(user_id=current_user.id)
     score_json = profile.profile_score_json or {}
     return HttpResponse.success(data={
         "user_id": profile.user_id,
         "module": profile.module,
-        "version": profile.version,
         "score": score_json.get("overall_score"),
-        "confidence": score_json.get("confidence", profile.confidence),
         "metrics": {
             "dimension_scores": score_json.get("dimension_scores") or {},
-            "section_coverage": score_json.get("section_coverage", 0),
-            "evidence_quality": score_json.get("evidence_quality", 0),
-            "uncertainty_handling": None,
-            "content_richness": None,
         },
-        "missing_sections": score_json.get("missing_sections") or [],
         "scored_at": score_json.get("scored_at"),
         "updated_at": profile.updated_at,
     })
@@ -429,10 +419,22 @@ async def get_profile_score(current_user: User = Depends(get_current_user)):
 async def get_profile_onboarding(
     current_user: User = Depends(get_current_user),
 ):
-    """获取首次登录状态。"""
-    memory = _get_memory_service()
-    data = await memory.get_onboarding(user_id=current_user.id)
-    return HttpResponse.success(data=OnboardingResponse(**data).model_dump())
+    """获取用户基础信息（base_info）。"""
+    profile_builder = get_profile_service()
+    base_info = await profile_builder.get_onboarding(user_id=current_user.id)
+    return HttpResponse.success(data=OnboardingResponse(
+        base_info=BaseInfoData(**base_info),
+        student_profile=StudentProfileData(
+            school=base_info.get("school"),
+            school_level=base_info.get("school_level"),
+            major=base_info.get("major"),
+            grade=base_info.get("grade"),
+            courses=base_info.get("courses", []),
+            learning_goal=base_info.get("global_learning_goal"),
+            preferred_language=", ".join(base_info.get("programming_languages", [])),
+        ),
+        profile_initialized=bool(base_info.get("major")),
+    ).model_dump())
 
 @router.patch("/profile/onboarding")
 async def update_profile_onboarding(
@@ -440,43 +442,41 @@ async def update_profile_onboarding(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
-    """更新首次登录数据。"""
-    memory = _get_memory_service()
-    base_info = payload.model_dump()
-    base_info["school_level"] = await _resolve_school_level(base_info.get("school"))
+    """更新首次登录数据（全局画像）。"""
+    profile_builder = get_profile_service()
+
     try:
-        profile = await memory.upsert_profile(
+        result = await profile_builder.update_from_onboarding(
             user_id=current_user.id,
-            onboarding=base_info,
-            reason="onboarding",
+            payload=payload.model_dump(),
         )
+
+        # 更新用户标志位
         current_user.is_first_login = False
         db.add(current_user)
         await db.commit()
         logger.info("[ChatAPI] onboarding complete: user_id=%s", current_user.id)
-    except ValueError as e:
+    except Exception as e:
         logger.warning("[ChatAPI] onboarding update failed: user_id=%s err=%s", current_user.id, e)
         return HttpResponse.error(code=400, message=str(e))
 
-    onboarding_data = await memory.get_onboarding(user_id=current_user.id)
-    profile_json = profile.profile_json or {}
+    onboarding_data = await profile_builder.get_onboarding(user_id=current_user.id)
+
     return HttpResponse.success(data={
-        "profile": {
-            "user_id": profile.user_id,
-            "module": profile.module,
-            "base_info": profile_json.get("base_info") or {},
-            "learning_profile": profile_json.get("learning_profile") or {},
-            "knowledge_mastery": profile_json.get("knowledge_mastery") or [],
-            "initial_strategy": profile_json.get("initial_strategy") or {},
-            "profile_meta": profile_json.get("profile_meta") or {},
-            "profile_json": profile.profile_json,
-            "profile_score_json": profile.profile_score_json,
-            "version": profile.version,
-            "confidence": profile.confidence,
-            "updated_reason": profile.updated_reason,
-            "updated_at": profile.updated_at,
-        },
-        "onboarding": onboarding_data,
+        "profile": result,
+        "onboarding": OnboardingResponse(
+            base_info=BaseInfoData(**onboarding_data),
+            student_profile=StudentProfileData(
+                school=onboarding_data.get("school"),
+                school_level=onboarding_data.get("school_level"),
+                major=onboarding_data.get("major"),
+                grade=onboarding_data.get("grade"),
+                courses=onboarding_data.get("courses", []),
+                learning_goal=onboarding_data.get("global_learning_goal"),
+                preferred_language=", ".join(onboarding_data.get("programming_languages", [])),
+            ),
+            profile_initialized=True,
+        ).model_dump(),
     })
 
 
@@ -485,24 +485,23 @@ async def update_profile_from_tutoring(
     payload: TutoringProfileUpdate,
     current_user: User = Depends(get_current_user),
 ):
-    """应用智能辅导产生的画像增量更新。"""
-    memory = _get_memory_service()
-    profile = await memory.apply_tutoring_profile_update(
-        user_id=current_user.id,
-        payload=payload.model_dump(),
-    )
-    if not profile:
-        return HttpResponse.success(data={"profile_updated": False})
+    """应用智能辅导产生的画像增量更新（针对课程画像）。"""
+    profile_builder = get_profile_service()
 
-    profile_json = profile.profile_json or {}
-    return HttpResponse.success(data={
-        "profile_updated": True,
-        "learning_profile": profile_json.get("learning_profile") or {},
-        "knowledge_mastery": profile_json.get("knowledge_mastery") or [],
-        "profile_meta": profile_json.get("profile_meta") or {},
-        "version": profile.version,
-        "updated_at": profile.updated_at,
-    })
+    course_name = payload.active_course
+    if not course_name:
+        return HttpResponse.error(code=400, message="active_course is required")
+
+    try:
+        result = await profile_builder.process_tutoring_update(
+            user_id=current_user.id,
+            course_name=course_name,
+            session_id=payload.session_id,
+        )
+        return HttpResponse.success(data=result)
+    except Exception as e:
+        logger.warning("[ChatAPI] tutoring profile update failed: user_id=%s err=%s", current_user.id, e)
+        return HttpResponse.error(code=400, message=str(e))
 
 
 @router.get("/profile/history")
@@ -510,23 +509,8 @@ async def get_profile_history(
     limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
 ):
-    """获取画像历史。"""
-    memory = _get_memory_service()
-    history = await memory.list_profile_history(user_id=current_user.id, limit=limit)
-    return HttpResponse.success(data=[
-        {
-            "id": item.id,
-            "user_id": item.user_id,
-            "module": item.module,
-            "version": item.version,
-            "profile_json": item.profile_json,
-            "profile_score_json": item.profile_score_json,
-            "change_reason": item.change_reason,
-            "source_session_ids": item.source_session_ids,
-            "created_at": item.created_at,
-        }
-        for item in history
-    ])
+    """获取画像历史（已废弃，返回空列表）。"""
+    return HttpResponse.success(data=[])
 
 
 # ---------------------------------------------------------------------------

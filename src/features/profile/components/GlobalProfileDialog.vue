@@ -9,19 +9,7 @@
   >
     <div v-if="profile" class="dialog-body">
       <section class="section">
-        <h3>冷启动基础信息</h3>
-        <div class="kv-grid">
-          <div><span>学校</span><strong>{{ profile.base_info.school || '未填写' }}</strong></div>
-          <div><span>专业</span><strong>{{ profile.base_info.major || '未填写' }}</strong></div>
-          <div><span>年级</span><strong>{{ profile.base_info.grade || '未填写' }}</strong></div>
-          <div><span>每日学习时长</span><strong>{{ profile.base_info.daily_study_time || '未填写' }}</strong></div>
-          <div><span>全局学习目标</span><strong>{{ profile.base_info.global_learning_goal || '未填写' }}</strong></div>
-          <div><span>课程数</span><strong>{{ profile.base_info.courses?.length || 0 }}</strong></div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h3>全局画像</h3>
+        <h3><el-icon><Monitor /></el-icon> 全局画像 (Root Profile)</h3>
         <div class="card-grid">
           <article v-for="item in globalCards" :key="item.title" class="profile-card">
             <h4>{{ item.title }}</h4>
@@ -31,27 +19,27 @@
       </section>
 
       <section class="section">
-        <h3>课程子画像</h3>
-        <div v-if="courseCards.length" class="card-grid">
-          <article v-for="course in courseCards" :key="course.name" class="profile-card">
-            <div class="course-head">
-              <h4>{{ course.name }}</h4>
-              <span>{{ course.level }}</span>
+        <h3><el-icon><DataBoard /></el-icon> 课程子画像 (Sub Profiles)</h3>
+        <el-tabs v-if="courseCards.length" type="border-card" class="course-tabs">
+          <el-tab-pane v-for="course in courseCards" :key="course.name" :label="course.name">
+            <div class="profile-card sub-profile-card">
+              <div class="course-head">
+                <h4>知识水平评估</h4>
+                <el-tag size="small" type="warning" effect="dark">{{ course.level }}</el-tag>
+              </div>
+              <p class="course-goal"><strong>近期学习目标:</strong> {{ course.goal }}</p>
+              <div class="weak-points-section" v-if="course.weakPoints.length">
+                <strong>核心薄弱点:</strong>
+                <div class="tag-list">
+                  <el-tag effect="light" type="danger" round v-for="point in course.weakPoints" :key="point">{{ point }}</el-tag>
+                </div>
+              </div>
             </div>
-            <p>{{ course.goal }}</p>
-            <div v-if="course.weakPoints.length" class="tag-list">
-              <span v-for="point in course.weakPoints" :key="point">{{ point }}</span>
-            </div>
-          </article>
+          </el-tab-pane>
+        </el-tabs>
+        <div v-else class="empty-state">
+          <el-empty description="当前还没有课程子画像" :image-size="60" />
         </div>
-        <div v-else class="empty-state">当前还没有课程子画像。</div>
-      </section>
-
-      <section v-if="strategyList.length" class="section">
-        <h3>当前策略</h3>
-        <ul class="strategy-list">
-          <li v-for="item in strategyList" :key="item">{{ item }}</li>
-        </ul>
       </section>
     </div>
   </el-dialog>
@@ -59,6 +47,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Monitor, DataBoard } from '@element-plus/icons-vue'
 
 import { getProfile, type ProfileData } from '@/features/profile/api/profile'
 import { isGlobalProfileVisible, profileRefreshTrigger } from '@/features/profile/model/useGlobalProfile'
@@ -85,14 +74,7 @@ const courseCards = computed(() => {
   }))
 })
 
-const strategyList = computed(() => {
-  const strategy = profile.value?.initial_strategy || {}
-  return [
-    strategy.strategy_summary,
-    strategy.path_planning_strategy,
-    strategy.tutor_strategy,
-  ].filter(Boolean) as string[]
-})
+
 
 const fetchProfile = async () => {
   try {
@@ -132,26 +114,17 @@ watch(profileRefreshTrigger, () => {
   font-size: 18px;
 }
 
-.kv-grid,
 .card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.kv-grid div,
 .profile-card {
   padding: 14px;
   border-radius: 14px;
   border: 1px solid var(--color-border);
   background: #fff;
-}
-
-.kv-grid span {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--color-text-muted);
 }
 
 .profile-card h4 {
@@ -177,23 +150,9 @@ watch(profileRefreshTrigger, () => {
   margin-top: 12px;
 }
 
-.tag-list span {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: #fff7ed;
-  color: #c2410c;
-  font-size: 12px;
-}
 
-.strategy-list {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--color-text-secondary);
-}
 
-.strategy-list li {
-  line-height: 1.7;
-}
+
 
 .empty-state {
   color: var(--color-text-faint);

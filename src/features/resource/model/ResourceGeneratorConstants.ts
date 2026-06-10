@@ -186,6 +186,7 @@ export interface DagNodeState {
   metrics?: Record<string, any>
   artifactId?: string
   lastUpdatedAt?: number
+  reviewWarning?: boolean
 }
 
 export function createDagNode(id: string, isSystem: boolean): DagNodeState {

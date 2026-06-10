@@ -32,7 +32,7 @@ from app.resource.service import (
     run_multi_agent_generation,
     run_single_agent_generation,
 )
-from app.memory.service import MemoryService
+from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
 
 router = APIRouter()
@@ -60,8 +60,8 @@ async def create_resource_task(
     )
     resource_id = result["resource_id"]
 
-    memory_service = MemoryService(module="mentor")
-    profile_record = await memory_service.get_profile(user_id=current_user.id)
+    profile_builder = get_profile_service()
+    profile_record = await profile_builder.get_profile(user_id=current_user.id)
     profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
 
     background_tasks.add_task(
@@ -89,8 +89,8 @@ async def create_single_resource_task(
         req.agent_id.value,
     )
 
-    memory_service = MemoryService(module="mentor")
-    profile_record = await memory_service.get_profile(user_id=current_user.id)
+    profile_builder = get_profile_service()
+    profile_record = await profile_builder.get_profile(user_id=current_user.id)
     profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
 
     usecases = ResourceService(session)

@@ -147,6 +147,11 @@ export interface CreateLearningPathRequest {
   enable_search?: boolean
 }
 
+export interface CreateLearningPathResponse {
+  id: number
+  status: string
+}
+
 export interface AuxiliaryResourceRequest {
   resource_type: 'mindmap' | 'code' | 'ppt'
 }

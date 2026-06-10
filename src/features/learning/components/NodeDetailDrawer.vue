@@ -80,6 +80,8 @@ watch(visible, (val) => {
 const statusText = (status: string) => {
   switch (status) {
     case 'available': return '可学习'
+    case 'in_progress': return '学习中'
+    case 'remediation': return '专项巩固中'
     case 'locked': return '未解锁'
     case 'completed': return '已通过'
     case 'completed_with_gaps': return '带缺口完成'

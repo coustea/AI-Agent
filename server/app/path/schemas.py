@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic import BaseModel, Field, field_validator
+
+if TYPE_CHECKING:
+    from app.infra.models import PathNode, PathNodeTutorial, PathNodeQuestion, PathNodeResource
 
 # ======================================================================
 # 请求模型
@@ -87,6 +90,21 @@ class LearningPathTutorialDTO(BaseModel):
     weak_knowledge_points: list[str] = Field(default_factory=list)
     created_at: str
 
+    @classmethod
+    def from_model(cls, tutorial: PathNodeTutorial) -> LearningPathTutorialDTO:
+        return cls(
+            id=tutorial.id,
+            tutorial_type=tutorial.tutorial_type,
+            version_no=tutorial.version_no,
+            based_on_tutorial_id=tutorial.based_on_tutorial_id,
+            title=tutorial.title,
+            summary=tutorial.summary,
+            content_markdown=tutorial.content_markdown,
+            knowledge_points=list(tutorial.knowledge_points or []),
+            weak_knowledge_points=list(tutorial.weak_knowledge_points or []),
+            created_at=tutorial.created_at.isoformat() if tutorial.created_at else "",
+        )
+
 
 class LearningPathQuestionDTO(BaseModel):
     id: int
@@ -102,6 +120,23 @@ class LearningPathQuestionDTO(BaseModel):
     knowledge_points: list[str] = Field(default_factory=list)
     is_correct: bool | None = None
 
+    @classmethod
+    def from_model(cls, question: PathNodeQuestion) -> LearningPathQuestionDTO:
+        return cls(
+            id=question.id,
+            question_no=question.question_no,
+            round_no=question.round_no,
+            mode=question.mode,
+            type=question.type,
+            question=question.question,
+            choice=dict(question.choice or {}),
+            answer=question.answer,
+            response=question.response,
+            analysis=question.analysis,
+            knowledge_points=list(question.knowledge_points or []),
+            is_correct=question.is_correct,
+        )
+
 
 class LearningPathResourceDTO(BaseModel):
     id: int
@@ -113,6 +148,20 @@ class LearningPathResourceDTO(BaseModel):
     content_json: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str
+
+    @classmethod
+    def from_model(cls, resource: PathNodeResource) -> LearningPathResourceDTO:
+        return cls(
+            id=resource.id,
+            resource_type=resource.resource_type,
+            version_no=resource.version_no,
+            title=resource.title,
+            content_format=resource.content_format,
+            content_text=resource.content_text,
+            content_json=resource.content_json,
+            metadata=dict(resource.metadata_json or {}),
+            created_at=resource.created_at.isoformat() if resource.created_at else "",
+        )
 
 
 class LearningPathNodeDTO(BaseModel):
@@ -128,7 +177,27 @@ class LearningPathNodeDTO(BaseModel):
     difficulty: str | None = None
     recommendation_reason: str | None = None
     prerequisites: list[str] = Field(default_factory=list)
+    resource_policy: NodeResourcePolicy | None = None
     current_tutorial_id: int | None = None
+
+    @classmethod
+    def from_model(cls, node: PathNode) -> LearningPathNodeDTO:
+        return cls(
+            id=node.id,
+            node_id=node.node_id,
+            stage_id=node.stage_id,
+            title=node.title,
+            status=node.status,
+            priority=node.priority,
+            attempt_count=node.attempt_count,
+            mastery_target=node.mastery_target,
+            estimated_minutes=node.estimated_minutes,
+            difficulty=node.difficulty,
+            recommendation_reason=node.recommendation_reason,
+            prerequisites=list(node.prerequisites or []),
+            resource_policy=dict(node.resource_policy) if node.resource_policy else None,
+            current_tutorial_id=node.current_tutorial_id,
+        )
 
 
 class LearningPathOverviewResponse(BaseModel):
@@ -196,6 +265,19 @@ class PathQuizSubmitResponse(BaseModel):
     weak_knowledge_points: list[str] = Field(default_factory=list)
     next_node_id: int | None = None
     current_tutorial_id: int | None = None
+
+
+class AgentQuestionItem(BaseModel):
+    question: str = Field(description="题干")
+    choice: dict[str, str] = Field(default_factory=dict, description="选项映射，如 {'A': 'xxx'}")
+    answer: str = Field(description="正确答案，如 A")
+    analysis: str = Field(default="", description="题目解析")
+    knowledge_points: list[str] = Field(default_factory=list, description="涉及知识点")
+    type: str = Field(default="single_choice", description="题型")
+
+
+class AgentQuestionSet(BaseModel):
+    questions: list[AgentQuestionItem] = Field(default_factory=list, min_length=0, max_length=5)
 
 
 class AgentPathNode(BaseModel):
@@ -267,6 +349,8 @@ __all__ = [
     "AgentPathNode",
     "AgentStage",
     "AgentLearningPathPlan",
+    "AgentQuestionItem",
+    "AgentQuestionSet",
     # Resource policy
     "NodeResourcePolicy",
     "LearningSignalSnapshot",

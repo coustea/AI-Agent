@@ -13,12 +13,10 @@
 
 新表应添加到 REGISTERED_MODELS 元组中，以便 init_db() 自动创建。
 
-重构说明（v2）：
-- 删除 UserMemory（多条记忆模式）
-- 新增 UserLongTermMemory（用户级单条长期记忆）
-- 新增 ChatSessionSummary（会话概要）
-- 修改 UserProfile（增加 profile_json、profile_score_json、module 字段）
-- 修改 UserProfileHistory（增加 profile_json、profile_score_json、module 字段）
+重构说明（v3）：
+- Chat 会话压缩使用 ChatSessionSummaryBlock
+- Chat 长期记忆使用 ChatLongTermMemory
+- Profile 独立为共享模块，但仍复用 global_profiles / course_profiles
 """
 
 import uuid
@@ -96,9 +94,7 @@ class School(SQLModel, table=True):
 class ChatSession(SQLModel, table=True):
     """会话表 — 管理多会话隔离，每个用户可以有多个独立会话"""
     __tablename__ = "chat_sessions"
-    __table_args__ = (
-        Index("ix_chat_sessions_attachment_analyses", "attachment_analyses", postgresql_using="gin"),
-    )
+    __table_args__ = ()
 
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
@@ -117,10 +113,7 @@ class ChatSession(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
-    # 会话概要触发计数器
-    summary_token_count: int = Field(default=0)  # 累计 token 数，达到阈值触发会话概要生成
-    # 附件预分析结果持久化（按消息ID索引）
-    attachment_analyses: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    summary_token_count: int = Field(default=0)
 
 
 class ChatMessage(SQLModel, table=True):
@@ -156,11 +149,13 @@ class ChatMessage(SQLModel, table=True):
 # Summary — 会话概要（上下文压缩）
 # ---------------------------------------------------------------------------
 
-class ChatSessionSummary(SQLModel, table=True):
-    """会话概要表 — 保存上下文压缩结果，一个会话可以有多个概要"""
-    __tablename__ = "chat_session_summaries"
+class ChatSessionSummaryBlock(SQLModel, table=True):
+    """会话摘要块表 — 按时间顺序保存已压缩会话块。"""
+    __tablename__ = "chat_session_summary_blocks"
     __table_args__ = (
-        Index("ix_chat_session_summaries_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_chat_session_summary_blocks_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_chat_session_summary_blocks_topics", "topics", postgresql_using="gin"),
+        Index("ix_chat_session_summary_blocks_keywords", "keywords", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -170,14 +165,17 @@ class ChatSessionSummary(SQLModel, table=True):
     )  # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
     module: str = Field(default="mentor", index=True)  # 所属功能模块
 
-    summary_markdown: str = Field(sa_column=Column(Text))  # 概要主体 Markdown（唯一权威来源）
-
-    summary_type: str = Field(default="incremental", max_length=50)  # 概要类型：incremental | full
-    version: int = Field(default=1)  # 概要版本号
-
-    start_message_id: int | None = Field(default=None)  # 起始消息 ID
-    end_message_id: int | None = Field(default=None)  # 结束消息 ID
-    summarized_message_count: int = Field(default=0)  # 已压缩消息数量
+    block_index: int = Field(default=1, index=True)
+    summary_markdown: str = Field(sa_column=Column(Text))
+    summary_type: str = Field(default="incremental", max_length=50)
+    version: int = Field(default=1)
+    start_message_id: int | None = Field(default=None)
+    end_message_id: int | None = Field(default=None)
+    start_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    end_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    summarized_message_count: int = Field(default=0)
+    topics: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    keywords: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -193,20 +191,20 @@ class ChatSessionSummary(SQLModel, table=True):
 # Memory — 长期记忆（用户级单条）
 # ---------------------------------------------------------------------------
 
-class UserLongTermMemory(SQLModel, table=True):
-    """用户长期记忆表 — 一个用户在一个 module 下只有一条长期记忆
+class ChatLongTermMemory(SQLModel, table=True):
+    """Chat 长期记忆表 — 一个用户在一个 chat module 下只有一条长期记忆
 
     设计原则：
     - 只保存长期稳定、未来可复用的信息
     - 不保存当前会话临时状态、一次性作业中间状态
     - memory_markdown 是唯一权威来源（给 LLM 上下文用）
     """
-    __tablename__ = "user_long_term_memories"
+    __tablename__ = "chat_long_term_memories"
     __table_args__ = (
-        UniqueConstraint("user_id", "module", name="uq_user_long_term_memory_user_module"),
-        Index("ix_user_long_term_memories_source_session_ids", "source_session_ids", postgresql_using="gin"),
-        Index("ix_user_long_term_memories_source_message_ids", "source_message_ids", postgresql_using="gin"),
-        Index("ix_user_long_term_memories_source_summary_ids", "source_summary_ids", postgresql_using="gin"),
+        UniqueConstraint("user_id", "module", name="uq_chat_long_term_memory_user_module"),
+        Index("ix_chat_long_term_memories_source_session_ids", "source_session_ids", postgresql_using="gin"),
+        Index("ix_chat_long_term_memories_source_message_ids", "source_message_ids", postgresql_using="gin"),
+        Index("ix_chat_long_term_memories_source_summary_block_ids", "source_summary_block_ids", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -221,7 +219,7 @@ class UserLongTermMemory(SQLModel, table=True):
 
     source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
     source_message_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源消息 ID 列表
-    source_summary_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源概要 ID 列表
+    source_summary_block_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))
     updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 更新原因
 
     created_at: datetime = Field(
@@ -238,39 +236,21 @@ class UserLongTermMemory(SQLModel, table=True):
 # Profile — 用户画像及历史快照
 # ---------------------------------------------------------------------------
 
-class UserProfile(SQLModel, table=True):
-    """用户画像表 — 一个用户在一个 module 下只有一条当前画像
-    
-    设计原则：
-    - profile_json 是文字画像权威来源
-    - profile_score_json 是评分画像权威来源
-    """
-    __tablename__ = "user_profiles"
+class GlobalProfile(SQLModel, table=True):
+    """全局主画像表"""
+    __tablename__ = "global_profiles"
     __table_args__ = (
-        UniqueConstraint("user_id", "module", name="uq_user_profile_user_module"),
-        Index("ix_user_profiles_profile_json", "profile_json", postgresql_using="gin"),
-        Index("ix_user_profiles_profile_score_json", "profile_score_json", postgresql_using="gin"),
-        Index("ix_user_profiles_source_session_ids", "source_session_ids", postgresql_using="gin"),
-        Index("ix_user_profiles_source_summary_ids", "source_summary_ids", postgresql_using="gin"),
-        Index("ix_user_profiles_source_event_ids", "source_event_ids", postgresql_using="gin"),
+        UniqueConstraint("user_id", "module", name="uq_global_profile_user_module"),
+        Index("ix_global_profiles_profile_json", "profile_json", postgresql_using="gin"),
+        Index("ix_global_profiles_profile_score_json", "profile_score_json", postgresql_using="gin"),
     )
 
-    id: int | None = Field(default=None, primary_key=True)  # 改为 id 主键
+    id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    module: str = Field(default="mentor", index=True)  # 所属功能模块
+    module: str = Field(default="mentor", index=True)
 
-    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 文字画像 JSON
-    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 分数画像 JSON
-    profile_markdown: str | None = Field(default=None, sa_column=Column(Text))  # 画像 Markdown 渲染缓存
-
-    version: int = Field(default=1)  # 画像版本号
-    confidence: float = Field(default=0.7)  # 画像整体置信度
-
-    source_memory_version: int | None = Field(default=None)  # 来源长期记忆版本
-    source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
-    source_summary_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源概要 ID 列表
-    source_event_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源学习事件 ID 列表
-    updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 更新原因
+    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -281,36 +261,30 @@ class UserProfile(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
-
-class UserProfileHistory(SQLModel, table=True):
-    """用户画像历史表 — 保存每次画像变更的快照"""
-    __tablename__ = "user_profile_history"
+class CourseProfile(SQLModel, table=True):
+    """课程子画像表"""
+    __tablename__ = "course_profiles"
     __table_args__ = (
-        Index("ix_user_profile_history_profile_json", "profile_json", postgresql_using="gin"),
-        Index("ix_user_profile_history_profile_score_json", "profile_score_json", postgresql_using="gin"),
-        Index("ix_user_profile_history_user_module_version", "user_id", "module", "version"),
+        UniqueConstraint("user_id", "module", "course_name", name="uq_course_profile_user_module_course"),
+        Index("ix_course_profiles_profile_json", "profile_json", postgresql_using="gin"),
+        Index("ix_course_profiles_profile_score_json", "profile_score_json", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    module: str = Field(default="mentor", index=True)  # 所属功能模块
+    module: str = Field(default="mentor", index=True)
+    course_name: str = Field(max_length=200, index=True)
 
-    version: int = Field(index=True)  # 版本号，每次更新递增
-
-    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 文字画像快照 JSON
-    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 分数画像快照 JSON
-    profile_markdown: str | None = Field(default=None, sa_column=Column(Text))  # 画像 Markdown 快照缓存
-
-    change_reason: str | None = Field(default=None, sa_column=Column(Text))  # 变更原因
-
-    source_memory_version: int | None = Field(default=None)  # 来源长期记忆版本
-    source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
-    source_summary_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源概要 ID 列表
-    source_event_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源学习事件 ID 列表
+    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -614,6 +588,7 @@ class PathNode(SQLModel, table=True):
     current_tutorial_id: int | None = Field(default=None, index=True)
 
     prerequisites: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    resource_policy: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     mastery_target: str | None = Field(default=None, sa_column=Column(Text))
     estimated_minutes: int | None = Field(default=None)
     difficulty: str | None = Field(default=None, max_length=30)
@@ -747,10 +722,10 @@ REGISTERED_MODELS = (
     ActiveToken,
     ChatSession,
     ChatMessage,
-    ChatSessionSummary,
-    UserLongTermMemory,
-    UserProfile,
-    UserProfileHistory,
+    ChatSessionSummaryBlock,
+    ChatLongTermMemory,
+    GlobalProfile,
+    CourseProfile,
     GeneratedResource,
     GeneratedResourceItem,
     QuizQuestion,
