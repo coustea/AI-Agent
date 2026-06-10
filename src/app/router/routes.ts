@@ -19,6 +19,7 @@ const Profile = () => import('@/features/profile/views/Profile.vue')
 const ResourceDetail = () => import('@/features/resource/views/ResourceDetail.vue')
 const QuestionBank = () => import('@/features/learning/views/QuestionBank.vue')
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
+const WrongQuestions = () => import('@/features/learning/views/WrongQuestions.vue')
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: () => (hasAuthToken() ? '/dashboard' : '/login') },
@@ -43,6 +44,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'path-resource-history', name: 'PathResourceHistory', component: PathResourceHistory },
       { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank },
+      { path: 'wrong-questions', name: 'WrongQuestions', component: WrongQuestions },
     ],
   },
 ]

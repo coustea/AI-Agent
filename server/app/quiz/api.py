@@ -9,6 +9,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.database import get_session
 from app.infra.models import QuizQuestion, ProgrammingProblem
 from app.infra.response import HttpResponse
+from app.quiz.schemas import QuizReviewRequest, QuizReviewResponse
+from app.quiz.service import quiz_review_service
 
 router = APIRouter()
 
@@ -202,3 +204,23 @@ async def get_programming_problem(
         "test_cases": problem.test_cases or [],
         "tags": problem.tags or [],
     })
+
+
+# ---------------------------------------------------------------------------
+# AI 答案审查 API
+# ---------------------------------------------------------------------------
+
+
+@router.post("/quiz-review")
+async def review_quiz_answer(
+    request: QuizReviewRequest,
+) -> QuizReviewResponse:
+    """AI 审查主观题答案（填空题、简答题）。"""
+    result = await quiz_review_service.review(
+        question_type=request.question_type,
+        question_content=request.question_content,
+        standard_answer=request.standard_answer,
+        user_answer=request.user_answer,
+        knowledge_points=request.knowledge_points,
+    )
+    return QuizReviewResponse(**result)

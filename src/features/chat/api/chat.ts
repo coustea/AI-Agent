@@ -90,9 +90,6 @@ export function streamChat(
   if (params.enable_web_search != null) {
     formData.append('enable_web_search', String(Boolean(params.enable_web_search)))
   }
-  if (params.enable_knowledge_base != null) {
-    formData.append('enable_knowledge_base', String(Boolean(params.enable_knowledge_base)))
-  }
 
   createSseStream({
     url: '/api/v1/ai/chat/stream',

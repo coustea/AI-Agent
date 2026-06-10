@@ -145,6 +145,7 @@ export interface ChatMessageItem {
   content: string
   attachments: AttachmentInfo[] | null
   teaching_diagram: TeachingDiagram | null
+  knowledge_sources?: KnowledgeSource[] | null
   created_at: string | null
 }
 
@@ -169,7 +170,6 @@ export interface StreamChatParams {
   need_teaching_diagram?: boolean
   generate_video?: boolean
   enable_web_search?: boolean
-  enable_knowledge_base?: boolean
 }
 
 export interface StreamChatHistoryItem {

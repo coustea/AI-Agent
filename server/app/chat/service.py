@@ -85,6 +85,7 @@ class ChatMessageItem:
                  content: str,
                  attachments: list[AttachmentInfo] | None = None,
                  tool_calls: list[dict[str, Any]] | None = None,
+                 knowledge_sources: list[dict[str, Any]] | None = None,
                  teaching_diagram: dict[str, Any] | None = None,
                  created_at: Any = None) -> None:
         self.id = id
@@ -92,6 +93,7 @@ class ChatMessageItem:
         self.content = content
         self.attachments = attachments
         self.tool_calls = tool_calls
+        self.knowledge_sources = knowledge_sources
         self.teaching_diagram = teaching_diagram
         self.created_at = created_at
 
@@ -101,6 +103,8 @@ class ChatMessageItem:
             d["attachments"] = [a.model_dump() for a in self.attachments]
         if self.tool_calls:
             d["tool_calls"] = self.tool_calls
+        if self.knowledge_sources:
+            d["knowledge_sources"] = self.knowledge_sources
         if self.teaching_diagram:
             d["teaching_diagram"] = self.teaching_diagram
         return d
@@ -176,6 +180,7 @@ class ChatUseCases:
                 content=m.content,
                 attachments=parsed_attachments,
                 tool_calls=m.tool_calls if isinstance(m.tool_calls, list) else None,
+                knowledge_sources=m.knowledge_sources if isinstance(m.knowledge_sources, list) else None,
                 teaching_diagram=m.teaching_diagram if isinstance(m.teaching_diagram, dict) else None,
                 created_at=m.created_at,
             ))
@@ -190,6 +195,7 @@ class ChatUseCases:
         content: str,
         attachments: list[dict[str, Any]] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
+        knowledge_sources: list[dict[str, Any]] | None = None,
         teaching_diagram: dict[str, Any] | None = None,
         usage_metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -201,6 +207,7 @@ class ChatUseCases:
             content=content,
             attachments=attachments,
             tool_calls=tool_calls,
+            knowledge_sources=knowledge_sources,
             teaching_diagram=teaching_diagram,
             usage_metadata=usage_metadata,
         )
@@ -366,7 +373,6 @@ class ChatUseCases:
         session_id: str | None,
         attachments: list[str],
         enable_web_search: bool = False,
-        enable_knowledge_base: bool = False,
         need_teaching_diagram: bool = False,
         generate_video: bool = False,
     ) -> TutorAgentContext:
@@ -419,7 +425,6 @@ class ChatUseCases:
             attachment_analysis=attachment_analysis or {},
             attachments=attachments,
             enable_web_search=enable_web_search,
-            enable_knowledge_base=enable_knowledge_base,
             need_teaching_diagram=need_teaching_diagram,
             diagram_mode="requested" if need_teaching_diagram else "off",
             generate_video=generate_video,
@@ -444,7 +449,6 @@ class ChatUseCases:
         generate_video: bool = False,
         enable_search: bool | None = None,
         enable_web_search: bool = False,
-        enable_knowledge_base: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """SSE 流式对话主入口。"""
         if enable_search is not None:
@@ -458,7 +462,6 @@ class ChatUseCases:
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
             enable_web_search=enable_web_search,
-            enable_knowledge_base=enable_knowledge_base,
             persist=True,
         ):
             yield event
@@ -475,7 +478,6 @@ class ChatUseCases:
         generate_video: bool = False,
         enable_search: bool | None = None,
         enable_web_search: bool = False,
-        enable_knowledge_base: bool = False,
         persist: bool = True,
     ) -> AsyncIterator[dict[str, Any]]:
         """流式对话事件生成器，供 SSE 和 avatar bridge 共用。"""
@@ -484,8 +486,8 @@ class ChatUseCases:
         effective_session = session_id or self.default_session_id(user_id)
         merged_attachments = list(dict.fromkeys(attachments or []))
         logger.info(
-            "[ChatUseCases] 开始对话: user_id=%s session_id=%s msg_len=%d attachments=%d web_search=%s knowledge=%s diagram=%s",
-            user_id, effective_session, len(user_message or ""), len(merged_attachments), enable_web_search, enable_knowledge_base, need_teaching_diagram,
+            "[ChatUseCases] 开始对话: user_id=%s session_id=%s msg_len=%d attachments=%d web_search=%s diagram=%s",
+            user_id, effective_session, len(user_message or ""), len(merged_attachments), enable_web_search, need_teaching_diagram,
         )
         normalized_history = list(history or [])
         if not normalized_history and (user_message or "").strip():
@@ -537,7 +539,6 @@ class ChatUseCases:
             session_id=effective_session,
             attachments=merged_attachments,
             enable_web_search=enable_web_search,
-            enable_knowledge_base=enable_knowledge_base,
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
         )
@@ -572,6 +573,7 @@ class ChatUseCases:
                 }
 
         tool_calls = completion_event.get("data", {}).get("tool_calls") if completion_event else None
+        knowledge_sources = completion_event.get("data", {}).get("knowledge_sources") if completion_event else None
         usage_metadata = completion_event.get("data", {}).get("usage_metadata") if completion_event else None
 
         if persist and has_assistant_output and not stream_failed:
@@ -585,6 +587,7 @@ class ChatUseCases:
                 role="assistant",
                 content=full_answer,
                 tool_calls=tool_calls,
+                knowledge_sources=knowledge_sources,
                 teaching_diagram=teaching_diagram,
                 usage_metadata=usage_metadata,
             )

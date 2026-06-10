@@ -18,19 +18,21 @@ from app.infra.models import QuizQuestion
 logger = get_logger(__name__)
 
 QUIZ_DIR = Path(__file__).parent.parent.parent / "quiz" / "final"
+QUIZ_BANK_SUBDIR = "408题库"
 
 BATCH_SIZE = 200
 
 
 async def _load_quiz_files() -> list[tuple[dict, str]]:
     """扫描题库目录，返回 (题目dict, 文件相对路径) 列表。"""
-    if not QUIZ_DIR.exists():
-        logger.warning("[QuizImport] 题库目录不存在: %s", QUIZ_DIR)
+    bank_dir = QUIZ_DIR / QUIZ_BANK_SUBDIR
+    if not bank_dir.exists():
+        logger.warning("[QuizImport] 题库目录不存在: %s", bank_dir)
         return []
 
     results: list[tuple[dict, str]] = []
-    for json_file in sorted(QUIZ_DIR.rglob("*.json")):
-        rel_path = str(json_file.relative_to(QUIZ_DIR))
+    for json_file in sorted(bank_dir.rglob("*.json")):
+        rel_path = json_file.relative_to(QUIZ_DIR).as_posix()
         if any(skip in rel_path for skip in ("fixed_output", ".omc", "state")):
             continue
         try:

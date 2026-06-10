@@ -93,7 +93,6 @@ def prepare_tutor_state(context: TutorAgentContext, history: list[ChatHistoryMes
         "attachments": list(context.attachments),
         "resource_mode": context.resource_mode,
         "enable_web_search": context.enable_web_search,
-        "enable_knowledge_base": context.enable_knowledge_base,
         "need_teaching_diagram": context.need_teaching_diagram,
         "teaching_diagram": None,
         "teaching_diagram_error": None,
