@@ -1,6 +1,7 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { hasAuthToken } from '@/shared/auth/token'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
+import { resourceVideoPreviewRoute } from '@/features/resource/video-preview'
 
 const Login = () => import('@/features/auth/views/Login.vue')
 const Register = () => import('@/features/auth/views/Register.vue')
@@ -24,6 +25,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'Login', component: Login },
   { path: '/register', name: 'Register', component: Register },
   { path: '/onboarding', name: 'Onboarding', component: OnboardingDialog, props: { standalone: true } },
+  resourceVideoPreviewRoute,
   {
     path: '/',
     component: MainLayout,

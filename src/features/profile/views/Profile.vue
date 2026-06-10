@@ -335,7 +335,7 @@
             <div class="perf-data">
               <span class="label">累计学习时长</span>
               <span class="value">
-                {{ formatDurationValue(learningStats?.total_seconds || 45600) }}<small>{{ formatDurationUnit(learningStats?.total_seconds || 45600) }}</small>
+                {{ formatDurationValue(learningStats?.total_seconds) }}<small>{{ formatDurationUnit(learningStats?.total_seconds) }}</small>
               </span>
             </div>
           </div>
