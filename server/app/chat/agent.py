@@ -178,7 +178,6 @@ async def _run_tool_augmented_generation(
     tools: list[Any],
     node_name: str,
     config: RunnableConfig,
-    knowledge_fallback_query: str = "",
 ) -> dict[str, Any]:
     """绑定工具、执行工具调用，并生成最终回答。"""
     tools_by_name = {t.name: t for t in tools}
@@ -215,6 +214,21 @@ async def _run_tool_augmented_generation(
             if tool_instance:
                 try:
                     tool_output = await tool_instance.ainvoke(tool_args)
+                    if tool_name == "search_knowledge_base":
+                        query = str(tool_args.get("query", "")).strip()
+                        if query:
+                            _context, kb_rows = await aformat_knowledge_context(query)
+                            knowledge_sources = [
+                                {
+                                    "rank": item.get("rank"),
+                                    "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("book_title") or "未知来源",
+                                    "file_name": (item.get("metadata") or {}).get("file_name") or "",
+                                    "chunk_index": (item.get("metadata") or {}).get("chunk_index"),
+                                    "distance": item.get("distance"),
+                                    "retrieval_mode": item.get("retrieval_mode") or "",
+                                }
+                                for item in kb_rows
+                            ]
                     full_messages.append(ToolMessage(
                         content=str(tool_output),
                         tool_call_id=tool_call.get("id", ""),
@@ -239,34 +253,6 @@ async def _run_tool_augmented_generation(
             config=config,
             runnable=llm_to_use,
         )
-
-    if knowledge_fallback_query and "search_knowledge_base" in tools_by_name:
-        logger.info("[TutorAgent] %s 知识库兜底检索 query=%s", node_name, truncate(knowledge_fallback_query, 100))
-        try:
-            kb_context, kb_rows = await aformat_knowledge_context(knowledge_fallback_query)
-            knowledge_sources = [
-                {
-                    "rank": item.get("rank"),
-                    "source": (item.get("metadata") or {}).get("source") or (item.get("metadata") or {}).get("book_title") or "未知来源",
-                    "file_name": (item.get("metadata") or {}).get("file_name") or "",
-                    "distance": item.get("distance"),
-                }
-                for item in kb_rows
-            ]
-
-            if kb_context and "没有检索到" not in kb_context:
-                enhanced_messages = list(full_messages)
-                enhanced_messages.append(HumanMessage(
-                    content=f"【本地知识库检索结果】\n{kb_context}\n\n请参考以上内容回答用户问题。"
-                ))
-                result = await stream_answer(
-                    agent,
-                    enhanced_messages,
-                    node_name=node_name,
-                    config=config,
-                )
-        except Exception as exc:
-            logger.warning("[TutorAgent] 知识库兜底检索失败: %s", exc)
 
     return {
         "messages": [result],
@@ -364,13 +350,12 @@ async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> 
     question = extract_question(messages)
     search_result = state.get("search_result", "")
     diagram_enabled = bool(state.get("need_teaching_diagram", False))
-    enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
 
     from app.chat.tools.memory import make_memory_tools
     memory_tools = []
     if agent.context.memory_reader:
         memory_tools = make_memory_tools(agent.context.memory_reader)
-    knowledge_tools = [search_knowledge_base] if enable_knowledge_base else []
+    knowledge_tools = [search_knowledge_base]
 
     if search_result:
         node_name = "spark_summary"
@@ -403,14 +388,14 @@ async def answer_node(agent: Any, state: TutorState, config: RunnableConfig) -> 
             full_messages = build_messages(scoped_prompt, list(messages))
             tools = memory_tools + knowledge_tools
 
-    return await _run_tool_augmented_generation(
+    result = await _run_tool_augmented_generation(
         agent=agent,
         messages=full_messages,
         tools=tools,
         node_name=node_name,
         config=config,
-        knowledge_fallback_query=question if enable_knowledge_base else "",
     )
+    return result
 
 
 async def attachment_answer_node(
@@ -489,8 +474,7 @@ async def attachment_answer_node(
         if agent.context.memory_reader:
             memory_tools = make_memory_tools(agent.context.memory_reader)
 
-        enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
-        knowledge_tools = [search_knowledge_base] if enable_knowledge_base else []
+        knowledge_tools = [search_knowledge_base]
         tools = memory_tools + knowledge_tools
 
         return await _run_tool_augmented_generation(
@@ -499,7 +483,6 @@ async def attachment_answer_node(
             tools=tools,
             node_name="attachment_answer",
             config=config,
-            knowledge_fallback_query=question if enable_knowledge_base else "",
         )
 
 
@@ -728,15 +711,13 @@ class TutorAgent:
     async def _classify_node(self, state: TutorState) -> dict[str, Any]:
         """分类节点：决定意图路由与执行模式。
 
-        知识库检索已改为 Agent Tool，不再作为独立节点。
-        当 enable_knowledge_base=True 时，会在 state 中标记，供 answer_node 绑定工具时使用。
+        知识库检索作为 Agent Tool 常驻提供，不再由前端开关控制。
         """
         user_id = state.get("user_id")
         session_id = state.get("session_id")
         messages = state.get("messages") or []
         attachments = state.get("attachments") or []
         enable_web_search = bool(state.get("enable_web_search", False))
-        enable_knowledge_base = bool(state.get("enable_knowledge_base", False))
         need_teaching_diagram = bool(state.get("need_teaching_diagram", False))
         user_message = extract_question(messages)
 
@@ -761,10 +742,6 @@ class TutorAgent:
             elif enable_web_search:
                 route = "search"
                 execution_mode = "search"
-            elif enable_knowledge_base:
-                # 知识库开启但没有联网搜索时，走 direct 路由，由 answer_node 绑定知识库工具
-                route = "direct"
-                execution_mode = "knowledge_tool"
             elif need_diagram and diagram_only_requested(user_message):
                 _, prior_answer = previous_teaching_exchange(list(messages))
                 if prior_answer:
@@ -785,7 +762,6 @@ class TutorAgent:
                 execution_mode,
                 need_diagram,
                 enable_web_search,
-                enable_knowledge_base,
                 truncate(user_message, 120),
             )
 
@@ -857,7 +833,6 @@ class TutorAgent:
             truncate(current_message, 180),
             len(context.attachments),
             context.enable_web_search,
-            context.enable_knowledge_base,
         )
 
         await self._ensure_graph()

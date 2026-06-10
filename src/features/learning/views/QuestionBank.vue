@@ -58,16 +58,21 @@
                           v-if="!randomSubmitted"
                           type="primary"
                           :disabled="!hasAnswer(randomUserAnswer)"
+                          :loading="false"
                           class="submit-challenge-btn"
                           @click="submitRandomAnswer"
                       >
                         提交答案
                       </el-button>
+                      <div v-else-if="randomReviewLoading" class="feedback-status-row">
+                        <span class="review-loading-text">AI 正在审查答案...</span>
+                      </div>
                       <div v-else class="feedback-status-row">
                         <div class="result-indicator" :class="randomIsCorrect ? 'correct' : 'wrong'">
                           <el-icon v-if="randomIsCorrect"><CircleCheck /></el-icon>
                           <el-icon v-else><CircleClose /></el-icon>
                           <span>{{ randomIsCorrect ? '回答正确！' : '回答错误' }}</span>
+                          <span v-if="randomReviewResult" class="score-badge">{{ randomReviewResult.score }}分</span>
                         </div>
                         <div class="feedback-actions">
                           <el-button
@@ -84,6 +89,22 @@
 
                     <transition name="el-collapse-transition">
                       <div v-if="randomSubmitted && challengeAnalysisVisible" class="random-analysis-panel">
+                        <!-- AI 审查结果 -->
+                        <div v-if="randomReviewResult && !isOptionQuestion(randomQuestion)" class="ai-review-section">
+                          <div class="ai-review-header">
+                            <span class="ai-review-label">AI 评分</span>
+                            <span class="ai-review-score" :class="randomReviewResult.is_correct ? 'correct' : 'wrong'">
+                              {{ randomReviewResult.score }}分
+                            </span>
+                          </div>
+                          <div class="ai-review-feedback">{{ randomReviewResult.feedback }}</div>
+                          <div v-if="randomReviewResult.improvement_hints?.length" class="ai-review-hints">
+                            <div class="hints-title">改进建议</div>
+                            <ul>
+                              <li v-for="hint in randomReviewResult.improvement_hints" :key="hint">{{ hint }}</li>
+                            </ul>
+                          </div>
+                        </div>
                         <div class="analysis-title">参考答案: <span class="ans-badge">{{ formatAnswer(randomQuestion.answer) }}</span></div>
                         <div class="analysis-body markdown-body">
                           <strong>答案解析：</strong>
@@ -336,18 +357,25 @@
                 </div>
                 <div class="q-card-footer">
                   <div
-                      v-if="browserSubmitted[q.id]"
+                      v-if="browserSubmitted[q.id] && !browserReviewLoading[q.id]"
                       class="result-indicator browser-result"
                       :class="browserCorrect[q.id] ? 'correct' : 'wrong'"
                   >
                     <el-icon v-if="browserCorrect[q.id]"><CircleCheck /></el-icon>
                     <el-icon v-else><CircleClose /></el-icon>
                     <span>{{ browserCorrect[q.id] ? '回答正确！' : '回答错误' }}</span>
+                    <span v-if="browserReviewResult[q.id] && !isOptionQuestion(q)" class="score-badge">
+                      {{ browserReviewResult[q.id]!.score }}分
+                    </span>
+                  </div>
+                  <div v-if="browserReviewLoading[q.id]" class="result-indicator browser-result loading">
+                    <span class="review-loading-text">AI 审查中...</span>
                   </div>
                   <el-button
                       type="primary"
                       size="small"
                       :disabled="browserSubmitted[q.id] || !hasAnswer(browserAnswers[q.id])"
+                      :loading="false"
                       class="submit-browser-btn"
                       @click="submitBrowserAnswer(q)"
                   >
@@ -366,6 +394,22 @@
 
                 <transition name="el-collapse-transition">
                   <div v-if="isDetailExpanded(q.id)" class="q-card-detail-analysis">
+                    <!-- AI 审查结果 -->
+                    <div v-if="browserReviewResult[q.id] && !isOptionQuestion(q)" class="ai-review-section">
+                      <div class="ai-review-header">
+                        <span class="ai-review-label">AI 评分</span>
+                        <span class="ai-review-score" :class="browserReviewResult[q.id]!.is_correct ? 'correct' : 'wrong'">
+                          {{ browserReviewResult[q.id]!.score }}分
+                        </span>
+                      </div>
+                      <div class="ai-review-feedback">{{ browserReviewResult[q.id]!.feedback }}</div>
+                      <div v-if="browserReviewResult[q.id]!.improvement_hints?.length" class="ai-review-hints">
+                        <div class="hints-title">改进建议</div>
+                        <ul>
+                          <li v-for="hint in browserReviewResult[q.id]!.improvement_hints" :key="hint">{{ hint }}</li>
+                        </ul>
+                      </div>
+                    </div>
                     <div class="detail-ans">参考答案: <span class="ans-label">{{ formatAnswer(q.answer) }}</span></div>
                     <div :class="['detail-anal', 'markdown-body', { 'analysis-markdown-compact': isAnalysisQuestion(q) }]">
                       <strong>解析：</strong>
@@ -674,7 +718,8 @@ import {
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { ElConfigProvider } from 'element-plus';
 import { getProfileOnboarding } from '@/features/profile/api/profile';
-import { fetchQuizBankQuestions } from '@/features/learning/api/quizBank';
+import { fetchQuizBankQuestions, fetchQuizReview, type QuizReviewResult } from '@/features/learning/api/quizBank';
+import { addWrongQuestion } from '@/features/learning/api/wrongQuestions';
 
 type KatexModule = {
   render: (tex: string, element: HTMLElement, options?: Record<string, unknown>) => void
@@ -1025,12 +1070,16 @@ const randomUserAnswer = ref<any>('');
 const randomSubmitted = ref(false);
 const randomIsCorrect = ref(false);
 const challengeAnalysisVisible = ref(false);
+const randomReviewLoading = ref(false);
+const randomReviewResult = ref<QuizReviewResult | null>(null);
 
 const loadNewRandomQuestion = () => {
   randomUserAnswer.value = '';
   randomSubmitted.value = false;
   randomIsCorrect.value = false;
   challengeAnalysisVisible.value = false;
+  randomReviewLoading.value = false;
+  randomReviewResult.value = null;
 
   // 随机取一道题
   if (allQuestions.value.length > 0) {
@@ -1046,24 +1095,64 @@ const selectRandomOption = (question: Question, key: string) => {
   randomUserAnswer.value = updateOptionAnswer(question, randomUserAnswer.value, key);
 };
 
-const submitRandomAnswer = () => {
+const submitRandomAnswer = async () => {
   if (!randomQuestion.value || randomSubmitted.value) return;
 
   randomSubmitted.value = true;
-  const correct = evaluateAnswer(randomQuestion.value, randomUserAnswer.value);
 
-  randomIsCorrect.value = correct;
-  challengeAnalysisVisible.value = true;
+  // 客观题：本地判定
+  if (isOptionQuestion(randomQuestion.value)) {
+    const correct = evaluateAnswer(randomQuestion.value, randomUserAnswer.value);
+    randomIsCorrect.value = correct;
+    challengeAnalysisVisible.value = true;
+    saveGlobalStats(1, correct ? 1 : 0);
+    ElMessage({
+      type: correct ? 'success' : 'error',
+      message: correct ? '回答正确！知识点掌握牢固。' : '回答有误，看看下方的解析吧！',
+      duration: 2000,
+      offset: 20,
+    });
+    return;
+  }
 
-  // 记录到全局统计
-  saveGlobalStats(1, correct ? 1 : 0);
+  // 主观题：调用 AI 审查
+  randomReviewLoading.value = true;
 
-  ElMessage({
-    type: correct ? 'success' : 'error',
-    message: correct ? '回答正确！知识点掌握牢固。' : '回答有误，看看下方的解析吧！',
-    duration: 2000,
-    offset: 20
-  });
+  try {
+    const result = await fetchQuizReview({
+      question_id: randomQuestion.value.id,
+      question_type: randomQuestion.value.type,
+      question_content: randomQuestion.value.content,
+      standard_answer: randomQuestion.value.answer,
+      user_answer: String(randomUserAnswer.value || ''),
+      knowledge_points: randomQuestion.value.knowledge_points,
+    });
+    randomIsCorrect.value = result.is_correct;
+    randomReviewResult.value = result;
+    challengeAnalysisVisible.value = true;
+    saveGlobalStats(1, result.is_correct ? 1 : 0);
+    ElMessage({
+      type: result.is_correct ? 'success' : 'error',
+      message: result.feedback,
+      duration: 3000,
+      offset: 20,
+    });
+  } catch (e) {
+    // AI 审查失败时使用 fallback 判定
+    const fallbackCorrect = evaluateAnswer(randomQuestion.value, randomUserAnswer.value);
+    randomIsCorrect.value = fallbackCorrect;
+    randomReviewResult.value = {
+      score: fallbackCorrect ? 70 : 30,
+      is_correct: fallbackCorrect,
+      feedback: fallbackCorrect ? '答案基本正确' : '答案需要改进，请查看解析',
+      improvement_hints: [],
+    };
+    challengeAnalysisVisible.value = true;
+    saveGlobalStats(1, fallbackCorrect ? 1 : 0);
+    ElMessage.warning({ message: 'AI 审查服务暂时不可用，已使用基础判定', duration: 2000, offset: 20 });
+  } finally {
+    randomReviewLoading.value = false;
+  }
 };
 
 // ------------------------------
@@ -1146,6 +1235,8 @@ const expandedQuestionIds = ref<Set<string>>(new Set());
 const browserAnswers = ref<Record<string, any>>({});
 const browserSubmitted = ref<Record<string, boolean>>({});
 const browserCorrect = ref<Record<string, boolean>>({});
+const browserReviewLoading = ref<Record<string, boolean>>({});
+const browserReviewResult = ref<Record<string, QuizReviewResult | null>>({});
 
 const toggleQuestionDetail = (id: string) => {
   const next = new Set(expandedQuestionIds.value);
@@ -1163,13 +1254,91 @@ const selectBrowserOption = (question: Question, key: string) => {
   browserAnswers.value[question.id] = updateOptionAnswer(question, browserAnswers.value[question.id], key);
 };
 
-const submitBrowserAnswer = (question: Question) => {
+const submitBrowserAnswer = async (question: Question) => {
   if (browserSubmitted.value[question.id] || !hasAnswer(browserAnswers.value[question.id])) return;
-  const correct = evaluateAnswer(question, browserAnswers.value[question.id]);
+
+  // 客观题：本地判定
+  if (isOptionQuestion(question)) {
+    const correct = evaluateAnswer(question, browserAnswers.value[question.id]);
+    browserSubmitted.value[question.id] = true;
+    browserCorrect.value[question.id] = correct;
+    expandedQuestionIds.value = new Set(expandedQuestionIds.value).add(question.id);
+    saveGlobalStats(1, correct ? 1 : 0);
+    // 答错时添加到错题本
+    if (!correct) {
+      try {
+        await addWrongQuestion({
+          question_id: question.id,
+          user_answer: String(browserAnswers.value[question.id] || ''),
+        });
+      } catch {
+        // 忽略错误
+      }
+    }
+    return;
+  }
+
+  // 主观题（填空题、简答题）：调用 AI 审查
+  browserReviewLoading.value[question.id] = true;
   browserSubmitted.value[question.id] = true;
-  browserCorrect.value[question.id] = correct;
-  expandedQuestionIds.value = new Set(expandedQuestionIds.value).add(question.id);
-  saveGlobalStats(1, correct ? 1 : 0);
+
+  try {
+    const result = await fetchQuizReview({
+      question_id: question.id,
+      question_type: question.type,
+      question_content: question.content,
+      standard_answer: question.answer,
+      user_answer: String(browserAnswers.value[question.id] || ''),
+      knowledge_points: question.knowledge_points,
+    });
+    browserCorrect.value[question.id] = result.is_correct;
+    browserReviewResult.value[question.id] = result;
+    expandedQuestionIds.value = new Set(expandedQuestionIds.value).add(question.id);
+    saveGlobalStats(1, result.is_correct ? 1 : 0);
+    ElMessage({
+      type: result.is_correct ? 'success' : 'error',
+      message: result.feedback,
+      duration: 3000,
+      offset: 20,
+    });
+    // 答错时添加到错题本
+    if (!result.is_correct) {
+      try {
+        await addWrongQuestion({
+          question_id: question.id,
+          user_answer: String(browserAnswers.value[question.id] || ''),
+        });
+      } catch {
+        // 忽略错误
+      }
+    }
+  } catch (e) {
+    // AI 审查失败时使用 fallback 判定
+    const fallbackCorrect = evaluateAnswer(question, browserAnswers.value[question.id]);
+    browserCorrect.value[question.id] = fallbackCorrect;
+    browserReviewResult.value[question.id] = {
+      score: fallbackCorrect ? 70 : 30,
+      is_correct: fallbackCorrect,
+      feedback: fallbackCorrect ? '答案基本正确' : '答案需要改进，请查看解析',
+      improvement_hints: [],
+    };
+    expandedQuestionIds.value = new Set(expandedQuestionIds.value).add(question.id);
+    saveGlobalStats(1, fallbackCorrect ? 1 : 0);
+    ElMessage.warning({ message: 'AI 审查服务暂时不可用，已使用基础判定', duration: 2000, offset: 20 });
+    // 答错时添加到错题本
+    if (!fallbackCorrect) {
+      try {
+        await addWrongQuestion({
+          question_id: question.id,
+          user_answer: String(browserAnswers.value[question.id] || ''),
+        });
+      } catch {
+        // 忽略错误
+      }
+    }
+  } finally {
+    browserReviewLoading.value[question.id] = false;
+  }
 };
 
 // ------------------------------
@@ -1908,6 +2077,97 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
   line-height: 1.6;
   margin-bottom: 12px;
+}
+
+/* AI 审查结果样式 */
+.ai-review-section {
+  background: rgba(90, 82, 255, 0.06);
+  border: 1px solid rgba(90, 82, 255, 0.15);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.ai-review-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ai-review-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.ai-review-score {
+  font-size: 1.1rem;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 6px;
+}
+
+.ai-review-score.correct {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success-color);
+}
+
+.ai-review-score.wrong {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger-color);
+}
+
+.ai-review-feedback {
+  font-size: 0.88rem;
+  color: var(--text-dark);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.ai-review-hints {
+  margin-top: 8px;
+}
+
+.ai-review-hints .hints-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.ai-review-hints ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.ai-review-hints li {
+  margin: 3px 0;
+  line-height: 1.4;
+}
+
+.score-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(90, 82, 255, 0.12);
+  color: var(--primary-color);
+}
+
+.review-loading-text {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .analysis-tags {

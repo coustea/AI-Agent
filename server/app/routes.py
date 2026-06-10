@@ -20,6 +20,13 @@ except ModuleNotFoundError as exc:
         raise
     quiz_router = None
 
+try:
+    from app.quiz.wrong_api import router as wrong_router
+except ModuleNotFoundError as exc:
+    if exc.name != "app.quiz":
+        raise
+    wrong_router = None
+
 
 def install_routes(app: FastAPI) -> None:
     app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
@@ -31,4 +38,6 @@ def install_routes(app: FastAPI) -> None:
     app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
     if quiz_router is not None:
         app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
+    if wrong_router is not None:
+        app.include_router(wrong_router, prefix="/api/v1/ai", tags=["wrong-questions"])
     app.include_router(websocket_router)

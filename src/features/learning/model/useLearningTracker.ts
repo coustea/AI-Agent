@@ -11,25 +11,67 @@ export interface TrackingContext {
   topic?: string
 }
 
-const MIN_DURATION_SECONDS = 5
+const IDLE_TIMEOUT_MS = 30000
+const MIN_DURATION_SECONDS = 1
+const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'scroll', 'touchstart', 'wheel']
 
 let activeStartTime: number | null = null
+let sessionStartedAt: number | null = null
 let activeContext: TrackingContext | null = null
 let accumulatedMs = 0
 let isPaused = false
+let idleTimer: number | null = null
+let listenersBound = false
+
+function clearIdleTimer() {
+  if (idleTimer !== null) {
+    window.clearTimeout(idleTimer)
+    idleTimer = null
+  }
+}
+
+function pauseTracking() {
+  if (activeStartTime === null || isPaused) return
+  accumulatedMs += Date.now() - activeStartTime
+  activeStartTime = null
+  isPaused = true
+  clearIdleTimer()
+}
+
+function scheduleIdleTimeout() {
+  clearIdleTimer()
+  if (!activeContext || isPaused || document.hidden) return
+  idleTimer = window.setTimeout(() => {
+    pauseTracking()
+  }, IDLE_TIMEOUT_MS)
+}
+
+function resumeTracking() {
+  if (!activeContext || !isPaused || document.hidden) return
+  const now = Date.now()
+  if (sessionStartedAt === null) {
+    sessionStartedAt = now
+  }
+  activeStartTime = now
+  isPaused = false
+  scheduleIdleTimeout()
+}
+
+function handleUserActivity() {
+  if (!activeContext) return
+  if (isPaused) {
+    resumeTracking()
+    return
+  }
+  scheduleIdleTimeout()
+}
 
 function onVisibilityChange() {
-  if (!activeStartTime) return
+  if (!activeContext) return
   if (document.hidden) {
-    if (!isPaused) {
-      accumulatedMs += Date.now() - activeStartTime
-      isPaused = true
-    }
+    pauseTracking()
   } else {
-    if (isPaused) {
-      activeStartTime = Date.now()
-      isPaused = false
-    }
+    scheduleIdleTimeout()
   }
 }
 
@@ -37,54 +79,70 @@ function onBeforeUnload() {
   stopTracking()
 }
 
-document.addEventListener('visibilitychange', onVisibilityChange)
-window.addEventListener('beforeunload', onBeforeUnload)
+function bindGlobalListeners() {
+  if (listenersBound) return
+  listenersBound = true
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('beforeunload', onBeforeUnload)
+  ACTIVITY_EVENTS.forEach((eventName) => {
+    window.addEventListener(eventName, handleUserActivity, { passive: true })
+  })
+}
 
 export function startTracking(context: TrackingContext) {
-  if (activeStartTime !== null) {
+  bindGlobalListeners()
+
+  if (activeContext) {
     stopTracking()
   }
-  activeStartTime = Date.now()
+
+  const now = Date.now()
   activeContext = context
+  sessionStartedAt = now
   accumulatedMs = 0
   isPaused = document.hidden
+  activeStartTime = isPaused ? null : now
+
+  if (!isPaused) {
+    scheduleIdleTimeout()
+  }
 }
 
 export function stopTracking() {
-  if (activeStartTime === null || !activeContext) return
+  if (!activeContext) return
 
-  if (!isPaused) {
-    accumulatedMs += Date.now() - activeStartTime
-  }
+  pauseTracking()
 
   const durationSeconds = Math.floor(accumulatedMs / 1000)
   const now = new Date()
-  const startedAt = new Date(now.getTime() - accumulatedMs)
+  const startedAt = new Date(sessionStartedAt ?? now.getTime())
+  const context = activeContext
 
   activeStartTime = null
+  sessionStartedAt = null
+  activeContext = null
+  accumulatedMs = 0
   isPaused = false
+  clearIdleTimer()
 
   if (durationSeconds < MIN_DURATION_SECONDS) {
-    activeContext = null
     return
   }
 
   const payload: LearningSessionCreate = {
-    source_page: activeContext.sourcePage,
+    source_page: context.sourcePage,
     started_at: startedAt.toISOString(),
     ended_at: now.toISOString(),
     duration_seconds: durationSeconds,
-    resource_id: activeContext.resourceId,
-    path_id: activeContext.pathId,
-    path_node_id: activeContext.pathNodeId,
-    node_id: activeContext.nodeId,
-    course: activeContext.course,
-    topic: activeContext.topic,
+    resource_id: context.resourceId,
+    path_id: context.pathId,
+    path_node_id: context.pathNodeId,
+    node_id: context.nodeId,
+    course: context.course,
+    topic: context.topic,
   }
 
-  activeContext = null
-
   recordLearningSession(payload).catch(() => {
-    // 静默失败，学习时长上报不应阻塞用户操作
+    // Silent failure: tracking should not block the user flow.
   })
 }

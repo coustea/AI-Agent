@@ -54,7 +54,6 @@ async def mentor_chat_stream(
     need_teaching_diagram: bool = Form(default=False),
     generate_video: bool = Form(default=False),
     enable_web_search: bool = Form(default=False),
-    enable_knowledge_base: bool = Form(default=False),
     current_user: User = Depends(get_current_user),
 ):
     """SSE 流式对话主入口。
@@ -69,7 +68,6 @@ async def mentor_chat_stream(
         need_teaching_diagram: 是否生成图解说明。
         generate_video: 是否生成视频。
         enable_web_search: 是否启用联网搜索。
-        enable_knowledge_base: 是否启用本地知识库检索。
         current_user: 当前登录用户。
 
     Returns:
@@ -115,7 +113,6 @@ async def mentor_chat_stream(
             need_teaching_diagram=need_teaching_diagram,
             generate_video=generate_video,
             enable_web_search=enable_web_search,
-            enable_knowledge_base=enable_knowledge_base,
         )),
         media_type="text/event-stream",
         headers={

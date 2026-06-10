@@ -1,4 +1,4 @@
-import type { TeachingDiagram, KnowledgeSource } from '@/features/chat/model/chat'
+import type { TeachingDiagram } from '@/features/chat/model/chat'
 
 export interface PendingFile {
   file?: File
@@ -24,7 +24,6 @@ export interface ChatMsg {
   teachingDiagramGenerating?: boolean
   searchStage?: string
   searchMessage?: string
-  knowledgeSources?: KnowledgeSource[]
 }
 
 export const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): TeachingDiagram | null => {
