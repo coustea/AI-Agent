@@ -92,6 +92,11 @@ class ProfileService:
         user_id: int,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
+        """Save onboarding data immediately and return.
+
+        LLM inference (patch + scoring) runs in background so the
+        frontend doesn't block on the slow AI calls.
+        """
         async with session_scope() as db:
             base_info = payload.copy()
             school_name = base_info.get("school")
@@ -99,15 +104,7 @@ class ProfileService:
                 school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
                 base_info["school_level"] = school.level if school and school.level else None
 
-            patch = await self._infer_onboarding_patch(base_info)
-            base_info.update(patch)
-
             profile = await self._upsert_profile(db=db, user_id=user_id, profile_data=base_info)
-            if profile.profile_json:
-                scores = await self.compute_scores(profile_json=profile.profile_json)
-                if scores:
-                    profile.profile_score_json = scores
-                    await db.flush()
 
             return {
                 "user_id": profile.user_id,
@@ -115,6 +112,28 @@ class ProfileService:
                 "profile_json": profile.profile_json or {},
                 "updated_at": profile.updated_at,
             }
+
+    async def run_onboarding_inference(self, *, user_id: int, payload: dict[str, Any]) -> None:
+        """Background task: LLM inference + scoring after onboarding save."""
+        try:
+            async with session_scope() as db:
+                base_info = payload.copy()
+                school_name = base_info.get("school")
+                if school_name:
+                    school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
+                    base_info["school_level"] = school.level if school and school.level else None
+
+                patch = await self._infer_onboarding_patch(base_info)
+                base_info.update(patch)
+
+                profile = await self._upsert_profile(db=db, user_id=user_id, profile_data=base_info)
+                if profile.profile_json:
+                    scores = await self.compute_scores(profile_json=profile.profile_json)
+                    if scores:
+                        profile.profile_score_json = scores
+                        await db.flush()
+        except Exception as exc:
+            logger.warning("[ProfileService] background onboarding inference failed: %s", exc)
 
     async def process_tutoring_update(
         self,

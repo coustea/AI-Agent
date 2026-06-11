@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, AsyncIterator
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -455,44 +455,37 @@ async def get_profile_onboarding(
 @router.patch("/profile/onboarding")
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
-    """更新首次登录数据（全局画像）。"""
+    """更新首次登录数据（全局画像）。立即返回，LLM推理在后台进行。"""
     profile_builder = get_profile_service()
+    payload_data = payload.model_dump()
 
     try:
         result = await profile_builder.update_from_onboarding(
             user_id=current_user.id,
-            payload=payload.model_dump(),
+            payload=payload_data,
         )
 
-        # 更新用户标志位
-        current_user.is_first_login = False
-        db.add(current_user)
-        await db.commit()
+        # 更新用户标志位 — 通过 db session 重新加载，避免 detached 对象的 greenlet 错误
+        user = await db.get(User, current_user.id)
+        if user:
+            user.is_first_login = False
+            await db.commit()
         logger.info("[ChatAPI] onboarding complete: user_id=%s", current_user.id)
     except Exception as e:
         logger.warning("[ChatAPI] onboarding update failed: user_id=%s err=%s", current_user.id, e)
         return HttpResponse.error(code=400, message=str(e))
 
-    onboarding_data = await profile_builder.get_onboarding(user_id=current_user.id)
+    # 后台异步执行 LLM 推理和评分，不阻塞响应
+    background_tasks.add_task(
+        profile_builder.run_onboarding_inference, user_id=current_user.id, payload=payload_data
+    )
 
     return HttpResponse.success(data={
         "profile": result,
-        "onboarding": OnboardingResponse(
-            base_info=BaseInfoData(**onboarding_data),
-            student_profile=StudentProfileData(
-                school=onboarding_data.get("school"),
-                school_level=onboarding_data.get("school_level"),
-                major=onboarding_data.get("major"),
-                grade=onboarding_data.get("grade"),
-                courses=onboarding_data.get("courses", []),
-                learning_goal=onboarding_data.get("global_learning_goal"),
-                preferred_language=", ".join(onboarding_data.get("programming_languages", [])),
-            ),
-            profile_initialized=True,
-        ).model_dump(),
     })
 
 

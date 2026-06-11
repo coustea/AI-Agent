@@ -107,9 +107,8 @@ def _score_payload(profile: Any) -> dict[str, Any]:
     return {
         "user_id": profile.user_id,
         "module": profile.module,
-        "version": profile.version,
         "score": score_json.get("overall_score"),
-        "confidence": score_json.get("confidence", profile.confidence),
+        "confidence": score_json.get("confidence", 0.7),
         "metrics": {
             "dimension_scores": score_json.get("dimension_scores") or {},
             "section_coverage": score_json.get("section_coverage", 0),

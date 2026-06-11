@@ -20,7 +20,6 @@ export interface ProfileData {
   profile_markdown: string | null
   profile_json: Record<string, unknown> | null
   profile_score_json: Record<string, unknown> | null
-  version: number | null
   updated_reason: string | null
   updated_at: string | null
 }
@@ -53,7 +52,6 @@ export interface ProfileOnboardingUpdate {
 
 export interface ProfileOnboardingUpdateResult {
   profile: ProfileData
-  onboarding: ProfileOnboardingData
 }
 
 export interface TutoringEvidence {

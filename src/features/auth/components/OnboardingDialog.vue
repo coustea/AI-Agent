@@ -64,7 +64,7 @@
                   </div>
                 </div>
               </transition>
-              <div class="school-suggestions-wrapper" v-if="currentStep === 1 && schoolSuggestions.length > 0">
+              <div class="school-suggestions-wrapper" v-if="currentStep === 4 && schoolSuggestions.length > 0">
                 <div class="school-suggestions-list">
                   <button
                     v-for="school in schoolSuggestions"
@@ -81,7 +81,7 @@
                 <input
                   v-model="userInput"
                   class="stealth-input"
-                  :placeholder="currentStep === 1 ? '输入学校名称搜索...' : '在这里自由输入回复...'"
+                  :placeholder="currentStep === 4 ? '输入学校名称搜索...' : '在这里自由输入回复...'"
                   @keyup.enter="handleSend"
                   @input="handleInputChange"
                 />
@@ -173,7 +173,7 @@ const initMessages = () => {
     {
       id: Date.now(),
       role: 'assistant',
-      content: '你好！我是你的专属学习智能体。<br/>为了能为你量身定制个性化的学习路径，我们需要进行一次短暂的交流，构建你的专属“数字学习档案”。<br/><br/>首先，能告诉我你目前所在的<b>学校</b>吗？'
+      content: '你好！我是你的专属学习智能体。<br/>为了能为你量身定制个性化的学习路径，我们需要进行一次短暂的交流，构建你的专属”数字学习档案”。<br/><br/>首先，能告诉我你目前的<b>专业</b>是？'
     }
   ]
 }
@@ -218,7 +218,7 @@ const scrollToBottom = async () => {
 }
 
 const handleInputChange = () => {
-  if (currentStep.value !== 1) return
+  if (currentStep.value !== 4) return
   if (schoolSearchTimer) clearTimeout(schoolSearchTimer)
   const query = userInput.value.trim()
   if (!query) {
@@ -245,10 +245,10 @@ const selectSchool = (school: SchoolItem) => {
 
 const currentQuickReplies = computed(() => {
   switch(currentStep.value) {
-    case 2: return PRESET_MAJORS
-    case 3: return PRESET_GRADES
-    case 4: return PRESET_DAILY_STUDY_TIME
-    case 5: return PRESET_GOALS
+    case 1: return PRESET_MAJORS
+    case 2: return PRESET_GRADES
+    case 3: return PRESET_GOALS
+    case 5: return PRESET_DAILY_STUDY_TIME
     case 6: return ['暂不选择', ...PRESET_PROGRAMMING_LANGUAGES]
     case 7: return PRESET_COURSES
     default: return []
@@ -318,33 +318,33 @@ const handleSend = () => {
   scrollToBottom()
 
   if (currentStep.value === 1) {
-    form.school = text
-    currentStep.value = 2
-    advanceStep(`好的，<b>${form.school}</b> 已记录。接下来，请问你的<b>专业</b>是？`)
-  }
-  else if (currentStep.value === 2) {
     const foundMajor = PRESET_MAJORS.find(m => text.includes(m))
     if (foundMajor) form.major = foundMajor; else form.major = text;
-    currentStep.value = 3
+    currentStep.value = 2
     advanceStep(`太棒了！专业 <b>${form.major}</b> 已提取。接下来，请问你目前的<b>年级</b>是？`)
   }
-  else if (currentStep.value === 3) {
+  else if (currentStep.value === 2) {
     const found = PRESET_GRADES.find(g => text.includes(g))
     if (found) form.grade = found; else form.grade = text;
-    currentStep.value = 4
-    advanceStep(`好的，年级是 <b>${form.grade}</b>。为了评估你的学习节奏，你每天大约能抽出多少<b>学习时间</b>？`)
+    currentStep.value = 3
+    advanceStep(`好的，年级是 <b>${form.grade}</b>。那你的<b>全局学习目标</b>是什么呢？（比如期末复习、考研等）`)
   }
-  else if (currentStep.value === 4) {
-    const found = PRESET_DAILY_STUDY_TIME.find(g => text.includes(g))
-    if (found) form.daily_study_time = found; else form.daily_study_time = text;
-    currentStep.value = 5
-    advanceStep(`没问题，每天 <b>${form.daily_study_time}</b>。那你的<b>全局学习目标</b>是什么呢？（比如期末复习、考研等）`)
-  }
-  else if (currentStep.value === 5) {
+  else if (currentStep.value === 3) {
     const found = PRESET_GOALS.find(g => text.includes(g))
     if (found) form.global_learning_goal = found; else form.global_learning_goal = text;
+    currentStep.value = 4
+    advanceStep(`收到！目标设定为 <b>${form.global_learning_goal}</b>。接下来，能告诉我你目前所在的<b>学校</b>吗？`)
+  }
+  else if (currentStep.value === 4) {
+    form.school = text
+    currentStep.value = 5
+    advanceStep(`好的，<b>${form.school}</b> 已记录。为了评估你的学习节奏，你每天大约能抽出多少<b>学习时间</b>？`)
+  }
+  else if (currentStep.value === 5) {
+    const found = PRESET_DAILY_STUDY_TIME.find(g => text.includes(g))
+    if (found) form.daily_study_time = found; else form.daily_study_time = text;
     currentStep.value = 6
-    advanceStep(`收到！目标设定为 <b>${form.global_learning_goal}</b>。如果你的专业涉及编程，告诉我常用的<b>编程语言</b>，之后的代码示例会直接贴合你的技术栈。`)
+    advanceStep(`没问题，每天 <b>${form.daily_study_time}</b>。如果你的专业涉及编程，告诉我常用的<b>编程语言</b>，之后的代码示例会直接贴合你的技术栈。`)
   }
   else if (currentStep.value === 6) {
     if (text !== '暂不选择') {
