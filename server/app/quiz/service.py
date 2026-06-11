@@ -20,13 +20,6 @@ class QuizBankService:
     _MATH_COMMAND_PATTERN = re.compile(
         r"(^|[^\\a-zA-Z])(int_|iint_|iiint_|oint_|sum_|prod_|lim_|frac|sqrt|sin|cos|tan|cot|sec|csc|ln|log|exp|to|rightarrow|infty|cdots|ldots|mathrm|mathbf|boldsymbol|operatorname\*?|left|right)\b"
     )
-    _BROKEN_CODE_FENCE_LINE = re.compile(r"^\s*(`{3,}|~{3,})\s*$", re.M)
-    _REPEATED_FUNCTION_LINE = re.compile(
-        r"^\s*(?:int|double|float|char|void)\s+[A-Za-z_]\w*\s*\([^)]*\)\s*\{\s*$",
-        re.M,
-    )
-    _SECTION_LEAK_PATTERN = re.compile(r"(?:(?:部分|Part)|\?\?)\s*[A-Za-z一二三四五六七八九十]?\s*[:：]")
-    _PROGRAMMING_ANALYSIS_TYPES = {"analysis", "分析题"}
 
     def _repair_missing_latex_commands(self, text: str) -> str:
         return self._MATH_COMMAND_PATTERN.sub(r"\1\\\2", text)
@@ -117,61 +110,6 @@ class QuizBankService:
                 normalized[str(key)] = str(value)
         return normalized
 
-    def _looks_like_broken_programming_prompt(self, text: str) -> bool:
-        repeated_function_count = len(self._REPEATED_FUNCTION_LINE.findall(text))
-        has_section_leak = "部分 " in text or "Part " in text or "?? " in text
-        fence_count = len(self._BROKEN_CODE_FENCE_LINE.findall(text))
-        return repeated_function_count >= 2 or has_section_leak or fence_count >= 6
-
-    def _strip_repeated_programming_noise(self, text: str) -> str:
-        lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-        cleaned: list[str] = []
-        seen_function_lines: set[str] = set()
-        previous_blank = False
-
-        for raw_line in lines:
-            line = raw_line.rstrip()
-            stripped = line.strip()
-
-            if self._BROKEN_CODE_FENCE_LINE.match(line):
-                continue
-
-            normalized_for_match = stripped.replace("?", "")
-            if self._SECTION_LEAK_PATTERN.search(stripped) or normalized_for_match.startswith(("部分", "Part")):
-                break
-
-            if self._REPEATED_FUNCTION_LINE.match(line):
-                signature = re.sub(r"\s+", "", stripped)
-                if signature in seen_function_lines:
-                    continue
-                seen_function_lines.add(signature)
-
-            if previous_blank and not stripped and cleaned:
-                continue
-
-            cleaned.append(line)
-            previous_blank = not stripped
-
-        while cleaned and not cleaned[-1].strip():
-            cleaned.pop()
-
-        return "\n".join(cleaned)
-
-    def _normalize_programming_prompt(self, text: str | None, question_type: str | None, subject: str | None) -> str:
-        normalized = self._normalize_math_text(text)
-        if question_type not in self._PROGRAMMING_ANALYSIS_TYPES or subject != "大学编程":
-            return normalized
-        if not normalized or not self._looks_like_broken_programming_prompt(normalized):
-            return normalized
-        stripped = self._strip_repeated_programming_noise(normalized)
-        final_text = stripped or normalized
-        for marker in ("部分 ", "Part ", "?? "):
-            idx = final_text.find(marker)
-            if idx > 0:
-                final_text = final_text[:idx].rstrip()
-                break
-        return final_text
-
     async def list_questions(
         self,
         session: AsyncSession,
@@ -251,7 +189,7 @@ class QuizBankService:
             subject_en=item.subject_en,
             type=item.question_type,
             difficulty=item.difficulty,
-            content=self._normalize_programming_prompt(item.content, item.question_type, item.subject),
+            content=self._normalize_math_text(item.content),
             options=self._normalize_options(item.options_json),
             answer=self._normalize_math_text(item.answer),
             analysis=self._normalize_math_text(item.analysis),

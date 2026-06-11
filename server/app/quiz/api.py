@@ -7,7 +7,7 @@ from sqlalchemy import select, func, distinct
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.database import get_session
-from app.infra.models import QuizQuestion, ProgrammingProblem
+from app.infra.models import QuizQuestion
 from app.infra.response import HttpResponse
 from app.quiz.schemas import QuizReviewRequest, QuizReviewResponse
 from app.quiz.service import quiz_review_service
@@ -95,114 +95,6 @@ async def list_quiz_questions(
         "subjects": all_subjects,
         "difficulties": all_difficulties,
         "types": all_types,
-    })
-
-
-# ---------------------------------------------------------------------------
-# 编程题 API
-# ---------------------------------------------------------------------------
-
-
-@router.get("/programming-problems")
-async def list_programming_problems(
-    query: str | None = Query(default=None, max_length=200),
-    difficulty: str | None = Query(default=None),
-    category: str | None = Query(default=None),
-    tag: list[str] | None = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    session: AsyncSession = Depends(get_session),
-):
-    """编程题列表查询，支持筛选和分页。"""
-    base = select(ProgrammingProblem)
-
-    if query:
-        base = base.where(
-            ProgrammingProblem.title.ilike(f"%{query}%")
-            | ProgrammingProblem.description.ilike(f"%{query}%")
-        )
-    if difficulty:
-        base = base.where(ProgrammingProblem.difficulty == difficulty)
-    if category:
-        base = base.where(ProgrammingProblem.category == category)
-    if tag:
-        base = base.where(ProgrammingProblem.tags.contains(tag))
-
-    total = (await session.exec(
-        select(func.count()).select_from(base.subquery())
-    )).scalar() or 0
-
-    items = (await session.exec(
-        base.order_by(ProgrammingProblem.id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )).scalars().all()
-
-    all_difficulties = sorted({
-        d for d in (await session.exec(
-            select(distinct(ProgrammingProblem.difficulty))
-        )).scalars().all() if d
-    })
-    all_categories = sorted({
-        c for c in (await session.exec(
-            select(distinct(ProgrammingProblem.category))
-        )).scalars().all() if c
-    })
-    all_tags = sorted({
-        t for row in (await session.exec(
-            select(distinct(ProgrammingProblem.tags))
-        )).scalars().all() if row for t in (row or [])
-    })
-
-    return HttpResponse.success(data={
-        "items": [
-            {
-                "id": p.problem_slug,
-                "title": p.title,
-                "difficulty": p.difficulty,
-                "category": p.category,
-                "tags": p.tags or [],
-            }
-            for p in items
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "difficulties": all_difficulties,
-        "categories": all_categories,
-        "tags": all_tags,
-    })
-
-
-@router.get("/programming-problems/{problem_slug}")
-async def get_programming_problem(
-    problem_slug: str,
-    session: AsyncSession = Depends(get_session),
-):
-    """获取编程题详情。"""
-    result = await session.exec(
-        select(ProgrammingProblem).where(
-            ProgrammingProblem.problem_slug == problem_slug
-        )
-    )
-    problem = result.scalars().first()
-
-    if not problem:
-        return HttpResponse.error(code=404, message="编程题不存在")
-
-    return HttpResponse.success(data={
-        "id": problem.problem_slug,
-        "title": problem.title,
-        "difficulty": problem.difficulty,
-        "category": problem.category,
-        "description": problem.description,
-        "input_format": problem.input_format,
-        "output_format": problem.output_format,
-        "examples": problem.examples or [],
-        "hints": problem.hints or [],
-        "code_snippets": problem.code_snippets or {},
-        "test_cases": problem.test_cases or [],
-        "tags": problem.tags or [],
     })
 
 
