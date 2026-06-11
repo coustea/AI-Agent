@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.memory.types import LTM_CATEGORIES
-from app.chat.schemas import TurnRequest
+from app.chat.schemas import Evidence, ToolIntent, TurnRequest
 from app.chat.stages import AttachmentAnalyzer, WebSearchTool
 from app.chat.tools.knowledge import aformat_knowledge_context
 from app.evaluation.service import evaluation_service
@@ -222,3 +222,56 @@ class TutorToolRegistry:
         if not summaries:
             return "附件分析没有得到可用内容。"
         return _compact(f"附件分析原因: {reason or '未提供'}\n" + "\n\n".join(summaries))
+
+
+_TOOL_EVIDENCE_TYPES: dict[str, str] = {
+    "get_learner_profile": "learner_profile",
+    "get_long_term_memory": "long_term_memory",
+    "search_knowledge_base": "knowledge_base",
+    "web_search": "web_search",
+    "get_recent_evaluation": "recent_evaluation",
+    "analyze_attachment": "attachment",
+}
+
+
+class TutorToolExecutor:
+    """Execute model-requested tutor tools and convert outputs to orchestrator evidence."""
+
+    def __init__(self, *, request: TurnRequest, registry: TutorToolRegistry | None = None) -> None:
+        self.request = request
+        self.registry = registry or TutorToolRegistry(request=request)
+
+    def tools(self) -> list[StructuredTool]:
+        return self.registry.tools()
+
+    async def execute(self, intent: ToolIntent, request: TurnRequest | None = None) -> dict[str, Any]:
+        tool_name = str(intent.tool_name or "").strip()
+        payload = intent.payload if isinstance(intent.payload, dict) else {}
+        try:
+            tool = self.registry.by_name(tool_name)
+            result_text = str(await tool.ainvoke(payload)).strip()
+        except Exception as exc:
+            logger.warning("[TutorToolExecutor] tool failed: name=%s error=%s", tool_name, exc)
+            return {
+                "tool_name": tool_name,
+                "status": "failed",
+                "result_text": f"{tool_name} 调用失败: {exc}",
+                "evidence": [],
+            }
+
+        evidence_type = _TOOL_EVIDENCE_TYPES.get(tool_name)
+        evidence = []
+        if evidence_type and result_text:
+            evidence.append(
+                Evidence(
+                    evidence_type=evidence_type,  # type: ignore[arg-type]
+                    summary=result_text,
+                    details={"tool_name": tool_name, "args": payload},
+                ).model_dump()
+            )
+        return {
+            "tool_name": tool_name,
+            "status": "success" if result_text else "ignored",
+            "result_text": result_text,
+            "evidence": evidence,
+        }
