@@ -24,14 +24,20 @@ jwt:
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
   # 文本模型（修改以下三项即可切换本地/云端）
+  # --- 云端：讯飞星火 ---
   # base_url: "https://spark-api-open.xf-yun.com/v1/chat/completions"
   # api_key: "fsUxWflgdQvAuDDKwAau:wyIMVaJXZGgQwFohkdhS"
-  # Spark Pro: generalv3; Spark Max: generalv3.5; Spark Pro-128K: pro-128k
-  # model_name: "generalv3"
+  # model_name: "generalv3"  # Spark Pro: generalv3; Spark Max: generalv3.5; Spark Pro-128K: pro-128k
 
-  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-  api_key: "6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx"
-  model_name: "astron-code-latest"
+  # --- 云端：讯飞 Maas ---
+  # base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+  # api_key: "6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx"
+  # model_name: "astron-code-latest"
+
+  # --- 本地：Qwen3-8B (llama.cpp server, OpenAI 兼容 API) ---
+  base_url: "http://127.0.0.1:10000/v1"
+  api_key: "not-needed"
+  model_name: "Qwen3-8B"
 
   
   # 图片理解模型（独立配置）

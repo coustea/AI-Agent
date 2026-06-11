@@ -440,6 +440,7 @@ async def get_home_dashboard(
 ):
     """Get dynamic homepage view model for the current user."""
     profile = await get_profile_service().get_or_create_profile(user_id=current_user.id)
+    profile = await session.merge(profile)
     snapshot = await _load_usage_snapshot(session, current_user.id)
 
     # Calculate target topic for question recommendation

@@ -9,8 +9,7 @@
 DROP SCHEMA IF EXISTS public CASCADE;
 CREATE SCHEMA public;
 
--- UUID 默认值使用 gen_random_uuid()
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- UUID 默认值使用 gen_random_uuid()（PostgreSQL 13+ 内置，无需扩展）
 
 -- ============================================================
 -- 1. users

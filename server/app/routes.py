@@ -11,7 +11,7 @@ from app.dashboard.api import router as dashboard_router
 from app.evaluation.api import router as evaluation_router
 from app.path.api import router as path_router
 from app.resource.api import router as resource_router
-from app.websockets import router as websocket_router
+from app.ws_routes import router as websocket_router
 
 from app.quiz.api import router as quiz_router
 from app.quiz.wrong_api import router as wrong_router
