@@ -63,3 +63,30 @@ async def test_registry_profile_tool_uses_bound_request(monkeypatch: pytest.Monk
 
     assert "画像: 目标是考研" in result
     assert calls == [(7, "goals", "计算机网络")]
+
+
+@pytest.mark.asyncio
+async def test_registry_profile_tool_returns_fallback_on_service_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.chat import tutor_tools
+    from app.chat.tutor_tools import TutorToolRegistry
+
+    class FailingProfileService:
+        async def get_profile_markdown(
+            self,
+            user_id: int,
+            course_name: str | None = None,
+            dimension: str | None = None,
+        ) -> str:
+            raise RuntimeError("profile db unavailable")
+
+    monkeypatch.setattr(tutor_tools, "get_profile_service", lambda: FailingProfileService())
+
+    request = TurnRequest(user_id=7, session_id="s-1", message="按我的目标讲")
+    registry = TutorToolRegistry(request=request)
+    profile_tool = registry.by_name("get_learner_profile")
+
+    result = await profile_tool.ainvoke({"dimension": "goals"})
+
+    assert result == "暂时无法读取学习者画像。"

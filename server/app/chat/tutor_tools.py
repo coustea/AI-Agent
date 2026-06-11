@@ -19,6 +19,7 @@ from app.profile.service import get_profile_service
 
 logger = get_logger(__name__)
 
+# Keep this Literal explicit so LangChain/Pydantic expose a stable enum schema for tool callers.
 LongTermMemoryCategory = Literal[
     "learning_background",
     "long_term_goals",
@@ -141,11 +142,15 @@ class TutorToolRegistry:
         course_name: str | None = None,
         reason: str = "",
     ) -> str:
-        markdown = await self.profile_service.get_profile_markdown(
-            self.request.user_id,
-            course_name=course_name,
-            dimension=dimension,
-        )
+        try:
+            markdown = await self.profile_service.get_profile_markdown(
+                self.request.user_id,
+                course_name=course_name,
+                dimension=dimension,
+            )
+        except Exception as exc:
+            logger.warning("[TutorToolRegistry] get_learner_profile failed: %s", exc)
+            return "暂时无法读取学习者画像。"
         return _compact(f"画像读取原因: {reason or '未提供'}\n{markdown}")
 
     async def _get_long_term_memory(
@@ -156,7 +161,11 @@ class TutorToolRegistry:
         category_value = str(category or "").strip() or None
         if category_value and category_value not in LTM_CATEGORIES:
             return f"长期记忆分类无效: {category_value}"
-        markdown = await self.memory_service.get_memory_markdown(self.request.user_id, category=category_value)
+        try:
+            markdown = await self.memory_service.get_memory_markdown(self.request.user_id, category=category_value)
+        except Exception as exc:
+            logger.warning("[TutorToolRegistry] get_long_term_memory failed: %s", exc)
+            return "暂时无法读取长期学习记忆。"
         return _compact(f"长期记忆读取原因: {reason or '未提供'}\n{markdown}")
 
     async def _search_knowledge_base(
@@ -166,11 +175,19 @@ class TutorToolRegistry:
         top_k: int = 4,
     ) -> str:
         search_query = f"{course_name} {query}".strip() if course_name else query
-        context, _rows = await aformat_knowledge_context(search_query, top_k=top_k)
+        try:
+            context, _rows = await aformat_knowledge_context(search_query, top_k=top_k)
+        except Exception as exc:
+            logger.warning("[TutorToolRegistry] search_knowledge_base failed: %s", exc)
+            return "本地知识库暂时不可用。"
         return _compact(context or "本地知识库没有检索到相关内容，或知识库尚未正确加载。")
 
     async def _web_search(self, query: str, reason: str = "") -> str:
-        result_text, tool_name = await self.web_search.search(query)
+        try:
+            result_text, tool_name = await self.web_search.search(query)
+        except Exception as exc:
+            logger.warning("[TutorToolRegistry] web_search failed: %s", exc)
+            return "联网搜索暂时不可用。"
         if result_text:
             return _compact(f"搜索渠道: {tool_name or 'web_search'}\n搜索原因: {reason or '未提供'}\n{result_text}")
         return "联网搜索没有返回可用结果。"
@@ -196,7 +213,11 @@ class TutorToolRegistry:
     async def _analyze_attachment(self, reason: str = "") -> str:
         if not self.request.attachments:
             return "本轮没有上传附件。"
-        output = await self.attachment_analyzer.analyze(self.request)
+        try:
+            output = await self.attachment_analyzer.analyze(self.request)
+        except Exception as exc:
+            logger.warning("[TutorToolRegistry] analyze_attachment failed: %s", exc)
+            return "附件分析暂时不可用。"
         summaries = [item.summary for item in output.evidence]
         if not summaries:
             return "附件分析没有得到可用内容。"
