@@ -1,93 +1,159 @@
-"""Chat 模块数据模式定义。
+"""Chat 模块核心数据模式 — 编排请求、证据模型、推理结果、教学图解 Schema。
 
-包含 Agent 内部状态类型、教学图解 Schema 等。
+所有 DTO 集中在此文件，打破原分散文件间的循环依赖。
+按职责分为五组：
+
+  1. 基础消息与证据 — ChatHistoryMessage / Evidence / EvidenceSet / UploadResponse
+  2. 工具意图与最终回答 — ToolIntent / FinalAnswer / ReasoningResult（agent ↔ orchestrator 的合约类型）
+  3. 编排层基础模型 — TurnRequest / ConstraintReport（orchestrator 输入/输出约束）
+  4. 教学图解 Schema — TeachingDiagram 及 6 种 payload（comparison/flowchart/sequence/framework/summary/hierarchy）
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Optional, Union
-from typing_extensions import TypedDict
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from langchain_core.messages import AnyMessage
-from langgraph.graph.message import add_messages
-from app.chat.tools.memory import MemoryReader
 
 
 # ===================================================================
-# Agent 内部状态类型（TypedDict，total=False 兼容 LangGraph 增量更新）
+# 基础消息与证据
 # ===================================================================
 
-class TutorAgentContext(BaseModel):
-    """Agent 初始化上下文 — 由 service 层构造后传入 TutorAgent。
 
-    包含用户身份、系统提示词、只读能力和功能开关。
+class ChatHistoryMessage(BaseModel):
+    """前端传来的历史消息 DTO，与 DB ChatMessage 不直接对应。
+
+    用于 SSE 请求中的 history 字段，转为 LangChain 消息后进入推理 prompt。
     """
+    role: str = Field(..., description="消息角色: user / assistant / system / tool")
+    content: str = Field(..., description="消息文本内容")
+    tool_calls: list[dict] | None = Field(default=None, description="assistant 角色时携带的工具调用要求")
+    tool_call_id: str | None = Field(default=None, description="tool 角色时对应的工具调用 ID")
+    turn_id: int | None = Field(default=None, description="所属对话轮次 ID")
+    message_kind: str | None = Field(default=None, description="assistant_tool_request / tool_result / assistant_answer")
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
+EvidenceType = Literal[
+    "attachment",
+    "web_search",
+    "knowledge_base",
+    "learner_profile",
+    "long_term_memory",
+    "recent_evaluation",
+]
+
+
+class Evidence(BaseModel):
+    """统一证据模型 — 各阶段产出的信息载体。
+
+    每个阶段（附件分析/搜索/工具执行）产出的信息都封装为 Evidence，
+    通过 usable_for_answer / usable_for_diagram 控制下游是否可见。
+    """
+    evidence_type: EvidenceType
+    summary: str  # 人类可读的摘要，嵌入推理 prompt
+    details: dict[str, Any] = Field(default_factory=dict)  # 结构化详情，供持久化和前端展示
+    confidence: float = 0.7
+    freshness: str = "turn"  # "turn" / "session" / "persistent"
+    scope: str = "turn"  # 证据生命周期：turn 级 / session 级
+    usable_for_answer: bool = True  # 是否注入推理 prompt
+    usable_for_diagram: bool = True  # 是否注入图解生成
+
+
+class EvidenceSet(BaseModel):
+    """证据集合 — 编排流水线中各阶段产出的证据汇总容器。
+
+    for_answer() / for_diagram() 分别过滤出对应下游可用的证据。
+    """
+    items: list[Evidence] = Field(default_factory=list)
+
+    def for_answer(self) -> list[Evidence]:
+        return [item for item in self.items if item.usable_for_answer]
+
+    def for_diagram(self) -> list[Evidence]:
+        return [item for item in self.items if item.usable_for_diagram]
+
+    def extend(self, items: list[Evidence]) -> None:
+        self.items.extend(items)
+
+
+class UploadResponse(BaseModel):
+    """文件上传成功后的响应 DTO，包含 URL、类型、大小等信息。"""
+    url: str = Field(..., description="文件访问 URL")
+    file_type: str = Field(default="document", description="image / document")
+    original_name: str = Field(default="", description="原始文件名")
+    size_bytes: int = Field(default=0, ge=0, description="文件大小")
+    storage_key: str | None = Field(default=None, description="存储键")
+    mime_type: str | None = Field(default=None, description="MIME 类型")
+    extension: str | None = Field(default=None, description="文件扩展名")
+
+
+# ===================================================================
+# 工具意图与最终回答
+# ===================================================================
+
+
+class ToolIntent(BaseModel):
+    """Agent 推理产出的「需要调工具」信号 — 由 orchestrator 执行后回填证据。
+
+    tool_name: web_search / learner_profile / long_term_memory
+    payload: 工具所需参数（如搜索 query、画像维度等）
+    """
+    tool_name: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class FinalAnswer(BaseModel):
+    """Agent 推理产出的「直接回答」信号 — 推理循环终止条件。"""
+    kind: Literal["final_answer"] = "final_answer"
+    answer: str
+
+
+ReasoningResult = ToolIntent | FinalAnswer  # Agent.reason() 的返回类型联合
+
+
+# ===================================================================
+# 编排层基础模型
+# ===================================================================
+
+class TurnRequest(BaseModel):
+    """一轮对话的编排请求 — 由 service.py 构建，传入 orchestrator.run()。
+
+    各标志位控制流水线是否启用对应阶段：
+      attachment_analysis_enabled → 触发附件分析
+      search_enabled              → 触发搜索
+      diagram_enabled             → 触发教学图解
+    """
     user_id: int
     session_id: str
-    system_prompt: str
-    session_summary_context: str = ""
-    file_context: str = ""
-    attachment_analysis_context: str = ""
-    attachment_analysis: dict[str, Any] = Field(default_factory=dict)
+    message: str
     attachments: list[str] = Field(default_factory=list)
-    enable_web_search: bool = False
-    need_teaching_diagram: bool = False
-    diagram_mode: Literal["requested", "off"] = "off"
-    preferred_diagram_type: Optional["TeachingDiagramType"] = None
-    generate_video: bool = False
-    resource_mode: str = "none"
-    evaluation_summary_context: str = ""
-    memory_reader: MemoryReader | None = None
+    attachment_analysis_enabled: bool = False
+    search_enabled: bool = False
+    diagram_enabled: bool = False
+    history: list[ChatHistoryMessage] = Field(default_factory=list)
+    uploaded_file_ids_by_url: dict[str, int] = Field(default_factory=dict)  # URL → DB file_id 映射
+    history_limit: int = 8  # 截取最近 N 条历史避免 token 溢出
 
 
-class TutorState(TypedDict, total=False):
-    """LangGraph 运行状态 — 精简版。
+class ConstraintReport(BaseModel):
+    """推理循环约束报告 — 记录工具执行情况，防止重复调用和无限循环。
 
-    移除了 planner/compile_plan/execute_step/replan 相关的复杂状态字段。
-    所有字段均为可选，支持 LangGraph 增量更新。
+    由 orchestrator 在推理循环中逐步填充，最终随 TurnRunResult 返回。
     """
-
-    # ---- 用户身份与附件 ----
-    user_id: int  # 用户ID
-    session_id: str  # 会话ID
-    attachments: Optional[list[str]]  # 附件URL列表
-    need_teaching_diagram: bool  # 是否生成教学图解
-    enable_web_search: bool  # 是否启用联网搜索
-    teaching_diagram: Optional[dict[str, Any]]  # 生成的教学图解数据
-    teaching_diagram_error: Optional[str]  # 教学图解生成错误信息
-    diagram_type: Optional["TeachingDiagramType"]  # 教学图解类型
-
-    # ---- 路由与执行模式 ----
-    route: str  # 路由结果
-    execution_mode: str  # 执行模式
-    summary_type: str  # 总结类型
-    search_result: str  # 搜索节点返回的搜索结果
-
-    # ---- 上下文信息 ----
-    retrieved_profile_context: str  # Agent 本轮按需读取的用户画像，只读
-    retrieved_memory_context: str  # Agent 本轮按需读取的跨会话学习事实，只读
-    session_summary_context: str  # 服务层注入的旧会话摘要，只读
-    file_context: str  # 文件上下文
-    attachment_analysis_context: str  # 附件分析上下文
-    attachment_analysis: dict[str, Any]  # 附件分析结果
-
-    # ---- Prompt 模板 ----
-    system_prompt: str  # 系统提示词
-
-    # ---- 对话消息 ----
-    messages: Annotated[list[AnyMessage], add_messages]  # 消息列表（支持增量追加）
-
-    # ---- 终止信息 ----
-    answer_text: str  # 最终回答文本
-    termination_reason: str  # 终止原因
+    executed_tools: list[str] = Field(default_factory=list)
+    failed_tools: list[str] = Field(default_factory=list)
+    skipped_tools: list[str] = Field(default_factory=list)
+    max_steps_reached: bool = False
+    unresolved_questions: list[str] = Field(default_factory=list)
 
 
 # ===================================================================
 # 教学图解 Schema（6 类图型：comparison / flowchart / sequence / framework / summary / hierarchy）
+#
+# 数据流：TeachingDiagramGenerator → LLM ainvoke_json(TeachingDiagram) → 前端渲染
+# 每个 Payload 使用 extra="forbid" 严格约束字段，防止 LLM 输出多余内容。
+# TeachingDiagram.validate_payload_type 确保 graph_type 与 visual_content 类型一致。
 # ===================================================================
 
 TeachingDiagramType = Literal["comparison", "flowchart", "sequence", "framework", "summary", "hierarchy"]
