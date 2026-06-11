@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Digital-human realtime bridge for the shared TutorAgent chat pipeline.
+"""Digital-human realtime bridge for the shared chat tutoring pipeline.
 
 The bridge owns WebSocket, ASR and avatar playback concerns only. Tutoring
-decisions run through ``app.chat.service`` and its stateless ``TutorAgent``.
+decisions run through ``app.chat.service`` and its transcript-first orchestrator.
 """
 
 import asyncio
@@ -665,7 +665,7 @@ class RealtimeBridge:
     ):
         """Run one completed turn through chat service and avatar playback."""
         from app.chat.service import get_chat_usecases
-        from app.chat.request import ChatHistoryMessage
+        from app.chat.schemas import ChatHistoryMessage
 
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()

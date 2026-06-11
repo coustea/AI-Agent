@@ -1,6 +1,12 @@
-"""TutorAgent 对话轮次的运行时准备辅助函数。
+"""Chat 对话轮次的运行时辅助函数。
 
-为 TutorAgent 对话轮次准备运行时状态和上下文。
+负责处理附件分类、历史消息转换，以及构造持久化所需的用户消息记录。
+图片 URL 会追加 [Attached Images:] 标记供模型理解。
+
+三个核心函数的调用关系：
+  - _classify_attachments     — 附件分类，被 agent.py 和 stages.py 调用
+  - build_user_message_record — 构建用户消息记录，被 service.py 调用做持久化
+  - history_to_langchain_messages — 历史消息转为 LangChain 格式，被 agent.py 调用进推理 prompt
 """
 
 from __future__ import annotations
@@ -10,8 +16,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
-from app.chat.request import ChatHistoryMessage
-from app.chat.schemas import TutorAgentContext, TutorState
+from app.chat.schemas import ChatHistoryMessage
 
 # 支持的图片扩展名集合
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -80,46 +85,29 @@ def build_user_message_record(
     )
 
 
-def prepare_tutor_state(context: TutorAgentContext, history: list[ChatHistoryMessage]) -> TutorState:
-    """根据已初始化的代理上下文和提供的历史记录构建 LangGraph 状态。"""
-    messages = history_to_langchain_messages(history)
-    attachment_context = (
-        context.attachment_analysis_context
-        or str((context.attachment_analysis or {}).get("analysis_context", "")).strip()
-    )
-    return {
-        "user_id": context.user_id,
-        "session_id": context.session_id,
-        "attachments": list(context.attachments),
-        "resource_mode": context.resource_mode,
-        "enable_web_search": context.enable_web_search,
-        "need_teaching_diagram": context.need_teaching_diagram,
-        "teaching_diagram": None,
-        "teaching_diagram_error": None,
-        "diagram_type": context.preferred_diagram_type,
-        "route": "",
-        "execution_mode": "",
-        "retrieved_profile_context": "",
-        "retrieved_memory_context": "",
-        "session_summary_context": context.session_summary_context,
-        "file_context": context.file_context,
-        "attachment_analysis_context": attachment_context,
-        "attachment_analysis": context.attachment_analysis,
-        "system_prompt": context.system_prompt,
-        "messages": messages,
-        "answer_text": "",
-        "termination_reason": "",
-    }
-
-
 def history_to_langchain_messages(history: list[ChatHistoryMessage]) -> list[AnyMessage]:
+    def _normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
+        normalized: list[dict] = []
+        for tool_call in tool_calls or []:
+            if not isinstance(tool_call, dict):
+                continue
+            normalized.append(
+                {
+                    "id": str(tool_call.get("id", "")),
+                    "name": str(tool_call.get("name", "")),
+                    "args": tool_call.get("args", {}) if isinstance(tool_call.get("args", {}), dict) else {},
+                    "type": "tool_call",
+                }
+            )
+        return normalized
+
     messages: list[AnyMessage] = []
     for item in history:
         content = (item.content or "").strip()
         if item.role == "user" and content:
             messages.append(HumanMessage(content=content))
         elif item.role in {"assistant", "ai"} and (content or item.tool_calls):
-            messages.append(AIMessage(content=content, tool_calls=item.tool_calls or []))
+            messages.append(AIMessage(content=content, tool_calls=_normalize_tool_calls(item.tool_calls)))
         elif item.role == "system" and content:
             messages.append(SystemMessage(content=content))
         elif item.role == "tool" and item.tool_call_id:

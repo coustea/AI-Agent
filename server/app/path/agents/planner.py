@@ -7,7 +7,7 @@ from loguru import logger
 
 from app.chat.tools.search import duckduckgo_search, serp_search, spark_search, tavily_search
 from app.infra.llm import get_llm
-from app.path.prompt_manager import path_prompts
+from app.infra.prompts import prompts
 from app.path.schemas import AgentLearningPathPlan, AgentPathNode, AgentStage, CreateLearningPathRequest
 
 ProgressCallback = Callable[[str, int, str], Awaitable[None]]
@@ -48,7 +48,7 @@ class PathPlannerAgent:
             spark_search,
         ]
         self.max_search_tool_calls = 3
-        self.system_prompt = path_prompts.planner_system()
+        self.system_prompt = prompts.get("path").get("planner_system")
         self.generate_graph = self._build_generate_graph()
 
     def _build_generate_graph(self):
@@ -74,7 +74,7 @@ class PathPlannerAgent:
                 profile_md = json.dumps(state["profile"], ensure_ascii=False, indent=2)
             request_context = _format_request_context(state["request"])
             search_context = state.get("search_context", "")
-            sys_msg = SystemMessage(content=path_prompts.planner_system())
+            sys_msg = SystemMessage(content=prompts.get("path").get("planner_system"))
             human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n学习者画像:\n{profile_md}")
 
             result = await self.llm.ainvoke_json(AgentLearningPathPlan, [sys_msg, human_msg])
@@ -190,9 +190,10 @@ def _build_search_messages(
         else "未提供"
     )
     return [
-        SystemMessage(content=path_prompts.search_research_system()),
+        SystemMessage(content=prompts.get("path").get("search_research_system")),
         HumanMessage(
-            content=path_prompts.render_search_research_user(
+            content=prompts.get("path").render(
+                "search_research_user",
                 request_context=_format_request_context(request),
                 profile_context=profile_context,
             )

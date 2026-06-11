@@ -1,4 +1,13 @@
-"""Local Chroma knowledge-base retrieval helpers."""
+"""本地 Chroma 知识库检索 — 混合 dense + sparse 双路召回。
+
+检索策略：
+  1. Dense 路径：Chroma 向量相似度搜索(Ollama embeddings)，缓存 query embedding 避免重复计算
+  2. Sparse 路径：内存 BM25 索引(从 Chroma collection 加载)，支持中文分词
+  3. 合并：merge_ranked_results 按 (来源+chunk_index) 去重，综合 dense rank、sparse rank、
+     词汇命中数加权排序，返回 top_k 结果
+
+query rewrite：对短查询用领域规则扩展同义词(如"tcp三次握手"→[TCP,三次握手,连接建立])
+"""
 
 from __future__ import annotations
 

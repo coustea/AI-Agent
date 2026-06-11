@@ -1,6 +1,8 @@
-"""图片分析服务：Spark OCR + GLM-4V 双模式。
+"""图片分析服务 — Spark OCR + GLM-4V 双模式，供 chat/avatar 共享。
 
-供 chat、avatar 等需要图片理解的模块共享。
+降级策略：优先使用讯飞 Spark 图片理解(WebSocket 实时流)，
+  Spark 不可用(凭据缺失/调用失败)时降级到 GLM-4V 视觉模型。
+Spark 鉴权：HMAC-SHA256 签名 + Base64 编码，按讯飞 WebSocket API 规范构造 URL。
 """
 
 from __future__ import annotations

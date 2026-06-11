@@ -13,19 +13,8 @@ from app.path.api import router as path_router
 from app.resource.api import router as resource_router
 from app.websockets import router as websocket_router
 
-try:
-    from app.quiz.api import router as quiz_router
-except ModuleNotFoundError as exc:
-    if exc.name != "app.quiz":
-        raise
-    quiz_router = None
-
-try:
-    from app.quiz.wrong_api import router as wrong_router
-except ModuleNotFoundError as exc:
-    if exc.name != "app.quiz":
-        raise
-    wrong_router = None
+from app.quiz.api import router as quiz_router
+from app.quiz.wrong_api import router as wrong_router
 
 
 def install_routes(app: FastAPI) -> None:
@@ -36,8 +25,6 @@ def install_routes(app: FastAPI) -> None:
     app.include_router(path_router, prefix="/api/v1/ai", tags=["path"])
     app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
     app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
-    if quiz_router is not None:
-        app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
-    if wrong_router is not None:
-        app.include_router(wrong_router, prefix="/api/v1/ai", tags=["wrong-questions"])
+    app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
+    app.include_router(wrong_router, prefix="/api/v1/ai", tags=["wrong-questions"])
     app.include_router(websocket_router)

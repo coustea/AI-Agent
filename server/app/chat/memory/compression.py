@@ -1,11 +1,18 @@
-"""Chat session compression."""
+"""Chat 会话压缩 — 将旧消息压缩为时序摘要块。
+
+触发条件：token 数 ≥ min_tokens 或消息数 ≥ min_messages（满足其一即可）。
+压缩策略：保留最近 keep_recent 条原始消息，其余通过 LLM 生成 Markdown 摘要。
+LLM 失败时降级为 extract_fallback_summary_markdown（取前 N 行拼接）。
+压缩后物理删除已摘要的旧消息，重置 summary_token_count 计数器。
+"""
 
 from __future__ import annotations
 
+from langchain_core.messages import HumanMessage, SystemMessage
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.chat.memory.prompt_manager import chat_memory_prompts
+from app.infra.prompts import prompts
 from app.chat.memory.types import DIALOGUE_ROLES, extract_fallback_summary_markdown
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
@@ -100,8 +107,7 @@ class ChatSessionCompressor:
 
         summary_markdown = None
         try:
-            prompt = chat_memory_prompts.render_compression(dialogue_text=chat_text[:5000])
-            from langchain_core.messages import HumanMessage, SystemMessage
+            prompt = prompts.get("chat_memory").render("compression", dialogue_text=chat_text[:5000])
 
             resp = await self.llm.ainvoke(
                 [

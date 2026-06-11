@@ -8,7 +8,7 @@ import re
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import salvage_json_from_llm
-from app.resource.prompt_manager import resource_prompts
+from app.infra.prompts import prompts
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -109,7 +109,7 @@ class ReviewAgent(BaseResourceAgent):
                 progress=25,
             )
 
-        prompt = resource_prompts.get("review")
+        prompt = prompts.get("resource").get("review")
         findings_text = json.dumps(findings, ensure_ascii=False, indent=2)
         input_text = f"{self._build_review_input(state)}\n\n## 规则审核发现的可疑点\n{findings_text}"
 

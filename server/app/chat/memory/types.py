@@ -1,4 +1,15 @@
-"""Chat-private memory types and helpers."""
+"""Chat 私有记忆类型与辅助工具。
+
+核心常量：
+  DIALOGUE_ROLES — 压缩时只保留 user/assistant 对话
+  MESSAGE_EXPIRE_DAYS — 短期消息过期天数（默认 7 天）
+  LTM_CATEGORIES / LTM_CATEGORY_NAMES — 长期记忆的 7 个分类及中文名
+
+辅助函数：
+  now() — UTC 时间（数据库写入统一用 UTC）
+  estimate_token_count() — 粗略估算（max(len//4, word_count)），用于触发阈值判断
+  has_stable_signal() — 正则检测文本是否包含值得持久化的学习特征
+"""
 
 from __future__ import annotations
 

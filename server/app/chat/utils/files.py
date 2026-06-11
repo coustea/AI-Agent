@@ -1,6 +1,11 @@
 """文件服务：上传路径解析、文件内容读取、文档分析。
 
 供 chat、avatar 等需要处理用户上传文件的模块共享。
+
+安全策略：
+  resolve_uploaded_path — 校验路径不包含 ..，resolve() 后必须以 user_dir 为前缀
+  read_uploaded_file_content — 按 max_content_chars 截断，防止超大文件撑爆内存
+  pymupdf / python-docx 采用延迟导入(lazy import)，因为它们是可选重依赖
 """
 
 from __future__ import annotations

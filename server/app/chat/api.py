@@ -1,6 +1,25 @@
 """聊天 HTTP 路由。
 
-聊天模块的 HTTP 路由定义，包含对话流、文件上传、会话管理、画像等端点。
+所有端点挂载在 /api/v1/ai/chat/ 下：
+  POST /chat/stream     — SSE 流式对话主入口，前端核心调用
+  POST /chat/upload     — 文件上传（预上传场景）
+  GET  /chat/uploads/…  — 读取上传文件（带权限校验）
+  GET  /chat/files/…    — 读取聊天文件（如图解 PNG）
+  GET  /chat/sessions   — 会话列表
+  POST /chat/sessions   — 创建会话
+  DELETE /chat/sessions/{id} — 软删除（归档）会话
+  PATCH /chat/sessions/{id}  — 更新会话标题
+  GET  /chat/history    — 获取聊天历史
+
+画像端点（挂载在同一路由器下）：
+  GET  /profile                — 获取完整画像
+  GET  /profile/score          — 获取画像评分
+  GET  /profile/onboarding     — 获取基础信息
+  PATCH /profile/onboarding    — 更新首次登录数据
+  PATCH /profile/tutoring-update — 应用辅导产生的画像增量
+
+学校搜索（onboarding 流程需要）：
+  GET  /schools/search
 """
 
 from __future__ import annotations
@@ -10,18 +29,20 @@ from typing import TYPE_CHECKING, AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
-from app.infra.database import get_session
-from app.infra.logging import get_logger
-from app.infra.models import User
-from app.chat.request import ChatHistoryMessage
+from app.chat.schemas import ChatHistoryMessage
 from app.chat.runtime import latest_user_message
 from app.chat.service import get_chat_usecases
+from app.config import CHAT_DIR
+from app.infra.database import engine, get_session
+from app.infra.logging import get_logger
+from app.infra.models import School, User
+from app.infra.response import HttpResponse
 from app.profile import BaseInfoData, OnboardingResponse, OnboardingUpdate, StudentProfileData, TutoringProfileUpdate
 from app.profile.service import get_profile_service
-from app.infra.response import HttpResponse
 
 if TYPE_CHECKING:
     from app.chat.memory.service import ChatMemoryService
@@ -254,8 +275,6 @@ async def get_chat_file(
     Returns:
         文件响应。
     """
-    from app.config import CHAT_DIR
-
     # 权限校验：只允许所有者访问
     if current_user.id != owner_id:
         return HttpResponse.error(code=403, message="无权访问此文件")
@@ -521,12 +540,6 @@ async def _resolve_school_level(school_name: str | None) -> str | None:
     if not school_name:
         return None
 
-    from sqlalchemy import select
-    from sqlmodel.ext.asyncio.session import AsyncSession
-
-    from app.infra.database import engine
-    from app.infra.models import School
-
     async with AsyncSession(engine, expire_on_commit=False) as session:
         stmt = select(School).where(School.name == school_name).limit(1)
         school = (await session.exec(stmt)).scalars().first()
@@ -548,12 +561,6 @@ async def search_schools(
     Returns:
         学校列表，包含 id、name、level
     """
-    from sqlalchemy import select
-    from sqlmodel.ext.asyncio.session import AsyncSession
-
-    from app.infra.database import engine
-    from app.infra.models import School
-
     async with AsyncSession(engine, expire_on_commit=False) as session:
         if keyword:
             stmt = (

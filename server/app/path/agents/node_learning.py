@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from app.infra.llm import get_llm
-from app.path.prompt_manager import path_prompts
+from app.infra.prompts import prompts
+from app.path.schemas import AgentQuestionSet
 
 
 class NodeLearningAgent:
@@ -26,7 +27,8 @@ class NodeLearningAgent:
         if weak_knowledge_points:
             weak_points_section = f"重点围绕这些薄弱知识点强化：{', '.join(weak_knowledge_points)}"
         profile_section = f"学习者画像:\n{profile_markdown[:2000]}" if profile_markdown else ""
-        prompt = path_prompts.render_tutorial(
+        prompt = prompts.get("path").render(
+            "tutorial",
             path_goal=path_goal,
             node_title=node_title,
             mastery_target=mastery_target,
@@ -53,7 +55,8 @@ class NodeLearningAgent:
         tutorial_summary: str,
         round_no: int,
     ) -> list[dict[str, Any]]:
-        prompt = path_prompts.render_question_generation(
+        prompt = prompts.get("path").render(
+            "question_generation",
             path_goal=path_goal,
             node_title=node_title,
             mastery_target=mastery_target,
@@ -61,7 +64,7 @@ class NodeLearningAgent:
             tutorial_summary=tutorial_summary,
             round_no=round_no,
         )
-        result = await self.llm.ainvoke_json(path_prompts.question_schema(), prompt)
+        result = await self.llm.ainvoke_json(AgentQuestionSet, prompt)
         questions = result.questions if hasattr(result, "questions") else []
         normalized: list[dict[str, Any]] = []
         for item in questions:

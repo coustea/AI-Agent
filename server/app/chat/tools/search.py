@@ -1,4 +1,8 @@
-"""搜索工具封装。"""
+"""搜索工具封装 — DuckDuckGo / Tavily / SerpApi / 讯飞 四路搜索。
+
+WebSearchTool 会按既定顺序回退搜索引擎。
+_redact_url_query_secrets 脱敏异常中的 API key，防止泄露到日志或响应。
+"""
 
 from __future__ import annotations
 

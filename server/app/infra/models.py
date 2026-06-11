@@ -94,7 +94,15 @@ class School(SQLModel, table=True):
 class ChatSession(SQLModel, table=True):
     """会话表 — 管理多会话隔离，每个用户可以有多个独立会话"""
     __tablename__ = "chat_sessions"
-    __table_args__ = ()
+    __table_args__ = (
+        Index(
+            "ix_chat_sessions_user_module_archived_updated",
+            "user_id",
+            "module",
+            "is_archived",
+            text("updated_at DESC"),
+        ),
+    )
 
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
@@ -116,16 +124,44 @@ class ChatSession(SQLModel, table=True):
     summary_token_count: int = Field(default=0)
 
 
+class ChatTurn(SQLModel, table=True):
+    """聊天轮次表 — 记录一次用户输入到助手完成响应的完整执行。"""
+    __tablename__ = "chat_turns"
+    __table_args__ = (
+        UniqueConstraint("session_id", "turn_index", name="uq_chat_turns_session_turn_index"),
+        Index("ix_chat_turns_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_chat_turns_user_session_status", "user_id", "session_id", "status"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )
+    module: str = Field(default="mentor", index=True)
+    turn_index: int = Field(default=1, index=True)
+    status: str = Field(default="running", max_length=32, index=True)
+    route: str = Field(default="default", max_length=50, index=True)
+    execution_mode: str = Field(default="default", max_length=50, index=True)
+    has_attachments: bool = Field(default=False)
+    used_web_search: bool = Field(default=False)
+    used_teaching_diagram: bool = Field(default=False)
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
+    completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True), index=True))
+
+
 class ChatMessage(SQLModel, table=True):
     """聊天消息表 — 保存用户与助手的原始聊天记录"""
     __tablename__ = "chat_messages"
     __table_args__ = (
         Index("ix_chat_messages_user_session_module_created_at", "user_id", "session_id", "module", "created_at"),
+        Index("ix_chat_messages_session_turn_created_at", "session_id", "turn_id", "created_at"),
         Index("ix_chat_messages_attachments", "attachments", postgresql_using="gin"),
-        Index("ix_chat_messages_tool_calls", "tool_calls", postgresql_using="gin"),
         Index("ix_chat_messages_knowledge_sources", "knowledge_sources", postgresql_using="gin"),
-        Index("ix_chat_messages_teaching_diagram", "teaching_diagram", postgresql_using="gin"),
-        Index("ix_chat_messages_usage_metadata", "usage_metadata", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -133,11 +169,14 @@ class ChatMessage(SQLModel, table=True):
     session_id: str = Field(
         sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
     )  # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
+    turn_id: int | None = Field(default=None, index=True)
     module: str = Field(default="mentor", index=True)
     role: str  # 消息角色："user" | "assistant" | "system" | "tool"
+    message_kind: str | None = Field(default=None, max_length=50, index=True)
     content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
     attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
+    tool_call_id: str | None = Field(default=None, max_length=120, index=True)
     knowledge_sources: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
     teaching_diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 教学图解数据
     usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 记录该条消息消耗的精准 Token
@@ -155,7 +194,26 @@ class ChatSessionSummaryBlock(SQLModel, table=True):
     """会话摘要块表 — 按时间顺序保存已压缩会话块。"""
     __tablename__ = "chat_session_summary_blocks"
     __table_args__ = (
-        Index("ix_chat_session_summary_blocks_user_session_created_at", "user_id", "session_id", "created_at"),
+        UniqueConstraint(
+            "session_id",
+            "module",
+            "block_index",
+            name="uq_chat_session_summary_blocks_session_module_block",
+        ),
+        Index(
+            "ix_chat_session_summary_blocks_user_session_module_created_at",
+            "user_id",
+            "session_id",
+            "module",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_chat_session_summary_blocks_user_session_module_block",
+            "user_id",
+            "session_id",
+            "module",
+            text("block_index DESC"),
+        ),
         Index("ix_chat_session_summary_blocks_topics", "topics", postgresql_using="gin"),
         Index("ix_chat_session_summary_blocks_keywords", "keywords", postgresql_using="gin"),
     )
@@ -227,6 +285,144 @@ class ChatLongTermMemory(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+    )
+
+
+class ChatAttachmentAnalysis(SQLModel, table=True):
+    """附件分析结果表。"""
+    __tablename__ = "chat_attachment_analyses"
+    __table_args__ = (
+        Index("ix_chat_attachment_analyses_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_chat_attachment_analyses_message_id", "message_id"),
+        Index("ix_chat_attachment_analyses_file_id", "file_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )
+    message_id: int | None = Field(default=None, index=True)
+    file_id: int | None = Field(default=None, index=True)
+    file_name: str | None = Field(default=None, max_length=255)
+    file_url: str | None = Field(default=None, max_length=1000)
+    turn_id: int | None = Field(default=None, index=True)
+    module: str = Field(default="mentor", index=True)
+    analysis_type: str = Field(max_length=50, index=True)
+    summary_text: str = Field(sa_column=Column(Text))
+    extracted_text: str | None = Field(default=None, sa_column=Column(Text))
+    structured_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
+
+
+class ChatUploadedFile(SQLModel, table=True):
+    """聊天上传文件元数据表。"""
+    __tablename__ = "chat_uploaded_files"
+    __table_args__ = (
+        Index("ix_chat_uploaded_files_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_chat_uploaded_files_storage_key", "storage_key"),
+        Index("ix_chat_uploaded_files_file_kind", "file_kind"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )
+    module: str = Field(default="mentor", index=True)
+    storage_url: str = Field(max_length=1000)
+    storage_key: str | None = Field(default=None, max_length=500)
+    original_name: str = Field(max_length=255)
+    file_kind: str = Field(max_length=32, index=True)
+    mime_type: str | None = Field(default=None, max_length=120)
+    extension: str | None = Field(default=None, max_length=20)
+    size_bytes: int = Field(default=0, ge=0)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
+
+
+class ChatMessageAttachment(SQLModel, table=True):
+    """消息与附件关联表。"""
+    __tablename__ = "chat_message_attachments"
+    __table_args__ = (
+        Index("ix_chat_message_attachments_message_id", "message_id"),
+        Index("ix_chat_message_attachments_file_id", "file_id"),
+        Index("ix_chat_message_attachments_turn_id", "turn_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )
+    message_id: int = Field(index=True)
+    file_id: int = Field(index=True)
+    turn_id: int | None = Field(default=None, index=True)
+    module: str = Field(default="mentor", index=True)
+    attachment_order: int = Field(default=0, ge=0)
+    attachment_role: str = Field(default="input", max_length=32)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
+
+
+class ChatToolInvocation(SQLModel, table=True):
+    """工具调用记录表。"""
+    __tablename__ = "chat_tool_invocations"
+    __table_args__ = (
+        Index("ix_chat_tool_invocations_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_chat_tool_invocations_assistant_message_id", "assistant_message_id"),
+        Index("ix_chat_tool_invocations_tool_message_id", "tool_message_id"),
+        Index("ix_chat_tool_invocations_tool_call_id", "tool_call_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )
+    turn_id: int | None = Field(default=None, index=True)
+    module: str = Field(default="mentor", index=True)
+    assistant_message_id: int | None = Field(default=None, index=True)
+    tool_message_id: int | None = Field(default=None, index=True)
+    tool_call_id: str = Field(max_length=120, index=True)
+    tool_name: str = Field(max_length=120, index=True)
+    arguments_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    result_text: str | None = Field(default=None, sa_column=Column(Text))
+    result_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    status: str = Field(default="success", max_length=32, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
+
+
+class ChatTurnTranscript(SQLModel, table=True):
+    """对话轮 transcript 源数据表。"""
+    __tablename__ = "chat_turn_transcripts"
+    __table_args__ = (
+        UniqueConstraint("turn_id", name="uq_chat_turn_transcripts_turn_id"),
+        Index("ix_chat_turn_transcripts_turn_id", "turn_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    turn_id: int = Field(index=True)
+    transcript_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
+    final_answer: str = Field(default="", sa_column=Column(Text))
+    constraint_report_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -765,8 +961,14 @@ class WrongQuestion(SQLModel, table=True):
 REGISTERED_MODELS = (
     ActiveToken,
     ChatSession,
+    ChatTurn,
     ChatMessage,
     ChatSessionSummaryBlock,
+    ChatAttachmentAnalysis,
+    ChatUploadedFile,
+    ChatMessageAttachment,
+    ChatToolInvocation,
+    ChatTurnTranscript,
     ChatLongTermMemory,
     GlobalProfile,
     CourseProfile,

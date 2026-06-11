@@ -22,7 +22,7 @@ from app.profile.types import (
     make_default_profile_json,
     make_default_score_json,
 )
-from app.profile.prompt_manager import profile_prompts
+from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
 
@@ -255,7 +255,8 @@ class ProfileService:
         global_patch: dict[str, Any] = {}
         course_patch: dict[str, Any] = {}
         try:
-            prompt = profile_prompts.render_profile(
+            prompt = prompts.get("profile").render(
+                "profile",
                 profile_json=json.dumps(profile_json, ensure_ascii=False),
                 recent_dialogue=recent_dialogue,
                 long_term_memory=long_term_memory,
@@ -279,7 +280,8 @@ class ProfileService:
         if not profile_json:
             return None
         try:
-            prompt = profile_prompts.render_score(
+            prompt = prompts.get("profile").render(
+                "score",
                 profile_text=json.dumps(profile_json, ensure_ascii=False),
             )
             resp = await self.llm.ainvoke_json(
@@ -363,7 +365,8 @@ class ProfileService:
 
     async def _infer_onboarding_patch(self, base_info: dict[str, Any]) -> dict[str, Any]:
         try:
-            prompt = profile_prompts.render_onboarding(
+            prompt = prompts.get("profile").render(
+                "onboarding",
                 onboarding_data=json.dumps(base_info, ensure_ascii=False),
             )
             resp = await self.llm.ainvoke_json(

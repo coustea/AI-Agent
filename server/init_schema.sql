@@ -71,19 +71,60 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_id ON chat_sessions (user_id);
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_module ON chat_sessions (module);
+CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_module_archived_updated
+    ON chat_sessions (user_id, module, is_archived, updated_at DESC);
 
 -- ============================================================
--- 5. chat_messages
+-- 5. chat_turns
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_turns (
+    id                    SERIAL          PRIMARY KEY,
+    user_id               INTEGER         NOT NULL,
+    session_id            UUID            REFERENCES chat_sessions(id),
+    module                VARCHAR         NOT NULL DEFAULT 'mentor',
+    turn_index            INTEGER         NOT NULL DEFAULT 1,
+    status                VARCHAR(32)     NOT NULL DEFAULT 'running',
+    route                 VARCHAR(50)     NOT NULL DEFAULT 'default',
+    execution_mode        VARCHAR(50)     NOT NULL DEFAULT 'default',
+    has_attachments       BOOLEAN         NOT NULL DEFAULT FALSE,
+    used_web_search       BOOLEAN         NOT NULL DEFAULT FALSE,
+    used_teaching_diagram BOOLEAN         NOT NULL DEFAULT FALSE,
+    error_message         TEXT,
+    created_at            TIMESTAMPTZ     DEFAULT NOW(),
+    completed_at          TIMESTAMPTZ,
+    CONSTRAINT uq_chat_turns_session_turn_index UNIQUE (session_id, turn_index)
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_turns_user_id ON chat_turns (user_id);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_session_id ON chat_turns (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_module ON chat_turns (module);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_turn_index ON chat_turns (turn_index);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_status ON chat_turns (status);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_route ON chat_turns (route);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_execution_mode ON chat_turns (execution_mode);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_created_at ON chat_turns (created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_completed_at ON chat_turns (completed_at);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_user_session_created_at
+    ON chat_turns (user_id, session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_chat_turns_user_session_status
+    ON chat_turns (user_id, session_id, status);
+
+-- ============================================================
+-- 6. chat_messages
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_messages (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
     session_id          UUID            REFERENCES chat_sessions(id),
+    turn_id             INTEGER,
     module              VARCHAR         NOT NULL DEFAULT 'mentor',
     role                VARCHAR         NOT NULL,
+    message_kind        VARCHAR(50),
     content             TEXT            NOT NULL,
     attachments         JSONB,
     tool_calls          JSONB,
+    tool_call_id        VARCHAR(120),
+    knowledge_sources   JSONB,
     teaching_diagram    JSONB,
     usage_metadata      JSONB,
     created_at          TIMESTAMPTZ     DEFAULT NOW()
@@ -91,25 +132,45 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS ix_chat_messages_user_id ON chat_messages (user_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_session_id ON chat_messages (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_turn_id ON chat_messages (turn_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_module ON chat_messages (module);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_message_kind ON chat_messages (message_kind);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_tool_call_id ON chat_messages (tool_call_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_created_at ON chat_messages (created_at);
 
 -- Composite index for common query pattern
 CREATE INDEX IF NOT EXISTS ix_chat_messages_user_session_module_created_at
     ON chat_messages (user_id, session_id, module, created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_session_turn_created_at
+    ON chat_messages (session_id, turn_id, created_at);
 
 -- GIN indexes for JSONB columns
 CREATE INDEX IF NOT EXISTS ix_chat_messages_attachments
     ON chat_messages USING GIN (attachments);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_tool_calls
-    ON chat_messages USING GIN (tool_calls);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_teaching_diagram
-    ON chat_messages USING GIN (teaching_diagram);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_usage_metadata
-    ON chat_messages USING GIN (usage_metadata);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_knowledge_sources
+    ON chat_messages USING GIN (knowledge_sources);
 
 -- ============================================================
--- 6. chat_session_summary_blocks
+-- 6b. chat_turn_transcripts
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_turn_transcripts (
+    id                    SERIAL          PRIMARY KEY,
+    turn_id               INTEGER         NOT NULL,
+    transcript_json       JSONB           NOT NULL DEFAULT '{}'::jsonb,
+    final_answer          TEXT            NOT NULL DEFAULT '',
+    constraint_report_json JSONB,
+    created_at            TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ     DEFAULT NOW(),
+    CONSTRAINT uq_chat_turn_transcripts_turn_id UNIQUE (turn_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_turn_transcripts_turn_id
+    ON chat_turn_transcripts (turn_id);
+CREATE INDEX IF NOT EXISTS ix_chat_turn_transcripts_created_at
+    ON chat_turn_transcripts (created_at);
+
+-- ============================================================
+-- 7. chat_session_summary_blocks
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_session_summary_blocks (
     id                          SERIAL          PRIMARY KEY,
@@ -128,7 +189,9 @@ CREATE TABLE IF NOT EXISTS chat_session_summary_blocks (
     topics                      JSONB,
     keywords                    JSONB,
     created_at                  TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at                  TIMESTAMPTZ     DEFAULT NOW()
+    updated_at                  TIMESTAMPTZ     DEFAULT NOW(),
+    CONSTRAINT uq_chat_session_summary_blocks_session_module_block
+        UNIQUE (session_id, module, block_index)
 );
 
 CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_id
@@ -139,15 +202,17 @@ CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_module
     ON chat_session_summary_blocks (module);
 CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_block_index
     ON chat_session_summary_blocks (block_index);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_session_created_at
-    ON chat_session_summary_blocks (user_id, session_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_session_module_created_at
+    ON chat_session_summary_blocks (user_id, session_id, module, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_session_module_block
+    ON chat_session_summary_blocks (user_id, session_id, module, block_index DESC);
 CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_topics
     ON chat_session_summary_blocks USING GIN (topics);
 CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_keywords
     ON chat_session_summary_blocks USING GIN (keywords);
 
 -- ============================================================
--- 7. chat_long_term_memories
+-- 8. chat_long_term_memories
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_long_term_memories (
     id                      SERIAL          PRIMARY KEY,
@@ -180,6 +245,144 @@ CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_message_ids
     ON chat_long_term_memories USING GIN (source_message_ids);
 CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_summary_block_ids
     ON chat_long_term_memories USING GIN (source_summary_block_ids);
+
+-- ============================================================
+-- 8b. chat_attachment_analyses
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_attachment_analyses (
+    id               SERIAL          PRIMARY KEY,
+    user_id          INTEGER         NOT NULL,
+    session_id       UUID            REFERENCES chat_sessions(id),
+    message_id       INTEGER,
+    file_id          INTEGER,
+    file_name        VARCHAR(255),
+    file_url         VARCHAR(1000),
+    turn_id          INTEGER,
+    module           VARCHAR         NOT NULL DEFAULT 'mentor',
+    analysis_type    VARCHAR(50)     NOT NULL,
+    summary_text     TEXT            NOT NULL,
+    extracted_text   TEXT,
+    structured_json  JSONB,
+    created_at       TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_user_id
+    ON chat_attachment_analyses (user_id);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_session_id
+    ON chat_attachment_analyses (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_message_id
+    ON chat_attachment_analyses (message_id);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_file_id
+    ON chat_attachment_analyses (file_id);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_turn_id
+    ON chat_attachment_analyses (turn_id);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_module
+    ON chat_attachment_analyses (module);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_analysis_type
+    ON chat_attachment_analyses (analysis_type);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_user_session_created_at
+    ON chat_attachment_analyses (user_id, session_id, created_at DESC);
+
+-- ============================================================
+-- 8c. chat_uploaded_files
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_uploaded_files (
+    id             SERIAL          PRIMARY KEY,
+    user_id        INTEGER         NOT NULL,
+    session_id     UUID            REFERENCES chat_sessions(id),
+    module         VARCHAR         NOT NULL DEFAULT 'mentor',
+    storage_url    VARCHAR(1000)   NOT NULL,
+    storage_key    VARCHAR(500),
+    original_name  VARCHAR(255)    NOT NULL,
+    file_kind      VARCHAR(32)     NOT NULL,
+    mime_type      VARCHAR(120),
+    extension      VARCHAR(20),
+    size_bytes     INTEGER         NOT NULL DEFAULT 0,
+    created_at     TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_user_id
+    ON chat_uploaded_files (user_id);
+CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_session_id
+    ON chat_uploaded_files (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_module
+    ON chat_uploaded_files (module);
+CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_storage_key
+    ON chat_uploaded_files (storage_key);
+CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_file_kind
+    ON chat_uploaded_files (file_kind);
+CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_user_session_created_at
+    ON chat_uploaded_files (user_id, session_id, created_at DESC);
+
+-- ============================================================
+-- 7d. chat_message_attachments
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_message_attachments (
+    id                SERIAL          PRIMARY KEY,
+    user_id           INTEGER         NOT NULL,
+    session_id        UUID            REFERENCES chat_sessions(id),
+    message_id        INTEGER         NOT NULL,
+    file_id           INTEGER         NOT NULL,
+    turn_id           INTEGER,
+    module            VARCHAR         NOT NULL DEFAULT 'mentor',
+    attachment_order  INTEGER         NOT NULL DEFAULT 0,
+    attachment_role   VARCHAR(32)     NOT NULL DEFAULT 'input',
+    created_at        TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_user_id
+    ON chat_message_attachments (user_id);
+CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_session_id
+    ON chat_message_attachments (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_message_id
+    ON chat_message_attachments (message_id);
+CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_file_id
+    ON chat_message_attachments (file_id);
+CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_turn_id
+    ON chat_message_attachments (turn_id);
+CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_module
+    ON chat_message_attachments (module);
+
+-- ============================================================
+-- 7e. chat_tool_invocations
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_tool_invocations (
+    id                    SERIAL          PRIMARY KEY,
+    user_id               INTEGER         NOT NULL,
+    session_id            UUID            REFERENCES chat_sessions(id),
+    turn_id               INTEGER,
+    module                VARCHAR         NOT NULL DEFAULT 'mentor',
+    assistant_message_id  INTEGER,
+    tool_message_id       INTEGER,
+    tool_call_id          VARCHAR(120)    NOT NULL,
+    tool_name             VARCHAR(120)    NOT NULL,
+    arguments_json        JSONB,
+    result_text           TEXT,
+    result_json           JSONB,
+    status                VARCHAR(32)     NOT NULL DEFAULT 'success',
+    created_at            TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_user_id
+    ON chat_tool_invocations (user_id);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_session_id
+    ON chat_tool_invocations (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_turn_id
+    ON chat_tool_invocations (turn_id);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_module
+    ON chat_tool_invocations (module);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_assistant_message_id
+    ON chat_tool_invocations (assistant_message_id);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_tool_message_id
+    ON chat_tool_invocations (tool_message_id);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_tool_call_id
+    ON chat_tool_invocations (tool_call_id);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_tool_name
+    ON chat_tool_invocations (tool_name);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_status
+    ON chat_tool_invocations (status);
+CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_user_session_created_at
+    ON chat_tool_invocations (user_id, session_id, created_at DESC);
 
 -- ============================================================
 -- 8. global_profiles

@@ -1,7 +1,4 @@
-"""Chat 模块工具函数。
-
-精简版：只保留 TutorAgent 轻量级编排器需要的辅助函数。
-"""
+"""Chat 工具函数 — 节点计时、消息构建、路由判断、SSE 事件构造。"""
 
 from __future__ import annotations
 
@@ -35,13 +32,13 @@ def node_timer(node_name: str, **extra: Any) -> Generator[None, None, None]:
         无返回值。
     """
     extra_str = " ".join(f"{k}={v}" for k, v in extra.items())
-    logger.debug("[TutorAgent] 节点进入 %s %s", node_name, extra_str)
+    logger.debug("[ChatRuntime] 节点进入 %s %s", node_name, extra_str)
     start = time.monotonic()
     try:
         yield
     finally:
         elapsed = int((time.monotonic() - start) * 1000)
-        logger.debug("[TutorAgent] 节点退出 %s 耗时%dms", node_name, elapsed)
+        logger.debug("[ChatRuntime] 节点退出 %s 耗时%dms", node_name, elapsed)
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +163,7 @@ def classify_route(state: dict) -> str:
         路由目标节点名称。
     """
     route = state.get("route", "direct")
-    valid_routes = {"direct", "diagram_only", "search", "attachment_needed"}
+    valid_routes = {"direct", "search", "attachment_needed"}
     return route if route in valid_routes else "direct"
 
 

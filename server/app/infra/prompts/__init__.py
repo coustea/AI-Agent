@@ -1,14 +1,24 @@
 """Shared prompt loading utilities.
 
-Each business module owns its own prompt files. This module only provides
-the shared mechanics for loading, caching, rendering, and status reporting.
+```
+ModulePromptLoader  — loads .md files from one module's prompts/ directory
+PromptRegistry      — central singleton that owns all module loaders
+prompts             — the global PromptRegistry instance
+```
+
+Usage::
+
+    from app.infra.prompts import prompts
+
+    prompts.get("chat").render("tutor_system", session_summary_context=...)
+    prompts.get("resource").get("ppt")
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from app.infra.logging import get_logger
 
@@ -130,6 +140,44 @@ class ModulePromptLoader:
         return "/".join(parts)
 
 
-def warm_prompt_loaders(loaders: Iterable[ModulePromptLoader]) -> None:
-    for loader in loaders:
-        loader.load_all()
+class PromptRegistry:
+    """Central registry that owns a ModulePromptLoader per business module."""
+
+    def __init__(self) -> None:
+        self._loaders: dict[str, ModulePromptLoader] = {}
+
+    def register(self, module_name: str, prompt_dir: Path) -> ModulePromptLoader:
+        loader = ModulePromptLoader(prompt_dir, module_name=module_name)
+        self._loaders[module_name] = loader
+        return loader
+
+    def get(self, module_name: str) -> ModulePromptLoader:
+        loader = self._loaders.get(module_name)
+        if loader is None:
+            raise KeyError(
+                f"Prompt module '{module_name}' not registered. "
+                f"Available: {sorted(self._loaders)}"
+            )
+        return loader
+
+    def warm_all(self) -> None:
+        for loader in self._loaders.values():
+            loader.load_all()
+
+    def status(self) -> dict[str, dict[str, dict[str, Any]]]:
+        return {name: loader.status() for name, loader in self._loaders.items()}
+
+
+# ---------------------------------------------------------------------------
+# Global singleton — auto-registers all known modules
+# ---------------------------------------------------------------------------
+_PROMPTS_PKG_DIR = Path(__file__).resolve().parent   # app/infra/prompts/
+_APP_DIR = _PROMPTS_PKG_DIR.parent.parent             # app/
+
+prompts = PromptRegistry()
+prompts.register("chat", _APP_DIR / "chat" / "prompts")
+prompts.register("chat_memory", _APP_DIR / "chat" / "memory" / "prompts")
+prompts.register("resource", _APP_DIR / "resource" / "prompts")
+prompts.register("path", _APP_DIR / "path" / "prompts")
+prompts.register("profile", _APP_DIR / "profile" / "prompts")
+prompts.register("quiz", _APP_DIR / "quiz" / "prompts")

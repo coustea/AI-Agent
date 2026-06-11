@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.prompt_manager import resource_prompts
+from app.infra.prompts import prompts
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -55,7 +55,7 @@ class QuizAgent(BaseResourceAgent):
             cfg.append("- 每题包含详细解析" if config.get("include_analysis", True) else "- 不包含解析")
             input_text += f"\n\n{chr(10).join(cfg)}"
 
-        prompt = resource_prompts.get("quiz")
+        prompt = prompts.get("resource").get("quiz")
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
         if self.emitter:

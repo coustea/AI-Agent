@@ -1,11 +1,18 @@
-"""Chat-private long-term memory extraction."""
+"""Chat 长期记忆提取 — 跨会话稳定学习特征的增量更新。
+
+两种触发机制：
+  1. 信号触发：当轮对话中检测到稳定学习信号（正则匹配偏好/纠正/背景等关键词）
+  2. 周期触发：每 periodic_turns 轮自动检查，但有冷却时间防频繁更新
+更新策略：LLM 判断是否 need_update + confidence ≥ min_confidence 才写入，
+  避免低质量对话污染长期记忆。记忆格式为分类 Markdown。
+"""
 
 from __future__ import annotations
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.chat.memory.prompt_manager import chat_memory_prompts
+from app.infra.prompts import prompts
 from app.chat.memory.types import (
     MemoryUpdateOutput,
     has_stable_signal,
@@ -108,7 +115,8 @@ class ChatLongTermMemoryService:
             )
         ).first()
 
-        prompt = chat_memory_prompts.render_ltm_update(
+        prompt = prompts.get("chat_memory").render(
+            "ltm_update",
             user_message=user_message[:1000],
             assistant_reply=assistant_reply[:1000],
             session_summary=latest_summary_block.summary_markdown if latest_summary_block else "暂无会话概要。",

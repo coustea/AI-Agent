@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.prompt_manager import resource_prompts
+from app.infra.prompts import prompts
 from app.resource.schemas import ExecutionPlan, WorkerResult, WorkerState
 from app.resource.utils import format_learner_profile_for_prompt
 
@@ -29,7 +29,7 @@ class PlanningAgent(BaseResourceAgent):
                 progress=10,
             )
 
-        prompt = resource_prompts.get("planning")
+        prompt = prompts.get("resource").get("planning")
         input_text = self._build_planning_input(state)
 
         if self.emitter:

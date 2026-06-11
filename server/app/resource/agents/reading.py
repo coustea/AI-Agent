@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.prompt_manager import resource_prompts
+from app.infra.prompts import prompts
 from app.resource.schemas import WorkerResult, WorkerState
 
 
@@ -76,7 +76,7 @@ class ReadingAgent(BaseResourceAgent):
                 progress=25,
             )
 
-        prompt = resource_prompts.get("reading")
+        prompt = prompts.get("resource").get("reading")
         result = await self.llm.ainvoke_json(
             ReadingPayload,
             f"{prompt}\n\n{input_text}",
