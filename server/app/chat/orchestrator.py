@@ -22,9 +22,8 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from app.chat.agent import ReasoningAgent
-from app.chat.memory.service import get_chat_memory_service
 from app.chat.schemas import ConstraintReport, Evidence, EvidenceSet, FinalAnswer, ToolIntent, TurnRequest
-from app.chat.stages import AttachmentAnalyzer, SearchOrchestrator, TeachingDiagramGenerator, WebSearchTool
+from app.chat.stages import AttachmentAnalyzer, SearchOrchestrator, TeachingDiagramGenerator
 from app.chat.tutor_tools import TutorToolExecutor
 
 
@@ -41,72 +40,6 @@ class ToolExecutionRecord(BaseModel):
     result_text: str = ""
     status: str = "success"
     evidence: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class ToolExecutor:
-    """工具执行器：根据 ToolIntent 分发到对应工具并收集 Evidence。
-
-    支持三种工具：
-      - learner_profile  → 查询学习者画像
-      - long_term_memory → 查询长期记忆
-      - web_search       → 联网搜索（tavily/duckduckgo/serp/spark 降级链）
-    """
-
-    def __init__(self) -> None:
-        self.web_search = WebSearchTool()
-
-    async def execute(self, intent: ToolIntent, request: Any) -> dict[str, Any]:
-        if intent.tool_name == "learner_profile":
-            dimension = str(intent.payload.get("dimension") or "").strip() or None
-            markdown = await get_chat_memory_service().get_profile_markdown(request.user_id, dimension=dimension)
-            return {
-                "tool_name": intent.tool_name,
-                "status": "success",
-                "evidence": [
-                    Evidence(
-                        evidence_type="learner_profile",
-                        summary=markdown,
-                        details={"dimension": dimension},
-                    ).model_dump()
-                ],
-            }
-        if intent.tool_name == "long_term_memory":
-            category = str(intent.payload.get("category") or "").strip() or None
-            markdown = await get_chat_memory_service().get_memory_markdown(request.user_id, category=category)
-            return {
-                "tool_name": intent.tool_name,
-                "status": "success",
-                "result_text": markdown,
-                "evidence": [
-                    Evidence(
-                        evidence_type="long_term_memory",
-                        summary=markdown,
-                        details={"category": category},
-                    ).model_dump()
-                ],
-            }
-        if intent.tool_name == "web_search":
-            query = str(intent.payload.get("query") or request.message or "").strip()
-            result_text, tool_name = await self.web_search.search(query)
-            status = "success" if result_text else "ignored"
-            return {
-                "tool_name": intent.tool_name,
-                "status": status,
-                "result_text": result_text,
-                "evidence": [
-                    Evidence(
-                        evidence_type="web_search",
-                        summary=result_text,
-                        details={"query": query, "tool_name": tool_name or "web_search"},
-                    ).model_dump()
-                ] if result_text else [],
-            }
-        return {
-            "tool_name": intent.tool_name,
-            "status": "ignored",
-            "result_text": "",
-            "evidence": [],
-        }
 
 
 # ── Transcript 投影 ─────────────────────────────────────────────
@@ -246,6 +179,7 @@ class TurnOrchestrator:
         diagram: Any = None,
         tools: Any = None,
         max_reasoning_steps: int = 4,
+        eager_search_enabled: bool = False,
     ) -> None:
         self.attachments = attachments or AttachmentAnalyzer()
         self.search = search or SearchOrchestrator()
@@ -253,6 +187,7 @@ class TurnOrchestrator:
         self.diagram = diagram or TeachingDiagramGenerator()
         self.tools = tools
         self.max_reasoning_steps = max_reasoning_steps
+        self.eager_search_enabled = eager_search_enabled
 
     async def run(self, request: TurnRequest) -> TurnRunResult:
         """执行一轮对话的完整流水线。"""
@@ -272,7 +207,7 @@ class TurnOrchestrator:
             attachment_analyses = list(getattr(attachment_output, "records", []) or [])
 
         # 阶段 2：搜索（知识库 + 联网 → knowledge_base / web_search evidence）
-        if request.search_enabled and self.search is not None:
+        if request.search_enabled and self.search is not None and self.eager_search_enabled:
             route = "search" if route == "answer" else route
             execution_mode = "attachment_search" if request.attachment_analysis_enabled and request.attachments else "search"
             search_output = await self.search.search(request, evidence_set)
@@ -313,9 +248,13 @@ class TurnOrchestrator:
             return ""
 
         tool_executor = self.tools or TutorToolExecutor(request=request)
+        available_tools = tool_executor.tools() if hasattr(tool_executor, "tools") else []
 
         for _ in range(self.max_reasoning_steps):
-            outcome = await self.agent.reason(request, evidence_set, constraints)
+            try:
+                outcome = await self.agent.reason(request, evidence_set, constraints, tools=available_tools)
+            except TypeError:
+                outcome = await self.agent.reason(request, evidence_set, constraints)
             normalized = self._normalize_outcome(outcome)
             if isinstance(normalized, FinalAnswer):
                 return normalized.answer
