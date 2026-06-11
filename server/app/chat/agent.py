@@ -15,6 +15,7 @@ Prompt 构建三要素：
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -22,8 +23,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.chat.schemas import ConstraintReport, EvidenceSet, FinalAnswer, ToolIntent, TurnRequest
 from app.chat.runtime import _classify_attachments, history_to_langchain_messages
 from app.chat.memory.service import get_chat_memory_service
-from app.evaluation.service import evaluation_service
-from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.prompts import prompts
 from app.chat.utils import normalize_message_content
@@ -58,19 +57,7 @@ async def build_tutor_system_prompt(
         user_id=user_id,
         session_id=session_id,
     )
-    # 近期学习评估数据（测验分数、薄弱知识点、系统建议）
-    evaluation_summary_context = "暂无近期学习测验评估记录。"
-    try:
-        async with session_scope() as db:
-            eval_data = await evaluation_service.get_summary(db, user_id=user_id, limit=5)
-            if eval_data.event_count > 0:
-                evaluation_summary_context = f"平均测验分: {eval_data.average_score if eval_data.average_score is not None else 'N/A'}\n"
-                if eval_data.weak_topics:
-                    evaluation_summary_context += f"当前薄弱点: {', '.join(eval_data.weak_topics)}\n"
-                if eval_data.recommendations:
-                    evaluation_summary_context += f"系统建议: {', '.join(eval_data.recommendations)}"
-    except Exception:
-        evaluation_summary_context = "暂无近期学习测验评估记录。"
+    evaluation_summary_context = "如需近期测验、薄弱点或学习计划依据，请调用 get_recent_evaluation 工具。"
 
     return prompts.get("chat").render(
         "tutor_system",
@@ -148,16 +135,21 @@ class ReasoningAgent:
             evidence_set=evidence_set,
             constraint_report=constraints,
         )
-        available_tools = list(tools or self.tools)
+        available_tools = list(self.tools if tools is None else tools)
         model = self.llm.model.bind_tools(available_tools) if available_tools else None
         response = await self.llm.ainvoke(messages, model=model, temperature=0.25)
         tool_call = self._first_new_tool_call(response, constraints)
         if tool_call is not None:
             return ToolIntent(
                 tool_name=str(tool_call.get("name") or ""),
-                payload=tool_call.get("args") if isinstance(tool_call.get("args"), dict) else {},
+                payload=self._tool_payload(tool_call),
             )
-        return FinalAnswer(answer=normalize_message_content(getattr(response, "content", "")))
+        answer = normalize_message_content(getattr(response, "content", ""))
+        tool_calls = getattr(response, "tool_calls", None)
+        if isinstance(tool_calls, list) and tool_calls and not answer:
+            response = await self.llm.ainvoke(messages, model=None, temperature=0.25)
+            answer = normalize_message_content(getattr(response, "content", ""))
+        return FinalAnswer(answer=answer)
 
     def _first_new_tool_call(self, response: Any, constraints: ConstraintReport) -> dict[str, Any] | None:
         tool_calls = getattr(response, "tool_calls", None)
@@ -173,3 +165,15 @@ class ReasoningAgent:
             if name:
                 constraints.skipped_tools.append(name)
         return None
+
+    def _tool_payload(self, tool_call: dict[str, Any]) -> dict[str, Any]:
+        args = tool_call.get("args")
+        if isinstance(args, dict):
+            return args
+        if isinstance(args, str):
+            try:
+                parsed = json.loads(args)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
