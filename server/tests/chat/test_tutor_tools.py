@@ -116,6 +116,29 @@ async def test_tool_executor_maps_profile_result_to_evidence(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
+async def test_tool_executor_normalizes_legacy_profile_intent_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.chat import tutor_tools
+    from app.chat.schemas import ToolIntent
+    from app.chat.tutor_tools import TutorToolExecutor
+
+    class FakeProfileService:
+        async def get_profile_markdown(self, user_id: int, **_kwargs) -> str:
+            assert user_id == 7
+            return "画像: 喜欢先看例子"
+
+    monkeypatch.setattr(tutor_tools, "get_profile_service", lambda: FakeProfileService())
+
+    request = TurnRequest(user_id=7, session_id="s-1", message="结合我的情况讲")
+    executor = TutorToolExecutor(request=request)
+
+    result = await executor.execute(ToolIntent(tool_name="learner_profile", payload={"dimension": "preferences"}))
+
+    assert result["tool_name"] == "get_learner_profile"
+    assert result["status"] == "success"
+    assert result["evidence"][0]["evidence_type"] == "learner_profile"
+
+
+@pytest.mark.asyncio
 async def test_tool_executor_converts_tool_failure_to_non_crashing_result() -> None:
     from app.chat.schemas import ToolIntent
     from app.chat.tutor_tools import TutorToolExecutor, TutorToolRegistry

@@ -234,6 +234,13 @@ _TOOL_EVIDENCE_TYPES: dict[str, str] = {
 }
 
 
+_TOOL_NAME_ALIASES: dict[str, str] = {
+    "learner_profile": "get_learner_profile",
+    "long_term_memory": "get_long_term_memory",
+    "web_search": "web_search",
+}
+
+
 class TutorToolExecutor:
     """Execute model-requested tutor tools and convert outputs to orchestrator evidence."""
 
@@ -245,7 +252,8 @@ class TutorToolExecutor:
         return self.registry.tools()
 
     async def execute(self, intent: ToolIntent, request: TurnRequest | None = None) -> dict[str, Any]:
-        tool_name = str(intent.tool_name or "").strip()
+        raw_tool_name = str(intent.tool_name or "").strip()
+        tool_name = _TOOL_NAME_ALIASES.get(raw_tool_name, raw_tool_name)
         payload = intent.payload if isinstance(intent.payload, dict) else {}
         try:
             tool = self.registry.by_name(tool_name)
