@@ -551,36 +551,6 @@ CREATE INDEX IF NOT EXISTS ix_quiz_questions_raw_record
     ON quiz_questions USING GIN (raw_record);
 
 -- ============================================================
--- 12b. programming_problems
--- ============================================================
-CREATE TABLE IF NOT EXISTS programming_problems (
-    id                  SERIAL          PRIMARY KEY,
-    problem_slug        VARCHAR(255)    NOT NULL UNIQUE,
-    title               VARCHAR(500)    NOT NULL,
-    difficulty          VARCHAR(50),
-    category            VARCHAR(100),   -- 算法分类: 数组/链表/动态规划/图论/贪心 等
-    description         TEXT            NOT NULL,
-    input_format        TEXT,
-    output_format       TEXT,
-    examples            JSONB,
-    hints               JSONB,
-    code_snippets       JSONB,
-    test_cases          JSONB,
-    tags                JSONB,
-    created_at          TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_programming_problems_problem_slug
-    ON programming_problems (problem_slug);
-CREATE INDEX IF NOT EXISTS ix_programming_problems_difficulty
-    ON programming_problems (difficulty);
-CREATE INDEX IF NOT EXISTS ix_programming_problems_category
-    ON programming_problems (category);
-CREATE INDEX IF NOT EXISTS ix_programming_problems_tags
-    ON programming_problems USING GIN (tags);
-
--- ============================================================
 -- 13. learning_events
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learning_events (

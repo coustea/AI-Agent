@@ -178,17 +178,6 @@ async def init_db() -> None:
     except Exception as exc:
         logger.warning("[Database] 题库数据导入失败（非致命）: %s", exc)
 
-    # 按需导入编程题数据（表为空时才导入）
-    try:
-        from app.quiz.import_programming import import_programming_problems
-        async with AsyncSession(engine, expire_on_commit=False) as session:
-            count = await import_programming_problems(session)
-            if count > 0:
-                logger.info("[Database] 编程题导入完成: count=%d", count)
-            else:
-                logger.info("[Database] 编程题已存在，跳过导入")
-    except Exception as exc:
-        logger.warning("[Database] 编程题导入失败（非致命）: %s", exc)
 
 
 # ============ Session factories ============

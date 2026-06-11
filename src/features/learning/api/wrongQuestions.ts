@@ -1,38 +1,65 @@
 import http from '@/shared/api/http'
 
-export interface AddWrongQuestionRequest {
-  question_id: string
-  user_answer?: string
-}
-
-export interface WrongQuestionItem {
+export interface WrongQuestion {
   id: number
   question_id: string
   subject: string
   question_type: string
   content: string
-  options_json: Record<string, unknown> | null
+  options: Record<string, string> | null
   standard_answer: string | null
   analysis: string | null
   user_answer: string | null
   wrong_count: number
   note: string | null
-  created_at: string | null
-  updated_at: string | null
+  is_archived: boolean
+  created_at: string
+  updated_at: string
 }
 
-export async function addWrongQuestion(request: AddWrongQuestionRequest): Promise<void> {
-  await http.post('/ai/wrong-questions', request)
+export interface WrongQuestionListResponse {
+  items: WrongQuestion[]
+  total: number
+  page: number
+  page_size: number
+  subjects: string[]
+  types: string[]
 }
 
 export async function fetchWrongQuestions(params?: {
+  subject?: string
+  question_type?: string
+  is_archived?: boolean
   page?: number
   page_size?: number
-}): Promise<{ items: WrongQuestionItem[]; total: number; page: number; page_size: number }> {
+}): Promise<WrongQuestionListResponse> {
   const response = await http.get('/ai/wrong-questions', { params })
+  return response.data as WrongQuestionListResponse
+}
+
+export async function addWrongQuestion(data: {
+  question_id: string
+  user_answer?: string
+}): Promise<{ id: number; action: string }> {
+  const response = await http.post('/ai/wrong-questions', data)
   return response.data.data
 }
 
+export async function removeWrongQuestion(wrongId: number): Promise<void> {
+  await http.delete(`/ai/wrong-questions/${wrongId}`)
+}
+
 export async function archiveWrongQuestion(wrongId: number): Promise<void> {
-  await http.put(`/ai/wrong-questions/${wrongId}/archive`)
+  await http.post(`/ai/wrong-questions/${wrongId}/archive`)
+}
+
+export async function unarchiveWrongQuestion(wrongId: number): Promise<void> {
+  await http.post(`/ai/wrong-questions/${wrongId}/unarchive`)
+}
+
+export async function fetchRandomWrongQuestion(subject?: string): Promise<WrongQuestion | null> {
+  const response = await http.get('/ai/wrong-questions/random', {
+    params: subject ? { subject } : undefined,
+  })
+  return response.data.data as WrongQuestion | null
 }

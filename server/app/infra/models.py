@@ -622,47 +622,6 @@ class QuizQuestion(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Programming Problem - 编程题（力扣/洛谷等 OJ 来源）
-# ---------------------------------------------------------------------------
-
-class ProgrammingProblem(SQLModel, table=True):
-    """编程题主表。"""
-    __tablename__ = "programming_problems"
-    __table_args__ = (
-        UniqueConstraint("problem_slug", name="uq_programming_problems_slug"),
-        Index("ix_prog_problems_difficulty", "difficulty"),
-        Index("ix_prog_problems_tags", "tags", postgresql_using="gin"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    problem_slug: str = Field(max_length=255, index=True)  # URL 标识
-    title: str = Field(max_length=500)
-    difficulty: str | None = Field(default=None, max_length=50, index=True)  # 简单/中等/困难
-    category: str | None = Field(default=None, max_length=100, index=True)  # 算法分类: 数组/链表/动态规划/图论 等
-
-    description: str = Field(sa_column=Column(Text))  # 题面 (Markdown)
-    input_format: str | None = Field(default=None, sa_column=Column(Text))
-    output_format: str | None = Field(default=None, sa_column=Column(Text))
-
-    examples: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # [{input, output, explanation}]
-    hints: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
-    code_snippets: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # {python: "...", cpp: "..."}
-    test_cases: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # [{input, output}]
-
-    tags: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
-    )
-
-
-# ---------------------------------------------------------------------------
 # Evaluation – 学习行为与效果评估
 # ---------------------------------------------------------------------------
 
@@ -975,7 +934,6 @@ REGISTERED_MODELS = (
     GeneratedResource,
     GeneratedResourceItem,
     QuizQuestion,
-    ProgrammingProblem,
     LearningEvent,
     LearningSession,
     LearningPath,

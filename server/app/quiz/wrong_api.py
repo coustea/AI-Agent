@@ -1,32 +1,110 @@
-"""错题本 API — 添加、查询、归档错题记录。"""
+"""错题本 API。"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
-from sqlalchemy import select, func, insert as sa_insert
+from sqlalchemy import select, func, delete
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user
 from app.infra.database import get_session
-from app.infra.models import User, WrongQuestion, QuizQuestion
+from app.infra.models import WrongQuestion, QuizQuestion, User
 from app.infra.response import HttpResponse
+from app.auth.security import get_current_user
+from app.quiz.wrong_schemas import (
+    WrongQuestionCreate,
+    WrongQuestionRead,
+    WrongQuestionListResponse,
+)
 
 router = APIRouter()
 
 
-class AddWrongQuestionRequest(BaseModel):
-    question_id: str
-    user_answer: str | None = None
+@router.get("/wrong-questions")
+async def list_wrong_questions(
+    subject: str | None = Query(default=None),
+    question_type: str | None = Query(default=None),
+    is_archived: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> WrongQuestionListResponse:
+    """获取当前用户的错题列表。"""
+    user_id = current_user.id
+
+    base = select(WrongQuestion).where(
+        WrongQuestion.user_id == user_id,
+        WrongQuestion.is_archived == is_archived,
+    )
+
+    if subject:
+        base = base.where(WrongQuestion.subject == subject)
+    if question_type:
+        base = base.where(WrongQuestion.question_type == question_type)
+
+    # 总数
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await session.exec(count_stmt)).scalar() or 0
+
+    # 分页
+    items_raw = (await session.exec(
+        base.order_by(WrongQuestion.updated_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )).scalars().all()
+
+    items = [_to_read(item) for item in items_raw]
+
+    # 聚合选项
+    subjects_stmt = select(func.distinct(WrongQuestion.subject)).where(
+        WrongQuestion.user_id == user_id,
+        WrongQuestion.is_archived == is_archived,
+    )
+    subjects = sorted([s for s in (await session.exec(subjects_stmt)).scalars().all() if s])
+
+    types_stmt = select(func.distinct(WrongQuestion.question_type)).where(
+        WrongQuestion.user_id == user_id,
+        WrongQuestion.is_archived == is_archived,
+    )
+    types = sorted([t for t in (await session.exec(types_stmt)).scalars().all() if t])
+
+    return WrongQuestionListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        subjects=subjects,
+        types=types,
+    )
 
 
 @router.post("/wrong-questions")
 async def add_wrong_question(
-    request: AddWrongQuestionRequest,
-    current_user: User = Depends(get_current_user),
+    request: WrongQuestionCreate,
     session: AsyncSession = Depends(get_session),
-):
-    """添加错题记录。若已存在则累加 wrong_count。"""
+    current_user: User = Depends(get_current_user),
+) -> HttpResponse:
+    """添加错题（若已存在则更新错误次数）。"""
+    user_id = current_user.id
+
+    # 查找是否已存在
+    existing = (await session.exec(
+        select(WrongQuestion).where(
+            WrongQuestion.user_id == user_id,
+            WrongQuestion.question_id == request.question_id,
+        )
+    )).scalars().first()
+
+    if existing:
+        existing.wrong_count += 1
+        existing.user_answer = request.user_answer
+        existing.is_archived = False
+        existing.updated_at = func.now()
+        await session.commit()
+        await session.refresh(existing)
+        return HttpResponse.success(data={"id": existing.id, "action": "updated"})
+
+    # 从题库获取题目快照
     quiz = (await session.exec(
         select(QuizQuestion).where(QuizQuestion.question_id == request.question_id)
     )).scalars().first()
@@ -34,9 +112,9 @@ async def add_wrong_question(
     if not quiz:
         return HttpResponse.error(code=404, message="题目不存在")
 
-    stmt = sa_insert(WrongQuestion).values(
-        user_id=current_user.id,
-        question_id=request.question_id,
+    wrong = WrongQuestion(
+        user_id=user_id,
+        question_id=quiz.question_id,
         subject=quiz.subject,
         question_type=quiz.question_type,
         content=quiz.content,
@@ -46,85 +124,130 @@ async def add_wrong_question(
         user_answer=request.user_answer,
         wrong_count=1,
     )
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["user_id", "question_id"],
-        set_={
-            "wrong_count": WrongQuestion.wrong_count + 1,
-            "user_answer": request.user_answer,
-            "updated_at": func.now(),
-        },
-    )
-    await session.exec(stmt)  # type: ignore[arg-type]
+    session.add(wrong)
     await session.commit()
-    return HttpResponse.success(message="已记录错题")
+    await session.refresh(wrong)
+
+    return HttpResponse.success(data={"id": wrong.id, "action": "created"})
 
 
-@router.get("/wrong-questions")
-async def list_wrong_questions(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """查询当前用户的错题列表。"""
-    base = select(WrongQuestion).where(
-        WrongQuestion.user_id == current_user.id,
-        WrongQuestion.is_archived == False,  # noqa: E712
-    )
-
-    total = (await session.exec(
-        select(func.count()).select_from(base.subquery())
-    )).scalar() or 0
-
-    items = (await session.exec(
-        base.order_by(WrongQuestion.updated_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )).scalars().all()
-
-    return HttpResponse.success(data={
-        "items": [
-            {
-                "id": w.id,
-                "question_id": w.question_id,
-                "subject": w.subject,
-                "question_type": w.question_type,
-                "content": w.content,
-                "options_json": w.options_json,
-                "standard_answer": w.standard_answer,
-                "analysis": w.analysis,
-                "user_answer": w.user_answer,
-                "wrong_count": w.wrong_count,
-                "note": w.note,
-                "created_at": w.created_at.isoformat() if w.created_at else None,
-                "updated_at": w.updated_at.isoformat() if w.updated_at else None,
-            }
-            for w in items
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
-
-
-@router.put("/wrong-questions/{wrong_id}/archive")
-async def archive_wrong_question(
+@router.delete("/wrong-questions/{wrong_id}")
+async def remove_wrong_question(
     wrong_id: int,
-    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
-    """归档（移除）错题记录。"""
-    wq = (await session.exec(
+    current_user: User = Depends(get_current_user),
+) -> HttpResponse:
+    """移除错题（归档或删除）。"""
+    user_id = current_user.id
+
+    wrong = (await session.exec(
         select(WrongQuestion).where(
             WrongQuestion.id == wrong_id,
-            WrongQuestion.user_id == current_user.id,
+            WrongQuestion.user_id == user_id,
         )
     )).scalars().first()
 
-    if not wq:
+    if not wrong:
         return HttpResponse.error(code=404, message="错题记录不存在")
 
-    wq.is_archived = True  # type: ignore[assignment]
-    session.add(wq)
+    await session.delete(wrong)
     await session.commit()
+
+    return HttpResponse.success(message="已移除")
+
+
+@router.post("/wrong-questions/{wrong_id}/archive")
+async def archive_wrong_question(
+    wrong_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HttpResponse:
+    """归档错题（答对后移入归档）。"""
+    user_id = current_user.id
+
+    wrong = (await session.exec(
+        select(WrongQuestion).where(
+            WrongQuestion.id == wrong_id,
+            WrongQuestion.user_id == user_id,
+        )
+    )).scalars().first()
+
+    if not wrong:
+        return HttpResponse.error(code=404, message="错题记录不存在")
+
+    wrong.is_archived = True
+    await session.commit()
+
     return HttpResponse.success(message="已归档")
+
+
+@router.post("/wrong-questions/{wrong_id}/unarchive")
+async def unarchive_wrong_question(
+    wrong_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HttpResponse:
+    """取消归档（恢复到错题本）。"""
+    user_id = current_user.id
+
+    wrong = (await session.exec(
+        select(WrongQuestion).where(
+            WrongQuestion.id == wrong_id,
+            WrongQuestion.user_id == user_id,
+        )
+    )).scalars().first()
+
+    if not wrong:
+        return HttpResponse.error(code=404, message="错题记录不存在")
+
+    wrong.is_archived = False
+    await session.commit()
+
+    return HttpResponse.success(message="已恢复")
+
+
+@router.get("/wrong-questions/random")
+async def get_random_wrong_question(
+    subject: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HttpResponse:
+    """随机获取一道错题用于重练。"""
+    user_id = current_user.id
+
+    base = select(WrongQuestion).where(
+        WrongQuestion.user_id == user_id,
+        WrongQuestion.is_archived == False,
+    )
+
+    if subject:
+        base = base.where(WrongQuestion.subject == subject)
+
+    # 随机取一道
+    items = (await session.exec(base)).scalars().all()
+    if not items:
+        return HttpResponse.success(data=None)
+
+    import random
+    item = random.choice(items)
+
+    return HttpResponse.success(data=_to_read(item))
+
+
+def _to_read(item: WrongQuestion) -> WrongQuestionRead:
+    return WrongQuestionRead(
+        id=item.id,
+        question_id=item.question_id,
+        subject=item.subject,
+        question_type=item.question_type,
+        content=item.content,
+        options=item.options_json,
+        standard_answer=item.standard_answer,
+        analysis=item.analysis,
+        user_answer=item.user_answer,
+        wrong_count=item.wrong_count,
+        note=item.note,
+        is_archived=item.is_archived,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
