@@ -342,6 +342,8 @@ CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_turn_id
     ON chat_message_attachments (turn_id);
 CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_module
     ON chat_message_attachments (module);
+CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_created_at
+    ON chat_message_attachments (created_at);
 
 -- ============================================================
 -- 7e. chat_tool_invocations
@@ -541,14 +543,8 @@ CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_type
     ON quiz_questions (subject, question_type);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_en_type
     ON quiz_questions (subject_en, question_type);
-CREATE INDEX IF NOT EXISTS ix_quiz_questions_options_json
-    ON quiz_questions USING GIN (options_json);
-CREATE INDEX IF NOT EXISTS ix_quiz_questions_knowledge_points
-    ON quiz_questions USING GIN (knowledge_points);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_tags
     ON quiz_questions USING GIN (tags);
-CREATE INDEX IF NOT EXISTS ix_quiz_questions_raw_record
-    ON quiz_questions USING GIN (raw_record);
 
 -- ============================================================
 -- 13. learning_events
@@ -797,3 +793,28 @@ CREATE INDEX IF NOT EXISTS ix_path_node_resources_node_type
     ON path_node_resources (node_id, resource_type);
 CREATE INDEX IF NOT EXISTS ix_path_node_resources_content_json
     ON path_node_resources USING GIN (content_json);
+
+-- ============================================================
+-- 19. wrong_questions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS wrong_questions (
+    id                SERIAL          PRIMARY KEY,
+    user_id           INTEGER         NOT NULL,
+    question_id       VARCHAR(255)    NOT NULL,
+    subject           VARCHAR(255)    NOT NULL,
+    question_type     VARCHAR(100)    NOT NULL,
+    content           TEXT            NOT NULL,
+    options_json      JSONB,
+    standard_answer   TEXT,
+    analysis          TEXT,
+    user_answer       TEXT,
+    wrong_count       INTEGER         NOT NULL DEFAULT 1,
+    note              TEXT,
+    is_archived       BOOLEAN         NOT NULL DEFAULT FALSE,
+    created_at        TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_wrong_questions_user_id ON wrong_questions (user_id);
+CREATE INDEX IF NOT EXISTS ix_wrong_questions_question_id ON wrong_questions (question_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_wrong_questions_user_question ON wrong_questions (user_id, question_id);

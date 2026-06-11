@@ -5,13 +5,14 @@
 
   1. 基础消息与证据 — ChatHistoryMessage / Evidence / EvidenceSet / UploadResponse
   2. 工具意图与最终回答 — ToolIntent / FinalAnswer / ReasoningResult（agent ↔ orchestrator 的合约类型）
+  2. 工具意图与最终回答 — ToolIntent / FinalAnswer / FinalAnswerStream / ReasoningResult（agent ↔ orchestrator 的合约类型）
   3. 编排层基础模型 — TurnRequest / ConstraintReport（orchestrator 输入/输出约束）
   4. 教学图解 Schema — TeachingDiagram 及 6 种 payload（comparison/flowchart/sequence/framework/summary/hierarchy）
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, Union
+from typing import Any, AsyncIterator, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -107,6 +108,12 @@ class FinalAnswer(BaseModel):
     """Agent 推理产出的「直接回答」信号 — 推理循环终止条件。"""
     kind: Literal["final_answer"] = "final_answer"
     answer: str
+
+
+class FinalAnswerStream:
+    """Wraps an asynchronous iterator yielding string chunks for the final answer."""
+    def __init__(self, stream: AsyncIterator[str]):
+        self.stream = stream
 
 
 ReasoningResult = ToolIntent | FinalAnswer  # Agent.reason() 的返回类型联合

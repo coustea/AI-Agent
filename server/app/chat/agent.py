@@ -20,7 +20,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.chat.schemas import ConstraintReport, EvidenceSet, FinalAnswer, ToolIntent, TurnRequest
+from app.chat.schemas import ConstraintReport, EvidenceSet, FinalAnswer, FinalAnswerStream, ToolIntent, TurnRequest
 from app.chat.runtime import _classify_attachments, history_to_langchain_messages
 from app.chat.memory.service import get_chat_memory_service
 from app.infra.llm import get_llm
@@ -129,7 +129,7 @@ class ReasoningAgent:
         evidence_set: EvidenceSet,
         constraints: ConstraintReport,
         tools: list[Any] | None = None,
-    ) -> ToolIntent | FinalAnswer:
+    ) -> ToolIntent | FinalAnswer | FinalAnswerStream:
         messages = await build_reasoning_messages(
             request=request,
             evidence_set=evidence_set,
@@ -137,19 +137,49 @@ class ReasoningAgent:
         )
         available_tools = list(self.tools if tools is None else tools)
         model = self.llm.model.bind_tools(available_tools) if available_tools else None
-        response = await self.llm.ainvoke(messages, model=model, temperature=0.25)
-        tool_call = self._first_new_tool_call(response, constraints)
-        if tool_call is not None:
-            return ToolIntent(
-                tool_name=str(tool_call.get("name") or ""),
-                payload=self._tool_payload(tool_call),
-            )
-        answer = normalize_message_content(getattr(response, "content", ""))
-        tool_calls = getattr(response, "tool_calls", None)
-        if isinstance(tool_calls, list) and tool_calls and not answer:
-            response = await self.llm.ainvoke(messages, model=None, temperature=0.25)
-            answer = normalize_message_content(getattr(response, "content", ""))
-        return FinalAnswer(answer=answer)
+        
+        stream = self.llm.astream(messages, model=model, temperature=0.25)
+        try:
+            first_chunk = await stream.__anext__()
+        except StopAsyncIteration:
+            return FinalAnswer(answer="")
+
+        tool_calls = getattr(first_chunk, "tool_calls", None)
+        if isinstance(tool_calls, list) and tool_calls:
+            accumulated = first_chunk
+            async for chunk in stream:
+                accumulated += chunk
+            
+            tool_call = self._first_new_tool_call(accumulated, constraints)
+            if tool_call is not None:
+                return ToolIntent(
+                    tool_name=str(tool_call.get("name") or ""),
+                    payload=self._tool_payload(tool_call),
+                )
+            
+            answer = normalize_message_content(getattr(accumulated, "content", ""))
+            if not answer:
+                response = await self.llm.ainvoke(messages, model=None, temperature=0.25)
+                answer = normalize_message_content(getattr(response, "content", ""))
+            return FinalAnswer(answer=answer)
+        else:
+            async def text_generator():
+                content = getattr(first_chunk, "content", "")
+                if isinstance(content, list) and content:
+                    content = content[0].get("text", "")
+                content_str = normalize_message_content(content)
+                if content_str:
+                    yield content_str
+                    
+                async for chunk in stream:
+                    chunk_content = getattr(chunk, "content", "")
+                    if isinstance(chunk_content, list) and chunk_content:
+                        chunk_content = chunk_content[0].get("text", "")
+                    chunk_str = normalize_message_content(chunk_content)
+                    if chunk_str:
+                        yield chunk_str
+
+            return FinalAnswerStream(text_generator())
 
     def _first_new_tool_call(self, response: Any, constraints: ConstraintReport) -> dict[str, Any] | None:
         tool_calls = getattr(response, "tool_calls", None)

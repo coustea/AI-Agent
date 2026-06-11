@@ -16,13 +16,13 @@ project_turn_run 将 TurnRunResult 投影为前端可消费的 transcript 消息
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Any, Literal, AsyncIterator
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 from app.chat.agent import ReasoningAgent
-from app.chat.schemas import ConstraintReport, Evidence, EvidenceSet, FinalAnswer, ToolIntent, TurnRequest
+from app.chat.schemas import ConstraintReport, Evidence, EvidenceSet, FinalAnswer, FinalAnswerStream, ToolIntent, TurnRequest
 from app.chat.stages import AttachmentAnalyzer, SearchOrchestrator, TeachingDiagramGenerator
 from app.chat.tutor_tools import TutorToolExecutor
 
@@ -190,7 +190,17 @@ class TurnOrchestrator:
         self.eager_search_enabled = eager_search_enabled
 
     async def run(self, request: TurnRequest) -> TurnRunResult:
-        """执行一轮对话的完整流水线。"""
+        """执行一轮对话的完整流水线 (非流式兼容接口)。"""
+        result = None
+        async for item in self.astream_run(request):
+            if isinstance(item, TurnRunResult):
+                result = item
+        if result is None:
+            raise ValueError("astream_run did not yield TurnRunResult")
+        return result
+
+    async def astream_run(self, request: TurnRequest) -> AsyncIterator[str | TurnRunResult]:
+        """执行一轮对话的完整流水线并流式输出结果。"""
         evidence_set = EvidenceSet()
         constraints = ConstraintReport()
         tool_records: list[ToolExecutionRecord] = []
@@ -213,15 +223,26 @@ class TurnOrchestrator:
             search_output = await self.search.search(request, evidence_set)
             evidence_set.extend(self._coerce_evidence(getattr(search_output, "evidence", [])))
 
-        # 阶段 3：推理循环（agent ↔ tools → FinalAnswer）
-        final_answer = await self._reason_until_final(request, evidence_set, constraints, tool_records)
+        # 阶段 3：推理循环（agent ↔ tools → FinalAnswerStream | FinalAnswer）
+        final_answer = ""
+        final_outcome = await self._reason_until_final(request, evidence_set, constraints, tool_records)
+        
+        if isinstance(final_outcome, FinalAnswerStream):
+            async for chunk in final_outcome.stream:
+                final_answer += chunk
+                yield chunk
+        else:
+            final_answer = final_outcome
+            if final_answer:
+                yield final_answer
+
         teaching_diagram: dict[str, Any] | None = None
 
         # 阶段 4：教学图解生成（仅当启用且有回答时）
         if request.diagram_enabled and self.diagram is not None and final_answer:
             teaching_diagram = await self.diagram.generate(request, final_answer, evidence_set)
 
-        return TurnRunResult(
+        yield TurnRunResult(
             final_answer=final_answer,
             teaching_diagram=teaching_diagram,
             evidence=evidence_set.items,
@@ -238,7 +259,7 @@ class TurnOrchestrator:
         evidence_set: EvidenceSet,
         constraints: ConstraintReport,
         tool_records: list[ToolExecutionRecord],
-    ) -> str:
+    ) -> FinalAnswerStream | str:
         """推理循环：agent.reason() → ToolIntent → execute → 证据回填 → 再推理。
 
         最多执行 max_reasoning_steps 轮，防止无限循环。
@@ -256,6 +277,8 @@ class TurnOrchestrator:
             except TypeError:
                 outcome = await self.agent.reason(request, evidence_set, constraints)
             normalized = self._normalize_outcome(outcome)
+            if isinstance(normalized, FinalAnswerStream):
+                return normalized
             if isinstance(normalized, FinalAnswer):
                 return normalized.answer
             if isinstance(normalized, ToolIntent):
@@ -288,9 +311,9 @@ class TurnOrchestrator:
         constraints.max_steps_reached = True
         return ""
 
-    def _normalize_outcome(self, outcome: Any) -> FinalAnswer | ToolIntent | None:
+    def _normalize_outcome(self, outcome: Any) -> FinalAnswer | ToolIntent | FinalAnswerStream | None:
         """兼容 dict / 对象两种返回格式，统一转为 ToolIntent 或 FinalAnswer。"""
-        if isinstance(outcome, FinalAnswer | ToolIntent):
+        if isinstance(outcome, FinalAnswer | ToolIntent | FinalAnswerStream):
             return outcome
         if isinstance(outcome, dict):
             if str(outcome.get("kind") or "") == "final_answer":

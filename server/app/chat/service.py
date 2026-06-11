@@ -607,7 +607,7 @@ class ChatUseCases:
         yield {"event": "status", "data": {"stage": "answer", "message": "正在组织回答..."}}
 
         try:
-            result = await self._orchestrator.run(
+            run_stream = self._orchestrator.astream_run(
                 TurnRequest(
                     user_id=user_id,
                     session_id=effective_session,
@@ -620,6 +620,18 @@ class ChatUseCases:
                     uploaded_file_ids_by_url=dict(self._uploaded_file_ids_by_url),
                 )
             )
+            result = None
+            async for item in run_stream:
+                if isinstance(item, str):
+                    safety_result = await safety_filter.check(item)
+                    safe_chunk = safety_result.sanitized_text if safety_result.has_violation else item
+                    if safe_chunk:
+                        yield {"event": "token", "data": safe_chunk}
+                else:
+                    result = item
+            
+            if result is None:
+                raise ValueError("未收到编排器返回的结果")
         except Exception as exc:
             logger.exception("[ChatUseCases] 编排执行失败")
             if persist and turn_id is not None:
@@ -655,11 +667,9 @@ class ChatUseCases:
                 full_answer = safety_result.sanitized_text
                 yield {
                     "event": "status",
-                    "data": {"stage": "safety_filter", "message": "内容触发安全策略，已进行敏感词过滤"},
+                    "data": {"stage": "safety_filter", "message": "内容触发安全策略，已进行部分过滤"},
                 }
 
-        if full_answer:
-            yield {"event": "token", "data": full_answer}
         if teaching_diagram is not None:
             yield {"event": "diagram", "data": teaching_diagram}
 
