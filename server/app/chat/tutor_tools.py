@@ -241,6 +241,11 @@ _TOOL_NAME_ALIASES: dict[str, str] = {
 }
 
 
+_LONG_TERM_MEMORY_CATEGORY_ALIASES: dict[str, str] = {
+    "goals_progress": "long_term_goals",
+}
+
+
 class TutorToolExecutor:
     """Execute model-requested tutor tools and convert outputs to orchestrator evidence."""
 
@@ -254,10 +259,11 @@ class TutorToolExecutor:
     async def execute(self, intent: ToolIntent, request: TurnRequest | None = None) -> dict[str, Any]:
         raw_tool_name = str(intent.tool_name or "").strip()
         tool_name = _TOOL_NAME_ALIASES.get(raw_tool_name, raw_tool_name)
-        payload = intent.payload if isinstance(intent.payload, dict) else {}
+        payload = self._normalize_payload(tool_name, intent.payload if isinstance(intent.payload, dict) else {})
         try:
             tool = self.registry.by_name(tool_name)
-            result_text = str(await tool.ainvoke(payload)).strip()
+            raw_result = await tool.ainvoke(payload)
+            result_text = "" if raw_result is None else str(raw_result).strip()
         except Exception as exc:
             logger.warning("[TutorToolExecutor] tool failed: name=%s error=%s", tool_name, exc)
             return {
@@ -283,3 +289,11 @@ class TutorToolExecutor:
             "result_text": result_text,
             "evidence": evidence,
         }
+
+    def _normalize_payload(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(payload)
+        if tool_name == "get_long_term_memory":
+            category = str(normalized.get("category") or "").strip()
+            if category:
+                normalized["category"] = _LONG_TERM_MEMORY_CATEGORY_ALIASES.get(category, category)
+        return normalized

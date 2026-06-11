@@ -331,7 +331,9 @@ class TurnOrchestrator:
                     constraints.failed_tools.append(normalized.tool_name)
                 tool_records.append(
                     ToolExecutionRecord(
-                        tool_name=normalized.tool_name,
+                        tool_name=str(tool_result.get("tool_name") or normalized.tool_name)
+                        if isinstance(tool_result, dict)
+                        else normalized.tool_name,
                         invoked_by="agent",
                         payload=normalized.payload,
                         raw_result=tool_result if isinstance(tool_result, dict) else {},

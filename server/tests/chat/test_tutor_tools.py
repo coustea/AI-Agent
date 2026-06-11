@@ -139,6 +139,59 @@ async def test_tool_executor_normalizes_legacy_profile_intent_name(monkeypatch: 
 
 
 @pytest.mark.asyncio
+async def test_tool_executor_normalizes_legacy_long_term_memory_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.chat import tutor_tools
+    from app.chat.schemas import ToolIntent
+    from app.chat.tutor_tools import TutorToolExecutor
+
+    class FakeMemoryService:
+        async def get_memory_markdown(self, user_id: int, category: str | None = None) -> str:
+            assert user_id == 7
+            assert category == "long_term_goals"
+            return "长期目标: 通过阶段练习追踪进度"
+
+    monkeypatch.setattr(tutor_tools, "get_chat_memory_service", lambda: FakeMemoryService())
+
+    request = TurnRequest(user_id=7, session_id="s-1", message="看看目标进展")
+    executor = TutorToolExecutor(request=request)
+
+    result = await executor.execute(ToolIntent(tool_name="long_term_memory", payload={"category": "goals_progress"}))
+
+    assert result["tool_name"] == "get_long_term_memory"
+    assert result["status"] == "success"
+    assert result["evidence"][0]["evidence_type"] == "long_term_memory"
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_treats_none_tool_output_as_ignored() -> None:
+    from app.chat.schemas import ToolIntent
+    from app.chat.tutor_tools import TutorToolExecutor, TutorToolRegistry
+
+    class FakeTool:
+        name = "web_search"
+
+        async def ainvoke(self, _payload):
+            return None
+
+    class FakeRegistry(TutorToolRegistry):
+        def by_name(self, name: str):
+            assert name == "web_search"
+            return FakeTool()
+
+    request = TurnRequest(user_id=7, session_id="s-1", message="查一下最新资料")
+    executor = TutorToolExecutor(request=request, registry=FakeRegistry(request=request))
+
+    result = await executor.execute(ToolIntent(tool_name="web_search", payload={"query": "最新资料"}))
+
+    assert result["tool_name"] == "web_search"
+    assert result["status"] == "ignored"
+    assert result["result_text"] == ""
+    assert result["evidence"] == []
+
+
+@pytest.mark.asyncio
 async def test_tool_executor_converts_tool_failure_to_non_crashing_result() -> None:
     from app.chat.schemas import ToolIntent
     from app.chat.tutor_tools import TutorToolExecutor, TutorToolRegistry
