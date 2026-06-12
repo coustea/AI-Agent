@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.memory.types import LTM_CATEGORIES
-from app.chat.schemas import TurnRequest
+from app.chat.schemas import TutorTurnContext
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -53,7 +53,7 @@ def _compact(text: str, *, limit: int = 3500) -> str:
 
 
 def make_get_long_term_memory(
-    request: TurnRequest,
+    request: TutorTurnContext,
     memory_service: Any | None = None,
 ) -> Callable[..., Awaitable[str]]:
     """工厂函数：创建闭包绑定当前请求的长期记忆查询工具。

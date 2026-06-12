@@ -18,7 +18,7 @@ from typing import Any
 
 from langchain_core.tools import StructuredTool
 
-from app.chat.schemas import Evidence, ToolIntent, TurnRequest
+from app.chat.schemas import Evidence, TutorToolCall, TutorTurnContext
 from app.chat.stages import WebSearchTool
 from app.chat.tools.evaluation import GetRecentEvaluationArgs, make_get_recent_evaluation
 from app.chat.tools.knowledge import SearchKnowledgeBaseArgs, make_search_knowledge_base
@@ -48,7 +48,7 @@ TOOL_NAME_ALIASES: dict[str, str] = {
 class TutorToolRegistry:
     """辅导工具注册表 — 构建绑定到单次辅导轮次的 LangChain 工具集合。
 
-    每个 TurnRequest 创建一个 Registry 实例，工具列表通过 tools() 懒加载。
+    每个 TutorTurnContext 创建一个 Registry 实例，工具列表通过 tools() 懒加载。
     工具的 coroutine 工厂函数会捕获当前请求上下文（用户ID、会话ID等），
     确保工具在执行时能访问正确的请求数据。
     """
@@ -56,7 +56,7 @@ class TutorToolRegistry:
     def __init__(
         self,
         *,
-        request: TurnRequest,
+        request: TutorTurnContext,
         memory_service: Any | None = None,
         web_search: Any | None = None,
         profile_service: Any | None = None,
@@ -147,7 +147,7 @@ class TutorToolExecutor:
       4. 将结果包装为 Evidence 对象供编排器使用
     """
 
-    def __init__(self, *, request: TurnRequest, registry: TutorToolRegistry | None = None) -> None:
+    def __init__(self, *, request: TutorTurnContext, registry: TutorToolRegistry | None = None) -> None:
         self.request = request
         # 如果未提供注册表，自动创建一个绑定到当前请求的新注册表
         self.registry = registry or TutorToolRegistry(request=request)
@@ -155,7 +155,7 @@ class TutorToolExecutor:
     def tools(self) -> list[StructuredTool]:
         return self.registry.tools()
 
-    async def execute(self, intent: ToolIntent, request: TurnRequest | None = None) -> dict[str, Any]:
+    async def execute(self, intent: TutorToolCall, request: TutorTurnContext | None = None) -> dict[str, Any]:
         """执行单个工具调用 — 解析别名、规范化参数、调用工具、包装证据。
 
         Args:

@@ -1,12 +1,11 @@
 """Chat 私有记忆管线与持久化门面。
 
-核心类 ChatMemoryService 是记忆操作的统一入口，编排两阶段后处理管线：
-  after_turn → post_turn:
-    1. 压缩(compressor.maybe_compress) — 短期消息过多时生成摘要块
-    2. 长期记忆(long_term_memory.maybe_update) — 检测稳定信号并增量更新
+核心类 ChatMemoryService 是记忆操作的统一入口，提供独立的后处理接口：
+  update_post_turn_counters — 累加本轮压缩/画像/长期记忆调度计数器
+  compress_session      — 会话压缩（短期消息摘要化）
+  update_long_term_memory — 长期记忆更新（稳定学习特征增量写入）
 
-画像更新由 ChatUseCases 的智能辅导后置管线在记忆管线之后串行触发，
-避免与压缩/长期记忆同时争抢同一个会话计数器。
+画像更新由 TutorAgent 的 post-turn 调度边界触发，避免与压缩/长期记忆同时执行。
 
 其余方法提供会话 CRUD、消息存取、摘要查询等基础能力。
 
@@ -35,6 +34,7 @@ from app.chat.memory.types import (
     MESSAGE_EXPIRE_DAYS,
     TITLE_MAX_LENGTH,
     estimate_token_count,
+    has_stable_signal,
     now,
 )
 from app.infra.database import session_scope
@@ -67,8 +67,10 @@ COMPRESS_MIN_MESSAGES = 14
 COMPRESS_MIN_TOKENS = 3500
 # 注入 system prompt 的最大摘要块数
 SUMMARY_CONTEXT_BLOCKS = 3
-# 长期记忆更新的轮次间隔（每 8 轮检查一次）
-LTM_PERIODIC_TURNS = 8
+# 长期记忆更新的新增消息阈值
+LTM_MIN_MESSAGES = 12
+# 长期记忆更新的新增 token 阈值
+LTM_MIN_TOKENS = 3500
 # 长期记忆更新的最低置信度阈值
 LTM_MIN_CONFIDENCE = 0.75
 # 长期记忆更新的冷却期（分钟），防止频繁写入
@@ -228,10 +230,10 @@ class ChatMemoryService:
             min_messages=COMPRESS_MIN_MESSAGES,
             min_tokens=COMPRESS_MIN_TOKENS,
         )
-        # 长期记忆服务：每 8 轮检查一次，置信度 ≥ 0.75 才写入，冷却期 30 分钟
+        # 长期记忆服务：按新增消息/token 调度，置信度 ≥ 0.75 才写入，冷却期 30 分钟
         self.long_term_memory = ChatLongTermMemoryService(
             module=module,
-            periodic_turns=LTM_PERIODIC_TURNS,
+            periodic_turns=LTM_MIN_MESSAGES,
             min_confidence=LTM_MIN_CONFIDENCE,
             cooldown_minutes=LTM_UPDATE_COOLDOWN_MINUTES,
         )
@@ -873,15 +875,21 @@ class ChatMemoryService:
             return len(messages)
 
     # -------------------------------------------------------------------
-    # reset_session_counters: 重置 session 的 token 计数器
+    # reset_session_counters: 重置 session 的后处理计数器
     #
-    # 将 summary_token_count 归零，通常在会话重置或重新开始时调用。
+    # 将压缩、画像、长期记忆计数器归零，通常在会话重置或重新开始时调用。
     # -------------------------------------------------------------------
     async def reset_session_counters(self, *, user_id: int, session_id: str) -> None:
         async with session_scope() as db:
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
             if chat_session:
                 chat_session.summary_token_count = 0
+                chat_session.profile_token_count = 0
+                chat_session.profile_message_count = 0
+                chat_session.ltm_token_count = 0
+                chat_session.ltm_message_count = 0
+                chat_session.last_profile_message_id = None
+                chat_session.last_ltm_message_id = None
                 db.add(chat_session)
                 await db.commit()
 
@@ -1000,48 +1008,243 @@ class ChatMemoryService:
                 )
             ).first()
 
-    # -------------------------------------------------------------------
-    # get_profile_markdown: 获取用户学习画像的 markdown 内容
-    #
-    # 委托给 ProfileService 执行，支持按维度过滤。
-    # 画像由 profiling 服务在对话过程中持续更新，
-    # 包含学习风格、知识水平、偏好等维度的信息。
-    # -------------------------------------------------------------------
-    async def get_profile_markdown(self, user_id: int, dimension: str | None = None) -> str:
-        from app.profile.service import get_profile_service
-        return await get_profile_service().get_profile_markdown(user_id, dimension=dimension)
+    async def get_memory_markdown(self, user_id: int, category: str | None = None) -> str:
+        """读取长期记忆 Markdown，按需返回指定分类小节。"""
+        record = await self.get_long_term_memory(user_id=user_id)
+        markdown = str(getattr(record, "memory_markdown", "") or "").strip()
+        if not markdown:
+            return "暂无长期学习记忆。"
+
+        category_value = str(category or "").strip()
+        if not category_value:
+            return markdown
+
+        heading = LTM_CATEGORY_NAMES.get(category_value)
+        if not heading:
+            return markdown
+
+        match = re.search(
+            rf"(^|\n)##\s+{re.escape(heading)}\s*\n(?P<body>.*?)(?=\n##\s+|\Z)",
+            markdown,
+            flags=re.S,
+        )
+        if not match:
+            return f"## {heading}\n暂无信息。"
+        return f"## {heading}\n{match.group('body').strip()}"
 
     # -------------------------------------------------------------------
-    # after_turn: 每轮对话结束后的 token 计数与后处理管线入口
+    # update_post_turn_counters: 累加本轮后处理调度计数器
     #
-    # 工作流：
-    #   1. 计算本轮 token 增量（优先使用 LLM 返回的 usage_metadata，
-    #      否则用本地估算函数 estimate_token_count）
-    #   2. 将 token 增量累加到 session.summary_token_count
-    #      （该计数器用于判断是否触发压缩）
-    #   3. 触发 post_turn 后处理管线（压缩 + 长期记忆更新）
-    #
-    # 为什么 token 计数在这里而非 post_turn 中：
-    #   token 计数是独立的副作用，即使 post_turn 失败，
-    #   计数器仍应准确反映会话的 token 消耗。
+    # summary_token_count 只用于压缩；画像和长期记忆各自维护 token/message 计数与处理游标。
     # -------------------------------------------------------------------
-    async def after_turn(
+    async def update_post_turn_counters(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        turn_id: int | None = None,
+        user_message: str,
+        assistant_reply: str,
+        usage_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, int]:
+        try:
+            async with session_scope() as db:
+                token_delta, message_delta, max_message_id = await self._turn_message_stats(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_id=turn_id,
+                    user_message=user_message,
+                    assistant_reply=assistant_reply,
+                    usage_metadata=usage_metadata,
+                )
+                chat_session = (
+                    await db.exec(
+                        select(ChatSession).where(
+                            ChatSession.id == session_id,
+                            ChatSession.user_id == user_id,
+                            ChatSession.module == self.module,
+                        )
+                    )
+                ).first()
+                if not chat_session:
+                    chat_session = ChatSession(
+                        id=session_id,
+                        user_id=user_id,
+                        module=self.module,
+                        title=DEFAULT_SESSION_TITLE,
+                    )
+                chat_session.summary_token_count = max(0, (chat_session.summary_token_count or 0) + token_delta)
+                chat_session.profile_token_count = max(0, (chat_session.profile_token_count or 0) + token_delta)
+                chat_session.profile_message_count = max(0, (chat_session.profile_message_count or 0) + message_delta)
+                chat_session.ltm_token_count = max(0, (chat_session.ltm_token_count or 0) + token_delta)
+                chat_session.ltm_message_count = max(0, (chat_session.ltm_message_count or 0) + message_delta)
+                chat_session.updated_at = now()
+                db.add(chat_session)
+                await db.commit()
+                return {
+                    "token_delta": token_delta,
+                    "message_delta": message_delta,
+                    "max_message_id": max_message_id,
+                    "summary_token_count": int(chat_session.summary_token_count or 0),
+                    "profile_token_count": int(chat_session.profile_token_count or 0),
+                    "profile_message_count": int(chat_session.profile_message_count or 0),
+                    "ltm_token_count": int(chat_session.ltm_token_count or 0),
+                    "ltm_message_count": int(chat_session.ltm_message_count or 0),
+                }
+        except Exception as exc:
+            logger.error("[ChatMemoryService] post-turn 计数更新失败 user=%s session=%s err=%s", user_id, session_id, exc)
+        token_delta = estimate_token_count(user_message) + estimate_token_count(assistant_reply)
+        return {
+            "token_delta": token_delta,
+            "message_delta": int(bool(user_message)) + int(bool(assistant_reply)),
+            "max_message_id": 0,
+            "summary_token_count": 0,
+            "profile_token_count": 0,
+            "profile_message_count": 0,
+            "ltm_token_count": 0,
+            "ltm_message_count": 0,
+        }
+
+    async def _turn_message_stats(
+        self,
+        *,
+        db: Any,
+        user_id: int,
+        session_id: str,
+        turn_id: int | None,
+        user_message: str,
+        assistant_reply: str,
+        usage_metadata: dict[str, Any] | None = None,
+    ) -> tuple[int, int, int]:
+        if turn_id is not None:
+            messages = list(
+                (
+                    await db.exec(
+                        select(ChatMessage)
+                        .where(
+                            ChatMessage.user_id == user_id,
+                            ChatMessage.session_id == session_id,
+                            ChatMessage.module == self.module,
+                            ChatMessage.turn_id == turn_id,
+                            ChatMessage.role.in_(["user", "assistant"]),
+                        )
+                        .order_by(ChatMessage.id.asc())
+                    )
+                ).all()
+            )
+            if messages:
+                stored_tokens = sum(estimate_token_count(message.content or "") for message in messages)
+                token_delta = int(usage_metadata.get("total_tokens") or stored_tokens) if usage_metadata else stored_tokens
+                return token_delta, len(messages), int(messages[-1].id or 0)
+
+        fallback_messages = [text for text in (user_message, assistant_reply) if str(text or "").strip()]
+        if usage_metadata and "total_tokens" in usage_metadata:
+            token_delta = int(usage_metadata["total_tokens"] or 0)
+        else:
+            token_delta = sum(estimate_token_count(text) for text in fallback_messages)
+        return token_delta, len(fallback_messages), 0
+
+    # -------------------------------------------------------------------
+    # compress_session: 会话压缩入口
+    #
+    # 当 session 中消息数 ≥ min_messages 或 token ≥ min_tokens 时，
+    # 将旧消息通过 LLM 摘要化，保留最近 keep_recent 条原始消息。
+    # 返回压缩后的 summary block（None 表示无需压缩）。
+    # -------------------------------------------------------------------
+    async def compress_session(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        reason: str = "compress_session",
+    ):
+        try:
+            async with session_scope() as db:
+                return await self.compressor.maybe_compress(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    reason=reason,
+                )
+        except Exception as exc:
+            logger.error("[ChatMemoryService] compression failed: %s", exc)
+            return None
+
+    # -------------------------------------------------------------------
+    # update_long_term_memory: 长期记忆更新入口
+    #
+    # 根据信号触发（正则匹配偏好/纠正/背景）或新增消息/token 阈值触发
+    # 判断是否需要更新。LLM 判断 need_update 且 confidence ≥ 阈值
+    # 才实际写入。返回 True 表示已更新。
+    # -------------------------------------------------------------------
+    async def update_long_term_memory(
         self,
         *,
         user_id: int,
         session_id: str,
         user_message: str,
         assistant_reply: str,
-        usage_metadata: dict[str, Any] | None = None,
-        turn_count: int = 0,
-    ) -> None:
-        # 优先使用 LLM 返回的精确 token 数，回退到本地估算
-        if usage_metadata and "total_tokens" in usage_metadata:
-            delta = usage_metadata["total_tokens"]
-        else:
-            delta = estimate_token_count(user_message) + estimate_token_count(assistant_reply)
+        signal_detected: bool = False,
+    ) -> dict[str, Any]:
+        try:
+            async with session_scope() as db:
+                chat_session = (
+                    await db.exec(
+                        select(ChatSession).where(
+                            ChatSession.id == session_id,
+                            ChatSession.user_id == user_id,
+                            ChatSession.module == self.module,
+                        )
+                    )
+                ).first()
+                after_message_id = int(chat_session.last_ltm_message_id or 0) if chat_session else 0
+                new_dialogue, message_count, latest_message_id = await self._build_dialogue_since(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    after_message_id=after_message_id,
+                    limit=60,
+                )
+                if not new_dialogue or latest_message_id <= after_message_id:
+                    return {"updated": False, "analyzed": False, "latest_message_id": after_message_id}
 
-        # 更新 session 的累计 token 计数（失败不阻塞后续流程）
+                result = await self.long_term_memory.maybe_update(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                    user_message=user_message,
+                    assistant_reply=assistant_reply,
+                    new_dialogue=new_dialogue,
+                    turn_count=message_count,
+                    signal_detected=signal_detected,
+                )
+                analyzed = bool(result.get("analyzed"))
+                if analyzed and chat_session:
+                    chat_session.ltm_token_count = 0
+                    chat_session.ltm_message_count = 0
+                    chat_session.last_ltm_message_id = latest_message_id
+                    chat_session.last_ltm_updated_at = now()
+                    chat_session.updated_at = now()
+                    db.add(chat_session)
+                return {**result, "latest_message_id": latest_message_id}
+        except Exception as exc:
+            logger.error("[ChatMemoryService] long-term update failed: %s", exc)
+            return {"updated": False, "analyzed": False, "error": str(exc)}
+
+    async def should_update_long_term_memory(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        assistant_reply: str,
+    ) -> tuple[bool, dict[str, Any]]:
+        """判断本轮是否应该尝试长期记忆更新，返回调度信息。"""
+        signal_detected = has_stable_signal(user_message) or (
+            has_stable_signal(assistant_reply)
+            and any(keyword in assistant_reply for keyword in ("以后", "下次", "记住", "偏好", "纠正"))
+        )
         try:
             async with session_scope() as db:
                 chat_session = (
@@ -1054,93 +1257,68 @@ class ChatMemoryService:
                     )
                 ).first()
                 if not chat_session:
-                    # session 不存在时兜底创建，避免计数丢失
-                    chat_session = ChatSession(
-                        id=session_id,
-                        user_id=user_id,
-                        module=self.module,
-                        title=DEFAULT_SESSION_TITLE,
-                    )
-                # 累加 token 增量，确保不为负数
-                chat_session.summary_token_count = max(0, (chat_session.summary_token_count or 0) + delta)
-                chat_session.updated_at = now()
-                db.add(chat_session)
-                await db.commit()
+                    return signal_detected, {
+                        "signal_detected": signal_detected,
+                        "ltm_token_count": 0,
+                        "ltm_message_count": 0,
+                    }
+
+                token_count = int(chat_session.ltm_token_count or 0)
+                message_count = int(chat_session.ltm_message_count or 0)
+                threshold_due = token_count >= LTM_MIN_TOKENS or message_count >= LTM_MIN_MESSAGES
+                last_updated = chat_session.last_ltm_updated_at
+                cooldown_ok = (
+                    last_updated is None
+                    or (now() - last_updated).total_seconds() >= LTM_UPDATE_COOLDOWN_MINUTES * 60
+                )
+                has_new_messages = message_count > 0
+                return (signal_detected or threshold_due) and cooldown_ok and has_new_messages, {
+                    "signal_detected": signal_detected,
+                    "threshold_due": threshold_due,
+                    "cooldown_ok": cooldown_ok,
+                    "ltm_token_count": token_count,
+                    "ltm_message_count": message_count,
+                    "last_ltm_message_id": int(chat_session.last_ltm_message_id or 0),
+                }
         except Exception as exc:
-            logger.error("[ChatMemoryService] token 计数更新失败 user=%s session=%s err=%s", user_id, session_id, exc)
+            logger.error("[ChatMemoryService] long-term schedule check failed: %s", exc)
+            return False, {"signal_detected": False, "error": str(exc)}
 
-        # 触发后处理管线：压缩 + 长期记忆更新
-        await self.post_turn(
-            user_id=user_id,
-            session_id=session_id,
-            user_message=user_message,
-            assistant_reply=assistant_reply,
-            turn_count=turn_count,
-        )
-
-    # -------------------------------------------------------------------
-    # post_turn: 后处理管线 — 压缩 + 长期记忆更新
-    #
-    # 两阶段管线按顺序执行，各自独立 try/except 互不影响：
-    #
-    # 阶段 1 — 短期记忆压缩（compressor.maybe_compress）：
-    #   当 session 中消息数 ≥ 14 条 或 token ≥ 3500 时，
-    #   将旧消息摘要化，保留最近 8 条原始消息。
-    #   压缩后生成一个 ChatSessionSummaryBlock 行。
-    #
-    # 阶段 2 — 长期记忆更新（long_term_memory.maybe_update）：
-    #   每 8 轮检查一次（由 turn_count 控制），检测本轮对话中
-    #   是否包含稳定信号（如重复出现的知识偏好、学习习惯），
-    #   置信度 ≥ 0.75 时增量更新 ChatLongTermMemory.memory_markdown。
-    #
-    # 返回值：字典标记哪些阶段实际执行了更新，供调用方判断。
-    # -------------------------------------------------------------------
-    async def post_turn(
+    async def _build_dialogue_since(
         self,
         *,
+        db: Any,
         user_id: int,
         session_id: str,
-        user_message: str,
-        assistant_reply: str,
-        turn_count: int = 0,
-    ) -> dict[str, bool]:
-        # 跟踪各阶段是否实际执行了更新
-        results = {
-            "compressed": False,
-            "ltm_updated": False,
-        }
+        after_message_id: int,
+        limit: int,
+    ) -> tuple[str, int, int]:
+        stmt = (
+            select(ChatMessage)
+            .where(
+                ChatMessage.user_id == user_id,
+                ChatMessage.session_id == session_id,
+                ChatMessage.module == self.module,
+                ChatMessage.role.in_(["user", "assistant"]),
+                ChatMessage.id > after_message_id,
+            )
+            .order_by(ChatMessage.id.desc())
+            .limit(limit)
+        )
+        messages = list((await db.exec(stmt)).all())
+        if not messages:
+            return "", 0, after_message_id
 
-        # 阶段 1：尝试压缩短期消息（失败不影响后续阶段）
-        try:
-            async with session_scope() as db:
-                summary = await self.compressor.maybe_compress(
-                    db=db,
-                    user_id=user_id,
-                    session_id=session_id,
-                    reason="post_turn",
-                )
-                # summary 非 None 表示实际执行了压缩
-                results["compressed"] = summary is not None
-        except Exception as exc:
-            logger.error("[ChatMemoryService] compression failed: %s", exc)
-
-        # 阶段 2：尝试更新长期记忆（独立于压缩，失败不影响）
-        try:
-            async with session_scope() as db:
-                updated = await self.long_term_memory.maybe_update(
-                    db=db,
-                    user_id=user_id,
-                    session_id=session_id,
-                    user_message=user_message,
-                    assistant_reply=assistant_reply,
-                    turn_count=turn_count,
-                )
-                results["ltm_updated"] = updated
-        except Exception as exc:
-            logger.error("[ChatMemoryService] long-term update failed: %s", exc)
-
-        
-        return results
+        lines: list[str] = []
+        latest_message_id = after_message_id
+        for message in reversed(messages):
+            latest_message_id = max(latest_message_id, int(message.id or 0))
+            content = (message.content or "").strip()
+            if not content:
+                continue
+            role_label = "学生" if message.role == "user" else "辅导老师"
+            lines.append(f"{role_label}：{content[:700]}")
+        return "\n".join(lines), len(messages), latest_message_id
 
 
 # -------------------------------------------------------------------

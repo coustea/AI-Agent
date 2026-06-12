@@ -24,11 +24,9 @@ from app.chat.schemas import (
     TutorAgentInput,
     UploadResponse,
 )
-from app.chat.streaming import ResponseStreamer
 from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage
-from app.profile.service import get_profile_service
 
 logger = get_logger(__name__)
 
@@ -142,10 +140,10 @@ async def chat(
     流程：
     1. 创建 turn 记录 + 持久化用户消息
     2. 构建历史消息（build_messages）
-    3. 加载会话摘要、长期记忆、学习者画像
+    3. 加载会话摘要
     4. 调用 TutorAgent.chat()，将内部事件转换为 SSE
     5. 持久化助手回复、工具调用、turn 终态
-    6. 后台串行触发记忆管线和画像更新
+    6. 后台交给 TutorAgent 调度记忆管线和画像更新
     """
     uc = get_chat_usecases()
     effective_session = session_id or uc.default_session_id(user_id)
@@ -233,22 +231,6 @@ async def chat(
     history_messages = await build_messages(user_id, effective_session)
     session_summary = await svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
 
-    # 加载长期记忆
-    long_term_memory = ""
-    try:
-        ltm_record = await svc.get_long_term_memory(user_id=user_id)
-        if ltm_record and getattr(ltm_record, "memory_markdown", None):
-            long_term_memory = ltm_record.memory_markdown
-    except Exception as exc:
-        logger.warning("[chat] 加载长期记忆失败: %s", exc)
-
-    # 加载学习者画像
-    learner_profile = ""
-    try:
-        learner_profile = await svc.get_profile_markdown(user_id)
-    except Exception as exc:
-        logger.warning("[chat] 加载画像失败: %s", exc)
-
     # ── 3. 调用 TutorAgent ──
     agent_input = TutorAgentInput(
         user_id=user_id,
@@ -259,8 +241,6 @@ async def chat(
         attachments=merged_attachments,
         history_messages=history_messages,
         session_summary=session_summary,
-        long_term_memory=long_term_memory,
-        learner_profile=learner_profile,
         enable_web_search=enable_web_search,
         need_teaching_diagram=need_teaching_diagram,
     )
@@ -375,16 +355,19 @@ async def chat(
             error_message=None,
         )
 
-    # ── 5. 后台任务：串行运行记忆管线和画像更新，避免抢占同一个 session 计数器 ──
-    if full_answer:
-        uc._spawn_background(
-            uc._run_tutoring_post_turn_pipeline(
-                user_id=user_id, session_id=effective_session,
-                user_message=current_message, assistant_reply=full_answer,
-                turn_count=turn_index,
-            ),
-            label="tutoring_post_turn_pipeline",
-        )
+    # ── 5. 后台任务：由 TutorAgent 调度压缩 / 长期记忆 / 画像更新 ──
+    if full_answer and turn_id is not None:
+        async def _post_turn():
+            await agent.run_post_turn_jobs(
+                user_id=user_id,
+                session_id=effective_session,
+                turn_id=turn_id,
+                user_message=current_message,
+                assistant_reply=full_answer,
+                turn_index=turn_index,
+            )
+
+        uc._spawn_background(_post_turn(), label="post_turn")
 
 
 # -----------------------------------------------------------------------
@@ -710,8 +693,6 @@ class ChatUseCases:
         self._background_tasks: set[asyncio.Task] = set()
         # 已上传文件的 URL→数据库 ID 映射
         self._uploaded_file_ids_by_url: dict[str, int] = {}
-        # 响应流生成器：将 LLM 输出转为 SSE 事件
-        self._response_streamer = ResponseStreamer()
 
     def default_session_id(self, user_id: int) -> str:
         """生成默认会话 ID — 格式: user-{user_id}-default-mentor。"""
@@ -936,50 +917,6 @@ class ChatUseCases:
             session_id=session_id,
             filename=filename,
         )
-
-    async def _update_learner_profile(self, *, user_id: int, session_id: str) -> None:
-        """根据对话内容更新学习者画像（后台执行）。"""
-        await get_profile_service().maybe_update_from_tutoring_turn(user_id=user_id, session_id=session_id)
-
-    async def _run_tutoring_post_turn_pipeline(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        user_message: str,
-        assistant_reply: str,
-        turn_count: int,
-    ) -> None:
-        """串行运行智能辅导的后置记忆任务。
-
-        顺序必须保持：先更新会话 token 并尝试压缩/长期记忆，再更新画像。
-        两者都会读取或修改 ChatSession.summary_token_count，拆成并发任务会导致触发阈值互相抢占。
-        """
-        try:
-            await self._memory_service.after_turn(
-                user_id=user_id,
-                session_id=session_id,
-                user_message=user_message,
-                assistant_reply=assistant_reply,
-                turn_count=turn_count,
-            )
-        except Exception as exc:
-            logger.error(
-                "[ChatUseCases] 智能辅导记忆管线失败 user=%s session=%s err=%s",
-                user_id,
-                session_id,
-                exc,
-            )
-
-        try:
-            await self._update_learner_profile(user_id=user_id, session_id=session_id)
-        except Exception as exc:
-            logger.error(
-                "[ChatUseCases] 智能辅导画像更新失败 user=%s session=%s err=%s",
-                user_id,
-                session_id,
-                exc,
-            )
 
     def _spawn_background(self, coro, *, label: str = "") -> None:
         """安全地启动后台协程任务。

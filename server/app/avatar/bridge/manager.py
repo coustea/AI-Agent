@@ -665,7 +665,6 @@ class RealtimeBridge:
     ):
         """Run one completed turn through chat service and avatar playback."""
         from app.chat.service import get_chat_usecases
-        from app.chat.schemas import ChatHistoryMessage
 
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()
@@ -673,19 +672,22 @@ class RealtimeBridge:
             session = await chat_uc.create_session(user_id=self.user_id)
             self.session_id = str(session["id"])
 
-        normalized_history: list[ChatHistoryMessage] = []
+        normalized_history: list[dict] = []
         for item in history or []:
-            try:
-                normalized_history.append(ChatHistoryMessage(**item))
-            except Exception:
+            if not isinstance(item, dict):
                 logger.debug("[Bridge] ignored malformed history item=%s", item)
-        latest_content = normalized_history[-1].content.strip() if normalized_history else ""
+                continue
+            role = str(item.get("role") or "").strip()
+            content = str(item.get("content") or "").strip()
+            if role and content:
+                normalized_history.append({"role": role, "content": content})
+        latest_content = normalized_history[-1]["content"].strip() if normalized_history else ""
         if (
             not normalized_history
-            or normalized_history[-1].role != "user"
+            or normalized_history[-1]["role"] != "user"
             or latest_content != user_text.strip()
         ):
-            normalized_history.append(ChatHistoryMessage(role="user", content=user_text))
+            normalized_history.append({"role": "user", "content": user_text})
         full_response = ""
         event_count = 0
         stream_failed = False

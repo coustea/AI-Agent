@@ -26,6 +26,8 @@ from app.chat.schemas import (
     ClassificationResult,
     Evidence,
     EvidenceSet,
+    TutorToolCall,
+    TutorTurnContext,
     TutorAgentInput,
 )
 from app.chat.stages import TeachingDiagramGenerator
@@ -64,8 +66,6 @@ class TutorAgentState(TypedDict, total=False):
     # 上下文
     history_messages: list[AnyMessage]
     session_summary: str
-    long_term_memory: str
-    learner_profile: str
 
     # 分类
     classification: ClassificationResult
@@ -119,8 +119,6 @@ class TutorAgent:
             "need_teaching_diagram": input.need_teaching_diagram,
             "history_messages": input.history_messages,
             "session_summary": input.session_summary,
-            "long_term_memory": input.long_term_memory,
-            "learner_profile": input.learner_profile,
             "attachment_context": "",
             "attachment_analyses": [],
             "evidence": [],
@@ -234,6 +232,96 @@ class TutorAgent:
         except Exception as exc:
             logger.warning("[TutorAgent] persist turn event failed: %s", exc)
 
+    async def run_post_turn_jobs(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        turn_id: int,
+        user_message: str,
+        assistant_reply: str,
+        turn_index: int = 0,
+    ) -> None:
+        """在最终回答落盘后调度会话压缩、长期记忆和画像更新。
+
+        默认每轮最多运行一个重 LLM 任务：压缩 > 长期记忆 > 画像。
+        """
+        state: TutorAgentState = {
+            "user_id": user_id,
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "event_queue": asyncio.Queue(),
+        }
+        await self._persist_turn_event(
+            state,
+            "memory.update.start",
+            {"stage": "post_turn", "turn_index": turn_index},
+        )
+
+        job = "none"
+        status = "skipped"
+        payload: dict[str, Any] = {}
+        try:
+            counters = await self.memory_service.update_post_turn_counters(
+                user_id=user_id,
+                session_id=session_id,
+                turn_id=turn_id,
+                user_message=user_message,
+                assistant_reply=assistant_reply,
+            )
+            payload["counters"] = counters
+
+            summary_block = await self.memory_service.compress_session(
+                user_id=user_id,
+                session_id=session_id,
+            )
+            if summary_block is not None:
+                job = "compression"
+                status = "completed"
+                payload["summary_block_id"] = getattr(summary_block, "id", None)
+            else:
+                should_ltm, ltm_schedule = await self.memory_service.should_update_long_term_memory(
+                    user_id=user_id,
+                    session_id=session_id,
+                    user_message=user_message,
+                    assistant_reply=assistant_reply,
+                )
+                payload["ltm_schedule"] = ltm_schedule
+                if should_ltm:
+                    job = "long_term_memory"
+                    ltm_result = await self.memory_service.update_long_term_memory(
+                        user_id=user_id,
+                        session_id=session_id,
+                        user_message=user_message,
+                        assistant_reply=assistant_reply,
+                        signal_detected=bool(ltm_schedule.get("signal_detected")),
+                    )
+                    status = "completed" if ltm_result.get("updated") else "analyzed" if ltm_result.get("analyzed") else "skipped"
+                    payload["ltm_result"] = ltm_result
+                else:
+                    from app.profile.service import get_profile_service
+
+                    job = "learner_profile"
+                    profile_updated = await get_profile_service().maybe_update_from_tutoring_turn(
+                        user_id=user_id,
+                        session_id=session_id,
+                    )
+                    status = "completed" if profile_updated else "skipped"
+                    payload["profile_updated"] = profile_updated
+
+            await self._persist_turn_event(
+                state,
+                "memory.update.done",
+                {"job": job, "status": status, **payload},
+            )
+        except Exception as exc:
+            logger.error("[TutorAgent] post-turn jobs failed: %s", exc)
+            await self._persist_turn_event(
+                state,
+                "memory.update.done",
+                {"job": job, "status": "error", "error": str(exc), **payload},
+            )
+
     # ------------------------------------------------------------------
     # Graph construction
     # ------------------------------------------------------------------
@@ -299,7 +387,6 @@ class TutorAgent:
         question = state.get("question", "")
         attachments = state.get("attachments", [])
         summary = state.get("session_summary", "")
-        profile = state.get("learner_profile", "")
 
         has_attachments = bool(attachments)
         has_web_search = state.get("enable_web_search", False)
@@ -309,7 +396,6 @@ class TutorAgent:
             f"学生问题: {question}\n"
             f"附件数量: {len(attachments)}\n"
             f"会话摘要: {summary[:500] if summary else '无'}\n"
-            f"学习者画像: {profile[:300] if profile else '无'}\n"
             f"用户请求联网搜索: {has_web_search}\n"
             f"用户请求教学图解: {has_diagram}\n\n"
             "请分析以上信息，返回分类结果。"
@@ -441,9 +527,7 @@ class TutorAgent:
         enable_web_search = state.get("enable_web_search", False)
         need_diagram = state.get("need_teaching_diagram", False)
 
-        from app.chat.schemas import TurnRequest
-
-        turn_request = TurnRequest(
+        turn_context = TutorTurnContext(
             user_id=user_id,
             session_id=session_id,
             user_input=question,
@@ -452,8 +536,8 @@ class TutorAgent:
             need_teaching_diagram=need_diagram,
         )
 
-        registry = TutorToolRegistry(request=turn_request)
-        executor = TutorToolExecutor(request=turn_request, registry=registry)
+        registry = TutorToolRegistry(request=turn_context)
+        executor = TutorToolExecutor(request=turn_context, registry=registry)
 
         evidence_list: list[dict[str, Any]] = list(state.get("evidence", []))
         tool_invocations: list[dict[str, Any]] = list(state.get("tool_invocations", []))
@@ -478,15 +562,13 @@ class TutorAgent:
         if not tools_to_call and enable_web_search:
             tools_to_call.append("web_search")
 
-        from app.chat.schemas import ToolIntent
-
         seq = len(events) + 1
         for tool_name in tools_to_call:
             start_event = ChatStreamEvent(type="tool_start", payload={"tool_name": tool_name}, sequence=seq, timestamp=time.time())
             events = await self._emit_event(state, start_event, events, turn_event_type="tool.start")
             seq += 1
 
-            intent = ToolIntent(tool_name=tool_name, payload={"query": question, "reason": "classify routed"})
+            intent = TutorToolCall(tool_name=tool_name, payload={"query": question, "reason": "classify routed"})
             tool_status = "success"
             tool_call_id = f"call-{uuid4().hex}"
             result_text = ""
@@ -622,8 +704,6 @@ class TutorAgent:
         question = state.get("question", "")
         history = state.get("history_messages", [])
         session_summary = state.get("session_summary", "")
-        long_term_memory = state.get("long_term_memory", "")
-        learner_profile = state.get("learner_profile", "")
         attachment_context = state.get("attachment_context", "")
         evidence_list = state.get("evidence", [])
         attachments = state.get("attachments", [])
@@ -648,10 +728,6 @@ class TutorAgent:
         extra_parts: list[str] = []
         if evidence_context and evidence_context != "无额外证据。":
             extra_parts.append(f"[检索证据]\n{evidence_context}")
-        if long_term_memory:
-            extra_parts.append(f"[长期记忆]\n{long_term_memory}")
-        if learner_profile:
-            extra_parts.append(f"[学习者画像]\n{learner_profile}")
         if extra_parts:
             system_prompt += "\n\n" + "\n\n".join(extra_parts)
 
@@ -747,11 +823,9 @@ class TutorAgent:
         events = await self._emit_event(state, start_event, events, turn_event_type="diagram.start")
 
         try:
-            from app.chat.schemas import TurnRequest
-
             evidence_set = EvidenceSet(items=[Evidence.model_validate(e) for e in state.get("evidence", []) if isinstance(e, dict)])
             diagram_result = await TeachingDiagramGenerator().generate(
-                TurnRequest(
+                TutorTurnContext(
                     user_id=user_id,
                     session_id=session_id,
                     user_input=question,

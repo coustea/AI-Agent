@@ -6,7 +6,7 @@ from typing import Any, Callable, Awaitable
 
 from pydantic import BaseModel, Field
 
-from app.chat.schemas import TurnRequest
+from app.chat.schemas import TutorTurnContext
 from app.profile.service import get_profile_service
 from app.infra.logging import get_logger
 
@@ -32,7 +32,7 @@ def _compact(text: str, *, limit: int = 3500) -> str:
 
 
 def make_get_learner_profile(
-    request: TurnRequest,
+    request: TutorTurnContext,
     profile_service: Any | None = None,
 ) -> Callable[..., Awaitable[str]]:
     """工厂函数：创建闭包绑定当前请求的画像查询工具。

@@ -15,7 +15,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.chat.schemas import Evidence, EvidenceSet, TeachingDiagram, TurnRequest
+from app.chat.schemas import Evidence, EvidenceSet, TeachingDiagram, TutorTurnContext
 from app.chat.tools.search import duckduckgo_search, serp_search, spark_search, tavily_search
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
@@ -64,7 +64,7 @@ class TeachingDiagramGenerator:
 
     async def generate(
         self,
-        request: TurnRequest,
+        request: TutorTurnContext,
         answer: str,
         evidence_set: EvidenceSet,
     ) -> dict:

@@ -122,6 +122,20 @@ class ChatSession(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
     summary_token_count: int = Field(default=0)
+    profile_token_count: int = Field(default=0)
+    profile_message_count: int = Field(default=0)
+    ltm_token_count: int = Field(default=0)
+    ltm_message_count: int = Field(default=0)
+    last_profile_message_id: int | None = Field(default=None)
+    last_ltm_message_id: int | None = Field(default=None)
+    last_profile_updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+    )
+    last_ltm_updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+    )
 
 
 class ChatTurn(SQLModel, table=True):

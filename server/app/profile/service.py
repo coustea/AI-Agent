@@ -14,10 +14,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.infra.models import ChatMessage, ChatSession, ChatLongTermMemory, CourseProfile, GlobalProfile, School
+from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock, ChatLongTermMemory, CourseProfile, GlobalProfile, School
 from app.profile.types import (
     OnboardingInferenceOutput,
+    PROFILE_MESSAGE_THRESHOLD,
     PROFILE_TOKEN_THRESHOLD,
+    PROFILE_UPDATE_COOLDOWN_MINUTES,
     ProfileScoreOutput,
     TutoringInferenceOutput,
     make_default_profile_json,
@@ -149,7 +151,7 @@ class ProfileService:
 
             recent_dialogue = ""
             if session_id:
-                recent_dialogue = await self._build_recent_dialogue(
+                recent_dialogue, _ = await self._build_recent_dialogue(
                     db=db,
                     user_id=user_id,
                     session_id=session_id,
@@ -211,8 +213,15 @@ class ProfileService:
             if not chat_session:
                 return False
 
-            token_count = chat_session.summary_token_count or 0
-            if token_count < PROFILE_TOKEN_THRESHOLD:
+            token_count = chat_session.profile_token_count or 0
+            message_count = chat_session.profile_message_count or 0
+            threshold_due = token_count >= PROFILE_TOKEN_THRESHOLD or message_count >= PROFILE_MESSAGE_THRESHOLD
+            if not threshold_due:
+                return False
+
+            last_updated = chat_session.last_profile_updated_at
+            now_dt = datetime.now(timezone.utc)
+            if last_updated and (now_dt - last_updated).total_seconds() < PROFILE_UPDATE_COOLDOWN_MINUTES * 60:
                 return False
 
             global_profile = await self._get_profile_db(db=db, user_id=user_id)
@@ -227,13 +236,25 @@ class ProfileService:
                 elif isinstance(first_course, str):
                     course_name = first_course
 
-            if not course_name:
-                return False
-
-            recent_dialogue = await self._build_recent_dialogue(
+            after_message_id = int(chat_session.last_profile_message_id or 0)
+            incremental_dialogue, latest_message_id = await self._build_recent_dialogue(
                 db=db,
                 user_id=user_id,
                 session_id=session_id,
+                after_message_id=after_message_id,
+                max_messages=40,
+            )
+            if not incremental_dialogue or latest_message_id <= after_message_id:
+                return False
+
+            summary_context = await self._build_session_summary_context(
+                db=db,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            recent_dialogue = (
+                f"【最近会话摘要】\n{summary_context or '暂无会话摘要。'}\n\n"
+                f"【上次画像分析后新增对话】\n{incremental_dialogue}"
             )
             long_term_memory = await self._get_long_term_memory_text(user_id=user_id)
 
@@ -247,7 +268,7 @@ class ProfileService:
             if global_patch:
                 await self._upsert_profile(db=db, user_id=user_id, profile_data=global_patch)
 
-            if course_patch:
+            if course_patch and course_name:
                 profile = await self._upsert_profile(
                     db=db,
                     user_id=user_id,
@@ -260,9 +281,13 @@ class ProfileService:
                         profile.profile_score_json = scores
                         await db.flush()
 
-            chat_session.summary_token_count = 0
+            updated = bool(global_patch or (course_patch and course_name))
+            chat_session.profile_token_count = 0
+            chat_session.profile_message_count = 0
+            chat_session.last_profile_message_id = latest_message_id
+            chat_session.last_profile_updated_at = now_dt
             db.add(chat_session)
-            return bool(global_patch or course_patch)
+            return updated
 
     async def infer_tutoring_patch(
         self,
@@ -407,27 +432,56 @@ class ProfileService:
         user_id: int,
         session_id: str,
         max_messages: int = 20,
-    ) -> str:
+        after_message_id: int = 0,
+    ) -> tuple[str, int]:
         stmt = (
             select(ChatMessage)
             .where(
                 ChatMessage.user_id == user_id,
                 ChatMessage.session_id == session_id,
+                ChatMessage.module == self.module,
+                ChatMessage.role.in_(["user", "assistant"]),
+                ChatMessage.id > after_message_id,
             )
-            .order_by(ChatMessage.created_at.desc())
+            .order_by(ChatMessage.id.desc())
             .limit(max_messages)
         )
         messages = list((await db.exec(stmt)).all())
         if not messages:
-            return ""
-        messages.reverse()
+            return "", after_message_id
         lines: list[str] = []
-        for msg in messages:
+        latest_message_id = after_message_id
+        for msg in reversed(messages):
+            latest_message_id = max(latest_message_id, int(msg.id or 0))
             role_label = "学生" if msg.role == "user" else "辅导老师"
             content = (msg.content or "").strip()
             if content:
                 lines.append(f"{role_label}：{content[:500]}")
-        return "\n".join(lines)
+        return "\n".join(lines), latest_message_id
+
+    async def _build_session_summary_context(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: int,
+        session_id: str,
+        limit: int = 3,
+    ) -> str:
+        stmt = (
+            select(ChatSessionSummaryBlock)
+            .where(
+                ChatSessionSummaryBlock.user_id == user_id,
+                ChatSessionSummaryBlock.session_id == session_id,
+                ChatSessionSummaryBlock.module == self.module,
+            )
+            .order_by(ChatSessionSummaryBlock.created_at.desc())
+            .limit(limit)
+        )
+        blocks = list((await db.exec(stmt)).all())
+        if not blocks:
+            return ""
+        blocks.reverse()
+        return "\n\n".join(block.summary_markdown for block in blocks if block.summary_markdown)
 
     async def _get_long_term_memory_text(self, *, user_id: int) -> str:
         async with session_scope() as db:

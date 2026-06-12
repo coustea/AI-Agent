@@ -2,7 +2,7 @@
 
 两种触发机制：
   1. 信号触发：当轮对话中检测到稳定学习信号（正则匹配偏好/纠正/背景等关键词）
-  2. 周期触发：每 periodic_turns 轮自动检查，但有冷却时间防频繁更新
+  2. 批量触发：上层按新增消息/token 阈值调度，并用冷却时间防频繁更新
 更新策略：LLM 判断是否 need_update + confidence ≥ min_confidence 才写入，
   避免低质量对话污染长期记忆。记忆格式为分类 Markdown。
 """
@@ -31,7 +31,7 @@ class ChatLongTermMemoryService:
 
     两种触发机制：
       1. 信号触发：当轮对话中检测到稳定学习信号（正则匹配偏好/纠正/背景等关键词）
-      2. 周期触发：每 periodic_turns 轮自动检查，但有冷却时间防频繁更新
+      2. 批量触发：上层按新增消息/token 阈值调度，并用冷却时间防频繁更新
 
     更新策略：LLM 判断是否 need_update + confidence ≥ min_confidence 才写入，
     避免低质量对话污染长期记忆。记忆格式为分类 Markdown。
@@ -47,7 +47,7 @@ class ChatLongTermMemoryService:
     ) -> None:
         # 模块名 — 用于隔离不同对话模块的长期记忆
         self.module = module
-        # 周期触发间隔 — 每 N 轮自动检查一次是否需要更新
+        # 批量触发的新增消息间隔，由上层调度器按 token/message 共同决定
         self.periodic_turns = periodic_turns
         # 最小置信度阈值 — LLM 返回的 confidence 必须 ≥ 此值才写入
         self.min_confidence = min_confidence
@@ -85,8 +85,10 @@ class ChatLongTermMemoryService:
         session_id: str,
         user_message: str,
         assistant_reply: str,
+        new_dialogue: str = "",
         turn_count: int = 0,
-    ) -> bool:
+        signal_detected: bool | None = None,
+    ) -> dict[str, bool]:
         """条件更新长期记忆 — 根据信号或周期触发判断是否需要更新。
 
         更新流程：
@@ -104,11 +106,11 @@ class ChatLongTermMemoryService:
         signal_detected = self.should_consider_update(
             user_message=user_message,
             assistant_reply=assistant_reply,
-        )
-        periodic_trigger = turn_count > 0 and turn_count % self.periodic_turns == 0
+        ) if signal_detected is None else signal_detected
+        periodic_trigger = bool((new_dialogue or "").strip()) and turn_count > 0
         # 两种触发方式都未满足，直接返回
         if not signal_detected and not periodic_trigger:
-            return False
+            return {"updated": False, "analyzed": False}
 
         # 加载现有的长期记忆记录，不存在则创建空白模板
         existing = (
@@ -141,7 +143,7 @@ class ChatLongTermMemoryService:
             and old_memory.updated_at
             and (now() - old_memory.updated_at).total_seconds() < self.cooldown_seconds
         ):
-            return False
+            return {"updated": False, "analyzed": False}
 
         # 获取最新的会话摘要块 — 作为 LLM 判断的上下文
         latest_summary_block = (
@@ -160,6 +162,7 @@ class ChatLongTermMemoryService:
         # 构建 LLM 提示词 — 包含当前对话、会话摘要和旧记忆，让 LLM 判断是否需要更新
         prompt = prompts.get("chat_memory").render(
             "ltm_update",
+            new_dialogue=(new_dialogue or "").strip()[:4000],
             user_message=user_message[:1000],
             assistant_reply=assistant_reply[:1000],
             session_summary=latest_summary_block.summary_markdown if latest_summary_block else "暂无会话概要。",
@@ -177,9 +180,9 @@ class ChatLongTermMemoryService:
 
         # 双重校验：LLM 判断不需要更新 → 跳过；置信度不足 → 跳过
         if not resp.need_update or not resp.memory_markdown:
-            return False
+            return {"updated": False, "analyzed": True}
         if getattr(resp, "confidence", self.min_confidence) < self.min_confidence:
-            return False
+            return {"updated": False, "analyzed": True}
 
         # 写入更新后的长期记忆 — 版本号递增（仅已有记录时递增）
         memory = existing or old_memory
@@ -192,4 +195,4 @@ class ChatLongTermMemoryService:
         memory.source_summary_block_ids = [latest_summary_block.id] if latest_summary_block and latest_summary_block.id else None
         memory.updated_at = now()
         db.add(memory)
-        return True
+        return {"updated": True, "analyzed": True}

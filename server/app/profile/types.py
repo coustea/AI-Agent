@@ -12,7 +12,9 @@ class ConcurrentUpdateError(Exception):
     """Raised when optimistic profile updates conflict."""
 
 
-PROFILE_TOKEN_THRESHOLD: Final[int] = 1500
+PROFILE_TOKEN_THRESHOLD: Final[int] = 8000
+PROFILE_MESSAGE_THRESHOLD: Final[int] = 30
+PROFILE_UPDATE_COOLDOWN_MINUTES: Final[int] = 90
 PROFILE_MIN_COVERAGE: Final[int] = 60
 
 

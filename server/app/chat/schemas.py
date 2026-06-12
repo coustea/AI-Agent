@@ -1,36 +1,24 @@
-"""Chat 模块核心数据模式 — 编排请求、证据模型、推理结果、教学图解 Schema。
+"""Chat 模块核心数据模式 — TutorAgent 输入、工具上下文、证据模型、教学图解 Schema。
 
 所有 DTO 集中在此文件，打破原分散文件间的循环依赖。
-按职责分为六组：
+按职责分为四组：
 
-  1. 基础消息与证据 — ChatHistoryMessage / Evidence / EvidenceSet / UploadResponse
-  2. 工具意图与最终回答 — ToolIntent / FinalAnswer / FinalAnswerStream / ReasoningResult（agent ↔ orchestrator 的合约类型）
-  3. 编排层基础模型 — TurnRequest / ConstraintReport（orchestrator 输入/输出约束）
-  4. TutorAgent 合约 — TutorAgentInput / ChatStreamEvent / ClassificationResult（TutorAgent ↔ ChatService）
-  5. 教学图解 Schema — TeachingDiagram 及 6 种 payload（comparison/flowchart/sequence/framework/summary/hierarchy）
+  1. 证据与上传 — Evidence / EvidenceSet / UploadResponse
+  2. 工具上下文 — TutorToolCall / TutorTurnContext
+  3. TutorAgent 合约 — TutorAgentInput / ChatStreamEvent / ClassificationResult
+  4. 教学图解 Schema — TeachingDiagram 及 6 种 payload（comparison/flowchart/sequence/framework/summary/hierarchy）
 """
 
 from __future__ import annotations  # 延迟求值注解，允许前向引用（如字符串形式的类型标注）
 
-from typing import Any, AsyncIterator, Literal, Optional, Union  # Any: 动态类型; AsyncIterator: SSE 异步流; Literal: 限定枚举值
+from typing import Any, Literal, Optional, Union  # Any: 动态类型; Literal: 限定枚举值
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator  # Pydantic v2 核心基类和校验器
 
 
 # ===================================================================
-# 基础消息与证据
+# 证据与上传
 # ===================================================================
-
-
-class ChatHistoryMessage(BaseModel):
-    """前端传来的历史消息 DTO（已废弃，保留兼容）。
-
-    新架构下前端不再上传 history，由 build_messages() 从数据库构建。
-    """
-    role: str = Field(..., description="消息角色: user / assistant / system / tool")
-    content: str = Field(..., description="消息文本内容")
-    tool_calls: list[dict] | None = Field(default=None)
-    tool_call_id: str | None = Field(default=None)
 
 
 # 证据类型枚举 — 覆盖所有流水线阶段的产出物
@@ -99,60 +87,24 @@ class UploadResponse(BaseModel):
 
 
 # ===================================================================
-# 工具意图与最终回答
+# 工具上下文
 # ===================================================================
 
 
-class ToolIntent(BaseModel):
-    """Agent 推理产出的「需要调工具」信号 — 由 orchestrator 执行后回填证据。
-
-    推理循环中的合约类型：agent 返回 ToolIntent → orchestrator 执行 → 证据回填 → 再次推理。
-    """
+class TutorToolCall(BaseModel):
+    """TutorAgent 节点选择出的工具调用。"""
     tool_name: str  # 工具名：get_learner_profile / get_long_term_memory / search_knowledge_base / web_search / get_recent_evaluation
     payload: dict[str, Any] = Field(default_factory=dict)  # 工具参数，如 {"query": "TCP三次握手"} 或 {"category": "stable_weaknesses"}
 
 
-class FinalAnswer(BaseModel):
-    """Agent 推理产出的「直接回答」信号 — 推理循环终止条件。"""
-    kind: Literal["final_answer"] = "final_answer"  # 固定标记，orchestrator 据此识别终止信号
-    answer: str  # 最终回答文本，直接传给前端渲染
-
-
-class FinalAnswerStream:
-    """流式最终回答包装器 — 将异步迭代器封装为 orchestrator 可识别的终止信号。"""
-    def __init__(self, stream: AsyncIterator[str]):  # stream: 逐块 yield 回答文本的异步生成器
-        self.stream = stream  # orchestrator 消费此 stream 时逐块 yield 给 service.py → SSE
-
-
-# Agent.reason() 的返回类型联合 — ToolIntent(继续循环) 或 FinalAnswer(终止)
-ReasoningResult = ToolIntent | FinalAnswer
-
-
-# ===================================================================
-# 编排层基础模型
-# ===================================================================
-
-class TurnRequest(BaseModel):
-    """一轮对话的请求 — 前端只传 user_input，历史由后端从数据库构建。"""
+class TutorTurnContext(BaseModel):
+    """单轮辅导上下文 — 绑定工具和图解生成所需的最小请求信息。"""
     user_id: int
     session_id: str
     user_input: str = ""
     attachments: list[str] = Field(default_factory=list)
     enable_web_search: bool = False
     need_teaching_diagram: bool = False
-
-
-class ConstraintReport(BaseModel):
-    """推理循环约束报告 — 记录工具执行情况，防止重复调用和无限循环。
-
-    由 orchestrator 在推理循环中逐步填充，最终随 TurnRunResult 返回。
-    agent 看到 executed_tools 后不会再调同一工具，打破潜在死循环。
-    """
-    executed_tools: list[str] = Field(default_factory=list)  # 已成功执行的工具名列表
-    failed_tools: list[str] = Field(default_factory=list)  # 执行失败的工具名列表
-    skipped_tools: list[str] = Field(default_factory=list)  # 被跳过的工具（模型重复请求已执行的工具）
-    max_steps_reached: bool = False  # 是否达到最大推理步数（防无限循环的安全阀）
-    unresolved_questions: list[str] = Field(default_factory=list)  # 未解决的问题（预留扩展）
 
 
 # ===================================================================
@@ -169,8 +121,6 @@ class TutorAgentInput(BaseModel):
     attachments: list[str] = Field(default_factory=list)
     history_messages: list[Any] = Field(default_factory=list)
     session_summary: str = ""
-    long_term_memory: str = ""
-    learner_profile: str = ""
     enable_web_search: bool = False
     need_teaching_diagram: bool = False
 

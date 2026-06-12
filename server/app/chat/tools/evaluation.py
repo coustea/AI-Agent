@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable
 
 from pydantic import BaseModel, Field
 
-from app.chat.schemas import TurnRequest
+from app.chat.schemas import TutorTurnContext
 from app.evaluation.service import evaluation_service
 from app.infra.database import session_scope
 from app.infra.logging import get_logger
@@ -31,7 +31,7 @@ def _compact(text: str, *, limit: int = 3500) -> str:
 
 
 def make_get_recent_evaluation(
-    request: TurnRequest,
+    request: TutorTurnContext,
 ) -> Callable[..., Awaitable[str]]:
     """工厂函数：创建闭包绑定当前请求的近期评估查询工具。
 

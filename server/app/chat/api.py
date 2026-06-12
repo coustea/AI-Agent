@@ -439,7 +439,7 @@ async def chat_history(
         session_id=session_id,  # 可选会话ID
         limit=limit,  # 返回数量限制
     )
-    # 将 ChatHistoryMessage 对象列表转换为字典列表，便于 JSON 序列化
+    # 将 ChatMessageItem 对象列表转换为字典列表，便于 JSON 序列化
     return HttpResponse.success(data=[item.model_dump() for item in items])
 
 
