@@ -20,12 +20,19 @@ from app.config import CHAT_DIR
 
 logger = get_logger(__name__)
 
+# 上传文件的根目录，与 config.yaml 中 chat.dir 对应
 UPLOAD_DIR = CHAT_DIR
+# 单个文件最大读取字符数，防止超大文件撑爆 LLM 上下文窗口
 MAX_FILE_CONTENT_CHARS = 15000
 
 
 def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
     """将 URL 路径解析为 (owner_id, absolute_path)，校验路径安全性和文件存在性。
+
+    安全策略：
+    1. 路径遍历攻击防护：resolve() 后必须以 user_dir 为前缀
+    2. 目录穿越防护：session_id 和 filename 不能包含路径分隔符
+    3. 所有路径操作使用 resolve() 解析符号链接
 
     Args:
         file_url: 上传文件的 URL 路径。
@@ -34,21 +41,24 @@ def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
         元组 (owner_id, absolute_path)，无效路径返回 None。
     """
     relative: str
+    # 支持两种 URL 前缀格式：API 路由前缀和简短前缀
     if file_url.startswith("/api/v1/ai/chat/uploads/"):
         relative = file_url.removeprefix("/api/v1/ai/chat/uploads/")
     elif file_url.startswith("/uploads/"):
         relative = file_url.removeprefix("/uploads/")
     else:
-        # 支持直接传本地绝对路径（chat-uploads/<user>/<session>/<file>）
+        # 兜底：支持直接传入本地绝对路径（chat-uploads/<user>/<session>/<file>）
         try:
             local_path = Path(file_url).expanduser().resolve()
         except (OSError, RuntimeError, ValueError):
             return None
         upload_root = UPLOAD_DIR.resolve()
+        # 路径遍历攻击防护：确保解析后的路径仍在上传根目录内
         if not str(local_path).startswith(str(upload_root)):
             return None
         if not local_path.exists():
             return None
+        # 从绝对路径反推目录结构，支持 2 层（user/file）或 3 层（user/session/file）
         relative_parts = local_path.relative_to(upload_root).parts
         if len(relative_parts) == 3:
             owner_part, session_id, filename = relative_parts
@@ -59,12 +69,14 @@ def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
             return None
         if not owner_part.isdigit():
             return None
+        # 安全校验：session_id 和 filename 不能包含路径分隔符（防目录穿越）
         if session_id and Path(session_id).name != session_id:
             return None
         if Path(filename).name != filename:
             return None
         return int(owner_part), str(local_path)
 
+    # URL 路径解析：按 "/" 分割，过滤空段
     parts = [p for p in relative.split("/") if p]
     if len(parts) == 3:
         owner_part, session_id, filename = parts
@@ -74,6 +86,7 @@ def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
     else:
         return None
 
+    # 安全校验：owner 必须是纯数字用户 ID
     if not owner_part.isdigit():
         return None
     if session_id and Path(session_id).name != session_id:
@@ -81,6 +94,7 @@ def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
     if Path(filename).name != filename:
         return None
 
+    # 拼接绝对路径并再次验证路径遍历安全性
     user_dir = (UPLOAD_DIR / owner_part).resolve()
     path = (user_dir / session_id / filename).resolve() if session_id else (user_dir / filename).resolve()
     if not str(path).startswith(str(user_dir)):
@@ -124,28 +138,36 @@ def read_uploaded_file_content(
         文件内容字符串，失败时返回错误提示信息。
     """
     path = Path(absolute_path)
+    # 基本的文件存在性校验
     if not path.exists():
         return f"文件不存在: {absolute_path}"
     if not path.is_file():
         return f"路径不是文件: {absolute_path}"
 
+    # 根据文件扩展名选择不同的解析策略
     suffix = path.suffix.lower()
     if suffix == ".pdf":
+        # 延迟导入 pymupdf — 仅在实际处理 PDF 时才加载，减少启动开销
         from pymupdf import open as pdf_open
 
         text_parts = []
         with pdf_open(str(path)) as doc:
+            # 可选限制页数，避免超长 PDF 占用过多 token
             pages = doc if max_pdf_pages is None else list(doc)[:max_pdf_pages]
             for page in pages:
                 text_parts.append(page.get_text())
         content = "\n".join(text_parts)
     elif suffix == ".docx":
+        # 延迟导入 python-docx — 仅在处理 Word 文档时加载
         from docx import Document
 
         doc = Document(str(path))
+        # 可选限制段落数，防止超大文档撑爆内存
         paragraphs = doc.paragraphs if max_docx_paragraphs is None else doc.paragraphs[:max_docx_paragraphs]
+        # 过滤空段落，只保留有实际内容的文本
         content = "\n".join(para.text for para in paragraphs if para.text.strip())
     elif suffix in {".txt", ".md", ".log"}:
+        # 纯文本文件直接读取，errors="replace" 防止编码异常中断
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
     else:
@@ -153,6 +175,7 @@ def read_uploaded_file_content(
 
     if not content or not content.strip():
         return "文件内容为空"
+    # 截断超长内容，防止撑爆 LLM 上下文窗口
     if len(content) > max_content_chars:
         content = content[:max_content_chars] + "\n\n[...文档内容过长，已截断...]"
     return content
@@ -168,26 +191,32 @@ async def analyze_documents(
     max_pdf_pages: int | None = None,
     max_docx_paragraphs: int | None = None,
 ) -> dict:
-    """批量读取用户上传的文档内容，返回分析摘要。
+    """批量读取用户上传的文档内容，返回可直接注入 LLM 上下文的分析提示词。
+
+    流程：URL 解析 → 权限校验 → 内容读取 → 截断 → 拼接为分析上下文。
 
     Args:
-        current_user_id: 当前用户 ID。
+        current_user_id: 当前用户 ID（用于权限校验）。
         file_urls: 文件 URL 列表。
-        question: 用户问题。
+        question: 用户问题（用于构建分析提示词）。
 
     Returns:
         分析结果字典，包含 success、documents、analysis_text、error 字段。
     """
+    # 存储所有成功读取的文档元数据和内容
     documents: list[dict[str, str]] = []
+    # 存储每个文档的内容片段，用于后续拼接为分析提示词
     snippets: list[str] = []
 
     for file_url in file_urls:
+        # 将 URL 解析为 (owner_id, absolute_path)，失败则跳过
         resolved = resolve_uploaded_path(file_url)
         if resolved is None:
             logger.warning("[DocumentAnalysis] failed to resolve %s", file_url)
             continue
 
         owner_id, absolute_path = resolved
+        # 安全校验：确保当前用户只能访问自己的文件
         if owner_id != current_user_id:
             logger.warning(
                 "[DocumentAnalysis] forbidden file access user=%s owner=%s",
@@ -195,6 +224,7 @@ async def analyze_documents(
             )
             continue
 
+        # 读取文件内容，支持 PDF/DOCX/TXT/MD/LOG
         content = read_uploaded_file_content(
             absolute_path,
             max_content_chars=max_file_content_chars,
@@ -207,6 +237,7 @@ async def analyze_documents(
             "absolute_path": absolute_path,
             "content": content,
         })
+        # 构建单个文件的内容片段，用于拼接为完整的分析上下文
         snippets.append(f"文件《{Path(absolute_path).name}》内容如下：\n{content}")
 
     if not documents:
@@ -217,10 +248,13 @@ async def analyze_documents(
             "error": "未找到可访问的文档。",
         }
 
+    # 将所有文档内容拼接为一个字符串
     joined_snippets = "\n\n".join(snippets)
+    # 全局截断：防止多个文档总内容超出 LLM 上下文限制
     if len(joined_snippets) > max_total_chars:
         joined_snippets = joined_snippets[:max_total_chars] + "\n\n[...文档总内容过长，已截断...]"
 
+    # 构建最终的分析提示词，引导 LLM 基于文档内容回答问题并提炼知识点
     analysis_text = (
         f"用户问题：{question or '请分析这些文档'}\n\n"
         "以下是已提取的文档内容，请基于它们回答用户问题，并在回答中尽量提炼知识点：\n\n"

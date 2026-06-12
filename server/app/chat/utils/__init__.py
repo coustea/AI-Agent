@@ -31,12 +31,15 @@ def node_timer(node_name: str, **extra: Any) -> Generator[None, None, None]:
     Yields:
         无返回值。
     """
+    # 将额外参数格式化为 "key=value" 字符串，便于日志追踪
     extra_str = " ".join(f"{k}={v}" for k, v in extra.items())
     logger.debug("[ChatRuntime] 节点进入 %s %s", node_name, extra_str)
+    # 使用 monotonic 高精度计时，不受系统时间修改影响
     start = time.monotonic()
     try:
         yield
     finally:
+        # 计算毫秒级耗时，用于性能分析和慢节点告警
         elapsed = int((time.monotonic() - start) * 1000)
         logger.debug("[ChatRuntime] 节点退出 %s 耗时%dms", node_name, elapsed)
 
@@ -90,15 +93,17 @@ def is_unusable_reply_text(text: str) -> bool:
     Returns:
         True 表示无效回复，需要重试或降级。
     """
+    # 统一为空白处理，去除首尾空格
     normalized = (text or "").strip()
     if not normalized:
         return True
-    # 排除生成时间标记
+    # 排除生成时间标记 — LLM 有时会错误输出时间戳而非实际内容
     if normalized in {"生成时间：", "生成时间:", "更新时间：", "更新时间:"}:
         return True
+    # 匹配以"生成时间"开头且长度极短的文本（如"生成时间：2024-01-01"）
     if normalized.startswith("生成时间") and len(normalized) <= 16:
         return True
-    # 过短的回复视为无效
+    # 少于 8 个字符的回复大概率不包含有效教学内容，视为无效
     if len(normalized) < 8:
         return True
     return False
@@ -119,10 +124,11 @@ def extract_question(messages: list[AnyMessage]) -> str:
     Returns:
         用户问题的纯文本，未找到则返回空字符串。
     """
+    # 从后向前遍历，找到最近一条用户消息（支持多轮对话）
     for msg in reversed(messages):
         if isinstance(msg, HumanMessage):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            # 移除附件标记
+            # 移除附件标记 — 前端会在消息末尾附加 [Attached Images:...] 等占位符
             return (
                 content.split(" [Attached Images:")[0]
                 .split(" [Attached Image:")[0]
@@ -144,8 +150,9 @@ def build_messages(system_prompt: str, messages: list[AnyMessage]) -> list[AnyMe
     Returns:
         以系统消息开头的消息列表。
     """
-    # 过滤掉已有的系统消息
+    # 先移除消息列表中已有的系统消息，确保最终只有一条系统消息
     pure = [msg for msg in messages if not isinstance(msg, SystemMessage)]
+    # 将新的系统提示词作为首条消息注入
     return [SystemMessage(content=system_prompt)] + pure
 
 
@@ -162,7 +169,9 @@ def classify_route(state: dict) -> str:
     Returns:
         路由目标节点名称。
     """
+    # 从状态中读取 classify 节点输出的路由类型，默认 direct（直接回答）
     route = state.get("route", "direct")
+    # 白名单校验，防止非法路由值导致图执行异常
     valid_routes = {"direct", "search", "attachment_needed"}
     return route if route in valid_routes else "direct"
 

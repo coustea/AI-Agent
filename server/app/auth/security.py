@@ -13,7 +13,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET
-from app.infra.database import session_scope
+from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import ActiveToken, User
 from app.infra.response import HttpResponse
@@ -98,31 +98,34 @@ async def revoke_token(token: str, session: AsyncSession) -> None:
         await session.commit()
 
 
-async def _resolve_current_user_from_token(token: str) -> User:
-    async with session_scope() as session:
-        if not await is_token_valid(token, session):
-            raise AuthError("Token 已失效或已退出登录")
-        user_id = decode_token(token)
-        user = await session.get(User, user_id)
-        if not user:
-            raise AuthError("用户不存在")
-        await session.refresh(user)
-        return user
+async def _resolve_current_user_from_token(
+    token: str, session: AsyncSession
+) -> User:
+    if not await is_token_valid(token, session):
+        raise AuthError("Token 已失效或已退出登录")
+    user_id = decode_token(token)
+    user = await session.get(User, user_id)
+    if not user:
+        raise AuthError("用户不存在")
+    await session.refresh(user)
+    return user
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_session),
 ) -> User:
     if not credentials:
         raise AuthError("缺少 Token")
-    return await _resolve_current_user_from_token(credentials.credentials)
+    return await _resolve_current_user_from_token(credentials.credentials, session)
 
 
 async def get_current_user_flexible(
     credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
     token: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
 ) -> User:
     resolved_token = credentials.credentials if credentials else token
     if not resolved_token:
         raise AuthError("缺少 Token")
-    return await _resolve_current_user_from_token(resolved_token)
+    return await _resolve_current_user_from_token(resolved_token, session)
