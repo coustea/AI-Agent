@@ -1,163 +1,781 @@
-"""推理 Agent — 接收完整消息列表，决定「调工具还是直接回答」。
+"""TutorAgent — LangGraph 驱动的辅导智能体。
 
-调用链路：service.chat() → agent.reason(messages, ...) → LangChain tool call 或 LLM 回答
+图结构: START → classify → [analysis_files] → [search_node] → answer_node → [diagram_node] → END
+
+每个节点产生 ChatStreamEvent，通过 chat() 方法以 AsyncIterator 形式返回给 ChatService。
+ChatService 负责将内部事件转换为 SSE 格式推送给前端。
+
+职责边界:
+  - TutorAgent: 推理编排、工具调用、流式输出、节点级持久化
+  - ChatService: 会话/turn 生命周期、历史构建、最终消息持久化、SSE 转发
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
+import asyncio
+import time
+from typing import Any, AsyncIterator, TypedDict
+from uuid import uuid4
 
-from langchain_core.messages import AIMessage, AnyMessage
+from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, START, StateGraph
 
-from app.chat.schemas import ConstraintReport, FinalAnswer, FinalAnswerStream, ToolIntent
+from app.chat.memory.service import get_chat_memory_service
+from app.chat.schemas import (
+    ChatStreamEvent,
+    ClassificationResult,
+    Evidence,
+    EvidenceSet,
+    TutorAgentInput,
+)
+from app.chat.stages import TeachingDiagramGenerator
+from app.chat.streaming import ResponseStreamer, SafetyBufferedResponseStreamer
+from app.chat.tool_execute import TutorToolExecutor, TutorToolRegistry
 from app.chat.utils import normalize_message_content
+from app.chat.utils.files import analyze_documents
+from app.chat.utils.vision import VisionService
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
+from app.infra.prompts import prompts
+
+logger = get_logger(__name__)
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 
-class ReasoningAgent:
-    """LangChain tool-calling tutor agent — 纯推理器。
+# ===================================================================
+# Graph State
+# ===================================================================
 
-    接收完整的消息列表（由 service.build_messages() 构建），
-    让模型决定是否调用工具，并将工具调用转换为 ToolIntent。
-    实际工具执行由 service.chat() 负责。
-    """
 
-    def __init__(self, llm: Any | None = None, tools: list[Any] | None = None) -> None:
-        """初始化推理代理
-        - llm: 大语言模型实例，默认使用配置的模型
-        - tools: 可用工具列表，模型从中选择要调用的工具
+class TutorAgentState(TypedDict, total=False):
+    """LangGraph 图状态 — 各节点通过返回 dict 更新部分字段。"""
+
+    # 请求
+    user_id: int
+    session_id: str
+    turn_id: int
+    user_message_id: int | None
+    question: str
+    attachments: list[str]
+    enable_web_search: bool
+    need_teaching_diagram: bool
+
+    # 上下文
+    history_messages: list[AnyMessage]
+    session_summary: str
+    long_term_memory: str
+    learner_profile: str
+
+    # 分类
+    classification: ClassificationResult
+
+    # 附件
+    attachment_context: str
+    attachment_analyses: list[dict[str, Any]]
+
+    # 证据
+    evidence: list[dict[str, Any]]
+    sources: list[dict[str, Any]]
+
+    # 运行时
+    tool_invocations: list[dict[str, Any]]
+    stream_events: list[ChatStreamEvent]
+    event_queue: asyncio.Queue
+    errors: list[str]
+
+    # 输出
+    final_answer: str
+    diagram_result: dict[str, Any] | None
+
+
+# ===================================================================
+# TutorAgent
+# ===================================================================
+
+
+class TutorAgent:
+    """LangGraph 驱动的辅导智能体 — 单次对话 turn 的运行时。"""
+
+    def __init__(self, memory_service: Any | None = None) -> None:
+        self.llm = get_llm()
+        self.memory_service = memory_service or get_chat_memory_service()
+        self._graph = self._build_graph()
+
+    async def chat(self, input: TutorAgentInput) -> AsyncIterator[ChatStreamEvent]:
+        """执行一次辅导对话，流式返回事件。
+
+        ChatService 调用此方法，逐事件转发为 SSE。
         """
-        self.llm = llm or get_llm()
-        self.tools = list(tools or [])
+        event_queue: asyncio.Queue[ChatStreamEvent] = asyncio.Queue()
+        initial_state: TutorAgentState = {
+            "user_id": input.user_id,
+            "session_id": input.session_id,
+            "turn_id": input.turn_id,
+            "user_message_id": input.user_message_id,
+            "question": input.question,
+            "attachments": input.attachments,
+            "enable_web_search": input.enable_web_search,
+            "need_teaching_diagram": input.need_teaching_diagram,
+            "history_messages": input.history_messages,
+            "session_summary": input.session_summary,
+            "long_term_memory": input.long_term_memory,
+            "learner_profile": input.learner_profile,
+            "attachment_context": "",
+            "attachment_analyses": [],
+            "evidence": [],
+            "sources": [],
+            "tool_invocations": [],
+            "stream_events": [],
+            "event_queue": event_queue,
+            "errors": [],
+            "final_answer": "",
+            "diagram_result": None,
+        }
 
-    async def reason(
-        self,
-        messages: list[AnyMessage],
-        constraints: ConstraintReport,
-        tools: list[Any] | None = None,
-    ) -> ToolIntent | FinalAnswer | FinalAnswerStream:
-        """核心推理方法：接收完整消息列表，让模型决定是调用工具还是直接回答
-        - 如果模型选择工具 → 返回 ToolIntent，由 chat() 执行
-        - 如果模型直接回答 → 返回 FinalAnswer 或 FinalAnswerStream
-        """
+        yield ChatStreamEvent(type="message_start", payload={}, sequence=0, timestamp=time.time())
 
-        # ── 调用 LLM ──
-        available_tools = list(self.tools if tools is None else tools)
-        model = self.llm.model.bind_tools(available_tools) if available_tools else None
-
-        if not hasattr(self.llm, "astream"):
-            response = await self.llm.ainvoke(messages, model=model, temperature=0.25)
-            return await self._outcome_from_response(response, constraints, messages)
-
-        stream = self.llm.astream(messages, model=model, temperature=0.25)
+        graph_task: asyncio.Task[Any] | None = None
         try:
-            first_chunk = await stream.__anext__()
-        except StopAsyncIteration:
-            return FinalAnswer(answer="")
+            graph_task = asyncio.create_task(self._graph.ainvoke(initial_state))
 
-        tool_calls = getattr(first_chunk, "tool_calls", None)
-        if isinstance(tool_calls, list) and tool_calls:
-            # 如果第一个 chunk 包含工具调用，累积所有 chunk 以获取完整工具调用
-            accumulated = first_chunk
-            async for chunk in stream:
-                accumulated += chunk
-
-            # 从累积的响应中提取第一个未执行过的工具调用
-            tool_call = self._first_new_tool_call(accumulated, constraints)
-            if tool_call is not None:
-                return ToolIntent(
-                    tool_name=str(tool_call.get("name") or ""),
-                    payload=self._tool_payload(tool_call),
+            while True:
+                if graph_task.done() and event_queue.empty():
+                    break
+                get_event_task = asyncio.create_task(event_queue.get())
+                done, pending = await asyncio.wait(
+                    {graph_task, get_event_task},
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
+                if get_event_task in done:
+                    yield get_event_task.result()
+                else:
+                    get_event_task.cancel()
+                    await asyncio.gather(get_event_task, return_exceptions=True)
+                for task in pending:
+                    if task is not graph_task:
+                        task.cancel()
 
-            # 如果没有新的工具调用，提取回答内容
-            answer = normalize_message_content(getattr(accumulated, "content", ""))
-            # 如果回答为空，重试一次（不绑定工具）
-            if not answer:
-                response = await self.llm.ainvoke(messages, model=None, temperature=0.25)
-                answer = normalize_message_content(getattr(response, "content", ""))
-            return FinalAnswer(answer=answer)
-        else:
-            # 流式文本生成：逐块 yield 内容给前端
-            async def text_generator():
-                content = getattr(first_chunk, "content", "")
-                if isinstance(content, list) and content:
-                    content = content[0].get("text", "")
-                content_str = normalize_message_content(content)
-                if content_str:
-                    yield content_str
+            final_state = await graph_task
 
-                async for chunk in stream:
-                    chunk_content = getattr(chunk, "content", "")
-                    if isinstance(chunk_content, list) and chunk_content:
-                        chunk_content = chunk_content[0].get("text", "")
-                    chunk_str = normalize_message_content(chunk_content)
-                    if chunk_str:
-                        yield chunk_str
+            yield ChatStreamEvent(
+                type="final",
+                payload={
+                    "final_answer": final_state.get("final_answer", ""),
+                    "diagram_result": final_state.get("diagram_result"),
+                    "sources": final_state.get("sources", []),
+                    "tool_invocations": final_state.get("tool_invocations", []),
+                    "attachment_analyses": final_state.get("attachment_analyses", []),
+                    "errors": final_state.get("errors", []),
+                },
+                sequence=9999,
+                timestamp=time.time(),
+            )
+        except Exception as exc:
+            logger.exception("[TutorAgent] graph execution failed")
+            if graph_task is not None and not graph_task.done():
+                graph_task.cancel()
+            yield ChatStreamEvent(
+                type="error",
+                payload={"error": str(exc)},
+                sequence=9999,
+                timestamp=time.time(),
+            )
 
-            return FinalAnswerStream(text_generator())
+    # ------------------------------------------------------------------
+    # Event / persistence helpers
+    # ------------------------------------------------------------------
 
-    async def _outcome_from_response(
+    async def _emit_event(
         self,
-        response: Any,
-        constraints: ConstraintReport,
-        messages: list[Any],
-    ) -> ToolIntent | FinalAnswer:
-        """处理非流式 LLM 响应，提取工具调用或最终回答"""
-        tool_calls = getattr(response, "tool_calls", None)
-        if isinstance(tool_calls, list) and tool_calls:
-            # 提取第一个未执行过的工具调用
-            tool_call = self._first_new_tool_call(response, constraints)
-            if tool_call is not None:
-                return ToolIntent(
-                    tool_name=str(tool_call.get("name") or ""),
-                    payload=self._tool_payload(tool_call),
-                )
-            # 如果没有新的工具调用，提取回答内容
-            answer = normalize_message_content(getattr(response, "content", ""))
-            # 如果回答为空，重试一次（不绑定工具）
-            if not answer:
-                retry_response = await self.llm.ainvoke(messages, model=None, temperature=0.25)
-                answer = normalize_message_content(getattr(retry_response, "content", ""))
-            return FinalAnswer(answer=answer)
-        # 没有工具调用，直接返回回答
-        answer = normalize_message_content(getattr(response, "content", ""))
-        return FinalAnswer(answer=answer)
+        state: TutorAgentState,
+        event: ChatStreamEvent,
+        events: list[ChatStreamEvent] | None = None,
+        *,
+        turn_event_type: str | None = None,
+        persist: bool = True,
+    ) -> list[ChatStreamEvent]:
+        updated = list(events if events is not None else state.get("stream_events", []))
+        updated.append(event)
 
-    def _first_new_tool_call(self, response: Any, constraints: ConstraintReport) -> dict[str, Any] | None:
-        """从模型响应中提取第一个未执行过的工具调用
-        避免重复调用已执行的工具，将重复的工具记录到 skipped_tools
-        """
-        tool_calls = getattr(response, "tool_calls", None)
-        if not isinstance(tool_calls, list):
-            return None
-        executed = set(constraints.executed_tools)
-        for tool_call in tool_calls:
-            if not isinstance(tool_call, dict):
-                continue
-            name = str(tool_call.get("name") or "").strip()
-            # 如果工具未执行过，返回该工具调用
-            if name and name not in executed:
-                return tool_call
-            # 如果工具已执行过，记录到跳过列表
-            if name:
-                constraints.skipped_tools.append(name)
-        return None
+        queue = state.get("event_queue")
+        if queue is not None:
+            await queue.put(event)
 
-    def _tool_payload(self, tool_call: dict[str, Any]) -> dict[str, Any]:
-        """提取工具调用的参数，处理多种格式（dict/str/JSON字符串）"""
-        args = tool_call.get("args")
-        # 如果 args 已经是字典，直接返回
-        if isinstance(args, dict):
-            return args
-        # 如果 args 是 JSON 字符串，解析为字典
-        if isinstance(args, str):
+        if persist:
+            await self._persist_turn_event(
+                state,
+                turn_event_type or self._default_turn_event_type(event.type),
+                event.payload,
+            )
+        return updated
+
+    @staticmethod
+    def _default_turn_event_type(event_type: str) -> str:
+        return event_type.replace("_", ".")
+
+    async def _persist_turn_event(
+        self,
+        state: TutorAgentState,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        turn_id = state.get("turn_id")
+        if not turn_id:
+            return
+        try:
+            await self.memory_service.append_turn_event(
+                user_id=state.get("user_id", 0),
+                session_id=state.get("session_id", ""),
+                turn_id=turn_id,
+                event_type=event_type,
+                payload=payload or {},
+            )
+        except Exception as exc:
+            logger.warning("[TutorAgent] persist turn event failed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Graph construction
+    # ------------------------------------------------------------------
+
+    def _build_graph(self) -> Any:
+        workflow = StateGraph(TutorAgentState)
+
+        workflow.add_node("classify", self._classify_node)
+        workflow.add_node("analysis_files", self._analysis_files_node)
+        workflow.add_node("search_node", self._search_node)
+        workflow.add_node("answer_node", self._answer_node)
+        workflow.add_node("diagram_node", self._diagram_node)
+
+        workflow.add_edge(START, "classify")
+        workflow.add_conditional_edges("classify", self._route_after_classify)
+        workflow.add_conditional_edges("analysis_files", self._route_after_analysis)
+        workflow.add_conditional_edges("search_node", self._route_after_search)
+        workflow.add_conditional_edges("answer_node", self._route_after_answer)
+        workflow.add_edge("diagram_node", END)
+
+        return workflow.compile()
+
+    # ------------------------------------------------------------------
+    # Routing functions
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _route_after_classify(state: TutorAgentState) -> str:
+        cls = state.get("classification")
+        if cls is None:
+            return "answer_node"
+        if cls.needs_file_analysis and state.get("attachments"):
+            return "analysis_files"
+        if cls.needs_knowledge_search or cls.needs_web_search or cls.needs_profile or cls.needs_long_term_memory or cls.needs_recent_evaluation:
+            return "search_node"
+        return "answer_node"
+
+    @staticmethod
+    def _route_after_analysis(state: TutorAgentState) -> str:
+        cls = state.get("classification")
+        if cls and (cls.needs_knowledge_search or cls.needs_web_search or cls.needs_profile or cls.needs_long_term_memory or cls.needs_recent_evaluation):
+            return "search_node"
+        return "answer_node"
+
+    @staticmethod
+    def _route_after_search(state: TutorAgentState) -> str:
+        return "answer_node"
+
+    @staticmethod
+    def _route_after_answer(state: TutorAgentState) -> str:
+        cls = state.get("classification")
+        if cls and cls.needs_diagram:
+            return "diagram_node"
+        if state.get("need_teaching_diagram") and state.get("final_answer"):
+            return "diagram_node"
+        return END
+
+    # ------------------------------------------------------------------
+    # Node: classify
+    # ------------------------------------------------------------------
+
+    async def _classify_node(self, state: TutorAgentState) -> dict:
+        question = state.get("question", "")
+        attachments = state.get("attachments", [])
+        summary = state.get("session_summary", "")
+        profile = state.get("learner_profile", "")
+
+        has_attachments = bool(attachments)
+        has_web_search = state.get("enable_web_search", False)
+        has_diagram = state.get("need_teaching_diagram", False)
+
+        prompt = (
+            f"学生问题: {question}\n"
+            f"附件数量: {len(attachments)}\n"
+            f"会话摘要: {summary[:500] if summary else '无'}\n"
+            f"学习者画像: {profile[:300] if profile else '无'}\n"
+            f"用户请求联网搜索: {has_web_search}\n"
+            f"用户请求教学图解: {has_diagram}\n\n"
+            "请分析以上信息，返回分类结果。"
+        )
+
+        try:
+            classification = await self.llm.ainvoke_json(
+                ClassificationResult,
+                [
+                    SystemMessage(content=prompts.get("chat").get("classify_system", "你是辅导分类器。")),
+                    HumanMessage(content=prompt),
+                ],
+                temperature=0.1,
+            )
+        except Exception as exc:
+            logger.warning("[TutorAgent] classify LLM failed, using defaults: %s", exc)
+            classification = ClassificationResult(
+                needs_file_analysis=has_attachments,
+                needs_knowledge_search=False,
+                needs_web_search=has_web_search,
+                needs_diagram=has_diagram,
+            )
+
+        event = ChatStreamEvent(
+            type="classify_done",
+            payload=classification.model_dump(),
+            sequence=1,
+            timestamp=time.time(),
+        )
+        events = await self._emit_event(state, event, turn_event_type="classify.done")
+
+        return {
+            "classification": classification,
+            "stream_events": events,
+        }
+
+    # ------------------------------------------------------------------
+    # Node: analysis_files
+    # ------------------------------------------------------------------
+
+    async def _analysis_files_node(self, state: TutorAgentState) -> dict:
+        attachments = state.get("attachments", [])
+        user_id = state.get("user_id", 0)
+        session_id = state.get("session_id", "")
+
+        start_event = ChatStreamEvent(type="file_analysis_start", payload={"count": len(attachments)}, sequence=2, timestamp=time.time())
+        events = await self._emit_event(state, start_event, turn_event_type="file.analysis.start")
+
+        image_urls, file_urls = [], []
+        for url in attachments:
+            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
+            if ext in IMAGE_EXTENSIONS:
+                image_urls.append(url)
+            else:
+                file_urls.append(url)
+
+        parts: list[str] = []
+
+        if image_urls:
             try:
-                parsed = json.loads(args)
-            except json.JSONDecodeError:
-                return {}
-            return parsed if isinstance(parsed, dict) else {}
-        return {}
+                vision_result = await VisionService().analyze_images(
+                    image_urls[:5],
+                    "请详细分析这些图片中的文字、题目、图表和关键信息，并用中文总结。",
+                )
+                analysis_text = str(vision_result.get("analysis_text") or "").strip()
+                if analysis_text:
+                    parts.append(f"[图片] {analysis_text}")
+            except Exception as exc:
+                logger.warning("[TutorAgent] image analysis failed: %s", exc)
+
+        if file_urls:
+            try:
+                analysis = await analyze_documents(
+                    current_user_id=user_id,
+                    file_urls=file_urls[:5],
+                    question="请分析这些文档",
+                )
+                summary = str(analysis.get("analysis_text") or "").strip()
+                if summary:
+                    parts.append(f"[文档] {summary}")
+            except Exception as exc:
+                logger.warning("[TutorAgent] document analysis failed: %s", exc)
+
+        attachment_context = "\n".join(parts)
+        attachment_analyses: list[dict[str, Any]] = []
+        if image_urls and any(part.startswith("[图片]") for part in parts):
+            image_summary = "\n".join(part.removeprefix("[图片] ").strip() for part in parts if part.startswith("[图片]"))
+            attachment_analyses.append({
+                "file_url": image_urls[0],
+                "file_name": image_urls[0].split("/")[-1],
+                "analysis_type": "image",
+                "summary_text": image_summary,
+                "structured_json": {"file_urls": image_urls},
+            })
+        if file_urls and any(part.startswith("[文档]") for part in parts):
+            document_summary = "\n".join(part.removeprefix("[文档] ").strip() for part in parts if part.startswith("[文档]"))
+            attachment_analyses.append({
+                "file_url": file_urls[0],
+                "file_name": file_urls[0].split("/")[-1],
+                "analysis_type": "document",
+                "summary_text": document_summary,
+                "structured_json": {"file_urls": file_urls},
+            })
+
+        done_event = ChatStreamEvent(
+            type="file_analysis_done",
+            payload={"context_length": len(attachment_context)},
+            sequence=3,
+            timestamp=time.time(),
+        )
+        events = await self._emit_event(state, done_event, events, turn_event_type="file.analysis.done")
+
+        return {
+            "attachment_context": attachment_context,
+            "attachment_analyses": attachment_analyses,
+            "stream_events": events,
+        }
+
+    # ------------------------------------------------------------------
+    # Node: search_node
+    # ------------------------------------------------------------------
+
+    async def _search_node(self, state: TutorAgentState) -> dict:
+        cls = state.get("classification")
+        question = state.get("question", "")
+        user_id = state.get("user_id", 0)
+        session_id = state.get("session_id", "")
+        attachments = state.get("attachments", [])
+        enable_web_search = state.get("enable_web_search", False)
+        need_diagram = state.get("need_teaching_diagram", False)
+
+        from app.chat.schemas import TurnRequest
+
+        turn_request = TurnRequest(
+            user_id=user_id,
+            session_id=session_id,
+            user_input=question,
+            attachments=attachments,
+            enable_web_search=enable_web_search,
+            need_teaching_diagram=need_diagram,
+        )
+
+        registry = TutorToolRegistry(request=turn_request)
+        executor = TutorToolExecutor(request=turn_request, registry=registry)
+
+        evidence_list: list[dict[str, Any]] = list(state.get("evidence", []))
+        tool_invocations: list[dict[str, Any]] = list(state.get("tool_invocations", []))
+        events = list(state.get("stream_events", []))
+        sources: list[dict[str, Any]] = list(state.get("sources", []))
+        errors: list[str] = list(state.get("errors", []))
+
+        # Decide which tools to call based on classification
+        tools_to_call: list[str] = []
+        if cls:
+            if cls.needs_profile:
+                tools_to_call.append("get_learner_profile")
+            if cls.needs_long_term_memory:
+                tools_to_call.append("get_long_term_memory")
+            if cls.needs_knowledge_search:
+                tools_to_call.append("search_knowledge_base")
+            if cls.needs_web_search or enable_web_search:
+                tools_to_call.append("web_search")
+            if cls.needs_recent_evaluation:
+                tools_to_call.append("get_recent_evaluation")
+
+        if not tools_to_call and enable_web_search:
+            tools_to_call.append("web_search")
+
+        from app.chat.schemas import ToolIntent
+
+        seq = len(events) + 1
+        for tool_name in tools_to_call:
+            start_event = ChatStreamEvent(type="tool_start", payload={"tool_name": tool_name}, sequence=seq, timestamp=time.time())
+            events = await self._emit_event(state, start_event, events, turn_event_type="tool.start")
+            seq += 1
+
+            intent = ToolIntent(tool_name=tool_name, payload={"query": question, "reason": "classify routed"})
+            tool_status = "success"
+            tool_call_id = f"call-{uuid4().hex}"
+            result_text = ""
+            result_evidence: list[dict[str, Any]] = []
+            assistant_message_id: int | None = None
+            tool_message_id: int | None = None
+
+            try:
+                assistant_message = await self.memory_service.save_message(
+                    user_id=user_id,
+                    session_id=session_id,
+                    role="assistant",
+                    content=f"正在调用工具：{tool_name}",
+                    tool_calls=[{"id": tool_call_id, "name": tool_name, "args": intent.payload}],
+                    turn_id=state.get("turn_id"),
+                    message_kind="assistant_tool_request",
+                )
+                assistant_message_id = getattr(assistant_message, "id", None)
+            except Exception as exc:
+                logger.warning("[TutorAgent] save tool request message failed: %s", exc)
+
+            try:
+                result = await executor.execute(intent)
+                tool_status = str(result.get("status", "success")) if isinstance(result, dict) else "success"
+                result_text = str((result or {}).get("result_text", "")) if isinstance(result, dict) else ""
+                result_evidence = (result or {}).get("evidence", []) if isinstance(result, dict) else []
+
+                tool_invocations.append({
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "payload": intent.payload,
+                    "result_text": result_text,
+                    "status": tool_status,
+                    "evidence": result_evidence,
+                    "assistant_message_id": assistant_message_id,
+                })
+
+                if isinstance(result, dict):
+                    if result_evidence:
+                        evidence_list.extend(result_evidence)
+
+                    if tool_name == "search_knowledge_base":
+                        for e in result_evidence:
+                            if isinstance(e, dict):
+                                raw_sources = (e.get("details") or {}).get("sources", [])
+                                if isinstance(raw_sources, list):
+                                    sources.extend(s for s in raw_sources if isinstance(s, dict))
+                    elif tool_name == "web_search":
+                        for e in result_evidence:
+                            if isinstance(e, dict):
+                                details = e.get("details") or {}
+                                sources.append({
+                                    "source": details.get("tool_name") or "web_search",
+                                    "query": details.get("query") or "",
+                                    "summary": e.get("summary", ""),
+                                })
+
+            except Exception as exc:
+                logger.warning("[TutorAgent] tool %s failed: %s", tool_name, exc)
+                tool_status = "error"
+                errors.append(f"{tool_name}: {exc}")
+                result_text = f"调用失败: {exc}"
+                tool_invocations.append({
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "payload": intent.payload,
+                    "result_text": result_text,
+                    "status": "error",
+                    "evidence": [],
+                    "assistant_message_id": assistant_message_id,
+                })
+
+            try:
+                tool_message = await self.memory_service.save_message(
+                    user_id=user_id,
+                    session_id=session_id,
+                    role="tool",
+                    content=result_text,
+                    tool_call_id=tool_call_id,
+                    turn_id=state.get("turn_id"),
+                    message_kind="tool_result",
+                )
+                tool_message_id = getattr(tool_message, "id", None)
+            except Exception as exc:
+                logger.warning("[TutorAgent] save tool result message failed: %s", exc)
+
+            if tool_invocations:
+                tool_invocations[-1]["tool_message_id"] = tool_message_id
+
+            try:
+                await self.memory_service.save_tool_invocations(
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_id=state.get("turn_id"),
+                    invocations=[
+                        {
+                            "tool_call_id": tool_call_id,
+                            "tool_name": tool_name,
+                            "arguments_json": intent.payload,
+                            "result_text": result_text,
+                            "result_json": {"evidence": result_evidence},
+                            "status": tool_status,
+                            "assistant_message_id": assistant_message_id,
+                            "tool_message_id": tool_message_id,
+                        }
+                    ],
+                )
+            except Exception as exc:
+                logger.warning("[TutorAgent] save tool invocation failed: %s", exc)
+
+            done_event = ChatStreamEvent(
+                type="tool_done",
+                payload={"tool_name": tool_name, "status": tool_status},
+                sequence=seq,
+                timestamp=time.time(),
+            )
+            events = await self._emit_event(state, done_event, events, turn_event_type="tool.done")
+            seq += 1
+
+        return {
+            "evidence": evidence_list,
+            "tool_invocations": tool_invocations,
+            "stream_events": events,
+            "sources": sources,
+            "errors": errors,
+        }
+
+    # ------------------------------------------------------------------
+    # Node: answer_node
+    # ------------------------------------------------------------------
+
+    async def _answer_node(self, state: TutorAgentState) -> dict:
+        question = state.get("question", "")
+        history = state.get("history_messages", [])
+        session_summary = state.get("session_summary", "")
+        long_term_memory = state.get("long_term_memory", "")
+        learner_profile = state.get("learner_profile", "")
+        attachment_context = state.get("attachment_context", "")
+        evidence_list = state.get("evidence", [])
+        attachments = state.get("attachments", [])
+
+        # Build evidence context
+        evidence_parts: list[str] = []
+        for e in evidence_list:
+            if isinstance(e, dict) and e.get("summary"):
+                evidence_parts.append(f"[{e.get('evidence_type', 'unknown')}] {e['summary']}")
+        evidence_context = "\n".join(evidence_parts) if evidence_parts else "无额外证据。"
+
+        # Build system prompt
+        system_prompt = prompts.get("chat").render(
+            "tutor_system",
+            session_summary_context=session_summary,
+            file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
+            attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
+            evaluation_summary_context="如需近期测验、薄弱点或学习计划依据，请调用 get_recent_evaluation 工具。",
+        )
+
+        # Inject extra context
+        extra_parts: list[str] = []
+        if evidence_context and evidence_context != "无额外证据。":
+            extra_parts.append(f"[检索证据]\n{evidence_context}")
+        if long_term_memory:
+            extra_parts.append(f"[长期记忆]\n{long_term_memory}")
+        if learner_profile:
+            extra_parts.append(f"[学习者画像]\n{learner_profile}")
+        if extra_parts:
+            system_prompt += "\n\n" + "\n\n".join(extra_parts)
+
+        # Build messages
+        human_content = question
+        if attachment_context:
+            human_content = f"{question}\n\n[附件分析结果]\n{attachment_context}"
+
+        messages = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
+
+        events = list(state.get("stream_events", []))
+        full_answer = ""
+        raw_answer = ""
+        seq = len(events) + 1
+
+        try:
+            from app.chat.service import safety_filter
+
+            stream_buffer = SafetyBufferedResponseStreamer(
+                response_streamer=ResponseStreamer(),
+                safety_check=safety_filter.check,
+                guard_chars=safety_filter.stream_guard_chars,
+            )
+
+            stream = self.llm.astream(messages, temperature=0.25)
+            async for chunk in stream:
+                content = getattr(chunk, "content", "")
+                if isinstance(content, list) and content:
+                    content = content[0].get("text", "") if isinstance(content[0], dict) else str(content[0])
+                chunk_str = normalize_message_content(content)
+                if not chunk_str:
+                    continue
+                raw_answer += chunk_str
+                async for safe_event in stream_buffer.push(chunk_str):
+                    token = safe_event.get("data", "")
+                    if not token:
+                        continue
+                    full_answer += token
+                    event = ChatStreamEvent(type="answer_token", payload={"token": token}, sequence=seq, timestamp=time.time())
+                    events = await self._emit_event(state, event, events, persist=False)
+                    seq += 1
+
+            async for safe_event in stream_buffer.flush():
+                token = safe_event.get("data", "")
+                if not token:
+                    continue
+                full_answer += token
+                event = ChatStreamEvent(type="answer_token", payload={"token": token}, sequence=seq, timestamp=time.time())
+                events = await self._emit_event(state, event, events, persist=False)
+                seq += 1
+
+            if not full_answer:
+                full_answer = raw_answer
+
+        except Exception as exc:
+            logger.exception("[TutorAgent] answer streaming failed")
+            try:
+                response = await self.llm.ainvoke(messages, temperature=0.25)
+                full_answer = normalize_message_content(getattr(response, "content", ""))
+            except Exception as fallback_exc:
+                logger.exception("[TutorAgent] answer fallback also failed")
+                errors = list(state.get("errors", []))
+                errors.append(f"answer_node: {exc}")
+                return {"final_answer": "", "stream_events": events, "errors": errors}
+
+        answer_done_event = ChatStreamEvent(
+            type="answer_done",
+            payload={"answer_length": len(full_answer)},
+            sequence=seq,
+            timestamp=time.time(),
+        )
+        events = await self._emit_event(state, answer_done_event, events, turn_event_type="answer.done")
+
+        return {"final_answer": full_answer, "stream_events": events}
+
+    # ------------------------------------------------------------------
+    # Node: diagram_node
+    # ------------------------------------------------------------------
+
+    async def _diagram_node(self, state: TutorAgentState) -> dict:
+        question = state.get("question", "")
+        final_answer = state.get("final_answer", "")
+        user_id = state.get("user_id", 0)
+        session_id = state.get("session_id", "")
+        attachments = state.get("attachments", [])
+        enable_web_search = state.get("enable_web_search", False)
+        need_diagram = state.get("need_teaching_diagram", False)
+
+        events = list(state.get("stream_events", []))
+        diagram_result: dict[str, Any] | None = None
+
+        start_event = ChatStreamEvent(type="diagram_start", payload={}, sequence=len(events) + 1, timestamp=time.time())
+        events = await self._emit_event(state, start_event, events, turn_event_type="diagram.start")
+
+        try:
+            from app.chat.schemas import TurnRequest
+
+            evidence_set = EvidenceSet(items=[Evidence.model_validate(e) for e in state.get("evidence", []) if isinstance(e, dict)])
+            diagram_result = await TeachingDiagramGenerator().generate(
+                TurnRequest(
+                    user_id=user_id,
+                    session_id=session_id,
+                    user_input=question,
+                    attachments=attachments,
+                    enable_web_search=enable_web_search,
+                    need_teaching_diagram=need_diagram,
+                ),
+                final_answer,
+                evidence_set,
+            )
+        except Exception as exc:
+            logger.warning("[TutorAgent] diagram generation failed: %s", exc)
+            errors = list(state.get("errors", []))
+            errors.append(f"diagram_node: {exc}")
+            done_event = ChatStreamEvent(type="diagram_done", payload={"has_diagram": False}, sequence=len(events) + 1, timestamp=time.time())
+            events = await self._emit_event(state, done_event, events, turn_event_type="diagram.done")
+            return {"diagram_result": None, "stream_events": events, "errors": errors}
+
+        done_event = ChatStreamEvent(
+            type="diagram_done",
+            payload={"has_diagram": diagram_result is not None},
+            sequence=len(events) + 1,
+            timestamp=time.time(),
+        )
+        events = await self._emit_event(state, done_event, events, turn_event_type="diagram.done")
+
+        return {"diagram_result": diagram_result, "stream_events": events}

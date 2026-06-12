@@ -1,10 +1,12 @@
 """Chat 私有记忆管线与持久化门面。
 
-核心类 ChatMemoryService 是记忆操作的统一入口，编排三阶段后处理管线：
+核心类 ChatMemoryService 是记忆操作的统一入口，编排两阶段后处理管线：
   after_turn → post_turn:
     1. 压缩(compressor.maybe_compress) — 短期消息过多时生成摘要块
     2. 长期记忆(long_term_memory.maybe_update) — 检测稳定信号并增量更新
-    3. 画像(profile_service.maybe_update_from_tutoring_turn) — 同步画像维度
+
+画像更新由 ChatUseCases 的智能辅导后置管线在记忆管线之后串行触发，
+避免与压缩/长期记忆同时争抢同一个会话计数器。
 
 其余方法提供会话 CRUD、消息存取、摘要查询等基础能力。
 
@@ -352,7 +354,7 @@ class ChatMemoryService:
         usage_metadata: dict[str, Any] | None = None,
         turn_id: int | None = None,
         message_kind: str | None = None,
-    ) -> None:
+    ) -> ChatMessage:
         async with session_scope() as db:
             # 查找 session，不存在则自动创建（隐式 upsert）
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
@@ -411,6 +413,7 @@ class ChatMemoryService:
 
             # 原子提交：消息 + 所有附件分析在同一个事务中落盘
             await db.commit()
+            return message
 
     # -------------------------------------------------------------------
     # save_tool_invocations: 批量保存工具调用记录

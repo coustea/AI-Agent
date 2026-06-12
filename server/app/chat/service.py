@@ -1,56 +1,44 @@
-"""聊天服务层 — 对话流编排、记忆管理、附件分析、文件上传。
+"""聊天服务层 — 对话流编排、记忆管理、文件上传。
 
 核心函数：
   build_messages()  — 从数据库构建 LangChain 消息列表（含工具调用链）
-  analysis_files()  — 调用大模型分析附件（先星火降级 GLM）
-  chat()            — 总编排：build_messages → analysis_files → agent 推理循环 → 流式响应
+  chat()            — 总编排：build_messages → TutorAgent.chat() → 转发 SSE 事件 → 持久化
 
-ChatUseCases 保留会话管理、文件上传等辅助功能，对话核心逻辑由以上三个函数驱动。
+ChatUseCases 保留会话管理、文件上传等辅助功能，对话核心逻辑委托给 TutorAgent。
 """
 
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, NamedTuple
-from uuid import uuid4
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
-from pydantic import BaseModel, Field
-from sqlalchemy import select
 
+from app.chat.agent import TutorAgent
 from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
-from app.chat.agent import ReasoningAgent
-from app.chat.streaming import ResponseStreamer, SafetyBufferedResponseStreamer
 from app.chat.schemas import (
-    ConstraintReport, Evidence, EvidenceSet, FinalAnswer, FinalAnswerStream,
-    ToolIntent, TurnRequest, UploadResponse,
+    TutorAgentInput,
+    UploadResponse,
 )
-from app.chat.stages import TeachingDiagramGenerator
-from app.chat.tool_execute import TutorToolExecutor
-from app.chat.utils import normalize_message_content
-from app.chat.utils.vision import VisionService
-from app.chat.utils.files import analyze_documents
+from app.chat.streaming import ResponseStreamer
 from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST
-from app.infra.database import session_scope
 from app.infra.logging import get_logger
-from app.infra.models import ChatMessage, ChatToolInvocation
-from app.infra.prompts import prompts
+from app.infra.models import ChatMessage
 from app.profile.service import get_profile_service
 
 logger = get_logger(__name__)
 
 
 # -----------------------------------------------------------------------
-# 核心函数：build_messages / analysis_files / chat
+# 核心函数：build_messages / chat
 # -----------------------------------------------------------------------
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
-HISTORY_LIMIT = 20  # 从数据库读取的最近消息条数
+HISTORY_LIMIT = 20
 
 
 def _normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
@@ -66,108 +54,6 @@ def _normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
             "type": "tool_call",
         })
     return normalized
-
-
-# ── 工具执行记录 ────────────────────────────────────────────────
-
-
-class ToolExecutionRecord(BaseModel):
-    """单次工具调用的完整记录 — 用于持久化和 transcript 投影。"""
-    tool_call_id: str = Field(default_factory=lambda: f"tool-{uuid4().hex}")
-    tool_name: str
-    invoked_by: str = "agent"
-    payload: dict[str, Any] = Field(default_factory=dict)
-    raw_result: dict[str, Any] = Field(default_factory=dict)
-    result_text: str = ""
-    status: str = "success"
-    evidence: list[dict[str, Any]] = Field(default_factory=list)
-
-
-# ── Transcript 投影 ─────────────────────────────────────────────
-
-
-def project_turn_run(
-    final_answer: str,
-    tool_records: list[ToolExecutionRecord],
-    evidence: list[Evidence],
-    attachment_analyses: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """将推理结果投影为前端可消费的格式 — 消息列表 + 工具调用记录 + 知识来源。"""
-    transcript_messages: list[dict[str, Any]] = []
-    tool_invocations: list[dict[str, Any]] = []
-
-    for record in tool_records:
-        tool_call_id = record.tool_call_id
-        tool_name = record.tool_name
-        payload = record.payload
-        result_text = record.result_text or _stringify_result(record.raw_result)
-
-        transcript_messages.append({
-            "role": "assistant",
-            "content": f"正在调用工具：{tool_name}",
-            "tool_calls": [{"id": tool_call_id, "name": tool_name, "args": payload}],
-            "message_kind": "assistant_tool_request",
-        })
-        transcript_messages.append({
-            "role": "tool",
-            "content": result_text,
-            "tool_call_id": tool_call_id,
-            "message_kind": "tool_result",
-        })
-        tool_invocations.append({
-            "tool_call_id": tool_call_id,
-            "tool_name": tool_name,
-            "arguments_json": payload,
-            "result_text": result_text,
-            "result_json": record.raw_result,
-            "status": record.status,
-        })
-
-    if final_answer:
-        transcript_messages.append({
-            "role": "assistant",
-            "content": final_answer,
-            "tool_calls": [],
-            "message_kind": "assistant_answer",
-        })
-
-    knowledge_sources = _collect_knowledge_sources(evidence)
-
-    return {
-        "transcript_messages": transcript_messages,
-        "tool_invocations": tool_invocations,
-        "knowledge_sources": knowledge_sources,
-        "attachment_analyses": attachment_analyses,
-    }
-
-
-def _collect_knowledge_sources(evidence_items: list[Evidence]) -> list[dict[str, Any]]:
-    """从证据列表中提取知识库和搜索来源。"""
-    sources: list[dict[str, Any]] = []
-    for item in evidence_items:
-        if item.evidence_type == "knowledge_base":
-            raw_sources = item.details.get("sources") if isinstance(item.details, dict) else []
-            if isinstance(raw_sources, list):
-                for source in raw_sources:
-                    if isinstance(source, dict):
-                        sources.append(source)
-        elif item.evidence_type == "web_search":
-            details = item.details if isinstance(item.details, dict) else {}
-            sources.append({
-                "source": details.get("tool_name") or "web_search",
-                "query": details.get("query") or "",
-                "summary": item.summary,
-            })
-    return sources
-
-
-def _stringify_result(result: Any) -> str:
-    """将工具返回结果统一转为字符串。"""
-    if isinstance(result, str):
-        return result
-    if isinstance(result, dict):
-        return json.dumps(result, ensure_ascii=False)
-    return str(result)
 
 
 async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
@@ -223,56 +109,23 @@ async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
     return [SystemMessage(content=system_content), *messages]
 
 
-async def analysis_files(attachments: list[str], user_id: int, session_id: str) -> str:
-    """分析附件，返回分析结果文本。
-
-    图片先走星火 OCR，降级 GLM-4V；文档走文本解析 + LLM 摘要。
-    返回拼接后的分析上下文文本，供注入 LLM prompt。
-    """
-    if not attachments:
-        return ""
-
-    image_urls, file_urls = [], []
-    for url in attachments:
-        ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
-        if ext in IMAGE_EXTENSIONS:
-            image_urls.append(url)
-        else:
-            file_urls.append(url)
-
-    parts: list[str] = []
-
-    # 图片分析：VisionService（先星火降级 GLM）
-    if image_urls:
-        try:
-            vision_result = await VisionService().analyze_images(
-                image_urls[:5],
-                "请详细分析这些图片中的文字、题目、图表和关键信息，并用中文总结。",
-            )
-            analysis_text = str(vision_result.get("analysis_text") or "").strip()
-            if analysis_text:
-                parts.append(f"[图片] {analysis_text}")
-        except Exception as exc:
-            logger.warning("[analysis_files] 图片分析失败: %s", exc)
-
-    # 文档分析：提取文本 + LLM 摘要
-    if file_urls:
-        try:
-            analysis = await analyze_documents(
-                current_user_id=user_id,
-                file_urls=file_urls[:5],
-                question="请分析这些文档",
-            )
-            summary = str(analysis.get("analysis_text") or "").strip()
-            if summary:
-                parts.append(f"[文档] {summary}")
-        except Exception as exc:
-            logger.warning("[analysis_files] 文档分析失败: %s", exc)
-
-    return "\n".join(parts)
-
-
-MAX_REASONING_STEPS = 4  # 推理循环最大步数
+# SSE 事件类型 → 前端 SSE event 名称映射
+_SSE_EVENT_MAP: dict[str, str] = {
+    "message_start": "start",
+    "classify_done": "status",
+    "file_analysis_start": "status",
+    "file_analysis_done": "attachment",
+    "tool_start": "tool",
+    "tool_done": "tool",
+    "answer_token": "token",
+    "answer_done": "status",
+    "diagram_start": "status",
+    "diagram_done": "diagram",
+    "memory_update_start": "status",
+    "memory_update_done": "status",
+    "final": "done",
+    "error": "error",
+}
 
 
 async def chat(
@@ -284,16 +137,15 @@ async def chat(
     enable_web_search: bool = False,
     need_teaching_diagram: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
-    """总编排函数：build_messages → analysis_files → agent 推理循环 → 流式响应。
+    """总编排函数：创建 turn → 构建上下文 → 调用 TutorAgent → 转发 SSE → 持久化。
 
     流程：
-    1. 从数据库构建历史消息（build_messages）
-    2. 如有附件，先分析附件（analysis_files），结果注入上下文
-    3. 构建完整消息列表 [SystemMessage, ...历史, HumanMessage(当前问题+附件分析)]
-    4. 推理循环：agent.reason() → ToolIntent → execute → 证据回填 → 再推理
-    5. 流式输出 SSE 事件
-    6. 后置教学图解生成
-    7. 持久化结果，后台触发记忆管线和画像更新
+    1. 创建 turn 记录 + 持久化用户消息
+    2. 构建历史消息（build_messages）
+    3. 加载会话摘要、长期记忆、学习者画像
+    4. 调用 TutorAgent.chat()，将内部事件转换为 SSE
+    5. 持久化助手回复、工具调用、turn 终态
+    6. 后台串行触发记忆管线和画像更新
     """
     uc = get_chat_usecases()
     effective_session = session_id or uc.default_session_id(user_id)
@@ -345,6 +197,7 @@ async def chat(
         status="running",
     )
     turn_id = turn_row.id
+    turn_index = int(getattr(turn_row, "turn_index", 0) or 0)
 
     await svc.append_turn_event(
         user_id=user_id, session_id=effective_session, turn_id=turn_id,
@@ -356,12 +209,13 @@ async def chat(
         for url in merged_attachments
     ] if merged_attachments else None
 
-    await uc.save_message(
+    user_message = await uc.save_message(
         user_id=user_id, session_id=effective_session,
         role="user", content=user_content,
         attachments=user_attachment_records,
         turn_id=turn_id, message_kind="user_input",
     )
+    user_message_id = getattr(user_message, "id", None)
 
     await svc.append_turn_event(
         user_id=user_id, session_id=effective_session, turn_id=turn_id,
@@ -375,121 +229,100 @@ async def chat(
             label="generate_title",
         )
 
-    # ── 2. 分析附件 + 构建消息列表 ──
-    attachment_context = ""
-    if merged_attachments:
-        yield {"event": "status", "data": {"stage": "attachment_analysis", "message": "正在分析附件内容..."}}
-        attachment_context = await analysis_files(merged_attachments, user_id, effective_session)
-
-    # 构建历史消息（含会话压缩摘要）
+    # ── 2. 构建上下文 ──
     history_messages = await build_messages(user_id, effective_session)
-
-    # 构建当前问题的 HumanMessage，附加附件分析上下文
-    human_content = current_message
-    if attachment_context:
-        human_content = f"{current_message}\n\n[附件分析结果]\n{attachment_context}"
-
-    # 获取会话压缩摘要用于系统 prompt
     session_summary = await svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
-    system_prompt = prompts.get("chat").render(
-        "tutor_system",
-        session_summary_context=session_summary,
-        file_context=f"附件 {len(merged_attachments)} 个" if merged_attachments else "本轮没有上传附件。",
-        attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
-        evaluation_summary_context="如需近期测验、薄弱点或学习计划依据，请调用 get_recent_evaluation 工具。",
+
+    # 加载长期记忆
+    long_term_memory = ""
+    try:
+        ltm_record = await svc.get_long_term_memory(user_id=user_id)
+        if ltm_record and getattr(ltm_record, "memory_markdown", None):
+            long_term_memory = ltm_record.memory_markdown
+    except Exception as exc:
+        logger.warning("[chat] 加载长期记忆失败: %s", exc)
+
+    # 加载学习者画像
+    learner_profile = ""
+    try:
+        learner_profile = await svc.get_profile_markdown(user_id)
+    except Exception as exc:
+        logger.warning("[chat] 加载画像失败: %s", exc)
+
+    # ── 3. 调用 TutorAgent ──
+    agent_input = TutorAgentInput(
+        user_id=user_id,
+        session_id=effective_session,
+        turn_id=turn_id,
+        user_message_id=user_message_id,
+        question=current_message,
+        attachments=merged_attachments,
+        history_messages=history_messages,
+        session_summary=session_summary,
+        long_term_memory=long_term_memory,
+        learner_profile=learner_profile,
+        enable_web_search=enable_web_search,
+        need_teaching_diagram=need_teaching_diagram,
     )
 
-    messages = [SystemMessage(content=system_prompt), *history_messages, HumanMessage(content=human_content)]
-
-    # ── 3. 推理循环 ──
-    yield {"event": "status", "data": {"stage": "answer", "message": "正在组织回答..."}}
-
-    agent = ReasoningAgent()
-    constraints = ConstraintReport()
-    evidence_set = EvidenceSet()
-    tool_records: list[ToolExecutionRecord] = []
-    tool_executor = TutorToolExecutor(request=TurnRequest(
-        user_id=user_id, session_id=effective_session, user_input=current_message,
-        attachments=merged_attachments, enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
-    ))
-
-    # 获取可用工具 schema
-    tool_schema_provider = getattr(tool_executor, "tools", None)
-    available_tools = tool_schema_provider() if callable(tool_schema_provider) else None
-
+    agent = TutorAgent()
     full_answer = ""
+    tool_invocations: list[dict[str, Any]] = []
+    diagram_result: dict[str, Any] | None = None
+    sources: list[dict[str, Any]] = []
     attachment_analyses: list[dict[str, Any]] = []
+    has_error = False
 
     try:
-        stream_buffer = SafetyBufferedResponseStreamer(
-            response_streamer=uc._response_streamer,
-            safety_check=safety_filter.check,
-            guard_chars=safety_filter.stream_guard_chars,
-        )
+        async for event in agent.chat(agent_input):
+            sse_event = _SSE_EVENT_MAP.get(event.type, "status")
+            sse_data = event.payload
 
-        for _ in range(MAX_REASONING_STEPS):
-            # 调用 agent 推理
-            outcome = await agent.reason(messages, constraints, tools=available_tools)
-
-            if isinstance(outcome, FinalAnswerStream):
-                # 流式文本生成
-                async for chunk in outcome.stream:
-                    full_answer += chunk
-                    async for event in stream_buffer.push(chunk):
-                        yield event
-                break
-
-            if isinstance(outcome, FinalAnswer):
-                full_answer = outcome.answer
-                if full_answer:
-                    async for event in stream_buffer.push(full_answer):
-                        yield event
-                break
-
-            if isinstance(outcome, ToolIntent):
-                # 执行工具
-                constraints.executed_tools.append(outcome.tool_name)
-                tool_result = await tool_executor.execute(outcome)
-                status = str(tool_result.get("status") or "success") if isinstance(tool_result, dict) else "success"
-                if status != "success":
-                    constraints.failed_tools.append(outcome.tool_name)
-
-                tool_records.append(ToolExecutionRecord(
-                    tool_name=str(tool_result.get("tool_name") or outcome.tool_name) if isinstance(tool_result, dict) else outcome.tool_name,
-                    invoked_by="agent",
-                    payload=outcome.payload,
-                    raw_result=tool_result if isinstance(tool_result, dict) else {},
-                    result_text=str((tool_result or {}).get("result_text") or "") if isinstance(tool_result, dict) else "",
-                    status=status,
-                    evidence=(tool_result or {}).get("evidence", []) if isinstance(tool_result, dict) else [],
-                ))
-
-                # 证据回填
-                evidence_items = (tool_result or {}).get("evidence") if isinstance(tool_result, dict) else None
-                if evidence_items:
-                    evidence_set.extend([Evidence.model_validate(e) if isinstance(e, dict) else e for e in evidence_items])
-
-                # 将工具结果追加到消息列表，供下一轮推理使用
-                tool_call_id = f"call-{len(tool_records)}"
-                messages.append(AIMessage(
-                    content="",
-                    tool_calls=[{"id": tool_call_id, "name": outcome.tool_name, "args": outcome.payload, "type": "tool_call"}],
-                ))
-                result_text = str((tool_result or {}).get("result_text") or "") if isinstance(tool_result, dict) else ""
-                messages.append(ToolMessage(content=result_text, tool_call_id=tool_call_id))
-
+            # 特殊处理：token 事件只发文本，不包 payload
+            if event.type == "answer_token":
+                yield {"event": "token", "data": sse_data.get("token", "")}
                 continue
 
-            break
-        else:
-            constraints.max_steps_reached = True
+            # 收集结果
+            if event.type == "final":
+                full_answer = sse_data.get("final_answer", "")
+                diagram_result = sse_data.get("diagram_result")
+                tool_invocations = sse_data.get("tool_invocations", [])
+                sources = sse_data.get("sources", [])
+                attachment_analyses = sse_data.get("attachment_analyses", [])
 
-        async for event in stream_buffer.flush():
-            yield event
+                # 发送 diagram 事件
+                if diagram_result is not None:
+                    yield {"event": "diagram", "data": diagram_result}
+
+                yield {
+                    "event": "done",
+                    "data": {
+                        "session_id": effective_session,
+                        "full_response": full_answer,
+                        "knowledge_sources": sources,
+                        "teaching_diagram": diagram_result,
+                        "tool_calls": [
+                            {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
+                            for inv in tool_invocations
+                        ],
+                        "attachment_analyses": attachment_analyses,
+                    },
+                }
+                continue
+
+            if event.type == "error":
+                has_error = True
+                yield {"event": "error", "data": sse_data.get("error", "未知错误")}
+                yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+                continue
+
+            # 默认 SSE 转发
+            yield {"event": sse_event, "data": sse_data}
 
     except Exception as exc:
-        logger.exception("[chat] 推理执行失败")
+        logger.exception("[chat] TutorAgent 执行失败")
+        has_error = True
         if turn_id is not None:
             await svc.append_turn_event(
                 user_id=user_id, session_id=effective_session, turn_id=turn_id,
@@ -505,82 +338,27 @@ async def chat(
         yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
         return
 
-    # ── 4. 后置教学图解 ──
-    teaching_diagram: dict[str, Any] | None = None
-    if need_teaching_diagram and full_answer:
-        try:
-            teaching_diagram = await TeachingDiagramGenerator().generate(
-                TurnRequest(
-                    user_id=user_id, session_id=effective_session, user_input=current_message,
-                    attachments=merged_attachments, enable_web_search=enable_web_search,
-                    need_teaching_diagram=need_teaching_diagram,
-                ),
-                full_answer, evidence_set,
-            )
-        except Exception as exc:
-            logger.warning("[chat] 图解生成失败: %s", exc)
-
-    # ── 5. 后处理：安全过滤、持久化 ──
-    if full_answer:
-        safety_result = await safety_filter.check(full_answer)
-        if safety_result.has_violation:
-            full_answer = safety_result.sanitized_text
-            yield {"event": "status", "data": {"stage": "safety_filter", "message": "内容触发安全策略，已进行部分过滤"}}
-
-    if teaching_diagram is not None:
-        yield {"event": "diagram", "data": teaching_diagram}
-
-    projection = project_turn_run(full_answer, tool_records, evidence_set.items, attachment_analyses)
-    tool_calls = [
-        {"id": item["tool_call_id"], "name": item["tool_name"], "args": item.get("arguments_json") or {}}
-        for item in projection["tool_invocations"]
-    ]
-    knowledge_sources = list(projection["knowledge_sources"])
-
-    # ── 持久化助手回复和工具调用 ──
+    # ── 4. 持久化助手回复和工具调用 ──
     if turn_id is not None:
         yield {"event": "status", "data": {"stage": "persisting_turn", "message": "正在保存本轮学习记录..."}}
 
-        transcript_messages = list(projection["transcript_messages"])
-        assistant_messages = [item for item in transcript_messages if str(item.get("role") or "") == "assistant"]
-        if assistant_messages:
-            for index, am in enumerate(assistant_messages):
-                content = str(am.get("content") or "")
-                if index == len(assistant_messages) - 1 and full_answer:
-                    content = full_answer
-                await uc.save_message(
-                    user_id=user_id, session_id=effective_session,
-                    role="assistant", content=content,
-                    tool_calls=am.get("tool_calls") if isinstance(am.get("tool_calls"), list) else None,
-                    knowledge_sources=knowledge_sources if index == len(assistant_messages) - 1 else None,
-                    teaching_diagram=teaching_diagram if index == len(assistant_messages) - 1 else None,
-                    attachment_analyses=attachment_analyses if index == len(assistant_messages) - 1 else None,
-                    turn_id=turn_id,
-                    message_kind=str(am.get("message_kind") or "assistant_answer"),
-                )
-        else:
+        # 安全过滤
+        if full_answer:
+            safety_result = await safety_filter.check(full_answer)
+            if safety_result.has_violation:
+                full_answer = safety_result.sanitized_text
+                yield {"event": "status", "data": {"stage": "safety_filter", "message": "内容触发安全策略，已进行部分过滤"}}
+
+        # 保存最终助手回复
+        if full_answer:
             await uc.save_message(
                 user_id=user_id, session_id=effective_session,
                 role="assistant", content=full_answer,
-                tool_calls=tool_calls, knowledge_sources=knowledge_sources,
-                teaching_diagram=teaching_diagram, attachment_analyses=attachment_analyses,
+                knowledge_sources=sources if sources else None,
+                teaching_diagram=diagram_result,
+                attachment_analyses=attachment_analyses if attachment_analyses else None,
                 turn_id=turn_id, message_kind="assistant_answer",
             )
-
-        for tm in transcript_messages:
-            if str(tm.get("role") or "") != "tool":
-                continue
-            await uc.save_message(
-                user_id=user_id, session_id=effective_session,
-                role="tool", content=str(tm.get("content") or ""),
-                tool_call_id=str(tm.get("tool_call_id") or ""),
-                turn_id=turn_id, message_kind="tool_result",
-            )
-
-        await svc.save_tool_invocations(
-            user_id=user_id, session_id=effective_session,
-            turn_id=turn_id, invocations=projection["tool_invocations"],
-        )
 
         await svc.append_turn_event(
             user_id=user_id, session_id=effective_session, turn_id=turn_id,
@@ -589,7 +367,6 @@ async def chat(
         await svc.finalize_turn_transcript(
             user_id=user_id, session_id=effective_session, turn_id=turn_id,
             status="completed", final_answer=full_answer,
-            constraint_report=constraints.model_dump(),
         )
         await svc.update_turn(
             user_id=user_id, session_id=effective_session, turn_id=turn_id,
@@ -598,31 +375,16 @@ async def chat(
             error_message=None,
         )
 
-    # ── 后台任务：记忆管线和画像更新 ──
+    # ── 5. 后台任务：串行运行记忆管线和画像更新，避免抢占同一个 session 计数器 ──
     if full_answer:
         uc._spawn_background(
-            svc.after_turn(
+            uc._run_tutoring_post_turn_pipeline(
                 user_id=user_id, session_id=effective_session,
                 user_message=current_message, assistant_reply=full_answer,
+                turn_count=turn_index,
             ),
-            label="memory_pipeline",
+            label="tutoring_post_turn_pipeline",
         )
-        uc._spawn_background(
-            uc._update_learner_profile(user_id=user_id, session_id=effective_session),
-            label="profile_update",
-        )
-
-    yield {
-        "event": "done",
-        "data": {
-            "session_id": effective_session,
-            "full_response": full_answer,
-            "knowledge_sources": knowledge_sources,
-            "teaching_diagram": teaching_diagram,
-            "tool_calls": tool_calls,
-            "attachment_analyses": attachment_analyses,
-        },
-    }
 
 
 # -----------------------------------------------------------------------
@@ -880,7 +642,7 @@ class ChatMessageItem:
         turn_id: int | None = None,
         message_kind: str | None = None,
         created_at: Any = None,
-    ) -> None:
+    ) -> Any:
         self.id = id
         self.role = role
         self.content = content
@@ -1082,13 +844,13 @@ class ChatUseCases:
         usage_metadata: dict[str, Any] | None = None,
         turn_id: int | None = None,
         message_kind: str | None = None,
-    ) -> None:
+    ) -> Any:
         """保存单条消息到数据库。
 
         由 chat() 在流式结束后调用，持久化用户消息和助手回复。
         turn_id 将消息关联到具体的对话轮次，便于后续记忆管线处理。
         """
-        await self._memory_service.save_message(
+        return await self._memory_service.save_message(
             user_id=user_id,
             session_id=session_id,
             role=role,
@@ -1178,6 +940,46 @@ class ChatUseCases:
     async def _update_learner_profile(self, *, user_id: int, session_id: str) -> None:
         """根据对话内容更新学习者画像（后台执行）。"""
         await get_profile_service().maybe_update_from_tutoring_turn(user_id=user_id, session_id=session_id)
+
+    async def _run_tutoring_post_turn_pipeline(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message: str,
+        assistant_reply: str,
+        turn_count: int,
+    ) -> None:
+        """串行运行智能辅导的后置记忆任务。
+
+        顺序必须保持：先更新会话 token 并尝试压缩/长期记忆，再更新画像。
+        两者都会读取或修改 ChatSession.summary_token_count，拆成并发任务会导致触发阈值互相抢占。
+        """
+        try:
+            await self._memory_service.after_turn(
+                user_id=user_id,
+                session_id=session_id,
+                user_message=user_message,
+                assistant_reply=assistant_reply,
+                turn_count=turn_count,
+            )
+        except Exception as exc:
+            logger.error(
+                "[ChatUseCases] 智能辅导记忆管线失败 user=%s session=%s err=%s",
+                user_id,
+                session_id,
+                exc,
+            )
+
+        try:
+            await self._update_learner_profile(user_id=user_id, session_id=session_id)
+        except Exception as exc:
+            logger.error(
+                "[ChatUseCases] 智能辅导画像更新失败 user=%s session=%s err=%s",
+                user_id,
+                session_id,
+                exc,
+            )
 
     def _spawn_background(self, coro, *, label: str = "") -> None:
         """安全地启动后台协程任务。

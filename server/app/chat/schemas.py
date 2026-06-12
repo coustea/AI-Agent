@@ -1,12 +1,13 @@
 """Chat 模块核心数据模式 — 编排请求、证据模型、推理结果、教学图解 Schema。
 
 所有 DTO 集中在此文件，打破原分散文件间的循环依赖。
-按职责分为五组：
+按职责分为六组：
 
   1. 基础消息与证据 — ChatHistoryMessage / Evidence / EvidenceSet / UploadResponse
   2. 工具意图与最终回答 — ToolIntent / FinalAnswer / FinalAnswerStream / ReasoningResult（agent ↔ orchestrator 的合约类型）
   3. 编排层基础模型 — TurnRequest / ConstraintReport（orchestrator 输入/输出约束）
-  4. 教学图解 Schema — TeachingDiagram 及 6 种 payload（comparison/flowchart/sequence/framework/summary/hierarchy）
+  4. TutorAgent 合约 — TutorAgentInput / ChatStreamEvent / ClassificationResult（TutorAgent ↔ ChatService）
+  5. 教学图解 Schema — TeachingDiagram 及 6 种 payload（comparison/flowchart/sequence/framework/summary/hierarchy）
 """
 
 from __future__ import annotations  # 延迟求值注解，允许前向引用（如字符串形式的类型标注）
@@ -152,6 +153,61 @@ class ConstraintReport(BaseModel):
     skipped_tools: list[str] = Field(default_factory=list)  # 被跳过的工具（模型重复请求已执行的工具）
     max_steps_reached: bool = False  # 是否达到最大推理步数（防无限循环的安全阀）
     unresolved_questions: list[str] = Field(default_factory=list)  # 未解决的问题（预留扩展）
+
+
+# ===================================================================
+# TutorAgent 合约 — TutorAgent ↔ ChatService 的接口
+# ===================================================================
+
+class TutorAgentInput(BaseModel):
+    """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。"""
+    user_id: int
+    session_id: str
+    turn_id: int
+    user_message_id: int | None = None
+    question: str
+    attachments: list[str] = Field(default_factory=list)
+    history_messages: list[Any] = Field(default_factory=list)
+    session_summary: str = ""
+    long_term_memory: str = ""
+    learner_profile: str = ""
+    enable_web_search: bool = False
+    need_teaching_diagram: bool = False
+
+
+class ClassificationResult(BaseModel):
+    """classify 节点的输出 — 意图分类和路由决策。"""
+    intent: str = "general_qa"
+    subject: str = ""
+    difficulty: str = "intermediate"
+    needs_file_analysis: bool = False
+    needs_knowledge_search: bool = False
+    needs_web_search: bool = False
+    needs_profile: bool = False
+    needs_long_term_memory: bool = False
+    needs_recent_evaluation: bool = False
+    needs_diagram: bool = False
+    safety_risk: str = "none"
+    answer_style: str = "explain"
+
+
+ChatStreamEventType = Literal[
+    "message_start", "classify_done",
+    "file_analysis_start", "file_analysis_done",
+    "tool_start", "tool_done",
+    "answer_token", "answer_done",
+    "diagram_start", "diagram_done",
+    "memory_update_start", "memory_update_done",
+    "final", "error",
+]
+
+
+class ChatStreamEvent(BaseModel):
+    """TutorAgent 流式事件 — 内部事件形状，ChatService 转换为 SSE。"""
+    type: ChatStreamEventType
+    payload: dict[str, Any] = Field(default_factory=dict)
+    sequence: int = 0
+    timestamp: float = 0.0
 
 
 # ===================================================================

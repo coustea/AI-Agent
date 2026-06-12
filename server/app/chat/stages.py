@@ -4,8 +4,8 @@
   WebSearchTool          — 联网搜索降级链（tavily → duckduckgo → serp → spark）
   TeachingDiagramGenerator — LLM 生成结构化图解 JSON
 
-已删除（职责归入 service.py）：
-  AttachmentAnalyzer  → service.analysis_files()
+已删除（职责归入 TutorAgent 节点）：
+  AttachmentAnalyzer  → TutorAgent.analysis_files 节点
   SearchOrchestrator  → agent 通过 web_search / search_knowledge_base 工具自行调用
 """
 
