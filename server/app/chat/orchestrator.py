@@ -16,6 +16,7 @@ project_turn_run 将 TurnRunResult 投影为前端可消费的 transcript 消息
 from __future__ import annotations
 
 import json
+import inspect
 from typing import Any, Literal, AsyncIterator
 from uuid import uuid4
 
@@ -269,12 +270,13 @@ class TurnOrchestrator:
             return ""
 
         tool_executor = self.tools or TutorToolExecutor(request=request)
-        available_tools = tool_executor.tools() if hasattr(tool_executor, "tools") else []
+        tool_schema_provider = getattr(tool_executor, "tools", None)
+        available_tools = tool_schema_provider() if callable(tool_schema_provider) else None
 
         for _ in range(self.max_reasoning_steps):
-            try:
+            if available_tools is not None and self._agent_supports_tools_kwarg():
                 outcome = await self.agent.reason(request, evidence_set, constraints, tools=available_tools)
-            except TypeError:
+            else:
                 outcome = await self.agent.reason(request, evidence_set, constraints)
             normalized = self._normalize_outcome(outcome)
             if isinstance(normalized, FinalAnswerStream):
@@ -310,6 +312,16 @@ class TurnOrchestrator:
 
         constraints.max_steps_reached = True
         return ""
+
+    def _agent_supports_tools_kwarg(self) -> bool:
+        try:
+            signature = inspect.signature(self.agent.reason)
+        except (TypeError, ValueError):
+            return True
+        return any(
+            parameter.name == "tools" or parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
 
     def _normalize_outcome(self, outcome: Any) -> FinalAnswer | ToolIntent | FinalAnswerStream | None:
         """兼容 dict / 对象两种返回格式，统一转为 ToolIntent 或 FinalAnswer。"""

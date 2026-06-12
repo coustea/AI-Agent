@@ -79,3 +79,38 @@ async def test_turn_orchestrator_does_not_eager_search_when_tool_agent_can_searc
 
     assert calls == ["answer"]
     assert result.final_answer == "讲解完成"
+
+
+@pytest.mark.asyncio
+async def test_turn_orchestrator_does_not_mask_agent_type_errors() -> None:
+    from app.chat.orchestrator import TurnOrchestrator
+    from app.chat.schemas import TurnRequest
+
+    class FakeAgent:
+        async def reason(self, request, evidence_set, constraints, tools=None):
+            raise TypeError("internal agent failure")
+
+    orchestrator = TurnOrchestrator(agent=FakeAgent())
+
+    with pytest.raises(TypeError, match="internal agent failure"):
+        await orchestrator.run(TurnRequest(user_id=7, session_id="session-1", message="解释 TCP"))
+
+
+@pytest.mark.asyncio
+async def test_turn_orchestrator_omits_tools_kwarg_for_legacy_executor() -> None:
+    from app.chat.orchestrator import TurnOrchestrator
+    from app.chat.schemas import TurnRequest
+
+    class LegacyExecutor:
+        async def execute(self, intent, request=None):
+            raise AssertionError("should not execute tools for final answer")
+
+    class FakeAgent:
+        async def reason(self, request, evidence_set, constraints):
+            return {"kind": "final_answer", "answer": "讲解完成"}
+
+    orchestrator = TurnOrchestrator(agent=FakeAgent(), tools=LegacyExecutor())
+
+    result = await orchestrator.run(TurnRequest(user_id=7, session_id="session-1", message="解释 TCP"))
+
+    assert result.final_answer == "讲解完成"

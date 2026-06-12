@@ -137,6 +137,10 @@ class ReasoningAgent:
         )
         available_tools = list(self.tools if tools is None else tools)
         model = self.llm.model.bind_tools(available_tools) if available_tools else None
+
+        if not hasattr(self.llm, "astream"):
+            response = await self.llm.ainvoke(messages, model=model, temperature=0.25)
+            return await self._outcome_from_response(response, constraints, messages)
         
         stream = self.llm.astream(messages, model=model, temperature=0.25)
         try:
@@ -180,6 +184,28 @@ class ReasoningAgent:
                         yield chunk_str
 
             return FinalAnswerStream(text_generator())
+
+    async def _outcome_from_response(
+        self,
+        response: Any,
+        constraints: ConstraintReport,
+        messages: list[Any],
+    ) -> ToolIntent | FinalAnswer:
+        tool_calls = getattr(response, "tool_calls", None)
+        if isinstance(tool_calls, list) and tool_calls:
+            tool_call = self._first_new_tool_call(response, constraints)
+            if tool_call is not None:
+                return ToolIntent(
+                    tool_name=str(tool_call.get("name") or ""),
+                    payload=self._tool_payload(tool_call),
+                )
+            answer = normalize_message_content(getattr(response, "content", ""))
+            if not answer:
+                retry_response = await self.llm.ainvoke(messages, model=None, temperature=0.25)
+                answer = normalize_message_content(getattr(retry_response, "content", ""))
+            return FinalAnswer(answer=answer)
+        answer = normalize_message_content(getattr(response, "content", ""))
+        return FinalAnswer(answer=answer)
 
     def _first_new_tool_call(self, response: Any, constraints: ConstraintReport) -> dict[str, Any] | None:
         tool_calls = getattr(response, "tool_calls", None)
