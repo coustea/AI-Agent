@@ -26,6 +26,7 @@ from typing import Any, AsyncIterator, NamedTuple
 from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
 from app.chat.orchestrator import TurnOrchestrator, project_turn_run
 from app.chat.stages import AttachmentAnalyzer
+from app.chat.streaming import ResponseStreamer
 from app.chat.schemas import ChatHistoryMessage, UploadResponse
 from app.chat.runtime import _classify_attachments, build_user_message_record, latest_user_message
 from app.chat.schemas import TurnRequest
@@ -279,6 +280,7 @@ class ChatUseCases:
         self._uploaded_file_ids_by_url: dict[str, int] = {}
         self._attachment_analyzer = AttachmentAnalyzer()
         self._orchestrator = TurnOrchestrator(attachments=self._attachment_analyzer)
+        self._response_streamer = ResponseStreamer()
 
     def default_session_id(self, user_id: int) -> str:
         return f"user-{user_id}-default-mentor"
@@ -625,8 +627,8 @@ class ChatUseCases:
                 if isinstance(item, str):
                     safety_result = await safety_filter.check(item)
                     safe_chunk = safety_result.sanitized_text if safety_result.has_violation else item
-                    if safe_chunk:
-                        yield {"event": "token", "data": safe_chunk}
+                    async for event in self._response_streamer.stream_answer(safe_chunk):
+                        yield event
                 else:
                     result = item
             
