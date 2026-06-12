@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, AsyncIterator
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
@@ -462,26 +462,28 @@ async def update_profile_onboarding(
     """更新首次登录数据（全局画像）。立即返回，LLM推理在后台进行。"""
     profile_builder = get_profile_service()
     payload_data = payload.model_dump()
+    user_id = int(current_user.id)
 
     try:
         result = await profile_builder.update_from_onboarding(
-            user_id=current_user.id,
+            user_id=user_id,
             payload=payload_data,
         )
 
-        # 更新用户标志位 — 通过 db session 重新加载，避免 detached 对象的 greenlet 错误
-        user = await db.get(User, current_user.id)
-        if user:
-            user.is_first_login = False
-            await db.commit()
-        logger.info("[ChatAPI] onboarding complete: user_id=%s", current_user.id)
+        await db.exec(
+            update(User)
+            .where(User.id == user_id)
+            .values(is_first_login=False)
+        )
+        await db.commit()
+        logger.info("[ChatAPI] onboarding complete: user_id=%s", user_id)
     except Exception as e:
-        logger.warning("[ChatAPI] onboarding update failed: user_id=%s err=%s", current_user.id, e)
+        logger.warning("[ChatAPI] onboarding update failed: user_id=%s err=%s", user_id, e)
         return HttpResponse.error(code=400, message=str(e))
 
     # 后台异步执行 LLM 推理和评分，不阻塞响应
     background_tasks.add_task(
-        profile_builder.run_onboarding_inference, user_id=current_user.id, payload=payload_data
+        profile_builder.run_onboarding_inference, user_id=user_id, payload=payload_data
     )
 
     return HttpResponse.success(data={

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -378,6 +379,7 @@ class ProfileService:
             merged = deepcopy(profile.profile_json) if profile.profile_json else {}
             merged.update(profile_data)
             profile.profile_json = merged
+            profile.updated_at = datetime.now(timezone.utc)
             await db.flush()
 
         return profile
