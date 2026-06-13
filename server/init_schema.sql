@@ -65,13 +65,32 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     is_archived             BOOLEAN          DEFAULT FALSE,
     created_at              TIMESTAMPTZ      DEFAULT NOW(),
     updated_at              TIMESTAMPTZ      DEFAULT NOW(),
-    summary_token_count     INTEGER          DEFAULT 0
+    summary_token_count     INTEGER          DEFAULT 0,
+    profile_token_count     INTEGER          DEFAULT 0,
+    profile_message_count   INTEGER          DEFAULT 0,
+    ltm_token_count         INTEGER          DEFAULT 0,
+    ltm_message_count       INTEGER          DEFAULT 0,
+    last_profile_message_id INTEGER,
+    last_ltm_message_id     INTEGER,
+    last_profile_updated_at TIMESTAMPTZ,
+    last_ltm_updated_at     TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_id ON chat_sessions (user_id);
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_module ON chat_sessions (module);
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_module_archived_updated
     ON chat_sessions (user_id, module, is_archived, updated_at DESC);
+
+ALTER TABLE chat_sessions
+    DROP COLUMN IF EXISTS ltm_turn_count,
+    ADD COLUMN IF NOT EXISTS profile_token_count INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS profile_message_count INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS ltm_token_count INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS ltm_message_count INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS last_profile_message_id INTEGER,
+    ADD COLUMN IF NOT EXISTS last_ltm_message_id INTEGER,
+    ADD COLUMN IF NOT EXISTS last_profile_updated_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS last_ltm_updated_at TIMESTAMPTZ;
 
 -- ============================================================
 -- 5. chat_turns
