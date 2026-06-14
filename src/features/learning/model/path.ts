@@ -31,6 +31,11 @@ export interface LearningPathNode {
   current_tutorial_id: number | null
 }
 
+export interface CapstoneProject {
+  title: string
+  description: string
+}
+
 export interface LearningPathOverview {
   id: number
   module: string
@@ -46,6 +51,8 @@ export interface LearningPathOverview {
   adjustment_rationale: string[]
   stages: LearningPathStage[]
   nodes: LearningPathNode[]
+  capstone_project: CapstoneProject | null
+  pre_check_knowledge: string[]
   created_at: string
   updated_at: string
 }

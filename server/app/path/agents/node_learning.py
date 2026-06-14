@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.prompts import prompts
 from app.path.schemas import AgentQuestionSet
@@ -36,7 +37,7 @@ class NodeLearningAgent:
             weak_points_section=weak_points_section,
             profile_section=profile_section,
         )
-        response = await self.llm.ainvoke(prompt, temperature=0.3)
+        response = await self.llm.ainvoke(prompt, temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
         return {
             "title": f"{node_title} - {tutorial_type}",

@@ -17,14 +17,18 @@ logger = get_logger(__name__)
 
 
 class QuizBankService:
-    _MATH_COMMAND_PATTERN = re.compile(
+    """题库查询服务 — 题目列表、筛选、LaTeX 修复。"""
+
+    _MATH_COMMAND_PATTERN = re.compile(  # 匹配未转义的 LaTeX 命令（缺少 \ 前缀）
         r"(^|[^\\a-zA-Z])(int_|iint_|iiint_|oint_|sum_|prod_|lim_|frac|sqrt|sin|cos|tan|cot|sec|csc|ln|log|exp|to|rightarrow|infty|cdots|ldots|mathrm|mathbf|boldsymbol|operatorname\*?|left|right)\b"
     )
 
     def _repair_missing_latex_commands(self, text: str) -> str:
+        """修复缺失反斜杠的 LaTeX 命令（如 frac → \frac）。"""
         return self._MATH_COMMAND_PATTERN.sub(r"\1\\\2", text)
 
     def _repair_isolated_dollar_blocks(self, text: str) -> str:
+        """修复孤立的 $ 符号块（LMS 渲染常见问题）。"""
         lines = text.splitlines()
         repaired: list[str] = []
         index = 0
@@ -73,6 +77,7 @@ class QuizBankService:
         return "\n".join(repaired)
 
     def _normalize_math_text(self, text: str | None) -> str:
+        """统一修复 LaTeX 公式文本（换行符、转义、块级公式等）。"""
         if not text:
             return ""
 
@@ -122,6 +127,7 @@ class QuizBankService:
         page: int = 1,
         page_size: int = 50,
     ) -> QuizQuestionListResponse:
+        """查询题库题目列表，支持关键词/科目/难度/题型筛选。"""
         filters = []
         if query:
             keyword = f"%{query.strip()}%"
@@ -208,9 +214,9 @@ class QuizReviewOutput(BaseModel):
 
 
 class QuizReviewService:
-    """AI 答案审查服务"""
+    """AI 答案审查服务 — 使用 LLM 评判主观题答案质量。"""
 
-    _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "quiz" / "review.md"
+    _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "quiz" / "review.md"  # 审查 prompt 模板路径
 
     def __init__(self):
         self._prompt_template: str | None = None
@@ -261,9 +267,9 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         user_answer: str,
         knowledge_points: list[str] | None = None,
     ) -> dict:
-        """执行 AI 答案审查"""
-        llm = get_llm()
-        messages = self._build_messages(
+        """执行 AI 答案审查 — 调用 LLM 评判并返回评分和反馈。"""
+        llm = get_llm()  # 获取 LLM 单例
+        messages = self._build_messages(  # 构建审查 prompt
             question_type=question_type,
             question_content=question_content,
             standard_answer=standard_answer,
@@ -272,18 +278,18 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         )
 
         try:
-            result = await llm.ainvoke_json(
+            result = await llm.ainvoke_json(  # 调用 LLM 结构化输出
                 QuizReviewOutput,
                 messages,
                 function_name="quiz_review",
                 function_description="评判主观题答案质量",
             )
-            output = QuizReviewOutput.model_validate(result)
+            output = QuizReviewOutput.model_validate(result)  # Pydantic 校验
         except Exception as e:
             logger.warning("[QuizReview] LLM call failed: %s, using fallback", e)
-            output = self._fallback_review(user_answer, standard_answer)
+            output = self._fallback_review(user_answer, standard_answer)  # LLM 失败时降级为关键词匹配
 
-        is_correct = output.score >= 60
+        is_correct = output.score >= 60  # 60 分以上视为正确
         return {
             "score": output.score,
             "is_correct": is_correct,

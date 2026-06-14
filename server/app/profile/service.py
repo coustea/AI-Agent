@@ -31,11 +31,11 @@ logger = get_logger(__name__)
 
 
 class ProfileService:
-    """Shared learner profile CRUD, inference, and scoring."""
+    """学习者画像服务 — CRUD、LLM 推理、评分。"""
 
     def __init__(self, *, module: str = "mentor") -> None:
-        self.module = module
-        self.llm = get_llm()
+        self.module = module  # 所属功能模块
+        self.llm = get_llm()  # LLM 单例
 
     async def get_profile(
         self,
@@ -43,6 +43,7 @@ class ProfileService:
         user_id: int,
         course_name: str | None = None,
     ) -> GlobalProfile | CourseProfile | None:
+        """获取用户画像（不存在返回 None）。"""
         async with session_scope() as db:
             return await self._get_profile_db(db=db, user_id=user_id, course_name=course_name)
 
@@ -52,11 +53,12 @@ class ProfileService:
         user_id: int,
         course_name: str | None = None,
     ) -> GlobalProfile | CourseProfile:
+        """获取或创建用户画像（不存在则自动创建默认画像）。"""
         async with session_scope() as db:
             profile = await self._get_profile_db(db=db, user_id=user_id, course_name=course_name)
             if profile:
                 return profile
-            return await self._upsert_profile(
+            return await self._upsert_profile(  # 创建默认画像
                 db=db,
                 user_id=user_id,
                 profile_data=make_default_profile_json(),
@@ -64,10 +66,11 @@ class ProfileService:
             )
 
     async def get_onboarding(self, *, user_id: int) -> dict[str, Any]:
+        """获取用户 onboarding 基础信息（学校、年级、专业等）。"""
         async with session_scope() as db:
             profile = await self._get_profile_db(db=db, user_id=user_id)
             if profile and profile.profile_json:
-                return profile.profile_json.get("base_info") or {}
+                return profile.profile_json.get("base_info") or {}  # 从画像中提取基础信息
             return {}
 
     async def get_profile_markdown(
@@ -76,6 +79,7 @@ class ProfileService:
         course_name: str | None = None,
         dimension: str | None = None,
     ) -> str:
+        """将画像转为 Markdown 文本，供 LLM prompt 注入。"""
         async with session_scope() as db:
             profile = await self._get_profile_db(db=db, user_id=user_id, course_name=course_name)
             if not profile:
@@ -95,19 +99,15 @@ class ProfileService:
         user_id: int,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Save onboarding data immediately and return.
-
-        LLM inference (patch + scoring) runs in background so the
-        frontend doesn't block on the slow AI calls.
-        """
+        """保存 onboarding 数据并立即返回（LLM 推理在后台异步执行）。"""
         async with session_scope() as db:
             base_info = payload.copy()
             school_name = base_info.get("school")
-            if school_name:
+            if school_name:  # 查询学校层次信息
                 school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
                 base_info["school_level"] = school.level if school and school.level else None
 
-            profile = await self._upsert_profile(db=db, user_id=user_id, profile_data=base_info)
+            profile = await self._upsert_profile(db=db, user_id=user_id, profile_data=base_info)  # 持久化基础信息
 
             return {
                 "user_id": profile.user_id,
@@ -117,7 +117,7 @@ class ProfileService:
             }
 
     async def run_onboarding_inference(self, *, user_id: int, payload: dict[str, Any]) -> None:
-        """Background task: LLM inference + scoring after onboarding save."""
+        """后台任务：onboarding 保存后执行 LLM 推理和评分。"""
         try:
             async with session_scope() as db:
                 base_info = payload.copy()
@@ -145,6 +145,7 @@ class ProfileService:
         course_name: str,
         session_id: str | None = None,
     ) -> dict[str, Any]:
+        """处理辅导产生的画像增量更新 — 从对话中提取学习信号并更新画像。"""
         async with session_scope() as db:
             global_profile = await self._upsert_profile(db=db, user_id=user_id, profile_data={})
             profile_json = global_profile.profile_json or {}
@@ -180,8 +181,10 @@ class ProfileService:
                     profile.profile_score_json = scores
                     await db.flush()
 
+            updated = bool(global_patch or course_patch)
+            logger.info("[ProfileService] 画像数据已保存: user_id=%s updated=%s", user_id, updated)
             return {
-                "profile_updated": bool(global_patch or course_patch),
+                "profile_updated": updated,
                 "course_name": profile.course_name,
                 "profile_json": profile.profile_json or {},
                 "updated_at": profile.updated_at,
@@ -194,6 +197,7 @@ class ProfileService:
         course_name: str | None = None,
         payload: dict[str, Any],
     ) -> Any:
+        """直接应用画像增量更新（来自评估事件等外部信号）。"""
         async with session_scope() as db:
             return await self._upsert_profile(
                 db=db,
@@ -208,6 +212,7 @@ class ProfileService:
         user_id: int,
         session_id: str,
     ) -> bool:
+        """检查是否需要从辅导对话中更新画像（基于消息数/Token 数阈值和冷却时间）。"""
         async with session_scope() as db:
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
             if not chat_session:
@@ -297,6 +302,7 @@ class ProfileService:
         recent_dialogue: str,
         long_term_memory: str,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """使用 LLM 从对话中推断画像更新补丁（全局画像 + 课程画像）。"""
         global_patch: dict[str, Any] = {}
         course_patch: dict[str, Any] = {}
         try:
@@ -322,6 +328,7 @@ class ProfileService:
         return global_patch, course_patch
 
     async def compute_scores(self, *, profile_json: dict[str, Any]) -> dict[str, Any] | None:
+        """使用 LLM 计算画像综合评分和维度分数。"""
         if not profile_json:
             return None
         try:
@@ -367,6 +374,7 @@ class ProfileService:
         profile_data: dict[str, Any],
         course_name: str | None = None,
     ) -> GlobalProfile | CourseProfile:
+        """Upsert 画像：存在则合并更新，不存在则创建。"""
         if course_name:
             stmt = select(CourseProfile).where(
                 CourseProfile.user_id == user_id,
@@ -401,15 +409,16 @@ class ProfileService:
                 await db.flush()
 
         if profile_data:
-            merged = deepcopy(profile.profile_json) if profile.profile_json else {}
-            merged.update(profile_data)
+            merged = deepcopy(profile.profile_json) if profile.profile_json else {}  # 深拷贝避免修改原始数据
+            merged.update(profile_data)  # 合并新数据到现有画像
             profile.profile_json = merged
             profile.updated_at = datetime.now(timezone.utc)
-            await db.flush()
+            await db.flush()  # 刷新到数据库但不提交事务
 
         return profile
 
     async def _infer_onboarding_patch(self, base_info: dict[str, Any]) -> dict[str, Any]:
+        """使用 LLM 从 onboarding 数据推断画像补丁。"""
         try:
             prompt = prompts.get("profile").render(
                 "onboarding",
@@ -434,6 +443,7 @@ class ProfileService:
         max_messages: int = 20,
         after_message_id: int = 0,
     ) -> tuple[str, int]:
+        """构建最近对话文本（学生/辅导老师角色标记），用于画像推断。"""
         stmt = (
             select(ChatMessage)
             .where(
@@ -467,6 +477,7 @@ class ProfileService:
         session_id: str,
         limit: int = 3,
     ) -> str:
+        """构建会话摘要上下文（最近 N 个压缩块）。"""
         stmt = (
             select(ChatSessionSummaryBlock)
             .where(
@@ -484,6 +495,7 @@ class ProfileService:
         return "\n\n".join(block.summary_markdown for block in blocks if block.summary_markdown)
 
     async def _get_long_term_memory_text(self, *, user_id: int) -> str:
+        """获取用户长期记忆文本（用于画像推断的跨会话上下文）。"""
         async with session_scope() as db:
             ltm = (
                 await db.exec(
@@ -498,10 +510,11 @@ class ProfileService:
         return ""
 
 
-_profile_service_cache: dict[str, ProfileService] = {}
+_profile_service_cache: dict[str, ProfileService] = {}  # 按模块缓存 ProfileService 单例
 
 
 def get_profile_service(*, module: str = "mentor") -> ProfileService:
+    """获取 ProfileService 单例（按模块名缓存）。"""
     if module not in _profile_service_cache:
         _profile_service_cache[module] = ProfileService(module=module)
     return _profile_service_cache[module]

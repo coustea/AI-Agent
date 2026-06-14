@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
@@ -42,7 +43,7 @@ class PlanningAgent(BaseResourceAgent):
         plan = await self.llm.ainvoke_json(
             ExecutionPlan,
             f"{prompt}\n\n{input_text}",
-            temperature=0.3,
+            temperature=INFERENCE_TEMPERATURE,
         )
 
         if self.emitter:
@@ -74,10 +75,6 @@ class PlanningAgent(BaseResourceAgent):
                 },
             },
         )
-        
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        # PlanningAgent overrides run directly, so this is just to satisfy ABC.
-        raise NotImplementedError
 
     def _build_planning_input(self, state: WorkerState) -> str:
         parts = [

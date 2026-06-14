@@ -31,7 +31,6 @@ const pptDocument = computed<PPTDocument | null>(() => {
     ? (props.resultData as Record<string, any>).content || props.resultData
     : props.resultData
   if (typeof content === 'string') {
-    // maybe wrapped in markdown ```json
     const match = content.match(/```json\s*([\s\S]*?)\s*```/)
     if (match) {
       content = match[1]

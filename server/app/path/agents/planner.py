@@ -251,12 +251,26 @@ def repair_generated_plan_from_macro_stages(
 ) -> AgentLearningPathPlan:
     """Recover a structurally usable plan from the architect stage output.
 
-    The planner is designed as a single LLM pass after research/profile/stage
-    planning. If the final structured output omits stages or nodes, reuse the
-    already-generated macro stages instead of retrying.
+    Schema now requires stages/nodes (min_length=1), so the normal path
+    guarantees non-empty. This function handles edge cases where
+    model_construct bypassed validation or stages/nodes are inconsistent.
     """
     if not plan.stages and macro_stages:
         plan.stages = list(macro_stages)
+
+    # Derive stages from node stage_id values if stages still missing
+    if not plan.stages and plan.nodes:
+        seen: set[str] = set()
+        derived: list[AgentStage] = []
+        for node in plan.nodes:
+            if node.stage_id not in seen:
+                seen.add(node.stage_id)
+                derived.append(AgentStage(
+                    stage_id=node.stage_id,
+                    title=node.title,
+                    description=f"{node.title}阶段",
+                ))
+        plan.stages = derived
 
     if strategy_report:
         plan.strategy_report = strategy_report

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
 
 /* ============================================================
    Design Tokens — White Theme (Indigo accent)
@@ -85,17 +85,18 @@
   --gradient-eval: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
 
   /* ---- Typography ---- */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Outfit', system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
 
-  --text-xs: 0.72rem;
-  --text-sm: 0.82rem;
-  --text-base: 0.95rem;
-  --text-md: 1.05rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.6rem;
-  --text-2xl: 2rem;
-  --text-3xl: 2.85rem;
+  /* Type scale — 1.200 ratio (Minor Third) with mobile-first base ≥16px */
+  --text-xs: 0.75rem;       /* 12px — captions, badges */
+  --text-sm: 0.8125rem;     /* 13px — secondary labels */
+  --text-base: 1rem;        /* 16px — body baseline (HIG minimum) */
+  --text-md: 1.125rem;      /* 18px — large body, subheadings */
+  --text-lg: 1.3125rem;     /* 21px — card titles */
+  --text-xl: 1.625rem;      /* 26px — section headings */
+  --text-2xl: 2.125rem;     /* 34px — page titles */
+  --text-3xl: 2.75rem;      /* 44px — hero / splash */
 
   --weight-normal: 400;
   --weight-medium: 500;
@@ -104,19 +105,25 @@
   --weight-extrabold: 800;
 
   --leading-tight: 1.25;
-  --leading-normal: 1.55;
-  --leading-relaxed: 1.65;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.7;
 
-  /* ---- Spacing ---- */
+  /* ---- Spacing (4px base, 8dp rhythm) ---- */
+  --space-0: 0px;
+  --space-0\.5: 2px;
   --space-1: 4px;
+  --space-1\.5: 6px;
   --space-2: 8px;
+  --space-2\.5: 10px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  --space-7: 28px;
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
+  --space-16: 64px;
 
   /* ---- Border Radius ---- */
   --radius-sm: 6px;
@@ -157,6 +164,7 @@ body {
   font-size: var(--text-base);
   line-height: var(--leading-normal);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background-image:
     radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.03) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.03) 0px, transparent 50%);
@@ -164,12 +172,26 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-sans);
-  letter-spacing: -0.02em;
-  color: var(--color-text);
+  letter-spacing: -0.025em;
+  color: var(--color-text-strong);
+  line-height: var(--leading-tight);
+  margin: 0;
 }
+
+h1 { font-size: var(--text-3xl); font-weight: var(--weight-extrabold); }
+h2 { font-size: var(--text-2xl); font-weight: var(--weight-bold); }
+h3 { font-size: var(--text-xl); font-weight: var(--weight-bold); }
+h4 { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+h5 { font-size: var(--text-md); font-weight: var(--weight-semibold); }
+h6 { font-size: var(--text-base); font-weight: var(--weight-semibold); }
 
 code, pre {
   font-family: var(--font-mono) !important;
+}
+
+img, svg, video {
+  display: block;
+  max-width: 100%;
 }
 
 /* ============================================================
@@ -184,12 +206,17 @@ code, pre {
   --el-button-hover-border-color: var(--color-primary-hover) !important;
   border-radius: var(--radius-lg) !important;
   font-weight: var(--weight-semibold) !important;
-  transition: all var(--transition-base) !important;
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .el-button--primary:hover {
   transform: translateY(-1px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 4px 14px -3px rgba(79, 70, 229, 0.45);
+}
+
+.el-button--primary:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 /* Card */
@@ -216,7 +243,7 @@ code, pre {
   color: var(--color-text) !important;
   box-shadow: none !important;
   border-radius: var(--radius-lg) !important;
-  transition: all var(--transition-base) !important;
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .el-input__wrapper.is-focus,
@@ -228,6 +255,7 @@ code, pre {
 
 .el-input__inner {
   color: var(--color-text) !important;
+  font-size: var(--text-base) !important;
 }
 
 /* ============================================================
@@ -249,7 +277,9 @@ code, pre {
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   box-shadow: var(--shadow-xs);
-  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .panel:hover {
@@ -278,17 +308,17 @@ code, pre {
 .section-header h2,
 .section-header h3 {
   margin: 0;
-  color: var(--color-text);
+  color: var(--color-text-strong);
   font-weight: var(--weight-bold);
 }
 
 .eyebrow {
   display: block;
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1\.5);
   font-size: var(--text-xs);
   font-weight: var(--weight-extrabold);
-  color: var(--color-text-faint);
-  letter-spacing: 0.04em;
+  color: var(--color-primary);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -303,7 +333,7 @@ code, pre {
 .stat-item .label {
   display: block;
   font-size: var(--text-xs);
-  color: var(--color-text-faint);
+  color: var(--color-text-muted);
   font-weight: var(--weight-bold);
   letter-spacing: 0.04em;
 }
@@ -312,7 +342,7 @@ code, pre {
   display: block;
   margin-top: var(--space-2);
   color: var(--color-text-strong);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   font-weight: var(--weight-bold);
 }
 
@@ -326,8 +356,10 @@ code, pre {
   background: var(--color-surface-hover);
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  transition: background var(--transition-base), color var(--transition-base), border-color var(--transition-base);
+  font-weight: var(--weight-semibold);
+  transition: background 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tag-pill:hover {
@@ -338,15 +370,18 @@ code, pre {
 
 /* Link Button — secondary action */
 .link-button {
-  min-height: 32px;
-  padding: var(--space-2) 14px !important;
+  min-height: 36px;
+  padding: var(--space-2) var(--space-4) !important;
   border: 1px solid var(--color-primary-border) !important;
   border-radius: var(--radius-lg) !important;
   background: var(--color-primary-soft) !important;
   color: var(--color-primary) !important;
-  font-weight: var(--weight-bold) !important;
+  font-weight: var(--weight-semibold) !important;
   box-shadow: none !important;
-  transition: transform var(--transition-base), border-color var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base) !important;
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .link-button:hover {
@@ -363,10 +398,18 @@ code, pre {
   margin: var(--space-4) 0;
 }
 
+/* Focus ring — consistent across all interactive elements */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 /* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-border-hover); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--color-border-hover); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
 
 /* ============================================================
    Markdown Rendering
@@ -385,35 +428,36 @@ code, pre {
 .markdown-body > :first-child { margin-top: 0; }
 .markdown-body > :last-child { margin-bottom: 0; }
 
-.markdown-body p { margin: 0 0 0.55rem 0; }
+.markdown-body p { margin: 0 0 0.75rem 0; }
 
 .markdown-body ul,
 .markdown-body ol {
-  margin: 0.4rem 0 0.55rem;
-  padding-left: 1.15rem;
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.25rem;
 }
 
-.markdown-body li { margin: 0.08rem 0; }
-.markdown-body li + li { margin-top: 0.16rem; }
+.markdown-body li { margin: 0.15rem 0; }
+.markdown-body li + li { margin-top: 0.25rem; }
 
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
 .markdown-body h4 {
-  margin: 0.8rem 0 0.38rem;
+  margin: 1rem 0 0.5rem;
   padding-bottom: 0;
   border-bottom: 0;
   line-height: var(--leading-tight);
   font-weight: var(--weight-bold);
+  color: var(--color-text-strong);
 }
 
-.markdown-body h1 { font-size: 1.16rem; }
-.markdown-body h2 { font-size: 1.08rem; }
-.markdown-body h3 { font-size: 1rem; }
+.markdown-body h1 { font-size: var(--text-xl); }
+.markdown-body h2 { font-size: var(--text-lg); }
+.markdown-body h3 { font-size: var(--text-md); }
 .markdown-body h4 { font-size: var(--text-base); }
 
 .markdown-body code:not(pre code) {
-  padding: 0.12rem 0.32rem;
+  padding: 0.15rem 0.4rem;
   border-radius: var(--radius-sm);
   background: var(--color-surface-hover);
   color: #E11D48;
@@ -421,15 +465,15 @@ code, pre {
 }
 
 .markdown-body blockquote {
-  margin: 0.55rem 0;
-  padding: 0.08rem 0 0.08rem 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0.1rem 0 0.1rem 0.875rem;
   color: var(--color-text-muted);
-  border-left: 3px solid var(--color-border-hover);
+  border-left: 3px solid var(--color-primary-border);
 }
 
 .markdown-body pre {
-  margin: 0.8rem 0;
-  padding: 14px var(--space-4);
+  margin: 1rem 0;
+  padding: var(--space-4);
   overflow-x: auto;
   background: var(--color-bg) !important;
   border: 1px solid var(--color-border);
@@ -443,8 +487,8 @@ code, pre {
   padding: 0;
   background: transparent !important;
   font-family: var(--font-mono);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.7;
 }
 
 /* ============================================================

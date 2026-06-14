@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+
+from app.infra.logging import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from app.resource.schemas import WorkerState, WorkerResult
@@ -19,7 +22,7 @@ def register_agent(cls: type[BaseResourceAgent]) -> type[BaseResourceAgent]:
     return cls
 
 
-class BaseResourceAgent(ABC):
+class BaseResourceAgent:
     """Base class for all resource generation agents.
 
     Each agent can run independently with just learning_need + profile,
@@ -46,6 +49,7 @@ class BaseResourceAgent(ABC):
 
         parts = build_worker_base_context(state)
         input_text = "\n\n".join(parts)
+        logger.info("Agent[%s] _execute 开始: input_len=%d learning_need='%.60s'", self.agent_id, len(input_text), state.learning_need)
         try:
             result = await self._execute(input_text, state)
         except Exception as exc:
@@ -67,7 +71,9 @@ class BaseResourceAgent(ABC):
             )
         return result
 
-    @abstractmethod
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        """Execute the agent's core logic and return WorkerResult."""
-        ...
+        """Execute the agent's core logic and return WorkerResult.
+
+        Agents that override run() directly don't need to implement this.
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} must implement _execute or override run")

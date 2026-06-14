@@ -13,23 +13,23 @@ from app.infra.logging import get_logger
 from app.infra.models import User
 from app.infra.response import HttpResponse
 
-router = APIRouter()
+router = APIRouter()  # 评估模块路由，挂载在 /api/v1/ai/evaluation/ 下
 logger = get_logger(__name__)
 
 
-@router.post("/evaluation/events")
+@router.post("/evaluation/events")  # POST 记录学习事件 — 资源浏览/完成/测验等行为信号
 async def record_learning_event(
     payload: LearningEventCreate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
-    event = await evaluation_service.record_event(
+    event = await evaluation_service.record_event(  # 持久化学习事件到数据库
         session,
         user_id=current_user.id,
         payload=payload,
     )
-    background_tasks.add_task(
+    background_tasks.add_task(  # 后台异步将学习信号应用到用户画像
         bg_apply_profile_update_from_learning_event,
         current_user.id,
         {
@@ -51,7 +51,7 @@ async def record_learning_event(
     return HttpResponse.success(data={"id": event.id})
 
 
-@router.post("/evaluation/sessions")
+@router.post("/evaluation/sessions")  # POST 记录学习会话 — 前端离开学习页面时上报活跃时长
 async def record_learning_session(
     payload: LearningSessionCreate,
     current_user: User = Depends(get_current_user),
@@ -72,7 +72,7 @@ async def record_learning_session(
     return HttpResponse.success(data={"id": learning_session.id})
 
 
-@router.get("/evaluation/summary")
+@router.get("/evaluation/summary")  # GET 评估摘要 — 平均分、薄弱点、推荐等
 async def get_evaluation_summary(
     limit: int = Query(default=100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
@@ -86,7 +86,7 @@ async def get_evaluation_summary(
     return HttpResponse.success(data=summary)
 
 
-@router.get("/evaluation/time-stats")
+@router.get("/evaluation/time-stats")  # GET 学习时长统计 — 今日/本周/本月/连续天数
 async def get_learning_time_stats(
     days: int = Query(default=30, ge=1, le=90),
     current_user: User = Depends(get_current_user),

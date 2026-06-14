@@ -137,7 +137,7 @@ defineProps<{
 .card-number {
   font-size: 24px;
   font-weight: 900;
-  font-family: monospace;
+  font-family: var(--font-mono);
   opacity: 0.15;
   writing-mode: vertical-rl;
   text-orientation: mixed;

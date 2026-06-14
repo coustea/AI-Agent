@@ -111,3 +111,18 @@ MAX_DOCX_PARAGRAPHS_TO_READ = get("chat.max_docx_paragraphs", 1200)
 MAX_IMAGE_ANALYZE_COUNT = get("chat.max_analyze_images", 8)
 MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
 
+# ============ Memory 压缩与长期记忆 ============
+RECENT_RAW_MESSAGES = get("memory.recent_raw_messages", 8)
+COMPRESS_MIN_MESSAGES = get("memory.compress_min_messages", 14)
+COMPRESS_MIN_TOKENS = get("memory.compress_min_tokens", 3500)
+SUMMARY_CONTEXT_BLOCKS = get("memory.summary_context_blocks", 3)
+LTM_MIN_MESSAGES = get("memory.ltm_min_messages", 12)
+LTM_MIN_TOKENS = get("memory.ltm_min_tokens", 3500)
+LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
+LTM_COOLDOWN_MINUTES = get("memory.ltm_cooldown_minutes", 30)
+
+# ============ 模型推理参数 ============
+INFERENCE_TEMPERATURE = get("models.temperature", 0.3)
+INFERENCE_MAX_TOKENS = get("models.max_tokens", 4096)
+VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
+

@@ -20,7 +20,7 @@ export interface ResourceItemDetail {
   type: string
   title: string
   format: string
-  content: string | null
+  content: Record<string, unknown> | string | null
   summary: string
   summary_data: Record<string, unknown>
   metadata: Record<string, unknown>

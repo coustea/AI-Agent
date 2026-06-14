@@ -724,6 +724,8 @@ class LearningPath(SQLModel, table=True):
     stages_json: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
     strategy_report: str | None = Field(default=None, sa_column=Column(Text))
     adjustment_rationale: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    capstone_project_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    pre_check_knowledge: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

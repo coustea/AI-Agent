@@ -1,50 +1,55 @@
 <template>
   <div class="ppt-player-container" ref="containerRef">
-    <!-- 判断如果是导出模式 (isExportMode)，则一次性渲染所有页面，并隐藏控制器 -->
     <template v-if="isExportMode">
-      <div 
-        v-for="(slide, index) in documentData.slides" 
+      <div
+        v-for="(slide, index) in documentData.slides"
         :key="`export-${index}`"
-        class="slide-wrapper export-slide"
-        :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : {}"
+        class="slide-frame export-slide"
       >
-        <component 
-          :is="getLayoutComponent(documentData.config.template_id, slide.layout)"
-          :data="slide.data"
-          v-if="getLayoutComponent(documentData.config.template_id, slide.layout)"
-        />
-        <div v-else class="fallback-slide">
-          <h3>缺少布局组件</h3>
-          <p>主题 {{ documentData.config.template_id }} 未实现 {{ slide.layout }} 布局</p>
+        <div
+          class="slide-shell"
+          :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : undefined"
+        >
+          <component
+            :is="resolveLayoutComponent(documentData.template_id, slide.layout)"
+            v-if="resolveLayoutComponent(documentData.template_id, slide.layout)"
+            :data="slide.data"
+          />
+          <div v-else class="fallback-slide">
+            <h3>布局组件缺失</h3>
+            <p>{{ documentData.template_id }} / {{ slide.layout }}</p>
+          </div>
         </div>
       </div>
     </template>
-    
-    <!-- 正常预览模式，动态计算缩放比例，增加翻页动画 -->
+
     <template v-else>
-      <div class="ppt-viewer" :style="{ transform: `scale(${scale})` }">
-        <transition-group name="slide-fade">
-          <div 
-            v-for="(slide, index) in documentData.slides" 
+      <div class="viewer-stage">
+        <div class="viewer-canvas" :style="{ transform: `scale(${scale})` }">
+          <div
+            v-for="(slide, index) in documentData.slides"
             :key="`${slide.layout}-${index}`"
             v-show="currentIndex === index"
-            class="slide-wrapper"
-            :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : {}"
+            class="slide-frame preview-slide"
           >
-            <component 
-              :is="getLayoutComponent(documentData.config.template_id, slide.layout)"
-              :data="slide.data"
-              v-if="getLayoutComponent(documentData.config.template_id, slide.layout)"
-            />
-            <div v-else class="fallback-slide">
-              <h3>缺少布局组件</h3>
-              <p>主题 {{ documentData.config.template_id }} 未实现 {{ slide.layout }} 布局</p>
+            <div
+              class="slide-shell"
+              :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : undefined"
+            >
+              <component
+                :is="resolveLayoutComponent(documentData.template_id, slide.layout)"
+                v-if="resolveLayoutComponent(documentData.template_id, slide.layout)"
+                :data="slide.data"
+              />
+              <div v-else class="fallback-slide">
+                <h3>布局组件缺失</h3>
+                <p>{{ documentData.template_id }} / {{ slide.layout }}</p>
+              </div>
             </div>
           </div>
-        </transition-group>
+        </div>
       </div>
-      
-      <!-- 播放器控制条 -->
+
       <div class="controls">
         <button @click="prevSlide" :disabled="currentIndex === 0" class="control-btn">上一页</button>
         <span class="page-indicator">{{ currentIndex + 1 }} / {{ documentData.slides.length }}</span>
@@ -55,90 +60,109 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineAsyncComponent, onMounted, onUnmounted } from 'vue';
-import type { PPTDocument } from './types/ppt';
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import type { LayoutType, PPTDocument, ThemeType } from './types/ppt'
+
+type LayoutComponentLoader = () => Promise<unknown>
+type ThemeRegistry = Record<LayoutType, LayoutComponentLoader | undefined>
 
 const props = defineProps<{
-  documentData: PPTDocument,
+  documentData: PPTDocument
   isExportMode?: boolean
-}>();
+}>()
 
-const currentIndex = ref(0);
-const containerRef = ref<HTMLElement | null>(null);
-const scale = ref(1);
+const currentIndex = ref(0)
+const containerRef = ref<HTMLElement | null>(null)
+const scale = ref(1)
+let resizeObserver: ResizeObserver | null = null
 
-const themeModules = import.meta.glob('./themes/**/*.vue');
-let resizeObserver: ResizeObserver | null = null;
+const themeModules = import.meta.glob('./themes/**/*.vue') as Record<string, LayoutComponentLoader>
 
-onMounted(() => {
-  calculateScale();
-  
-  if (containerRef.value) {
-    resizeObserver = new ResizeObserver(() => {
-      calculateScale();
-    });
-    resizeObserver.observe(containerRef.value);
+const componentPath = (theme: ThemeType, componentName: string) => `./themes/${theme}/${componentName}.vue`
+
+const registry: Record<ThemeType, ThemeRegistry> = {
+  'theme-logic-blue': {
+    cover: themeModules[componentPath('theme-logic-blue', 'Cover')],
+    agenda: themeModules[componentPath('theme-logic-blue', 'Agenda')],
+    layer_stack: themeModules[componentPath('theme-logic-blue', 'LayerStack')],
+    theory_proof: themeModules[componentPath('theme-logic-blue', 'TheoryProof')],
+    process_flow: themeModules[componentPath('theme-logic-blue', 'ProcessFlow')],
+    tech_dashboard: themeModules[componentPath('theme-logic-blue', 'TechDashboard')],
+    mixed_two_column: themeModules[componentPath('theme-logic-blue', 'MixedTwoColumn')],
+  },
+  'theme-mac-light': {
+    cover: themeModules[componentPath('theme-mac-light', 'Cover')],
+    agenda: themeModules[componentPath('theme-mac-light', 'Agenda')],
+    layer_stack: themeModules[componentPath('theme-mac-light', 'LayerStack')],
+    theory_proof: themeModules[componentPath('theme-mac-light', 'TheoryProof')],
+    process_flow: themeModules[componentPath('theme-mac-light', 'ProcessFlow')],
+    tech_dashboard: themeModules[componentPath('theme-mac-light', 'TechDashboard')],
+    mixed_two_column: themeModules[componentPath('theme-mac-light', 'MixedTwoColumn')],
+  },
+  'theme-notion-light': {
+    cover: themeModules[componentPath('theme-notion-light', 'Cover')],
+    agenda: themeModules[componentPath('theme-notion-light', 'Agenda')],
+    layer_stack: themeModules[componentPath('theme-notion-light', 'LayerStack')],
+    theory_proof: themeModules[componentPath('theme-notion-light', 'TheoryProof')],
+    process_flow: themeModules[componentPath('theme-notion-light', 'ProcessFlow')],
+    tech_dashboard: themeModules[componentPath('theme-notion-light', 'TechDashboard')],
+    mixed_two_column: themeModules[componentPath('theme-notion-light', 'MixedTwoColumn')],
+  },
+}
+
+const currentSlide = computed(() => props.documentData.slides[currentIndex.value])
+
+const resolveLayoutComponent = (theme: ThemeType, layout: LayoutType) => {
+  const loader = registry[theme]?.[layout]
+  if (!loader) {
+    console.error(`[PPT Engine] 缺少布局组件: ${theme}/${layout}`)
+    return null
   }
-  
-  window.addEventListener('keydown', handleKeyDown);
-});
-
-onUnmounted(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
-  window.removeEventListener('keydown', handleKeyDown);
-});
-
-const toComponentName = (str: string) => {
-  return str.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
-};
-
-const getLayoutComponent = (theme: string, layout: string) => {
-  const componentName = toComponentName(layout);
-  const path = `./themes/${theme}/${componentName}.vue`;
-  
-  if (themeModules[path]) {
-    return defineAsyncComponent(themeModules[path] as any);
-  } else {
-    console.warn(`[PPT Engine] 找不到对应组件: ${path}`);
-    return null; 
-  }
-};
+  return loader
+}
 
 const prevSlide = () => {
-  if (currentIndex.value > 0) currentIndex.value--;
-};
+  if (currentIndex.value > 0) currentIndex.value -= 1
+}
 
 const nextSlide = () => {
-  if (currentIndex.value < props.documentData.slides.length - 1) currentIndex.value++;
-};
+  if (currentIndex.value < props.documentData.slides.length - 1) currentIndex.value += 1
+}
 
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'ArrowRight' || e.key === 'PageDown') nextSlide();
-  if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
-};
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (!currentSlide.value) return
+  if (event.key === 'ArrowRight' || event.key === 'PageDown') nextSlide()
+  if (event.key === 'ArrowLeft' || event.key === 'PageUp') prevSlide()
+}
 
 const calculateScale = () => {
-  if (!containerRef.value || props.isExportMode) return;
-  const { width, height } = containerRef.value.getBoundingClientRect();
-  
-  if (width <= 32 || height <= 32) {
-    scale.value = 0.1;
-    return;
+  if (!containerRef.value || props.isExportMode) return
+  const { width, height } = containerRef.value.getBoundingClientRect()
+  if (width < 200 || height < 200) return
+
+  const horizontalPadding = 56
+  const verticalPadding = 96
+  const controlBarHeight = 84
+  const availableWidth = Math.max(width - horizontalPadding, 1)
+  const availableHeight = Math.max(height - verticalPadding - controlBarHeight, 1)
+
+  scale.value = Math.min(availableWidth / 1280, availableHeight / 720, 1)
+}
+
+onMounted(() => {
+  calculateScale()
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => calculateScale())
+    resizeObserver.observe(containerRef.value)
   }
+  window.addEventListener('keydown', handleKeyDown)
+})
 
-  // 给周围留极小的均匀边距 (16px)
-  const availableWidth = width - 32;
-  const availableHeight = height - 32;
-
-  const scaleX = availableWidth / 1280;
-  const scaleY = availableHeight / 720;
-  
-  // 保持 16:9 比例缩放，并保证缩放比例为正数且合理
-  scale.value = Math.max(0.05, Math.min(scaleX, scaleY));
-};
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  window.removeEventListener('keydown', handleKeyDown)
+})
 </script>
 
 <style scoped>
@@ -147,39 +171,55 @@ const calculateScale = () => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.1), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(15, 23, 42, 0.08), transparent 30%),
+    linear-gradient(180deg, #e7edf7 0%, #d8dde6 100%);
+}
+
+.viewer-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  background: #E5E7EB;
-  position: relative;
-  overflow: hidden;
+  padding: 28px 28px 96px;
 }
 
-/* 导出模式专属样式，支持 Playwright 打印分页 */
-.export-slide {
+.viewer-canvas {
   width: 1280px;
   height: 720px;
+  position: relative;
+  transform-origin: center center;
+}
+
+.slide-frame {
+  width: 1280px;
+  height: 720px;
+}
+
+.preview-slide {
+  position: absolute;
+  inset: 0;
+}
+
+.export-slide {
   position: relative;
   page-break-after: always;
-  background: #fff;
-  overflow: hidden;
+  margin-bottom: 24px;
 }
 
-.ppt-viewer {
-  width: 1280px;
-  height: 720px;
-  background: #fff;
-  position: relative;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); 
-  transform-origin: center center;
-  overflow: hidden;
-}
-
-.slide-wrapper {
-  position: absolute;
-  top: 0;
-  left: 0;
+.slide-shell {
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #fff;
+  box-shadow:
+    0 30px 60px rgba(15, 23, 42, 0.16),
+    0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
 .fallback-slide {
@@ -189,70 +229,67 @@ const calculateScale = () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: #FEE2E2;
-  color: #991B1B;
+  background: linear-gradient(135deg, #fff1f2, #ffe4e6);
+  color: #9f1239;
   text-align: center;
+  gap: 12px;
 }
 
 .fallback-slide h3 {
-  font-size: 32px;
-  margin-bottom: 16px;
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.fallback-slide p {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .controls {
   position: absolute;
-  bottom: 20px;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
   display: flex;
-  gap: 20px;
   align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(14px);
   z-index: 10;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 10px 24px;
-  border-radius: 30px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(4px);
 }
 
 .control-btn {
-  background: transparent;
   border: none;
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
+  background: transparent;
+  color: #334155;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
   cursor: pointer;
-  padding: 6px 12px;
-  border-radius: 16px;
-  transition: background 0.2s;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .control-btn:hover:not(:disabled) {
-  background: #F3F4F6;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
 }
 
 .control-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .page-indicator {
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-  min-width: 50px;
+  min-width: 64px;
   text-align: center;
-}
-
-/* 页面切换动画 */
-.slide-fade-enter-active,
-.slide-fade-leave-active {
-  transition: opacity 0.5s ease, transform 0.5s ease;
-}
-.slide-fade-enter-from {
-  opacity: 0;
-  transform: translateX(50px);
-}
-.slide-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50px);
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
 }
 </style>

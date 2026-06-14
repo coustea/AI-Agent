@@ -474,11 +474,9 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         const msg: Record<string, unknown> = { type: 'text_input', text: params.text }
         if (typeof params.need_diagram === 'boolean') msg.need_diagram = params.need_diagram
         if (params.session_id) msg.session_id = params.session_id
-        if (params.history?.length) msg.history = params.history
         if (params.attachments?.length) msg.attachments = params.attachments
         if (typeof params.enable_search === 'boolean') msg.enable_search = params.enable_search
-        if (typeof params.generate_video === 'boolean') msg.generate_video = params.generate_video
-                if (typeof params.speech_rate === 'number') msg.speech_rate = params.speech_rate
+        if (typeof params.speech_rate === 'number') msg.speech_rate = params.speech_rate
 
         ws.send(JSON.stringify(msg))
         resetIdleTimer()

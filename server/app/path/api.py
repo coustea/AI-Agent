@@ -16,10 +16,10 @@ from app.path.schemas import (
 )
 from app.path.service import PathService, build_learning_event_item
 
-router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
+router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])  # 路径规划模块路由，挂载在 /api/v1/ai/path-plan/ 下
 
 
-@router.post("")
+@router.post("")  # POST /api/v1/ai/path-plan — 创建学习路径
 async def create_path(
     request: CreateLearningPathRequest,
     background_tasks: BackgroundTasks,
@@ -27,8 +27,8 @@ async def create_path(
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
-    path_id = await service.init_path_task(current_user.id, request)
-    background_tasks.add_task(
+    path_id = await service.init_path_task(current_user.id, request)  # 创建路径记录（状态=generating）
+    background_tasks.add_task(  # 后台异步执行路径生成（LLM 规划 + 节点创建）
         _run_generation_bg,
         user_id=current_user.id,
         path_id=path_id,
@@ -37,7 +37,7 @@ async def create_path(
     return HttpResponse.success(data={"id": path_id, "status": "generating"}, status_code=201)
 
 
-@router.get("/{path_id}/events")
+@router.get("/{path_id}/events")  # GET /api/v1/ai/path-plan/{id}/events — SSE 订阅路径生成进度
 async def stream_path_events(
     path_id: int,
     current_user: User = Depends(get_current_user_flexible),
@@ -54,25 +54,25 @@ async def stream_path_events(
         return HttpResponse.error(code=404, message=str(exc))
 
     async def event_stream():
-        queue = path_event_bus.subscribe(path_id)
+        queue = path_event_bus.subscribe(path_id)  # 订阅路径事件队列
         try:
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)  # 30秒超时发心跳
                 except asyncio.TimeoutError:
-                    yield f": heartbeat\n\n"
+                    yield f": heartbeat\n\n"  # SSE 心跳保持连接
                     continue
                 data = event.model_dump_json()
                 yield f"event: {event.event_type}\ndata: {data}\n\n"
                 if event.event_type == "path.done":
-                    break
+                    break  # 路径生成完成，结束 SSE 流
         finally:
-            path_event_bus.unsubscribe(path_id, queue)
+            path_event_bus.unsubscribe(path_id, queue)  # 清理订阅
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.get("/active")
+@router.get("/active")  # GET /api/v1/ai/path-plan/active — 获取当前激活的学习路径
 async def get_active_path(
     module: str = "mentor",
     current_user: User = Depends(get_current_user),
@@ -83,7 +83,7 @@ async def get_active_path(
     return HttpResponse.success(data=response.model_dump(mode="json") if response else None)
 
 
-@router.get("/history")
+@router.get("/history")  # GET /api/v1/ai/path-plan/history — 获取路径历史列表
 async def get_path_history(
     module: str = "mentor",
     current_user: User = Depends(get_current_user),
@@ -94,7 +94,7 @@ async def get_path_history(
     return HttpResponse.success(data=[item.model_dump(mode="json") for item in items])
 
 
-@router.post("/{path_id}/activate")
+@router.post("/{path_id}/activate")  # POST /api/v1/ai/path-plan/{id}/activate — 激活历史路径
 async def activate_history_path(
     path_id: int,
     current_user: User = Depends(get_current_user),
@@ -108,7 +108,7 @@ async def activate_history_path(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.get("/nodes/{node_id}/workspace")
+@router.get("/nodes/{node_id}/workspace")  # GET /api/v1/ai/path-plan/nodes/{id}/workspace — 获取节点学习区
 async def get_node_workspace(
     node_id: int,
     current_user: User = Depends(get_current_user),
@@ -122,7 +122,23 @@ async def get_node_workspace(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.post("/nodes/{node_id}/questions")
+
+
+@router.post("/nodes/{node_id}/start-learning")  # POST 节点深入学习 — 标记开始并懒加载主教程
+async def start_node_learning(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.start_node_learning(current_user.id, node_id)
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/questions")  # POST 生成节点测验题 — LLM 根据教程生成 5 道题
 async def generate_node_questions(
     node_id: int,
     current_user: User = Depends(get_current_user),
@@ -136,7 +152,7 @@ async def generate_node_questions(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.post("/nodes/{node_id}/quiz-submit")
+@router.post("/nodes/{node_id}/quiz-submit")  # POST 提交节点测验 — 自动评分并决定下一步
 async def submit_node_quiz(
     node_id: int,
     payload: PathQuizSubmitRequest,
@@ -151,7 +167,7 @@ async def submit_node_quiz(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.post("/nodes/{node_id}/resources")
+@router.post("/nodes/{node_id}/resources")  # POST 生成节点辅助资源 — mindmap/code/ppt/content/reading
 async def generate_node_resource(
     node_id: int,
     payload: AuxiliaryResourceRequest,
@@ -166,7 +182,7 @@ async def generate_node_resource(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.get("/resources")
+@router.get("/resources")  # GET /api/v1/ai/path-plan/resources — 获取路径资源列表
 async def list_path_resources(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -210,7 +226,7 @@ async def list_path_resources(
     })
 
 
-@router.get("/resources/{resource_id}")
+@router.get("/resources/{resource_id}")  # GET 路径资源详情
 async def get_path_resource(
     resource_id: int,
     current_user: User = Depends(get_current_user),
@@ -222,7 +238,7 @@ async def get_path_resource(
     return HttpResponse.success(data=LearningPathResourceDTO.from_model(resource).model_dump(mode="json"))
 
 
-@router.get("/{path_id}")
+@router.get("/{path_id}")  # GET /api/v1/ai/path-plan/{id} — 获取路径详情（含所有节点）
 async def get_path_by_id(
     path_id: int,
     current_user: User = Depends(get_current_user),
@@ -236,7 +252,7 @@ async def get_path_by_id(
     return HttpResponse.success(data=response.model_dump(mode="json"))
 
 
-@router.post("/{path_id}/events")
+@router.post("/{path_id}/events")  # POST 记录路径学习事件 — 前端上报学习行为
 async def record_path_learning_event(
     path_id: int,
     payload: LearningEventCreate,
@@ -257,7 +273,7 @@ async def record_path_learning_event(
     return HttpResponse.success(data=build_learning_event_item(event).model_dump(mode="json"))
 
 
-@router.get("/{path_id}/evaluation")
+@router.get("/{path_id}/evaluation")  # GET 路径学习评估 — 汇总学习信号和优化建议
 async def get_path_learning_evaluation(
     path_id: int,
     current_user: User = Depends(get_current_user),

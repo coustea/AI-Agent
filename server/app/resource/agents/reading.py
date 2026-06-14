@@ -6,10 +6,14 @@ import json
 
 from pydantic import BaseModel, Field
 
+from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
 from app.resource.schemas import WorkerResult, WorkerState
+
+logger = get_logger(__name__)
 
 
 class ReadingResource(BaseModel):
@@ -77,10 +81,11 @@ class ReadingAgent(BaseResourceAgent):
             )
 
         prompt = prompts.get("resource").get("reading")
+        logger.info("Agent[reading] 步骤: 调用 LLM 生成拓展阅读, depth=%s max_items=%s", reading_depth, max_items)
         result = await self.llm.ainvoke_json(
             ReadingPayload,
             f"{prompt}\n\n{input_text}",
-            temperature=0.3,
+            temperature=INFERENCE_TEMPERATURE,
             function_name="generate_reading_resources",
             function_description="生成拓展阅读推荐资源",
         )
@@ -94,6 +99,11 @@ class ReadingAgent(BaseResourceAgent):
 
         reading_data = result.model_dump(mode="json")
         content = json.dumps(reading_data, ensure_ascii=False, indent=2)
+        logger.info(
+            "Agent[reading] 步骤: 阅读资源解析完成, resources=%d path_steps=%d",
+            len(reading_data.get("resources", [])),
+            len(reading_data.get("learning_path", [])),
+        )
 
         return WorkerResult(
             success=True,

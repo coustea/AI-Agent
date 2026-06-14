@@ -1,9 +1,10 @@
-"""Dashboard HTTP routes."""
+"""Dashboard HTTP routes — split into focused sub-endpoints."""
 
 from __future__ import annotations
 
+import math
 from collections import Counter
-from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -12,16 +13,17 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
-from app.chat.service import get_chat_usecases
 from app.infra.database import get_session
 from app.infra.models import (
     ChatMessage,
     ChatSession,
     GeneratedResource,
-    LearningPath,
+    GeneratedResourceItem,
     LearningEvent,
+    LearningPath,
     LearningSession,
     PathNode,
+    QuizQuestion,
     User,
 )
 from app.infra.response import HttpResponse
@@ -32,28 +34,9 @@ from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-@dataclass(frozen=True)
-class HomeUsageSnapshot:
-    chat_session_count: int
-    user_message_count: int
-    recent_sessions: list[ChatSession]
-    recent_resources: list[GeneratedResource]
-    active_path: LearningPath | None
-    path_nodes: list[PathNode]
-    recent_events: list[LearningEvent]
-    recent_learning_sessions: list[LearningSession]
-
-    @property
-    def has_activity(self) -> bool:
-        return any((
-            self.chat_session_count,
-            self.user_message_count,
-            self.recent_resources,
-            self.active_path,
-            self.recent_events,
-            self.recent_learning_sessions,
-        ))
-
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _text(value: Any, fallback: str = "") -> str:
     if value is None:
@@ -87,136 +70,6 @@ def _mastery_items(profile_json: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(items, key=lambda item: item.get("mastery_score") or 0)
 
 
-def _dimension_score_items(score_json: dict[str, Any]) -> list[dict[str, Any]]:
-    scores = score_json.get("dimension_scores") or {}
-    missing_sections = set(score_json.get("missing_sections") or [])
-    items: list[dict[str, Any]] = []
-    for key in ALL_DIMENSIONS:
-        score = scores.get(key)
-        items.append({
-            "key": key,
-            "label": DIMENSION_NAMES.get(key, key),
-            "score": score if isinstance(score, (int, float)) else None,
-            "missing": key in missing_sections or score is None,
-        })
-    return items
-
-
-def _score_payload(profile: Any) -> dict[str, Any]:
-    score_json = profile.profile_score_json or {}
-    return {
-        "user_id": profile.user_id,
-        "module": profile.module,
-        "score": score_json.get("overall_score"),
-        "confidence": score_json.get("confidence", 0.7),
-        "metrics": {
-            "dimension_scores": score_json.get("dimension_scores") or {},
-            "section_coverage": score_json.get("section_coverage", 0),
-            "evidence_quality": score_json.get("evidence_quality", 0),
-            "uncertainty_handling": None,
-            "content_richness": None,
-        },
-        "dimensions": _dimension_score_items(score_json),
-        "missing_sections": score_json.get("missing_sections") or [],
-        "scored_at": score_json.get("scored_at"),
-        "updated_at": profile.updated_at,
-    }
-
-
-async def _load_usage_snapshot(session: AsyncSession, user_id: int) -> HomeUsageSnapshot:
-    chat_count = (await session.exec(
-        select(func.count())
-        .select_from(ChatSession)
-        .where(ChatSession.user_id == user_id, ChatSession.is_archived.is_(False))
-    )).one()
-    message_count = (await session.exec(
-        select(func.count())
-        .select_from(ChatMessage)
-        .where(ChatMessage.user_id == user_id, ChatMessage.role == "user")
-    )).one()
-    recent_sessions = list((await session.exec(
-        select(ChatSession)
-        .where(ChatSession.user_id == user_id, ChatSession.is_archived.is_(False))
-        .order_by(col(ChatSession.updated_at).desc())
-        .limit(5)
-    )).all())
-    recent_resources = list((await session.exec(
-        select(GeneratedResource)
-        .where(
-            GeneratedResource.user_id == user_id,
-            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
-        )
-        .order_by(col(GeneratedResource.updated_at).desc())
-        .limit(5)
-    )).all())
-    active_path = (await session.exec(
-        select(LearningPath)
-        .where(LearningPath.user_id == user_id, LearningPath.status == "active")
-        .order_by(col(LearningPath.updated_at).desc())
-        .limit(1)
-    )).first()
-    path_nodes: list[PathNode] = []
-    if active_path and active_path.id is not None:
-        path_nodes = list((await session.exec(
-            select(PathNode)
-            .where(PathNode.user_id == user_id, PathNode.path_id == active_path.id)
-            .order_by(col(PathNode.priority).asc(), col(PathNode.updated_at).desc())
-            .limit(12)
-        )).all())
-    recent_events = list((await session.exec(
-        select(LearningEvent)
-        .where(LearningEvent.user_id == user_id)
-        .order_by(col(LearningEvent.created_at).desc())
-        .limit(50)
-    )).all())
-    recent_learning_sessions = list((await session.exec(
-        select(LearningSession)
-        .where(LearningSession.user_id == user_id)
-        .order_by(col(LearningSession.started_at).desc())
-        .limit(30)
-    )).all())
-    return HomeUsageSnapshot(
-        chat_session_count=int(chat_count or 0),
-        user_message_count=int(message_count or 0),
-        recent_sessions=recent_sessions,
-        recent_resources=recent_resources,
-        active_path=active_path,
-        path_nodes=path_nodes,
-        recent_events=recent_events,
-        recent_learning_sessions=recent_learning_sessions,
-    )
-
-
-def _event_topic(event: LearningEvent | None) -> str:
-    if not event:
-        return ""
-    return _text(event.topic) or _text(event.course)
-
-
-def _resource_title(resource: GeneratedResource | None) -> str:
-    if not resource:
-        return ""
-    return _text(resource.learning_need, "最近生成的资源")
-
-
-def _weak_topics(snapshot: HomeUsageSnapshot, mastery: list[dict[str, Any]]) -> list[str]:
-    counter: Counter[str] = Counter()
-    for event in snapshot.recent_events:
-        topic = _event_topic(event)
-        if not topic:
-            continue
-        feedback = event.feedback or ""
-        if event.event_type == "quiz_submitted" and event.score is not None and event.score < 70:
-            counter[topic] += 2
-        if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
-            counter[topic] += 2
-    for item in mastery[:5]:
-        topic = _text(item.get("knowledge_point"))
-        if topic:
-            counter[topic] += 1
-    return [topic for topic, _ in counter.most_common(5)]
-
-
 def _status_label(value: str) -> str:
     return {
         "pending": "等待中",
@@ -238,72 +91,130 @@ def _status_label(value: str) -> str:
     }.get(value, value or "待更新")
 
 
-def _quick_actions(snapshot: HomeUsageSnapshot, weak_topics: list[str]) -> list[dict[str, str]]:
-    action_defs = [
-        {
-            "key": "tutor",
-            "label": "智能辅导",
-            "path": "/tutor",
-            "icon": "chat",
-            "score": 30 + snapshot.user_message_count,
-            "description": f"已有 {snapshot.user_message_count} 条提问记录，继续沿最近问题追问" if snapshot.user_message_count else "还没有辅导记录，适合作为第一次校准入口",
-            "tag": f"{snapshot.chat_session_count} 个会话" if snapshot.chat_session_count else "待开始",
-        },
-        {
-            "key": "resource",
-            "label": "资源引擎",
-            "path": "/resource-generator",
-            "icon": "resource",
-            "score": 35 + len(snapshot.recent_resources) * 3 + len(weak_topics) * 2,
-            "description": f"围绕 {weak_topics[0]} 生成配套材料" if weak_topics else "把当前学习需求转成课件、导读或练习",
-            "tag": f"{len(snapshot.recent_resources)} 个资源" if snapshot.recent_resources else "可生成",
-        },
-        {
-            "key": "path",
-            "label": "路径规划",
-            "path": "/path-planner",
-            "icon": "path",
-            "score": 45 + ((snapshot.active_path.overall_progress if snapshot.active_path else 0) // 5),
-            "description": f"当前路径进度 {snapshot.active_path.overall_progress}%，继续推进节点" if snapshot.active_path else "还没有活跃路径，先生成阶段计划",
-            "tag": "进行中" if snapshot.active_path else "待规划",
-        },
-        {
-            "key": "practice",
-            "label": "学习题库",
-            "path": "/question-bank",
-            "icon": "practice",
-            "score": 25 + sum(1 for event in snapshot.recent_events if event.event_type == "quiz_submitted") * 4 + len(weak_topics),
-            "description": f"用练习验证 {weak_topics[0]}" if weak_topics else "用题目把最近学习收口成反馈",
-            "tag": f"{sum(1 for event in snapshot.recent_events if event.event_type == 'quiz_submitted')} 次测验",
-        },
-    ]
-    return [
-        {key: _text(value) for key, value in item.items() if key != "score"}
-        for item in sorted(action_defs, key=lambda value: value["score"], reverse=True)
-    ]
+def _event_topic(event: LearningEvent | None) -> str:
+    if not event:
+        return ""
+    return _text(event.topic) or _text(event.course)
 
 
-def _current_node(snapshot: HomeUsageSnapshot) -> PathNode | None:
+def _resource_title(resource: GeneratedResource | None) -> str:
+    if not resource:
+        return ""
+    return _text(resource.learning_need, "最近生成的资源")
+
+
+def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
     for status in ("available", "completed_with_gaps"):
-        for node in snapshot.path_nodes:
+        for node in path_nodes:
             if node.status == status:
                 return node
-    return snapshot.path_nodes[0] if snapshot.path_nodes else None
+    return path_nodes[0] if path_nodes else None
 
 
-def _recommendation(
-    *,
-    cold_start: bool,
-    snapshot: HomeUsageSnapshot,
-    weak_topics: list[str],
-    strategies: list[str],
-) -> dict[str, str]:
-    node = _current_node(snapshot)
-    latest_event = snapshot.recent_events[0] if snapshot.recent_events else None
-    latest_resource = snapshot.recent_resources[0] if snapshot.recent_resources else None
+# ---------------------------------------------------------------------------
+# Shared lightweight queries
+# ---------------------------------------------------------------------------
 
-    if cold_start and not snapshot.has_activity:
-        return {
+async def _get_active_path(session: AsyncSession, user_id: int) -> LearningPath | None:
+    return (await session.exec(
+        select(LearningPath)
+        .where(LearningPath.user_id == user_id, LearningPath.status == "active")
+        .order_by(col(LearningPath.updated_at).desc())
+        .limit(1)
+    )).first()
+
+
+async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> list[PathNode]:
+    return list((await session.exec(
+        select(PathNode)
+        .where(PathNode.user_id == user_id, PathNode.path_id == path_id)
+        .order_by(col(PathNode.priority).asc(), col(PathNode.updated_at).desc())
+        .limit(12)
+    )).all())
+
+
+async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 50) -> list[LearningEvent]:
+    return list((await session.exec(
+        select(LearningEvent)
+        .where(LearningEvent.user_id == user_id)
+        .order_by(col(LearningEvent.created_at).desc())
+        .limit(limit)
+    )).all())
+
+
+async def _get_profile_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
+    profile = await get_profile_service().get_or_create_profile(user_id=user_id)
+    profile = await session.merge(profile)
+    return profile.profile_json or {}
+
+
+def _weak_topics_from_events_and_mastery(
+    events: list[LearningEvent],
+    mastery: list[dict[str, Any]],
+) -> list[str]:
+    counter: Counter[str] = Counter()
+    for event in events:
+        topic = _event_topic(event)
+        if not topic:
+            continue
+        feedback = event.feedback or ""
+        if event.event_type == "quiz_submitted" and event.score is not None and event.score < 70:
+            counter[topic] += 2
+        if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
+            counter[topic] += 2
+    for item in mastery[:5]:
+        topic = _text(item.get("knowledge_point"))
+        if topic:
+            counter[topic] += 1
+    return [topic for topic, _ in counter.most_common(5)]
+
+
+# ---------------------------------------------------------------------------
+# 1. GET /dashboard/recommendation
+# ---------------------------------------------------------------------------
+
+@router.get("/recommendation")
+async def get_recommendation(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    profile_json = await _get_profile_json(session, current_user.id)
+    base_info = profile_json.get("base_info") or {}
+    mastery = _mastery_items(profile_json)
+    strategies = [item for item in _strategy_list(profile_json) if item]
+
+    active_path = await _get_active_path(session, current_user.id)
+    path_nodes = await _get_path_nodes(session, current_user.id, active_path.id) if active_path else []
+    recent_events = await _get_recent_events(session, current_user.id, limit=20)
+    recent_resources = list((await session.exec(
+        select(GeneratedResource)
+        .where(
+            GeneratedResource.user_id == current_user.id,
+            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
+        )
+        .order_by(col(GeneratedResource.updated_at).desc())
+        .limit(3)
+    )).all())
+    chat_session_count = (await session.exec(
+        select(func.count())
+        .select_from(ChatSession)
+        .where(ChatSession.user_id == current_user.id, ChatSession.is_archived.is_(False))
+    )).one()
+    user_message_count = (await session.exec(
+        select(func.count())
+        .select_from(ChatMessage)
+        .where(ChatMessage.user_id == current_user.id, ChatMessage.role == "user")
+    )).one()
+
+    has_activity = any((chat_session_count, user_message_count, recent_resources, active_path, recent_events))
+    cold_start = not _text(base_info.get("major")) and not has_activity
+    weak_topics = _weak_topics_from_events_and_mastery(recent_events, mastery)
+    node = _current_node(path_nodes)
+    latest_event = recent_events[0] if recent_events else None
+    latest_resource = recent_resources[0] if recent_resources else None
+
+    if cold_start and not has_activity:
+        recommendation = {
             "label": "推荐下一步",
             "title": "先补齐学习画像",
             "text": "首页还没有足够使用信号，先完成画像后再生成更准确的学习入口。",
@@ -311,9 +222,9 @@ def _recommendation(
             "path": "/profile",
             "icon": "monitor",
         }
-    if latest_event and latest_event.event_type == "quiz_submitted" and latest_event.score is not None and latest_event.score < 70:
+    elif latest_event and latest_event.event_type == "quiz_submitted" and latest_event.score is not None and latest_event.score < 70:
         topic = _event_topic(latest_event) or (weak_topics[0] if weak_topics else "最近测验")
-        return {
+        recommendation = {
             "label": "测验信号",
             "title": f"复盘 {topic}",
             "text": f"最近一次测验得分 {latest_event.score:.0f}，适合先讲清错因再进入题库验证。",
@@ -321,8 +232,8 @@ def _recommendation(
             "path": "/tutor",
             "icon": "chat",
         }
-    if node:
-        return {
+    elif node:
+        recommendation = {
             "label": "今日建议",
             "title": f"继续推进：{node.title}",
             "text": node.recommendation_reason or node.mastery_target or "根据当前路径进度，优先完成这一项，再回到题库或资源页形成反馈。",
@@ -330,8 +241,8 @@ def _recommendation(
             "path": "/path-planner",
             "icon": "path",
         }
-    if weak_topics:
-        return {
+    elif weak_topics:
+        recommendation = {
             "label": "薄弱信号",
             "title": f"攻坚 {weak_topics[0]}",
             "text": strategies[0] if strategies else "最近画像或学习事件显示这里需要优先补强。",
@@ -339,8 +250,8 @@ def _recommendation(
             "path": "/resource-generator",
             "icon": "resource",
         }
-    if latest_resource and latest_resource.status in {"pending", "generating", "processing"}:
-        return {
+    elif latest_resource and latest_resource.status in {"pending", "generating", "processing"}:
+        recommendation = {
             "label": "资源进度",
             "title": f"{_resource_title(latest_resource)} 正在处理",
             "text": f"最新资源状态为「{_status_label(latest_resource.status)}」，可以回到资源页查看进度。",
@@ -348,8 +259,8 @@ def _recommendation(
             "path": f"/resource-detail/{latest_resource.id}" if latest_resource.id else "/resource-generator",
             "icon": "resource",
         }
-    if latest_resource and latest_resource.id:
-        return {
+    elif latest_resource and latest_resource.id:
+        recommendation = {
             "label": "最近资源",
             "title": _resource_title(latest_resource),
             "text": "你最近生成过学习资源，适合回看后再做一轮练习形成反馈。",
@@ -357,65 +268,69 @@ def _recommendation(
             "path": f"/resource-detail/{latest_resource.id}",
             "icon": "resource",
         }
-    return {
-        "label": "推荐下一步",
-        "title": "生成第一条学习路径",
-        "text": "还没有活跃路径记录，先把目标拆成阶段节点，后续首页会按节点和学习事件推荐。",
-        "action": "开始规划",
-        "path": "/path-planner",
-        "icon": "path",
-    }
+    else:
+        recommendation = {
+            "label": "推荐下一步",
+            "title": "生成第一条学习路径",
+            "text": "还没有活跃路径记录，先把目标拆成阶段节点，后续首页会按节点和学习事件推荐。",
+            "action": "开始规划",
+            "path": "/path-planner",
+            "icon": "path",
+        }
 
-
-def _build_home_payload(profile: Any, snapshot: HomeUsageSnapshot, recommended_question: Any = None) -> dict[str, Any]:
-    """Convert DB signals and profile into frontend-ready dashboard JSON."""
-    profile_json = profile.profile_json or {}
-    base_info = profile_json.get("base_info") or {}
-    mastery = _mastery_items(profile_json)
-    strategies = [item for item in _strategy_list(profile_json) if item]
-    cold_start = not _text(base_info.get("major")) and not snapshot.has_activity
-    weak_topics = _weak_topics(snapshot, mastery)
-    actions = _quick_actions(snapshot, weak_topics)
-    recommendation = _recommendation(
-        cold_start=cold_start,
-        snapshot=snapshot,
-        weak_topics=weak_topics,
-        strategies=strategies,
-    )
-    recent_quiz_event = next((e for e in snapshot.recent_events if e.event_type == "quiz_submitted"), None)
-    latest_resource_obj = snapshot.recent_resources[0] if snapshot.recent_resources else None
-    active_path_node = _current_node(snapshot)
-    
-    recent_modules = {
-        "latest_resource": {
-            "id": latest_resource_obj.id,
-            "title": _resource_title(latest_resource_obj),
-            "status": latest_resource_obj.status,
-            "created_at": latest_resource_obj.created_at.isoformat() if latest_resource_obj.created_at else None,
-        } if latest_resource_obj else None,
-        "active_path": {
-            "id": snapshot.active_path.id,
-            "title": snapshot.active_path.title,
-            "overall_progress": snapshot.active_path.overall_progress,
-            "current_node_title": active_path_node.title if active_path_node else None,
-        } if snapshot.active_path else None,
-        "recent_quiz": {
-            "topic": _event_topic(recent_quiz_event),
-            "score": recent_quiz_event.score,
-            "created_at": recent_quiz_event.created_at.isoformat() if recent_quiz_event.created_at else None,
-        } if recent_quiz_event else None,
-        "recommended_question": {
-            "id": recommended_question.question_id,
-            "subject": recommended_question.subject,
-            "content": recommended_question.content,
-            "difficulty": recommended_question.difficulty,
-            "type": recommended_question.question_type,
-        } if recommended_question else None,
-    }
-
-    return {
+    return HttpResponse.success(data={
         "state": "cold_start" if cold_start else "active",
         "recommendation": recommendation,
+    })
+
+
+# ---------------------------------------------------------------------------
+# 2. GET /dashboard/profile-radar
+# ---------------------------------------------------------------------------
+
+@router.get("/profile-radar")
+async def get_profile_radar(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    profile = await get_profile_service().get_or_create_profile(user_id=current_user.id)
+    profile = await session.merge(profile)
+    score_json = profile.profile_score_json or {}
+
+    scores = score_json.get("dimension_scores") or {}
+    missing_sections = set(score_json.get("missing_sections") or [])
+    dimensions: list[dict[str, Any]] = []
+    for key in ALL_DIMENSIONS:
+        score = scores.get(key)
+        dimensions.append({
+            "key": key,
+            "label": DIMENSION_NAMES.get(key, key),
+            "score": score if isinstance(score, (int, float)) else None,
+            "missing": key in missing_sections or score is None,
+        })
+
+    weak_areas = [
+        item.get("name") or item.get("knowledge_point")
+        for item in sorted(
+            (profile.profile_json or {}).get("knowledge_mastery") or [],
+            key=lambda x: x.get("mastery_score", 60),
+        )
+        if (item.get("mastery_score", 60) < 60)
+    ][:5]
+
+    return HttpResponse.success(data={
+        "user_id": profile.user_id,
+        "module": profile.module,
+        "score": score_json.get("overall_score"),
+        "confidence": score_json.get("confidence", 0.7),
+        "metrics": {
+            "dimension_scores": score_json.get("dimension_scores") or {},
+            "section_coverage": score_json.get("section_coverage", 0),
+            "evidence_quality": score_json.get("evidence_quality", 0),
+        },
+        "dimensions": dimensions,
+        "weak_areas": weak_areas,
+        "missing_sections": score_json.get("missing_sections") or [],
         "radar": {
             "eyebrow": "画像",
             "title": "用户画像雷达图",
@@ -423,51 +338,359 @@ def _build_home_payload(profile: Any, snapshot: HomeUsageSnapshot, recommended_q
             "path": "/profile",
             "note": "完整画像、课程背景和薄弱点明细已放在个人中心，首页只保留能力趋势信号。",
         },
-        "quick_section": {
-            "eyebrow": "功能入口",
-            "title": "快速进入功能页面",
-            "actions": actions,
-        },
-        "recent_modules": recent_modules,
-        "profile_score": _score_payload(profile),
-    }
+        "scored_at": score_json.get("scored_at"),
+        "updated_at": profile.updated_at,
+    })
 
 
-@router.get("/home")
-async def get_home_dashboard(
+# ---------------------------------------------------------------------------
+# 3. GET /dashboard/continue-learning
+# ---------------------------------------------------------------------------
+
+@router.get("/continue-learning")
+async def get_continue_learning(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Get dynamic homepage view model for the current user."""
-    profile = await get_profile_service().get_or_create_profile(user_id=current_user.id)
-    profile = await session.merge(profile)
-    snapshot = await _load_usage_snapshot(session, current_user.id)
+    active_path = await _get_active_path(session, current_user.id)
+    if not active_path:
+        return HttpResponse.success(data={"active_path": None, "nodes": []})
 
-    # Calculate target topic for question recommendation
-    profile_json = profile.profile_json or {}
+    path_nodes = await _get_path_nodes(session, current_user.id, active_path.id)
+
+    last_learned_at: datetime | None = None
+    last_event = (await session.exec(
+        select(LearningEvent)
+        .where(
+            LearningEvent.user_id == current_user.id,
+            LearningEvent.path_id == active_path.id,
+        )
+        .order_by(col(LearningEvent.created_at).desc())
+        .limit(1)
+    )).first()
+    if last_event:
+        last_learned_at = last_event.created_at
+
+    nodes = [
+        {
+            "node_id": n.node_id,
+            "title": n.title,
+            "status": n.status,
+            "progress": 100 if n.status in ("completed", "completed_with_gaps")
+                        else 80 if n.status == "remediation"
+                        else 50 if n.started_at is not None
+                        else 30 if n.status == "available"
+                        else 0,
+            "attempt_count": n.attempt_count,
+            "started_at": n.started_at.isoformat() if n.started_at else None,
+            "completed_at": n.completed_at.isoformat() if n.completed_at else None,
+        }
+        for n in path_nodes
+    ]
+
+    return HttpResponse.success(data={
+        "active_path": {
+            "id": active_path.id,
+            "title": active_path.title,
+            "overall_progress": active_path.overall_progress,
+            "current_node_title": (_current_node(path_nodes).title if _current_node(path_nodes) else None),
+            "updated_at": active_path.updated_at.isoformat() if active_path.updated_at else None,
+            "last_learned_at": last_learned_at.isoformat() if last_learned_at else None,
+        },
+        "nodes": nodes,
+    })
+
+
+# ---------------------------------------------------------------------------
+# 4. GET /dashboard/quick-actions
+# ---------------------------------------------------------------------------
+
+@router.get("/quick-actions")
+async def get_quick_actions(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    profile_json = await _get_profile_json(session, current_user.id)
+    mastery = _mastery_items(profile_json)
+    strategies = [item for item in _strategy_list(profile_json) if item]
+    recent_events = await _get_recent_events(session, current_user.id, limit=30)
+
+    chat_session_count = (await session.exec(
+        select(func.count())
+        .select_from(ChatSession)
+        .where(ChatSession.user_id == current_user.id, ChatSession.is_archived.is_(False))
+    )).one()
+    user_message_count = (await session.exec(
+        select(func.count())
+        .select_from(ChatMessage)
+        .where(ChatMessage.user_id == current_user.id, ChatMessage.role == "user")
+    )).one()
+    recent_resources = list((await session.exec(
+        select(GeneratedResource)
+        .where(
+            GeneratedResource.user_id == current_user.id,
+            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
+        )
+        .order_by(col(GeneratedResource.updated_at).desc())
+        .limit(5)
+    )).all())
+    active_path = await _get_active_path(session, current_user.id)
+
+    weak_topics = _weak_topics_from_events_and_mastery(recent_events, mastery)
+
+    action_defs = [
+        {
+            "key": "tutor",
+            "label": "智能辅导",
+            "path": "/tutor",
+            "icon": "chat",
+            "score": 30 + int(user_message_count or 0),
+            "description": f"已有 {user_message_count} 条提问记录，继续沿最近问题追问" if user_message_count else "还没有辅导记录，适合作为第一次校准入口",
+            "tag": f"{chat_session_count} 个会话" if chat_session_count else "待开始",
+        },
+        {
+            "key": "resource",
+            "label": "资源引擎",
+            "path": "/resource-generator",
+            "icon": "resource",
+            "score": 35 + len(recent_resources) * 3 + len(weak_topics) * 2,
+            "description": f"围绕 {weak_topics[0]} 生成配套材料" if weak_topics else "把当前学习需求转成课件、导读或练习",
+            "tag": f"{len(recent_resources)} 个资源" if recent_resources else "可生成",
+        },
+        {
+            "key": "path",
+            "label": "路径规划",
+            "path": "/path-planner",
+            "icon": "path",
+            "score": 45 + ((active_path.overall_progress if active_path else 0) // 5),
+            "description": f"当前路径进度 {active_path.overall_progress}%，继续推进节点" if active_path else "还没有活跃路径，先生成阶段计划",
+            "tag": "进行中" if active_path else "待规划",
+        },
+        {
+            "key": "practice",
+            "label": "学习题库",
+            "path": "/question-bank",
+            "icon": "practice",
+            "score": 25 + sum(1 for event in recent_events if event.event_type == "quiz_submitted") * 4 + len(weak_topics),
+            "description": f"用练习验证 {weak_topics[0]}" if weak_topics else "用题目把最近学习收口成反馈",
+            "tag": f"{sum(1 for event in recent_events if event.event_type == 'quiz_submitted')} 次测验",
+        },
+    ]
+    actions = [
+        {key: _text(value) for key, value in item.items() if key != "score"}
+        for item in sorted(action_defs, key=lambda value: value["score"], reverse=True)
+    ]
+
+    # Today suggestions
+    path_nodes = await _get_path_nodes(session, current_user.id, active_path.id) if active_path else []
+    suggestions: list[dict[str, str]] = []
+    tones = ["blue", "amber", "green", "indigo"]
+
+    if active_path:
+        node = _current_node(path_nodes)
+        title = f"继续推进「{node.title}」" if node else "继续当前学习路径"
+        reason = f"路径进度 {active_path.overall_progress}%，优先完成当前节点再进入下一阶段"
+        suggestions.append({"title": title, "reason": reason, "path": "/path-planner", "tone": tones[0]})
+
+    if weak_topics:
+        topic = weak_topics[0]
+        strategy_hint = strategies[0] if strategies else f"「{topic}」维度偏弱，需要通过专项练习巩固"
+        suggestions.append({
+            "title": f"完成「{topic}」专项练习",
+            "reason": strategy_hint,
+            "path": "/question-bank",
+            "tone": tones[1],
+        })
+
+    low_quiz = next(
+        (e for e in recent_events
+         if e.event_type == "quiz_submitted" and e.score is not None and e.score < 70),
+        None,
+    )
+    if low_quiz:
+        topic = _event_topic(low_quiz) or "最近测验"
+        suggestions.append({
+            "title": f"复盘「{topic}」错题",
+            "reason": f"最近测验得分 {low_quiz.score:.0f}，先讲清错因再回到题库验证",
+            "path": "/mistake-book",
+            "tone": tones[2],
+        })
+
+    latest_resource = recent_resources[0] if recent_resources else None
+    if latest_resource and latest_resource.status == "completed":
+        suggestions.append({
+            "title": "复习最近生成资料",
+            "reason": "用错题和资源回顾保持知识稳定度",
+            "path": f"/resource-detail/{latest_resource.id}" if latest_resource.id else "/resource-generator",
+            "tone": tones[3],
+        })
+
+    fallbacks = [
+        {"title": "生成新的学习资源", "reason": "把当前学习需求转成课件、导读或练习", "path": "/resource-generator", "tone": "blue"},
+        {"title": "规划下一阶段路径", "reason": "将目标拆成阶段节点，系统会按节点持续推荐", "path": "/path-planner", "tone": "amber"},
+    ]
+    for fb in fallbacks:
+        if len(suggestions) >= 3:
+            break
+        if not any(s["path"] == fb["path"] for s in suggestions):
+            suggestions.append(fb)
+
+    return HttpResponse.success(data={
+        "actions": actions,
+        "today_suggestions": suggestions[:3],
+    })
+
+
+# ---------------------------------------------------------------------------
+# 5. GET /dashboard/recent-resources
+# ---------------------------------------------------------------------------
+
+@router.get("/recent-resources")
+async def get_recent_resources(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    recent_resources = list((await session.exec(
+        select(GeneratedResource)
+        .where(
+            GeneratedResource.user_id == current_user.id,
+            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
+        )
+        .order_by(col(GeneratedResource.updated_at).desc())
+        .limit(5)
+    )).all())
+
+    result: list[dict[str, Any]] = []
+    for r in recent_resources[:4]:
+        first_item = (await session.exec(
+            select(GeneratedResourceItem)
+            .where(GeneratedResourceItem.resource_id == r.id)
+            .limit(1)
+        )).first()
+        result.append({
+            "id": r.id,
+            "title": _resource_title(r),
+            "type": first_item.agent_type if first_item else _status_label(r.status),
+            "agent": first_item.generated_by or "资源生成智能体" if first_item else "资源生成智能体",
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return HttpResponse.success(data=result)
+
+
+# ---------------------------------------------------------------------------
+# 6. GET /dashboard/daily-challenge
+# ---------------------------------------------------------------------------
+
+_DIFFICULTY_MINUTES = {"简单": 5, "中等": 12, "困难": 20, "easy": 5, "medium": 12, "hard": 20}
+
+
+@router.get("/daily-challenge")
+async def get_daily_challenge(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    profile_json = await _get_profile_json(session, current_user.id)
     mastery = profile_json.get("knowledge_mastery") or []
     weak_topics = [
         item.get("name") for item in sorted(
-            mastery, key=lambda x: x.get("mastery_score", 60)
+            mastery, key=lambda x: x.get("mastery_score", 60),
         ) if item.get("mastery_score", 60) < 60
     ]
     courses = profile_json.get("learning_profile", {}).get("course_profiles", [])
     current_course = _course_context_name(courses[0]) if courses else None
-    
-    target_topic = weak_topics[0] if weak_topics else current_course
 
-    from app.infra.models import QuizQuestion
+    target_topic = weak_topics[0] if weak_topics else current_course
 
     recommended_question = None
     if target_topic:
         stmt = select(QuizQuestion).where(
-            QuizQuestion.content.ilike(f"%{target_topic}%") | 
+            QuizQuestion.content.ilike(f"%{target_topic}%") |
             QuizQuestion.subject.ilike(f"%{target_topic}%")
         ).order_by(func.random()).limit(1)
         recommended_question = (await session.exec(stmt)).first()
-        
+
     if not recommended_question:
         stmt = select(QuizQuestion).order_by(func.random()).limit(1)
         recommended_question = (await session.exec(stmt)).first()
 
-    return HttpResponse.success(data=_build_home_payload(profile, snapshot, recommended_question))
+    if recommended_question:
+        estimated_minutes = _DIFFICULTY_MINUTES.get(
+            recommended_question.difficulty or "", 12,
+        )
+        return HttpResponse.success(data={
+            "id": recommended_question.question_id,
+            "subject": recommended_question.subject,
+            "content": recommended_question.content,
+            "difficulty": recommended_question.difficulty,
+            "type": recommended_question.question_type,
+            "estimated_minutes": estimated_minutes,
+            "source": "题库推荐",
+            "reason": f"推荐你从「{recommended_question.subject}」切入，保持每日练习节奏。",
+        })
+
+    return HttpResponse.success(data=None)
+
+
+# ---------------------------------------------------------------------------
+# 7. GET /dashboard/study-stats
+# ---------------------------------------------------------------------------
+
+@router.get("/study-stats")
+async def get_study_stats(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    now = datetime.now(timezone.utc)
+    week_start = now - timedelta(days=now.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    weekly_days = (await session.exec(
+        select(func.count(func.distinct(func.date(col(LearningSession.started_at)))))
+        .where(LearningSession.user_id == current_user.id, LearningSession.started_at >= week_start)
+    )).one() or 0
+
+    total_seconds = (await session.exec(
+        select(func.coalesce(func.sum(LearningSession.duration_seconds), 0))
+        .where(LearningSession.user_id == current_user.id)
+    )).one() or 0
+    total_hours = math.ceil(int(total_seconds) / 3600)
+
+    active_path = await _get_active_path(session, current_user.id)
+    pending_nodes = 0
+    if active_path:
+        pending_nodes = (await session.exec(
+            select(func.count())
+            .select_from(PathNode)
+            .where(
+                PathNode.user_id == current_user.id,
+                PathNode.path_id == active_path.id,
+                col(PathNode.status).in_(["available", "locked"]),
+            )
+        )).one() or 0
+
+    recent_events_count = (await session.exec(
+        select(func.count())
+        .select_from(LearningEvent)
+        .where(LearningEvent.user_id == current_user.id)
+    )).one() or 0
+    recent_resources_count = (await session.exec(
+        select(func.count())
+        .select_from(GeneratedResource)
+        .where(
+            GeneratedResource.user_id == current_user.id,
+            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
+        )
+    )).one() or 0
+    today_suggestion_count = sum([
+        1 if active_path else 0,
+        1 if recent_events_count else 0,
+        1 if recent_resources_count else 0,
+        1,
+    ])
+
+    return HttpResponse.success(data={
+        "weekly_days": int(weekly_days),
+        "total_hours": int(total_hours),
+        "pending_nodes": int(pending_nodes),
+        "today_suggestions": int(today_suggestion_count),
+    })

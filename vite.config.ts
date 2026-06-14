@@ -12,11 +12,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:9999',
+        target: 'http://127.0.0.1:9999',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:9999',
+        target: 'ws://127.0.0.1:9999',
         ws: true,
         changeOrigin: true,
       },
@@ -40,12 +40,10 @@ export default defineConfig({
           }
 
           if (
-            id.includes('mermaid') ||
             id.includes('markmap') ||
             id.includes('katex') ||
             id.includes('markdown-it') ||
-            id.includes('highlight.js') ||
-            id.includes('md-editor-v3')
+            id.includes('highlight.js')
           ) {
             return 'vendor-renderers'
           }

@@ -18,7 +18,6 @@ const Profile = () => import('@/features/profile/views/Profile.vue')
 const ResourceDetail = () => import('@/features/resource/views/ResourceDetail.vue')
 const QuestionBank = () => import('@/features/learning/views/QuestionBank.vue')
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
-const WrongQuestions = () => import('@/features/learning/views/WrongQuestions.vue')
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: () => (hasAuthToken() ? '/dashboard' : '/login') },
@@ -30,7 +29,7 @@ export const routes: RouteRecordRaw[] = [
     component: MainLayout,
     children: [
       { path: 'dashboard', name: 'Dashboard', component: Home },
-      { path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator },
+      { path: 'resource-generator', name: 'ResourceGenerator.vue', component: ResourceGenerator },
       { path: 'path-planner', name: 'LearningPathEntry', component: LearningPathEntry },
       { path: 'path-planner/overview/:id?', name: 'LearningPathOverview', component: LearningPathOverview },
       { path: 'path-planner/node/:nodeId', name: 'LearningPathNode', component: LearningPathNode },
@@ -42,7 +41,6 @@ export const routes: RouteRecordRaw[] = [
       { path: 'path-resource-history', name: 'PathResourceHistory', component: PathResourceHistory },
       { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank },
-      { path: 'wrong-questions', name: 'WrongQuestions', component: WrongQuestions },
     ],
   },
 ]

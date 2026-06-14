@@ -17,7 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
 from app.resource.constants import STANDALONE_RESOURCE_SOURCES
-from app.resource.events import AgentEventEmitter, AgentRunTracker
+from app.resource.events import AgentEventEmitter, AgentRunTracker, resource_event_bus
 from app.resource.items import (
     content_envelope,
     db_item_to_resource_item,
@@ -59,6 +59,9 @@ class ResourceService:
         if resource_id not in self._write_locks:
             self._write_locks[resource_id] = asyncio.Lock()
         return self._write_locks[resource_id]
+
+    def _release_write_lock(self, resource_id: int) -> None:
+        self._write_locks.pop(resource_id, None)
 
     async def start_resource_task(
         self,
@@ -106,9 +109,23 @@ class ResourceService:
         if resource is None:
             return None
         db_items = await self.list_resource_items(user_id, resource_id)
+        agent_snapshots = resource_event_bus.get_latest_snapshot(resource_id)
+        merged_agent_snapshots = self._merge_persisted_items_into_snapshots(
+            agent_snapshots.get("agent_snapshots", {}),
+            db_items,
+        )
+        selected_agents = list(resource.selected_agents or [])
         return {
             "resource_id": resource_id,
             "status": resource.status,
+            "selected_agents": selected_agents,
+            "agent_snapshots": merged_agent_snapshots,
+            "overall_progress": self._calculate_overall_progress(
+                status=resource.status,
+                selected_agents=selected_agents,
+                agent_snapshots=merged_agent_snapshots,
+            ),
+            "current_message": agent_snapshots.get("current_message", ""),
             "resources": [
                 self._db_item_to_resource_item(item).model_dump(mode="json")
                 for item in db_items
@@ -296,7 +313,6 @@ class ResourceService:
             learning_need=resource.learning_need or "",
             selected_agents=resource.selected_agents or [],
             resources=[self._db_item_to_resource_item(item) for item in db_items],
-            study_path=review_result.study_path if review_result else [],
             review_result=review_result,
             status=resource.status,
             created_at=resource.created_at.isoformat() if resource.created_at else "",
@@ -309,6 +325,69 @@ class ResourceService:
 
     def _db_item_to_worker_result(self, item: GeneratedResourceItemModel) -> WorkerResult:
         return db_item_to_worker_result(item)
+
+    @staticmethod
+    def _merge_persisted_items_into_snapshots(
+        agent_snapshots: dict[str, Any],
+        db_items: list[GeneratedResourceItemModel],
+    ) -> dict[str, Any]:
+        merged = {
+            agent_id: dict(snapshot)
+            for agent_id, snapshot in agent_snapshots.items()
+        }
+        for item in db_items:
+            previous = dict(merged.get(item.agent_type, {}))
+            previous.update({
+                "event_type": previous.get("event_type", "agent.artifact_ready"),
+                "agent_id": item.agent_type,
+                "status": "finished",
+                "message": previous.get("message") or f"{item.agent_type} 资源已保存，可在产物坞预览",
+                "progress": 100,
+                "phase": "artifact_saved",
+                "artifact_id": str(item.id),
+            })
+            merged[item.agent_type] = previous
+        return merged
+
+    @staticmethod
+    def _calculate_overall_progress(
+        *,
+        status: str | None,
+        selected_agents: list[str],
+        agent_snapshots: dict[str, Any],
+    ) -> int:
+        if status in {"completed", "partial_completed"}:
+            return 100
+        if status == "pending" and not agent_snapshots:
+            return 0
+
+        def progress_for(agent_id: str) -> int:
+            raw = agent_snapshots.get(agent_id, {}).get("progress", 0)
+            try:
+                return max(0, min(100, int(raw)))
+            except (TypeError, ValueError):
+                return 0
+
+        worker_agents = [agent_id for agent_id in selected_agents if agent_id != PPT_AGENT_ID]
+        stages = [
+            (15, progress_for("planning")),
+            (
+                45,
+                round(sum(progress_for(agent_id) for agent_id in worker_agents) / len(worker_agents))
+                if worker_agents else 0,
+            ),
+            (10, progress_for(PRE_REVIEW_AGENT_ID)),
+            (10, progress_for(BUNDLE_AGENT_ID)),
+        ]
+        if PPT_AGENT_ID in selected_agents:
+            stages.extend([
+                (15, progress_for(PPT_AGENT_ID)),
+                (5, progress_for(PPT_REVIEW_AGENT_ID)),
+            ])
+        weight_total = sum(weight for weight, _ in stages)
+        if weight_total <= 0:
+            return 0
+        return max(0, min(100, round(sum(weight * progress for weight, progress in stages) / weight_total)))
 
     async def get_resource(
         self,
@@ -402,6 +481,7 @@ async def run_multi_agent_generation(
                 "启动资源生成: run_id=%s user_id=%s, resource_id=%s, agents=%s",
                 run_id, user_id, resource_id, enabled_agents,
             )
+            await usecases.update_resource_status(resource_id, "generating")
 
             # ==========================================
             # 阶段 1: 规划阶段 (Planning Agent)
@@ -443,7 +523,14 @@ async def run_multi_agent_generation(
             if planning_result.success:
                 logger.info("Planning 完成: %.2fs", planning_elapsed)
             else:
-                logger.warning("Planning 失败: %.2fs, error=%s", planning_elapsed, planning_result.error)
+                logger.error(
+                    "Planning 失败，终止整个生成流程: resource_id=%s run_id=%s error=%s 耗时=%.2fs",
+                    resource_id, run_id, planning_result.error, planning_elapsed,
+                )
+                await emitter.emit_done(success=False, message=f"规划阶段失败: {planning_result.error or '未知错误'}")
+                done_emitted = True
+                success = False
+                return
 
             # ==========================================
             # 阶段 2: 基础资源并行生成阶段 (Parallel Worker Agents)
@@ -461,10 +548,14 @@ async def run_multi_agent_generation(
                 """独立运行单个 Worker Agent 的协程函数"""
                 agent_start = time.perf_counter()
                 try:
-                    logger.info("Agent[%s] 启动: run_id=%s resource_id=%s", agent_id, run_id, resource_id)
                     agent_config = request.agent_configs.get(agent_id, {})
                     if agent_config_extra:
                         agent_config = {**agent_config, **agent_config_extra}
+                    logger.info(
+                        "Agent[%s] 启动: run_id=%s resource_id=%s config=%s",
+                        agent_id, run_id, resource_id,
+                        {k: v for k, v in agent_config.items() if k in ("page_count", "slide_count", "difficulty", "question_count")},
+                    )
                     state = WorkerState(
                         resource_id=resource_id,
                         learning_need=request.learning_need,
@@ -498,9 +589,16 @@ async def run_multi_agent_generation(
 
                     agent_elapsed = time.perf_counter() - agent_start
                     if result.success:
-                        logger.info("Agent[%s] 完成: %.2fs", agent_id, agent_elapsed)
+                        logger.info(
+                            "Agent[%s] 完成: %.2fs summary=%s metadata=%s",
+                            agent_id, agent_elapsed, result.summary,
+                            result.summary_data or {},
+                        )
                     else:
-                        logger.warning("Agent[%s] 失败: %.2fs, error=%s", agent_id, agent_elapsed, result.error)
+                        logger.warning(
+                            "Agent[%s] 失败: %.2fs error=%s",
+                            agent_id, agent_elapsed, result.error,
+                        )
 
                     if result.success and result.content:
                         resource_item = await usecases.save_worker_result(
@@ -869,6 +967,8 @@ async def run_multi_agent_generation(
             total_elapsed = time.perf_counter() - start_time
             logger.error("资源生成异常: resource_id=%s, 耗时=%.2fs", resource_id, total_elapsed, exc_info=True)
 
+        usecases._release_write_lock(resource_id)
+
         if not success:
             await usecases.update_resource_status(resource_id, "failed")
             if not done_emitted:
@@ -975,6 +1075,8 @@ async def run_single_agent_generation(
         # ==========================================
         # 善后阶段: 标记总状态并更新路径节点（如果是路径任务）
         # ==========================================
+        usecases._release_write_lock(resource_id)
+
         if not success:
             await usecases.update_resource_status(resource_id, "failed")
         else:

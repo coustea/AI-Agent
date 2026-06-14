@@ -37,6 +37,16 @@ from app.chat.memory.types import (
     has_stable_signal,
     now,
 )
+from app.config import (
+    COMPRESS_MIN_MESSAGES,
+    COMPRESS_MIN_TOKENS,
+    LTM_MIN_CONFIDENCE,
+    LTM_MIN_MESSAGES,
+    LTM_MIN_TOKENS,
+    LTM_COOLDOWN_MINUTES,
+    RECENT_RAW_MESSAGES,
+    SUMMARY_CONTEXT_BLOCKS,
+)
 from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
@@ -56,25 +66,8 @@ from app.infra.models import (
 logger = get_logger(__name__)
 
 # -----------------------------------------------------------------------
-# 常量定义
+# 常量 — 已迁移至 config.yaml，由 app.config 导入
 # -----------------------------------------------------------------------
-
-# 压缩保留的最近原始消息数（压缩后仍保留这 8 条不被摘要化）
-RECENT_RAW_MESSAGES = 8
-# 触发压缩的最小消息数（消息数 ≥ 14 时才考虑压缩）
-COMPRESS_MIN_MESSAGES = 14
-# 触发压缩的最小 token 数（token ≥ 3500 时才考虑压缩）
-COMPRESS_MIN_TOKENS = 3500
-# 注入 system prompt 的最大摘要块数
-SUMMARY_CONTEXT_BLOCKS = 3
-# 长期记忆更新的新增消息阈值
-LTM_MIN_MESSAGES = 12
-# 长期记忆更新的新增 token 阈值
-LTM_MIN_TOKENS = 3500
-# 长期记忆更新的最低置信度阈值
-LTM_MIN_CONFIDENCE = 0.75
-# 长期记忆更新的冷却期（分钟），防止频繁写入
-LTM_UPDATE_COOLDOWN_MINUTES = 30
 
 
 # -----------------------------------------------------------------------
@@ -235,7 +228,7 @@ class ChatMemoryService:
             module=module,
             periodic_turns=LTM_MIN_MESSAGES,
             min_confidence=LTM_MIN_CONFIDENCE,
-            cooldown_minutes=LTM_UPDATE_COOLDOWN_MINUTES,
+            cooldown_minutes=LTM_COOLDOWN_MINUTES,
         )
         # transcript 持久化适配器，负责事件追加和终态落盘
         self.persistence = ChatPersistenceAdapter()
@@ -325,6 +318,34 @@ class ChatMemoryService:
             db.add(chat_session)
             await db.commit()
             return True
+
+    async def generate_session_title(self, *, user_id: int, session_id: str, first_message: str) -> bool:
+        """根据首条用户消息生成会话标题，失败时退回到截断后的用户输入。"""
+        fallback = self._clean_session_title(first_message) or DEFAULT_SESSION_TITLE
+        title = fallback
+        try:
+            resp = await self.llm.ainvoke(
+                [
+                    SystemMessage(content="你是会话标题生成器。只输出一个简短中文标题，不要标点、引号或解释。"),
+                    HumanMessage(content=f"为这段学习辅导对话生成标题，最多12个中文字符：\n{first_message}"),
+                ],
+                temperature=0.2,
+                max_tokens=32,
+            )
+            raw_title = str(getattr(resp, "content", resp) or "")
+            title = self._clean_session_title(raw_title) or fallback
+        except Exception as exc:
+            logger.warning("[ChatMemoryService] generate title failed: user_id=%s session_id=%s err=%s", user_id, session_id, exc)
+        return await self.update_session_title(user_id=user_id, session_id=session_id, title=title)
+
+    @staticmethod
+    def _clean_session_title(value: str) -> str:
+        title = re.sub(r"[\r\n\t]+", " ", value or "").strip()
+        title = title.strip("`'\"“”‘’《》[]（）()，。！？!?：:；;、 ")
+        title = re.sub(r"\s+", " ", title)
+        if len(title) > TITLE_MAX_LENGTH:
+            title = title[:TITLE_MAX_LENGTH]
+        return title
 
     # -------------------------------------------------------------------
     # save_message: 持久化单条聊天消息及其附件分析结果
@@ -1269,7 +1290,7 @@ class ChatMemoryService:
                 last_updated = chat_session.last_ltm_updated_at
                 cooldown_ok = (
                     last_updated is None
-                    or (now() - last_updated).total_seconds() >= LTM_UPDATE_COOLDOWN_MINUTES * 60
+                    or (now() - last_updated).total_seconds() >= LTM_COOLDOWN_MINUTES * 60
                 )
                 has_new_messages = message_count > 0
                 return (signal_detected or threshold_due) and cooldown_ok and has_new_messages, {

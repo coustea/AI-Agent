@@ -6,10 +6,14 @@ import json
 
 from pydantic import BaseModel, Field
 
+from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
 from app.resource.schemas import WorkerResult, WorkerState
+
+logger = get_logger(__name__)
 
 
 class QuizOption(BaseModel):
@@ -21,7 +25,7 @@ class QuizQuestion(BaseModel):
     id: int = Field(description="题目编号")
     type: str = Field(default="single_choice", description="题目类型")
     question: str = Field(description="题目内容")
-    options: list[QuizOption] = Field(default_factory=list, description="选项列表")
+    options: list[QuizOption] = Field(min_length=2, description="选项列表，至少2个选项")
     answer: str | bool | list[str] = Field(description="正确答案")
     explanation: str = Field(default="", description="解析说明")
     difficulty: str = Field(default="medium", description="难度")
@@ -65,10 +69,11 @@ class QuizAgent(BaseResourceAgent):
                 progress=25,
             )
 
+        logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
         result = await self.llm.ainvoke_json(
             QuizPayload,
             full_prompt,
-            temperature=0.3,
+            temperature=INFERENCE_TEMPERATURE,
             function_name="generate_quiz",
             function_description="生成习题集",
         )
@@ -84,6 +89,7 @@ class QuizAgent(BaseResourceAgent):
         content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
 
         questions = quiz_data.get("questions", [])
+        logger.info("Agent[quiz] 步骤: 习题解析完成, questions=%d", len(questions))
         difficulty_dist: dict[str, int] = {}
         for q in questions:
             d = q.get("difficulty", "medium")

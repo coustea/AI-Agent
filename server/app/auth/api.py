@@ -14,41 +14,41 @@ from app.infra.models import User
 from app.config import AVATAR_DIR
 from app.infra.response import HttpResponse
 
-router = APIRouter()
-bearer_scheme = HTTPBearer()
+router = APIRouter()  # 认证模块路由，挂载在 /api/v1/users 下
+bearer_scheme = HTTPBearer()  # Bearer Token 认证方案，自动从 Authorization 头提取
 
 
-@router.post("")
+@router.post("")  # POST /api/v1/users — 用户注册
 async def create_user(
     data: UserRegister,
     session: AsyncSession = Depends(get_session),
 ):
-    result = await auth_usecases.register(session, data)
+    result = await auth_usecases.register(session, data)  # 调用注册用例
     if not result:
-        return HttpResponse.error(code=400, message="用户名已存在")
-    return HttpResponse.success(data=result, status_code=201)
+        return HttpResponse.error(code=400, message="用户名已存在")  # 用户名重复
+    return HttpResponse.success(data=result, status_code=201)  # 201 Created
 
 
-@router.post("/auth")
+@router.post("/auth")  # POST /api/v1/users/auth — 用户登录
 async def login(
     data: UserLogin,
     session: AsyncSession = Depends(get_session),
 ):
-    result = await auth_usecases.login(session, data)
+    result = await auth_usecases.login(session, data)  # 验证用户名密码并签发 JWT
     if not result:
-        return HttpResponse.error(code=401, message="用户名或密码错误")
-    return HttpResponse.success(data=result)
+        return HttpResponse.error(code=401, message="用户名或密码错误")  # 认证失败
+    return HttpResponse.success(data=result)  # 返回 {token, user}
 
 
-@router.post("/auth/logout")
+@router.post("/auth/logout")  # POST /api/v1/users/auth/logout — 用户登出
 async def logout(
     background_tasks: BackgroundTasks,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    await auth_usecases.logout(session, credentials.credentials)
-    background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)
+    await auth_usecases.logout(session, credentials.credentials)  # 从白名单移除 Token，使其失效
+    background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)  # 后台异步更新用户画像
     return HttpResponse.success(message="退出登录成功")
 
 

@@ -5,7 +5,7 @@
         <div class="brand-logo">
           <el-icon><Monitor /></el-icon>
         </div>
-        <span class="brand-name">学枢平台</span>
+        <span class="brand-name">学枢智导</span>
       </div>
 
       <div class="navbar-center">
@@ -69,7 +69,7 @@
     <main class="page-content">
       <router-view v-slot="{ Component }">
         <transition name="fade-slide" mode="out-in">
-          <keep-alive include="ResourceGenerator,Tutor">
+          <keep-alive include="ResourceGenerator,Tutor,LearningPathOverview">
             <component :is="Component" :key="route.path" />
           </keep-alive>
         </transition>
@@ -89,7 +89,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Menu, Connection, Cpu, ChatDotRound,
   SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
-  User, DataBoard, Collection, Close
+  User, DataBoard, Collection
 } from '@element-plus/icons-vue'
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
@@ -109,7 +109,6 @@ const navItems = [
   { path: '/path-planner', label: '路径规划', icon: Connection, theme: 'nav-theme-path' },
   { path: '/tutor', label: '智能辅导', icon: ChatDotRound, theme: 'nav-theme-tutor' },
   { path: '/question-bank', label: '学习题库', icon: Collection, theme: 'nav-theme-eval' },
-  { path: '/wrong-questions', label: '错题本', icon: Close, theme: 'nav-theme-eval' },
 ]
 
 useAuthPolling(60000)
@@ -307,11 +306,11 @@ const handleCommand = async (command: string) => {
 }
 
 .brand-name {
-  font-size: 1.25rem;
+  font-size: var(--text-lg);
   font-weight: var(--weight-bold);
-  color: var(--color-text);
-  letter-spacing: -0.02em;
-  transition: all var(--transition-base);
+  color: var(--color-text-strong);
+  letter-spacing: -0.03em;
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .navbar-center {
@@ -333,13 +332,15 @@ const handleCommand = async (command: string) => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2\.5) var(--space-4);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  min-height: 40px;
 }
 
 .nav-item:hover {

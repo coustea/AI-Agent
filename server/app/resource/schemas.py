@@ -264,16 +264,6 @@ class GeneratedResourceItem(BaseModel):
     updated_at: str | None = None
 
 
-class StudyPathStep(BaseModel):
-    """Review Agent 生成的个性化学习路径步骤。"""
-    order: int
-    resource_type: str
-    title: str
-    reason: str = Field(default="", description="为什么在这个位置学习该资源")
-    estimated_time: int | None = Field(default=None, description="预估学习时间(分钟)")
-    focus_points: list[str] = Field(default_factory=list, description="学习时应重点关注的知识点")
-
-
 class ReviewResult(BaseModel):
     """Review Agent 的审查结果。"""
     passed: bool = True
@@ -283,7 +273,6 @@ class ReviewResult(BaseModel):
     issues: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     failed_agents: list[str] = Field(default_factory=list)
-    study_path: list[StudyPathStep] = Field(default_factory=list)
 
 
 class ResourceBundle(BaseModel):
@@ -295,7 +284,6 @@ class ResourceBundle(BaseModel):
     learning_need: str
     selected_agents: list[str] = Field(default_factory=list)
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
-    study_path: list[StudyPathStep] = Field(default_factory=list)
     review_result: ReviewResult | None = None
     status: str = "completed"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -339,7 +327,6 @@ __all__ = [
     "WorkerState",
     "WorkerResult",
     "GeneratedResourceItem",
-    "StudyPathStep",
     "ReviewResult",
     "ResourceBundle",
     # Response models

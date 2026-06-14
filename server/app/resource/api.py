@@ -145,12 +145,14 @@ async def stream_resource_events(
     EventSource (GET) 无法设置 Authorization header，
     因此通过 query parameter 传递 JWT 进行鉴权。
     """
-    if token:
-        from app.auth.security import decode_token
-        try:
-            decode_token(token)
-        except Exception:
-            return HttpResponse.error(code=401, message="认证失败")
+    if not token:
+        return HttpResponse.error(code=401, message="缺少认证 token")
+
+    from app.auth.security import decode_token
+    try:
+        decode_token(token)
+    except Exception:
+        return HttpResponse.error(code=401, message="认证失败")
 
     async def event_stream():
         queue = resource_event_bus.subscribe(resource_id)

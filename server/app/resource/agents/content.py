@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
 from app.resource.schemas import WorkerResult, WorkerState
+
+logger = get_logger(__name__)
 
 
 @register_agent
@@ -38,8 +42,9 @@ class ContentAgent(BaseResourceAgent):
                 progress=25,
             )
 
+        logger.info("Agent[content] 步骤: 调用 LLM 生成课程内容, input_len=%d", len(input_text))
         prompt = prompts.get("resource").get("content")
-        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
+        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
 
         if self.emitter:
             await self.emitter.emit_agent(
@@ -50,6 +55,7 @@ class ContentAgent(BaseResourceAgent):
 
         content = response.content if hasattr(response, "content") else str(response)
         content = _clean_markdown_fences(content)
+        logger.info("Agent[content] 步骤: 内容清洗完成, output_len=%d", len(content))
 
         return WorkerResult(
             success=True,

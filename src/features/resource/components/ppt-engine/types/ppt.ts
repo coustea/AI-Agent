@@ -1,95 +1,157 @@
-// 1. 定义支持的主题和布局枚举
-export type ThemeType = 'theme-logic-blue' | 'theme-dev-green' | 'theme-tech-indigo';
-export type LayoutType = 'cover' | 'agenda' | 'bullet_points' | 'grid_cards' | 'comparison';
+export type ThemeType = 'theme-logic-blue' | 'theme-mac-light' | 'theme-notion-light'
+export type LayoutType =
+  | 'cover'
+  | 'agenda'
+  | 'layer_stack'
+  | 'theory_proof'
+  | 'process_flow'
+  | 'tech_dashboard'
+  | 'mixed_two_column'
 
-// 2. 全局配置项
-export interface PPTConfig {
-  template_id: ThemeType;
-  topic: string;
-  author?: string;
-  date?: string;
+export interface SlideMetadata {
+  speaker_notes?: string
+  transition?: 'fade' | 'slide' | 'zoom' | 'none'
+  background_override?: string
 }
 
-// 3. 通用页面元数据 (比如演讲者备注、自定义切换效果)
-interface SlideMetadata {
-  speaker_notes?: string;
-  transition?: 'fade' | 'slide' | 'zoom' | 'none';
-  background_override?: string; // 允许特殊页面自定义背景色
-}
-
-// 4. 针对不同布局，定义专属的 Data 结构
 export interface CoverData {
-  main_title: string;
-  sub_title?: string;
-  lecturer?: string;
+  main_title: string
+  sub_title?: string
+  lecturer?: string
+  date?: string
 }
 
 export interface AgendaData {
-  list: string[];
+  list: string[]
 }
 
-export interface BulletPointsData {
-  title: string;
-  points: string[];
+export interface LayerItem {
+  level_name: string
+  description: string
+  protocols?: string[]
+  components?: string[]
 }
 
-export interface GridCardsData {
-  title: string;
-  cards: Array<{
-    title: string;
-    desc: string;
-  }>;
+export interface LayerStackData {
+  title: string
+  layers: LayerItem[]
 }
 
-export interface ComparisonData {
-  title: string;
-  left_label: string;
-  left_content: string[];
-  right_label: string;
-  right_content: string[];
+export interface TheoryProofStep {
+  step_title: string
+  detail: string
 }
 
-// 5. 定义具体的 Slide 类型 (将 LayoutType 作为“辨识字段”)
-interface SlideCover {
-  layout: 'cover';
-  metadata?: SlideMetadata;
-  data: CoverData;
+export interface TheoryProofData {
+  theorem_name: string
+  formula_latex: string
+  constraints: string[]
+  proof_steps: TheoryProofStep[]
 }
 
-interface SlideAgenda {
-  layout: 'agenda';
-  metadata?: SlideMetadata;
-  data: AgendaData;
+export interface ProcessFlowStep {
+  time_seq: string
+  from: string
+  to: string
+  action: string
+  internal_state: string
 }
 
-interface SlideBulletPoints {
-  layout: 'bullet_points';
-  metadata?: SlideMetadata;
-  data: BulletPointsData;
+export interface ProcessFlowData {
+  flow_title: string
+  swimlanes: string[]
+  timeline_steps: ProcessFlowStep[]
 }
 
-interface SlideGridCards {
-  layout: 'grid_cards';
-  metadata?: SlideMetadata;
-  data: GridCardsData;
+export interface TechDashboardMetric {
+  label: string
+  value: string
+  unit?: string
 }
 
-interface SlideComparison {
-  layout: 'comparison';
-  metadata?: SlideMetadata;
-  data: ComparisonData;
+export interface TechDashboardData {
+  title: string
+  code_snippet: { language: string; code: string }
+  terminal_output: string
+  stat_metrics: TechDashboardMetric[]
+  summary_points: string[]
 }
 
-// 6. 将所有 Slide 组合成一个联合类型
-type PPTSlide = 
-  | SlideCover 
-  | SlideAgenda 
-  | SlideBulletPoints 
-  | SlideGridCards 
-  | SlideComparison;
+export interface ArchitectureNode {
+  id: string
+  label: string
+  type: string
+}
 
-// 7. 最终的根节点结构
+export interface ComparisonTableData {
+  dimensions: string[]
+  left_features: string[]
+  right_features: string[]
+}
+
+export interface MixedTwoColumnData {
+  title: string
+  architecture_nodes?: ArchitectureNode[]
+  comparison_table?: ComparisonTableData
+  deep_dive_text: string
+  inline_code: string
+}
+
+export interface CoverSlide {
+  layout: 'cover'
+  metadata?: SlideMetadata
+  data: CoverData
+}
+
+export interface AgendaSlide {
+  layout: 'agenda'
+  metadata?: SlideMetadata
+  data: AgendaData
+}
+
+export interface LayerStackSlide {
+  layout: 'layer_stack'
+  metadata?: SlideMetadata
+  data: LayerStackData
+}
+
+export interface TheoryProofSlide {
+  layout: 'theory_proof'
+  metadata?: SlideMetadata
+  data: TheoryProofData
+}
+
+export interface ProcessFlowSlide {
+  layout: 'process_flow'
+  metadata?: SlideMetadata
+  data: ProcessFlowData
+}
+
+export interface TechDashboardSlide {
+  layout: 'tech_dashboard'
+  metadata?: SlideMetadata
+  data: TechDashboardData
+}
+
+export interface MixedTwoColumnSlide {
+  layout: 'mixed_two_column'
+  metadata?: SlideMetadata
+  data: MixedTwoColumnData
+}
+
+export type PPTSlide =
+  | CoverSlide
+  | AgendaSlide
+  | LayerStackSlide
+  | TheoryProofSlide
+  | ProcessFlowSlide
+  | TechDashboardSlide
+  | MixedTwoColumnSlide
+
 export interface PPTDocument {
-  config: PPTConfig;
-  slides: PPTSlide[];
+  template_id: ThemeType
+  topic: string
+  author?: string
+  date?: string
+  slides: PPTSlide[]
 }

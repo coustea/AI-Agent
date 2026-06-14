@@ -7,7 +7,6 @@ type ResourceStreamEventName = 'agent' | 'done'
   | 'agent.snapshot'
   | 'agent.step'
   | 'agent.heartbeat'
-  | 'agent.metric'
   | 'agent.artifact_ready'
 
 /** Agent 状态值 */
@@ -30,6 +29,11 @@ export interface ResourceStreamEvent {
   /** done 事件专用 */
   success?: boolean | null
   timestamp: number
+}
+
+export type ResourceAgentSnapshot = Partial<ResourceStreamEvent> & {
+  agent_id: string
+  progress?: number
 }
 
 export interface ResourceGenerationRequest {
@@ -83,5 +87,9 @@ export interface ResourceGenerationRequest {
 export interface ResourceTaskStatus {
   resource_id: number
   status: 'pending' | 'planning' | 'generating' | 'reviewing' | 'completed' | 'partial_completed' | 'failed'
+  selected_agents?: string[]
+  agent_snapshots?: Record<string, ResourceAgentSnapshot>
+  overall_progress?: number
+  current_message?: string
   resources?: any[]
 }

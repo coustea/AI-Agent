@@ -1134,8 +1134,16 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
       courses: profileForm.courses.filter(Boolean).map((c) => c.trim()),
       programming_languages: profileForm.programming_languages,
     }
-    const res = await updateProfileOnboarding(payload)
-    studentProfile.value = res.data?.data?.onboarding?.student_profile ?? studentProfile.value
+    await updateProfileOnboarding(payload)
+    studentProfile.value = {
+      ...studentProfile.value,
+      school: payload.school,
+      major: payload.major,
+      grade: payload.grade,
+      courses: payload.courses,
+      learning_goal: payload.global_learning_goal,
+      preferred_language: payload.programming_languages.join(', '),
+    }
     profileEditorVisible.value = false
     ElMessage.success('学习画像资料已更新')
     await loadProfileInfo()

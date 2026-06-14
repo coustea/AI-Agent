@@ -21,7 +21,7 @@ from wsgiref.handlers import format_date_time
 import websockets
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.config import SPARK_API_KEY, SPARK_API_SECRET, SPARK_APP_ID
+from app.config import SPARK_API_KEY, SPARK_API_SECRET, SPARK_APP_ID, VISION_TEMPERATURE
 from app.infra.llm import Llm, get_llm
 from app.infra.logging import get_logger
 from app.chat.utils.files import resolve_uploaded_image_path
@@ -221,7 +221,7 @@ class VisionService:
         # 调用 LLM 的 vision 能力（GLM-4V 或其他支持视觉的模型）
         response = await self.llm.vision(
             [HumanMessage(content=content_blocks)],
-            temperature=0.7,
+            temperature=VISION_TEMPERATURE,
         )
         return {
             "success": True,

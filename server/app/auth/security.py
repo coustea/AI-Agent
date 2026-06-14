@@ -27,11 +27,12 @@ class AuthError(Exception):
     """Authentication error that the global handler converts to HttpResponse envelope."""
 
     def __init__(self, message: str) -> None:
-        self.message = message
+        self.message = message  # 错误消息，会被全局异常处理器捕获并返回给前端
         super().__init__(message)
 
 
 def hash_password(password: str) -> str:
+    """使用 bcrypt 对密码进行哈希，自动加盐。"""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
@@ -52,15 +53,16 @@ def _is_expired(expires_at: datetime | None) -> bool:
 
 
 async def create_token(user_id: int, session: AsyncSession) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE)
-    payload = {"sub": str(user_id), "exp": expire, "jti": uuid4().hex}
+    """签发 JWT Token 并写入白名单表，支持登出失效。"""
+    expire = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE)  # 计算过期时间
+    payload = {"sub": str(user_id), "exp": expire, "jti": uuid4().hex}  # sub=用户ID, jti=唯一标识
     token = jwt.encode(
         payload,
-        JWT_SECRET or "dev-secret-change-in-production-long-enough",
+        JWT_SECRET or "dev-secret-change-in-production-long-enough",  # 开发环境兜底密钥
         algorithm=JWT_ALGO,
     )
-    session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))
-    await session.commit()
+    session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))  # 写入白名单
+    await session.commit()  # 持久化 Token 记录
     return token
 
 
@@ -81,11 +83,12 @@ def decode_token(token: str) -> int:
 
 
 async def is_token_valid(token: str, session: AsyncSession) -> bool:
-    active_token = (await session.exec(select(ActiveToken).where(ActiveToken.token == token))).first()
+    """检查 Token 是否在白名单中且未过期，过期则自动清理。"""
+    active_token = (await session.exec(select(ActiveToken).where(ActiveToken.token == token))).first()  # 查询白名单
     if not active_token:
-        return False
+        return False  # Token 不在白名单（已登出或从未签发）
     if _is_expired(active_token.expires_at):
-        await session.delete(active_token)
+        await session.delete(active_token)  # 清理过期记录
         await session.commit()
         return False
     return True

@@ -45,23 +45,23 @@
         
         <div class="stats-row">
           <div class="stat-box">
-            <label>总进度</label>
+            <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> 总进度</label>
             <strong class="text-primary">{{ path.overall_progress }}%</strong>
           </div>
           <div class="stat-box">
-            <label>预计耗时</label>
+            <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 预计耗时</label>
             <strong>{{ path.eta_days }} 天</strong>
           </div>
           <div class="stat-box">
-            <label>学习阶段</label>
+            <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg> 学习阶段</label>
             <strong>{{ path.stages.length }} 个</strong>
           </div>
           <div class="stat-box">
-            <label>知识节点</label>
+            <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> 知识节点</label>
             <strong>{{ path.nodes.length }} 个</strong>
           </div>
           <div class="stat-box">
-            <label>当前节点</label>
+            <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> 当前节点</label>
             <strong>{{ currentNode?.title || '等待开始' }}</strong>
           </div>
           <div class="stat-box progress-box">
@@ -121,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -184,9 +184,22 @@ const startSSE = (pathId: number) => {
   eventSource.addEventListener('path.done', handlePathEvent)
 }
 
-onUnmounted(() => {
+onDeactivated(() => {
+})
+
+onActivated(() => {
+  if (isGenerating.value && path.value) {
+    const currentId = path.value.id
+    if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
+      startSSE(currentId)
+    }
+  }
+})
+
+onBeforeUnmount(() => {
   if (eventSource) {
     eventSource.close()
+    eventSource = null
   }
 })
 
@@ -249,6 +262,19 @@ const handleNodeClick = (node: LearningPathNode) => {
   selectedNode.value = node
   drawerVisible.value = true
 }
+
+watch(
+  () => route.params.id,
+  () => {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
+    generatingMessages.value = []
+    isGenerating.value = false
+    loadPath()
+  }
+)
 
 onMounted(loadPath)
 </script>
@@ -459,6 +485,9 @@ onMounted(loadPath)
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .stat-box strong {
@@ -484,6 +513,7 @@ onMounted(loadPath)
   background: var(--color-bg);
   border-radius: 999px;
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .progress-track i {
@@ -491,7 +521,25 @@ onMounted(loadPath)
   height: 100%;
   background: var(--gradient-path);
   border-radius: 999px;
-  transition: width 1s ease-out;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-track i::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-100%);
+  animation: shimmer 2.5s infinite;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
 }
 
 .dashboard-banner {

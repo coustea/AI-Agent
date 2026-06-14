@@ -2,18 +2,14 @@ export interface TextMessageParams {
   text: string
   need_diagram?: boolean
   session_id?: string
-  history?: Array<{ role: string; content: string }>
   attachments?: string[]
   enable_search?: boolean
-  generate_video?: boolean
   speech_rate?: number
 }
 
 export interface DigitalHumanCapabilities {
   session_id?: string
-  history?: Array<{ role: string; content: string }>
   enable_search?: boolean
-  generate_video?: boolean
 }
 
 export interface StreamExtend {

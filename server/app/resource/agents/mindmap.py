@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
 from app.resource.schemas import WorkerResult, WorkerState
+
+logger = get_logger(__name__)
 
 
 @register_agent
@@ -39,8 +43,9 @@ class MindmapAgent(BaseResourceAgent):
                 progress=25,
             )
 
+        logger.info("Agent[mindmap] 步骤: 调用 LLM 生成知识导图, input_len=%d", len(input_text))
         prompt = prompts.get("resource").get("mindmap")
-        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=0.3)
+        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
 
         if self.emitter:
             await self.emitter.emit_agent(
@@ -62,6 +67,8 @@ class MindmapAgent(BaseResourceAgent):
                 item = stripped[2:].strip()
                 if any(token in item for token in ("易错", "误区", "难点", "薄弱")):
                     weak_points.append(item)
+
+        logger.info("Agent[mindmap] 步骤: 导图解析完成, output_len=%d branches=%d weak=%d", len(content), len(branches), len(weak_points))
 
         return WorkerResult(
             success=True,

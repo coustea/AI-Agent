@@ -25,8 +25,8 @@ from app.infra.models import LearningEvent, LearningSession
 
 logger = get_logger(__name__)
 
-SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
-STREAK_MIN_SECONDS = 300
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")  # 前端时区：上海（UTC+8）
+STREAK_MIN_SECONDS = 300  # 连续学习天数判定阈值：每天至少 5 分钟
 
 
 @dataclass(frozen=True)
@@ -40,12 +40,12 @@ class MemoryUpdateSignal:
 
 
 def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal]:
-    """Extract profile update signals from learning events."""
+    """从学习事件中提取画像更新信号（薄弱点、资源偏好等）。"""
     topic = event.topic or event.course or "当前主题"
     signals: list[MemoryUpdateSignal] = []
 
     if event.event_type == "quiz_submitted" and event.score is not None and event.score < 65:
-        signals.append(
+        signals.append(  # 测验低分 → 标记为薄弱知识点
             MemoryUpdateSignal(
                 content=f"在「{topic}」练习中得分偏低（{event.score:.0f}分），需要加强针对性巩固。",
                 signal_type="quiz_result",
@@ -59,7 +59,7 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
     feedback = (event.feedback or "").strip()
     if event.event_type in {"path_feedback", "resource_feedback"} and feedback:
         if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
-            signals.append(
+            signals.append(  # 用户反馈太难/不懂 → 标记薄弱点
                 MemoryUpdateSignal(
                     content=f"学习「{topic}」时用户反馈：{feedback}",
                     signal_type="self_report_weakness",
@@ -70,7 +70,7 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
                 )
             )
         if any(keyword in feedback for keyword in ("喜欢", "希望", "更想", "图解", "案例", "代码", "视频")):
-            signals.append(
+            signals.append(  # 用户反馈喜欢某类资源 → 标记偏好
                 MemoryUpdateSignal(
                     content=f"学习资源偏好反馈：{feedback}",
                     signal_type="preference",
@@ -81,11 +81,11 @@ def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal
                 )
             )
 
-    return signals[:2]
+    return signals[:2]  # 每次事件最多提取 2 个信号，避免画像过度更新
 
 
 def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> dict[str, Any] | None:
-    """Convert a learning event into the tutoring-profile update payload."""
+    """将学习事件转换为画像增量更新载荷。"""
     if isinstance(event, LearningEvent):
         event_data = LearningEventCreate(
             event_type=event.event_type,  # type: ignore[arg-type]
@@ -152,7 +152,7 @@ def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> 
 
 
 async def bg_apply_profile_update_from_learning_event(user_id: int, event_payload: dict[str, Any]) -> None:
-    """Apply learning signals to the dynamic learner profile."""
+    """后台异步：将学习信号应用到动态学习者画像。"""
     update_payload = build_profile_update_payload(LearningEventCreate(**event_payload))
     if update_payload is None:
         return
@@ -169,13 +169,14 @@ async def bg_apply_profile_update_from_learning_event(user_id: int, event_payloa
 
 
 def build_summary_from_events(events: list[LearningEvent], active_minutes: int = 0) -> EvaluationSummaryResponse:
-    score_values = [event.score for event in events if event.score is not None]
-    average_score = round(sum(score_values) / len(score_values), 1) if score_values else None
-    completed_resources = sum(1 for event in events if event.event_type == "resource_completed")
-    viewed_resources = sum(1 for event in events if event.event_type == "resource_viewed")
+    """从学习事件列表构建评估摘要（平均分、薄弱点、推荐等）。"""
+    score_values = [event.score for event in events if event.score is not None]  # 提取所有有分数的事件
+    average_score = round(sum(score_values) / len(score_values), 1) if score_values else None  # 计算平均分
+    completed_resources = sum(1 for event in events if event.event_type == "resource_completed")  # 已完成资源数
+    viewed_resources = sum(1 for event in events if event.event_type == "resource_viewed")  # 已浏览资源数
 
-    weak_counter: Counter[str] = Counter()
-    preferred_counter: Counter[str] = Counter()
+    weak_counter: Counter[str] = Counter()  # 薄弱知识点计数器
+    preferred_counter: Counter[str] = Counter()  # 资源偏好计数器
     for event in events:
         topic = event.topic or event.course
         if event.event_type == "quiz_submitted" and event.score is not None and event.score < 65 and topic:
@@ -193,17 +194,17 @@ def build_summary_from_events(events: list[LearningEvent], active_minutes: int =
             if keyword in feedback:
                 preferred_counter[label] += 1
 
-    recommendations: list[str] = []
+    recommendations: list[str] = []  # 优化建议列表
     if average_score is not None and average_score < 70:
-        recommendations.append("优先安排错题复盘和基础讲解资源，降低后续学习坡度。")
+        recommendations.append("优先安排错题复盘和基础讲解资源，降低后续学习坡度。")  # 低分建议
     if weak_counter:
-        recommendations.append(f"下一轮资源生成应重点覆盖「{weak_counter.most_common(1)[0][0]}」。")
+        recommendations.append(f"下一轮资源生成应重点覆盖「{weak_counter.most_common(1)[0][0]}」。")  # 薄弱点建议
     if preferred_counter:
-        recommendations.append(f"资源推送可提高「{preferred_counter.most_common(1)[0][0]}」占比。")
+        recommendations.append(f"资源推送可提高「{preferred_counter.most_common(1)[0][0]}」占比。")  # 偏好建议
     if not recommendations:
-        recommendations.append("继续按当前路径推进，并通过阶段测验积累更多评估信号。")
+        recommendations.append("继续按当前路径推进，并通过阶段测验积累更多评估信号。")  # 默认建议
 
-    metrics = [
+    metrics = [  # 构建评估指标卡片列表
         EvaluationMetric(label="平均测验分", value="暂无" if average_score is None else f"{average_score:.1f}"),
         EvaluationMetric(label="完成资源", value=str(completed_resources)),
         EvaluationMetric(label="活跃学习", value=f"{active_minutes} 分钟"),
@@ -224,6 +225,8 @@ def build_summary_from_events(events: list[LearningEvent], active_minutes: int =
 
 
 class EvaluationService:
+    """评估服务 — 学习事件记录、会话记录、摘要生成。"""
+
     async def record_event(
         self,
         session: AsyncSession,
@@ -231,7 +234,8 @@ class EvaluationService:
         user_id: int,
         payload: LearningEventCreate,
     ) -> LearningEvent:
-        event = LearningEvent(
+        """记录一条学习事件（资源浏览/完成/测验提交/反馈等）。"""
+        event = LearningEvent(  # 构建学习事件模型
             user_id=user_id,
             session_id=payload.session_id,
             resource_id=payload.resource_id,
@@ -264,8 +268,9 @@ class EvaluationService:
         user_id: int,
         payload: LearningSessionCreate,
     ) -> LearningSession:
-        started_at = _parse_iso_datetime(payload.started_at)
-        ended_at = _parse_iso_datetime(payload.ended_at)
+        """记录一次学习会话（前端离开页面时上报实际活跃时长）。"""
+        started_at = _parse_iso_datetime(payload.started_at)  # 解析开始时间
+        ended_at = _parse_iso_datetime(payload.ended_at)  # 解析结束时间
         learning_session = LearningSession(
             user_id=user_id,
             source_page=payload.source_page,
@@ -324,12 +329,13 @@ class EvaluationService:
         user_id: int,
         days: int = 30,
     ) -> LearningTimeStatsResponse:
-        window_days = max(1, min(days, 90))
-        now_local = datetime.now(SHANGHAI_TZ)
-        bounds = _get_time_boundaries(now_local)
-        query_start_utc = min(bounds["month_start_utc"], _local_day_start(now_local.date() - timedelta(days=window_days - 1)))
+        """获取学习时长统计 — 今日/本周/本月/连续天数/每日分布/小时分布。"""
+        window_days = max(1, min(days, 90))  # 限制查询窗口在 1-90 天
+        now_local = datetime.now(SHANGHAI_TZ)  # 当前上海时间
+        bounds = _get_time_boundaries(now_local)  # 计算今日/本周/本月的起止时间
+        query_start_utc = min(bounds["month_start_utc"], _local_day_start(now_local.date() - timedelta(days=window_days - 1)))  # 查询起始时间（取月份起点和窗口起点的较早者）
 
-        stmt = (
+        stmt = (  # 查询指定窗口内的学习会话
             select(LearningSession)
             .where(LearningSession.user_id == user_id)
             .where(LearningSession.started_at >= query_start_utc)
@@ -453,16 +459,17 @@ def _build_hourly_distribution(hourly_map: dict[int, int]) -> list[HourlyDistrib
 
 
 def _compute_streak_days(sessions: list[LearningSession], today_local: date) -> int:
-    daily_totals: dict[date, int] = defaultdict(int)
+    """计算连续学习天数 — 从今天向前回溯，每天至少 STREAK_MIN_SECONDS 秒。"""
+    daily_totals: dict[date, int] = defaultdict(int)  # 按日期汇总学习时长
     for sess in sessions:
         duration = sess.duration_seconds or 0
         if duration <= 0:
             continue
-        daily_totals[_to_local(sess.started_at).date()] += duration
+        daily_totals[_to_local(sess.started_at).date()] += duration  # 转换为上海时区后按日汇总
 
-    streak = 0
-    cursor = today_local
-    while daily_totals.get(cursor, 0) >= STREAK_MIN_SECONDS:
+    streak = 0  # 连续天数计数器
+    cursor = today_local  # 从今天开始向前回溯
+    while daily_totals.get(cursor, 0) >= STREAK_MIN_SECONDS:  # 当天学习时长 >= 5 分钟
         streak += 1
         cursor -= timedelta(days=1)
     return streak

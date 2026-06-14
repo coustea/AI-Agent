@@ -12,10 +12,10 @@ from app.infra.response import HttpResponse
 from app.quiz.schemas import QuizReviewRequest, QuizReviewResponse
 from app.quiz.service import quiz_review_service
 
-router = APIRouter()
+router = APIRouter()  # 题库模块路由，挂载在 /api/v1/ai/quiz-bank/ 下
 
 
-@router.get("/quiz-bank/questions")
+@router.get("/quiz-bank/questions")  # GET 题库题目列表查询，支持筛选和分页
 async def list_quiz_questions(
     query: str | None = Query(default=None, max_length=200),
     subject: str | None = Query(default=None),
@@ -103,7 +103,7 @@ async def list_quiz_questions(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/quiz-review")
+@router.post("/quiz-review")  # POST AI 审查主观题答案（填空题、简答题）
 async def review_quiz_answer(
     request: QuizReviewRequest,
 ) -> QuizReviewResponse:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from app.infra.models import PathNode, PathNodeTutorial, PathNodeQuestion, PathNodeResource
@@ -54,15 +54,15 @@ ALLOWED_RESOURCE_TYPES: tuple[str, ...] = (
 
 
 class NodeResourcePolicy(BaseModel):
-    """资源推送策略 — 每个路径节点推荐生成哪些资源。"""
+    """资源推送策略 — 只描述进入深入学习后建议生成哪些资源，不在规划阶段直接生成资源。"""
 
-    primary_resource_type: str = Field(description="主要资源类型，如 'content'")
-    required_resource_types: list[str] = Field(description="必须生成的资源类型列表")
-    optional_resource_types: list[str] = Field(default_factory=list, description="可选增强资源类型列表")
+    primary_resource_type: str = Field(description="进入深入学习后优先推荐生成的资源类型，如 'content'")
+    required_resource_types: list[str] = Field(description="进入深入学习后建议优先提供的资源类型列表")
+    optional_resource_types: list[str] = Field(default_factory=list, description="用户需要时再生成的可选增强资源类型列表")
     assessment_type: str = Field(default="quiz", description="掌握度评估方式: 'quiz', 'code', 'none'")
-    generation_focus: list[str] = Field(default_factory=list, description="资源生成内容重点提示")
-    personalization_reason: str = Field(description="为什么此策略适合该学习者")
-    expected_resource_count: int = Field(default=2, ge=1, le=6, description="预期生成资源数量")
+    generation_focus: list[str] = Field(default_factory=list, description="后续资源生成时使用的内容重点提示")
+    personalization_reason: str = Field(description="为什么此推荐策略适合该学习者")
+    expected_resource_count: int = Field(default=2, ge=1, le=6, description="进入深入学习后预计可生成的资源数量")
 
 
 class LearningSignalSnapshot(BaseModel):
@@ -215,6 +215,8 @@ class LearningPathOverviewResponse(BaseModel):
     adjustment_rationale: list[str] = Field(default_factory=list)
     stages: list[dict[str, Any]] = Field(default_factory=list)
     nodes: list[LearningPathNodeDTO] = Field(default_factory=list)
+    capstone_project: CapstoneProject | None = None
+    pre_check_knowledge: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
 
@@ -269,11 +271,17 @@ class PathQuizSubmitResponse(BaseModel):
 
 class AgentQuestionItem(BaseModel):
     question: str = Field(description="题干")
-    choice: dict[str, str] = Field(default_factory=dict, description="选项映射，如 {'A': 'xxx'}")
+    choice: dict[str, str] = Field(description="选项映射，如 {'A': '选项内容', 'B': '选项内容'}，至少2个选项")
     answer: str = Field(description="正确答案，如 A")
     analysis: str = Field(default="", description="题目解析")
     knowledge_points: list[str] = Field(default_factory=list, description="涉及知识点")
     type: str = Field(default="single_choice", description="题型")
+
+    @model_validator(mode="after")
+    def validate_choice(self) -> "AgentQuestionItem":
+        if len(self.choice) < 2:
+            raise ValueError(f"choice 必须至少包含2个选项，当前只有 {len(self.choice)} 个")
+        return self
 
 
 class AgentQuestionSet(BaseModel):
@@ -303,6 +311,13 @@ class AgentStage(BaseModel):
     description: str = Field(description="阶段描述")
 
 
+class CapstoneProject(BaseModel):
+    """终极实战项目描述。"""
+
+    title: str = Field(description="实战项目名称")
+    description: str = Field(description="实战项目详细描述与要求")
+
+
 class AgentLearningPathPlan(BaseModel):
     """规划 Agent 的结构化输出。"""
 
@@ -310,9 +325,11 @@ class AgentLearningPathPlan(BaseModel):
     eta_days: int = Field(default=14, description="预估学习天数")
     confidence: int = Field(default=60, ge=0, le=100, description="规划置信度百分比")
     strategy_report: str = Field(default="", description="个性化诊断与裁剪策略报告")
+    capstone_project: CapstoneProject | None = Field(default=None, description="终极实战项目描述")
+    pre_check_knowledge: list[str] = Field(default_factory=list, description="学习此路径的前置自测/必备基础知识点")
     adjustment_rationale: list[str] = Field(default_factory=list, description="调整理由列表")
-    stages: list[AgentStage] = Field(default_factory=list, description="宏观阶段骨架列表")
-    nodes: list[AgentPathNode] = Field(default_factory=list, description="所有阶段的具体学习节点列表")
+    stages: list[AgentStage] = Field(min_length=1, description="宏观阶段骨架列表，至少1个阶段")
+    nodes: list[AgentPathNode] = Field(min_length=1, description="所有阶段的具体学习节点列表，至少1个节点")
 
     @field_validator("confidence", mode="before")
     @classmethod

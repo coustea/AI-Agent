@@ -12,10 +12,10 @@ from app.chat.service import get_avatar_chat_usecases, get_chat_usecases
 from app.infra.models import User
 from app.infra.response import HttpResponse
 
-router = APIRouter()
+router = APIRouter()  # 数字人模块路由，挂载在 /api/v1/ai/avatar/ 下
 
 
-@router.get("/avatar/status")
+@router.get("/avatar/status")  # GET 数字人连接状态
 async def get_avatar_status(
     user: User = Depends(get_current_user),
 ):
@@ -25,7 +25,7 @@ async def get_avatar_status(
     return HttpResponse.success(data=status)
 
 
-@router.get("/avatar/stream")
+@router.get("/avatar/stream")  # GET 获取数字人视频流信息
 async def get_avatar_stream(
     user: User = Depends(get_current_user),
 ):
@@ -37,7 +37,7 @@ async def get_avatar_stream(
     return HttpResponse.success(data=stream_info)
 
 
-@router.post("/avatar/stop")
+@router.post("/avatar/stop")  # POST 停止数字人说话
 async def stop_avatar(
     user: User = Depends(get_current_user),
 ):
@@ -47,7 +47,7 @@ async def stop_avatar(
     return HttpResponse.success(data={"status": "stopped"})
 
 
-@router.post("/avatar/cleanup")
+@router.post("/avatar/cleanup")  # POST 清理数字人连接资源
 async def cleanup_avatar(
     user: User = Depends(get_current_user),
 ):
@@ -57,7 +57,7 @@ async def cleanup_avatar(
     return HttpResponse.success()
 
 
-@router.delete("/avatar/history")
+@router.delete("/avatar/history")  # DELETE 清空数字人会话历史
 async def clear_avatar_history(
     session_id: str | None = Form(default=None),
     user: User = Depends(get_current_user),
@@ -81,7 +81,7 @@ async def clear_avatar_history(
     return HttpResponse.success(data={"session_id": target_session_id, "deleted_count": deleted_count})
 
 
-@router.post("/avatar/attachments/analyze")
+@router.post("/avatar/attachments/analyze")  # POST 上传并分析附件（数字人调用）
 async def analyze_avatar_attachments(
     question: str = Form(...),
     session_id: str | None = Form(default=None),

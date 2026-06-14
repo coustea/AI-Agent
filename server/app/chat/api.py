@@ -592,16 +592,15 @@ async def update_profile_from_tutoring(
         return HttpResponse.error(code=400, message="active_course is required")
 
     try:
-        # 处理辅导产生的画像增量更新
-        # 这会在后台分析辅导对话，提取学习特征并更新课程画像
+        logger.info("[ChatAPI] 收到画像更新请求: user_id=%s", current_user.id)
         result = await profile_builder.process_tutoring_update(
-            user_id=current_user.id,  # 用户ID
-            course_name=course_name,  # 课程名称
-            session_id=payload.session_id,  # 辅导会话ID
+            user_id=current_user.id,
+            course_name=course_name,
+            session_id=payload.session_id,
         )
+        logger.info("[ChatAPI] 画像更新完成: user_id=%s", current_user.id)
         return HttpResponse.success(data=result)
     except Exception as e:
-        # 更新失败时记录警告日志并返回错误
         logger.warning("[ChatAPI] tutoring profile update failed: user_id=%s err=%s", current_user.id, e)
         return HttpResponse.error(code=400, message=str(e))
 

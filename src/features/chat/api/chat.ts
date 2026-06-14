@@ -70,10 +70,7 @@ export function streamChat(
 
   const formData = new FormData()
   if (params.message) {
-    formData.append('message', params.message)
-  }
-  if (params.history && params.history.length > 0) {
-    formData.append('history', JSON.stringify(params.history))
+    formData.append('user_input', params.message)
   }
   if (params.session_id) {
     formData.append('session_id', params.session_id)
@@ -83,9 +80,6 @@ export function streamChat(
   }
   if (params.need_teaching_diagram != null) {
     formData.append('need_teaching_diagram', String(Boolean(params.need_teaching_diagram)))
-  }
-  if (params.generate_video != null) {
-    formData.append('generate_video', String(Boolean(params.generate_video)))
   }
   if (params.enable_web_search != null) {
     formData.append('enable_web_search', String(Boolean(params.enable_web_search)))

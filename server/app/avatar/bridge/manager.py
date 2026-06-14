@@ -43,8 +43,6 @@ class RealtimeBridge:
         self._speech_rate: float = 1.0
         self._need_diagram_default: bool = False
         self._enable_search_default: bool = False
-        self._generate_video_default: bool = False
-        self._history_default: Optional[list[dict]] = None
         self._turn_lock = asyncio.Lock()
 
     @staticmethod
@@ -249,12 +247,8 @@ class RealtimeBridge:
         """Keep text-mode tutoring capabilities active for ASR-driven turns."""
         if isinstance(data.get("session_id"), str) and data["session_id"].strip():
             self.session_id = data["session_id"].strip()
-        if isinstance(data.get("history"), list):
-            self._history_default = data["history"]
         if "enable_search" in data:
             self._enable_search_default = bool(data.get("enable_search"))
-        if "generate_video" in data:
-            self._generate_video_default = bool(data.get("generate_video"))
 
     @staticmethod
     def _normalize_url_list(value) -> list[str]:
@@ -337,15 +331,11 @@ class RealtimeBridge:
         need_diagram = bool(data.get("need_diagram", False))
         self._need_diagram_default = need_diagram
         self._handle_capability_flags(data)
-        raw_history = data.get("history")
-        history = raw_history if isinstance(raw_history, list) else None
         await self._handle_user_text(
             text,
             attachments=attachments,
             need_diagram=need_diagram,
             enable_search=self._enable_search_default,
-            generate_video=self._generate_video_default,
-            history=history,
         )
 
     async def _handle_stop_speaking(self):
@@ -515,8 +505,6 @@ class RealtimeBridge:
                                 normalized,
                                 need_diagram=self._need_diagram_default,
                                 enable_search=self._enable_search_default,
-                                generate_video=self._generate_video_default,
-                                history=self._history_default,
                             )
                         )
             else:
@@ -640,8 +628,6 @@ class RealtimeBridge:
         attachments: Optional[list[str]] = None,
         need_diagram: bool = False,
         enable_search: bool = False,
-        generate_video: bool = False,
-        history: Optional[list[dict]] = None,
     ):
         """Serialize turns so one frontend response stream maps to one answer."""
         async with self._turn_lock:
@@ -650,8 +636,6 @@ class RealtimeBridge:
                 attachments=attachments,
                 need_diagram=need_diagram,
                 enable_search=enable_search,
-                generate_video=generate_video,
-                history=history,
             )
 
     async def _run_user_text_turn(
@@ -660,11 +644,9 @@ class RealtimeBridge:
         attachments: Optional[list[str]] = None,
         need_diagram: bool = False,
         enable_search: bool = False,
-        generate_video: bool = False,
-        history: Optional[list[dict]] = None,
     ):
         """Run one completed turn through chat service and avatar playback."""
-        from app.chat.service import get_chat_usecases
+        from app.chat.service import chat, get_chat_usecases
 
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()
@@ -672,22 +654,6 @@ class RealtimeBridge:
             session = await chat_uc.create_session(user_id=self.user_id)
             self.session_id = str(session["id"])
 
-        normalized_history: list[dict] = []
-        for item in history or []:
-            if not isinstance(item, dict):
-                logger.debug("[Bridge] ignored malformed history item=%s", item)
-                continue
-            role = str(item.get("role") or "").strip()
-            content = str(item.get("content") or "").strip()
-            if role and content:
-                normalized_history.append({"role": role, "content": content})
-        latest_content = normalized_history[-1]["content"].strip() if normalized_history else ""
-        if (
-            not normalized_history
-            or normalized_history[-1]["role"] != "user"
-            or latest_content != user_text.strip()
-        ):
-            normalized_history.append({"role": "user", "content": user_text})
         full_response = ""
         event_count = 0
         stream_failed = False
@@ -698,16 +664,13 @@ class RealtimeBridge:
             async def _consume_stream_events():
                 nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
                 nonlocal stream_failed, fail_reason
-                async for event in chat_uc.stream_chat_events(
+                async for event in chat(
                     user_id=self.user_id,
-                    user_message=user_text,
-                    history=normalized_history,
                     session_id=self.session_id,
+                    user_input=user_text,
                     attachments=merged_attachments,
                     need_teaching_diagram=need_diagram,
-                    enable_search=enable_search,
-                    generate_video=generate_video,
-                    persist=True,
+                    enable_web_search=enable_search,
                 ):
                     event_count += 1
                     if not self.frontend_ws:

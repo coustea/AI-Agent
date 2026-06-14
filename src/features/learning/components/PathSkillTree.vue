@@ -1,20 +1,67 @@
 <template>
-  <div class="skill-tree-container">
-    <v-chart class="chart" :option="chartOption" @click="handleNodeClick" autoresize />
+  <div class="timeline-container scroll-y">
+    <div v-for="(stage, stageIdx) in stages" :key="stage.stage_id" class="stage-section">
+      <!-- Stage Header -->
+      <div class="stage-header">
+        <div class="stage-badge">阶段 {{ stageIdx + 1 }}</div>
+        <div class="stage-info">
+          <h4>{{ stage.title }}</h4>
+          <p>{{ stage.description }}</p>
+        </div>
+      </div>
+
+      <!-- Nodes list within this stage -->
+      <div class="nodes-list">
+        <div 
+          v-for="node in getStageNodes(stage.stage_id)" 
+          :key="node.node_id" 
+          class="node-card"
+          :class="[node.status, { 'active-pulse': isActive(node.status) }]"
+          @click="handleNodeClick(node)"
+        >
+          <!-- Left Timeline Line & Status Icon -->
+          <div class="node-indicator">
+            <div class="status-icon">
+              <!-- Completed Checkmark -->
+              <svg v-if="isCompleted(node.status)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="icon-check"><polyline points="20 6 9 17 4 12"/></svg>
+              <!-- Locked Lock -->
+              <svg v-else-if="node.status === 'locked'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-lock"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <!-- Available / In Progress Dot -->
+              <span v-else class="pulse-dot"></span>
+            </div>
+            <div class="timeline-line"></div>
+          </div>
+
+          <!-- Node Details Card -->
+          <div class="node-content">
+            <div class="node-meta">
+              <span class="step-num">STEP {{ node.priority }}</span>
+              <span v-if="node.estimated_minutes" class="duration-badge">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="duration-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {{ node.estimated_minutes }} min
+              </span>
+              <span v-if="node.difficulty" class="difficulty-badge" :class="node.difficulty">{{ node.difficulty }}</span>
+            </div>
+            
+            <h5 class="node-title">{{ node.title }}</h5>
+            <p v-if="node.mastery_target" class="node-desc">{{ node.mastery_target }}</p>
+            <p v-else-if="node.recommendation_reason" class="node-desc">{{ node.recommendation_reason }}</p>
+            
+            <!-- Active CTA button -->
+            <div v-if="isActive(node.status)" class="node-cta">
+              <span class="cta-text">开始学习</span>
+              <svg class="cta-arrow" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { PropType } from 'vue'
-import { use } from 'echarts/core'
-import { GraphChart } from 'echarts/charts'
-import { TooltipComponent, TitleComponent } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-import VChart from 'vue-echarts'
 import type { LearningPathNode, LearningPathStage } from '@/features/learning/model/path'
-
-use([GraphChart, TooltipComponent, TitleComponent, CanvasRenderer])
 
 const props = defineProps({
   stages: {
@@ -31,159 +78,283 @@ const emit = defineEmits<{
   (e: 'node-click', node: LearningPathNode): void
 }>()
 
-const chartOption = computed(() => {
-  const chartNodes: any[] = []
-  const chartLinks: any[] = []
-  
-  // Group nodes by stage to calculate positions
-  const nodesByStage = new Map<string, LearningPathNode[]>()
-  for (const n of props.nodes) {
-    if (!nodesByStage.has(n.stage_id)) nodesByStage.set(n.stage_id, [])
-    nodesByStage.get(n.stage_id)!.push(n)
-  }
+// Filter and sort nodes belonging to a specific stage by priority
+const getStageNodes = (stageId: string) => {
+  return props.nodes
+    .filter(n => n.stage_id === stageId)
+    .sort((a, b) => a.priority - b.priority)
+}
 
-  const stageIds = props.stages.map(s => s.stage_id)
-  
-  // Categories for legend / colors
-  const categories = [
-    { name: 'available', itemStyle: { color: '#6366f1' } }, // Indigo
-    { name: 'completed', itemStyle: { color: '#10b981' } }, // Emerald
-    { name: 'locked', itemStyle: { color: '#94a3b8' } },    // Slate
-    { name: 'completed_with_gaps', itemStyle: { color: '#f59e0b' } }, // Amber
-  ]
+const isCompleted = (status: string) => {
+  return ['completed', 'completed_with_gaps'].includes(status)
+}
 
-  // Build nodes
-  for (const node of props.nodes) {
-    const stageIndex = stageIds.indexOf(node.stage_id)
-    const stageNodes = nodesByStage.get(node.stage_id) || []
-    // Sort by priority to ensure consistent y positioning
-    stageNodes.sort((a, b) => a.priority - b.priority)
-    const nodeIndex = stageNodes.findIndex(n => n.node_id === node.node_id)
-    const totalInStage = stageNodes.length
-    
-    // Calculate deterministic X, Y for layout: 'none'
-    // X is based on stage progress (left to right)
-    const x = stageIndex * 300
-    // Y is centered vertically within the stage
-    const y = (nodeIndex - (totalInStage - 1) / 2) * 100
+const isActive = (status: string) => {
+  return ['available', 'in_progress', 'remediation', 'reinforced'].includes(status)
+}
 
-    // Parse status to category
-    let categoryIdx = 2 // locked
-    if (node.status === 'available') categoryIdx = 0
-    else if (node.status === 'completed') categoryIdx = 1
-    else if (node.status === 'completed_with_gaps') categoryIdx = 3
-
-    chartNodes.push({
-      id: node.node_id,
-      name: node.title,
-      value: node.mastery_target,
-      x,
-      y,
-      symbolSize: 40,
-      category: categoryIdx,
-      label: {
-        show: true,
-        position: 'bottom',
-        formatter: '{b}',
-        color: 'inherit',
-        fontSize: 12,
-        fontWeight: 'bold',
-      },
-      // Keep raw node data for click handler
-      rawNode: node
-    })
-
-    // Build links from prerequisites
-    if (node.prerequisites && node.prerequisites.length > 0) {
-      for (const prereq of node.prerequisites) {
-        // Line drawn from prerequisite -> this node
-        chartLinks.push({
-          source: prereq,
-          target: node.node_id,
-          lineStyle: {
-            width: 2,
-            curveness: 0.2,
-            opacity: 0.6
-          }
-        })
-      }
-    } else if (stageIndex > 0) {
-      // If no explicit prereqs, loosely link to the previous stage's nodes
-      const prevStageId = stageIds[stageIndex - 1] as string
-      const prevNodes = nodesByStage.get(prevStageId) || []
-      if (prevNodes.length > 0 && prevNodes[0]) {
-        // Link to the first node of previous stage just to keep graph connected
-        chartLinks.push({
-          source: prevNodes[0].node_id,
-          target: node.node_id,
-          lineStyle: { type: 'dashed', width: 1, curveness: 0.2, opacity: 0.3 }
-        })
-      }
-    }
-  }
-
-  return {
-    tooltip: {
-      formatter: (params: any) => {
-        if (params.dataType === 'node') {
-          const n = params.data.rawNode as LearningPathNode
-          return `<strong>${n.title}</strong><br/>
-                  状态: ${n.status}<br/>
-                  难度: ${n.difficulty || '未知'}<br/>
-                  ${n.estimated_minutes ? `耗时: ${n.estimated_minutes}分钟<br/>` : ''}
-                  <em>${n.mastery_target || n.recommendation_reason || ''}</em>`
-        }
-        return ''
-      }
-    },
-    categories,
-    series: [
-      {
-        type: 'graph',
-        layout: 'none',
-        data: chartNodes,
-        links: chartLinks,
-        roam: true, // Allow zoom and pan
-        edgeSymbol: ['circle', 'arrow'],
-        edgeSymbolSize: [4, 8],
-        labelLayout: {
-          hideOverlap: true
-        },
-        lineStyle: {
-          color: 'source',
-          curveness: 0.3
-        },
-        itemStyle: {
-          borderColor: '#fff',
-          borderWidth: 2,
-          shadowBlur: 10,
-          shadowColor: 'rgba(0,0,0,0.1)'
-        }
-      }
-    ]
-  }
-})
-
-const handleNodeClick = (params: any) => {
-  if (params.dataType === 'node' && params.data.rawNode) {
-    emit('node-click', params.data.rawNode as LearningPathNode)
+const handleNodeClick = (node: LearningPathNode) => {
+  if (node.status !== 'locked') {
+    emit('node-click', node)
   }
 }
 </script>
 
 <style scoped>
-.skill-tree-container {
-  width: 100%;
-  height: 100%;
-  min-height: 400px;
+.timeline-container {
+  padding: 24px;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
-  overflow: hidden;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
 }
 
-.chart {
-  width: 100%;
-  height: 100%;
+.stage-section {
+  margin-bottom: 32px;
+}
+
+.stage-section:last-child {
+  margin-bottom: 0;
+}
+
+.stage-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stage-badge {
+  background: var(--gradient-path);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.2);
+}
+
+.stage-info h4 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.stage-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.nodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0; /* Continuous vertical timeline */
+  padding-left: 20px;
+}
+
+.node-card {
+  display: flex;
+  gap: 20px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+}
+
+/* Locked nodes are not clickable */
+.node-card.locked {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.node-card:not(.locked):hover {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+}
+
+.node-card:not(.locked):hover .node-content {
+  transform: translateX(4px);
+}
+
+/* Timeline Indicator & Line */
+.node-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.status-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: all 0.3s ease;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+}
+
+/* Completed styles */
+.node-card.completed .status-icon,
+.node-card.completed_with_gaps .status-icon {
+  background: #10b981; /* Emerald */
+  border-color: #10b981;
+  color: #fff;
+}
+
+/* Locked styles */
+.node-card.locked .status-icon {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+/* Active styles */
+.node-card:not(.locked):not(.completed):not(.completed_with_gaps) .status-icon {
+  border-color: var(--cat-path);
+  color: var(--cat-path);
+}
+
+.pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cat-path);
+}
+
+.active-pulse .pulse-dot {
+  animation: pulse-animation 2s infinite;
+}
+
+@keyframes pulse-animation {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(217, 119, 6, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0);
+  }
+}
+
+.timeline-line {
+  position: absolute;
+  top: 28px;
+  bottom: -28px;
+  width: 2px;
+  background: var(--color-border);
+  z-index: 1;
+}
+
+.nodes-list > .node-card:last-child .timeline-line {
+  display: none; /* No line after the last node in the stage */
+}
+
+/* Node Content Details */
+.node-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.node-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.step-num {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.node-card.in_progress .step-num,
+.node-card.available .step-num {
+  color: var(--cat-path);
+}
+
+.duration-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.difficulty-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent;
+}
+.difficulty-badge.beginner { background: rgba(16, 185, 129, 0.1); color: #059669; border-color: rgba(16, 185, 129, 0.2); }
+.difficulty-badge.intermediate { background: rgba(245, 158, 11, 0.1); color: #d97706; border-color: rgba(245, 158, 11, 0.2); }
+.difficulty-badge.advanced { background: rgba(239, 68, 68, 0.1); color: #dc2626; border-color: rgba(239, 68, 68, 0.2); }
+
+.node-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+  transition: color 0.2s ease;
+}
+
+.node-card:not(.locked):hover .node-title {
+  color: var(--color-primary);
+}
+
+.node-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* Active CTA Arrow */
+.node-cta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--cat-path);
+  opacity: 0.8;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.node-card:hover .node-cta {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.cta-arrow {
+  transition: transform 0.2s ease;
+}
+.node-card:hover .cta-arrow {
+  transform: translateX(2px);
 }
 </style>

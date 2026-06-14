@@ -34,7 +34,6 @@ AgentEventType = Literal[
     "agent.snapshot",
     "agent.step",
     "agent.heartbeat",
-    "agent.metric",
     "agent.artifact_ready",
     "done",
 ]
@@ -74,6 +73,7 @@ class ResourceEventBus:
 
     def __init__(self) -> None:
         self._subscribers: dict[int, list[asyncio.Queue[AgentEvent]]] = {}
+        self._latest_snapshots: dict[int, dict[str, Any]] = {}
 
     def subscribe(self, resource_id: int) -> asyncio.Queue[AgentEvent]:
         """SSE endpoint 调用，拿到一个 Queue，事件会自动灌入。"""
@@ -93,12 +93,65 @@ class ResourceEventBus:
 
     async def publish(self, resource_id: int, event: AgentEvent) -> None:
         """后台任务调用，事件广播给所有订阅者。"""
+        self._record_latest_snapshot(resource_id, event)
         subs = self._subscribers.get(resource_id, [])
         for q in subs:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
                 logger.warning("EventBus queue full for resource_id=%s, dropping event", resource_id)
+        if event.event_type == "done":
+            loop = asyncio.get_event_loop()
+            loop.call_later(300, self._cleanup_snapshot, resource_id)
+
+    def _cleanup_snapshot(self, resource_id: int) -> None:
+        self._latest_snapshots.pop(resource_id, None)
+        logger.debug("EventBus 清理快照: resource_id=%s", resource_id)
+
+    def get_latest_snapshot(self, resource_id: int) -> dict[str, Any]:
+        """返回最近一次事件驱动的任务快照，供 status 接口兜底同步。"""
+        snapshot = self._latest_snapshots.get(resource_id)
+        if not snapshot:
+            return {"agent_snapshots": {}, "current_message": ""}
+        return {
+            "agent_snapshots": {
+                agent_id: dict(agent_snapshot)
+                for agent_id, agent_snapshot in snapshot.get("agent_snapshots", {}).items()
+            },
+            "current_message": snapshot.get("current_message", ""),
+        }
+
+    def _record_latest_snapshot(self, resource_id: int, event: AgentEvent) -> None:
+        snapshot = self._latest_snapshots.setdefault(
+            resource_id,
+            {"agent_snapshots": {}, "current_message": ""},
+        )
+        if event.message:
+            snapshot["current_message"] = event.message
+
+        if not event.agent_id:
+            return
+
+        agent_snapshot = dict(snapshot["agent_snapshots"].get(event.agent_id, {}))
+        event_data = event.model_dump(mode="json", exclude_none=True)
+        for key in (
+            "event_type",
+            "agent_id",
+            "status",
+            "message",
+            "progress",
+            "run_id",
+            "span_id",
+            "phase",
+            "elapsed_ms",
+            "metrics",
+            "dependency",
+            "artifact_id",
+            "timestamp",
+        ):
+            if key in event_data:
+                agent_snapshot[key] = event_data[key]
+        snapshot["agent_snapshots"][event.agent_id] = agent_snapshot
 
 
 # 进程级单例

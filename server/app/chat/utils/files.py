@@ -170,8 +170,19 @@ def read_uploaded_file_content(
         # 纯文本文件直接读取，errors="replace" 防止编码异常中断
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
+    elif suffix in {".xlsx", ".xls"}:
+        import pandas as pd
+
+        df = pd.read_excel(str(path), dtype=str, nrows=500)
+        content = df.to_string(index=False)
+    elif suffix in {".csv", ".tsv"}:
+        import pandas as pd
+
+        sep = "\t" if suffix == ".tsv" else ","
+        df = pd.read_csv(str(path), sep=sep, dtype=str, nrows=500)
+        content = df.to_string(index=False)
     else:
-        return f"不支持的文件类型: {suffix}（支持: .pdf, .docx, .txt, .md, .log）"
+        return f"不支持的文件类型: {suffix}（支持: .pdf, .docx, .txt, .md, .log, .xlsx, .xls, .csv, .tsv）"
 
     if not content or not content.strip():
         return "文件内容为空"

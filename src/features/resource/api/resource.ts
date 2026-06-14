@@ -39,7 +39,6 @@ export function streamResourceEvents(
     'agent.snapshot',
     'agent.step',
     'agent.heartbeat',
-    'agent.metric',
     'agent.artifact_ready',
   ].forEach((eventName) => {
     es.addEventListener(eventName, handleAgentLikeEvent)

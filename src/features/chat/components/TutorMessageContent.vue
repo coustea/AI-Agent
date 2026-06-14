@@ -202,7 +202,7 @@ onBeforeUnmount(() => {
 
 .stream-markdown :deep(.code-block-lang) {
   min-width: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -245,6 +245,6 @@ onBeforeUnmount(() => {
 }
 
 .stream-markdown :deep(.code-block-wrapper code) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 </style>

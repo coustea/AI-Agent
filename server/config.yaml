@@ -23,27 +23,22 @@ jwt:
 # ============ 模型配置 ============
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
-  # 文本模型（修改以下三项即可切换本地/云端）
-  # --- 云端：讯飞星火 ---
-  # base_url: "https://spark-api-open.xf-yun.com/v1/chat/completions"
-  # api_key: "fsUxWflgdQvAuDDKwAau:wyIMVaJXZGgQwFohkdhS"
-  # model_name: "generalv3"  # Spark Pro: generalv3; Spark Max: generalv3.5; Spark Pro-128K: pro-128k
 
   # --- 云端：讯飞 Maas ---
   base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-  api_key: "6b0d31747b73715adedee83f40eaef0d:Yjc2NjQxMDA5ZDY5YWZhYzMxNjZmY2Yx"
+  api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
   model_name: "astron-code-latest"
-#
-#  # --- 本地：Qwen3-8B (llama.cpp server, OpenAI 兼容 API) ---
-#  base_url: "http://127.0.0.1:10000/v1"
-#  api_key: "not-needed"
-#  model_name: "Qwen3-8B"
+
+  # 推理参数
+  temperature: 0.3
+  max_tokens: 4096
 
   # 图片理解模型（独立配置）
   vision:
     base_url: "https://open.bigmodel.cn/api/paas/v4/"
     api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
     model_name: "glm-4.6v-flash"
+    temperature: 0.7
 
 # 星火 WebSocket API（Vision 用）
 spark:
@@ -60,7 +55,6 @@ avatar:
   anchor_id: "111204004"
   vcn: "x5_lingxiaoyue_flow"
   iat_url: "wss://iat-api.xfyun.cn/v2/iat"
-  bridge_port: 8765
   asr_app_id: "5ec3e8ba"
   asr_api_key: "f3acd6dac65bcb50003111992868f700"
   asr_api_secret: "Nzk5ZmJlNTMwNTA0ZDJlOTM2OWY4MDM4"
@@ -87,13 +81,16 @@ knowledge:
 logging:
   level: "INFO"
 
-# Memory 配置
+# Memory 压缩与长期记忆
 memory:
-  profile_gate_turns: 2
-  msg_limit: 10
-  chat_budget: 700
-  ltm_budget: 1600
-  summary_budget: 900
+  recent_raw_messages: 8
+  compress_min_messages: 14
+  compress_min_tokens: 3500
+  summary_context_blocks: 3
+  ltm_min_messages: 12
+  ltm_min_tokens: 3500
+  ltm_min_confidence: 0.75
+  ltm_cooldown_minutes: 30
 
 # Chat 附件与保护机制
 chat:

@@ -308,11 +308,6 @@
                     </button>
                   </el-tooltip>
 
-                  <el-tooltip content="生成视频" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': generateVideo }" @click="handleVideoToggle" :aria-label="generateVideo ? '关闭视频生成' : '生成视频'">
-                      <el-icon aria-hidden="true"><VideoCamera /></el-icon>
-                    </button>
-                  </el-tooltip>
                 </div>
 
                 <div class="action-right">
@@ -365,7 +360,7 @@
           </div>
         </div>
 
-        <input ref="fileInput" type="file" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onCombinedFileSelected" />
+        <input ref="fileInput" type="file" accept=".pdf,.docx,.txt,.md,.log,.png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onCombinedFileSelected" />
       </section>
     </main>
 
@@ -452,7 +447,7 @@ import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Microphone, Document, ChatDotRound, ChatLineSquare,
   Delete, Close, Top, Paperclip,
-  EditPen, Search, Timer, VideoCamera, DataLine,
+  EditPen, Search, Timer, DataLine,
   CircleCheckFilled, Download
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -475,7 +470,6 @@ import {
 import type {
   ChatSession,
   KnowledgeSource,
-  StreamChatHistoryItem,
   TeachingDiagram,
 } from '@/features/chat/model/chat'
 import { getMe } from '@/features/auth/api/auth'
@@ -495,18 +489,6 @@ import {
 
 defineOptions({ name: 'Tutor' })
 
-const buildStreamHistory = (): StreamChatHistoryItem[] => {
-  return messages.value
-    .filter(msg => msg.role === 'user' || msg.role === 'ai')
-    .filter(msg => msg.content.trim())
-    .map(msg => ({
-      role: msg.role === 'ai' ? 'assistant' : 'user',
-      content: msg.content,
-      attachments: msg.attachments || null,
-      teaching_diagram: msg.teachingDiagram || null,
-    }))
-}
-
 const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 
@@ -521,8 +503,6 @@ const isExpandedInput = ref(false)
 
 const enableWebSearch = ref(false)
 const needTeachingDiagram = ref(false)
-const generateVideo = ref(false)
-const hasToggledMedia = ref(false)
 
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
@@ -1613,29 +1593,11 @@ const removeAttachment = (idx: number) => {
 
 const getAvatarCapabilities = () => ({
   session_id: digitalHumanSessionId.value,
-  history: buildStreamHistory().map(item => ({ role: item.role, content: item.content })),
-  enable_web_search: enableWebSearch.value,
-  generate_video: generateVideo.value,
+  enable_search: enableWebSearch.value,
 })
 
 const handleTeachingDiagramToggle = () => {
-  hasToggledMedia.value = true
-  if (needTeachingDiagram.value) {
-    needTeachingDiagram.value = false
-  } else {
-    needTeachingDiagram.value = true
-    generateVideo.value = false
-  }
-}
-
-const handleVideoToggle = () => {
-  hasToggledMedia.value = true
-  if (generateVideo.value) {
-    generateVideo.value = false
-  } else {
-    generateVideo.value = true
-    needTeachingDiagram.value = false
-  }
+  needTeachingDiagram.value = !needTeachingDiagram.value
 }
 
 const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standard') => {
@@ -1826,7 +1788,6 @@ const handleSend = async () => {
   if (userMsg) {
     userMsg.attachments = uploadedAttachments.length > 0 ? uploadedAttachments : null
   }
-  const streamHistory = buildStreamHistory()
 
   const aiMsgId = Date.now() + 1
   messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
@@ -1855,11 +1816,10 @@ const handleSend = async () => {
   streamManager.startStream(
       currentSessionId.value!,
       {
-        history: streamHistory,
+        message: text,
         session_id: currentSessionId.value,
         attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
         need_teaching_diagram: shouldGenerateTeachingDiagram,
-        generate_video: generateVideo.value,
         enable_web_search: enableWebSearch.value,
       },
       {

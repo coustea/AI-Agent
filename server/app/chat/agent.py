@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime
 from typing import Any, AsyncIterator, TypedDict
 from uuid import uuid4
 
@@ -43,6 +44,10 @@ from app.infra.prompts import prompts
 logger = get_logger(__name__)
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+
+
+def _current_date_text() -> str:
+    return datetime.now().date().isoformat()
 
 
 # ===================================================================
@@ -396,16 +401,20 @@ class TutorAgent:
             f"学生问题: {question}\n"
             f"附件数量: {len(attachments)}\n"
             f"会话摘要: {summary[:500] if summary else '无'}\n"
+            f"当前日期: {_current_date_text()}\n"
             f"用户请求联网搜索: {has_web_search}\n"
             f"用户请求教学图解: {has_diagram}\n\n"
-            "请分析以上信息，返回分类结果。"
+            "请先判断该问题是否能仅凭稳定的通用知识可靠回答。"
+            "如果问题依赖最新、实时、未来、官方发布、具体试题、具体来源、具体数据，"
+            "或者你不能确信答案在当前日期仍然准确，应将 needs_web_search 设为 true。"
         )
 
         try:
+            classify_system_prompt = prompts.get("chat").get("classify_system") or "你是辅导分类器。"
             classification = await self.llm.ainvoke_json(
                 ClassificationResult,
                 [
-                    SystemMessage(content=prompts.get("chat").get("classify_system", "你是辅导分类器。")),
+                    SystemMessage(content=classify_system_prompt),
                     HumanMessage(content=prompt),
                 ],
                 temperature=0.1,
@@ -418,6 +427,9 @@ class TutorAgent:
                 needs_web_search=has_web_search,
                 needs_diagram=has_diagram,
             )
+
+        if has_web_search and not classification.needs_web_search:
+            classification = classification.model_copy(update={"needs_web_search": True})
 
         event = ChatStreamEvent(
             type="classify_done",
@@ -722,6 +734,11 @@ class TutorAgent:
             file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
             attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
             evaluation_summary_context="如需近期测验、薄弱点或学习计划依据，请调用 get_recent_evaluation 工具。",
+        )
+        system_prompt += (
+            f"\n\n# 当前日期\n{_current_date_text()}\n"
+            "涉及年份、最新、考试真题、政策、版本或其他时效信息时，必须以本轮工具证据为准；"
+            "如果没有可用证据，不要编造当前时间、发布时间、真题内容或来源。"
         )
 
         # Inject extra context

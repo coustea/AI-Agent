@@ -1,4 +1,4 @@
-// src/views/ResourceGenerator/constants.ts — 资源生成器常量与元数据
+// src/views/ResourceGenerator.vue/constants.ts — 资源生成器常量与元数据
 
 import type { LearningScenario } from '@/features/resource/model/resource'
 import {

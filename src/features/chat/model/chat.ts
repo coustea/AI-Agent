@@ -164,19 +164,10 @@ export interface UploadResult {
 
 export interface StreamChatParams {
   message?: string
-  history?: StreamChatHistoryItem[]
   session_id?: string
   attachments?: string[]
   need_teaching_diagram?: boolean
-  generate_video?: boolean
   enable_web_search?: boolean
-}
-
-export interface StreamChatHistoryItem {
-  role: 'user' | 'assistant' | 'ai' | 'system'
-  content: string
-  attachments?: AttachmentInfo[] | null
-  teaching_diagram?: TeachingDiagram | null
 }
 
 export interface StreamChatEvent {

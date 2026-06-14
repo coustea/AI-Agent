@@ -653,6 +653,8 @@ CREATE TABLE IF NOT EXISTS learning_paths (
     stages_json          JSONB,
     strategy_report      TEXT,
     adjustment_rationale JSONB,
+    capstone_project_json JSONB,
+    pre_check_knowledge  JSONB,
     created_at           TIMESTAMPTZ     DEFAULT NOW(),
     updated_at           TIMESTAMPTZ     DEFAULT NOW()
 );

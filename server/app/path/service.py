@@ -56,8 +56,10 @@ PASS_SCORE = 3
 QUIZ_SIZE = 5
 AUX_RESOURCE_TYPES = {"mindmap", "code", "ppt", "content", "reading"}
 ACTIVE_NODE_STATUSES = {"available", "in_progress", "remediation", "reinforced"}
+STARTED_NODE_STATUSES = {"in_progress", "remediation", "reinforced"}
 COMPLETED_NODE_STATUSES = {"completed", "completed_with_gaps"}
 ACCESSIBLE_NODE_STATUSES = ACTIVE_NODE_STATUSES | COMPLETED_NODE_STATUSES
+DEEP_LEARNING_NODE_STATUSES = STARTED_NODE_STATUSES | COMPLETED_NODE_STATUSES
 
 
 class PathService:
@@ -109,6 +111,8 @@ class PathService:
         path.stages_json = [self._stage_to_dict(stage) for stage in plan.stages]
         path.strategy_report = getattr(plan, "strategy_report", None)
         path.adjustment_rationale = list(getattr(plan, "adjustment_rationale", []) or [])
+        path.capstone_project_json = plan.capstone_project.model_dump(mode="json") if plan.capstone_project else None
+        path.pre_check_knowledge = list(plan.pre_check_knowledge or [])
 
         completed_keys: set[str] = set()
         nodes: list[PathNode] = []
@@ -235,19 +239,47 @@ class PathService:
     # ── 节点工作区 ──────────────────────────────────────────────────────────
 
     async def get_node_workspace(self, user_id: int, node_id: int) -> LearningPathNodeWorkspaceResponse:
+        """读取节点学习区状态，不触发任何 LLM 资源生成。
+
+        这个接口可以安全地用于路径页面、节点预览、刷新页面。
+        真正的教程生成必须由 start_node_learning 显式触发。
+        """
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
+
+        path = await self._must_get_path(user_id, node.path_id)
+        tutorials = await self._get_node_tutorials(node.id)
+        current = next((item for item in tutorials if item.is_current), None)
+        resources = await self._get_node_resources(node.id)
+        overview = await self._build_path_response(path)
+        return LearningPathNodeWorkspaceResponse(
+            path=overview,
+            node=LearningPathNodeDTO.from_model(node),
+            current_tutorial=LearningPathTutorialDTO.from_model(current) if current else None,
+            tutorials=[LearningPathTutorialDTO.from_model(item) for item in tutorials],
+            resources=[LearningPathResourceDTO.from_model(item) for item in resources],
+            current_round=await self._get_latest_round(node.id),
+            quiz_available=current is not None,
+        )
+
+    async def start_node_learning(self, user_id: int, node_id: int) -> LearningPathNodeWorkspaceResponse:
+        """进入深入学习：标记节点开始，并懒加载生成主教程。"""
+        node = await self._must_get_node(user_id, node_id)
+        self._ensure_node_accessible(node)
+
         if node.status == "available":
             node.status = "in_progress"
             node.started_at = datetime.now(timezone.utc)
             await self.session.commit()
             await self.session.refresh(node)
+
         path = await self._must_get_path(user_id, node.path_id)
         tutorials = await self._get_node_tutorials(node.id)
         current = next((item for item in tutorials if item.is_current), None)
         if current is None:
             current = await self._create_tutorial(path=path, node=node, tutorial_type="primary")
             tutorials = await self._get_node_tutorials(node.id)
+
         resources = await self._get_node_resources(node.id)
         overview = await self._build_path_response(path)
         return LearningPathNodeWorkspaceResponse(
@@ -256,7 +288,7 @@ class PathService:
             current_tutorial=LearningPathTutorialDTO.from_model(current),
             tutorials=[LearningPathTutorialDTO.from_model(item) for item in tutorials],
             resources=[LearningPathResourceDTO.from_model(item) for item in resources],
-            current_round=0,
+            current_round=await self._get_latest_round(node.id),
             quiz_available=current is not None,
         )
 
@@ -270,6 +302,7 @@ class PathService:
             raise ValueError("仅支持 mindmap、code、ppt")
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
+        self._ensure_node_in_deep_learning(node)
         path = await self._must_get_path(user_id, node.path_id)
         tutorial = await self._get_current_tutorial(node.id)
         if tutorial is None:
@@ -301,6 +334,7 @@ class PathService:
     async def generate_node_questions(self, user_id: int, node_id: int) -> PathQuizRoundResponse:
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
+        self._ensure_node_in_deep_learning(node)
         path = await self._must_get_path(user_id, node.path_id)
         tutorial = await self._get_current_tutorial(node.id)
         if tutorial is None:
@@ -521,6 +555,10 @@ class PathService:
     def _ensure_node_accessible(self, node: PathNode) -> None:
         if node.status not in ACCESSIBLE_NODE_STATUSES:
             raise ValueError("路径节点尚未解锁")
+
+    def _ensure_node_in_deep_learning(self, node: PathNode) -> None:
+        if node.status not in DEEP_LEARNING_NODE_STATUSES:
+            raise ValueError("请先进入深入学习，再生成该节点的学习资源")
 
     async def _get_nodes_for_path(self, path_id: int) -> list[PathNode]:
         stmt = (
@@ -804,6 +842,8 @@ class PathService:
             adjustment_rationale=list(path.adjustment_rationale or []),
             stages=list(path.stages_json or []),
             nodes=[LearningPathNodeDTO.from_model(item) for item in nodes],
+            capstone_project=path.capstone_project_json,
+            pre_check_knowledge=list(path.pre_check_knowledge or []),
             created_at=path.created_at.isoformat() if path.created_at else "",
             updated_at=path.updated_at.isoformat() if path.updated_at else "",
         )
