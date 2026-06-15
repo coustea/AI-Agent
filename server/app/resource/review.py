@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.resource.schemas import ResourceGenerationRequest, ReviewResult, WorkerResult
+from app.resource.schemas import AgentResult, ResourceGenerationRequest, ReviewResult
 
 SOURCE_AUDIT_AGENT_IDS = ("content", "reading")
 COMPLETENESS_ONLY_AGENT_IDS = ("quiz", "mindmap", "code")
@@ -17,11 +17,13 @@ PPT_AGENT_ID = "ppt"
 COORDINATOR_AGENT_ID = "coordinator"
 PRE_REVIEW_AGENT_ID = "pre_review"
 PPT_REVIEW_AGENT_ID = "ppt_review"
+VIDEO_AGENT_ID = "video"
+VIDEO_REVIEW_AGENT_ID = "video_review"
 BUNDLE_AGENT_ID = "bundle"
 REVIEW_CONTENT_LIMIT = 12_000
 
 
-def has_generated_content(result: WorkerResult | None) -> bool:
+def has_generated_content(result: AgentResult | None) -> bool:
     if result is None or not result.success:
         return False
     content = result.content
@@ -56,7 +58,7 @@ def profile_summary(profile: dict[str, Any]) -> str:
 def build_pre_audit_envelope(
     *,
     request: ResourceGenerationRequest,
-    results: dict[str, WorkerResult],
+    results: dict[str, AgentResult],
     profile: dict[str, Any],
     blueprint: Any | None,
 ) -> tuple[dict[str, Any], list[str]]:
@@ -107,7 +109,7 @@ def build_pre_audit_envelope(
 def build_ppt_audit_envelope(
     *,
     request: ResourceGenerationRequest,
-    results: dict[str, WorkerResult],
+    results: dict[str, AgentResult],
     profile: dict[str, Any],
     blueprint: Any | None,
 ) -> tuple[dict[str, Any], list[str]]:
@@ -149,6 +151,51 @@ def build_ppt_audit_envelope(
     }, missing_resources
 
 
+def build_video_audit_envelope(
+    *,
+    request: ResourceGenerationRequest,
+    results: dict[str, AgentResult],
+    profile: dict[str, Any],
+    blueprint: Any | None,
+) -> tuple[dict[str, Any], list[str]]:
+    selected_agents = request.enabled_agent_ids()
+    missing_resources: list[str] = []
+    video_result = results.get(VIDEO_AGENT_ID)
+    if VIDEO_AGENT_ID in selected_agents and not has_generated_content(video_result):
+        missing_resources.append(VIDEO_AGENT_ID)
+    approved_sources = [
+        {
+            "agent_id": agent_id,
+            "title": results[agent_id].title,
+            "summary": results[agent_id].summary,
+            "source_content": bounded_content(results[agent_id].content),
+        }
+        for agent_id in selected_agents
+        if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
+    ]
+    video_resource = (
+        {
+            "agent_id": VIDEO_AGENT_ID,
+            "title": video_result.title,
+            "summary": video_result.summary,
+            "audit_content": bounded_content(video_result.content),
+        }
+        if has_generated_content(video_result)
+        else None
+    )
+    return {
+        "mode": "video_audit",
+        "request_context": {
+            "learning_need": request.learning_need,
+            "learning_scenario": request.learning_scenario,
+            "profile_summary": profile_summary(profile),
+            "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
+        },
+        "approved_sources": approved_sources,
+        "video_resource": video_resource,
+    }, missing_resources
+
+
 def failed_review_result(
     *,
     status: str,
@@ -181,7 +228,8 @@ def failed_review_result(
     )
 
 
-def review_result_from_worker(result: WorkerResult) -> ReviewResult:
+def review_result_from_agent(result: AgentResult) -> ReviewResult:
+    """从 AgentResult 构造 ReviewResult。"""
     parsed = result.metadata.get("parsed_review")
     status = result.metadata.get("review_status") or ("pass" if result.success else "blocked")
     issues: list[str] = []
