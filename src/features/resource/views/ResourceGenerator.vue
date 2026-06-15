@@ -327,19 +327,19 @@ const baseGenerationAgentIds = computed(() => dagSelectedAgentIds.value.filter(i
 const dagNodesV2 = computed<DagNodeState[]>(() => {
   const selected = dagSelectedAgentIds.value
   const nodes: DagNodeState[] = []
-  nodes.push(dagNodeStates.value['planning'] || { id: 'planning', label: '规划任务', icon: '🎯', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true })
-  nodes.push(dagNodeStates.value[COORDINATOR_AGENT_ID] || { id: COORDINATOR_AGENT_ID, label: '并行调度中枢', icon: '⚙️', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true })
+  nodes.push(dagNodeStates.value['planning'] || { id: 'planning', label: '规划任务', icon: '🎯', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
+  nodes.push(dagNodeStates.value[COORDINATOR_AGENT_ID] || { id: COORDINATOR_AGENT_ID, label: '并行调度中枢', icon: '⚙️', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   for (const agentId of baseGenerationAgentIds.value) {
     const display = AGENT_DISPLAY[agentId]
     if (!display) continue
-    nodes.push(dagNodeStates.value[agentId] || { id: agentId, label: display.label, icon: display.icon, status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: false })
+    nodes.push(dagNodeStates.value[agentId] || { id: agentId, label: display.label, icon: display.icon, status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
   }
-  nodes.push(dagNodeStates.value[PRE_REVIEW_AGENT_ID] || { id: PRE_REVIEW_AGENT_ID, label: '前置安全审核', icon: '🛡️', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true })
+  nodes.push(dagNodeStates.value[PRE_REVIEW_AGENT_ID] || { id: PRE_REVIEW_AGENT_ID, label: '前置安全审核', icon: '🛡️', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   if (selected.includes(PPT_AGENT_ID)) {
-    nodes.push(dagNodeStates.value[PPT_AGENT_ID] || { id: PPT_AGENT_ID, label: '演示文稿助手', icon: '📊', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: false })
-    nodes.push(dagNodeStates.value[PPT_REVIEW_AGENT_ID] || { id: PPT_REVIEW_AGENT_ID, label: 'PPT 安全审核', icon: '🔍', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true })
+    nodes.push(dagNodeStates.value[PPT_AGENT_ID] || { id: PPT_AGENT_ID, label: '演示文稿助手', icon: '📊', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
+    nodes.push(dagNodeStates.value[PPT_REVIEW_AGENT_ID] || { id: PPT_REVIEW_AGENT_ID, label: 'PPT 安全审核', icon: '🔍', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   }
-  nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || { id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], isSystem: true })
+  nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || { id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   return nodes
 })
 
@@ -414,6 +414,55 @@ function initializeWaitingNodes() {
   updateOverallProgressFromDag()
 }
 
+function normalizeEventStatus(status?: string | null): DagNodeState['status'] | undefined {
+  if (!status) return undefined
+  if (status === 'finished') return 'success'
+  if (status === 'failed') return 'failed'
+  if (status === 'skipped') return 'skipped'
+  if (status === 'running') return 'running'
+  return undefined
+}
+
+function appendAgentEventLog(node: DagNodeState, event: ResourceStreamEvent) {
+  if (!event.message?.trim()) return
+
+  const eventStatus = normalizeEventStatus(event.status)
+  const logs = node.eventLogs || []
+  const last = logs[logs.length - 1]
+  const eventPhase = event.phase ?? undefined
+  const eventElapsedMs = event.elapsed_ms ?? undefined
+
+  const sameMessage = last && last.message === event.message && last.phase === eventPhase
+
+  if (sameMessage) {
+    node.eventLogs = [
+      ...logs.slice(0, -1),
+      {
+        ...last,
+        status: eventStatus || last.status,
+        progress: event.progress ?? last.progress,
+        elapsedMs: eventElapsedMs ?? last.elapsedMs,
+        timestamp: Date.now(),
+      },
+    ]
+    return
+  }
+
+  node.eventLogs = [
+    ...logs.slice(-11),
+    {
+      id: `${event.agent_id || node.id}-${event.event_type || 'event'}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      eventType: event.event_type,
+      phase: eventPhase,
+      message: event.message,
+      status: eventStatus || node.status,
+      progress: event.progress,
+      elapsedMs: eventElapsedMs,
+      timestamp: Date.now(),
+    },
+  ]
+}
+
 function applyAgentEvent(event: ResourceStreamEvent) {
   if (!event.agent_id) return
   const node = dagNodeStates.value[event.agent_id] || createDagNode(event.agent_id, SYSTEM_AGENT_IDS.includes(event.agent_id))
@@ -430,6 +479,7 @@ function applyAgentEvent(event: ResourceStreamEvent) {
     if (node.stepHistory[node.stepHistory.length - 1] !== event.message) {
       node.stepHistory = [...node.stepHistory.slice(-7), event.message]
     }
+    appendAgentEventLog(node, event)
   }
   dagNodeStates.value[event.agent_id] = node
   handleWorkflowAnimation(event)

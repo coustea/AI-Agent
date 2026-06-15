@@ -307,9 +307,9 @@ class TutorAgent:
                 else:
                     import re
                     profile_service = get_profile_service()
-                    
+
                     turn_text = f"{user_message}\n{assistant_reply}"
-                    
+
                     global_patterns = [
                         r"(喜欢|习惯|偏好|擅长|感兴趣|反感|讨厌|更愿意|认知|风格|学习方式)",
                         r"(节奏|速度|时间|每天|太快|太慢|稍微|快一点|慢一点|进度|频繁)",
@@ -321,20 +321,23 @@ class TutorAgent:
                         r"(薄弱|搞错|出错|卡住|记不住|混淆|搞不清|老是错|不会做|不懂|理解不了)",
                         r"(基础|掌握|熟悉|了解|懂了|不明白|难度|简单|困难|稍微深点)",
                     ]
-                    
+
                     should_update_global = any(re.search(p, turn_text) for p in global_patterns)
                     should_update_course = any(re.search(p, turn_text) for p in course_patterns)
-                    
+                    logger.info("[TutorAgent] 画像更新检查: should_update_global=%s should_update_course=%s",
+                                 should_update_global, should_update_course)
+
                     global_updated = False
                     course_updated = False
-                    
+
                     if should_update_global:
                         res_global = await profile_service.update_global_from_tutoring(
                             user_id=user_id,
                             session_id=session_id,
                         )
                         global_updated = res_global.get("profile_updated", False)
-                        
+                        logger.info("[TutorAgent] 全局画像更新完成: global_updated=%s", global_updated)
+
                     if should_update_course:
                         global_profile = await profile_service.get_or_create_global_profile(user_id=user_id)
                         profile_json = global_profile.profile_json or {}
@@ -346,7 +349,7 @@ class TutorAgent:
                                 course_name = first_course.get("course", "")
                             elif isinstance(first_course, str):
                                 course_name = first_course
-                                
+
                         if course_name:
                             res_course = await profile_service.update_course_from_tutoring(
                                 user_id=user_id,
@@ -354,6 +357,8 @@ class TutorAgent:
                                 course_name=course_name,
                             )
                             course_updated = res_course.get("profile_updated", False)
+                            logger.info("[TutorAgent] 课程画像更新完成: course_name=%s course_updated=%s",
+                                         course_name, course_updated)
                             
                     job = "learner_profile"
                     status = "completed" if (global_updated or course_updated) else "skipped"

@@ -1,37 +1,35 @@
 <template>
-  <div class="code-resource" :class="{ compact }" @click="handleMessageClick">
+  <div class="code-resource" :class="{ compact }" @click="handleMessageClick" ref="rootRef">
     <ResourceCardWrapper v-if="parsedData || markdownContent" :compact="compact" class="code-card-content">
-
-      <!-- 顶部信息栏：简述 -->
       <div v-if="!compact && parsedData?.explanation" class="code-header-meta">
         <span class="code-summary-text">{{ parsedData.explanation }}</span>
       </div>
 
-      <!-- 核心内容区：渲染 Markdown 或 纯代码 -->
       <div class="code-main-body">
-        <div 
-          v-if="displayMarkdown" 
-          class="markdown-shell"
-        >
+        <div v-if="displayMarkdown" class="markdown-shell code-markdown-shell">
           <MarkdownPreview :content="displayMarkdown" />
         </div>
-        <div v-else-if="pureCode" class="pure-code-block">
-          <pre><code :class="'language-' + (parsedData.language || 'text')">{{ pureCode }}</code></pre>
+
+        <div v-else-if="pureCode" class="code-block-wrapper pure-code-block">
+          <div class="code-block-header">
+            <span class="lang-label">{{ pureLanguage.toUpperCase() }}</span>
+            <button class="code-copy-btn" type="button">复制</button>
+          </div>
+          <pre><code :class="`language-${pureLanguage}`">{{ pureCode }}</code></pre>
         </div>
-        <div v-else-if="markdownContent" class="markdown-shell">
+
+        <div v-else-if="markdownContent" class="markdown-shell code-markdown-shell">
           <MarkdownPreview :content="markdownContent" />
         </div>
       </div>
 
-      <!-- 底部辅助信息：复杂度、运行步骤、练习等 -->
       <div v-if="!compact && hasExtraInfo" class="code-footer-extras">
         <div class="footer-divider">
           <span class="divider-label">实现指标</span>
           <div class="divider-line"></div>
         </div>
-        
+
         <div class="extras-grid">
-          <!-- 复杂度 -->
           <div v-if="hasComplexity" class="extra-item complexity-info">
             <div class="extra-label"><el-icon><Timer /></el-icon> 复杂度分析</div>
             <div class="extra-content">
@@ -40,7 +38,6 @@
             </div>
           </div>
 
-          <!-- 避坑指南 -->
           <div v-if="parsedData.debug_tips?.length" class="extra-item tips-info">
             <div class="extra-label"><el-icon><Warning /></el-icon> 调试建议</div>
             <ul class="tips-list">
@@ -49,7 +46,6 @@
           </div>
         </div>
 
-        <!-- 扩展练习 -->
         <div v-if="parsedData.exercises?.length" class="extra-item exercises-info">
           <div class="extra-label"><el-icon><EditPen /></el-icon> 练习序列</div>
           <div class="exercises-container">
@@ -66,7 +62,7 @@
         <div class="footer-line"></div>
       </div>
     </ResourceCardWrapper>
-    
+
     <div v-else class="code-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
@@ -77,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, nextTick, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Timer, Warning, EditPen } from '@element-plus/icons-vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
@@ -91,140 +87,284 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
-// 提取并解包数据
+const rootRef = ref<HTMLElement | null>(null)
+
+type FenceResult = {
+  code: string
+  language: string
+}
+
+const languageAlias: Record<string, string> = {
+  py: 'python',
+  js: 'javascript',
+  ts: 'typescript',
+  sh: 'bash',
+  shell: 'bash',
+  yml: 'yaml',
+  md: 'markdown',
+  cplusplus: 'cpp',
+  'c++': 'cpp',
+}
+
+const knownLanguages = [
+  'python', 'javascript', 'typescript', 'java', 'cpp', 'c', 'csharp', 'go', 'rust',
+  'html', 'css', 'scss', 'vue', 'json', 'yaml', 'markdown', 'bash', 'shell', 'sql', 'xml', 'text'
+]
+
+function toText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value == null) return ''
+  return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
+}
+
+function normalizeLanguage(language: unknown, fallback = 'text'): string {
+  const raw = toText(language || fallback).trim().toLowerCase()
+  return languageAlias[raw] || raw || fallback
+}
+
+function unwrapFencedCode(text: string, fallbackLanguage = 'text'): FenceResult {
+  const trimmed = text.trim()
+  const match = trimmed.match(/^```([\w#+.-]*)\s*\n([\s\S]*?)\n```$/)
+  if (!match) return { code: text, language: normalizeLanguage(fallbackLanguage) }
+  return {
+    language: normalizeLanguage(match[1], fallbackLanguage),
+    code: match[2].trimEnd(),
+  }
+}
+
+function looksLikeMarkdownDocument(text: string): boolean {
+  if (!text.trim()) return false
+
+  const fenceCount = text.match(/```/g)?.length ?? 0
+  if (fenceCount >= 2) return true
+
+  const hasMarkdownTitle = /(^|\n)#{1,4}\s+\S/.test(text)
+  const hasMarkdownList = /(^|\n)([-*]|\d+\.)\s+\S/.test(text)
+  const hasCodeSignals = /(^|\n)\s*(import|from|def|class|#include|public\s+class|function|const|let|var)\b/.test(text)
+
+  return hasMarkdownTitle && hasMarkdownList && !hasCodeSignals
+}
+
 const parsedData = computed(() => {
   if (!props.resultData) return null
-  
-  let raw = props.resultData
-  // 如果是字符串，尝试解析
+
+  let raw: unknown = props.resultData
   if (typeof raw === 'string') {
-    const p = parseJsonObject(raw)
-    if (p) raw = p
-    else return null // 无法解析的非 Markdown 字符串
+    const parsed = parseJsonObject(raw)
+    if (!parsed) return null
+    raw = parsed
   }
 
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+
   let data = raw as Record<string, any>
-  // 解包 resource 层级
-  if (data.resource && typeof data.resource === 'object') {
+  if (data.resource && typeof data.resource === 'object' && !Array.isArray(data.resource)) {
     data = data.resource
   }
 
-  // 解包 content 层级
   const content = data.content
-  if (content && typeof content === 'object') {
-    return content
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    return content as Record<string, any>
   }
-  
-  // 尝试解析 content 字符串
-  const pc = parseJsonObject(content)
-  if (pc) return pc
 
-  // 如果 data 本身看起来就像内容（例如有 code 或 language 字段）
-  if (data.code || data.language) return data
+  const parsedContent = parseJsonObject(content)
+  if (parsedContent) return parsedContent
+
+  if (data.code || data.full_code || data.markdown || data.markdown_content || data.language) return data
 
   return null
 })
 
-// 决定显示 Markdown 还是纯代码
 const displayMarkdown = computed(() => {
   const data = parsedData.value
   if (!data) return ''
-  
-  const codeContent = data.code || data.full_code || ''
-  // 如果代码内容本身就是一份完整的 Markdown 文档
-  if (typeof codeContent === 'string' && (codeContent.includes('# ') || codeContent.includes('## '))) {
-    return codeContent
-  }
-  return ''
+
+  const explicitMarkdown = data.markdown || data.markdown_content || data.document || data.content_markdown
+  if (typeof explicitMarkdown === 'string' && explicitMarkdown.trim()) return explicitMarkdown
+
+  const codeContent = toText(data.code || data.full_code || '')
+  return looksLikeMarkdownDocument(codeContent) ? codeContent : ''
 })
 
-const pureCode = computed(() => {
-  if (displayMarkdown.value) return ''
+const pureCodeInfo = computed(() => {
+  if (displayMarkdown.value) return { code: '', language: 'text' }
+
   const data = parsedData.value
-  if (!data) return ''
-  return data.code || data.full_code || ''
+  if (!data) return { code: '', language: 'text' }
+
+  const fallbackLanguage = normalizeLanguage(data.language || data.lang || 'text')
+  const codeContent = toText(data.code || data.full_code || '')
+  if (!codeContent.trim()) return { code: '', language: fallbackLanguage }
+
+  return unwrapFencedCode(codeContent, fallbackLanguage)
 })
+
+const pureCode = computed(() => pureCodeInfo.value.code)
+const pureLanguage = computed(() => pureCodeInfo.value.language || 'text')
 
 const markdownContent = computed(() => {
-  if (parsedData.value) return '' // 已由 parsedData 处理
-  if (typeof props.resultData === 'string') return props.resultData
-  return ''
+  if (parsedData.value) return ''
+  return typeof props.resultData === 'string' ? props.resultData : ''
 })
 
 const hasExtraInfo = computed(() => {
-  const d = parsedData.value
-  if (!d) return false
-  return !!(d.complexity?.time || d.complexity?.space || d.debug_tips?.length || d.exercises?.length)
+  const data = parsedData.value
+  return !!(data?.complexity?.time || data?.complexity?.space || data?.debug_tips?.length || data?.exercises?.length)
 })
 
 const hasComplexity = computed(() => {
-  const c = parsedData.value?.complexity
-  return !!(c?.time || c?.space)
+  const complexity = parsedData.value?.complexity
+  return !!(complexity?.time || complexity?.space)
 })
 
+function resolveLanguage(code: HTMLElement): string {
+  const className = code.className || ''
+  const match = className.match(/language-([\w#+.-]+)/)
+  return normalizeLanguage(match?.[1] || pureLanguage.value || 'text').toUpperCase()
+}
+
+function looksLikeDetachedCodeToolbar(element: HTMLElement): boolean {
+  const text = element.innerText.replace(/\s+/g, '').toLowerCase()
+  if (!text || text.length > 28) return false
+
+  const copyWords = ['复制', 'copy', 'copied', '已复制']
+  const variants = knownLanguages.flatMap((lang) => [
+    lang,
+    `${lang}复制`,
+    `${lang}copy`,
+    `${lang}copied`,
+    `${lang}已复制`,
+  ])
+
+  return variants.includes(text) || copyWords.includes(text)
+}
+
+function hideDetachedCodeToolbar(pre: HTMLElement) {
+  const previous = pre.previousElementSibling as HTMLElement | null
+  if (previous && looksLikeDetachedCodeToolbar(previous)) {
+    previous.dataset.hiddenByCodeView = 'true'
+    previous.style.display = 'none'
+  }
+
+  const parent = pre.parentElement as HTMLElement | null
+  if (!parent) return
+
+  Array.from(parent.children).forEach((child) => {
+    if (child === pre || !(child instanceof HTMLElement)) return
+    if (child.dataset.hiddenByCodeView === 'true') return
+    if (looksLikeDetachedCodeToolbar(child)) {
+      child.dataset.hiddenByCodeView = 'true'
+      child.style.display = 'none'
+    }
+  })
+}
+
+// 核心优化：结构化渲染与高亮
 const performHighlight = async () => {
   await nextTick()
-  if (typeof document !== 'undefined') {
-    const preBlocks = document.querySelectorAll('.code-resource .pure-code-block pre')
-    preBlocks.forEach((pre) => {
-      const code = pre.querySelector('code')
-      if (code) {
-        hljs.highlightElement(code as HTMLElement)
-        
-        // 如果还没有复制按钮，则添加一个
-        if (!pre.querySelector('.copy-code-btn')) {
-          const btn = document.createElement('button')
-          btn.className = 'copy-code-btn'
-          btn.type = 'button'
-          btn.innerText = '复制'
-          btn.setAttribute('data-code', code.innerText)
-          pre.appendChild(btn)
-        }
-      }
-    })
-  }
+  if (!rootRef.value) return
+
+  const preBlocks = rootRef.value.querySelectorAll<HTMLElement>('pre')
+  preBlocks.forEach((pre) => {
+    const code = pre.querySelector<HTMLElement>('code')
+    if (!code) return
+
+    hideDetachedCodeToolbar(pre)
+
+    // 代码高亮兼容处理
+    if (!code.dataset.highlighted && !code.classList.contains('hljs')) {
+      try {
+        hljs.highlightElement(code)
+      } catch {}
+    }
+
+    const langText = resolveLanguage(code)
+
+    // 如果已经被包裹（例如纯代码模式或已处理过的Markdown），只需更新语言标签
+    if (pre.parentElement?.classList.contains('code-block-wrapper')) {
+      const langLabel = pre.parentElement.querySelector('.lang-label')
+      if (langLabel) langLabel.innerText = langText
+      return
+    }
+
+    // --- 对未经包裹的 Markdown 生成的 <pre> 进行结构重组 ---
+    const wrapper = document.createElement('div')
+    wrapper.className = 'code-block-wrapper'
+
+    const header = document.createElement('div')
+    header.className = 'code-block-header'
+
+    const langLabel = document.createElement('span')
+    langLabel.className = 'lang-label'
+    langLabel.innerText = langText
+
+    const btn = document.createElement('button')
+    btn.className = 'code-copy-btn'
+    btn.innerText = '复制'
+    btn.type = 'button'
+
+    header.appendChild(langLabel)
+    header.appendChild(btn)
+
+    // 将新建的容器插入原先 <pre> 的位置，并把 <pre> 移入容器中
+    pre.parentNode?.insertBefore(wrapper, pre)
+    wrapper.appendChild(header)
+    wrapper.appendChild(pre)
+
+    // 移除 markdown 解析器可能自带的旧复制按钮
+    const oldBtns = pre.querySelectorAll('button')
+    oldBtns.forEach(b => b.remove())
+  })
 }
 
 const copyToClipboard = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text)
     ElMessage.success({ message: '代码已复制', plain: true })
-  } catch (err) {
+  } catch {
     ElMessage.error({ message: '复制失败，请重试', plain: true })
   }
 }
 
-const handleMessageClick = (e: MouseEvent) => {
-  const target = e.target as HTMLElement
-  if (target && target.classList.contains('copy-code-btn')) {
-    const code = target.getAttribute('data-code')
-    if (code) {
-      copyToClipboard(code)
-      const originalText = target.innerText
-      target.innerText = '已复制'
-      target.classList.add('copied')
-      setTimeout(() => {
-        target.innerText = originalText
-        target.classList.remove('copied')
-      }, 2000)
-    }
-  }
+const handleMessageClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (!target?.classList.contains('code-copy-btn')) return
+
+  // 从顶层卡片向下寻找 code 内容，避免将数千行代码写入 data 属性
+  const wrapper = target.closest('.code-block-wrapper')
+  const codeNode = wrapper?.querySelector('code')
+  const codeContent = codeNode?.innerText || codeNode?.textContent || ''
+
+  if (!codeContent) return
+
+  copyToClipboard(codeContent)
+  const originalText = target.innerText
+  target.innerText = '已复制'
+  target.classList.add('copied')
+
+  window.setTimeout(() => {
+    target.innerText = originalText
+    target.classList.remove('copied')
+  }, 1400)
 }
 
 onMounted(performHighlight)
-watch(parsedData, performHighlight)
-watch(pureCode, performHighlight)
+watch([parsedData, displayMarkdown, pureCode, markdownContent], performHighlight, { flush: 'post' })
 </script>
 
 <style scoped>
 .code-resource {
   min-width: 0;
   width: 100%;
-  --primary: var(--color-primary); /* Slate 600 */
+  --primary: var(--color-primary);
   --bg: var(--color-surface);
-  --fg: var(--color-text); /* Slate 700 */
+  --fg: var(--color-text);
   --border: var(--color-border);
-  --accent: var(--color-primary); /* Indigo 500 */
+  --accent: var(--color-primary);
+  --code-bg: #ffffff;
+  --code-head-bg: #f8fafc;
+  --code-border: #e2e8f0;
+  --code-text: #24292f;
 }
 
 .code-card-content {
@@ -233,60 +373,8 @@ watch(pureCode, performHighlight)
   gap: 16px;
 }
 
-/* 头部 HUD */
-.frame-header {
-  position: absolute;
-  top: 12px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-indicator {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: none;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.2); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.technical-label {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--primary);
-  letter-spacing: 1px;
-}
-
-/* 底部 HUD */
-.frame-footer {
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mono-tag {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--primary);
-  background: rgba(0, 0, 0, 0.1);
-  padding: 2px 6px;
-  border-radius: 2px;
-}
-
-.footer-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(to right, var(--border), transparent);
+.code-main-body {
+  min-width: 0;
 }
 
 .code-header-meta {
@@ -294,140 +382,275 @@ watch(pureCode, performHighlight)
 }
 
 .code-summary-text {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
   color: var(--color-text-secondary);
+  font-size: 0.95rem;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
-/* Markdown 与代码块样式 */
 .markdown-shell {
+  min-width: 0;
   color: var(--fg);
-  line-height: 1.65;
+  line-height: 1.78;
   overflow-wrap: anywhere;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 0.96rem;
 }
 
-/* 统一代码块外观 */
-:deep(pre), .pure-code-block pre {
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.03) !important;
-  border: none;
-  padding: 20px;
+.code-markdown-shell :deep(h1),
+.code-markdown-shell :deep(h2),
+.code-markdown-shell :deep(h3) {
+  margin: 1.7em 0 0.85em;
+  padding-bottom: 0.48em;
+  border-bottom: 1px solid #e5e7eb;
+  color: var(--color-text-strong);
+  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.code-markdown-shell :deep(h1) { font-size: 1.42rem; }
+.code-markdown-shell :deep(h2) { font-size: 1.18rem; }
+.code-markdown-shell :deep(h3) { font-size: 1.02rem; }
+
+.code-markdown-shell :deep(p) {
+  margin: 0.85em 0;
+  color: var(--color-text-secondary);
+}
+
+.code-markdown-shell :deep(ul),
+.code-markdown-shell :deep(ol) {
+  padding-left: 1.35em;
+  margin: 0.85em 0;
+}
+
+.code-markdown-shell :deep(li) { margin: 0.35em 0; }
+
+.code-markdown-shell :deep(blockquote) {
+  margin: 1em 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-primary-border, var(--primary));
+  background: #f8fafc;
+  color: var(--color-text-secondary);
+  border-radius: 0 10px 10px 0;
+}
+
+/* --- 重构的代码块卡片外观 --- */
+
+.code-resource :deep(.code-block-wrapper) {
   margin: 1.2em 0;
-  overflow: auto;
-  position: relative;
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  background: var(--code-bg);
+  overflow: hidden; /* 保证圆角能裁剪内部区域 */
+  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.03);
 }
 
-:deep(pre)::before, .pure-code-block pre::before {
-  content: '•••';
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  color: #334155;
-  font-size: 14px;
-  letter-spacing: 2px;
+.code-resource :deep(.code-block-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--code-head-bg);
+  border-bottom: 1px solid var(--code-border);
 }
 
-/* 复制按钮样式 */
-:deep(.copy-code-btn) {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  background: rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  color: var(--primary);
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  padding: 4px 8px;
-  border-radius: 4px;
+.code-resource :deep(.lang-label) {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-family: var(--font-mono, Consolas, monospace);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.code-resource :deep(.code-copy-btn) {
+  font-size: 0.75rem;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 14px;
   cursor: pointer;
-  transition: all 0.2s;
-  z-index: 10;
-  opacity: 0;
+  transition: all 0.2s ease;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
 }
 
-:deep(pre:hover .copy-code-btn) {
-  opacity: 1;
+.code-resource :deep(.code-copy-btn:hover) {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #94a3b8;
 }
 
-:deep(.copy-code-btn:hover) {
-  background: var(--primary);
-  color: white;
+.code-resource :deep(.code-copy-btn.copied) {
+  color: #059669;
+  border-color: #34d399;
+  background: #ecfdf5;
 }
 
-:deep(.copy-code-btn.copied) {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-
-:deep(code), .pure-code-block code {
-  font-family: var(--font-mono);
-  font-size: 0.85em;
+/* 内部代码区域完全撑开显示 */
+.code-resource :deep(.code-block-wrapper pre) {
+  margin: 0 !important;
+  padding: 18px !important;
+  border: none !important;
+  border-radius: 0 !important;
   background: transparent !important;
+  box-shadow: none !important;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
-/* 优化代码高亮对比度，拒绝灰色和浅色 */
-:deep(.hljs-comment), .pure-code-block .hljs-comment,
-:deep(.hljs-quote), .pure-code-block .hljs-quote {
-  color: var(--color-text-secondary) !important; /* 深蓝灰色，提高对比度 */
-  font-style: italic;
+.code-resource :deep(pre code),
+.code-resource :deep(.code-block-wrapper code) {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  background: transparent !important;
+  color: var(--code-text) !important;
+  font-family: var(--font-mono, "JetBrains Mono", "Fira Code", Consolas, monospace);
+  font-size: 0.9rem;
+  line-height: 1.76;
+  white-space: pre;
+  tab-size: 4;
 }
 
-:deep(.hljs-keyword), .pure-code-block .hljs-keyword,
-:deep(.hljs-selector-tag), .pure-code-block .hljs-selector-tag {
-  color: #9333EA !important; /* 深紫色 */
-  font-weight: bold;
+.code-resource :deep(.hljs) {
+  background: transparent !important;
+  color: var(--code-text) !important;
 }
 
-:deep(.hljs-string), .pure-code-block .hljs-string,
-:deep(.hljs-title), .pure-code-block .hljs-title,
-:deep(.hljs-section), .pure-code-block .hljs-section,
-:deep(.hljs-attribute), .pure-code-block .hljs-attribute,
-:deep(.hljs-literal), .pure-code-block .hljs-literal,
-:deep(.hljs-template-tag), .pure-code-block .hljs-template-tag,
-:deep(.hljs-template-variable), .pure-code-block .hljs-template-variable,
-:deep(.hljs-type), .pure-code-block .hljs-type,
-:deep(.hljs-addition), .pure-code-block .hljs-addition {
-  color: #0284C7 !important; /* 深蓝色 */
+.code-resource :deep(pre::-webkit-scrollbar) {
+  width: 10px;
+  height: 10px;
+}
+
+.code-resource :deep(pre::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+.code-resource :deep(pre::-webkit-scrollbar-thumb) {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: #cbd5e1;
+}
+
+.code-resource :deep(pre::-webkit-scrollbar-thumb:hover) {
+  background-color: #94a3b8;
+}
+
+/* 行内小代码块样式 */
+.code-resource :deep(:not(pre) > code) {
+  padding: 0.16em 0.42em;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  background: #eff6ff !important;
+  color: #1d4ed8;
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-size: 0.86em;
   font-weight: 600;
 }
 
-:deep(.hljs-string), .pure-code-block .hljs-string {
-  color: #16A34A !important; /* 深绿色 */
-  font-weight: normal;
+/* --- 隐藏兜底工具栏 --- */
+.code-resource :deep([data-hidden-by-code-view="true"]) {
+  display: none !important;
 }
 
-:deep(.hljs-number), .pure-code-block .hljs-number,
-:deep(.hljs-built_in), .pure-code-block .hljs-built_in,
-:deep(.hljs-builtin-name), .pure-code-block .hljs-builtin-name,
-:deep(.hljs-literal), .pure-code-block .hljs-literal {
-  color: #D97706 !important; /* 深橙色 */
+/* --- hljs 浅色主题配色调优 --- */
+.code-resource :deep(.hljs-comment),
+.code-resource :deep(.hljs-quote) {
+  color: #6a737d !important;
+  font-style: italic;
 }
 
-/* 页脚扩展信息 */
+.code-resource :deep(.hljs-keyword),
+.code-resource :deep(.hljs-selector-tag) {
+  color: #d73a49 !important;
+  font-weight: 700;
+}
+
+.code-resource :deep(.hljs-string),
+.code-resource :deep(.hljs-attr),
+.code-resource :deep(.hljs-symbol) {
+  color: #22863a !important;
+}
+
+.code-resource :deep(.hljs-title),
+.code-resource :deep(.hljs-title.function_),
+.code-resource :deep(.hljs-section) {
+  color: #6f42c1 !important;
+  font-weight: 700;
+}
+
+.code-resource :deep(.hljs-number),
+.code-resource :deep(.hljs-literal),
+.code-resource :deep(.hljs-boolean) {
+  color: #005cc5 !important;
+}
+
+.code-resource :deep(.hljs-built_in),
+.code-resource :deep(.hljs-type),
+.code-resource :deep(.hljs-class .hljs-title) {
+  color: #e36209 !important;
+}
+
+.code-resource :deep(.hljs-variable),
+.code-resource :deep(.hljs-template-variable) {
+  color: #24292f !important;
+}
+
+/* --- 底部执行标签栏 --- */
+
+.frame-footer {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.mono-tag {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #e6f7ec; /* 清新浅绿色背景 */
+  color: #0aa55a;      /* 绿色文本 */
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.footer-line {
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0; /* 实色浅灰线条 */
+}
+
+/* --- 其余复杂度及练习题样式保持一致 --- */
+
 .code-footer-extras {
   margin-top: 16px;
-  background: rgba(0, 0, 0, 0.02);
-  padding: 20px;
-  border-radius: 8px;
-  border: none;
+  padding: 18px;
+  border: 1px solid var(--code-border);
+  border-radius: 14px;
+  background: #f8fafc;
 }
 
 .footer-divider {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .divider-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
   font-size: 0.75rem;
   color: var(--primary);
   letter-spacing: 1px;
+  font-weight: 700;
 }
 
 .divider-line {
@@ -438,49 +661,49 @@ watch(pureCode, performHighlight)
 
 .extras-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
 }
 
 .extra-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .extra-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  font-weight: bold;
   color: var(--primary);
-  letter-spacing: 0.5px;
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 .extra-content {
-  font-family: var(--font-mono);
+  color: var(--code-text);
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
   font-size: 0.9rem;
-  color: #334155;
 }
 
 .extra-content code {
-  background: rgba(0, 0, 0, 0.1);
-  color: var(--primary);
   padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
+  border-radius: 6px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 700;
 }
 
 .tips-list {
   margin: 0;
   padding-left: 20px;
-  font-family: var(--font-mono);
-  font-size: 0.88rem;
   color: var(--color-text-secondary);
-  line-height: 1.6;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 0.9rem;
+  line-height: 1.65;
 }
 
 .exercises-container {
@@ -492,16 +715,16 @@ watch(pureCode, performHighlight)
 
 .exercise-item {
   display: flex;
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  color: #334155;
-  align-items: flex-start;
-  transition: all 0.2s;
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--code-text);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 0.92rem;
+  transition: border-color 0.18s ease, transform 0.18s ease;
 }
 
 .exercise-item:hover {
@@ -510,70 +733,42 @@ watch(pureCode, performHighlight)
 }
 
 .ex-num {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--primary);
-  background: rgba(0, 0, 0, 0.1);
-  padding: 2px 6px;
-  border-radius: 2px;
   flex-shrink: 0;
-}
-
-.ml-4 { margin-left: 16px; }
-
-/* 紧凑模式 */
-.compact .code-card-content {
-  padding: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
-.compact .frame-corners,
-.compact .frame-header,
-.compact .frame-footer {
-  display: none;
-}
-
-.compact .markdown-shell {
-  max-height: 180px;
-  overflow: hidden;
-  font-size: 0.86rem;
-  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-primary-soft, #eef2ff);
+  color: var(--primary);
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .code-empty-hud {
-  padding: 40px;
-  display: flex;
-  justify-content: center;
+  padding: 48px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: #f8fafc;
+  color: var(--primary);
+  text-align: center;
 }
 
 .empty-frame {
-  text-align: center;
-  border: none;
-  background: rgba(0, 0, 0, 0.02);
-  padding: 40px 60px;
-  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
 .empty-icon {
-  font-family: var(--font-mono);
-  font-size: 2rem;
-  color: var(--primary);
-  opacity: 0.3;
-  margin-bottom: 12px;
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-size: 1.8rem;
+  opacity: 0.55;
 }
 
-.empty-frame p {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--color-text-faint);
-  letter-spacing: 1px;
-}
-
-@media (max-width: 640px) {
-  .extras-grid {
-    grid-template-columns: 1fr;
-  }
+.compact .markdown-shell {
+  max-height: 300px;
+  overflow: hidden;
+  font-size: 0.86rem;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
 }
 </style>

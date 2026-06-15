@@ -159,7 +159,7 @@ const handleLogin = async (formEl: any) => {
         if (data.token) {
           setAuthToken(data.token)
           ElMessage.success({ message: '登录成功！', duration: 2000, offset: 20 })
-          if (data.user?.is_first_login) {
+          if (!data.user?.is_first_login) {
             router.push('/dashboard?onboarding=true')
           } else {
             router.push('/dashboard')

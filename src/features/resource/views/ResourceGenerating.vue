@@ -181,8 +181,33 @@
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
-              <div class="station-preview" :class="`preview-${node.id}`">
-                <span v-for="i in 4" :key="i"></span>
+              <div class="station-live-log" :class="[`is-${node.status}`, { 'is-empty': !getNodeLiveLogs(node).length }]">
+                <template v-if="getNodeLiveLogs(node).length">
+                  <div class="station-live-current">
+                    <span class="station-live-dot"></span>
+                    <div>
+                      <strong>{{ getNodePhaseLabel(node) }}</strong>
+                      <p>{{ getNodeDisplayMessage(node) }}</p>
+                    </div>
+                  </div>
+
+                  <div class="station-live-lines">
+                    <p
+                      v-for="log in getNodeLiveLogs(node, 3)"
+                      :key="log.id"
+                      class="station-live-line"
+                      :class="`is-${log.status || node.status}`"
+                    >
+                      <span>{{ getLogPhaseLabel(log.phase) }}</span>
+                      <em>{{ log.message }}</em>
+                    </p>
+                  </div>
+                </template>
+
+                <div v-else class="station-live-empty">
+                  <span class="station-live-dot muted"></span>
+                  <p>等待该智能体接收调度指令</p>
+                </div>
               </div>
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
@@ -280,9 +305,22 @@
             </div>
 
             <div class="focus-history detail-history-v3">
-              <span class="panel-eyebrow">STEP HISTORY</span>
-              <p v-for="step in selectedDagNode.stepHistory.slice(-5)" :key="step">{{ step }}</p>
-              <p v-if="!selectedDagNode.stepHistory.length">等待该智能体上报执行步骤</p>
+              <span class="panel-eyebrow">SSE EVENT STREAM</span>
+
+              <div
+                v-for="log in getNodeLiveLogs(selectedDagNode, 8)"
+                :key="log.id"
+                class="detail-live-log-item"
+                :class="`is-${log.status || selectedDagNode.status}`"
+              >
+                <div>
+                  <span>{{ getLogPhaseLabel(log.phase) }}</span>
+                  <em>{{ log.elapsedMs ? formatElapsed(log.elapsedMs) : getNodeTimeLabel(selectedDagNode) }}</em>
+                </div>
+                <p>{{ log.message }}</p>
+              </div>
+
+              <p v-if="!getNodeLiveLogs(selectedDagNode, 8).length">等待该智能体上报执行步骤</p>
             </div>
           </div>
         </aside>
@@ -616,6 +654,20 @@ const visibleOutputAgentIds = computed(() => {
 const workflowLogItems = computed(() => {
   const items: Array<{ id: string; title: string; message: string; status: DagNodeState['status'] }> = []
   props.visibleWorkflowNodes.forEach((node) => {
+    const richLogs = node.eventLogs || []
+
+    if (richLogs.length) {
+      richLogs.slice(-4).forEach((log) => {
+        items.push({
+          id: log.id,
+          title: `${node.label} · ${getLogPhaseLabel(log.phase)}`,
+          message: log.message,
+          status: log.status || node.status,
+        })
+      })
+      return
+    }
+
     if (node.stepHistory?.length) {
       node.stepHistory.slice(-3).forEach((step, index) => {
         items.push({
@@ -637,6 +689,60 @@ const workflowLogItems = computed(() => {
   return items
 })
 
+type AgentLiveLog = {
+  id: string
+  eventType?: string
+  phase?: string
+  message: string
+  status?: DagNodeState['status']
+  progress?: number
+  elapsedMs?: number
+  timestamp?: number
+}
+
+function getNodeLiveLogs(node: DagNodeState, limit = 4): AgentLiveLog[] {
+  const richLogs = (node.eventLogs || []) as AgentLiveLog[]
+
+  if (richLogs.length) {
+    return richLogs
+      .filter(log => Boolean(log.message?.trim()))
+      .slice(-limit)
+      .reverse()
+  }
+
+  return (node.stepHistory || [])
+    .filter(Boolean)
+    .slice(-limit)
+    .reverse()
+    .map((message, index) => ({
+      id: `${node.id}-history-${index}-${message}`,
+      message,
+      phase: node.phase,
+      status: node.status,
+      elapsedMs: node.elapsedMs,
+      timestamp: node.lastUpdatedAt,
+    }))
+}
+
+function getLogPhaseLabel(phase?: string) {
+  const phaseMap: Record<string, string> = {
+    planning_blueprint: '规划',
+    llm_generating: '生成',
+    validating: '校验',
+    reviewing_sources: '审核',
+    reviewing_ppt: '审核',
+    ppt_generating: 'PPT',
+    ppt_waiting_sources: '等待',
+    pre_review_waiting_sources: '等待',
+    artifact_saved: '保存',
+    bundling: '打包',
+    finished: '完成',
+    failed: '失败',
+  }
+
+  return phase ? phaseMap[phase] || phase : '状态'
+}
+
 function getStageNode(id: string): DagNodeState {
   return props.dagNodeStates[id] || {
     id,
@@ -646,6 +752,7 @@ function getStageNode(id: string): DagNodeState {
     progress: 0,
     currentMessage: '',
     stepHistory: [],
+    eventLogs: [],
     isSystem: SYSTEM_AGENT_IDS.includes(id),
   }
 }
@@ -1484,69 +1591,192 @@ function getPlanStepIcon(agentId: string) {
   white-space: nowrap;
 }
 
-.station-preview {
-  height: 92px;
+.station-live-log {
+  min-height: 92px;
   margin: 16px 0 14px;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.82);
-  padding: 12px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  padding: 11px 12px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 8px;
+  gap: 9px;
   overflow: hidden;
   flex: 1;
 }
 
-.station-preview span {
-  display: block;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.28);
+.station-live-log.is-running {
+  border-color: rgba(59, 130, 246, 0.34);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.08), transparent 42%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.82));
 }
 
-.station-preview span:nth-child(1) { width: 84%; }
-.station-preview span:nth-child(2) { width: 64%; }
-.station-preview span:nth-child(3) { width: 76%; }
-.station-preview span:nth-child(4) { width: 48%; }
-
-.preview-mindmap {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
+.station-live-log.is-success {
+  border-color: rgba(16, 185, 129, 0.34);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(16, 185, 129, 0.08), transparent 42%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 250, 0.84));
 }
 
-.preview-mindmap span {
-  width: 8px !important;
+.station-live-log.is-failed {
+  border-color: rgba(239, 68, 68, 0.28);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(239, 68, 68, 0.08), transparent 42%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(254, 242, 242, 0.86));
+}
+
+.station-live-current {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  gap: 9px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.station-live-dot {
+  width: 8px;
   height: 8px;
-  border-radius: 50%;
-  background: #14B8A6;
-  box-shadow: 20px 10px 0 rgba(20, 184, 166, 0.42), 38px -8px 0 rgba(20, 184, 166, 0.28);
+  margin-top: 6px;
+  border-radius: 999px;
+  background: #3B82F6;
+  box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.12);
+  flex-shrink: 0;
 }
 
-.preview-code {
-  background: #0F172A;
+.station-live-dot.muted {
+  background: #CBD5E1;
+  box-shadow: 0 0 0 5px rgba(148, 163, 184, 0.12);
 }
 
-.preview-code span {
-  background: rgba(125, 211, 252, 0.72);
+.station-live-current strong {
+  display: block;
+  color: #2563EB;
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1.2;
 }
 
-.preview-quiz span {
-  position: relative;
-  padding-left: 18px;
+.station-live-current p {
+  margin: 3px 0 0;
+  color: #0F172A;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.36;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.preview-quiz span::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: -3px;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #8B5CF6;
-  border-radius: 50%;
+.station-live-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.station-live-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  margin: 0;
+  min-width: 0;
+}
+
+.station-live-line span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563EB;
+  font-size: 0.62rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.station-live-line em {
+  min-width: 0;
+  color: #64748B;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.station-live-line.is-success span {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.station-live-line.is-failed span {
+  background: rgba(239, 68, 68, 0.1);
+  color: #DC2626;
+}
+
+.station-live-empty {
+  height: 100%;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #94A3B8;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.station-live-empty p {
+  margin: 0;
+  color: #94A3B8;
+}
+
+.detail-live-log-item {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.detail-live-log-item > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detail-live-log-item span {
+  color: #2563EB;
+  font-size: 0.68rem;
+  font-weight: 950;
+}
+
+.detail-live-log-item em {
+  color: #94A3B8;
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.detail-live-log-item p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.detail-live-log-item.is-success {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(240, 253, 250, 0.82);
+}
+
+.detail-live-log-item.is-failed {
+  border-color: rgba(239, 68, 68, 0.26);
+  background: rgba(254, 242, 242, 0.82);
 }
 
 .station-footer {
@@ -2564,8 +2794,8 @@ function getPlanStepIcon(agentId: string) {
   min-height: 196px;
 }
 
-.station-preview {
-  height: 82px;
+.station-live-log {
+  min-height: 78px;
   margin: 12px 0 12px;
 }
 

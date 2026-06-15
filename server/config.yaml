@@ -6,8 +6,7 @@ app:
 
 # 数据库配置
 database:
-#  url: "postgresql+asyncpg://coustea:Aa123456@101.43.200.154:5432/agent"
-  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 10
   max_overflow: 20
@@ -32,6 +31,9 @@ models:
   # 推理参数
   temperature: 0.3
   max_tokens: 4096
+  # 网络与重试参数
+  timeout: 300          # 单次请求超时（秒）
+  max_retries: 2        # 失败重试次数
 
   # 图片理解模型（独立配置）
   vision:
@@ -39,6 +41,8 @@ models:
     api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
     model_name: "glm-4.6v-flash"
     temperature: 0.7
+    timeout: 300
+    max_retries: 2
 
 # 星火 WebSocket API（Vision 用）
 spark:

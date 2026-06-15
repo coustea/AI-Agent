@@ -77,13 +77,7 @@
 
       <!-- Main Body: High density panels -->
       <div class="dashboard-body">
-        
-        <!-- Left: Diagnostic Sidebar -->
-        <aside class="dashboard-sidebar">
-          <PathDiagnosticWidget :path="path" />
-        </aside>
-
-        <!-- Right: Skill Tree / Graph -->
+        <!-- Skill Tree / Graph (full width) -->
         <section class="dashboard-graph">
           <div class="graph-card">
             <div class="card-header">
@@ -127,7 +121,6 @@ import { ElMessage } from 'element-plus'
 
 import BaseCard from '@/shared/ui/BaseCard.vue'
 import BaseButton from '@/shared/ui/BaseButton.vue'
-import PathDiagnosticWidget from '@/features/learning/components/PathDiagnosticWidget.vue'
 import PathSkillTree from '@/features/learning/components/PathSkillTree.vue'
 import EvaluationBanner from '@/features/learning/components/EvaluationBanner.vue'
 import NodeDetailDrawer from '@/features/learning/components/NodeDetailDrawer.vue'
@@ -548,18 +541,10 @@ onMounted(loadPath)
 
 /* Dashboard Body */
 .dashboard-body {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 20px;
-  flex: 1;
-}
-
-.dashboard-sidebar {
   display: flex;
   flex-direction: column;
-  /* Fixed height relative to viewport to make it sticky-like in a flex container */
-  height: calc(100vh - 300px);
-  min-height: 400px;
+  gap: 20px;
+  flex: 1;
 }
 
 .dashboard-graph {
@@ -637,13 +622,6 @@ onMounted(loadPath)
 
 /* Responsive */
 @media (max-width: 1200px) {
-  .dashboard-body {
-    grid-template-columns: 1fr;
-  }
-  .dashboard-sidebar {
-    height: 300px;
-    min-height: auto;
-  }
   .graph-card {
     min-height: 500px;
   }

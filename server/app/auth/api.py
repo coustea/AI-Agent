@@ -1,4 +1,8 @@
-"""Auth HTTP routes."""
+"""认证模块 HTTP 路由。
+
+提供用户注册、登录、登出、信息查询/更新、头像上传等 REST API 端点。
+所有路由挂载在 /api/v1/users 前缀下。
+"""
 
 from __future__ import annotations
 
@@ -14,52 +18,80 @@ from app.infra.models import User
 from app.config import AVATAR_DIR
 from app.infra.response import HttpResponse
 
-router = APIRouter()  # 认证模块路由，挂载在 /api/v1/users 下
-bearer_scheme = HTTPBearer()  # Bearer Token 认证方案，自动从 Authorization 头提取
+# 创建路由实例，挂载在 /api/v1/users 下
+router = APIRouter()
+# Bearer Token 认证方案，自动从 Authorization 头提取 Token
+bearer_scheme = HTTPBearer()
 
 
-@router.post("")  # POST /api/v1/users — 用户注册
+# POST /api/v1/users — 用户注册
+@router.post("")
 async def create_user(
     data: UserRegister,
     session: AsyncSession = Depends(get_session),
 ):
-    result = await auth_usecases.register(session, data)  # 调用注册用例
+    """用户注册接口。
+
+    创建新用户账号，用户名必须唯一。
+    成功返回 201 Created，用户名重复返回 400。
+    """
+    # 调用注册用例，检查用户名唯一性并创建用户
+    result = await auth_usecases.register(session, data)
     if not result:
-        return HttpResponse.error(code=400, message="用户名已存在")  # 用户名重复
-    return HttpResponse.success(data=result, status_code=201)  # 201 Created
+        return HttpResponse.error(code=400, message="用户名已存在")
+    return HttpResponse.success(data=result, status_code=201)
 
 
-@router.post("/auth")  # POST /api/v1/users/auth — 用户登录
+# POST /api/v1/users/auth — 用户登录
+@router.post("/auth")
 async def login(
     data: UserLogin,
     session: AsyncSession = Depends(get_session),
 ):
-    result = await auth_usecases.login(session, data)  # 验证用户名密码并签发 JWT
+    """用户登录接口。
+
+    验证用户名密码，成功签发 JWT Token。
+    返回 {token, user} 供前端保存。
+    """
+    # 验证用户名密码并签发 JWT Token
+    result = await auth_usecases.login(session, data)
     if not result:
-        return HttpResponse.error(code=401, message="用户名或密码错误")  # 认证失败
-    return HttpResponse.success(data=result)  # 返回 {token, user}
+        return HttpResponse.error(code=401, message="用户名或密码错误")
+    return HttpResponse.success(data=result)
 
 
-@router.post("/auth/logout")  # POST /api/v1/users/auth/logout — 用户登出
+# POST /api/v1/users/auth/logout — 用户登出
+@router.post("/auth/logout")
 async def logout(
     background_tasks: BackgroundTasks,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    await auth_usecases.logout(session, credentials.credentials)  # 从白名单移除 Token，使其失效
-    background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)  # 后台异步更新用户画像
+    """用户登出接口。
+
+    从白名单中删除 Token 使其立即失效。
+    后台异步更新用户画像数据。
+    """
+    # 撤销 Token，使其立即失效
+    await auth_usecases.logout(session, credentials.credentials)
+    # 后台任务：异步更新用户学习画像（不影响响应速度）
+    background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)
     return HttpResponse.success(message="退出登录成功")
 
 
 @router.get("/auth/status")
 async def check_auth_status(current_user: User = Depends(get_current_user)):
-    """轻量级 Token 探活接口"""
+    """轻量级 Token 探活接口。
+
+    用于前端检测当前 Token 是否仍然有效，有效则返回 200。
+    """
     return HttpResponse.success(message="Token 有效")
 
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
+    """获取当前登录用户信息。"""
     return HttpResponse.success(data=UserRead.model_validate(current_user))
 
 
@@ -69,6 +101,7 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """更新当前用户信息（PATCH 语义，只更新提交的字段）。"""
     user = await auth_usecases.update_me(session, current_user.id, data)
     if not user:
         return HttpResponse.error(code=404, message="用户不存在")
@@ -84,8 +117,9 @@ async def upload_avatar(
     """上传用户头像。
 
     支持 jpg, jpeg, png, gif, webp 格式，最大 2MB。
+    文件保存到 workplace/avatars/ 目录，以 {user_id}.{ext} 命名。
     """
-    # 验证文件类型
+    # 验证文件类型：只允许常见的图片格式
     allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     if file.content_type not in allowed_types:
         return HttpResponse.error(
@@ -93,27 +127,27 @@ async def upload_avatar(
             message="不支持的图片格式，仅支持 jpg, png, gif, webp",
         )
 
-    # 验证文件大小（2MB）
+    # 读取文件内容并验证大小（最大 2MB）
     content = await file.read()
-    max_size = 2 * 1024 * 1024
+    max_size = 2 * 1024 * 1024  # 2MB
     if len(content) > max_size:
         return HttpResponse.error(
             code=400,
             message=f"文件大小超过限制（最大 {max_size // (1024 * 1024)}MB）",
         )
 
-    # 确保目录存在
+    # 确保头像存储目录存在
     AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 生成文件名：{user_id}.{ext}
+    # 生成文件名：{user_id}.{扩展名}，确保每个用户只有一个头像
     ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
     filename = f"{current_user.id}.{ext}"
     file_path = AVATAR_DIR / filename
 
-    # 保存文件
+    # 将文件内容写入磁盘
     file_path.write_bytes(content)
 
-    # 生成 URL 并更新用户头像
+    # 生成头像访问 URL 并更新用户记录
     avatar_url = f"/api/v1/users/avatars/{filename}"
     user = await auth_usecases.update_me(
         session,
@@ -126,10 +160,14 @@ async def upload_avatar(
 
 @router.get("/avatars/{filename}")
 async def get_avatar(filename: str):
-    """获取用户头像文件。"""
+    """获取用户头像文件。
+
+    根据文件名返回头像图片，不存在则返回 404。
+    """
     from fastapi.responses import FileResponse
 
     file_path = AVATAR_DIR / filename
     if not file_path.exists():
         return HttpResponse.error(code=404, message="头像不存在")
+    # 直接返回文件响应（FastAPI 自动处理 Content-Type）
     return FileResponse(file_path)

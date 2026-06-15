@@ -40,12 +40,17 @@ class User(SQLModel, table=True):
     """用户基础信息表"""
     __tablename__ = "users"
 
-    id: int | None = Field(default=None, primary_key=True)  # 自增主键
-    username: str = Field(max_length=50, index=True, unique=True)  # 用户名，唯一索引
-    password: str = Field(max_length=255, exclude=True)  # bcrypt 哈希密码，exclude=True 防止序列化泄露
+    # 自增主键
+    id: int | None = Field(default=None, primary_key=True)
+    # 用户名，唯一索引
+    username: str = Field(max_length=50, index=True, unique=True)
+    # bcrypt 哈希密码，exclude=True 防止序列化泄露
+    password: str = Field(max_length=255, exclude=True)
     email: str | None = Field(default=None, max_length=100)
-    avatar: str | None = Field(default=None, max_length=500)  # 头像 URL
-    is_first_login: bool = Field(default=True)  # 是否首次登录，完成后置 False
+    # 头像 URL
+    avatar: str | None = Field(default=None, max_length=500)
+    # onboarding 是否已完成，True=已完成，False=未完成（需弹窗）
+    is_first_login: bool = Field(default=False)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -66,9 +71,12 @@ class ActiveToken(SQLModel, table=True):
     __tablename__ = "active_tokens"
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)  # 关联用户，支持按用户批量清理 token
-    token: str = Field(unique=True, index=True)  # JWT 字符串，唯一索引用于快速查找
-    expires_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))  # token 过期时间，用于清理过期记录
+    # 关联用户，支持按用户批量清理 token
+    user_id: int = Field(index=True)
+    # JWT 字符串，唯一索引用于快速查找
+    token: str = Field(unique=True, index=True)
+    # token 过期时间，用于清理过期记录
+    expires_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -80,8 +88,10 @@ class School(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, max_length=100)
-    level: str | None = Field(default=None, max_length=50)  # 办学层次：本科/专科
-    tier: str | None = Field(default=None, max_length=20)  # 院校层次：985/211/双一流/普通本科/专科
+    # 办学层次：本科/专科
+    level: str | None = Field(default=None, max_length=50)
+    # 院校层次：985/211/双一流/普通本科/专科
+    tier: str | None = Field(default=None, max_length=20)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -107,11 +117,15 @@ class ChatSession(SQLModel, table=True):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
-    )  # UUID 原生类型主键
+    )
+    # UUID 原生类型主键
     user_id: int = Field(index=True)
-    module: str = Field(default="mentor", index=True)  # 所属功能模块（如 "mentor"）
-    title: str = Field(default="新对话", max_length=100)  # 会话标题（取首条消息前 20 字符）
-    is_archived: bool = Field(default=False)  # 软删除标记
+    # 所属功能模块（如 "mentor"）
+    module: str = Field(default="mentor", index=True)
+    # 会话标题（取首条消息前 20 字符）
+    title: str = Field(default="新对话", max_length=100)
+    # 软删除标记
+    is_archived: bool = Field(default=False)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -182,18 +196,25 @@ class ChatMessage(SQLModel, table=True):
     user_id: int = Field(index=True)
     session_id: str = Field(
         sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
-    )  # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
+    )
+    # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
     turn_id: int | None = Field(default=None, index=True)
     module: str = Field(default="mentor", index=True)
-    role: str  # 消息角色："user" | "assistant" | "system" | "tool"
+    # 消息角色："user" | "assistant" | "system" | "tool"
+    role: str
     message_kind: str | None = Field(default=None, max_length=50, index=True)
-    content: str = Field(sa_column=Column(Text))  # 消息正文，使用 Text 类型支持长文本
-    attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 附件信息
-    tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))  # 工具调用记录
+    # 消息正文，使用 Text 类型支持长文本
+    content: str = Field(sa_column=Column(Text))
+    # 附件信息
+    attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
+    # 工具调用记录
+    tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
     tool_call_id: str | None = Field(default=None, max_length=120, index=True)
     knowledge_sources: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
-    teaching_diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 教学图解数据
-    usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # 记录该条消息消耗的精准 Token
+    # 教学图解数据
+    teaching_diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    # 记录该条消息消耗的精准 Token
+    usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
@@ -236,8 +257,10 @@ class ChatSessionSummaryBlock(SQLModel, table=True):
     user_id: int = Field(index=True)
     session_id: str = Field(
         sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
-    )  # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
-    module: str = Field(default="mentor", index=True)  # 所属功能模块
+    )
+    # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
+    # 所属功能模块
+    module: str = Field(default="mentor", index=True)
 
     block_index: int = Field(default=1, index=True)
     summary_markdown: str = Field(sa_column=Column(Text))
@@ -721,10 +744,6 @@ class LearningPath(SQLModel, table=True):
     status: str = Field(default="active", max_length=30, index=True)
 
     stages_json: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
-    strategy_report: str | None = Field(default=None, sa_column=Column(Text))
-    adjustment_rationale: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    capstone_project_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    pre_check_knowledge: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

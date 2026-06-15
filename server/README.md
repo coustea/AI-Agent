@@ -1,386 +1,238 @@
-# Backend Guide
+# 多智能体个性化学习资源平台
 
-这个目录是项目的 FastAPI 后端，实现认证、聊天、学习路径、资源生成、学习评估、画像、题库和数字人能力。
-
-## 目录概览
-
-```text
-server/
-├── app/                # 后端源码
-├── tests/              # pytest 测试
-├── config.yaml         # 运行配置
-├── init_schema.sql     # 数据库初始化脚本
-├── pyproject.toml      # Python 依赖
-├── uv.lock             # 依赖锁文件
-└── README.md
-```
+基于多智能体协作的个性化学习资源生成与辅导平台。后端使用 FastAPI + LangGraph 构建多智能体系统，前端使用 Vue 3 + TypeScript 提供交互体验。
 
 ## 技术栈
 
+| 层级 | 技术 |
+|------|------|
+| 后端框架 | FastAPI, SQLModel, SQLAlchemy Async |
+| 多智能体 | LangGraph, LangChain |
+| 数据库 | PostgreSQL (asyncpg) |
+| LLM | OpenAI 兼容 API (ChatOpenAI) |
+| 向量检索 | ChromaDB, FAISS |
+| 前端框架 | Vue 3, TypeScript, Vite |
+| UI 组件 | Element Plus, ECharts |
+| 包管理 | uv (后端), npm (前端) |
+
+## 项目结构
+
+```
+├── server/                  # FastAPI 后端
+│   ├── app/                 # 应用源码
+│   │   ├── auth/            # 认证与用户管理
+│   │   ├── chat/            # AI 辅导对话 (SSE 流式)
+│   │   ├── resource/        # 多智能体资源生成
+│   │   ├── path/            # 学习路径规划
+│   │   ├── memory/          # 记忆系统 (短期/长期/画像)
+│   │   ├── evaluation/      # 学习评估与事件
+│   │   ├── dashboard/       # 首页仪表盘
+│   │   ├── quiz/            # 题库与编程题
+│   │   ├── avatar/          # 数字人 (讯飞 WebSocket)
+│   │   ├── profile/         # 用户画像
+│   │   ├── infra/           # 基础设施 (DB, LLM, 配置, 日志)
+│   │   ├── prompts/         # 全局 Prompt 模板
+│   │   ├── app_factory.py   # FastAPI 应用工厂
+│   │   ├── lifecycle.py     # 启动生命周期
+│   │   └── routes.py        # 路由挂载
+│   ├── tests/               # pytest 测试
+│   ├── config.yaml          # 运行配置
+│   ├── init_schema.sql      # 数据库初始化脚本
+│   └── pyproject.toml
+├── src/                     # Vue 3 前端
+│   ├── app/                 # 入口, 路由, 布局
+│   ├── features/            # 功能模块
+│   │   ├── auth/            # 登录注册
+│   │   ├── chat/            # 辅导对话, 数字人
+│   │   ├── dashboard/       # 首页
+│   │   ├── learning/        # 学习路径, 评估, 题库
+│   │   ├── profile/         # 画像
+│   │   └── resource/        # 资源生成, PPT 引擎
+│   └── shared/              # 共享工具 (API, 认证, UI)
+├── docs/                    # 文档
+└── vite.config.ts           # Vite 配置 (代理 /api → :9999)
+```
+
+## 快速开始
+
+### 前置条件
+
 - Python 3.13+
-- FastAPI
-- SQLModel / SQLAlchemy Async
-- PostgreSQL + asyncpg
-- LangChain
-- LangGraph
-- uv
-
-## 主要模块
-
-后端业务代码位于 [server/app](/Users/apple/Code/software/server/app)。
-
-### `auth`
-
-认证和用户信息：
-
-- 注册
-- 登录
-- JWT 校验
-- 当前用户信息
-
-### `chat`
-
-智能辅导对话：
-
-- SSE 流式回复
-- 文件上传
-- 会话管理
-- 图片/文档分析
-- 搜索增强
-
-### `resource`
-
-独立多智能体资源生成域：
-
-- 多智能体资源任务
-- 单智能体资源任务
-- 状态查询
-- SSE 事件流
-- 独立资源历史与详情
-
-### `path`
-
-学习路径规划域：
-
-- 学习路径生成
-- 路径历史
-- 节点学习空间
-- 节点教程
-- 节点题目
-- 节点辅助资源
-- 路径内学习评估
-
-注意：`path` 域与 `resource` 域已经拆分，二者只允许在底层 agent 复用层面有交集，业务记录、展示接口和数据库记录不应混用。
-
-### `evaluation`
-
-学习行为事件与学习评估：
-
-- 学习事件上报
-- 用户学习画像增量更新
-- 学习信号聚合
-
-### `dashboard`
-
-首页数据聚合：
-
-- 当前路径
-- 最近资源
-- 最近学习事件
-- 推荐动作
-
-### `memory`
-
-用户画像、长期记忆、上下文构建。
-
-### `quiz`
-
-题库与导入逻辑：
-
-- 选择题
-- 编程题
-- 数据导入
-
-### `avatar`
-
-数字人相关能力。
-
-### `infra`
-
-基础设施：
-
-- 数据库会话
-- ORM 模型
-- LLM 工厂
-- 日志
-
-## 启动方式
+- Node.js 18+
+- PostgreSQL
+- [uv](https://docs.astral.sh/uv/) (Python 包管理器)
 
 ### 1. 安装依赖
 
 ```bash
-cd /Users/apple/Code/software/server
+# 后端
+cd server
 uv sync
+
+# 前端
+cd ..
+npm install
 ```
 
-### 2. 配置 `config.yaml`
+### 2. 配置
 
-后端通过 [server/config.yaml](/Users/apple/Code/software/server/config.yaml) 读取配置，不走 `.env`。
+编辑 `server/config.yaml`，至少配置以下项：
 
-至少要确认这些配置可用：
+```yaml
+database:
+  url: postgresql+asyncpg://user:pass@localhost:5432/dbname
+jwt:
+  secret_key: your-secret-key
+models:
+  base_url: https://api.openai.com/v1
+  api_key: sk-xxx
+  model_name: gpt-4o
+```
 
-- `database.url`
-- `jwt.secret_key`
-- `models.base_url`
-- `models.api_key`
-- `models.model_name`
+可选配置：`models.vision` (视觉模型), `search.tavily_key` (搜索), `avatar.*` (数字人), `knowledge.*` (向量检索)。
 
-如果要启用额外能力，还需要对应配置：
-
-- `models.vision.*`
-- `spark.*`
-- `avatar.*`
-- `search.tavily_key`
-
-### 3. 启动开发服务
+### 3. 初始化数据库
 
 ```bash
-uv run fastapi dev app/main.py
+psql -d dbname -f server/init_schema.sql
 ```
 
-默认地址：
+### 4. 启动开发服务
 
-- API: `http://localhost:9999`
-- Docs: `http://localhost:9999/docs`
+```bash
+# 后端 (端口 9999)
+cd server
+uv run fastapi dev app/main.py
 
-## 数据库
+# 前端 (端口 5173, 代理 /api → :9999)
+cd ..
+npm run dev
+```
 
-### 结构来源
+- API 文档：http://localhost:9999/docs
+- 前端页面：http://localhost:5173
 
-数据库结构脚本：
+## 多智能体架构
 
-- [server/init_schema.sql](/Users/apple/Code/software/server/init_schema.sql)
+### 辅导对话 (TutorAgent)
 
-后端启动时不会自动创建完整表结构，默认认为数据库结构已经按 SQL 脚本准备好。后端负责：
+基于 LangGraph StateGraph，节点流程：`classify` → 路由分发 → `answer_node` / `search_node` / `attachment_answer` / `teaching_diagram_generate`。通过 SSE 流式输出，读取三层上下文（画像、长期记忆、对话历史）。
 
-- 建立连接
-- 执行 CRUD
-- 按需导入学校、题库、编程题数据
+### 资源生成 (Resource Agents)
 
-### 核心表
+两种编排模式：
 
-#### 认证与用户
+- **多智能体模式**：PlanningAgent → 并行 Worker Agents → ReviewAgent → 存储。PlanningAgent 生成蓝图和分 Agent 指令，Worker 并发执行，ReviewAgent 校验。
+- **单智能体模式**：直接调用 `AGENT_REGISTRY[agent_id].run(state)`，用于路径规划内资源生成和按需生成。
 
-- `users`
-- `active_tokens`
+已注册 Agent：`planning`, `content`, `mindmap`, `quiz`, `code`, `reading`, `ppt`, `review`。每个 Agent 继承 `BaseResourceAgent`，通过 `@register_agent` 注册，可独立运行。
 
-#### 聊天与记忆
+### 记忆系统 (MemoryService)
 
-- `chat_sessions`
-- `chat_messages`
-- `user_profiles`
-- `user_memories`
+三层记忆架构：
 
-#### 独立资源生成
+- **SessionCompressor** — 短期对话 → 摘要压缩
+- **LongTermMemoryExtractor** — 事实提取至 `UserLongTermMemory`
+- **ProfileBuilder** — 8 维度画像构建（从记忆 + 事件）
 
-- `generated_resources`
-- `generated_resource_items`
+由 `ChatSession` 的 token 计数阈值触发。
 
-#### 学习路径
+### 学习路径 (Path Planner)
 
-- `learning_paths`
-- `path_nodes`
-- `path_node_tutorials`
-- `path_node_questions`
-- `path_node_resources`
+课程级学习路径规划 Agent，节点资源生成使用单智能体模式。路径内形成「教程 → 题目 → 辅助资源」的学习闭环。
 
-#### 学习评估
+### 数字人 (Avatar Bridge)
 
-- `learning_events`
-- `learning_sessions`
+WebSocket 桥接讯飞数字人服务，ASR → 数字人播报。前端通过 `ws://host:9999/ws/avatar?token=JWT` 连接。
 
-#### 题库
+## API 路由
 
-- `quiz_questions`
-- 相关编程题表
+| 前缀 | 模块 | 主要端点 |
+|------|------|----------|
+| `/api/v1/users` | auth | 注册, 登录, 登出, 用户信息 |
+| `/api/v1/ai/chat` | chat | SSE 流式对话, 附件上传, 会话管理 |
+| `/api/v1/ai` | resource | 资源生成 (多/单智能体), 状态查询, 事件流 |
+| `/api/v1/ai` | path | 路径规划, 节点工作空间, 题目轮次 |
+| `/api/v1/ai` | evaluation | 学习事件, 评估 |
+| `/api/v1/ai` | dashboard | 首页聚合数据 |
+| `/api/v1/ai` | quiz | 题库管理 |
+| `/api/v1/ai` | avatar | 数字人 REST 接口 |
+| `/ws/avatar` | websocket | 数字人 WebSocket |
 
-## 启动时会做什么
+所有 API 响应使用 `HttpResponse` 信封格式：`{code, message, data}`。
 
-应用入口在 [server/app/main.py](/Users/apple/Code/software/server/app/main.py)。
+## 认证流程
 
-服务启动时会：
+1. 登录返回 JWT Token，前端存入 `localStorage`
+2. 请求通过 `get_current_user` 依赖校验 JWT + `ActiveToken` 数据库白名单
+3. 登出移除白名单 Token + 触发后台画像构建
+4. WebSocket 认证使用查询参数 `?token=JWT`
 
-1. 初始化 prompts
-2. 校验数据库连接
-3. 执行健康检查
-4. 按需导入学校数据
-5. 按需导入题库数据
-6. 按需导入编程题数据
+## 核心数据表
 
-## API 路由概览
+| 领域 | 表 |
+|------|-----|
+| 认证 | `users`, `active_tokens` |
+| 对话 | `chat_sessions`, `chat_messages`, `chat_session_summaries` |
+| 记忆 | `user_long_term_memories`, `user_profiles`, `user_profile_histories` |
+| 资源生成 | `generated_resources`, `generated_resource_items` |
+| 学习路径 | `learning_paths`, `path_nodes`, `path_node_tutorials`, `path_node_questions`, `path_node_resources` |
+| 评估 | `learning_events`, `learning_sessions` |
+| 题库 | `quiz_questions`, `programming_problems` |
 
-### `/api/v1/users`
+## Prompt 系统
 
-- 用户注册
-- 登录
-- 登出
-- 当前用户信息
+每个模块拥有独立的 `prompts/` 目录，使用 `.md` 模板文件：
 
-### `/api/v1/ai/chat/*`
+- `chat/prompts/` — 辅导系统指令, 回答策略, 搜索指令, 教学图
+- `memory/prompts/` — 压缩, 长期记忆更新, 画像
+- `path/prompts/` — 路径规划, 教程, 题目生成
+- `resource/prompts/` — 各 Agent 指令 (planning, content, mindmap, quiz, code, reading, ppt, review)
 
-- 聊天流
-- 会话
-- 历史
-- 附件上传
-
-### `/api/v1/ai/resources*`
-
-独立资源生成域：
-
-- `POST /resources`
-- `POST /resources/single`
-- `GET /resources`
-- `GET /resources/{id}`
-- `GET /resources/{id}/status`
-- `GET /resources/{id}/events`
-
-### `/api/v1/ai/path-plan*`
-
-学习路径域：
-
-- `POST /path-plan`
-- `GET /path-plan/active`
-- `GET /path-plan/history`
-- `POST /path-plan/{path_id}/activate`
-- `GET /path-plan/{path_id}`
-- `GET /path-plan/nodes/{node_id}/workspace`
-- `POST /path-plan/nodes/{node_id}/questions`
-- `POST /path-plan/nodes/{node_id}/quiz-submit`
-- `POST /path-plan/nodes/{node_id}/resources`
-- `GET /path-plan/resources`
-- `GET /path-plan/resources/{resource_id}`
-- `POST /path-plan/{path_id}/events`
-- `GET /path-plan/{path_id}/evaluation`
-
-### `/api/v1/ai/dashboard/*`
-
-- 首页聚合数据
-
-### `/api/v1/ai/profile*`
-
-- 用户画像
-- 历史画像
-
-### `/api/v1/ai/evaluation*`
-
-- 学习事件
-- 学习摘要
+模板支持 `{variable_name}` 变量替换，启动时通过 `warm_prompt_loaders()` 预加载缓存。
 
 ## 路径规划与资源生成的边界
 
-这是当前后端设计里最重要的一条规则。
+> 这是本项目最重要的设计约束。
 
-### 独立资源生成
+**独立资源生成**：用户直接请求"生成教程/导图/PPT"，不依赖学习路径上下文。数据存 `generated_resources`，API 走 `/resources`。
 
-适用于：
+**路径节点资源**：用户在学习路径内，围绕节点生成资源。数据存 `path_node_resources`，API 走 `/path-plan`。
 
-- 用户直接说“给我生成一个教程/导图/PPT/代码示例”
-- 不依赖某条学习路径的上下文
-
-特点：
-
-- 使用 `generated_resources`
-- 详情页是独立资源详情
-- API 走 `/resources`
-
-### 路径节点资源
-
-适用于：
-
-- 用户已经在某条学习路径里
-- 围绕某个节点生成思维导图、PPT、代码示例
-- 节点内题目和教程的学习闭环
-
-特点：
-
-- 使用 `path_node_resources`
-- 属于路径节点学习空间
-- API 走 `/path-plan`
-
-不要把这两种资源写进同一张记录表，也不要用同一组展示接口。
+两种资源不共用记录表和展示接口。
 
 ## 测试
 
-### 运行全部测试
-
 ```bash
+cd server
+
+# 全部测试
 uv run pytest
-```
 
-### 运行部分测试
-
-```bash
-uv run pytest tests/path -q
+# 指定模块
+uv run pytest tests/chat -q
 uv run pytest tests/resource -q
-uv run pytest tests/dashboard -q
-```
+uv run pytest tests/path -q
 
-## 常用开发命令
-
-```bash
-uv sync
-uv run fastapi dev app/main.py
-uv run pytest
+# 遇到首个失败即停止
+uv run pytest -x
 ```
 
 ## 开发约定
 
-### 1. 配置读取
-
-统一从 [server/app/config.py](/Users/apple/Code/software/server/app/config.py) 读取，不要在业务代码里直接硬编码配置。
-
-### 2. 数据库初始化
-
-结构变更优先修改：
-
-- [server/init_schema.sql](/Users/apple/Code/software/server/init_schema.sql)
-- [server/app/infra/models.py](/Users/apple/Code/software/server/app/infra/models.py)
-
-### 3. 路径规划重构时的注意点
-
-- 不要再引入旧 `course_path_*` 风格兼容逻辑
-- 不要把路径资源和独立资源重新合并
-- 不要为旧接口保留无意义的转发壳
-
-### 4. 测试策略
-
-优先为这些层补测试：
-
-- API 层
-- Service 层
-- 路径规划与资源分离的回归场景
+- 配置统一从 `config.yaml` 读取，不硬编码、不使用 `.env`
+- 数据库结构变更同步修改 `init_schema.sql` 和 `infra/models.py`
+- 新表必须加入 `REGISTERED_MODELS` 元组
+- `get_session()` 用于 FastAPI 依赖注入（手动提交），`session_scope()` 用于后台任务（自动提交/回滚）
+- `runtime_context(user_id, session_id)` ContextVar 在异步调用链中传递用户身份
+- LLM 通过 `get_llm()` 单例访问，使用 OpenAI 兼容 API
+- Python 代码遵循 Google Python Style Guide
+- 前端 `.vue` 文件使用 `<script setup lang="ts">`，禁止 Options API
 
 ## 故障排查
 
-### 启动时报数据库错误
-
-先检查：
-
-1. `config.yaml` 的 `database.url`
-2. PostgreSQL 是否已启动
-3. 是否已经执行过 `init_schema.sql`
-
-### 首页 500
-
-优先检查：
-
-- dashboard 聚合查询是否访问了不存在的表/字段
-- 最近一次路径规划或资源生成重构是否改坏了聚合模型
-
-### 路径规划异常
-
-优先检查：
-
-- `learning_paths` 及其子表结构
-- `/api/v1/ai/path-plan/*` 接口是否和前端字段一致
-- 节点教程、题目、资源是否仍然误走了独立资源域
+| 问题 | 排查方向 |
+|------|----------|
+| 启动数据库错误 | 检查 `config.yaml` 的 `database.url`、PostgreSQL 是否运行、是否执行过 `init_schema.sql` |
+| 首页 500 | 检查 dashboard 聚合查询是否访问不存在的表/字段，最近重构是否改坏聚合模型 |
+| 路径规划异常 | 检查 `learning_paths` 子表结构、接口字段与前端是否一致、节点资源是否误走独立资源域 |

@@ -24,8 +24,8 @@ from app.infra.models import (
     PathNodeTutorial,
 )
 from app.profile.service import get_profile_service
-from app.path.agents.node_learning import NodeLearningAgent
-from app.path.agents.planner import PathPlannerAgent, repair_generated_plan_from_macro_stages
+from app.path.planner import PathPlannerAgent, repair_generated_plan_from_macro_stages
+from app.path.node_learning import NodeLearningAgent
 from app.path.events import PathEvent, path_event_bus
 from app.path.schemas import (
     AgentLearningPathPlan,
@@ -109,10 +109,6 @@ class PathService:
         path.status = "active"
         path.title = plan.title
         path.stages_json = [self._stage_to_dict(stage) for stage in plan.stages]
-        path.strategy_report = getattr(plan, "strategy_report", None)
-        path.adjustment_rationale = list(getattr(plan, "adjustment_rationale", []) or [])
-        path.capstone_project_json = plan.capstone_project.model_dump(mode="json") if plan.capstone_project else None
-        path.pre_check_knowledge = list(plan.pre_check_knowledge or [])
 
         completed_keys: set[str] = set()
         nodes: list[PathNode] = []
@@ -172,7 +168,6 @@ class PathService:
                 plan=plan,
                 macro_stages=list(getattr(plan, "stages", []) or []),
                 request=request,
-                strategy_report=getattr(plan, "strategy_report", ""),
             )
 
             await self.complete_path_generation(path_id, user_id, request, plan)
@@ -856,12 +851,8 @@ class PathService:
             confidence=path.confidence,
             status=path.status,
             current_node_key=path.current_node_key,
-            strategy_report=path.strategy_report,
-            adjustment_rationale=list(path.adjustment_rationale or []),
             stages=list(path.stages_json or []),
             nodes=[LearningPathNodeDTO.from_model(item) for item in nodes],
-            capstone_project=path.capstone_project_json,
-            pre_check_knowledge=list(path.pre_check_knowledge or []),
             created_at=path.created_at.isoformat() if path.created_at else "",
             updated_at=path.updated_at.isoformat() if path.updated_at else "",
         )

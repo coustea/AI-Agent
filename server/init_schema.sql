@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     password        VARCHAR(255)    NOT NULL,
     email           VARCHAR(100),
     avatar          VARCHAR(500),
-    is_first_login  BOOLEAN         DEFAULT TRUE,
+    is_first_login  BOOLEAN         DEFAULT FALSE,
     created_at      TIMESTAMPTZ     DEFAULT NOW(),
     updated_at      TIMESTAMPTZ     DEFAULT NOW()
 );
@@ -651,10 +651,6 @@ CREATE TABLE IF NOT EXISTS learning_paths (
     confidence           INTEGER         DEFAULT 60,
     status               VARCHAR(30)     NOT NULL DEFAULT 'active',
     stages_json          JSONB,
-    strategy_report      TEXT,
-    adjustment_rationale JSONB,
-    capstone_project_json JSONB,
-    pre_check_knowledge  JSONB,
     created_at           TIMESTAMPTZ     DEFAULT NOW(),
     updated_at           TIMESTAMPTZ     DEFAULT NOW()
 );

@@ -1,4 +1,4 @@
-"""搜索工具封装 — DuckDuckGo / Tavily / SerpApi / 讯飞 四路搜索。
+"""搜索工具封装 — DuckDuckGo / Tavily / 讯飞 三路搜索。
 
 WebSearchTool 会按既定顺序回退搜索引擎。
 _redact_url_query_secrets 脱敏异常中的 API key，防止泄露到日志或响应。
@@ -7,15 +7,13 @@ _redact_url_query_secrets 脱敏异常中的 API key，防止泄露到日志或�
 from __future__ import annotations
 
 import asyncio
-import serpapi
 import re
 import httpx
-from typing import Any
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 
-from app.config import SERPAPI_KEY, TAVILY_KEY, SPARK_SEARCH_KEY
+from app.config import TAVILY_KEY, SPARK_SEARCH_KEY
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -79,62 +77,6 @@ async def tavily_search(query: str) -> str:
     except Exception as exc:
         logger.warning("[tavily_search] failed: query=%r", query, exc)
         return f"Tavily 搜索失败: {exc}"
-
-@tool("serp_search")
-async def serp_search(query: str, location: str = "China", hl: str = "zh-CN", gl: str = "cn") -> str:
-    """使用 SerpApi 搜索网页，返回结构化搜索结果摘要。
-
-    Args:
-        query: 搜索关键词。
-        location: 搜索位置，默认中国。
-        hl: 界面语言，默认中文。
-        gl: 国家/地区，默认中国。
-
-    Returns:
-        搜索结果摘要字符串。
-    """
-    if not (SERPAPI_KEY or "").strip():
-        return "SerpApi 搜索不可用: 未配置 SERPAPI_KEY"
-
-    try:
-        # 定义同步搜索函数，在线程池中执行
-        def _search() -> dict[str, Any]:
-            client = serpapi.Client(api_key=SERPAPI_KEY)
-            return client.search({
-                "q": query,
-                "location": location,
-                "hl": hl,
-                "gl": gl,
-                "google_domain": "google.com"
-            })
-
-        results = await asyncio.to_thread(_search)
-
-        # 从 SerpApi 响应中提取有机搜索结果（排除广告等）
-        organic_results = results.get("organic_results", [])
-        if not organic_results:
-            return "未找到相关搜索结果"
-
-        # 格式化输出：每条结果包含标题、链接和摘要
-        summaries = []
-        for i, item in enumerate(organic_results[:5], 1):
-            title = item.get("title", "无标题")
-            link = item.get("link", "")
-            snippet = item.get("snippet", "无摘要")
-            summaries.append(f"{i}. {title}\n   链接: {link}\n   摘要: {snippet}")
-
-        result_text = "\n\n".join(summaries)
-        logger.info(
-            "[serp_search] query=%r result_count=%d",
-            query,
-            len(organic_results),
-        )
-        return result_text
-    except Exception as exc:
-        # 脱敏异常信息，防止 API key 泄露到日志
-        error = _redact_url_query_secrets(exc)
-        logger.warning("[serp_search] failed: query=%r error=%s", query, error)
-        return f"SerpApi 搜索失败: {error}"
 
 
 @tool("spark_search")

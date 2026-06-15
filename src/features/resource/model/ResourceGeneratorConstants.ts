@@ -172,6 +172,17 @@ export const getAgentOutputFormat = (agentId: string) => {
 
 // ===================== DAG 节点类型 =====================
 
+export type AgentEventLog = {
+  id: string
+  eventType?: string
+  phase?: string
+  message: string
+  status?: DagNodeState['status']
+  progress?: number
+  elapsedMs?: number
+  timestamp: number
+}
+
 export interface DagNodeState {
   id: string
   label: string
@@ -180,6 +191,7 @@ export interface DagNodeState {
   progress: number
   currentMessage: string
   stepHistory: string[]
+  eventLogs: AgentEventLog[]
   isSystem: boolean
   phase?: string
   elapsedMs?: number
@@ -199,6 +211,7 @@ export function createDagNode(id: string, isSystem: boolean): DagNodeState {
     progress: 0,
     currentMessage: '',
     stepHistory: [],
+    eventLogs: [],
     isSystem,
   }
 }

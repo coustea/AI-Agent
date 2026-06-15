@@ -211,12 +211,8 @@ class LearningPathOverviewResponse(BaseModel):
     confidence: int
     status: str
     current_node_key: str | None = None
-    strategy_report: str | None = None
-    adjustment_rationale: list[str] = Field(default_factory=list)
     stages: list[dict[str, Any]] = Field(default_factory=list)
     nodes: list[LearningPathNodeDTO] = Field(default_factory=list)
-    capstone_project: CapstoneProject | None = None
-    pre_check_knowledge: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
 
@@ -311,23 +307,12 @@ class AgentStage(BaseModel):
     description: str = Field(description="阶段描述")
 
 
-class CapstoneProject(BaseModel):
-    """终极实战项目描述。"""
-
-    title: str = Field(description="实战项目名称")
-    description: str = Field(description="实战项目详细描述与要求")
-
-
 class AgentLearningPathPlan(BaseModel):
     """规划 Agent 的结构化输出。"""
 
     title: str = Field(description="路径标题")
     eta_days: int = Field(default=14, description="预估学习天数")
     confidence: int = Field(default=60, ge=0, le=100, description="规划置信度百分比")
-    strategy_report: str = Field(default="", description="个性化诊断与裁剪策略报告")
-    capstone_project: CapstoneProject | None = Field(default=None, description="终极实战项目描述")
-    pre_check_knowledge: list[str] = Field(default_factory=list, description="学习此路径的前置自测/必备基础知识点")
-    adjustment_rationale: list[str] = Field(default_factory=list, description="调整理由列表")
     stages: list[AgentStage] = Field(min_length=1, description="宏观阶段骨架列表，至少1个阶段")
     nodes: list[AgentPathNode] = Field(min_length=1, description="所有阶段的具体学习节点列表，至少1个节点")
 
@@ -336,14 +321,6 @@ class AgentLearningPathPlan(BaseModel):
     def normalize_confidence(cls, value: Any) -> Any:
         if isinstance(value, float) and 0 <= value <= 1:
             return round(value * 100)
-        return value
-
-    @field_validator("adjustment_rationale", mode="before")
-    @classmethod
-    def normalize_adjustment_rationale(cls, value: Any) -> Any:
-        if isinstance(value, str):
-            stripped = value.strip()
-            return [stripped] if stripped else []
         return value
 
 
