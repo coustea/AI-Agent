@@ -1,4 +1,4 @@
-"""代码智能体 — 生成教学示例代码。"""
+"""代码智能体 — 基于教学蓝图生成教学示例代码（Markdown 格式）。"""
 
 from __future__ import annotations
 
@@ -24,10 +24,13 @@ class CodeAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        """核心生成逻辑：提取代码配置 → 调用 LLM → 返回 Markdown 代码块。"""
         config = state.agent_config
+        # 从配置中提取编程语言、案例类型、难度等参数
         language = config.get("programming_language") or config.get("language") or "python"
         case_type = config.get("case_type") or "basic_demo"
         difficulty = config.get("difficulty") or config.get("complexity") or "beginner"
+        # 将代码配置拼接到 prompt 中
         if config:
             cfg = ["## 代码配置"]
             cfg.append(f"- programming_language: {language}")

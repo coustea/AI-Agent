@@ -1,4 +1,4 @@
-"""阅读智能体 — 生成拓展阅读材料。"""
+"""阅读智能体 — 基于教学蓝图生成拓展阅读材料（JSON 结构化输出）。"""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 
 
 class ReadingResource(BaseModel):
+    """单个阅读资源：书籍/论文/文章/文档/实践项目。"""
     id: str = Field(description="资源编号，如 R1")
     type: str = Field(description="资源类型，如 book/paper/article/documentation/practice_project")
     title: str = Field(description="资源标题")
@@ -34,6 +35,7 @@ class ReadingResource(BaseModel):
 
 
 class ReadingPathStep(BaseModel):
+    """阅读路径中的一个步骤。"""
     step: int
     title: str
     description: str = ""
@@ -42,6 +44,7 @@ class ReadingPathStep(BaseModel):
 
 
 class ReadingPayload(BaseModel):
+    """LLM 结构化输出模型：完整拓展阅读推荐。"""
     title: str = "拓展阅读推荐"
     summary: str = ""
     resources: list[ReadingResource] = Field(default_factory=list)
@@ -61,10 +64,13 @@ class ReadingAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        """核心生成逻辑：提取阅读配置 → LLM 结构化输出 → 解析资源统计。"""
         config = state.agent_config
+        # 提取阅读配置参数
         reading_depth = config.get("reading_depth") or config.get("reading_type") or "course_extended"
         max_items = config.get("max_items") or 5
         language_preference = config.get("language_preference") or "chinese"
+        # 拼接阅读配置到 prompt
         if config:
             cfg = ["## 阅读配置"]
             cfg.append(f"- reading_depth: {reading_depth}")
@@ -82,6 +88,7 @@ class ReadingAgent(BaseResourceAgent):
 
         prompt = prompts.get("resource").get("reading")
         logger.info("Agent[reading] 步骤: 调用 LLM 生成拓展阅读, depth=%s max_items=%s", reading_depth, max_items)
+        # LLM 结构化输出 → ReadingPayload（含 resources、learning_path）
         result = await self.llm.ainvoke_json(
             ReadingPayload,
             f"{prompt}\n\n{input_text}",

@@ -1,3 +1,12 @@
+"""路径规划智能体 — 基于 LangGraph 的多智能体学习路径生成器。
+
+核心流程（DAG）：
+  research → strategist → END
+
+research 节点：LLM 自主选择搜索工具，收集联网参考资料
+strategist 节点：LLM 结合画像、搜索结果生成完整的路径规划（阶段+节点+资源策略）
+"""
+
 import json
 from typing import Any, Awaitable, Callable, TypedDict
 
@@ -10,8 +19,10 @@ from app.infra.llm import get_llm
 from app.infra.prompts import prompts
 from app.path.schemas import AgentLearningPathPlan, AgentPathNode, AgentStage, CreateLearningPathRequest
 
+# 进度回调类型：(status, progress_pct, message) → None
 ProgressCallback = Callable[[str, int, str], Awaitable[None]]
 
+# 搜索结果中的失败标记词 — 匹配任一即认为该搜索无效
 _SEARCH_FAILURE_MARKERS = (
     "搜索不可用",
     "搜索失败",
@@ -22,6 +33,7 @@ _SEARCH_FAILURE_MARKERS = (
 
 
 class PathState(TypedDict):
+    """LangGraph 状态图的全局状态，贯穿 research → strategist 全流程。"""
     request: CreateLearningPathRequest
     profile: dict[str, Any]
     profile_markdown: str
@@ -41,23 +53,29 @@ class PathPlannerAgent:
 
     def __init__(self, search_tools: list[Any] | None = None):
         self.llm = get_llm()
+        # 可用的搜索工具列表 — LLM 在 research 阶段自主选择
         self.search_tools = search_tools if search_tools is not None else [
             tavily_search,
             duckduckgo_search,
             serp_search,
             spark_search,
         ]
+        # 单轮 research 最多执行的搜索工具调用次数
         self.max_search_tool_calls = 3
         self.system_prompt = prompts.get("path").get("planner_system")
+        # 编译 LangGraph 工作流
         self.generate_graph = self._build_generate_graph()
 
     def _build_generate_graph(self):
+        """构建 LangGraph DAG：research → strategist → END。"""
         workflow = StateGraph(PathState)
 
         async def research_node(state: PathState) -> dict:
+            """联网研究节点 — 让 LLM 自主选择搜索工具收集参考资料。"""
             logger.info("LangGraph [Path Research] starting...")
             if state["request"].enable_search:
                 await emit_progress(state.get("progress_callback"), "researching", 30, "正在检索高价值参考资料")
+            # 执行混合搜索，返回格式化的参考文本
             search_context = await self._collect_search_evidence(
                 request=state["request"],
                 profile=state["profile"],
@@ -66,9 +84,11 @@ class PathPlannerAgent:
             return {"search_context": search_context}
 
         async def node_strategist_node(state: PathState) -> dict:
+            """策略规划节点 — 结合画像和搜索结果生成完整路径规划。"""
             logger.info("LangGraph [Node Strategist] starting...")
             await emit_progress(state.get("progress_callback"), "analyzing", 44, "正在分析画像、目标与课程结构")
             await emit_progress(state.get("progress_callback"), "strategizing", 58, "正在生成阶段、节点与资源策略")
+            # 优先使用预渲染的 profile_markdown，否则从 dict 序列化
             profile_md = state.get("profile_markdown", "")
             if not profile_md:
                 profile_md = json.dumps(state["profile"], ensure_ascii=False, indent=2)
@@ -77,7 +97,9 @@ class PathPlannerAgent:
             sys_msg = SystemMessage(content=prompts.get("path").get("planner_system"))
             human_msg = HumanMessage(content=f"{request_context}{search_context}\n\n学习者画像:\n{profile_md}")
 
+            # LLM 结构化输出 → AgentLearningPathPlan（含 stages + nodes）
             result = await self.llm.ainvoke_json(AgentLearningPathPlan, [sys_msg, human_msg])
+            # 修复可能的结构缺陷（空 stages/nodes、不一致的引用）
             result = repair_generated_plan_from_macro_stages(
                 plan=result,
                 macro_stages=result.stages,
@@ -87,9 +109,11 @@ class PathPlannerAgent:
             logger.info(f"LangGraph [Node Strategist] finished with {len(result.nodes)} nodes.")
             return {"final_plan": result}
 
+        # 注册两个节点并连接 DAG
         workflow.add_node("research", research_node)
         workflow.add_node("strategist", node_strategist_node)
 
+        # DAG 边：START → research → strategist → END
         workflow.add_edge(START, "research")
         workflow.add_edge("research", "strategist")
         workflow.add_edge("strategist", END)
@@ -104,6 +128,7 @@ class PathPlannerAgent:
         profile_markdown: str = "",
     ) -> AgentLearningPathPlan:
         """执行多智能体路径规划 (LangGraph版)。"""
+        # 记录规划启动日志
         logger.info("PathPlannerAgent 开始规划路径 - Topic: {}", request.topic)
         try:
             initial_state = {
@@ -127,11 +152,13 @@ class PathPlannerAgent:
         request: CreateLearningPathRequest,
         profile: dict[str, Any],
     ) -> str:
-        """Let the LLM pick search tools, run them, return formatted text for the prompt."""
+        """让 LLM 自主选择搜索工具并执行，返回格式化的参考文本。"""
+        # 未启用搜索或无可用工具时直接返回空
         if not request.enable_search or not self.search_tools:
             return ""
 
         try:
+            # 绑定搜索工具到 LLM，让模型自主决定调用哪个搜索引擎
             bound_model = self.llm.model.bind_tools(self.search_tools)
             messages = _build_search_messages(request, profile)
             response = await self.llm.ainvoke(messages, model=bound_model, max_tokens=1000)
@@ -139,6 +166,7 @@ class PathPlannerAgent:
             logger.warning("[PathPlannerAgent] search tool setup failed: %s", exc)
             return ""
 
+        # 提取 LLM 的工具调用请求，限制最多 max_search_tool_calls 个
         tool_calls = list(getattr(response, "tool_calls", []) or [])[: self.max_search_tool_calls]
         if not tool_calls:
             direct = _message_content(response)
@@ -164,6 +192,7 @@ class PathPlannerAgent:
 
 
 def _format_request_context(request: CreateLearningPathRequest) -> str:
+    """将路径创建请求格式化为 LLM 可读的上下文文本。"""
     current_knowledge = "、".join(request.current_knowledge) if request.current_knowledge else "未提供"
     preferences = (
         json.dumps(request.preferences, ensure_ascii=False, indent=2)
@@ -182,8 +211,10 @@ def _format_request_context(request: CreateLearningPathRequest) -> str:
 def _build_search_messages(
     request: CreateLearningPathRequest, profile: dict[str, Any]
 ) -> list[Any]:
+    """构建搜索研究阶段的 LLM 消息列表。"""
     from langchain_core.messages import HumanMessage, SystemMessage
 
+    # 将画像序列化为 JSON 文本注入 prompt
     profile_context = (
         json.dumps(profile, ensure_ascii=False, indent=2)
         if profile
@@ -202,6 +233,7 @@ def _build_search_messages(
 
 
 def _is_usable(result: object) -> bool:
+    """判断搜索结果是否可用（非空且不含失败标记词）。"""
     text = str(result or "").strip()
     if not text:
         return False
@@ -209,6 +241,7 @@ def _is_usable(result: object) -> bool:
 
 
 def _message_content(message: Any) -> str:
+    """从 LLM 响应消息中提取文本内容（兼容 str 和 list 类型）。"""
     content = getattr(message, "content", message)
     if isinstance(content, list):
         return "\n".join(str(item) for item in content)
@@ -216,10 +249,11 @@ def _message_content(message: Any) -> str:
 
 
 async def _run_tool_calls(tool_calls: list[Any], tools_by_name: dict[str, Any]) -> list[str]:
-    """Execute search tool calls concurrently, return raw string results."""
+    """并发执行搜索工具调用，返回原始结果文本列表。"""
     import asyncio
 
     async def _run_one(tool_call: Any) -> str:
+        """执行单个搜索工具调用，捕获异常返回错误信息。"""
         if isinstance(tool_call, dict):
             name, args = str(tool_call.get("name", "")), tool_call.get("args") or {}
         else:
@@ -234,6 +268,7 @@ async def _run_tool_calls(tool_calls: list[Any], tools_by_name: dict[str, Any]) 
             logger.warning("[PathPlannerAgent] search tool failed: tool=%s error=%s", name, exc)
             return f"{name} 搜索失败: {exc}"
 
+    # 使用 asyncio.gather 并发执行所有搜索调用
     return list(await asyncio.gather(*[_run_one(tc) for tc in tool_calls]))
 
 
@@ -249,16 +284,19 @@ def repair_generated_plan_from_macro_stages(
     request: CreateLearningPathRequest,
     strategy_report: str,
 ) -> AgentLearningPathPlan:
-    """Recover a structurally usable plan from the architect stage output.
+    """修复 LLM 生成的路径规划中的结构缺陷。
 
-    Schema now requires stages/nodes (min_length=1), so the normal path
-    guarantees non-empty. This function handles edge cases where
-    model_construct bypassed validation or stages/nodes are inconsistent.
+    处理场景：
+      1. stages 为空但 macro_stages 有值 → 从 macro_stages 补充
+      2. stages 为空但 nodes 有值 → 从 nodes 的 stage_id 推导 stages
+      3. nodes 为空但 stages 有值 → 为每个 stage 生成默认节点
+      4. adjustment_rationale 为空 → 填充默认说明
     """
+    # 场景1: stages 为空时从 macro_stages 补充
     if not plan.stages and macro_stages:
         plan.stages = list(macro_stages)
 
-    # Derive stages from node stage_id values if stages still missing
+    # 场景2: 从 nodes 的 stage_id 值推导 stages（去重保序）
     if not plan.stages and plan.nodes:
         seen: set[str] = set()
         derived: list[AgentStage] = []
@@ -278,11 +316,13 @@ def repair_generated_plan_from_macro_stages(
     if not plan.adjustment_rationale:
         plan.adjustment_rationale = ["基于画像与路径规划阶段骨架生成学习路径"]
 
+    # 场景3: nodes 为空时为每个 stage 生成一个默认节点
     if not plan.nodes and plan.stages:
         previous_node_id = ""
         nodes: list[AgentPathNode] = []
         for index, stage in enumerate(plan.stages, 1):
             node_id = f"{stage.stage_id}-core"
+            # 难度递进：第一阶段 beginner，最后阶段 advanced，其余 intermediate
             difficulty = "beginner" if index == 1 else "intermediate"
             if index == len(plan.stages) and len(plan.stages) >= 3:
                 difficulty = "advanced"
@@ -313,6 +353,7 @@ async def emit_progress(
     progress: int,
     message: str,
 ) -> None:
+    """安全调用进度回调 — callback 为 None 时跳过。"""
     if callback is None:
         return
     await callback(status, progress, message)

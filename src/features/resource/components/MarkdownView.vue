@@ -155,28 +155,6 @@ const content = computed(() => getMarkdownContent(props.resultData))
   background: rgba(0, 0, 0, 0.02);
 }
 
-/* 代码块：透明微底色，无边框 */
-.markdown-shell :deep(pre) {
-  position: relative;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.03) !important;
-  border: none;
-  padding: 20px;
-  margin: 1.5em 0;
-  overflow: auto;
-  color: #334155;
-}
-
-/* 代码块内部 code */
-.markdown-shell :deep(pre code) {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 0.88rem;
-  line-height: 1.7;
-  background: transparent !important;
-  color: inherit;
-  padding: 0;
-}
 
 /* 行内代码：浅色背景 */
 .markdown-shell :deep(p > code),
@@ -191,51 +169,6 @@ const content = computed(() => getMarkdownContent(props.resultData))
   font-weight: 500;
 }
 
-/* 代码块语言标签 */
-.markdown-shell :deep(pre)::before {
-  content: 'CODE';
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  color: var(--color-text-faint);
-  font-size: 0.7rem;
-  letter-spacing: 1px;
-  font-family: var(--font-mono);
-}
-
-/* 复制按钮：浅色风格 */
-.markdown-shell :deep(.copy-code-btn) {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-hover);
-  color: var(--color-text-secondary);
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  padding: 4px 8px;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.2s;
-  z-index: 10;
-  opacity: 0;
-}
-
-.markdown-shell :deep(pre:hover .copy-code-btn) {
-  opacity: 1;
-}
-
-.markdown-shell :deep(.copy-code-btn:hover) {
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary-border);
-  color: var(--color-primary-hover);
-}
-
-.markdown-shell :deep(.copy-code-btn.copied) {
-  background: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
 
 /* highlight.js 浅色语法高亮覆盖 */
 .markdown-shell :deep(.hljs) {

@@ -44,7 +44,7 @@ const normalizeComparisonTables = (text: string): string => {
 
 const renderContentHtml = () => {
   const normalized = normalizeComparisonTables(props.content || '')
-  streamingHtml.value = renderStreamingMarkdownHtml(normalized)
+  streamingHtml.value = renderStreamingMarkdownHtml(normalized, props.isStreaming)
 }
 
 const handleContentClick = async (event: MouseEvent) => {

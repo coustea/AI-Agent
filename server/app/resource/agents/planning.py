@@ -1,4 +1,9 @@
-"""规划智能体 — 分析学习需求，生成教学蓝图和各 Agent 个性化指令。"""
+"""规划智能体 — 分析学习需求，生成教学蓝图和各 Agent 个性化指令。
+
+PlanningAgent 是多智能体模式的入口，它的输出（ExecutionPlan）包含：
+  - blueprint: 教学蓝图（全局教学策略）
+  - agent_instructions: 每个子 Agent 的个性化执行指令
+"""
 
 from __future__ import annotations
 
@@ -31,6 +36,7 @@ class PlanningAgent(BaseResourceAgent):
             )
 
         prompt = prompts.get("resource").get("planning")
+        # 自定义构建规划输入（包含学习需求、画像、场景、资源类型列表）
         input_text = self._build_planning_input(state)
 
         if self.emitter:
@@ -40,6 +46,7 @@ class PlanningAgent(BaseResourceAgent):
                 progress=25,
             )
 
+        # LLM 结构化输出 → ExecutionPlan（含 blueprint + agent_instructions）
         plan = await self.llm.ainvoke_json(
             ExecutionPlan,
             f"{prompt}\n\n{input_text}",
@@ -77,13 +84,16 @@ class PlanningAgent(BaseResourceAgent):
         )
 
     def _build_planning_input(self, state: WorkerState) -> str:
+        """构建规划阶段的 LLM 输入文本。"""
         parts = [
             f"## 学习需求\n{state.learning_need}",
             f"## 学习场景\n{getattr(state, 'learning_scenario', 'self_study')}",
         ]
+        # 添加学习者画像
         profile_text = format_learner_profile_for_prompt(state.profile)
         if profile_text:
             parts.append(f"## 学习者画像\n{profile_text}")
+        # 添加需要生成的资源类型列表
         agents = list(state.agent_config.get("enabled_agents", [])) if state.agent_config else []
         if agents:
             parts.append(f"## 需要生成的资源类型\n{', '.join(agents)}")

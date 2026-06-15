@@ -40,6 +40,7 @@ from app.chat.utils.vision import VisionService
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
+from app.profile.service import get_profile_service
 
 logger = get_logger(__name__)
 
@@ -304,15 +305,61 @@ class TutorAgent:
                     status = "completed" if ltm_result.get("updated") else "analyzed" if ltm_result.get("analyzed") else "skipped"
                     payload["ltm_result"] = ltm_result
                 else:
-                    from app.profile.service import get_profile_service
-
+                    import re
+                    profile_service = get_profile_service()
+                    
+                    turn_text = f"{user_message}\n{assistant_reply}"
+                    
+                    global_patterns = [
+                        r"(喜欢|习惯|偏好|擅长|感兴趣|反感|讨厌|更愿意|认知|风格|学习方式)",
+                        r"(节奏|速度|时间|每天|太快|太慢|稍微|快一点|慢一点|进度|频繁)",
+                        r"(实践|动手|写代码|做题|编程|实验|实战|练习|编码|Debug)",
+                    ]
+                    course_patterns = [
+                        r"(这门课|操作系统|数据库|计网|网络|计组|算法|数据结构|高数|线代)",
+                        r"(进程|线程|锁|事务|索引|内存|虚拟内存|调度|TCP|IP|握手|矩阵|导数|概念)",
+                        r"(薄弱|搞错|出错|卡住|记不住|混淆|搞不清|老是错|不会做|不懂|理解不了)",
+                        r"(基础|掌握|熟悉|了解|懂了|不明白|难度|简单|困难|稍微深点)",
+                    ]
+                    
+                    should_update_global = any(re.search(p, turn_text) for p in global_patterns)
+                    should_update_course = any(re.search(p, turn_text) for p in course_patterns)
+                    
+                    global_updated = False
+                    course_updated = False
+                    
+                    if should_update_global:
+                        res_global = await profile_service.update_global_from_tutoring(
+                            user_id=user_id,
+                            session_id=session_id,
+                        )
+                        global_updated = res_global.get("profile_updated", False)
+                        
+                    if should_update_course:
+                        global_profile = await profile_service.get_or_create_global_profile(user_id=user_id)
+                        profile_json = global_profile.profile_json or {}
+                        active_courses = profile_json.get("base_info", {}).get("courses", [])
+                        course_name = ""
+                        if active_courses and isinstance(active_courses, list):
+                            first_course = active_courses[0]
+                            if isinstance(first_course, dict):
+                                course_name = first_course.get("course", "")
+                            elif isinstance(first_course, str):
+                                course_name = first_course
+                                
+                        if course_name:
+                            res_course = await profile_service.update_course_from_tutoring(
+                                user_id=user_id,
+                                session_id=session_id,
+                                course_name=course_name,
+                            )
+                            course_updated = res_course.get("profile_updated", False)
+                            
                     job = "learner_profile"
-                    profile_updated = await get_profile_service().maybe_update_from_tutoring_turn(
-                        user_id=user_id,
-                        session_id=session_id,
-                    )
-                    status = "completed" if profile_updated else "skipped"
-                    payload["profile_updated"] = profile_updated
+                    status = "completed" if (global_updated or course_updated) else "skipped"
+                    payload["profile_updated"] = global_updated or course_updated
+                    payload["global_updated"] = global_updated
+                    payload["course_updated"] = course_updated
 
             await self._persist_turn_event(
                 state,

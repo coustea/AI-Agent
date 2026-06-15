@@ -1,200 +1,133 @@
+"""TutorAgent LangGraph graph tests — verify node routing and basic execution."""
+
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
-from langchain_core.messages import AIMessage
 
-from app.chat.schemas import ConstraintReport, EvidenceSet, TurnRequest
-
-
-@pytest.mark.asyncio
-async def test_reasoning_agent_returns_tool_intent_from_model_tool_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat import agent as agent_module
-    from app.chat.agent import ReasoningAgent
-
-    class FakeModel:
-        def bind_tools(self, tools):
-            self.tools = tools
-            return self
-
-    class FakeLlm:
-        def __init__(self) -> None:
-            self.model = FakeModel()
-
-        async def ainvoke(self, _messages, *, model=None, temperature: float = 0.3):
-            assert model is self.model
-            return AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "id": "call-profile-1",
-                        "name": "get_learner_profile",
-                        "args": {"dimension": "goals", "reason": "personalize"},
-                    }
-                ],
-            )
-
-    async def fake_build_reasoning_messages(**_kwargs):
-        return [SimpleNamespace(content="stub")]
-
-    monkeypatch.setattr(agent_module, "build_reasoning_messages", fake_build_reasoning_messages)
-    agent = ReasoningAgent(llm=FakeLlm(), tools=[SimpleNamespace(name="get_learner_profile")])
-
-    result = await agent.reason(
-        TurnRequest(user_id=7, session_id="s-1", message="结合我的目标给建议"),
-        EvidenceSet(items=[]),
-        ConstraintReport(),
-    )
-
-    assert result.tool_name == "get_learner_profile"
-    assert result.payload == {"dimension": "goals", "reason": "personalize"}
+from app.chat.agent import TutorAgent, TutorAgentState
+from app.chat.schemas import ChatStreamEvent, ClassificationResult, TutorAgentInput
 
 
 @pytest.mark.asyncio
-async def test_reasoning_agent_returns_final_answer_when_model_has_no_tool_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat import agent as agent_module
-    from app.chat.agent import ReasoningAgent
-
-    class FakeModel:
-        def bind_tools(self, tools):
-            return self
-
-    class FakeLlm:
-        def __init__(self) -> None:
-            self.model = FakeModel()
-
-        async def ainvoke(self, _messages, *, model=None, temperature: float = 0.3):
-            return AIMessage(content="先从定义和例子开始理解。")
-
-    async def fake_build_reasoning_messages(**_kwargs):
-        return [SimpleNamespace(content="stub")]
-
-    monkeypatch.setattr(agent_module, "build_reasoning_messages", fake_build_reasoning_messages)
-    agent = ReasoningAgent(llm=FakeLlm(), tools=[SimpleNamespace(name="search_knowledge_base")])
-
-    result = await agent.reason(
-        TurnRequest(user_id=7, session_id="s-1", message="解释什么是函数"),
-        EvidenceSet(items=[]),
-        ConstraintReport(),
-    )
-
-    assert result.answer == "先从定义和例子开始理解。"
+async def test_route_after_classify_goes_to_answer_when_no_needs() -> None:
+    state: TutorAgentState = {
+        "classification": ClassificationResult(
+            intent="general_qa",
+            needs_file_analysis=False,
+            needs_knowledge_search=False,
+            needs_web_search=False,
+            needs_diagram=False,
+        ),
+        "attachments": [],
+    }
+    assert TutorAgent._route_after_classify(state) == "answer_node"
 
 
 @pytest.mark.asyncio
-async def test_reasoning_agent_respects_explicit_empty_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat import agent as agent_module
-    from app.chat.agent import ReasoningAgent
-
-    class FakeModel:
-        def bind_tools(self, _tools):
-            raise AssertionError("explicit tools=[] should not bind default tools")
-
-    class FakeLlm:
-        def __init__(self) -> None:
-            self.model = FakeModel()
-            self.seen_model = "unset"
-
-        async def ainvoke(self, _messages, *, model=None, temperature: float = 0.3):
-            self.seen_model = model
-            return AIMessage(content="直接回答。")
-
-    async def fake_build_reasoning_messages(**_kwargs):
-        return [SimpleNamespace(content="stub")]
-
-    fake_llm = FakeLlm()
-    monkeypatch.setattr(agent_module, "build_reasoning_messages", fake_build_reasoning_messages)
-    agent = ReasoningAgent(llm=fake_llm, tools=[SimpleNamespace(name="get_learner_profile")])
-
-    result = await agent.reason(
-        TurnRequest(user_id=7, session_id="s-1", message="解释什么是函数"),
-        EvidenceSet(items=[]),
-        ConstraintReport(),
-        tools=[],
-    )
-
-    assert fake_llm.seen_model is None
-    assert result.answer == "直接回答。"
+async def test_route_after_classify_goes_to_analysis_when_attachments() -> None:
+    state: TutorAgentState = {
+        "classification": ClassificationResult(needs_file_analysis=True),
+        "attachments": ["http://example.com/file.pdf"],
+    }
+    assert TutorAgent._route_after_classify(state) == "analysis_files"
 
 
 @pytest.mark.asyncio
-async def test_reasoning_agent_reasks_without_tools_when_only_skipped_tool_calls_are_blank(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.chat import agent as agent_module
-    from app.chat.agent import ReasoningAgent
-
-    class FakeModel:
-        def bind_tools(self, _tools):
-            return self
-
-    class FakeLlm:
-        def __init__(self) -> None:
-            self.model = FakeModel()
-            self.models: list[object | None] = []
-
-        async def ainvoke(self, _messages, *, model=None, temperature: float = 0.3):
-            self.models.append(model)
-            if len(self.models) == 1:
-                return SimpleNamespace(
-                    content="",
-                    tool_calls=[{"name": "get_learner_profile", "args": {}}],
-                )
-            return AIMessage(content="根据已有信息回答。")
-
-    async def fake_build_reasoning_messages(**_kwargs):
-        return [SimpleNamespace(content="stub")]
-
-    fake_llm = FakeLlm()
-    monkeypatch.setattr(agent_module, "build_reasoning_messages", fake_build_reasoning_messages)
-    agent = ReasoningAgent(llm=fake_llm, tools=[SimpleNamespace(name="get_learner_profile")])
-
-    result = await agent.reason(
-        TurnRequest(user_id=7, session_id="s-1", message="结合我的目标给建议"),
-        EvidenceSet(items=[]),
-        ConstraintReport(executed_tools=["get_learner_profile"]),
-    )
-
-    assert fake_llm.models == [fake_llm.model, None]
-    assert result.answer == "根据已有信息回答。"
+async def test_route_after_classify_goes_to_search_when_knowledge_needed() -> None:
+    state: TutorAgentState = {
+        "classification": ClassificationResult(needs_knowledge_search=True),
+        "attachments": [],
+    }
+    assert TutorAgent._route_after_classify(state) == "search_node"
 
 
 @pytest.mark.asyncio
-async def test_reasoning_agent_parses_json_string_tool_args(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat import agent as agent_module
-    from app.chat.agent import ReasoningAgent
+async def test_route_after_classify_goes_to_search_when_web_needed() -> None:
+    state: TutorAgentState = {
+        "classification": ClassificationResult(needs_web_search=True),
+        "attachments": [],
+    }
+    assert TutorAgent._route_after_classify(state) == "search_node"
 
-    class FakeModel:
-        def bind_tools(self, _tools):
-            return self
 
-    class FakeLlm:
-        def __init__(self) -> None:
-            self.model = FakeModel()
+@pytest.mark.asyncio
+async def test_route_after_classify_goes_to_answer_when_no_classification() -> None:
+    state: TutorAgentState = {"classification": None}
+    assert TutorAgent._route_after_classify(state) == "answer_node"
 
-        async def ainvoke(self, _messages, *, model=None, temperature: float = 0.3):
-            return SimpleNamespace(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "search_knowledge_base",
-                        "args": '{"query": "函数", "top_k": 3}',
-                    }
-                ],
-            )
 
-    async def fake_build_reasoning_messages(**_kwargs):
-        return [SimpleNamespace(content="stub")]
+@pytest.mark.asyncio
+async def test_route_after_answer_goes_to_diagram_when_needed() -> None:
+    state: TutorAgentState = {
+        "classification": ClassificationResult(needs_diagram=True),
+        "final_answer": "some answer",
+    }
+    assert TutorAgent._route_after_answer(state) == "diagram_node"
 
-    monkeypatch.setattr(agent_module, "build_reasoning_messages", fake_build_reasoning_messages)
-    agent = ReasoningAgent(llm=FakeLlm(), tools=[SimpleNamespace(name="search_knowledge_base")])
 
-    result = await agent.reason(
-        TurnRequest(user_id=7, session_id="s-1", message="解释什么是函数"),
-        EvidenceSet(items=[]),
-        ConstraintReport(),
-    )
+@pytest.mark.asyncio
+async def test_route_after_answer_goes_to_end_when_no_diagram() -> None:
+    from langgraph.graph import END
 
-    assert result.tool_name == "search_knowledge_base"
-    assert result.payload == {"query": "函数", "top_k": 3}
+    state: TutorAgentState = {
+        "classification": ClassificationResult(needs_diagram=False),
+        "final_answer": "some answer",
+    }
+    assert TutorAgent._route_after_answer(state) == END
+
+
+@pytest.mark.asyncio
+async def test_route_after_analysis_goes_to_search_when_needed() -> None:
+    state: TutorAgentState = {
+        "classification": ClassificationResult(needs_knowledge_search=True),
+    }
+    assert TutorAgent._route_after_analysis(state) == "search_node"
+
+
+@pytest.mark.asyncio
+async def test_route_after_analysis_goes_to_answer_when_no_search() -> None:
+    state: TutorAgentState = {
+        "classification": ClassificationResult(needs_knowledge_search=False, needs_web_search=False),
+    }
+    assert TutorAgent._route_after_analysis(state) == "answer_node"
+
+
+@pytest.mark.asyncio
+async def test_tutor_agent_graph_compiles() -> None:
+    """Verify the LangGraph graph can be built and compiled."""
+    agent = TutorAgent()
+    assert agent._graph is not None
+
+
+@pytest.mark.asyncio
+async def test_classification_result_defaults() -> None:
+    """Verify ClassificationResult has sensible defaults."""
+    cls = ClassificationResult()
+    assert cls.intent == "general_qa"
+    assert cls.needs_file_analysis is False
+    assert cls.needs_knowledge_search is False
+    assert cls.needs_diagram is False
+    assert cls.safety_risk == "none"
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_event_types() -> None:
+    """Verify ChatStreamEvent can be created with all defined types."""
+    for event_type in [
+        "message_start", "classify_done", "file_analysis_start", "file_analysis_done",
+        "tool_start", "tool_done", "answer_token", "answer_done",
+        "diagram_start", "diagram_done", "memory_update_start", "memory_update_done",
+        "final", "error",
+    ]:
+        event = ChatStreamEvent(type=event_type, payload={}, sequence=0, timestamp=0.0)
+        assert event.type == event_type
+
+
+@pytest.mark.asyncio
+async def test_tutor_agent_input_defaults() -> None:
+    """Verify TutorAgentInput has sensible defaults."""
+    input = TutorAgentInput(user_id=1, session_id="s1", turn_id=1, question="hello")
+    assert input.attachments == []
+    assert input.history_messages == []
+    assert input.session_summary == ""
+    assert input.enable_web_search is False

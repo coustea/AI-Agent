@@ -577,11 +577,83 @@ function repairCopiedCodeBlocks(text: string): string {
   return repaired.join('\n')
 }
 
+function isClearlyMarkdownText(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed) return false
+  if (/^#{1,6}\s+/.test(trimmed)) return true
+  if (/^[-*+]\s+/.test(trimmed)) return true
+  if (/^\d+\.\s+/.test(trimmed)) return true
+  if (/^\*\*.+?\*\*/.test(trimmed)) return true
+  if (/^>/.test(trimmed)) return true
+  if (!/^(#|\/\/|\/\*)/.test(trimmed) && /[\u4e00-\u9fa5]/.test(trimmed)) {
+    if (!/[=(){}\[\]]/.test(trimmed)) return true
+  }
+  return false
+}
+
+function repairMissingClosingFences(text: string): string {
+  if (!text) return text
+  const lines = text.split('\n')
+  const repaired: string[] = []
+  let inCodeBlock = false
+  let currentFenceChar = ''
+  let currentFenceLength = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? ''
+    const match = line.match(/^(\s*)(`{3,}|~{3,})(.*)$/)
+
+    if (match) {
+      const fence = match[2] ?? ''
+      const info = (match[3] ?? '').trim()
+
+      if (!inCodeBlock) {
+        inCodeBlock = true
+        currentFenceChar = fence[0] ?? ''
+        currentFenceLength = fence.length
+        repaired.push(line)
+      } else {
+        if (info === '' && fence[0] === currentFenceChar && fence.length >= currentFenceLength) {
+          inCodeBlock = false
+          repaired.push(line)
+        } else if (info !== '') {
+          let insertIndex = repaired.length
+          while (insertIndex > 0) {
+            const prevLine = repaired[insertIndex - 1] ?? ''
+            if (!prevLine.trim() || isClearlyMarkdownText(prevLine)) {
+              insertIndex--
+              continue
+            }
+            break
+          }
+          if (insertIndex === 0) insertIndex = repaired.length
+          
+          const popped = repaired.splice(insertIndex)
+          repaired.push(currentFenceChar.repeat(currentFenceLength))
+          repaired.push(...popped)
+          
+          repaired.push(line)
+          currentFenceChar = fence[0] ?? ''
+          currentFenceLength = fence.length
+        } else {
+          repaired.push(line)
+        }
+      }
+    } else {
+      repaired.push(line)
+    }
+  }
+
+  return repaired.join('\n')
+}
+
 export function normalizeStreamingMarkdown(text: string, isStreaming = false): string {
-  const repairedBase = repairLooseCodeBlocks(
-    repairSplitFenceLanguages(
-      repairMalformedFenceOpeners(
-        repairCopiedCodeBlocks(text),
+  const repairedBase = repairMissingClosingFences(
+    repairLooseCodeBlocks(
+      repairSplitFenceLanguages(
+        repairMalformedFenceOpeners(
+          repairCopiedCodeBlocks(text),
+        ),
       ),
     ),
   )
@@ -629,8 +701,8 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
   return `${repaired}\n\`\`\``
 }
 
-export function renderStreamingMarkdownHtml(text: string): string {
-  const normalized = normalizeStreamingMarkdown(text, true)
+export function renderStreamingMarkdownHtml(text: string, isStreaming = false): string {
+  const normalized = normalizeStreamingMarkdown(text, isStreaming)
   if (!normalized.trim()) return ''
 
   try {

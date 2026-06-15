@@ -17,9 +17,12 @@ from app.infra.models import QuizQuestion
 
 logger = get_logger(__name__)
 
+# 题库 JSON 文件所在目录（相对于 server/ 目录）
 QUIZ_DIR = Path(__file__).parent.parent.parent / "quiz" / "final"
+# 408 题库子目录名
 QUIZ_BANK_SUBDIR = "408题库"
 
+# 批量写入的批次大小
 BATCH_SIZE = 200
 
 
@@ -31,13 +34,16 @@ async def _load_quiz_files() -> list[tuple[dict, str]]:
         return []
 
     results: list[tuple[dict, str]] = []
+    # 递归扫描所有 JSON 文件
     for json_file in sorted(bank_dir.rglob("*.json")):
         rel_path = json_file.relative_to(QUIZ_DIR).as_posix()
+        # 跳过固定输出、状态等非题库文件
         if any(skip in rel_path for skip in ("fixed_output", ".omc", "state")):
             continue
         try:
             with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
+            # 支持 JSON 数组格式（每个元素为一道题）
             if isinstance(data, list):
                 for item in data:
                     results.append((item, rel_path))
@@ -87,6 +93,7 @@ async def import_quiz_bank(session: AsyncSession) -> int:
     Returns:
         新增题目数量
     """
+    # 检查表中是否已有数据
     count = (await session.exec(
         select(func.count()).select_from(QuizQuestion)
     )).scalar() or 0
@@ -95,6 +102,7 @@ async def import_quiz_bank(session: AsyncSession) -> int:
         logger.info("[QuizImport] 题库已有 %d 条数据，跳过导入", count)
         return 0
 
+    # 加载所有题库 JSON 文件
     raw_items = await _load_quiz_files()
     if not raw_items:
         logger.info("[QuizImport] 无题库数据需要导入")
@@ -105,18 +113,21 @@ async def import_quiz_bank(session: AsyncSession) -> int:
     imported = 0
     batch: list[QuizQuestion] = []
 
+    # 分批写入数据库
     for item, rel_path in raw_items:
         model = _to_model(item, rel_path)
         if model is None:
             continue
         batch.append(model)
 
+        # 达到批次大小时提交一次
         if len(batch) >= BATCH_SIZE:
             session.add_all(batch)
             await session.commit()
             imported += len(batch)
             batch = []
 
+    # 提交剩余的最后一批
     if batch:
         session.add_all(batch)
         await session.commit()

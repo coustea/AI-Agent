@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Digital-human realtime bridge for the shared chat tutoring pipeline.
+"""数字人实时桥接模块 — 连接前端 WebSocket、ASR 语音识别和数字人播报。
 
-The bridge owns WebSocket, ASR and avatar playback concerns only. Tutoring
-decisions run through ``app.chat.service`` and its transcript-first orchestrator.
+核心职责：
+  - 管理前端 WebSocket 连接和消息路由
+  - 处理音频流（VAD 模式下的持续语音识别）
+  - 调用共享的 chat 服务获取 AI 回复
+  - 驱动数字人（Avatar）进行 TTS 播报
+
+RealtimeBridge：单用户桥接实例，持有 WebSocket、ASR 队列和 Avatar 控制器
+AvatarBridgeManager：管理所有用户的 Bridge 实例（全局单例）
 """
 
 import asyncio
@@ -19,30 +25,36 @@ logger = get_logger(__name__)
 
 
 class RealtimeBridge:
-    """Connect digital-human I/O to the shared stateless tutoring service."""
+    """单用户数字人桥接 — 将前端 I/O 连接到共享的无状态辅导服务。"""
 
     def __init__(self, user_id: int):
         self.user_id = user_id
+        # 当前会话 ID — 由首次对话时自动创建
         self.session_id: str = ""
-        self.frontend_ws = None  # WebSocket 
+        # 前端 WebSocket 连接引用
+        self.frontend_ws = None
+        # VAD 监听模式标志
         self.is_listening = False
+        # 音频输入队列（VAD 模式下持续接收 PCM 音频块）
         self.current_audio_queue: Optional[asyncio.Queue] = None
 
-        # Avatar 控制器
+        # 数字人控制器实例
         self._avatar_controller = None
+        # ASR 持续监听的后台任务
         self._asr_loop_task = None
 
-        # VAD 参数
-        self._vad_eos = 1000
-        self._consecutive_empty = 0
-        self._empty_rate = 0.0
-        self._round_metrics: list[dict] = []
-        self._audio_chunk_counter = 0
-        self._last_asr_text: str = ""
-        self._last_asr_at: float = 0.0
-        self._speech_rate: float = 1.0
-        self._need_diagram_default: bool = False
-        self._enable_search_default: bool = False
+        # VAD 自适应参数
+        self._vad_eos = 1000            # VAD 结束静默时长（毫秒）
+        self._consecutive_empty = 0     # 连续空识别轮次计数
+        self._empty_rate = 0.0          # 空识别率（用于自适应调整 VAD）
+        self._round_metrics: list[dict] = []  # 每轮 ASR 的指标记录
+        self._audio_chunk_counter = 0   # 音频块计数器
+        self._last_asr_text: str = ""   # 上一次 ASR 识别结果（用于去重）
+        self._last_asr_at: float = 0.0  # 上一次 ASR 结果的时间戳
+        self._speech_rate: float = 1.0  # TTS 语速（0.8~1.5）
+        self._need_diagram_default: bool = False  # 默认是否生成教学图
+        self._enable_search_default: bool = False  # 默认是否启用联网搜索
+        # 对话锁 — 串行化 turn 处理，避免并发冲突
         self._turn_lock = asyncio.Lock()
 
     @staticmethod
@@ -132,9 +144,9 @@ class RealtimeBridge:
             })
 
     async def handle_frontend(self, ws):
-        """处理前端 WebSocket 连接。"""
+        """处理前端 WebSocket 连接 — 主消息循环。"""
         self.frontend_ws = ws
-        # Avoid reusing stale session id across different module pipelines.
+        # 每次新连接重置 session_id，避免跨模块会话复用
         self.session_id = ""
         # 确保 AvatarController 已初始化
         try:
@@ -142,7 +154,7 @@ class RealtimeBridge:
         except Exception as e:
             logger.warning("[Bridge] AvatarController 初始化失败: %s", e)
 
-        # 发送已缓存的流信息
+        # 发送已缓存的流信息（Avatar 重连场景）
         if self._avatar_controller and self._avatar_controller._last_stream_info:
             await self._send_to_frontend({
                 "type": "stream_info",
@@ -150,6 +162,7 @@ class RealtimeBridge:
             })
 
         try:
+            # 持续接收前端消息并路由处理
             while True:
                 try:
                     message = await ws.receive_text()
@@ -163,8 +176,7 @@ class RealtimeBridge:
                     break
                 except Exception as e:
                     logger.error("[Bridge] 处理消息异常: %s", e)
-                    # Fatal websocket state errors should break the receive loop,
-                    # otherwise we'll spin and spam logs.
+                    # WebSocket 状态异常（如 accept 失败）应立即退出循环
                     if isinstance(e, RuntimeError) and "accept" in str(e).lower():
                         logger.warning("[Bridge] websocket state invalid, break receive loop")
                         break
@@ -181,6 +193,7 @@ class RealtimeBridge:
         except Exception as e:
             logger.error("[Bridge] handle_frontend : %s", e, exc_info=True)
         finally:
+            # 连接断开时清理 Avatar 资源
             if self._avatar_controller:
                 try:
                     await self._avatar_controller.stop()
@@ -201,33 +214,43 @@ class RealtimeBridge:
             return False
 
     async def _route_message(self, data: dict):
-        """Route frontend message by type."""
+        """前端消息路由 — 根据消息类型分发到对应的处理方法。"""
         from app.avatar.bridge.state import MessageType
 
         msg_type = data.get("type", "")
 
         if msg_type == MessageType.AUDIO_CHUNK:
+            # 音频数据块 → 放入 ASR 队列
             await self._handle_audio_chunk(data)
         elif msg_type == MessageType.AUDIO_END:
+            # 音频结束 → 向 ASR 队列发送 None 终止符
             await self._handle_audio_end()
         elif msg_type == MessageType.TEXT_INPUT:
+            # 文本输入 → 直接调用 chat 服务
             await self._handle_text_input(data)
         elif msg_type == MessageType.STOP_SPEAKING:
+            # 停止播报 → 中断 Avatar TTS
             await self._handle_stop_speaking()
         elif msg_type == MessageType.CLEAR_HISTORY:
+            # 清除历史 → 删除当前 session 的消息记录
             await self._handle_clear_history()
         elif msg_type == "start_vad":
+            # 启动 VAD 监听模式
             if "need_diagram" in data:
                 self._handle_set_need_diagram(data)
             self._handle_capability_flags(data)
             await self._handle_start_vad()
         elif msg_type == "stop_vad":
+            # 停止 VAD 监听模式
             await self._handle_stop_vad()
         elif msg_type == "switch_session":
+            # 切换会话 ID
             self.session_id = data.get("session_id", "")
         elif msg_type == "set_speech_rate":
+            # 设置 TTS 语速
             self._handle_set_speech_rate(data)
         elif msg_type == "set_need_diagram":
+            # 设置是否生成教学图
             self._handle_set_need_diagram(data)
 
     def _handle_set_speech_rate(self, data: dict):
@@ -628,7 +651,7 @@ class RealtimeBridge:
         need_diagram: bool = False,
         enable_search: bool = False,
     ):
-        """Serialize turns so one frontend response stream maps to one answer."""
+        """串行化 turn 处理 — 使用锁确保同一时间只有一个 turn 在执行。"""
         async with self._turn_lock:
             await self._run_user_text_turn(
                 user_text=user_text,
@@ -644,11 +667,13 @@ class RealtimeBridge:
         need_diagram: bool = False,
         enable_search: bool = False,
     ):
-        """Run one completed turn through chat service and avatar playback."""
+        """执行一轮完整的对话 turn：调用 chat 服务 → 流式处理事件 → 触发 Avatar 播报。"""
         from app.chat.service import chat, get_chat_usecases
 
+        # 合并附件 URL 并去重
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()
+        # 自动创建会话（首次对话时）
         if not self.session_id:
             session = await chat_uc.create_session(user_id=self.user_id)
             self.session_id = str(session["id"])
@@ -661,6 +686,7 @@ class RealtimeBridge:
         diagram_forwarded = False
         try:
             async def _consume_stream_events():
+                """消费 chat 服务的 SSE 事件流，转发 token/status/error/diagram 事件。"""
                 nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
                 nonlocal stream_failed, fail_reason
                 async for event in chat(
@@ -683,6 +709,7 @@ class RealtimeBridge:
                                 str(payload)[:120] if payload else "None")
 
                     if event_type == "token":
+                        # 流式 token → 修复编码后转发给前端
                         content = self._repair_text_encoding(str(payload or ""))
                         if content:
                             full_response += content
@@ -690,22 +717,26 @@ class RealtimeBridge:
                                 await self._send_to_frontend({"type": "assistant_chunk", "content": content})
 
                     elif event_type == "status":
+                        # 状态事件 → 转发给前端
                         if self.frontend_ws and isinstance(payload, dict):
                             await self._send_to_frontend({"type": "status", "data": payload})
 
                     elif event_type == "error":
+                        # 错误事件 → 标记失败并通知前端
                         stream_failed = True
                         fail_reason = str(payload or "数字人回答失败，请重试")
                         if self.frontend_ws:
                             await self._send_to_frontend({"type": "error", "content": fail_reason})
 
                     elif event_type == "diagram":
+                        # 教学图事件 → 缓存并转发给前端
                         last_diagram_payload = payload
                         if self.frontend_ws and not diagram_forwarded:
                             await self._send_to_frontend({"type": "diagram", "data": payload})
                             diagram_forwarded = True
 
                     elif event_type == "done":
+                        # 完成事件 → 提取最终回复和教学图
                         if isinstance(payload, dict):
                             maybe_text = self._repair_text_encoding(
                                 str(payload.get("full_response", "") or payload.get("response", "") or "")
@@ -726,8 +757,7 @@ class RealtimeBridge:
                                 await self._send_to_frontend({"type": "diagram", "data": diagram_payload})
                                 diagram_forwarded = True
 
-            # Do not enforce a fixed timeout here.
-            # Long answers + diagram generation can legitimately exceed 60~120s.
+            # 执行事件流消费（不设固定超时，长回复+教学图可能超过 120s）
             await _consume_stream_events()
         except asyncio.CancelledError:
             stream_failed = True
@@ -752,13 +782,13 @@ class RealtimeBridge:
                 stream_failed,
             )
 
-            # Always send completion marker when frontend socket is still alive.
+            # 流结束后始终发送完成标记
             if self.frontend_ws:
                 if last_diagram_payload is not None and not diagram_forwarded:
                     await self._send_to_frontend({"type": "diagram", "data": last_diagram_payload})
                 await self._send_to_frontend({"type": "assistant_complete"})
 
-            # 4. 触发数字人播报
+            # 触发数字人 TTS 播报（异步执行，不阻塞响应）
             if full_response.strip() and self._avatar_controller:
                 logger.info(
                     "[Bridge] trigger avatar speak len=%s ws_alive=%s",
@@ -793,18 +823,24 @@ class RealtimeBridge:
 
 
 class AvatarBridgeManager:
-    """管理所有用户的 RealtimeBridge 实例。"""
+    """管理所有用户的 RealtimeBridge 实例（全局单例）。
+
+    每个用户对应一个 Bridge 实例，通过 user_id 索引。
+    使用 per-user 锁确保并发安全。
+    """
 
     def __init__(self):
         self._bridges: dict[int, RealtimeBridge] = {}
         self._locks: dict[int, asyncio.Lock] = {}
 
     def _get_lock(self, user_id: int) -> asyncio.Lock:
+        """获取或创建用户级别的异步锁。"""
         if user_id not in self._locks:
             self._locks[user_id] = asyncio.Lock()
         return self._locks[user_id]
 
     async def get_or_create_bridge(self, user_id: int) -> RealtimeBridge:
+        """获取或创建用户的 Bridge 实例（线程安全）。"""
         lock = self._get_lock(user_id)
         async with lock:
             if user_id not in self._bridges:
@@ -813,6 +849,7 @@ class AvatarBridgeManager:
             return self._bridges[user_id]
 
     async def get_status(self, user_id: int) -> dict:
+        """查询用户的 Bridge 状态（连接状态、监听状态等）。"""
         bridge = self._bridges.get(user_id)
         if not bridge:
             return {"connected": False, "state": "idle"}
@@ -824,22 +861,25 @@ class AvatarBridgeManager:
         }
 
     async def get_stream_info(self, user_id: int) -> dict | None:
+        """获取用户的 Avatar 视频流信息。"""
         bridge = self._bridges.get(user_id)
         if not bridge or not bridge._avatar_controller:
             return None
         return bridge._avatar_controller._last_stream_info
 
     async def stop(self, user_id: int):
+        """停止用户的 Avatar 播报。"""
         bridge = self._bridges.get(user_id)
         if bridge and bridge._avatar_controller:
             await bridge._avatar_controller.stop()
 
     async def cleanup(self, user_id: int):
+        """清理用户的 Bridge 实例（断开连接、释放资源）。"""
         bridge = self._bridges.pop(user_id, None)
         self._locks.pop(user_id, None)
         if bridge:
             await bridge.close()
 
 
-# 全局单例
+# 全局单例 — 所有路由共享同一个 BridgeManager
 avatar_bridge_manager = AvatarBridgeManager()

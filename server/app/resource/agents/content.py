@@ -1,4 +1,4 @@
-"""内容智能体 — 生成专业课程讲解文档。"""
+"""内容智能体 — 基于教学蓝图生成专业课程讲解文档。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 
 @register_agent
 class ContentAgent(BaseResourceAgent):
-    """基于教学蓝图生成课程讲解文档。"""
+    """基于教学蓝图生成课程讲解文档（Markdown 格式）。"""
 
     agent_id = "content"
     agent_name = "内容生成"
@@ -24,7 +24,9 @@ class ContentAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        """核心生成逻辑：拼接配置 → 调用 LLM → 清洗 Markdown 格式。"""
         config = state.agent_config
+        # 将用户配置（结构、深度、关注模式等）拼接到 prompt 中
         if config:
             cfg = ["## 内容配置"]
             cfg.append(f"- 结构: {config.get('structure', 'progressive')}")
@@ -54,6 +56,7 @@ class ContentAgent(BaseResourceAgent):
             )
 
         content = response.content if hasattr(response, "content") else str(response)
+        # 清理 LLM 输出中多余的 markdown fence 标记
         content = _clean_markdown_fences(content)
         logger.info("Agent[content] 步骤: 内容清洗完成, output_len=%d", len(content))
 
@@ -69,5 +72,6 @@ class ContentAgent(BaseResourceAgent):
 
 
 def _clean_markdown_fences(content: str) -> str:
+    """移除 LLM 输出中的 markdown fence 包裹标记。"""
     lines = content.split("\n")
     return "\n".join(line for line in lines if line.strip() not in ("```", "```markdown", "```text"))

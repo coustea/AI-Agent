@@ -429,24 +429,24 @@ CREATE INDEX IF NOT EXISTS ix_global_profiles_profile_score_json
 -- 9. course_profiles
 -- ============================================================
 CREATE TABLE IF NOT EXISTS course_profiles (
-    id                      SERIAL          PRIMARY KEY,
-    user_id                 INTEGER         NOT NULL,
-    module                  VARCHAR         NOT NULL DEFAULT 'mentor',
-    course_name             VARCHAR(200)    NOT NULL,
-    profile_json            JSONB,
-    profile_score_json      JSONB,
-    created_at              TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ     DEFAULT NOW(),
-    UNIQUE (user_id, module, course_name)
+    id                 SERIAL PRIMARY KEY,
+    global_profile_id  INTEGER NOT NULL REFERENCES global_profiles(id) ON DELETE CASCADE,
+    user_id            INTEGER NOT NULL,
+    module             VARCHAR NOT NULL DEFAULT 'mentor',
+    course_key         VARCHAR(200) NOT NULL,
+    course_name        VARCHAR(200) NOT NULL,
+    aliases            JSONB NOT NULL DEFAULT '[]'::jsonb,
+    profile_markdown   TEXT NOT NULL DEFAULT '',
+    created_at         TIMESTAMPTZ DEFAULT NOW(),
+    updated_at         TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_course_profile_global_course_key UNIQUE (global_profile_id, course_key)
 );
 
+CREATE INDEX IF NOT EXISTS ix_course_profiles_global_profile_id ON course_profiles (global_profile_id);
 CREATE INDEX IF NOT EXISTS ix_course_profiles_user_id ON course_profiles (user_id);
 CREATE INDEX IF NOT EXISTS ix_course_profiles_module ON course_profiles (module);
+CREATE INDEX IF NOT EXISTS ix_course_profiles_course_key ON course_profiles (course_key);
 CREATE INDEX IF NOT EXISTS ix_course_profiles_course_name ON course_profiles (course_name);
-CREATE INDEX IF NOT EXISTS ix_course_profiles_profile_json
-    ON course_profiles USING GIN (profile_json);
-CREATE INDEX IF NOT EXISTS ix_course_profiles_profile_score_json
-    ON course_profiles USING GIN (profile_score_json);
 
 -- ============================================================
 -- 10. generated_resources

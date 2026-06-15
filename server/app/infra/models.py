@@ -477,18 +477,17 @@ class CourseProfile(SQLModel, table=True):
     """课程子画像表"""
     __tablename__ = "course_profiles"
     __table_args__ = (
-        UniqueConstraint("user_id", "module", "course_name", name="uq_course_profile_user_module_course"),
-        Index("ix_course_profiles_profile_json", "profile_json", postgresql_using="gin"),
-        Index("ix_course_profiles_profile_score_json", "profile_score_json", postgresql_using="gin"),
+        UniqueConstraint("global_profile_id", "course_key", name="uq_course_profile_global_course_key"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    global_profile_id: int = Field(sa_column=Column(Integer, ForeignKey("global_profiles.id", ondelete="CASCADE"), index=True))
     user_id: int = Field(index=True)
     module: str = Field(default="mentor", index=True)
+    course_key: str = Field(max_length=200, index=True)
     course_name: str = Field(max_length=200, index=True)
-
-    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    aliases: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
+    profile_markdown: str = Field(default="", sa_column=Column(Text))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

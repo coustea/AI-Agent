@@ -17,11 +17,13 @@ logger = get_logger(__name__)
 
 
 class QuizOption(BaseModel):
+    """单个选项：标签（A/B/C/D）+ 内容文本。"""
     label: str = Field(description="选项标签，如 A/B/C/D")
     content: str = Field(description="选项内容")
 
 
 class QuizQuestion(BaseModel):
+    """单道题目：包含题干、选项、答案、解析、难度和知识点。"""
     id: int = Field(description="题目编号")
     type: str = Field(default="single_choice", description="题目类型")
     question: str = Field(description="题目内容")
@@ -33,6 +35,7 @@ class QuizQuestion(BaseModel):
 
 
 class QuizPayload(BaseModel):
+    """LLM 结构化输出模型：完整习题集。"""
     title: str = Field(default="随堂练习", description="习题集标题")
     summary: str = Field(default="", description="考查重点简介")
     questions: list[QuizQuestion] = Field(default_factory=list, description="题目列表")
@@ -40,7 +43,7 @@ class QuizPayload(BaseModel):
 
 @register_agent
 class QuizAgent(BaseResourceAgent):
-    """习题生成 Agent。"""
+    """习题生成 Agent — 输出 JSON 结构化的习题集。"""
 
     agent_id = "quiz"
     agent_name = "习题生成"
@@ -50,7 +53,9 @@ class QuizAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
+        """核心生成逻辑：拼接习题配置 → LLM 结构化输出 → 解析统计。"""
         config = state.agent_config
+        # 拼接习题配置（数量、难度、考试风格等）
         if config:
             cfg = ["## 习题配置"]
             cfg.append(f"- 题目数量: {config.get('question_count', 5)}")
@@ -70,6 +75,7 @@ class QuizAgent(BaseResourceAgent):
             )
 
         logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
+        # LLM 结构化输出 → QuizPayload（含 title、questions）
         result = await self.llm.ainvoke_json(
             QuizPayload,
             full_prompt,
@@ -88,6 +94,7 @@ class QuizAgent(BaseResourceAgent):
         quiz_data = result.model_dump(mode="json")
         content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
 
+        # 统计题目难度分布
         questions = quiz_data.get("questions", [])
         logger.info("Agent[quiz] 步骤: 习题解析完成, questions=%d", len(questions))
         difficulty_dist: dict[str, int] = {}

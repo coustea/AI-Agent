@@ -1361,7 +1361,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
     const history = res.data.data || []
     const mapped = history.map((msg, i) => ({
       id: Date.now() + i,
-      role: msg.role === 'assistant' ? 'ai' as const : msg.role as 'user' | 'ai',
+      role: (msg.role === 'assistant' || msg.role === 'tool' || msg.role === 'system') ? 'ai' as const : 'user' as const,
       content: msg.content,
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
