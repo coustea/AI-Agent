@@ -28,8 +28,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
+import time
 from typing import Any, AsyncIterator
 
 from langchain_openai import ChatOpenAI
@@ -211,6 +211,8 @@ class Llm:
         self._text_model: ChatOpenAI | None = None
         self._vision_model: ChatOpenAI | None = None
         self._text_base_url: str = ""
+        self._text_model_name: str = ""
+        self._structured_output_strategy: str = "auto"
         self._init()
 
     @property
@@ -228,6 +230,12 @@ class Llm:
 
         if text_cfg and "model_name" in text_cfg:
             self._text_base_url = text_cfg["base_url"].rstrip("/chat/completions").rstrip("/")
+            self._text_model_name = text_cfg["model_name"]
+            self._structured_output_strategy = str(
+                text_cfg.get("structured_output_strategy")
+                or text_cfg.get("json_strategy")
+                or "auto"
+            ).strip().lower()
             self._text_model = ChatOpenAI(
                 model=text_cfg["model_name"],
                 api_key=text_cfg["api_key"],
@@ -255,6 +263,25 @@ class Llm:
             logger.info("[LLM] 视觉模型初始化: model=%s", vision_cfg["model_name"])
 
     # ============ 核心方法 ============
+
+    def _resolve_structured_output_strategy(self) -> str:
+        """决定结构化输出优先策略。
+
+        tool calling 在原生 OpenAI 兼容度高的模型上很稳，但部分第三方兼容端
+        对复杂 schema 的 tool_calls 支持不稳定；这时先走 json_object 往往能少一次
+        完整 LLM 调用。
+        """
+        strategy = self._structured_output_strategy or "auto"
+        if strategy in {"tool_first", "json_first"}:
+            return strategy
+        if strategy != "auto":
+            logger.warning("[LLM] 未知 structured_output_strategy=%s，回退 auto", strategy)
+
+        model_name = (self._text_model_name or "").lower()
+        base_url = (self._text_base_url or "").lower()
+        if "astron-code" in model_name or "maas-coding-api" in base_url:
+            return "json_first"
+        return "tool_first"
 
     def _bind_text_model(
         self,
@@ -298,8 +325,7 @@ class Llm:
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        result = await runnable.ainvoke(input_data)
-        return result
+        return await runnable.ainvoke(input_data)
 
     async def astream(
         self,
@@ -411,6 +437,11 @@ class Llm:
         name = function_name or schema.__name__
         desc = function_description or f"Return {schema.__name__}"
         errors: list[str] = []
+        strategy = self._resolve_structured_output_strategy()
+        json_mode_attempted = False
+
+        def _elapsed_ms(start: float) -> int:
+            return round((time.perf_counter() - start) * 1000)
 
         # ============ 提前准备兜底用消息（注入强制 Schema 指令） ============
         # 将提示词增强（显式注入 Schema）提前，无论是哪一层调用都能受益
@@ -422,9 +453,43 @@ class Llm:
                 input_preview = c[:120].replace("\n", " ")
                 break
         logger.info(
-            "[LLM] ainvoke_json 开始: schema=%s messages=%d input_preview='%s'",
-            schema.__name__, len(enhanced_messages), input_preview,
+            "[LLM] ainvoke_json 开始: schema=%s strategy=%s messages=%d input_preview='%s'",
+            schema.__name__, strategy, len(enhanced_messages), input_preview,
         )
+
+        # ============ Tier 0: JSON Mode First (按模型/配置优化) ============
+        # 对 Astron/MaaS 这类 json_object 更稳定的兼容端，先尝试一次原生 JSON。
+        # 成功时可以避免 tool calling 失败后再重打一轮的常见慢路径。
+        if strategy == "json_first":
+            json_mode_attempted = True
+            tier_start = time.perf_counter()
+            logger.info("[LLM] Tier0(json_mode_first) 开始: schema=%s", schema.__name__)
+            try:
+                fallback_model = model.bind(response_format={"type": "json_object"})
+                resp = await fallback_model.ainvoke(enhanced_messages)
+                content = getattr(resp, "content", "") or ""
+                logger.info(
+                    "[LLM] Tier0(json_mode_first) 原始响应: content_len=%d "
+                    "content_preview='%s'",
+                    len(content), content[:200],
+                )
+                if not content.strip():
+                    raise ValueError("模型返回空内容")
+
+                parsed = parse_first_json_object(content)
+                parsed = _flatten_nested_config(parsed, schema)
+                result = schema.model_validate(parsed)
+                logger.info(
+                    "[LLM] ainvoke_json tier_success schema=%s strategy=%s tier=%s duration_ms=%d",
+                    schema.__name__, strategy, "json_mode_first", _elapsed_ms(tier_start),
+                )
+                return result
+            except Exception as exc:
+                errors.append(f"tier0(json_mode_first)={type(exc).__name__}: {exc}")
+                logger.warning(
+                    "[LLM] ainvoke_json tier_failed schema=%s strategy=%s tier=%s duration_ms=%d error=%s: %s",
+                    schema.__name__, strategy, "json_mode_first", _elapsed_ms(tier_start), type(exc).__name__, exc,
+                )
 
         # ============ Tier 1: Tool Calling (函数调用) ============
         # 生成 Schema 后简化 anyOf 结构，兼容 GLM/星火等模型
@@ -440,6 +505,7 @@ class Llm:
             },
         }]
         logger.info("[LLM] Tier1(tool_calling) 开始: schema=%s tool_name=%s", schema.__name__, name)
+        tier_start = time.perf_counter()
         try:
             # 使用最高兼容性的 tool_choice 格式：精准定向具体的工具名称，防止模型自由发挥
             runnable = model.bind_tools(
@@ -514,9 +580,8 @@ class Llm:
                 try:
                     result = schema.model_validate(cleaned_args)
                     logger.info(
-                        "[LLM] Tier1(tool_calling) 成功: schema=%s, "
-                        "验证通过的字段=%s",
-                        schema.__name__, list(cleaned_args.keys()),
+                        "[LLM] ainvoke_json tier_success schema=%s strategy=%s tier=%s duration_ms=%d",
+                        schema.__name__, strategy, "tool_calling", _elapsed_ms(tier_start),
                     )
                     return result
                 except Exception as ve:
@@ -539,8 +604,8 @@ class Llm:
                     parsed = _flatten_nested_config(parsed, schema)
                     result = schema.model_validate(parsed)
                     logger.info(
-                        "[LLM] Tier1(tool_calling) 从 content 解析成功: schema=%s",
-                        schema.__name__,
+                        "[LLM] ainvoke_json tier_success schema=%s strategy=%s tier=%s duration_ms=%d",
+                        schema.__name__, strategy, "tool_calling", _elapsed_ms(tier_start),
                     )
                     return result
                 except Exception as ce:
@@ -550,47 +615,61 @@ class Llm:
                     )
         except Exception as exc:
             errors.append(f"tier1(tool_calling)={type(exc).__name__}: {exc}")
-            logger.warning("[LLM] Tier1(tool_calling) 异常: %s: %s", type(exc).__name__, exc)
+            logger.warning(
+                "[LLM] ainvoke_json tier_failed schema=%s strategy=%s tier=%s duration_ms=%d error=%s: %s",
+                schema.__name__, strategy, "tool_calling", _elapsed_ms(tier_start), type(exc).__name__, exc,
+            )
 
         # ============ Tier 2: JSON Mode (原生 JSON 模式) ============
-        logger.info("[LLM] Tier2(json_mode) 开始: schema=%s", schema.__name__)
-        try:
-            # 开启 json_object 强校验模式（如果 API 支持的话）
-            fallback_model = model.bind(response_format={"type": "json_object"})
-            resp = await fallback_model.ainvoke(enhanced_messages)
-            content = getattr(resp, "content", "") or ""
-            logger.info(
-                "[LLM] Tier2(json_mode) 原始响应: content_len=%d "
-                "content_preview='%s'",
-                len(content), content[:200],
-            )
-            if not content.strip():
-                raise ValueError("模型返回空内容")
-
-            parsed = parse_first_json_object(content)
-            logger.info(
-                "[LLM] Tier2(json_mode) JSON 解析成功: parsed_keys=%s",
-                list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
-            )
-            parsed = _flatten_nested_config(parsed, schema)
+        if json_mode_attempted:
+            logger.info("[LLM] Tier2(json_mode) 跳过: schema=%s 已在 Tier0 尝试", schema.__name__)
+        else:
+            tier_start = time.perf_counter()
+            logger.info("[LLM] Tier2(json_mode) 开始: schema=%s", schema.__name__)
             try:
-                result = schema.model_validate(parsed)
-                logger.info("[LLM] Tier2(json_mode) 成功: schema=%s", schema.__name__)
-                return result
-            except Exception as ve:
-                logger.warning(
-                    "[LLM] Tier2(json_mode) Pydantic 验证失败: %s, "
-                    "parsed_keys=%s",
-                    ve, list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
+                # 开启 json_object 强校验模式（如果 API 支持的话）
+                fallback_model = model.bind(response_format={"type": "json_object"})
+                resp = await fallback_model.ainvoke(enhanced_messages)
+                content = getattr(resp, "content", "") or ""
+                logger.info(
+                    "[LLM] Tier2(json_mode) 原始响应: content_len=%d "
+                    "content_preview='%s'",
+                    len(content), content[:200],
                 )
-                raise
-        except Exception as exc:
-            errors.append(f"tier2(json_mode)={type(exc).__name__}: {exc}")
-            logger.warning("[LLM] Tier2(json_mode) 失败: %s: %s", type(exc).__name__, exc)
+                if not content.strip():
+                    raise ValueError("模型返回空内容")
+
+                parsed = parse_first_json_object(content)
+                logger.info(
+                    "[LLM] Tier2(json_mode) JSON 解析成功: parsed_keys=%s",
+                    list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
+                )
+                parsed = _flatten_nested_config(parsed, schema)
+                try:
+                    result = schema.model_validate(parsed)
+                    logger.info(
+                        "[LLM] ainvoke_json tier_success schema=%s strategy=%s tier=%s duration_ms=%d",
+                        schema.__name__, strategy, "json_mode", _elapsed_ms(tier_start),
+                    )
+                    return result
+                except Exception as ve:
+                    logger.warning(
+                        "[LLM] Tier2(json_mode) Pydantic 验证失败: %s, "
+                        "parsed_keys=%s",
+                        ve, list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
+                    )
+                    raise
+            except Exception as exc:
+                errors.append(f"tier2(json_mode)={type(exc).__name__}: {exc}")
+                logger.warning(
+                    "[LLM] ainvoke_json tier_failed schema=%s strategy=%s tier=%s duration_ms=%d error=%s: %s",
+                    schema.__name__, strategy, "json_mode", _elapsed_ms(tier_start), type(exc).__name__, exc,
+                )
 
         # ============ Tier 3: Text Prompting (纯文本解析兜底) ============
         # 如果前面两层全挂了（比如本地老模型），直接当做普通对话聊天，然后我们自己清洗
         logger.info("[LLM] Tier3(text_prompt) 开始: schema=%s", schema.__name__)
+        tier_start = time.perf_counter()
         try:
             resp = await model.ainvoke(enhanced_messages)
             content = getattr(resp, "content", "") or ""
@@ -616,8 +695,8 @@ class Llm:
                     parsed = _flatten_nested_config(parsed, schema)
                     result = schema.model_validate(parsed)
                     logger.info(
-                        "[LLM] Tier3(text_prompt) 通过 parse_first_json_object 成功: schema=%s",
-                        schema.__name__,
+                        "[LLM] ainvoke_json tier_success schema=%s strategy=%s tier=%s duration_ms=%d",
+                        schema.__name__, strategy, "text_prompt", _elapsed_ms(tier_start),
                     )
                     return result
                 except Exception as fe:
@@ -658,8 +737,8 @@ class Llm:
                     candidate = _flatten_nested_config(candidate, schema)
                     result = schema.model_validate(candidate)
                     logger.info(
-                        "[LLM] Tier3(text_prompt) 成功: schema=%s 候选[%d/%d] score=%d",
-                        schema.__name__, idx + 1, len(scored_candidates), score,
+                        "[LLM] ainvoke_json tier_success schema=%s strategy=%s tier=%s duration_ms=%d",
+                        schema.__name__, strategy, "text_prompt", _elapsed_ms(tier_start),
                     )
                     return result
                 except Exception as e:
@@ -675,8 +754,8 @@ class Llm:
         except Exception as exc:
             errors.append(f"tier3(text_prompt)={type(exc).__name__}: {exc}")
             logger.error(
-                "[LLM] ainvoke_json 全部失败: schema=%s errors=[%s]",
-                schema.__name__, "; ".join(errors),
+                "[LLM] ainvoke_json tier_failed schema=%s strategy=%s tier=%s duration_ms=%d error=%s: %s",
+                schema.__name__, strategy, "text_prompt", _elapsed_ms(tier_start), type(exc).__name__, exc,
             )
             raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 

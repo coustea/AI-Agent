@@ -92,7 +92,6 @@ def llm_with_fake_model() -> tuple[Llm, _FakeModel]:
     llm = Llm()
     fake = _FakeModel()
     llm._text_model = fake
-    llm._text_semaphore = None
     return llm, fake
 
 
@@ -123,8 +122,7 @@ def test_initializes_single_text_model_from_config(monkeypatch) -> None:
 
     assert llm._text_model.model_name == "generalv3.5"
     assert llm._text_model.base_url == "https://spark-api-open.xf-yun.com/v1"
-    assert llm._text_semaphore is not None
-    assert llm._text_semaphore._value == 7
+    assert not hasattr(llm, "_text_semaphore")
 
 
 def test_model_exposes_default_text_model(llm_with_fake_model) -> None:
@@ -193,7 +191,7 @@ async def test_ainvoke_json_accepts_tool_args_json_string() -> None:
         tool_calls=[{"name": "submit_score", "args": '{"name": "Alice", "score": 92}'}]
     )
     llm._text_model = fake
-    llm._text_semaphore = None
+
 
     result = await llm.ainvoke_json(
         _Payload,
@@ -214,7 +212,7 @@ async def test_ainvoke_json_selects_matching_tool_call() -> None:
         ]
     )
     llm._text_model = fake
-    llm._text_semaphore = None
+
 
     result = await llm.ainvoke_json(
         _Payload,
@@ -247,7 +245,7 @@ async def test_ainvoke_json_parses_nested_stringified_json_fields() -> None:
         ]
     )
     llm._text_model = fake
-    llm._text_semaphore = None
+
 
     result = await llm.ainvoke_json(ExecutionPlan, "input")
 
@@ -262,7 +260,7 @@ async def test_ainvoke_json_falls_back_to_json_text() -> None:
     llm = Llm()
     fake = _FakeModel(text='说明文字\n{"name": "Cara", "score": 95}\n结束')
     llm._text_model = fake
-    llm._text_semaphore = None
+
 
     result = await llm.ainvoke_json(
         _Payload,
@@ -279,7 +277,7 @@ async def test_ainvoke_json_can_prefer_json_mode_first() -> None:
     llm = Llm()
     fake = _FakeModel(text='{"name": "Eve", "score": 99}')
     llm._text_model = fake
-    llm._text_semaphore = None
+
     llm._structured_output_strategy = "json_first"
 
     result = await llm.ainvoke_json(
@@ -302,7 +300,7 @@ async def test_ainvoke_json_falls_back_when_tool_binding_fails() -> None:
         fail_tools=True,
     )
     llm._text_model = fake
-    llm._text_semaphore = None
+
 
     result = await llm.ainvoke_json(
         _Payload,
@@ -318,7 +316,7 @@ async def test_ainvoke_json_raises_diagnostic_error_when_all_paths_fail() -> Non
     llm = Llm()
     fake = _FakeModel(text="not json")
     llm._text_model = fake
-    llm._text_semaphore = None
+
 
     with pytest.raises(ServiceError) as exc_info:
         await llm.ainvoke_json(
