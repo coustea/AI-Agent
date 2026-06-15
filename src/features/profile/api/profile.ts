@@ -7,7 +7,6 @@ import type {
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
   ProfileScoreData,
-  ProfileHistoryItem,
 } from '@/features/profile/model/profile'
 
 export type {
@@ -17,7 +16,6 @@ export type {
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
   ProfileScoreData,
-  ProfileHistoryItem,
 }
 
 export function getProfile(userId?: number | string) {
@@ -38,10 +36,5 @@ export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
   return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload)
 }
 
-export function getProfileHistory(limit = 20, userId?: number | string) {
-  const path = userId ? `/ai/profile/${userId}/history` : '/ai/profile/history'
-  return http.get<ApiResponse<ProfileHistoryItem[]>>(path, {
-    params: { limit }
-  })
-}
+
 

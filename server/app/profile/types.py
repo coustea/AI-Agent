@@ -1,4 +1,17 @@
-"""Shared profile domain types."""
+"""学习者画像领域类型 — 维度常量、默认值模板、推理输出模型。
+
+画像维度（10个）：
+  major_background — 专业背景
+  student_stage — 学习阶段
+  course_context — 课程上下文
+  knowledge_level — 知识基础
+  learning_goal_type — 学习目标
+  weak_knowledge_points — 薄弱知识点
+  cognitive_style — 认知风格
+  resource_preference_weight — 资源偏好
+  learning_pace — 学习节奏
+  practice_profile — 实践能力
+"""
 
 from __future__ import annotations
 
@@ -7,8 +20,20 @@ from typing import Any, Final
 from pydantic import BaseModel, Field
 
 
+# ── 画像更新调度常量 ──────────────────────────────────────────────────────
+
+# 画像 token 累积阈值 — 超过此值触发画像更新检查
+PROFILE_TOKEN_THRESHOLD: Final[int] = 8000
+# 画像消息累积阈值 — 超过此值触发画像更新检查
+PROFILE_MESSAGE_THRESHOLD: Final[int] = 30
+# 画像更新冷却时间（分钟）— 两次更新之间的最小间隔
+PROFILE_UPDATE_COOLDOWN_MINUTES: Final[int] = 90
+# 画像最小覆盖率 — 低于此值时优先更新画像
+PROFILE_MIN_COVERAGE: Final[int] = 60
+
+
 class ProfileDimension:
-    """画像维度键常量。"""
+    """画像维度键常量 — 用于跨模块统一引用维度名称。"""
 
     MAJOR_BACKGROUND: Final[str] = "major_background"
     STUDENT_STAGE: Final[str] = "student_stage"
@@ -22,7 +47,17 @@ class ProfileDimension:
     PRACTICE_PROFILE: Final[str] = "practice_profile"
 
 
-ALL_DIMENSIONS: Final[tuple[str, ...]] = (
+GLOBAL_DIMENSIONS: Final[tuple[str, ...]] = (
+    ProfileDimension.MAJOR_BACKGROUND,
+    ProfileDimension.STUDENT_STAGE,
+    ProfileDimension.LEARNING_GOAL_TYPE,
+    ProfileDimension.COGNITIVE_STYLE,
+    ProfileDimension.RESOURCE_PREFERENCE_WEIGHT,
+    ProfileDimension.LEARNING_PACE,
+    ProfileDimension.PRACTICE_PROFILE,
+)
+
+SCORE_DIMENSIONS: Final[tuple[str, ...]] = (
     ProfileDimension.MAJOR_BACKGROUND,
     ProfileDimension.STUDENT_STAGE,
     ProfileDimension.COURSE_CONTEXT,
@@ -35,7 +70,11 @@ ALL_DIMENSIONS: Final[tuple[str, ...]] = (
     ProfileDimension.PRACTICE_PROFILE,
 )
 
+# 所有维度键的有序元组 (为了向后兼容部分代码，保留 ALL_DIMENSIONS 指向 SCORE_DIMENSIONS)
+ALL_DIMENSIONS: Final[tuple[str, ...]] = SCORE_DIMENSIONS
 
+
+# 维度键 → 中文名称映射 — 用于 Markdown 渲染和前端展示
 DIMENSION_NAMES: Final[dict[str, str]] = {
     ProfileDimension.MAJOR_BACKGROUND: "专业背景",
     ProfileDimension.STUDENT_STAGE: "学习阶段",
@@ -51,77 +90,56 @@ DIMENSION_NAMES: Final[dict[str, str]] = {
 
 
 def make_default_profile_json() -> dict[str, Any]:
-    """生成空白画像 JSON，含所有结构的默认值。"""
-
+    """生成空白全局画像 JSON。"""
     return {
-        "schema_version": 1,
         "base_info": {
-            "school": None,
-            "school_level": None,
-            "major": None,
-            "grade": None,
-            "daily_study_time": None,
-            "global_learning_goal": None,
+            "school": "",
+            "school_level": "",
+            "major": "",
+            "grade": "",
+            "daily_study_time": "",
+            "global_learning_goal": "",
             "programming_languages": [],
             "courses": [],
         },
-        "learning_profile": {
-            "global_profile": {},
-            "course_profiles": [],
-        },
-        "knowledge_mastery": [],
-        "initial_strategy": {},
-        "evidence": [],
-        "profile_meta": {
-            "coverage": 0,
-            "last_update_reason": "",
-            "updated_at": None,
-        },
+        "dimensions": {
+            dim: {
+                "value": "",
+                "evidence": [],
+            }
+            for dim in GLOBAL_DIMENSIONS
+        }
     }
 
 
 def make_default_score_json() -> dict[str, Any]:
-    """生成空白画像评分 JSON。"""
-
+    """生成空白画像评分 JSON — 所有维度初始分为 0，证据列表为空。"""
     return {
         "overall_score": 0,
-        "dimension_scores": {key: 0 for key in ALL_DIMENSIONS},
-        "scored_at": None,
+        "dimension_scores": {key: 0 for key in SCORE_DIMENSIONS},
+        "dimension_evidence": {key: [] for key in SCORE_DIMENSIONS},
+        "scored_at": "",
     }
 
 
-class EvidenceRecord(BaseModel):
-    """维度证据记录。"""
-
-    source: str = Field(default="system")
-    signal_type: str
-    course: str | None = None
-    knowledge_point: str | None = None
-    summary: str
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+class GlobalDimensionValue(BaseModel):
+    """全局画像维度值结构。"""
+    value: str = ""
+    evidence: list[str] = Field(default_factory=list)
 
 
-class OnboardingInferenceOutput(BaseModel):
-    """Onboarding 画像推理输出。"""
+class OnboardingGlobalInferenceOutput(BaseModel):
+    """全局 Onboarding 推理输出 Pydantic 模型。"""
+    dimensions_patch: dict[str, GlobalDimensionValue] = Field(default_factory=dict)
 
-    global_profile_patch: dict[str, Any] = Field(default_factory=dict)
+
+class GlobalTutoringInferenceOutput(BaseModel):
+    """全局辅导推理输出 Pydantic 模型。"""
+    should_update: bool = False
+    dimensions_patch: dict[str, GlobalDimensionValue] = Field(default_factory=dict)
 
 
 class ProfileScoreOutput(BaseModel):
-    """画像评分推理输出。"""
-
-    overall_score: float | None = None
-    dimension_scores: dict[str, Any] = Field(default_factory=dict)
-    scored_at: str | None = None
-
-
-class TutoringInferenceOutput(BaseModel):
-    """辅导推理输出，包含画像增量 patch。"""
-
-    should_update: bool = False
-    global_profile_patch: dict[str, Any] = Field(default_factory=dict)
-    course_profile_patch: dict[str, Any] | None = None
-    knowledge_mastery_patch: list[dict[str, Any]] = Field(default_factory=list)
-    initial_strategy_patch: dict[str, Any] = Field(default_factory=dict)
-    evidence: list[EvidenceRecord] = Field(default_factory=list)
-    update_reason: str = ""
+    """画像评分推理输出 Pydantic 模型。"""
+    dimension_scores: dict[str, float | int | None] = Field(default_factory=dict)
+    dimension_evidence: dict[str, list[str]] = Field(default_factory=dict)

@@ -120,25 +120,13 @@
             <div class="card-header-flex main-card-header">
               <h4 class="card-title">
                 <el-icon><User /></el-icon> 学习画像
-                <el-tooltip v-if="profileMetadata" content="学习时间越久等级越高" placement="top">
-                  <el-tag size="small" type="success" style="cursor: help; margin-left: 8px;">V{{ profileMetadata.version }}</el-tag>
-                </el-tooltip>
               </h4>
 
               <div class="custom-tab-switcher">
                 <button
-                    class="switcher-btn"
-                    :class="{ active: profileTab === 'dimensions' }"
-                    @click="profileTab = 'dimensions'"
+                    class="switcher-btn active"
                 >
                   能力维度
-                </button>
-                <button
-                    class="switcher-btn"
-                    :class="{ active: profileTab === 'history' }"
-                    @click="profileTab = 'history'"
-                >
-                  画像变更日志
                 </button>
               </div>
             </div>
@@ -158,11 +146,9 @@
                         <span class="dim-icon"><el-icon><component :is="getDimIcon(dim.key)" /></el-icon></span>
                         <span class="dim-name">{{ dim.name }}</span>
                         <span class="dim-score">{{ dim.score }}分</span>
-                        <span class="dim-trend" :class="dim.trend">
-                      <el-icon v-if="dim.trend === 'up'"><Top /></el-icon>
-                      <el-icon v-else-if="dim.trend === 'down'"><Bottom /></el-icon>
-                      <el-icon v-else><Right /></el-icon>
-                    </span>
+                        <span class="dim-trend stable">
+                          <el-icon><Right /></el-icon>
+                        </span>
                       </div>
                       <div class="dim-progress-track">
                         <div class="dim-progress-bar" :style="{ width: dim.score + '%' }" :class="dim.key"></div>
@@ -179,56 +165,6 @@
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-show="profileTab === 'history'" class="tab-pane-content">
-                <div class="profile-history-timeline">
-                  <el-timeline v-if="profileHistory.length > 0">
-                    <el-timeline-item
-                        v-for="(item, index) in profileHistory"
-                        :key="item.version"
-                        :timestamp="formatTime(item.created_at || item.scored_at)"
-                        placement="top"
-                        :type="index === 0 ? 'primary' : 'info'"
-                    >
-                      <el-card class="history-log-card" :class="{ 'is-selected': selectedHistoryVersion === item.version }" @click="selectHistoryItem(item)">
-                        <div class="log-header">
-                          <strong>画像版本 V{{ item.version }}</strong>
-                          <el-tag size="small" v-if="index === 0">当前版本</el-tag>
-                        </div>
-                        <p class="log-reason"><b>变更原因：</b>{{ item.change_reason || '系统自动分析同步' }}</p>
-                        <div class="log-meta">
-                          <span>综合评分: {{ item.profile_score_json?.score || item.score || '待评估' }}分</span>
-                        </div>
-                      </el-card>
-                    </el-timeline-item>
-                  </el-timeline>
-                  <div class="empty-state-text" v-else>
-                    暂无历史版本变更记录。
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="history-compare-panel" v-if="compareVersionData">
-              <div class="compare-hdr">
-                <span>对比历史版本 V{{ compareVersionData.version }} ({{ formatTime(compareVersionData.created_at || compareVersionData.scored_at) }})</span>
-                <el-button link type="primary" @click="compareVersionData = null">关闭对比</el-button>
-              </div>
-              <div class="compare-scores-grid">
-                <div v-for="dim in compareScoresList" :key="dim.name" class="compare-score-row">
-                  <span class="c-dim-name">{{ dim.name }}</span>
-                  <div class="c-dim-bars">
-                    <div class="c-bar-current">
-                      <span class="bar-lbl">当前 V{{ profileMetadata?.version }}:</span>
-                      <el-progress :percentage="dim.current" :color="'#4F46E5'" :stroke-width="8" />
-                    </div>
-                    <div class="c-bar-historical">
-                      <span class="bar-lbl">历史 V{{ compareVersionData.version }}:</span>
-                      <el-progress :percentage="dim.historical" :color="'#94A3B8'" :stroke-width="8" />
                     </div>
                   </div>
                 </div>
@@ -575,12 +511,12 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import {
   InfoFilled, Timer, Checked, VideoPlay, Search, Check, ArrowRight, ArrowLeft, ArrowDown,
   Reading, UserFilled, Clock, Cpu, DocumentCopy, Aim,
-  Top, Bottom, Right, User, ChatDotRound
+  Right, User, ChatDotRound
 } from '@element-plus/icons-vue'
 import { getMe, uploadAvatar } from '@/features/auth/api/auth'
 import {
   getProfileOnboarding, updateProfileOnboarding,
-  getProfileScore, getProfile, getProfileHistory
+  getProfileScore, getProfile
 } from '@/features/profile/api/profile'
 import { getGeneratedResources } from '@/features/resource/api/resource-history'
 import type { GeneratedResourceItem } from '@/features/resource/api/resource-history'
@@ -624,12 +560,9 @@ const studentProfile = ref<StudentProfileData & { learning_duration_total?: numb
 
 const profileScoreData = ref<ProfileScoreData | null>(null)
 const profileData = ref<any>(null)
-const profileHistory = ref<any[]>([])
 
 const profileTab = ref('dimensions')
 const activeDimensionKey = ref<string | null>(null)
-const selectedHistoryVersion = ref<number | null>(null)
-const compareVersionData = ref<any>(null)
 
 interface ProfileFormData {
   grade: string
@@ -695,25 +628,18 @@ const profileHeadline = computed(() => {
 
 const getDimIcon = (key: string): string => {
   const map: Record<string, string> = {
-    knowledge_foundation: 'Reading',
-    learning_goal: 'Aim',
+    major_background: 'Reading',
+    student_stage: 'Aim',
+    course_context: 'Clock',
+    knowledge_level: 'Timer',
+    learning_goal_type: 'Aim',
+    weak_knowledge_points: 'Warning',
     cognitive_style: 'Cpu',
-    mistake_preference: 'Timer',
-    practice_ability: 'DataLine',
-    interaction_preference: 'Service',
-    learning_history: 'Clock',
+    resource_preference_weight: 'Notebook',
+    learning_pace: 'DataLine',
+    practice_profile: 'DataLine',
   }
   return map[key] || 'DataLine'
-}
-
-const selectHistoryItem = (item: any) => {
-  if (selectedHistoryVersion.value === item.version) {
-    selectedHistoryVersion.value = null
-    compareVersionData.value = null
-  } else {
-    selectedHistoryVersion.value = item.version
-    compareVersionData.value = item
-  }
 }
 
 const selectCourse = (c: string) => {
@@ -721,50 +647,28 @@ const selectCourse = (c: string) => {
   courseDropdownOpen.value = false
 }
 
-const profileMetadata = computed(() => {
-  const ver = profileData.value?.version || 1
-  const time = profileData.value?.updated_at || profileScoreData.value?.updated_at || new Date().toISOString()
-  const reason = profileData.value?.updated_reason || (profileScoreData.value as any)?.change_reason || '结合多维测验与最近生成流诊断'
-  return {
-    version: ver,
-    updated_at: time,
-    updated_reason: reason
-  }
-})
-
 const dimensionsData = computed(() => {
   const dimensionNames: Record<string, string> = {
-    knowledge_foundation: '知识基础',
-    learning_goal: '学习目标',
+    major_background: '专业背景',
+    student_stage: '学习阶段',
+    course_context: '课程上下文',
+    knowledge_level: '知识基础',
+    learning_goal_type: '学习目标',
+    weak_knowledge_points: '薄弱知识点',
     cognitive_style: '认知风格',
-    mistake_preference: '易错点偏好',
-    practice_ability: '实践能力',
-    interaction_preference: '交互偏好',
-    learning_history: '学习历史',
+    resource_preference_weight: '资源偏好',
+    learning_pace: '学习节奏',
+    practice_profile: '实践能力',
   }
 
   const scores = profileScoreData.value?.metrics?.dimension_scores || {}
-
-  let prevScores: Record<string, number> = {}
-  if (profileHistory.value && profileHistory.value.length > 1) {
-    const currentVer = profileMetadata.value?.version || 1
-    const prevItem = profileHistory.value.find(item => item.version === currentVer - 1) || profileHistory.value[1]
-    const prevScoresRaw = prevItem?.profile_score_json?.metrics?.dimension_scores || prevItem?.metrics?.dimension_scores || {}
-    for (const k of Object.keys(dimensionNames)) {
-      prevScores[k] = prevScoresRaw[k] !== undefined && prevScoresRaw[k] !== null ? prevScoresRaw[k] : 0
-    }
-  }
 
   const dimJson = profileData.value?.profile_json?.dimensions || {} as Record<string, any>
 
   return Object.entries(dimensionNames).map(([key, name]) => {
     const rawScore = scores[key] !== undefined && scores[key] !== null ? scores[key] : 0
 
-    let trend: 'up' | 'down' | 'stable' = 'stable'
-    if (prevScores[key] !== undefined) {
-      if (rawScore > prevScores[key]) trend = 'up'
-      else if (rawScore < prevScores[key]) trend = 'down'
-    }
+    const trend: 'up' | 'down' | 'stable' = 'stable'
 
     const dimInfo = dimJson[key] || {} as Record<string, any>
 
@@ -773,34 +677,8 @@ const dimensionsData = computed(() => {
       name,
       score: rawScore,
       trend,
-      summary: dimInfo.summary || '',
+      summary: dimInfo.value || '',
       evidence: dimInfo.evidence || [],
-    }
-  })
-})
-
-const compareScoresList = computed(() => {
-  if (!compareVersionData.value) return []
-  const dimensionNames: Record<string, string> = {
-    knowledge_foundation: '知识基础',
-    learning_goal: '学习目标',
-    cognitive_style: '认知风格',
-    mistake_preference: '易错点偏好',
-    practice_ability: '实践能力',
-    interaction_preference: '交互偏好',
-    learning_history: '学习历史',
-  }
-
-  const currentScores = profileScoreData.value?.metrics?.dimension_scores || {}
-  const histScores = compareVersionData.value?.profile_score_json?.metrics?.dimension_scores || compareVersionData.value?.metrics?.dimension_scores || {}
-
-  return Object.entries(dimensionNames).map(([key, name]) => {
-    const currentVal = currentScores[key] !== undefined && currentScores[key] !== null ? currentScores[key] : 0
-    const historicalVal = histScores[key] !== undefined && histScores[key] !== null ? histScores[key] : 0
-    return {
-      name: name || key,
-      current: currentVal,
-      historical: historicalVal,
     }
   })
 })
@@ -814,7 +692,6 @@ const dynamicStats = computed(() => {
   const completedResourcesCount = resourceHistory.value.filter(r => r.status === 'completed').length
   const totalCourses = studentProfile.value.courses?.length || 0
   const activeDays = learningStats.value?.daily_breakdown?.filter((item) => item.seconds > 0).length || 0
-  const totalInteractions = profileHistory.value.length
 
   return {
     compositeScore: avgScore,
@@ -822,7 +699,7 @@ const dynamicStats = computed(() => {
     completedCourses: totalCourses,
     completedTasks: completedResourcesCount,
     activeDays,
-    interactions: totalInteractions
+    interactions: 0
   }
 })
 
@@ -1007,12 +884,11 @@ const fillProfileForm = (payload: StudentProfileData) => {
 
 const loadProfileInfo = async () => {
   try {
-    const [userRes, onboardingRes, scoreRes, profileRes, historyRes] = await Promise.allSettled([
+    const [userRes, onboardingRes, scoreRes, profileRes] = await Promise.allSettled([
       getMe(),
       getProfileOnboarding(),
       getProfileScore(),
       getProfile(),
-      getProfileHistory(20),
     ])
 
     if (userRes.status === 'fulfilled') {
@@ -1031,10 +907,6 @@ const loadProfileInfo = async () => {
 
     if (profileRes.status === 'fulfilled') {
       profileData.value = profileRes.value.data.data
-    }
-
-    if (historyRes.status === 'fulfilled' && historyRes.value.data?.data) {
-      profileHistory.value = historyRes.value.data.data
     }
   } catch (e) {
     console.warn('加载数据失败：', e)

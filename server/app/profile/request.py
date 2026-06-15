@@ -1,4 +1,4 @@
-"""Profile API request models."""
+"""画像 API 请求模型 — 入门信息更新、全局辅导更新、课程辅导更新。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class OnboardingUpdate(BaseModel):
-    """入门信息更新请求。"""
+    """入门信息更新请求 — 用户首次填写的基本信息。"""
 
     school: str = ""
     major: str
@@ -19,23 +19,17 @@ class OnboardingUpdate(BaseModel):
     courses: list[str] = Field(default_factory=list)
 
 
-class EvidenceInput(BaseModel):
-    """单条维度证据输入。"""
+class GlobalTutoringProfileUpdate(BaseModel):
+    """全局画像辅导增量更新请求。"""
 
-    source: str = Field(default="tutoring")
-    signal_type: str
-    summary: str
-    course: str | None = None
-    knowledge_point: str | None = None
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    session_id: str
+    update_reason: str = "tutoring_inference"
 
 
-class TutoringProfileUpdate(BaseModel):
-    """辅导过程中画像增量更新请求。"""
+class CourseTutoringProfileUpdate(BaseModel):
+    """课程画像辅导增量更新请求。"""
 
-    session_id: str | None = None
-    active_course: str | None = None
+    session_id: str
+    course_name: str
     active_topic: str | None = None
-    evidence: list[EvidenceInput] = Field(default_factory=list)
-    behavior_signals: dict[str, Any] = Field(default_factory=dict)
-    update_reason: str = Field(default="tutoring_inference")
+    update_reason: str = "tutoring_inference"

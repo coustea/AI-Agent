@@ -16,7 +16,8 @@
   GET  /profile/score          — 获取画像评分
   GET  /profile/onboarding     — 获取基础信息
   PATCH /profile/onboarding    — 更新首次登录数据
-  PATCH /profile/tutoring-update — 应用辅导产生的画像增量
+  PATCH /profile/global/tutoring-update — 应用全局画像特征更新
+  PATCH /profile/course/tutoring-update — 应用课程子画像特征更新
 
 学校搜索（onboarding 流程需要）：
   GET  /schools/search
@@ -51,7 +52,16 @@ from app.infra.models import School, User
 # 统一响应格式：HttpResponse.success() 和 HttpResponse.error()
 from app.infra.response import HttpResponse
 # 画像相关的数据模型和请求/响应类型
-from app.profile import BaseInfoData, OnboardingResponse, OnboardingUpdate, StudentProfileData, TutoringProfileUpdate
+from app.profile import (
+    BaseInfoData,
+    OnboardingResponse,
+    OnboardingUpdate,
+    StudentProfileData,
+    GlobalTutoringProfileUpdate,
+    CourseTutoringProfileUpdate,
+    GlobalProfileResponse,
+    GlobalScoreResponse,
+)
 # 画像服务：提供画像创建、更新、评分等功能
 from app.profile.service import get_profile_service
 
@@ -449,171 +459,156 @@ async def chat_history(
 
 
 @router.get("/profile")
-# 获取用户完整学习画像端点
 async def get_profile(current_user: User = Depends(get_current_user)):
-    """获取当前用户画像。"""
-    # 获取画像服务实例，提供画像创建、查询、更新等功能
+    """获取当前用户全局画像。"""
     profile_builder = get_profile_service()
-    # 获取或创建用户画像：如果用户没有画像则自动创建
-    profile = await profile_builder.get_or_create_profile(user_id=current_user.id)
-    # 从画像中提取 JSON 数据，为空则使用空字典
+    profile = await profile_builder.get_or_create_global_profile(user_id=current_user.id)
     profile_json = profile.profile_json or {}
-    # 返回完整的画像数据，包含多个维度
-    return HttpResponse.success(data={
-        "user_id": profile.user_id,  # 用户ID
-        "module": profile.module,  # 学习模块
-        "base_info": profile_json.get("base_info") or {},  # 基础信息（学校、年级等）
-        "learning_profile": profile_json.get("learning_profile") or {},  # 学习风格画像
-        "knowledge_mastery": profile_json.get("knowledge_mastery") or [],  # 知识掌握度列表
-        "initial_strategy": profile_json.get("initial_strategy") or {},  # 初始学习策略
-        "profile_meta": profile_json.get("profile_meta") or {},  # 画像元数据
-        "profile_json": profile.profile_json,  # 完整画像 JSON
-        "profile_score_json": profile.profile_score_json,  # 画像评分 JSON
-        "updated_at": profile.updated_at,  # 最后更新时间
-    })
+    
+    return HttpResponse.success(data=GlobalProfileResponse(
+        user_id=profile.user_id,
+        module=profile.module,
+        base_info=BaseInfoData(**(profile_json.get("base_info") or {})),
+        dimensions=profile_json.get("dimensions") or {},
+        profile_json=profile.profile_json or {},
+        profile_score_json=profile.profile_score_json or {},
+        updated_at=profile.updated_at,
+    ))
 
 
 @router.get("/profile/score")
-# 获取用户画像评分端点，返回综合评分和维度分数
 async def get_profile_score(current_user: User = Depends(get_current_user)):
     """获取当前用户画像评分。"""
-    # 获取画像服务实例
     profile_builder = get_profile_service()
-    # 获取或创建用户画像
-    profile = await profile_builder.get_or_create_profile(user_id=current_user.id)
-    # 提取评分 JSON 数据
+    profile = await profile_builder.get_or_create_global_profile(user_id=current_user.id)
     score_json = profile.profile_score_json or {}
-    # 返回评分数据，包含总分和各维度分数
-    return HttpResponse.success(data={
-        "user_id": profile.user_id,  # 用户ID
-        "module": profile.module,  # 学习模块
-        "score": score_json.get("overall_score"),  # 综合评分
-        "metrics": {
-            "dimension_scores": score_json.get("dimension_scores") or {},  # 各维度分数
+
+    scores = score_json.get("dimension_scores") or {}
+    evidences = score_json.get("dimension_evidence") or {}
+
+    dimensions = []
+    from app.profile.types import SCORE_DIMENSIONS, DIMENSION_NAMES
+    for key in SCORE_DIMENSIONS:
+        score = scores.get(key)
+        dimensions.append({
+            "key": key,
+            "label": DIMENSION_NAMES.get(key, key),
+            "score": score if isinstance(score, (int, float)) else None,
+            "evidence": evidences.get(key) or [],
+        })
+
+    return HttpResponse.success(data=GlobalScoreResponse(
+        user_id=profile.user_id,
+        module=profile.module,
+        score=score_json.get("overall_score"),
+        metrics={
+            "dimension_scores": scores,
+            "dimension_evidence": evidences,
         },
-        "scored_at": score_json.get("scored_at"),  # 评分时间
-        "updated_at": profile.updated_at,  # 画像最后更新时间
-    })
+        dimensions=dimensions,
+        scored_at=score_json.get("scored_at"),
+        updated_at=profile.updated_at,
+    ))
 
 
 @router.get("/profile/onboarding")
-# 获取用户 onboarding 基础信息端点，用于首次登录流程
 async def get_profile_onboarding(
-    current_user: User = Depends(get_current_user),  # JWT 认证
+    current_user: User = Depends(get_current_user),
 ):
     """获取用户基础信息（base_info）。"""
-    # 获取画像服务实例
     profile_builder = get_profile_service()
-    # 获取用户的 onboarding 数据（学校、年级、专业等）
     base_info = await profile_builder.get_onboarding(user_id=current_user.id)
-    # 构建 onboarding 响应对象，包含基础信息和学生画像
     return HttpResponse.success(data=OnboardingResponse(
-        # 基础信息：直接使用 base_info 字典构建 BaseInfoData 对象
         base_info=BaseInfoData(**base_info),
-        # 学生画像：从 base_info 中提取并转换为 StudentProfileData 对象
         student_profile=StudentProfileData(
-            school=base_info.get("school"),  # 学校名称
-            school_level=base_info.get("school_level"),  # 院校层次（如985、211）
-            major=base_info.get("major"),  # 专业
-            grade=base_info.get("grade"),  # 年级
-            courses=base_info.get("courses", []),  # 课程列表
-            learning_goal=base_info.get("global_learning_goal"),  # 全局学习目标
-            # 编程语言列表转换为逗号分隔的字符串
+            school=base_info.get("school"),
+            school_level=base_info.get("school_level"),
+            major=base_info.get("major"),
+            grade=base_info.get("grade"),
+            courses=base_info.get("courses", []),
+            learning_goal=base_info.get("global_learning_goal"),
             preferred_language=", ".join(base_info.get("programming_languages", [])),
         ),
-        # 画像是否已初始化：通过检查 major 字段是否存在来判断
         profile_initialized=bool(base_info.get("major")),
     ).model_dump())
 
+
 @router.patch("/profile/onboarding")
-# 更新用户 onboarding 数据端点，立即返回，LLM 推理在后台异步执行
 async def update_profile_onboarding(
-    payload: OnboardingUpdate,  # 请求体：onboarding 更新数据
-    background_tasks: BackgroundTasks,  # FastAPI 后台任务管理器
-    current_user: User = Depends(get_current_user),  # JWT 认证
-    db: AsyncSession = Depends(get_session),  # 数据库会话依赖注入
+    payload: OnboardingUpdate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
 ):
     """更新首次登录数据（全局画像）。立即返回，LLM推理在后台进行。"""
-    # 获取画像服务实例
     profile_builder = get_profile_service()
-    # 将请求体转换为字典，便于传递给业务逻辑层
     payload_data = payload.model_dump()
     user_id = int(current_user.id)
 
     try:
-        # 调用业务逻辑层更新 onboarding 数据
         result = await profile_builder.update_from_onboarding(
-            user_id=user_id,  # 用户ID
-            payload=payload_data,  # 更新数据
+            user_id=user_id,
+            payload=payload_data,
         )
-
-        # 更新用户表：标记为非首次登录
-        # is_first_login 字段用于前端判断是否显示 onboarding 引导
         await db.exec(
             update(User)
-            .where(User.id == user_id)  # 条件：当前用户
-            .values(is_first_login=False)  # 设置为 False，表示已完成首次登录
+            .where(User.id == user_id)
+            .values(is_first_login=False)
         )
-        # 提交数据库事务
         await db.commit()
         logger.info("[ChatAPI] onboarding complete: user_id=%s", user_id)
     except Exception as e:
-        # 更新失败时记录警告日志并返回错误
         logger.warning("[ChatAPI] onboarding update failed: user_id=%s err=%s", user_id, e)
         return HttpResponse.error(code=400, message=str(e))
 
-    # 后台异步执行 LLM 推理和评分，不阻塞响应
-    # 这是关键的异步设计：onboarding 数据更新后立即返回，
-    # LLM 推理（如学习风格分析、策略生成）在后台执行，避免用户等待
     background_tasks.add_task(
         profile_builder.run_onboarding_inference, user_id=user_id, payload=payload_data
     )
 
-    # 立即返回成功响应，不等待后台任务完成
     return HttpResponse.success(data={
         "profile": result,
+        "inference_scheduled": True,
     })
 
 
-@router.patch("/profile/tutoring-update")
-# 智能辅导产生的画像增量更新端点，针对课程画像
-async def update_profile_from_tutoring(
-    payload: TutoringProfileUpdate,  # 请求体：辅导更新数据
-    current_user: User = Depends(get_current_user),  # JWT 认证
+@router.patch("/profile/global/tutoring-update")
+async def update_global_profile_from_tutoring(
+    payload: GlobalTutoringProfileUpdate,
+    current_user: User = Depends(get_current_user),
 ):
-    """应用智能辅导产生的画像增量更新（针对课程画像）。"""
-    # 获取画像服务实例
+    """应用辅导产生的全局画像特征增量更新。"""
     profile_builder = get_profile_service()
-
-    # 提取当前活跃课程名称
-    course_name = payload.active_course
-    # 校验课程名称不能为空
-    if not course_name:
-        return HttpResponse.error(code=400, message="active_course is required")
-
     try:
-        logger.info("[ChatAPI] 收到画像更新请求: user_id=%s", current_user.id)
-        result = await profile_builder.process_tutoring_update(
+        logger.info("[ChatAPI] 收到全局画像更新请求: user_id=%s", current_user.id)
+        result = await profile_builder.update_global_from_tutoring(
             user_id=current_user.id,
-            course_name=course_name,
             session_id=payload.session_id,
         )
-        logger.info("[ChatAPI] 画像更新完成: user_id=%s", current_user.id)
         return HttpResponse.success(data=result)
     except Exception as e:
-        logger.warning("[ChatAPI] tutoring profile update failed: user_id=%s err=%s", current_user.id, e)
+        logger.warning("[ChatAPI] global profile update failed: user_id=%s err=%s", current_user.id, e)
         return HttpResponse.error(code=400, message=str(e))
 
 
-@router.get("/profile/history")
-# 获取画像历史端点（已废弃，保留兼容性）
-async def get_profile_history(
-    limit: int = Query(default=20, ge=1, le=100),  # 保留参数，但未使用
-    current_user: User = Depends(get_current_user),  # JWT 认证
+@router.patch("/profile/course/tutoring-update")
+async def update_course_profile_from_tutoring(
+    payload: CourseTutoringProfileUpdate,
+    current_user: User = Depends(get_current_user),
 ):
-    """获取画像历史（已废弃，返回空列表）。"""
-    # 已废弃的接口，返回空列表以保持向后兼容
-    return HttpResponse.success(data=[])
+    """应用智能辅导产生的课程画像增量更新。"""
+    profile_builder = get_profile_service()
+    try:
+        logger.info("[ChatAPI] 收到课程画像更新请求: user_id=%s", current_user.id)
+        result = await profile_builder.update_course_from_tutoring(
+            user_id=current_user.id,
+            session_id=payload.session_id,
+            course_name=payload.course_name,
+            active_topic=payload.active_topic,
+        )
+        return HttpResponse.success(data=result)
+    except Exception as e:
+        logger.warning("[ChatAPI] course profile update failed: user_id=%s err=%s", current_user.id, e)
+        return HttpResponse.error(code=400, message=str(e))
 
 
 # ---------------------------------------------------------------------------

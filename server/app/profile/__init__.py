@@ -1,15 +1,15 @@
 """Shared learner profile package."""
 
-from app.profile.request import OnboardingUpdate, TutoringProfileUpdate
+from app.profile.request import OnboardingUpdate, GlobalTutoringProfileUpdate, CourseTutoringProfileUpdate
 from app.profile.response import (
     BaseInfoData,
     OnboardingResponse,
-    ProfileEnvelopeResponse,
     StudentProfileData,
-    TutoringProfileUpdateResponse,
+    GlobalProfileResponse,
+    GlobalScoreResponse,
 )
 from app.profile.service import ProfileService, get_profile_service
-from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
+from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES, GLOBAL_DIMENSIONS, SCORE_DIMENSIONS
 
 __all__ = [
     "ALL_DIMENSIONS",
@@ -17,10 +17,13 @@ __all__ = [
     "DIMENSION_NAMES",
     "OnboardingResponse",
     "OnboardingUpdate",
-    "ProfileEnvelopeResponse",
+    "GlobalTutoringProfileUpdate",
+    "CourseTutoringProfileUpdate",
+    "GlobalProfileResponse",
+    "GlobalScoreResponse",
     "ProfileService",
     "StudentProfileData",
-    "TutoringProfileUpdate",
-    "TutoringProfileUpdateResponse",
     "get_profile_service",
+    "GLOBAL_DIMENSIONS",
+    "SCORE_DIMENSIONS",
 ]

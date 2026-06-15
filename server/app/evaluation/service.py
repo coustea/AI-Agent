@@ -31,6 +31,7 @@ STREAK_MIN_SECONDS = 300  # 连续学习天数判定阈值：每天至少 5 分�
 
 @dataclass(frozen=True)
 class MemoryUpdateSignal:
+    """Legacy signal type — kept for type-checking compatibility only."""
     content: str
     signal_type: str
     dimension: str
@@ -40,132 +41,22 @@ class MemoryUpdateSignal:
 
 
 def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal]:
-    """从学习事件中提取画像更新信号（薄弱点、资源偏好等）。"""
-    topic = event.topic or event.course or "当前主题"
-    signals: list[MemoryUpdateSignal] = []
-
-    if event.event_type == "quiz_submitted" and event.score is not None and event.score < 65:
-        signals.append(  # 测验低分 → 标记为薄弱知识点
-            MemoryUpdateSignal(
-                content=f"在「{topic}」练习中得分偏低（{event.score:.0f}分），需要加强针对性巩固。",
-                signal_type="quiz_result",
-                dimension="weakness_points",
-                course=event.course,
-                knowledge_point=event.topic,
-                confidence=0.7,
-            )
-        )
-
-    feedback = (event.feedback or "").strip()
-    if event.event_type in {"path_feedback", "resource_feedback"} and feedback:
-        if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
-            signals.append(  # 用户反馈太难/不懂 → 标记薄弱点
-                MemoryUpdateSignal(
-                    content=f"学习「{topic}」时用户反馈：{feedback}",
-                    signal_type="self_report_weakness",
-                    dimension="weakness_points",
-                    course=event.course,
-                    knowledge_point=event.topic,
-                    confidence=0.65,
-                )
-            )
-        if any(keyword in feedback for keyword in ("喜欢", "希望", "更想", "图解", "案例", "代码", "视频")):
-            signals.append(  # 用户反馈喜欢某类资源 → 标记偏好
-                MemoryUpdateSignal(
-                    content=f"学习资源偏好反馈：{feedback}",
-                    signal_type="preference",
-                    dimension="interaction_preference",
-                    course=event.course,
-                    knowledge_point=event.topic,
-                    confidence=0.6,
-                )
-            )
-
-    return signals[:2]  # 每次事件最多提取 2 个信号，避免画像过度更新
+    """Legacy helper — no longer produces actionable signals."""
+    return []
 
 
 def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> dict[str, Any] | None:
-    """将学习事件转换为画像增量更新载荷。"""
-    if isinstance(event, LearningEvent):
-        event_data = LearningEventCreate(
-            event_type=event.event_type,  # type: ignore[arg-type]
-            session_id=event.session_id,
-            resource_id=event.resource_id,
-            resource_item_id=event.resource_item_id,
-            path_id=event.path_id,
-            path_node_id=event.path_node_id,
-            node_id=event.node_id,
-            course=event.course,
-            topic=event.topic,
-            score=event.score,
-            feedback=event.feedback,
-            metadata=event.metadata_json or {},
-        )
-    else:
-        event_data = event
-
-    signals = derive_memory_signals(event_data)
-    if not signals:
-        return None
-
-    weak_topics: list[str] = []
-    preferred_resources: list[str] = []
-    feedback = event_data.feedback or ""
-    topic = event_data.topic or event_data.course
-
-    if any(signal.dimension == "weakness_points" for signal in signals) and topic:
-        weak_topics.append(topic)
-
-    for keyword, label in {
-        "图解": "图解材料",
-        "代码": "代码实操",
-        "案例": "案例讲解",
-        "视频": "视频讲解",
-        "题": "练习题库",
-    }.items():
-        if keyword in feedback and label not in preferred_resources:
-            preferred_resources.append(label)
-
-    return {
-        "session_id": event_data.session_id,
-        "active_course": event_data.course,
-        "active_topic": event_data.topic,
-        "update_reason": "learning_evaluation_signal",
-        "behavior_signals": {
-            "weak_topics": weak_topics,
-            "preferred_resources": preferred_resources,
-            "average_score": event_data.score,
-            "event_type": event_data.event_type,
-        },
-        "evidence": [
-            {
-                "source": "learning_evaluation",
-                "signal_type": signal.signal_type,
-                "summary": signal.content,
-                "course": signal.course,
-                "knowledge_point": signal.knowledge_point,
-                "confidence": signal.confidence,
-            }
-            for signal in signals
-        ],
-    }
+    """Legacy helper — always returns None (no profile update)."""
+    return None
 
 
 async def bg_apply_profile_update_from_learning_event(user_id: int, event_payload: dict[str, Any]) -> None:
-    """后台异步：将学习信号应用到动态学习者画像。"""
-    update_payload = build_profile_update_payload(LearningEventCreate(**event_payload))
-    if update_payload is None:
-        return
-
-    try:
-        from app.profile.service import get_profile_service
-
-        await get_profile_service().apply_tutoring_profile_update(
-            user_id=user_id,
-            payload=update_payload,
-        )
-    except Exception as exc:
-        logger.warning("[Evaluation] profile update from learning signal failed user=%s err=%s", user_id, exc)
+    """Profile V2 does not update from generic learning events in this refactor."""
+    logger.debug(
+        "[Evaluation] skip profile update for learning event: user_id=%s event_type=%s",
+        user_id,
+        event_payload.get("event_type"),
+    )
 
 
 def build_summary_from_events(events: list[LearningEvent], active_minutes: int = 0) -> EvaluationSummaryResponse:

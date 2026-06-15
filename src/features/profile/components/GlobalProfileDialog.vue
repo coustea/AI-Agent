@@ -9,36 +9,12 @@
   >
     <div v-if="profile" class="dialog-body">
       <section class="section">
-        <h3><el-icon><Monitor /></el-icon> 全局画像 (Root Profile)</h3>
+        <h3><el-icon><Monitor /></el-icon> 全局学习特征 (Global Profile Dimensions)</h3>
         <div class="card-grid">
           <article v-for="item in globalCards" :key="item.title" class="profile-card">
             <h4>{{ item.title }}</h4>
             <p>{{ item.summary }}</p>
           </article>
-        </div>
-      </section>
-
-      <section class="section">
-        <h3><el-icon><DataBoard /></el-icon> 课程子画像 (Sub Profiles)</h3>
-        <el-tabs v-if="courseCards.length" type="border-card" class="course-tabs">
-          <el-tab-pane v-for="course in courseCards" :key="course.name" :label="course.name">
-            <div class="profile-card sub-profile-card">
-              <div class="course-head">
-                <h4>知识水平评估</h4>
-                <el-tag size="small" type="warning" effect="dark">{{ course.level }}</el-tag>
-              </div>
-              <p class="course-goal"><strong>近期学习目标:</strong> {{ course.goal }}</p>
-              <div class="weak-points-section" v-if="course.weakPoints.length">
-                <strong>核心薄弱点:</strong>
-                <div class="tag-list">
-                  <el-tag effect="light" type="danger" round v-for="point in course.weakPoints" :key="point">{{ point }}</el-tag>
-                </div>
-              </div>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
-        <div v-else class="empty-state">
-          <el-empty description="当前还没有课程子画像" :image-size="60" />
         </div>
       </section>
     </div>
@@ -47,7 +23,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Monitor, DataBoard } from '@element-plus/icons-vue'
+import { Monitor } from '@element-plus/icons-vue'
 
 import { getProfile, type ProfileData } from '@/features/profile/api/profile'
 import { isGlobalProfileVisible, profileRefreshTrigger } from '@/features/profile/model/useGlobalProfile'
@@ -55,26 +31,17 @@ import { isGlobalProfileVisible, profileRefreshTrigger } from '@/features/profil
 const profile = ref<ProfileData | null>(null)
 
 const globalCards = computed(() => {
-  const globalProfile = (profile.value?.learning_profile as any)?.global_profile || {}
+  const dims = profile.value?.dimensions || {}
   return [
-    { title: '专业背景', summary: globalProfile.major_background?.value || '暂无' },
-    { title: '学习阶段', summary: globalProfile.student_stage?.value || '暂无' },
-    { title: '学习节奏', summary: globalProfile.learning_pace?.value || '暂无' },
-    { title: '认知风格', summary: globalProfile.cognitive_style?.value || '暂无' },
+    { title: '专业背景', summary: dims.major_background?.value || '暂无' },
+    { title: '学习阶段', summary: dims.student_stage?.value || '暂无' },
+    { title: '学习节奏', summary: dims.learning_pace?.value || '暂无' },
+    { title: '认知风格', summary: dims.cognitive_style?.value || '暂无' },
+    { title: '实践特征', summary: dims.practice_profile?.value || '暂无' },
+    { title: '目标类型', summary: dims.learning_goal_type?.value || '暂无' },
+    { title: '资源偏好', summary: dims.resource_preference_weight?.value || '暂无' },
   ]
 })
-
-const courseCards = computed(() => {
-  const courses = ((profile.value?.learning_profile as any)?.course_profiles || []) as any[]
-  return courses.map((course) => ({
-    name: course.course_context?.value?.course || '未命名课程',
-    level: course.knowledge_level?.value || '暂无',
-    goal: ((course.learning_goal_type?.value || []) as string[]).join(' / ') || '暂无目标',
-    weakPoints: (course.weak_knowledge_points?.value || []).map((item: any) => item.name || item),
-  }))
-})
-
-
 
 const fetchProfile = async () => {
   try {
@@ -112,6 +79,9 @@ watch(profileRefreshTrigger, () => {
 .section h3 {
   margin: 0;
   font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .card-grid {
@@ -129,32 +99,14 @@ watch(profileRefreshTrigger, () => {
 
 .profile-card h4 {
   margin: 0 0 8px;
+  color: var(--color-text-primary);
+  font-size: 15px;
 }
 
 .profile-card p {
   margin: 0;
   color: var(--color-text-secondary);
   line-height: 1.6;
-}
-
-.course-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-
-
-
-
-.empty-state {
-  color: var(--color-text-faint);
+  font-size: 14px;
 }
 </style>

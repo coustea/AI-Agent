@@ -9,18 +9,23 @@ export interface BaseInfoData {
   courses: string[]
 }
 
+export interface GlobalDimensionValue {
+  value: string
+  evidence: string[]
+}
+
+export interface ProfileJsonData {
+  base_info: BaseInfoData
+  dimensions: Record<string, GlobalDimensionValue>
+}
+
 export interface ProfileData {
   user_id: number | null
   module: string | null
   base_info: BaseInfoData
-  learning_profile: Record<string, unknown>
-  knowledge_mastery: Array<Record<string, unknown>>
-  initial_strategy: Record<string, unknown>
-  profile_meta: Record<string, unknown>
-  profile_markdown: string | null
-  profile_json: Record<string, unknown> | null
+  dimensions: Record<string, GlobalDimensionValue>
+  profile_json: ProfileJsonData | null
   profile_score_json: Record<string, unknown> | null
-  updated_reason: string | null
   updated_at: string | null
 }
 
@@ -54,37 +59,13 @@ export interface ProfileOnboardingUpdateResult {
   profile: ProfileData
 }
 
-export interface TutoringEvidence {
-  source?: string
-  signal_type: string
-  summary: string
-  course?: string | null
-  knowledge_point?: string | null
-  confidence?: number
-}
 
-export interface TutoringProfileUpdatePayload {
-  session_id?: string | null
-  active_course?: string | null
-  active_topic?: string | null
-  evidence?: TutoringEvidence[]
-  behavior_signals?: Record<string, unknown>
-  update_reason?: string
-}
-
-export interface TutoringProfileUpdateResult {
-  profile_updated: boolean
-  learning_profile: Record<string, unknown>
-  knowledge_mastery: Array<Record<string, unknown>>
-  profile_meta: Record<string, unknown>
-  version?: number
-  updated_at?: string | null
-}
 
 export interface ProfileScoreDimension {
   key: string
   label: string
-  score: number
+  score: number | null
+  evidence: string[]
 }
 
 export interface ProfileScoreData {
@@ -93,20 +74,9 @@ export interface ProfileScoreData {
   score: number | null
   metrics: {
     dimension_scores?: Record<string, number>
+    dimension_evidence?: Record<string, string[]>
   }
   dimensions?: ProfileScoreDimension[]
   scored_at: string | null
   updated_at: string | null
-}
-
-export interface ProfileHistoryItem {
-  id: number
-  user_id: number
-  module: string
-  version: number
-  profile_json: Record<string, unknown> | null
-  profile_score_json: Record<string, unknown> | null
-  change_reason: string | null
-  source_session_ids: string[] | null
-  created_at: string | null
 }

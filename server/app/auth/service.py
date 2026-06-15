@@ -93,10 +93,8 @@ class AuthUseCases:
         await revoke_token(token, session)
 
     async def upsert_profile_on_logout(self, user_id: int) -> None:
-        """登出后触发画像构建（懒加载 memory runtime）。"""
-        from app.profile.service import get_profile_service
-
-        await get_profile_service().apply_tutoring_profile_update(user_id=user_id, payload={})
+        """Profile V2 has no logout-triggered compatibility update."""
+        return None
 
 
 # 模块级单例
