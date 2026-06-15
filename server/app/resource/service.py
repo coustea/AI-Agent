@@ -34,6 +34,8 @@ from app.resource.review import (
     failed_review_result,
     review_result_from_worker,
 )
+from app.resource.agents.ppt_models import MaterialBundle
+from app.resource.agents.ppt_sources import build_material_bundle
 from app.resource.schemas import (
     AgentSelection,
     ExecutionPlan,
@@ -649,6 +651,28 @@ async def run_multi_agent_generation(
             pre_review_result = ReviewResult(passed=True, overall_score=100)
             review_result = pre_review_result
 
+            review_results_to_merge: list[ReviewResult] = []
+
+            def remember_review_result(result: ReviewResult) -> None:
+                review_results_to_merge.append(result)
+
+            def merge_review_results(items: list[ReviewResult]) -> ReviewResult:
+                if not items:
+                    return ReviewResult(passed=True, overall_score=100)
+
+                merged = ReviewResult(passed=all(item.passed for item in items))
+                merged.overall_score = min(item.overall_score for item in items)
+                merged.consistency_score = min(item.consistency_score for item in items)
+                merged.personalization_score = min(item.personalization_score for item in items)
+
+                for item in items:
+                    merged.issues.extend(item.issues)
+                    merged.suggestions.extend(item.suggestions)
+                    for agent_id in item.failed_agents:
+                        if agent_id not in merged.failed_agents:
+                            merged.failed_agents.append(agent_id)
+                return merged
+
             # 准备审核数据（从已完成的 Worker 结果中构建）
             failed_results = {aid: r for aid, r in results.items() if not r.success}
             review_results = await usecases.results_for_review(user_id, resource_id, failed_results)
@@ -674,7 +698,7 @@ async def run_multi_agent_generation(
                         revision_targets=missing_resources,
                         review_mode="pre_audit",
                     )
-                    review_result = pre_review_result
+                    remember_review_result(pre_review_result)
                     await emitter.emit_agent(
                         PRE_REVIEW_AGENT_ID,
                         status="finished",
@@ -708,7 +732,7 @@ async def run_multi_agent_generation(
                             metrics={"review_status": pre_review_worker_result.metadata.get("review_status")},
                         )
                     pre_review_result = review_result_from_worker(pre_review_worker_result)
-                    review_result = pre_review_result
+                    remember_review_result(pre_review_result)
                     logger.info(
                         "Pre Review 完成: success=%s, status=%s",
                         pre_review_worker_result.success,
@@ -729,7 +753,7 @@ async def run_multi_agent_generation(
                         revision_targets=["review"],
                         review_mode="pre_audit",
                     )
-                    review_result = pre_review_result
+                    remember_review_result(pre_review_result)
                     await emitter.emit_agent(
                         PRE_REVIEW_AGENT_ID,
                         status="finished",
@@ -748,7 +772,6 @@ async def run_multi_agent_generation(
 
             # --- 3b: PPT 生成 + PPT 审核（与 pre_review 并行）---
             async def run_ppt_pipeline() -> None:
-                nonlocal review_result
                 if PPT_AGENT_ID not in enabled_agents or PPT_AGENT_ID not in AGENT_REGISTRY:
                     return
 
@@ -769,7 +792,18 @@ async def run_multi_agent_generation(
                     }
                     for item in pre_audit_envelope.get("deep_audit_resources", [])
                 ]
-                await run_one(PPT_AGENT_ID, {"approved_sources": approved_sources})
+                material_bundle = build_material_bundle(
+                    learning_need=request.learning_need,
+                    learning_scenario=request.learning_scenario,
+                    profile=profile,
+                    blueprint=blueprint.model_dump(mode="json") if blueprint else None,
+                    instruction=instruction_map.get(PPT_AGENT_ID).model_dump(mode="json") if instruction_map.get(PPT_AGENT_ID) else None,
+                    results=results,
+                )
+                await run_one(PPT_AGENT_ID, {
+                    "approved_sources": approved_sources,
+                    "material_bundle": material_bundle.model_dump(mode="json"),
+                })
 
                 # PPT 审核（非阻塞，记录问题但不拦截）
                 await emitter.emit_agent("ppt_review", status="running", message="PPT 内容审核中", progress=90)
@@ -799,12 +833,7 @@ async def run_multi_agent_generation(
                         revision_targets=ppt_missing_resources,
                         review_mode="ppt_audit",
                     )
-                    # 合并审核结果但不阻断
-                    if review_result.passed:
-                        review_result = ppt_review_result
-                    else:
-                        review_result.issues.extend(ppt_review_result.issues)
-                        review_result.failed_agents.extend(ppt_review_result.failed_agents)
+                    remember_review_result(ppt_review_result)
                     await emitter.emit_agent(
                         PPT_REVIEW_AGENT_ID,
                         status="finished",
@@ -838,21 +867,7 @@ async def run_multi_agent_generation(
                             metrics={"review_status": ppt_review_worker_result.metadata.get("review_status")},
                         )
                     ppt_review_result = review_result_from_worker(ppt_review_worker_result)
-                    # 合并前置审核和 PPT 审核的建议
-                    if pre_review_result.suggestions:
-                        ppt_review_result.suggestions = [
-                            *pre_review_result.suggestions,
-                            *ppt_review_result.suggestions,
-                        ]
-                    # 合并到最终审核结果
-                    if review_result.passed:
-                        review_result = ppt_review_result
-                    else:
-                        review_result.suggestions.extend(ppt_review_result.suggestions)
-                        if ppt_review_result.issues:
-                            review_result.issues.extend(ppt_review_result.issues)
-                        if ppt_review_result.failed_agents:
-                            review_result.failed_agents.extend(ppt_review_result.failed_agents)
+                    remember_review_result(ppt_review_result)
                     logger.info(
                         "PPT Review 完成: success=%s, status=%s",
                         ppt_review_worker_result.success,
@@ -873,10 +888,7 @@ async def run_multi_agent_generation(
                         revision_targets=["review"],
                         review_mode="ppt_audit",
                     )
-                    if review_result.passed:
-                        review_result = ppt_review_result
-                    else:
-                        review_result.issues.extend(ppt_review_result.issues)
+                    remember_review_result(ppt_review_result)
                     await emitter.emit_agent(
                         PPT_REVIEW_AGENT_ID,
                         status="finished",
@@ -915,6 +927,9 @@ async def run_multi_agent_generation(
             # 等待阶段 3 全部完成
             if phase3_tasks:
                 await asyncio.gather(*phase3_tasks)
+
+            # 合并所有审查结果为最终 review_result
+            review_result = merge_review_results(review_results_to_merge)
 
             # ==========================================
             # 阶段 4: 持久化与打包 (Save Final Results)

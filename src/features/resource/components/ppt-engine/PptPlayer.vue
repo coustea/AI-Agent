@@ -1,5 +1,5 @@
 <template>
-  <div class="ppt-player-container" ref="containerRef">
+  <div class="ppt-player-container" :class="documentData.template_id" ref="containerRef">
     <template v-if="isExportMode">
       <div
         v-for="(slide, index) in documentData.slides"
@@ -11,9 +11,10 @@
           :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : undefined"
         >
           <component
-            :is="resolveLayoutComponent(documentData.template_id, slide.layout)"
-            v-if="resolveLayoutComponent(documentData.template_id, slide.layout)"
-            :data="slide.data"
+            :is="resolveLayoutComponent(slide.layout)"
+            v-if="resolveLayoutComponent(slide.layout)"
+            :slots="slide.slots"
+            :config="slide.layoutConfig"
           />
           <div v-else class="fallback-slide">
             <h3>布局组件缺失</h3>
@@ -26,27 +27,28 @@
     <template v-else>
       <div class="viewer-stage">
         <div class="viewer-canvas" :style="{ transform: `scale(${scale})` }">
-          <div
-            v-for="(slide, index) in documentData.slides"
-            :key="`${slide.layout}-${index}`"
-            v-show="currentIndex === index"
-            class="slide-frame preview-slide"
-          >
+          <transition :name="`ppt-${currentSlide?.metadata?.transition || 'fade'}`" mode="out-in">
             <div
-              class="slide-shell"
-              :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : undefined"
+              :key="currentIndex"
+              class="slide-frame preview-slide"
             >
-              <component
-                :is="resolveLayoutComponent(documentData.template_id, slide.layout)"
-                v-if="resolveLayoutComponent(documentData.template_id, slide.layout)"
-                :data="slide.data"
-              />
-              <div v-else class="fallback-slide">
-                <h3>布局组件缺失</h3>
-                <p>{{ documentData.template_id }} / {{ slide.layout }}</p>
+              <div
+                class="slide-shell"
+                :style="currentSlide?.metadata?.background_override ? { background: currentSlide.metadata.background_override } : undefined"
+              >
+                <component
+                  :is="resolveLayoutComponent(currentSlide?.layout)"
+                  v-if="currentSlide && resolveLayoutComponent(currentSlide.layout)"
+                  :slots="currentSlide.slots"
+                  :config="currentSlide.layoutConfig"
+                />
+                <div v-else class="fallback-slide">
+                  <h3>布局组件缺失</h3>
+                  <p>{{ documentData.template_id }} / {{ currentSlide?.layout }}</p>
+                </div>
               </div>
             </div>
-          </div>
+          </transition>
         </div>
       </div>
 
@@ -61,10 +63,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import type { LayoutType, PPTDocument, ThemeType } from './types/ppt'
-
-type LayoutComponentLoader = () => Promise<unknown>
-type ThemeRegistry = Record<LayoutType, LayoutComponentLoader | undefined>
+import type { PPTDocument } from './types/ppt'
+import './assets/themes.css'
+import { resolveLayoutComponent } from './components/layouts/registry'
 
 const props = defineProps<{
   documentData: PPTDocument
@@ -76,50 +77,7 @@ const containerRef = ref<HTMLElement | null>(null)
 const scale = ref(1)
 let resizeObserver: ResizeObserver | null = null
 
-const themeModules = import.meta.glob('./themes/**/*.vue') as Record<string, LayoutComponentLoader>
-
-const componentPath = (theme: ThemeType, componentName: string) => `./themes/${theme}/${componentName}.vue`
-
-const registry: Record<ThemeType, ThemeRegistry> = {
-  'theme-logic-blue': {
-    cover: themeModules[componentPath('theme-logic-blue', 'Cover')],
-    agenda: themeModules[componentPath('theme-logic-blue', 'Agenda')],
-    layer_stack: themeModules[componentPath('theme-logic-blue', 'LayerStack')],
-    theory_proof: themeModules[componentPath('theme-logic-blue', 'TheoryProof')],
-    process_flow: themeModules[componentPath('theme-logic-blue', 'ProcessFlow')],
-    tech_dashboard: themeModules[componentPath('theme-logic-blue', 'TechDashboard')],
-    mixed_two_column: themeModules[componentPath('theme-logic-blue', 'MixedTwoColumn')],
-  },
-  'theme-mac-light': {
-    cover: themeModules[componentPath('theme-mac-light', 'Cover')],
-    agenda: themeModules[componentPath('theme-mac-light', 'Agenda')],
-    layer_stack: themeModules[componentPath('theme-mac-light', 'LayerStack')],
-    theory_proof: themeModules[componentPath('theme-mac-light', 'TheoryProof')],
-    process_flow: themeModules[componentPath('theme-mac-light', 'ProcessFlow')],
-    tech_dashboard: themeModules[componentPath('theme-mac-light', 'TechDashboard')],
-    mixed_two_column: themeModules[componentPath('theme-mac-light', 'MixedTwoColumn')],
-  },
-  'theme-notion-light': {
-    cover: themeModules[componentPath('theme-notion-light', 'Cover')],
-    agenda: themeModules[componentPath('theme-notion-light', 'Agenda')],
-    layer_stack: themeModules[componentPath('theme-notion-light', 'LayerStack')],
-    theory_proof: themeModules[componentPath('theme-notion-light', 'TheoryProof')],
-    process_flow: themeModules[componentPath('theme-notion-light', 'ProcessFlow')],
-    tech_dashboard: themeModules[componentPath('theme-notion-light', 'TechDashboard')],
-    mixed_two_column: themeModules[componentPath('theme-notion-light', 'MixedTwoColumn')],
-  },
-}
-
 const currentSlide = computed(() => props.documentData.slides[currentIndex.value])
-
-const resolveLayoutComponent = (theme: ThemeType, layout: LayoutType) => {
-  const loader = registry[theme]?.[layout]
-  if (!loader) {
-    console.error(`[PPT Engine] 缺少布局组件: ${theme}/${layout}`)
-    return null
-  }
-  return loader
-}
 
 const prevSlide = () => {
   if (currentIndex.value > 0) currentIndex.value -= 1
@@ -291,5 +249,41 @@ onUnmounted(() => {
   font-size: 15px;
   font-weight: 800;
   color: #0f172a;
+}
+
+/* Transitions */
+.ppt-fade-enter-active,
+.ppt-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.ppt-fade-enter-from,
+.ppt-fade-leave-to {
+  opacity: 0;
+}
+
+.ppt-slide-enter-active,
+.ppt-slide-leave-active {
+  transition: all 0.4s ease;
+}
+.ppt-slide-enter-from {
+  opacity: 0;
+  transform: translateX(50px);
+}
+.ppt-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-50px);
+}
+
+.ppt-zoom-enter-active,
+.ppt-zoom-leave-active {
+  transition: all 0.4s ease;
+}
+.ppt-zoom-enter-from {
+  opacity: 0;
+  transform: scale(0.95);
+}
+.ppt-zoom-leave-to {
+  opacity: 0;
+  transform: scale(1.05);
 }
 </style>

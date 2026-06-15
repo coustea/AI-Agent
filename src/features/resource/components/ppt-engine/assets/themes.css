@@ -1,0 +1,100 @@
+/* 
+  PPT Engine Design Tokens
+  These variables define the styling for layouts and blocks.
+*/
+
+:root, .theme-notion-light {
+  /* Notion Light - Academic Minimalist */
+  --ppt-bg-primary: #ffffff;
+  --ppt-bg-secondary: #f7f7f5;
+  --ppt-bg-tertiary: #efefe9;
+  --ppt-text-primary: #37352f;
+  --ppt-text-secondary: #787774;
+  --ppt-accent: #0f172a;
+  --ppt-border: #e9e9e7;
+  --ppt-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --ppt-radius: 8px;
+  
+  --ppt-callout-info-bg: #e8f4fd;
+  --ppt-callout-info-text: #0b5394;
+  --ppt-callout-warning-bg: #fdf5e6;
+  --ppt-callout-warning-text: #b45f06;
+  --ppt-callout-success-bg: #eaf5e8;
+  --ppt-callout-success-text: #274e13;
+  --ppt-callout-danger-bg: #fce8e6;
+  --ppt-callout-danger-text: #990000;
+  
+  --ppt-code-bg: #f7f7f5;
+  --ppt-code-text: #eb5757;
+  --ppt-code-block-bg: #1e1e1e;
+  --ppt-code-block-text: #d4d4d4;
+}
+
+.theme-mac-light {
+  /* Mac Light - Skeuomorphic & Soft */
+  --ppt-bg-primary: #f5f5f7;
+  --ppt-bg-secondary: #ffffff;
+  --ppt-bg-tertiary: #f0f0f2;
+  --ppt-text-primary: #1d1d1f;
+  --ppt-text-secondary: #86868b;
+  --ppt-accent: #0066cc;
+  --ppt-border: rgba(0, 0, 0, 0.08);
+  --ppt-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --ppt-radius: 12px;
+  
+  --ppt-callout-info-bg: #f0f8ff;
+  --ppt-callout-info-text: #0066cc;
+  --ppt-callout-warning-bg: #fffbf0;
+  --ppt-callout-warning-text: #d97706;
+  --ppt-callout-success-bg: #f0fff4;
+  --ppt-callout-success-text: #16a34a;
+  --ppt-callout-danger-bg: #fef2f2;
+  --ppt-callout-danger-text: #dc2626;
+
+  --ppt-code-bg: #f0f0f2;
+  --ppt-code-text: #ff3b30;
+  --ppt-code-block-bg: #282c34;
+  --ppt-code-block-text: #abb2bf;
+}
+
+.theme-logic-blue {
+  /* Logic Blue - Dark Tech */
+  --ppt-bg-primary: #0b1120;
+  --ppt-bg-secondary: #111827;
+  --ppt-bg-tertiary: #1f2937;
+  --ppt-text-primary: #f8fafc;
+  --ppt-text-secondary: #94a3b8;
+  --ppt-accent: #38bdf8;
+  --ppt-border: #334155;
+  --ppt-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
+  --ppt-radius: 10px;
+  
+  --ppt-callout-info-bg: rgba(56, 189, 248, 0.1);
+  --ppt-callout-info-text: #38bdf8;
+  --ppt-callout-warning-bg: rgba(251, 191, 36, 0.1);
+  --ppt-callout-warning-text: #fcd34d;
+  --ppt-callout-success-bg: rgba(74, 222, 128, 0.1);
+  --ppt-callout-success-text: #86efac;
+  --ppt-callout-danger-bg: rgba(248, 113, 113, 0.1);
+  --ppt-callout-danger-text: #fca5a5;
+
+  --ppt-code-bg: #1f2937;
+  --ppt-code-text: #f472b6;
+  --ppt-code-block-bg: #000000;
+  --ppt-code-block-text: #e2e8f0;
+}
+
+/* Base styles inherited by blocks */
+.ppt-player-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ppt-text-primary);
+  background-color: var(--ppt-bg-primary);
+  /* Reset some basic margins */
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.ppt-player-container * {
+  box-sizing: inherit;
+}
