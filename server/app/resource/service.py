@@ -415,7 +415,11 @@ class ResourceService:
             except (TypeError, ValueError):
                 return 0
 
-        worker_agents = [agent_id for agent_id in selected_agents if agent_id != PPT_AGENT_ID]
+        worker_agents = [
+            agent_id
+            for agent_id in selected_agents
+            if agent_id not in AGGREGATION_AGENT_IDS
+        ]
         stages = [
             (15, progress_for("planning")),
             (
@@ -430,6 +434,11 @@ class ResourceService:
             stages.extend([
                 (15, progress_for(PPT_AGENT_ID)),
                 (5, progress_for(PPT_REVIEW_AGENT_ID)),
+            ])
+        if VIDEO_AGENT_ID in selected_agents:
+            stages.extend([
+                (15, progress_for(VIDEO_AGENT_ID)),
+                (5, progress_for(VIDEO_REVIEW_AGENT_ID)),
             ])
         weight_total = sum(weight for weight, _ in stages)
         if weight_total <= 0:
@@ -503,8 +512,8 @@ async def run_multi_agent_generation(
     [ 阶段 2 ] : 并行调度所有启用的 Worker Agents (如 Content, Quiz, Code, Mindmap 等)
                  (各个 Worker 拿着专属的 Instruction 并行干活)
                  ↓
-    [ 阶段 3 ] : 审核 + PPT 并行执行（非阻塞审核）
-                 - 前置审核与 PPT 生成并行启动
+    [ 阶段 3 ] : 前置审核、PPT、Video 聚合生成并行执行
+                 - 前置审核与 PPT、Video 生成并行启动
                  - 审核发现问题不拦截，记录到 issues 中供前端展示提示
                  ↓
     [ 阶段 4 ] : 组装并落库 (Assembler / Save)
