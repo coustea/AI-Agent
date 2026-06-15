@@ -8,8 +8,6 @@ import type {
   ProfileOnboardingUpdateResult,
   ProfileScoreData,
   ProfileHistoryItem,
-  TutoringProfileUpdatePayload,
-  TutoringProfileUpdateResult,
 } from '@/features/profile/model/profile'
 
 export type {
@@ -20,8 +18,6 @@ export type {
   ProfileOnboardingUpdateResult,
   ProfileScoreData,
   ProfileHistoryItem,
-  TutoringProfileUpdatePayload,
-  TutoringProfileUpdateResult,
 }
 
 export function getProfile(userId?: number | string) {
@@ -49,6 +45,3 @@ export function getProfileHistory(limit = 20, userId?: number | string) {
   })
 }
 
-export function updateProfileFromTutoring(payload: TutoringProfileUpdatePayload) {
-  return http.patch<ApiResponse<TutoringProfileUpdateResult>>('/ai/profile/tutoring-update', payload)
-}

@@ -57,18 +57,9 @@ class Evidence(BaseModel):
 class EvidenceSet(BaseModel):
     """证据集合 — 编排流水线中各阶段产出的证据汇总容器。
 
-    for_answer() / for_diagram() 分别过滤出对应下游可用的证据。
     这是流转于 orchestrator 各阶段之间的共享状态。
     """
     items: list[Evidence] = Field(default_factory=list)
-
-    # 过滤出可用于推理回答的证据（usable_for_answer=True）
-    def for_answer(self) -> list[Evidence]:
-        return [item for item in self.items if item.usable_for_answer]
-
-    # 过滤出可用于教学图解的证据（usable_for_diagram=True）
-    def for_diagram(self) -> list[Evidence]:
-        return [item for item in self.items if item.usable_for_diagram]
 
     # 批量追加新证据到集合
     def extend(self, items: list[Evidence]) -> None:

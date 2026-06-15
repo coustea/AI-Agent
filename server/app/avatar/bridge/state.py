@@ -14,25 +14,4 @@ class MessageType:
     CLEAR_HISTORY = "clear_history"
 
     # Server → Client
-    STATUS = "status"
-    STREAM_INFO = "stream_info"
-    ASR_RESULT = "asr_result"
-    USER_MESSAGE = "user_message"
-    ASSISTANT_CHUNK = "assistant_chunk"
-    ASSISTANT_COMPLETE = "assistant_complete"
-    AVATAR_STOPPED = "avatar_stopped"
     HISTORY_CLEARED = "history_cleared"
-    ERROR = "error"
-
-    # Additional message types
-    START_VAD = "start_vad"
-    STOP_VAD = "stop_vad"
-    SWITCH_SESSION = "switch_session"
-    VAD_STATE = "vad_state"
-    SET_SPEECH_RATE = "set_speech_rate"
-    SET_NEED_DIAGRAM = "set_need_diagram"
-
-    # Tool events
-    TOOL_CALL_START = "tool_call_start"
-    TOOL_RESULT = "tool_result"
-    RESOURCE_GENERATED = "resource_generated"

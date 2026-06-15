@@ -215,21 +215,6 @@ export function getDagNodeIcon(type: string): string {
   return AGENT_DISPLAY[type]?.icon || '📄'
 }
 
-export function getBentoCardGridStyle(_index: number, _total: number) {
-  return {}
-}
-
-export function stringifyCompact(value: any, maxLength = 80): string {
-  if (value === null || value === undefined || value === '') return ''
-  if (Array.isArray(value)) return value.map(item => stringifyCompact(item, 24)).filter(Boolean).join('、')
-  if (typeof value === 'object') {
-    const text = JSON.stringify(value)
-    return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text
-  }
-  const text = String(value)
-  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text
-}
-
 export function formatBentoTitle(title: string | undefined, type: string): string {
   const fallback = getResourceTypeLabel(type)
   const raw = String(title || fallback).trim()

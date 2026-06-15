@@ -1,6 +1,5 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
-import type { PathLearningEvaluationResponse } from '@/features/learning/model/path'
 import type {
   LearningEventCreate,
   LearningSessionCreate,
@@ -25,6 +24,3 @@ export function getLearningTimeStats(days = 30) {
   return http.get<ApiResponse<LearningTimeStats>>('/ai/evaluation/time-stats', { params: { days } })
 }
 
-export function getPathLearningEvaluation(pathId: number) {
-  return http.get<ApiResponse<PathLearningEvaluationResponse | null>>(`/ai/path-plan/${pathId}/evaluation`)
-}

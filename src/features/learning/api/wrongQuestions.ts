@@ -53,9 +53,6 @@ export async function archiveWrongQuestion(wrongId: number): Promise<void> {
   await http.post(`/ai/wrong-questions/${wrongId}/archive`)
 }
 
-export async function unarchiveWrongQuestion(wrongId: number): Promise<void> {
-  await http.post(`/ai/wrong-questions/${wrongId}/unarchive`)
-}
 
 export async function fetchRandomWrongQuestion(subject?: string): Promise<WrongQuestion | null> {
   const response = await http.get('/ai/wrong-questions/random', {

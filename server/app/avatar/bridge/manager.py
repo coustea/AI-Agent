@@ -395,7 +395,6 @@ class RealtimeBridge:
 
     async def _continuous_listen_loop(self):
         """Continuous ASR loop."""
-        from app.avatar.services.asr import IatClient
         from app.avatar.services.xfyun_auth import assemble_auth_url
         from app.config import ASR_APP_ID, ASR_API_KEY, ASR_API_SECRET, AVATAR_IAT_URL
         import websockets, json, base64, time

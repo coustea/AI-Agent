@@ -2,20 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Final
 
 from pydantic import BaseModel, Field
-
-
-class ConcurrentUpdateError(Exception):
-    """Raised when optimistic profile updates conflict."""
-
-
-PROFILE_TOKEN_THRESHOLD: Final[int] = 8000
-PROFILE_MESSAGE_THRESHOLD: Final[int] = 30
-PROFILE_UPDATE_COOLDOWN_MINUTES: Final[int] = 90
-PROFILE_MIN_COVERAGE: Final[int] = 60
 
 
 class ProfileDimension:
@@ -59,58 +48,6 @@ DIMENSION_NAMES: Final[dict[str, str]] = {
     ProfileDimension.LEARNING_PACE: "学习节奏",
     ProfileDimension.PRACTICE_PROFILE: "实践能力",
 }
-
-
-ONBOARDING_REQUIRED_FIELDS: Final[tuple[str, ...]] = (
-    "school",
-    "major",
-    "grade",
-    "daily_study_time",
-    "global_learning_goal",
-)
-
-ONBOARDING_OPTIONAL_FIELDS: Final[tuple[str, ...]] = (
-    "programming_languages",
-    "courses",
-)
-
-DAILY_STUDY_TIME_TO_PACE: Final[dict[str, str]] = {
-    "30min以下": "slow",
-    "30-60min": "slow",
-    "1-2h": "medium",
-    "2-3h": "fast",
-    "3h以上": "intensive",
-}
-
-RESOURCE_WEIGHT_DEFAULTS: Final[dict[str, float]] = {
-    "document": 0.55,
-    "diagram": 0.55,
-    "exercise": 0.55,
-    "code_case": 0.55,
-    "mind_map": 0.5,
-    "ppt": 0.4,
-    "video_animation": 0.4,
-}
-
-
-def dedupe_strings(items: list[str] | None) -> list[str]:
-    """去重并清理字符串列表。"""
-
-    result: list[str] = []
-    seen: set[str] = set()
-    for item in items or []:
-        text = str(item or "").strip()
-        if text and text not in seen:
-            seen.add(text)
-            result.append(text)
-    return result
-
-
-def slugify(value: str | None) -> str | None:
-    """将文本转为 URL 安全的 slug 格式，保留中英文和数字。"""
-
-    text = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "_", str(value or "").strip()).strip("_").lower()
-    return text or None
 
 
 def make_default_profile_json() -> dict[str, Any]:
