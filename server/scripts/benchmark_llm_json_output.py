@@ -49,8 +49,7 @@ class BenchmarkSummary:
     schema: str
     strategy: str
     attempts: int
-    first_try_success_rate: float
-    validation_success_rate: float
+    success_rate: float
     p50_latency_ms: float
     p95_latency_ms: float
     avg_latency_ms: float
@@ -85,8 +84,7 @@ def aggregate_records(records: list[BenchmarkRecord]) -> dict[tuple[str, str], B
             schema=key[0],
             strategy=key[1],
             attempts=attempts,
-            first_try_success_rate=success_count / attempts if attempts else 0.0,
-            validation_success_rate=success_count / attempts if attempts else 0.0,
+            success_rate=success_count / attempts if attempts else 0.0,
             p50_latency_ms=_percentile(latencies, 0.50),
             p95_latency_ms=_percentile(latencies, 0.95),
             avg_latency_ms=statistics.fmean(latencies) if latencies else 0.0,
@@ -114,14 +112,14 @@ def choose_default_strategy(schema_name: str, summary: dict[tuple[str, str], Ben
     if not rows:
         return None
 
-    best_success = max(float(_summary_value(row, "first_try_success_rate")) for _, row in rows)
+    best_success = max(float(_summary_value(row, "success_rate")) for _, row in rows)
     if best_success < 0.90:
         return None
 
     candidates = [
         (strategy, row)
         for strategy, row in rows
-        if best_success - float(_summary_value(row, "first_try_success_rate")) <= 0.05
+        if best_success - float(_summary_value(row, "success_rate")) <= 0.05
     ]
     candidates.sort(key=lambda item: float(_summary_value(item[1], "p95_latency_ms")))
     return candidates[0][0]
@@ -368,7 +366,7 @@ def write_markdown_summary(path: Path, summary: dict[tuple[str, str], BenchmarkS
                 schema=row.schema,
                 strategy=row.strategy,
                 attempts=row.attempts,
-                success=row.validation_success_rate,
+                success=row.success_rate,
                 p50=row.p50_latency_ms,
                 p95=row.p95_latency_ms,
                 parse=row.parse_error_count,
