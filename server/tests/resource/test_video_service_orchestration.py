@@ -53,3 +53,41 @@ def test_agent_resource_input_receives_previous_results():
 
     assert input_data.agent_name == "video"
     assert input_data.previous_results["content"].content == "# TCP"
+
+
+def test_review_agent_extracts_video_resource_audit_content():
+    from app.resource.agents.review import ReviewAgent
+
+    envelope = {
+        "mode": "video_audit",
+        "video_resource": {
+            "agent_id": "video",
+            "audit_content": '{"schema_version":"video/v1","scenes":[{"narration":"TCP 三次握手"}]}',
+        },
+    }
+
+    content = ReviewAgent._extract_audit_content(envelope)
+
+    assert "video/v1" in content
+    assert "TCP 三次握手" in content
+
+
+def test_overall_progress_treats_video_as_aggregation_stage_not_worker():
+    from app.resource.service import ResourceService
+    from app.resource.review import VIDEO_AGENT_ID, VIDEO_REVIEW_AGENT_ID
+
+    progress = ResourceService._calculate_overall_progress(
+        status="generating",
+        selected_agents=["content", "reading", "video"],
+        agent_snapshots={
+            "planning": {"progress": 100},
+            "content": {"progress": 100},
+            "reading": {"progress": 100},
+            "pre_review": {"progress": 100},
+            "bundle": {"progress": 100},
+            VIDEO_AGENT_ID: {"progress": 0},
+            VIDEO_REVIEW_AGENT_ID: {"progress": 0},
+        },
+    )
+
+    assert progress == 80
