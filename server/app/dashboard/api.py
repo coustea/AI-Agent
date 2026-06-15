@@ -56,18 +56,24 @@ def _course_context_name(course: dict[str, Any] | None, fallback: str = "") -> s
     return _text(value, fallback)
 
 
-def _strategy_list(profile_json: dict[str, Any]) -> list[str]:
-    strategy = profile_json.get("initial_strategy") or {}
-    return [
-        _text(strategy.get("strategy_summary")),
-        _text(strategy.get("path_planning_strategy")),
-        _text(strategy.get("tutor_strategy")),
-    ]
+def _score_json(profile_json_or_score: dict[str, Any]) -> dict[str, Any]:
+    return profile_json_or_score if isinstance(profile_json_or_score, dict) else {}
 
 
-def _mastery_items(profile_json: dict[str, Any]) -> list[dict[str, Any]]:
-    items = profile_json.get("knowledge_mastery") or []
-    return sorted(items, key=lambda item: item.get("mastery_score") or 0)
+def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list[str]:
+    scores = _score_json(score_json).get("dimension_scores") or {}
+    items: list[tuple[str, float]] = []
+    for key, value in scores.items():
+        if isinstance(value, (int, float)) and value > 0 and value < 60:
+            items.append((key, float(value)))
+    items.sort(key=lambda item: item[1])
+    return [DIMENSION_NAMES.get(key, key) for key, _ in items[:limit]]
+
+
+def _score_evidence(score_json: dict[str, Any], key: str, *, limit: int = 3) -> list[str]:
+    evidence = _score_json(score_json).get("dimension_evidence") or {}
+    values = evidence.get(key) or []
+    return [str(item) for item in values[:limit] if str(item).strip()]
 
 
 def _status_label(value: str) -> str:
@@ -143,14 +149,19 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
 
 
 async def _get_profile_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
-    profile = await get_profile_service().get_or_create_profile(user_id=user_id)
+    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id)
     profile = await session.merge(profile)
     return profile.profile_json or {}
 
 
-def _weak_topics_from_events_and_mastery(
+async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
+    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id)
+    profile = await session.merge(profile)
+    return profile.profile_score_json or {}
+
+
+def _weak_topics_from_events(
     events: list[LearningEvent],
-    mastery: list[dict[str, Any]],
 ) -> list[str]:
     counter: Counter[str] = Counter()
     for event in events:
@@ -162,10 +173,6 @@ def _weak_topics_from_events_and_mastery(
             counter[topic] += 2
         if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
             counter[topic] += 2
-    for item in mastery[:5]:
-        topic = _text(item.get("knowledge_point"))
-        if topic:
-            counter[topic] += 1
     return [topic for topic, _ in counter.most_common(5)]
 
 
@@ -180,8 +187,9 @@ async def get_recommendation(
 ):
     profile_json = await _get_profile_json(session, current_user.id)
     base_info = profile_json.get("base_info") or {}
-    mastery = _mastery_items(profile_json)
-    strategies = [item for item in _strategy_list(profile_json) if item]
+    goal = _text(base_info.get("global_learning_goal"))
+    courses = base_info.get("courses") or []
+    primary_course = courses[0] if courses else ""
 
     active_path = await _get_active_path(session, current_user.id)
     path_nodes = await _get_path_nodes(session, current_user.id, active_path.id) if active_path else []
@@ -208,7 +216,7 @@ async def get_recommendation(
 
     has_activity = any((chat_session_count, user_message_count, recent_resources, active_path, recent_events))
     cold_start = not _text(base_info.get("major")) and not has_activity
-    weak_topics = _weak_topics_from_events_and_mastery(recent_events, mastery)
+    weak_topics = _weak_topics_from_events(recent_events)
     node = _current_node(path_nodes)
     latest_event = recent_events[0] if recent_events else None
     latest_resource = recent_resources[0] if recent_resources else None
@@ -242,10 +250,11 @@ async def get_recommendation(
             "icon": "path",
         }
     elif weak_topics:
+        fallback_text = goal or f"建议继续围绕「{primary_course}」推进" if primary_course else "建议先补充学习目标和课程信息"
         recommendation = {
             "label": "薄弱信号",
             "title": f"攻坚 {weak_topics[0]}",
-            "text": strategies[0] if strategies else "最近画像或学习事件显示这里需要优先补强。",
+            "text": fallback_text,
             "action": "生成资源",
             "path": "/resource-generator",
             "icon": "resource",
@@ -293,44 +302,36 @@ async def get_profile_radar(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    profile = await get_profile_service().get_or_create_profile(user_id=current_user.id)
+    profile = await get_profile_service().get_or_create_global_profile(user_id=current_user.id)
     profile = await session.merge(profile)
     score_json = profile.profile_score_json or {}
 
     scores = score_json.get("dimension_scores") or {}
-    missing_sections = set(score_json.get("missing_sections") or [])
+    evidence = score_json.get("dimension_evidence") or {}
     dimensions: list[dict[str, Any]] = []
     for key in ALL_DIMENSIONS:
         score = scores.get(key)
+        evidence_items = evidence.get(key) or []
         dimensions.append({
             "key": key,
             "label": DIMENSION_NAMES.get(key, key),
-            "score": score if isinstance(score, (int, float)) else None,
-            "missing": key in missing_sections or score is None,
+            "score": score if isinstance(score, (int, float)) else 0,
+            "evidence": evidence_items,
+            "missing": not evidence_items,
         })
 
-    weak_areas = [
-        item.get("name") or item.get("knowledge_point")
-        for item in sorted(
-            (profile.profile_json or {}).get("knowledge_mastery") or [],
-            key=lambda x: x.get("mastery_score", 60),
-        )
-        if (item.get("mastery_score", 60) < 60)
-    ][:5]
+    weak_areas = _low_score_dimensions(score_json)
 
     return HttpResponse.success(data={
         "user_id": profile.user_id,
         "module": profile.module,
         "score": score_json.get("overall_score"),
-        "confidence": score_json.get("confidence", 0.7),
-        "metrics": {
-            "dimension_scores": score_json.get("dimension_scores") or {},
-            "section_coverage": score_json.get("section_coverage", 0),
-            "evidence_quality": score_json.get("evidence_quality", 0),
-        },
         "dimensions": dimensions,
         "weak_areas": weak_areas,
-        "missing_sections": score_json.get("missing_sections") or [],
+        "metrics": {
+            "dimension_scores": scores,
+            "dimension_evidence": evidence,
+        },
         "radar": {
             "eyebrow": "画像",
             "title": "用户画像雷达图",
@@ -411,8 +412,6 @@ async def get_quick_actions(
     session: AsyncSession = Depends(get_session),
 ):
     profile_json = await _get_profile_json(session, current_user.id)
-    mastery = _mastery_items(profile_json)
-    strategies = [item for item in _strategy_list(profile_json) if item]
     recent_events = await _get_recent_events(session, current_user.id, limit=30)
 
     chat_session_count = (await session.exec(
@@ -436,7 +435,7 @@ async def get_quick_actions(
     )).all())
     active_path = await _get_active_path(session, current_user.id)
 
-    weak_topics = _weak_topics_from_events_and_mastery(recent_events, mastery)
+    weak_topics = _weak_topics_from_events(recent_events)
 
     action_defs = [
         {
@@ -494,7 +493,7 @@ async def get_quick_actions(
 
     if weak_topics:
         topic = weak_topics[0]
-        strategy_hint = strategies[0] if strategies else f"「{topic}」维度偏弱，需要通过专项练习巩固"
+        strategy_hint = f"「{topic}」维度偏弱，需要通过专项练习巩固"
         suggestions.append({
             "title": f"完成「{topic}」专项练习",
             "reason": strategy_hint,
@@ -590,14 +589,10 @@ async def get_daily_challenge(
     session: AsyncSession = Depends(get_session),
 ):
     profile_json = await _get_profile_json(session, current_user.id)
-    mastery = profile_json.get("knowledge_mastery") or []
-    weak_topics = [
-        item.get("name") for item in sorted(
-            mastery, key=lambda x: x.get("mastery_score", 60),
-        ) if item.get("mastery_score", 60) < 60
-    ]
-    courses = profile_json.get("learning_profile", {}).get("course_profiles", [])
-    current_course = _course_context_name(courses[0]) if courses else None
+    score_json = await _get_profile_score_json(session, current_user.id)
+    weak_topics = _score_evidence(score_json, "weak_knowledge_points")
+    courses = profile_json.get("base_info", {}).get("courses", [])
+    current_course = courses[0] if courses else None
 
     target_topic = weak_topics[0] if weak_topics else current_course
 
