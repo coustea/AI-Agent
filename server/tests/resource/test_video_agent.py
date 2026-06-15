@@ -186,3 +186,16 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
     parsed = json.loads(result.content)
     assert parsed["duration_seconds"] == 180
     assert len(parsed["scenes"]) == 3
+
+
+def test_video_payload_contract_uses_backend_video_v1_fields():
+    payload = _valid_payload_dict()
+
+    first_scene = payload["scenes"][0]
+
+    assert "scene_id" in first_scene
+    assert "duration_ms" in first_scene
+    assert "narration" in first_scene
+    assert "visual_prompt" in first_scene
+    assert "visual_data" not in first_scene
+    assert "imageUrl" not in first_scene

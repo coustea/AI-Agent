@@ -27,25 +27,34 @@ VideoAgent 是位于 `standalone resource` 领域下的 **Aggregation Agent (聚
 
 ```json
 {
-  "title": "...",
-  "duration_seconds": 150,
-  "config": {
-    "mode": "standard",
-    "resolution": "16:9",
-    "theme": "tech"
-  },
+  "schema_version": "video/v1",
+  "title": "TCP 三次握手讲解",
+  "duration_seconds": 180,
+  "aspect_ratio": "16:9",
+  "style": "explainer",
+  "voice": "teacher",
+  "language": "zh-CN",
   "scenes": [
     {
-      "id": "scene_01",
-      "stage": "intro",
-      "title": "什么是TCP？",
-      "narration": "TCP，也就是传输控制协议...",
-      "visual_data": {
-        "layout": "title_with_bullet",
-        "elements": [...]
-      }
+      "scene_id": "scene-1",
+      "index": 1,
+      "role": "hook",
+      "title": "为什么需要三次确认",
+      "start_ms": 0,
+      "duration_ms": 30000,
+      "visual_type": "diagram",
+      "narration": "客户端和服务端需要确认双方收发能力。",
+      "captions": ["确认双方收发能力"],
+      "on_screen_text": ["SYN", "SYN+ACK", "ACK"],
+      "visual_prompt": "左右两列展示客户端和服务端，三条箭头展示报文顺序",
+      "interaction_prompt": "暂停让学习者复述第三次 ACK 的意义",
+      "source_agents": ["content", "mindmap"]
     }
-  ]
+  ],
+  "assets": [],
+  "metadata": {
+    "source_agent_ids": ["content", "mindmap"]
+  }
 }
 ```
 
