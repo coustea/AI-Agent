@@ -1,21 +1,6 @@
 <template>
   <main class="home-workspace">
     <div class="workspace-grid" v-if="recommendationData && profileRadarData">
-      <!-- 顶部状态栏 -->
-      <section class="top-status span-12">
-        <div class="breadcrumb-area">
-          <span class="home-dot"></span>
-          <span>首页</span>
-          <span class="slash">/</span>
-          <strong>学习控制台</strong>
-        </div>
-        <div class="system-status">
-          <span class="status-pill"><i class="status-dot active"></i>画像已激活</span>
-          <span class="status-pill">提供者：{{ modelProvider }}</span>
-          <span class="status-pill">动效：低</span>
-        </div>
-      </section>
-
       <!-- 第一行：学习总览 + 画像雷达 -->
       <BaseCard class="overview-card span-8" padding="large">
         <div class="overview-decoration"></div>

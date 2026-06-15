@@ -1,137 +1,223 @@
 <template>
   <div :class="['onboarding-root', { 'onboarding-standalone': standalone }]">
     <el-dialog
-      v-model="visible"
-      width="980px"
-      :show-close="false"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-      class="onboarding-dialog"
-      align-center
+        v-model="visible"
+        width="1160px"
+        :show-close="false"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        class="onboarding-dialog"
+        align-center
     >
       <section class="dialog-shell">
         <button class="skip-only-btn" type="button" @click="handleNeverShow">跳过</button>
 
-        <main class="chat-stage">
-          <div ref="messageListRef" class="message-list">
-            <div
-              v-for="msg in messages"
-              :key="msg.id"
-              :class="['message-row', msg.role, { 'is-streaming': msg.streaming }]"
-            >
-              <div v-if="msg.role === 'assistant'" class="avatar-icon">AI</div>
-
-              <div class="message-main">
-                <div class="message-meta">
-                  <span>{{ msg.role === 'assistant' ? '学习智能体' : '我' }}</span>
-                  <span>{{ msg.time }}</span>
-                </div>
-
-                <div class="message-bubble">
-                  <p class="message-text">{{ msg.content }}</p>
-                </div>
-              </div>
+        <main class="conversation-panel">
+          <header class="conversation-header">
+            <div class="header-left">
+              <span class="agent-state">
+                <i></i>
+                学习画像智能体
+              </span>
+              <h1>用对话完成学习画像构建</h1>
+              <p>每回答一步，右侧只展示已填写的信息，不展示空字段和策略说明。</p>
             </div>
 
-            <div v-if="isThinking" class="message-row assistant thinking-row">
-              <div class="avatar-icon">AI</div>
-              <div class="message-main">
-                <div class="message-meta">
-                  <span>学习智能体</span>
-                  <span>{{ currentTimeLabel }}</span>
-                </div>
-                <div class="message-bubble thinking-bubble" aria-label="正在输入">
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
-                </div>
-              </div>
+            <div class="header-progress" aria-label="当前进度">
+              <strong>{{ profileProgress }}%</strong>
+              <span>画像完整度</span>
             </div>
-          </div>
+          </header>
 
-          <div class="input-dock">
-            <transition name="fade-up">
-              <div v-if="profileChips.length > 0" class="extracted-strip">
-                <span class="strip-title">已从对话提取</span>
-                <div class="chip-list">
-                  <span v-for="item in profileChips" :key="item.label" class="profile-chip">
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.value }}</strong>
-                  </span>
-                </div>
-              </div>
-            </transition>
-
-            <transition name="fade-up">
-              <div v-if="currentStep <= 7 && currentQuickReplies.length > 0" class="quick-replies-wrapper">
-                <div class="quick-replies-scroll">
-                  <button
-                    v-for="reply in currentQuickReplies"
-                    :key="reply"
-                    class="quick-reply-btn"
-                    :class="{ 'is-selected': isReplySelected(reply) }"
-                    type="button"
-                    :disabled="isAssistantStreaming"
-                    @click="handleQuickReply(reply)"
-                  >
-                    {{ reply }}
-                  </button>
-                </div>
-              </div>
-            </transition>
-
-            <transition name="fade-up">
-              <div v-if="currentStep === 4 && schoolSuggestions.length > 0" class="school-suggestions-wrapper">
-                <div class="school-suggestions-list">
-                  <button
-                    v-for="school in schoolSuggestions"
-                    :key="school.name"
-                    class="school-suggestion-btn"
-                    type="button"
-                    @click="selectSchool(school)"
-                  >
-                    <span class="school-name">{{ school.name }}</span>
-                    <span v-if="school.level" class="school-level-tag">{{ school.level }}</span>
-                  </button>
-                </div>
-              </div>
-            </transition>
-
-            <div v-if="currentStep <= 7" class="composer-wrapper">
-              <textarea
-                ref="inputRef"
-                v-model="userInput"
-                class="chat-composer"
-                rows="1"
-                :placeholder="composerPlaceholder"
-                :disabled="isAssistantStreaming || submitting"
-                @keydown="handleComposerKeydown"
-                @input="handleInputChange"
-              ></textarea>
-
-              <button
-                class="send-btn"
+          <div class="step-strip" aria-label="画像构建步骤">
+            <button
+                v-for="step in ONBOARDING_STEPS"
+                :key="step.key"
                 type="button"
-                :disabled="!canSend"
-                @click="handleSend"
-              >
-                <el-icon><Position /></el-icon>
-              </button>
+                :class="['step-dot', getStepState(step.key)]"
+            >
+              <strong>{{ step.key }}</strong>
+              <span>{{ step.short }}</span>
+            </button>
+          </div>
+
+          <section class="chat-card">
+            <div class="current-question">
+              <div>
+                <span>当前步骤 · {{ currentStepMeta.short }}</span>
+                <strong>{{ currentStepMeta.title }}</strong>
+                <p>{{ currentStepMeta.description }}</p>
+              </div>
+              <em>{{ currentStepMeta.example }}</em>
             </div>
 
-            <div v-else class="profile-footer">
-              <el-button
-                class="finish-btn"
-                type="primary"
-                :loading="submitting"
-                @click="submitForm"
-              >
-                完成构建，进入学习空间
-                <el-icon class="el-icon--right"><Right /></el-icon>
-              </el-button>
+            <div ref="messageListRef" class="message-list">
+              <transition-group name="message-pop" tag="div" class="message-inner">
+                <div
+                    v-for="msg in messages"
+                    :key="msg.id"
+                    :class="['message-row', msg.role, { 'is-streaming': msg.streaming }]"
+                >
+                  <div v-if="msg.role === 'assistant'" class="avatar-icon">AI</div>
+
+                  <div class="message-main">
+                    <div class="message-meta">
+                      <span>{{ msg.role === 'assistant' ? '学习智能体' : '我' }}</span>
+                      <span>{{ msg.time }}</span>
+                    </div>
+
+                    <div class="message-bubble">
+                      <p class="message-text">{{ msg.content }}</p>
+                    </div>
+                  </div>
+                </div>
+              </transition-group>
+
+              <div v-if="isThinking" class="message-row assistant thinking-row">
+                <div class="avatar-icon">AI</div>
+                <div class="message-main">
+                  <div class="message-meta">
+                    <span>学习智能体</span>
+                    <span>{{ currentTimeLabel }}</span>
+                  </div>
+                  <div class="message-bubble thinking-bubble" aria-label="正在输入">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div class="input-dock">
+              <transition name="fade-up">
+                <div v-if="currentStep <= 7 && currentQuickReplies.length > 0" class="quick-replies-wrapper">
+                  <div class="quick-head">
+                    <span>{{ currentStepMeta.quickTitle }}</span>
+                    <em v-if="isMultiSelectStep">可多选，选完后点击发送</em>
+                    <em v-else>点击后自动进入下一步</em>
+                  </div>
+
+                  <div :class="['quick-replies-grid', { 'is-card-mode': shouldShowReplyHint }]">
+                    <button
+                        v-for="reply in currentQuickReplies"
+                        :key="reply"
+                        class="quick-reply-btn"
+                        :class="{ 'is-selected': isReplySelected(reply) }"
+                        type="button"
+                        :disabled="isAssistantStreaming"
+                        @click="handleQuickReply(reply)"
+                    >
+                      <span>{{ reply }}</span>
+                      <small v-if="getReplyHint(reply)">{{ getReplyHint(reply) }}</small>
+                    </button>
+                  </div>
+                </div>
+              </transition>
+
+              <transition name="fade-up">
+                <div v-if="currentStep === 4 && limitedSchoolSuggestions.length > 0" class="school-suggestions-wrapper">
+                  <div class="quick-head">
+                    <span>学校搜索结果</span>
+                    <em>最多展示 4 个结果，避免出现滚轮</em>
+                  </div>
+                  <div class="school-suggestions-grid">
+                    <button
+                        v-for="school in limitedSchoolSuggestions"
+                        :key="school.name"
+                        class="school-suggestion-btn"
+                        type="button"
+                        @click="selectSchool(school)"
+                    >
+                      <span class="school-name">{{ school.name }}</span>
+                      <span v-if="school.level" class="school-level-tag">{{ school.level }}</span>
+                    </button>
+                  </div>
+                </div>
+              </transition>
+
+              <transition name="fade-up">
+                <div v-if="isMultiSelectStep && selectionItems.length > 0" class="selection-preview">
+                  <span>当前选择</span>
+                  <div>
+                    <strong v-for="item in selectionItems" :key="item">{{ item }}</strong>
+                  </div>
+                </div>
+              </transition>
+
+              <div v-if="currentStep <= 7" class="composer-wrapper">
+                <textarea
+                    ref="inputRef"
+                    v-model="userInput"
+                    class="chat-composer"
+                    rows="1"
+                    :placeholder="composerPlaceholder"
+                    :disabled="isAssistantStreaming || submitting"
+                    @keydown="handleComposerKeydown"
+                    @input="handleInputChange"
+                ></textarea>
+
+                <button
+                    class="send-btn"
+                    type="button"
+                    :disabled="!canSend"
+                    @click="handleSend"
+                >
+                  <el-icon><Position /></el-icon>
+                </button>
+              </div>
+
+              <div v-else class="profile-footer">
+                <div>
+                  <strong>学习画像已经完成</strong>
+                  <p>进入学习空间后，系统会根据这些信息生成路径、资源和题库。</p>
+                </div>
+                <el-button
+                    class="finish-btn"
+                    type="primary"
+                    :loading="submitting"
+                    @click="submitForm"
+                >
+                  进入学习空间
+                  <el-icon class="el-icon--right"><Right /></el-icon>
+                </el-button>
+              </div>
+            </div>
+          </section>
         </main>
+
+        <aside class="profile-panel">
+          <div class="profile-top">
+            <span>实时画像</span>
+            <strong>{{ filledProfileCards.length }} 项信息</strong>
+          </div>
+
+          <section class="info-panel">
+            <div class="panel-title">
+              <span>已填写信息</span>
+              <em>填一项，展示一项</em>
+            </div>
+
+            <div v-if="filledProfileCards.length === 0" class="empty-info-card">
+              <span>等待第一条信息</span>
+              <p>回答专业后，这里会立即出现第一张画像卡片。</p>
+            </div>
+
+            <transition-group v-else name="info-pop" tag="div" class="info-grid">
+              <article
+                  v-for="card in filledProfileCards"
+                  :key="card.key"
+                  class="info-card"
+              >
+                <div class="info-card-top">
+                  <span class="info-icon">{{ card.icon }}</span>
+                  <span class="info-label">{{ card.label }}</span>
+                </div>
+                <strong class="info-value">{{ card.value }}</strong>
+              </article>
+            </transition-group>
+          </section>
+        </aside>
       </section>
     </el-dialog>
   </div>
@@ -146,6 +232,7 @@ import { Position, Right } from '@element-plus/icons-vue'
 import { updateMe } from '@/features/auth/api/auth'
 import { getProfileOnboarding, updateProfileOnboarding } from '@/features/profile/api/profile'
 import type { ProfileOnboardingUpdate } from '@/features/profile/api/profile'
+import { isProfileOnboardingComplete } from '@/features/profile/model/profile'
 import { searchSchools } from '@/features/resource/api/school'
 import type { SchoolItem } from '@/features/resource/api/school'
 import { hasAuthToken } from '@/shared/auth/token'
@@ -174,6 +261,23 @@ type ChatMessage = {
   content: string
   time: string
   streaming?: boolean
+}
+
+type StepMeta = {
+  key: number
+  short: string
+  title: string
+  description: string
+  example: string
+  quickTitle: string
+}
+
+type ProfileCard = {
+  key: string
+  icon: string
+  label: string
+  value: string
+  filled: boolean
 }
 
 const messages = ref<ChatMessage[]>([])
@@ -206,15 +310,83 @@ const PRESET_GRADES = ['大一', '大二', '大三', '大四', '研一', '研二
 const PRESET_DAILY_STUDY_TIME = ['30min以下', '30-60min', '1-2h', '2-3h', '3h以上']
 const PRESET_PROGRAMMING_LANGUAGES = ['Python', 'Java', 'C++', 'JavaScript', 'Go', 'Rust']
 
+const ONBOARDING_STEPS: StepMeta[] = [
+  {
+    key: 1,
+    short: '专业',
+    title: '先确认专业方向',
+    description: '专业会影响后续课程体系、案例选择和讲解方式。',
+    example: '例如：软件工程、计算机科学与技术',
+    quickTitle: '常见专业',
+  },
+  {
+    key: 2,
+    short: '年级',
+    title: '确认学习阶段',
+    description: '不同年级的学习重点不同，系统会据此调整难度。',
+    example: '例如：大二、研一',
+    quickTitle: '年级阶段',
+  },
+  {
+    key: 3,
+    short: '目标',
+    title: '明确学习目标',
+    description: '目标决定系统偏向期末复习、补基础、进阶学习还是项目实战。',
+    example: '例如：期末复习、项目实战',
+    quickTitle: '学习目标',
+  },
+  {
+    key: 4,
+    short: '学校',
+    title: '填写学校名称',
+    description: '输入学校名称后会出现搜索结果，可以直接选择。',
+    example: '例如：重庆邮电大学',
+    quickTitle: '学校名称',
+  },
+  {
+    key: 5,
+    short: '时间',
+    title: '设置每日学习时间',
+    description: '学习时间会影响节点大小、任务强度和复习节奏。',
+    example: '例如：30-60min、1-2h',
+    quickTitle: '每日时间',
+  },
+  {
+    key: 6,
+    short: '语言',
+    title: '选择常用编程语言',
+    description: '编程语言会影响代码示例、实操任务和项目练习。',
+    example: '例如：Python、Java、C++',
+    quickTitle: '技术栈',
+  },
+  {
+    key: 7,
+    short: '课程',
+    title: '选择本学期核心课程',
+    description: '课程会直接影响学习路径、题库练习和资源生成范围。',
+    example: '建议选择 1-4 门重点课程',
+    quickTitle: '核心课程',
+  },
+]
+
 const currentTimeLabel = computed(() => formatTime())
+
+const programmingLanguagesValue = computed<string[]>(() => {
+  return Array.isArray(form.programming_languages) ? form.programming_languages.map(String) : []
+})
+
+const coursesValue = computed<string[]>(() => {
+  return Array.isArray(form.courses) ? (form.courses as string[]).map(String) : []
+})
 
 const isComplete = computed(() => {
   return currentStep.value > 7 || Boolean(
-    form.school &&
-    form.major &&
-    form.grade &&
-    form.daily_study_time &&
-    form.global_learning_goal,
+      form.school &&
+      form.major &&
+      form.grade &&
+      form.daily_study_time &&
+      form.global_learning_goal &&
+      coursesValue.value.length > 0,
   )
 })
 
@@ -222,27 +394,99 @@ const canSend = computed(() => {
   return userInput.value.trim().length > 0 && !isAssistantStreaming.value && !submitting.value
 })
 
-const composerPlaceholder = computed(() => {
-  if (isAssistantStreaming.value) return '智能体正在输入...'
-  if (currentStep.value === 4) return '输入学校名称，支持搜索选择...'
-  if (isMultiSelectStep.value) return '可以输入多个内容，用逗号、空格或顿号分隔...'
-  return '在这里输入你的回复，Enter 发送，Shift + Enter 换行...'
+const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
+
+const shouldShowReplyHint = computed(() => [2, 7].includes(currentStep.value))
+
+const currentStepMeta = computed(() => {
+  return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) || ONBOARDING_STEPS[0]
 })
 
-const profileChips = computed(() => {
-  const chips: Array<{ label: string; value: string }> = []
-  if (form.major) chips.push({ label: '专业', value: String(form.major) })
-  if (form.grade) chips.push({ label: '年级', value: String(form.grade) })
-  if (form.global_learning_goal) chips.push({ label: '目标', value: String(form.global_learning_goal) })
-  if (form.school) chips.push({ label: '学校', value: String(form.school) })
-  if (form.daily_study_time) chips.push({ label: '时间', value: String(form.daily_study_time) })
-  if (Array.isArray(form.programming_languages) && form.programming_languages.length > 0) {
-    chips.push({ label: '语言', value: form.programming_languages.join('、') })
-  }
-  if (Array.isArray(form.courses) && form.courses.length > 0) {
-    chips.push({ label: '课程', value: form.courses.join('、') })
-  }
-  return chips
+const composerPlaceholder = computed(() => {
+  if (isAssistantStreaming.value) return '智能体正在输入...'
+  if (currentStep.value === 2) return '选择年级或输入你的学习阶段...'
+  if (currentStep.value === 4) return '输入学校名称，支持搜索选择...'
+  if (currentStep.value === 7) return '选择课程或输入多个课程，用逗号、空格、顿号分隔...'
+  if (isMultiSelectStep.value) return '可以输入多个内容，用逗号、空格或顿号分隔...'
+  return '输入回复，Enter 发送，Shift + Enter 换行...'
+})
+
+const selectionItems = computed(() => {
+  return userInput.value.split(/[,，、\s]+/).filter(Boolean)
+})
+
+const limitedSchoolSuggestions = computed(() => schoolSuggestions.value.slice(0, 4))
+
+const profileCards = computed<ProfileCard[]>(() => {
+  return [
+    {
+      key: 'major',
+      icon: '🎓',
+      label: '专业方向',
+      value: form.major || '',
+      filled: Boolean(form.major),
+    },
+    {
+      key: 'grade',
+      icon: '📍',
+      label: '当前年级',
+      value: form.grade || '',
+      filled: Boolean(form.grade),
+    },
+    {
+      key: 'goal',
+      icon: '🎯',
+      label: '学习目标',
+      value: form.global_learning_goal || '',
+      filled: Boolean(form.global_learning_goal),
+    },
+    {
+      key: 'school',
+      icon: '🏫',
+      label: '学校',
+      value: form.school || '',
+      filled: Boolean(form.school),
+    },
+    {
+      key: 'time',
+      icon: '⏱',
+      label: '每日时间',
+      value: form.daily_study_time || '',
+      filled: Boolean(form.daily_study_time),
+    },
+    {
+      key: 'language',
+      icon: '💻',
+      label: '编程语言',
+      value: programmingLanguagesValue.value.join('、'),
+      filled: programmingLanguagesValue.value.length > 0,
+    },
+    {
+      key: 'courses',
+      icon: '📚',
+      label: '核心课程',
+      value: coursesValue.value.join('、'),
+      filled: coursesValue.value.length > 0,
+    },
+  ]
+})
+
+const filledProfileCards = computed(() => profileCards.value.filter(item => item.filled))
+
+const completedRequiredCount = computed(() => {
+  return [
+    Boolean(form.major),
+    Boolean(form.grade),
+    Boolean(form.global_learning_goal),
+    Boolean(form.school),
+    Boolean(form.daily_study_time),
+    coursesValue.value.length > 0,
+  ].filter(Boolean).length
+})
+
+const profileProgress = computed(() => {
+  if (currentStep.value > 7 || isComplete.value) return 100
+  return Math.round((completedRequiredCount.value / 6) * 100)
 })
 
 const currentQuickReplies = computed(() => {
@@ -264,8 +508,6 @@ const currentQuickReplies = computed(() => {
   }
 })
 
-const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
-
 watch(visible, async (open) => {
   if (!open) {
     streamRunId += 1
@@ -284,9 +526,7 @@ const initializeDialog = async () => {
   resetState()
   const loadedComplete = await loadStatus()
   if (!loadedComplete) {
-    await streamAssistantMessage(
-      '你好！我是你的专属学习智能体。\n\n接下来我们像聊天一样完成一次学习画像构建。我会根据你的回答提取专业、年级、学校、学习目标、学习时间、技术栈和课程信息。\n\n先从最基础的开始：你目前的专业是什么？',
-    )
+    await streamAssistantMessage('你好，我是你的学习画像智能体。我们用聊天方式完成画像构建，右侧会按填写顺序逐项展示信息。先告诉我：你目前是什么专业？')
   }
 }
 
@@ -358,11 +598,11 @@ const splitToTypewriterChunks = (text: string) => {
 }
 
 const getChunkDelay = (chunk: string) => {
-  if (/\n/.test(chunk)) return 120
-  if (/[。！？!?]/.test(chunk)) return 180
-  if (/[，、；;：:]/.test(chunk)) return 90
-  if (/[A-Za-z0-9_+#./-]{2,}/.test(chunk)) return 34
-  return 24
+  if (/\n/.test(chunk)) return 80
+  if (/[。！？!?]/.test(chunk)) return 110
+  if (/[，、；;：:]/.test(chunk)) return 60
+  if (/[A-Za-z0-9_+#./-]{2,}/.test(chunk)) return 24
+  return 18
 }
 
 const streamAssistantMessage = async (content: string) => {
@@ -370,7 +610,7 @@ const streamAssistantMessage = async (content: string) => {
   isAssistantStreaming.value = true
   isThinking.value = true
   await scrollToBottom()
-  await sleep(220)
+  await sleep(160)
 
   if (runId !== streamRunId) return
 
@@ -453,7 +693,7 @@ const autoResizeComposer = () => {
   const textarea = inputRef.value
   if (!textarea) return
   textarea.style.height = '44px'
-  textarea.style.height = `${Math.min(textarea.scrollHeight, 88)}px`
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 76)}px`
 }
 
 const selectSchool = (school: SchoolItem) => {
@@ -512,6 +752,41 @@ const extractMultiple = (text: string, presets: string[]) => {
   return result
 }
 
+const getStepState = (key: number) => {
+  if (currentStep.value > key) return 'is-done'
+  if (currentStep.value === key) return 'is-active'
+  return 'is-pending'
+}
+
+const getGradeHint = (grade: string) => {
+  if (grade.includes('大一')) return '基础导入，降低抽象程度'
+  if (grade.includes('大二')) return '核心专业课，重点建立体系'
+  if (grade.includes('大三')) return '项目实践与综合复习'
+  if (grade.includes('大四')) return '毕设、实习和冲刺复习'
+  if (grade.includes('研')) return '专题研究和深度学习'
+  return '用于调整学习难度'
+}
+
+const getReplyHint = (reply: string) => {
+  if (currentStep.value === 2) {
+    return getGradeHint(reply)
+  }
+
+  if (currentStep.value === 7) {
+    const courseHints: Record<string, string> = {
+      数据结构: '算法、线性表、树图基础',
+      操作系统: '进程、内存、文件系统',
+      计算机网络: '协议、分层、网络应用',
+      数据库系统: 'SQL、事务、索引优化',
+      编译原理: '词法、语法、中间代码',
+      机器学习: '模型、训练、评估方法',
+    }
+    return courseHints[reply] || ''
+  }
+
+  return ''
+}
+
 const handleSend = async () => {
   if (!canSend.value) return
 
@@ -528,7 +803,7 @@ const handleSend = async () => {
     const foundMajor = PRESET_MAJORS.find(major => text.includes(major))
     form.major = foundMajor || text
     currentStep.value = 2
-    await streamAssistantMessage(`已提取你的专业：${form.major}。\n\n接下来确认一下年级，你目前是大几或研几？`)
+    await streamAssistantMessage(`已记录专业：${form.major}。接下来确认年级，我会据此调整讲解深度。`)
     return
   }
 
@@ -536,7 +811,7 @@ const handleSend = async () => {
     const foundGrade = PRESET_GRADES.find(grade => text.includes(grade))
     form.grade = foundGrade || text
     currentStep.value = 3
-    await streamAssistantMessage(`好的，年级是：${form.grade}。\n\n你现在最主要的学习目标是什么？比如期末复习、考研学习、补基础、项目实战。`)
+    await streamAssistantMessage(`已记录年级：${form.grade}。现在告诉我你的主要学习目标。`)
     return
   }
 
@@ -544,14 +819,14 @@ const handleSend = async () => {
     const foundGoal = PRESET_GOALS.find(goal => text.includes(goal))
     form.global_learning_goal = foundGoal || text
     currentStep.value = 4
-    await streamAssistantMessage(`目标已记录：${form.global_learning_goal}。\n\n接下来告诉我你的学校名称。输入学校名称时，我会自动帮你搜索匹配。`)
+    await streamAssistantMessage(`目标已记录：${form.global_learning_goal}。接下来输入学校名称，我会给出搜索建议。`)
     return
   }
 
   if (currentStep.value === 4) {
     form.school = text
     currentStep.value = 5
-    await streamAssistantMessage(`学校已记录：${form.school}。\n\n为了给你安排合适的学习节奏，你每天大约能抽出多少学习时间？`)
+    await streamAssistantMessage(`学校已记录：${form.school}。现在设置每天大约能学习多久。`)
     return
   }
 
@@ -559,7 +834,7 @@ const handleSend = async () => {
     const foundStudyTime = PRESET_DAILY_STUDY_TIME.find(time => text.includes(time))
     form.daily_study_time = foundStudyTime || text
     currentStep.value = 6
-    await streamAssistantMessage(`学习时间已记录：${form.daily_study_time}。\n\n如果你的专业涉及编程，可以告诉我常用的编程语言。之后生成代码示例、练习和项目任务时，会优先贴合你的技术栈。`)
+    await streamAssistantMessage(`学习时间已记录：${form.daily_study_time}。可以选择常用编程语言，也可以暂不选择。`)
     return
   }
 
@@ -569,7 +844,7 @@ const handleSend = async () => {
       form.programming_languages = languages.length > 0 ? languages : [text]
     }
     currentStep.value = 7
-    await streamAssistantMessage('好的，技术栈信息已记录。\n\n最后一步：这学期你主要学习了哪些核心课程？可以一次输入多个，例如：数据结构、操作系统、数据库系统。')
+    await streamAssistantMessage('技术栈信息已记录。最后选择本学期核心课程，可以多选。')
     return
   }
 
@@ -577,7 +852,7 @@ const handleSend = async () => {
     const courses = extractMultiple(text, PRESET_COURSES)
     form.courses = courses.length > 0 ? courses : [text]
     currentStep.value = 8
-    await streamAssistantMessage('学习画像已经构建完成。\n\n我会基于这些信息初始化你的个性化学习路径、资源推荐策略和题库练习偏好。点击下方按钮即可进入学习空间。')
+    await streamAssistantMessage('学习画像已经完成。右侧信息会用于初始化学习路径、资源推荐和题库偏好。')
   }
 }
 
@@ -597,13 +872,13 @@ const loadStatus = async () => {
     form.programming_languages = Array.isArray(baseInfo.programming_languages) ? baseInfo.programming_languages : []
     form.courses = Array.isArray(baseInfo.courses) ? baseInfo.courses : []
 
-    if (form.major && form.grade && form.daily_study_time && form.global_learning_goal) {
+    if (isProfileOnboardingComplete(baseInfo)) {
       currentStep.value = 8
       messages.value = [
         {
           id: Date.now(),
           role: 'assistant',
-          content: '欢迎回来。我已经加载了你之前填写的学习画像信息。点击下方按钮即可进入学习空间。',
+          content: '欢迎回来。我已经加载了之前填写的画像信息，可以直接进入学习空间。',
           time: formatTime(),
           streaming: false,
         },
@@ -663,6 +938,11 @@ const handleNeverShow = async () => {
 </script>
 
 <style scoped>
+:global(html),
+:global(body) {
+  overflow: hidden;
+}
+
 .onboarding-root {
   width: 100%;
 }
@@ -670,14 +950,15 @@ const handleNeverShow = async () => {
 .onboarding-standalone {
   width: 100vw;
   height: 100vh;
-  min-height: 720px;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 18% 12%, rgba(99, 102, 241, 0.12), transparent 34%),
-    radial-gradient(circle at 82% 16%, rgba(14, 165, 233, 0.12), transparent 30%),
-    linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      radial-gradient(circle at 18% 12%, rgba(79, 70, 229, 0.14), transparent 30%),
+      radial-gradient(circle at 88% 18%, rgba(14, 165, 233, 0.12), transparent 28%),
+      linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
 }
 
 .onboarding-dialog :deep(.el-dialog__header) {
@@ -686,36 +967,65 @@ const handleNeverShow = async () => {
 
 .onboarding-dialog :deep(.el-dialog__body) {
   padding: 0;
+  overflow: hidden;
   background: transparent;
+}
+
+.onboarding-dialog :deep(.el-overlay-dialog) {
+  overflow: hidden !important;
 }
 
 .onboarding-dialog :deep(.el-dialog) {
   overflow: hidden;
   background: transparent;
-  border-radius: 28px;
+  border-radius: 30px;
   box-shadow: none;
 }
 
 .dialog-shell {
   position: relative;
-  height: 88vh;
-  min-height: 640px;
-  max-height: 860px;
+  width: 100%;
+  height: min(86vh, 760px);
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 0.96);
-  border-radius: 28px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.96);
   box-shadow:
-    0 28px 70px rgba(15, 23, 42, 0.16),
-    0 1px 0 rgba(255, 255, 255, 0.8) inset;
+      0 28px 80px rgba(15, 23, 42, 0.16),
+      0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.dialog-shell * {
+  box-sizing: border-box;
+}
+
+.onboarding-root,
+.onboarding-root *,
+.onboarding-dialog :deep(.el-overlay-dialog),
+.onboarding-dialog :deep(.el-dialog),
+.onboarding-dialog :deep(.el-dialog__body) {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.onboarding-root::-webkit-scrollbar,
+.onboarding-root *::-webkit-scrollbar,
+.onboarding-dialog :deep(.el-overlay-dialog)::-webkit-scrollbar,
+.onboarding-dialog :deep(.el-dialog)::-webkit-scrollbar,
+.onboarding-dialog :deep(.el-dialog__body)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .skip-only-btn {
   position: absolute;
   top: 18px;
-  right: 20px;
-  z-index: 8;
+  right: 18px;
+  z-index: 12;
   height: 34px;
   padding: 0 14px;
   border: 1px solid rgba(203, 213, 225, 0.9);
@@ -723,7 +1033,7 @@ const handleNeverShow = async () => {
   background: rgba(255, 255, 255, 0.82);
   color: #64748b;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   backdrop-filter: blur(10px);
   transition: all 0.18s ease;
@@ -736,43 +1046,270 @@ const handleNeverShow = async () => {
   transform: translateY(-1px);
 }
 
-.chat-stage {
-  height: 100%;
+.conversation-panel {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  background:
+      linear-gradient(180deg, rgba(248, 250, 252, 0.94) 0%, rgba(255, 255, 255, 0.98) 52%, #ffffff 100%);
+}
+
+.conversation-header {
+  min-height: 116px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 30px 34px 14px;
+}
+
+.header-left {
+  min-width: 0;
+}
+
+.agent-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(199, 210, 254, 0.86);
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.agent-state i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.14);
+}
+
+.conversation-header h1 {
+  margin: 13px 0 6px;
+  color: #0f172a;
+  font-size: 25px;
+  line-height: 1.2;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.conversation-header p {
+  max-width: 560px;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.header-progress {
+  width: 108px;
+  height: 78px;
+  flex: 0 0 108px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(199, 210, 254, 0.8);
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  box-shadow: 0 14px 30px rgba(79, 70, 229, 0.08);
+}
+
+.header-progress strong {
+  color: #3730a3;
+  font-size: 23px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.header-progress span {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.step-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 34px 14px;
   overflow: hidden;
 }
 
-.message-list {
-  flex: 1;
+.step-dot {
+  min-width: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #94a3b8;
+  cursor: default;
+  transition: all 0.18s ease;
+}
+
+.step-dot strong {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.step-dot span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-dot.is-active {
+  border-color: rgba(99, 102, 241, 0.58);
+  background: #eef2ff;
+  color: #4f46e5;
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.1);
+}
+
+.step-dot.is-active strong,
+.step-dot.is-done strong {
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+.step-dot.is-done {
+  border-color: rgba(199, 210, 254, 0.92);
+  color: #4f46e5;
+}
+
+.chat-card {
   min-height: 0;
-  overflow-y: auto;
-  padding: 60px 54px 26px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  margin: 0 34px 30px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+}
+
+.current-question {
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px 20px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  background:
+      radial-gradient(circle at 8% 0%, rgba(99, 102, 241, 0.12), transparent 38%),
+      linear-gradient(135deg, rgba(248, 250, 252, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.current-question div {
+  min-width: 0;
+}
+
+.current-question span {
+  display: block;
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.current-question strong {
+  display: block;
+  margin-top: 6px;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.current-question p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.current-question em {
+  max-width: 230px;
+  flex: 0 0 230px;
+  padding: 10px 12px;
+  border: 1px solid rgba(199, 210, 254, 0.8);
+  border-radius: 15px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 12px;
+  line-height: 1.55;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.message-list {
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 18px 20px;
   scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
 }
 
-.message-list::-webkit-scrollbar {
+.message-inner {
+  min-height: min-content;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 12px;
+  overflow: visible;
+}
+
+.onboarding-root .message-list::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
+  display: block;
 }
 
-.message-list::-webkit-scrollbar-track {
+.onboarding-root .message-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.message-list::-webkit-scrollbar-thumb {
+.onboarding-root .message-list::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.36);
+  background: rgba(148, 163, 184, 0.42);
+}
+
+.onboarding-root .message-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.55);
 }
 
 .message-row {
   width: 100%;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  animation: message-in 0.28s ease both;
 }
 
 .message-row.user {
@@ -783,30 +1320,18 @@ const handleNeverShow = async () => {
   justify-content: flex-start;
 }
 
-@keyframes message-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .avatar-icon {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 14px;
   background: linear-gradient(135deg, #eef2ff 0%, #e0f2fe 100%);
   color: #4f46e5;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.02em;
+  font-size: 12px;
+  font-weight: 950;
   box-shadow: 0 8px 18px rgba(79, 70, 229, 0.12);
 }
 
@@ -814,26 +1339,25 @@ const handleNeverShow = async () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .message-row.assistant .message-main {
-  max-width: min(56ch, calc(100% - 70px));
+  max-width: min(54ch, calc(100% - 58px));
 }
 
 .message-row.user .message-main {
-  max-width: min(44ch, 72%);
+  max-width: min(40ch, 72%);
   align-items: flex-end;
 }
 
 .message-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 2px;
+  gap: 7px;
   color: #94a3b8;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 850;
   line-height: 1;
 }
 
@@ -842,38 +1366,30 @@ const handleNeverShow = async () => {
 }
 
 .message-bubble {
-  position: relative;
   max-width: 100%;
-  border-radius: 20px;
-  line-height: 1.75;
-  font-size: 15px;
+  padding: 11px 14px;
+  border-radius: 18px;
+  line-height: 1.7;
+  font-size: 14px;
   word-break: break-word;
+  overflow: hidden;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
 .message-row.assistant .message-bubble {
-  padding: 14px 18px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-top-left-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-top-left-radius: 7px;
+  background: #ffffff;
   color: #334155;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
 }
 
 .message-row.user .message-bubble {
-  padding: 12px 16px;
-  border-bottom-right-radius: 8px;
+  border-bottom-right-radius: 7px;
   background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
   color: #ffffff;
-  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
-}
-
-.message-row.is-streaming .message-bubble {
-  border-color: rgba(129, 140, 248, 0.5);
-  box-shadow:
-    0 14px 34px rgba(79, 70, 229, 0.1),
-    0 0 0 3px rgba(99, 102, 241, 0.06);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.2);
 }
 
 .message-text {
@@ -885,8 +1401,8 @@ const handleNeverShow = async () => {
 }
 
 .thinking-row .message-bubble {
-  width: 74px;
-  min-height: 42px;
+  width: 72px;
+  min-height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -925,103 +1441,138 @@ const handleNeverShow = async () => {
 
 .input-dock {
   flex-shrink: 0;
-  padding: 14px 32px 26px;
+  padding: 14px 18px 18px;
   border-top: 1px solid rgba(226, 232, 240, 0.78);
-  background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.82) 0%, rgba(255, 255, 255, 0.96) 100%);
-  backdrop-filter: blur(16px);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.84) 0%, rgba(255, 255, 255, 0.98) 100%);
 }
 
-.extracted-strip {
+.quick-replies-wrapper,
+.school-suggestions-wrapper,
+.selection-preview {
+  position: relative;
+  z-index: 3;
+  margin-bottom: 10px;
+  overflow: visible;
+}
+
+.quick-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(226, 232, 240, 0.86);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  margin-bottom: 8px;
 }
 
-.strip-title {
-  flex: 0 0 auto;
-  padding-top: 3px;
-  color: #64748b;
+.quick-head span {
+  color: #334155;
   font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
+  font-weight: 950;
 }
 
-.chip-list {
-  min-width: 0;
+.quick-head em {
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.quick-replies-grid {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  overflow: visible;
+  isolation: isolate;
 }
 
-.profile-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 260px;
-  padding: 5px 9px;
-  border: 1px solid rgba(199, 210, 254, 0.88);
-  border-radius: 999px;
-  background: rgba(238, 242, 255, 0.72);
-  color: #475569;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.profile-chip strong {
-  min-width: 0;
-  overflow: hidden;
-  color: #3730a3;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.quick-replies-wrapper {
-  margin-bottom: 10px;
-}
-
-.quick-replies-scroll {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.quick-replies-scroll::-webkit-scrollbar {
-  display: none;
+.quick-replies-grid.is-card-mode {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  overflow: visible;
 }
 
 .quick-reply-btn {
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 0 13px;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 34px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 7px 12px;
   border: 1px solid rgba(203, 213, 225, 0.96);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
   color: #475569;
-  font-size: 13px;
-  font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 
+.quick-reply-btn span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-reply-btn small {
+  max-width: 100%;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .quick-reply-btn:hover:not(:disabled) {
-  border-color: rgba(99, 102, 241, 0.45);
+  z-index: 8;
+  border-color: rgba(99, 102, 241, 0.72);
   background: #eef2ff;
   color: #4f46e5;
   transform: translateY(-1px);
+  box-shadow:
+      0 12px 26px rgba(79, 70, 229, 0.16),
+      0 0 0 3px rgba(99, 102, 241, 0.08);
+}
+
+.quick-reply-btn:hover:not(:disabled) small {
+  color: #64748b;
 }
 
 .quick-reply-btn.is-selected {
+  z-index: 6;
   border-color: #4f46e5;
-  background: #4f46e5;
-  color: #ffffff;
+  background: #eef2ff;
+  color: #4f46e5;
+  box-shadow:
+      0 12px 26px rgba(79, 70, 229, 0.16),
+      0 0 0 3px rgba(99, 102, 241, 0.08);
+}
+
+.quick-reply-btn.is-selected small {
+  color: #64748b;
+}
+
+.quick-reply-btn.is-selected:hover:not(:disabled) {
+  z-index: 12;
+  border-color: rgba(99, 102, 241, 0.8);
+  background: #eef2ff;
+  color: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow:
+      0 14px 30px rgba(79, 70, 229, 0.18),
+      0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.quick-reply-btn.is-selected:hover:not(:disabled) small {
+  color: #64748b;
 }
 
 .quick-reply-btn:disabled {
@@ -1029,93 +1580,126 @@ const handleNeverShow = async () => {
   opacity: 0.58;
 }
 
-.school-suggestions-wrapper {
-  margin-bottom: 10px;
-}
-
-.school-suggestions-list {
-  max-height: 184px;
-  overflow-y: auto;
-  padding: 6px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
+.school-suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  overflow: hidden;
 }
 
 .school-suggestion-btn {
-  width: 100%;
+  min-width: 0;
   min-height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 10px;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 13px;
+  background: #ffffff;
   color: #334155;
   cursor: pointer;
   text-align: left;
-  transition: background 0.16s ease;
+  transition: all 0.16s ease;
 }
 
 .school-suggestion-btn:hover {
-  background: #f1f5f9;
+  border-color: rgba(99, 102, 241, 0.45);
+  background: #f8fafc;
 }
 
 .school-name {
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 850;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .school-level-tag {
   flex: 0 0 auto;
-  padding: 3px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   background: #eef2ff;
   color: #4f46e5;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.selection-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px dashed rgba(99, 102, 241, 0.5);
+  border-radius: 14px;
+  background: rgba(238, 242, 255, 0.62);
+  overflow: hidden;
+}
+
+.selection-preview span {
+  flex: 0 0 auto;
+  color: #64748b;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 950;
+}
+
+.selection-preview div {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.selection-preview strong {
+  max-width: 120px;
+  overflow: hidden;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-wrapper {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  padding: 8px;
+  padding: 7px;
   border: 1px solid rgba(203, 213, 225, 0.95);
-  border-radius: 20px;
+  border-radius: 18px;
   background: #ffffff;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
   transition: all 0.18s ease;
 }
 
 .composer-wrapper:focus-within {
   border-color: rgba(99, 102, 241, 0.72);
   box-shadow:
-    0 16px 40px rgba(79, 70, 229, 0.12),
-    0 0 0 4px rgba(99, 102, 241, 0.1);
+      0 14px 34px rgba(79, 70, 229, 0.11),
+      0 0 0 4px rgba(99, 102, 241, 0.1);
 }
 
 .chat-composer {
   flex: 1;
   width: 100%;
   height: 44px;
-  max-height: 88px;
+  max-height: 76px;
   resize: none;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 10px 10px 8px 12px;
   border: none;
   outline: none;
   background: transparent;
   color: #0f172a;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -1126,15 +1710,6 @@ const handleNeverShow = async () => {
 .chat-composer:disabled {
   cursor: not-allowed;
   color: #94a3b8;
-}
-
-.chat-composer::-webkit-scrollbar {
-  width: 4px;
-}
-
-.chat-composer::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.38);
 }
 
 .send-btn {
@@ -1162,60 +1737,302 @@ const handleNeverShow = async () => {
   cursor: not-allowed;
   opacity: 0.42;
   box-shadow: none;
-  filter: grayscale(0.4);
 }
 
 .profile-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.profile-footer > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(199, 210, 254, 0.8);
+  border-radius: 16px;
+  background: #eef2ff;
+}
+
+.profile-footer strong {
+  display: block;
+  color: #3730a3;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.profile-footer p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .finish-btn {
   width: 100%;
-  height: 50px;
+  height: auto;
   border: none;
-  border-radius: 18px;
-  font-size: 15px;
-  font-weight: 800;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 900;
   background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
-  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.2);
+}
+
+.profile-panel {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+  padding: 30px 22px 22px;
+  border-left: 1px solid rgba(226, 232, 240, 0.9);
+  background:
+      radial-gradient(circle at 88% 6%, rgba(99, 102, 241, 0.16), transparent 26%),
+      linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.profile-top {
+  padding-right: 58px;
+}
+
+.profile-top span {
+  display: block;
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.profile-top strong {
+  display: block;
+  margin-top: 6px;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.info-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.05);
+}
+
+.info-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 14px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.panel-title span {
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.panel-title em {
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.empty-info-card {
+  height: 100%;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  border: 1px dashed rgba(148, 163, 184, 0.55);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.78);
+  text-align: center;
+}
+
+.empty-info-card span {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.empty-info-card p {
+  margin: 8px 0 0;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.info-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 9px;
+  overflow: hidden;
+}
+
+.info-card {
+  min-width: 0;
+  min-height: 72px;
+  padding: 9px;
+  border: 1px solid rgba(199, 210, 254, 0.74);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  overflow: hidden;
+}
+
+.info-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.info-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+}
+
+.info-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-value {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fade-up-enter-active,
-.fade-up-leave-active {
+.fade-up-leave-active,
+.info-pop-enter-active,
+.info-pop-leave-active,
+.message-pop-enter-active,
+.message-pop-leave-active {
   transition: all 0.22s ease;
 }
 
 .fade-up-enter-from,
-.fade-up-leave-to {
+.fade-up-leave-to,
+.info-pop-enter-from,
+.info-pop-leave-to,
+.message-pop-enter-from,
+.message-pop-leave-to {
   opacity: 0;
   transform: translateY(8px);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1160px) {
   .onboarding-dialog :deep(.el-dialog) {
     width: calc(100vw - 28px) !important;
   }
 
   .dialog-shell {
-    height: 90vh;
-    min-height: 620px;
+    grid-template-columns: minmax(0, 1fr) 330px;
   }
 
-  .message-list {
-    padding: 58px 28px 24px;
+  .conversation-header,
+  .step-strip {
+    padding-left: 24px;
+    padding-right: 24px;
   }
 
-  .input-dock {
-    padding: 12px 20px 22px;
+  .chat-card {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
+}
+
+@media (max-width: 900px) {
+  .dialog-shell {
+    height: min(92vh, 720px);
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .profile-panel {
+    display: none;
+  }
+
+  .conversation-header {
+    min-height: 106px;
+    padding: 24px 20px 12px;
+  }
+
+  .conversation-header h1 {
+    font-size: 21px;
+  }
+
+  .conversation-header p {
+    font-size: 12px;
+  }
+
+  .step-strip {
+    padding: 0 20px 12px;
+    gap: 6px;
+  }
+
+  .step-dot {
+    height: 42px;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .step-dot strong {
+    width: 20px;
+    height: 20px;
+  }
+
+  .chat-card {
+    margin: 0 20px 22px;
+  }
+
+  .current-question {
+    min-height: 84px;
+    padding: 14px 16px;
+  }
+
+  .current-question em {
+    display: none;
   }
 }
 
 @media (max-width: 640px) {
   .dialog-shell {
-    height: 92vh;
-    min-height: 600px;
+    height: min(94vh, 680px);
+    min-height: 0;
     border-radius: 22px;
   }
 
@@ -1224,48 +2041,74 @@ const handleNeverShow = async () => {
     right: 14px;
   }
 
-  .message-list {
-    padding: 54px 18px 20px;
-    gap: 18px;
+  .header-progress {
+    display: none;
   }
 
-  .avatar-icon {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-    border-radius: 12px;
+  .conversation-header {
+    padding: 22px 16px 10px;
+  }
+
+  .step-strip {
+    padding: 0 16px 10px;
+  }
+
+  .step-dot span {
+    display: none;
+  }
+
+  .chat-card {
+    margin: 0 16px 18px;
+    border-radius: 22px;
+  }
+
+  .current-question strong {
+    font-size: 15px;
+  }
+
+  .current-question p {
     font-size: 12px;
   }
 
+  .message-list {
+    padding: 14px;
+  }
+
+  .message-inner {
+    gap: 10px;
+  }
+
+  .avatar-icon {
+    width: 31px;
+    height: 31px;
+    flex-basis: 31px;
+    border-radius: 12px;
+  }
+
   .message-row.assistant .message-main {
-    max-width: min(52ch, calc(100% - 48px));
+    max-width: min(48ch, calc(100% - 42px));
   }
 
   .message-row.user .message-main {
-    max-width: 82%;
+    max-width: 84%;
   }
 
   .message-bubble {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .input-dock {
-    padding: 10px 12px 16px;
+    padding: 12px 12px 14px;
   }
 
-  .extracted-strip {
-    flex-direction: column;
-    gap: 8px;
+  .quick-replies-grid.is-card-mode,
+  .school-suggestions-grid,
+  .profile-footer {
+    grid-template-columns: 1fr;
   }
 
-  .composer-wrapper {
-    border-radius: 18px;
-  }
-
-  .send-btn {
-    width: 40px;
-    height: 40px;
-    flex-basis: 40px;
+  .finish-btn {
+    min-height: 48px;
   }
 }
 </style>
