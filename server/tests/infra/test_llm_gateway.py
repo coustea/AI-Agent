@@ -354,3 +354,40 @@ def test_llm_does_not_read_or_create_concurrency_limit(monkeypatch) -> None:
     llm = Llm()
 
     assert not hasattr(llm, "_text_semaphore")
+
+
+def test_spark_compatible_tool_call_normalization():
+    from app.infra.llm import SparkCompatibleChatOpenAI
+    from unittest.mock import MagicMock
+    from langchain_openai import ChatOpenAI
+    
+    model = SparkCompatibleChatOpenAI(api_key="mock", model="generalv3")
+    
+    # Mock raw message with a dict in tool_calls
+    mock_msg = MagicMock()
+    mock_msg.tool_calls = {
+        "type": "function",
+        "function": {"name": "test_tool", "arguments": "{}"}
+    }
+    mock_choice = MagicMock()
+    mock_choice.message = mock_msg
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    
+    # Mock the super()._create_chat_result to prevent actual OpenAI processing
+    original_super = ChatOpenAI._create_chat_result
+    ChatOpenAI._create_chat_result = lambda self, r, g=None: r
+    
+    try:
+        result = model._create_chat_result(mock_response)
+    finally:
+        ChatOpenAI._create_chat_result = original_super
+    
+    # Should normalize tool_calls to list and add id
+    normalized = result.choices[0].message.tool_calls
+    assert isinstance(normalized, list)
+    assert len(normalized) == 1
+    assert normalized[0]["type"] == "function"
+    assert "id" in normalized[0]
+
+

@@ -52,6 +52,34 @@ from app.infra.utils import (
 logger = get_logger(__name__)
 
 
+import uuid
+
+class SparkCompatibleChatOpenAI(ChatOpenAI):
+    """讯飞星火 OpenAI 兼容接口定制客户端。
+    
+    拦截并规范化不符合规范的 tool_calls 格式（如字典格式、缺失 id 等）。
+    """
+    def _create_chat_result(self, response: Any, generation_info: Any | None = None) -> Any:
+        try:
+            if hasattr(response, "choices") and response.choices:
+                for choice in response.choices:
+                    if hasattr(choice, "message") and choice.message:
+                        msg = choice.message
+                        if hasattr(msg, "tool_calls") and msg.tool_calls is not None:
+                            tool_calls = msg.tool_calls
+                            if isinstance(tool_calls, dict):
+                                if "id" not in tool_calls or not tool_calls["id"]:
+                                    tool_calls["id"] = f"call_{uuid.uuid4().hex[:12]}"
+                                object.__setattr__(msg, "tool_calls", [tool_calls])
+                            elif isinstance(tool_calls, list):
+                                for tc in tool_calls:
+                                    if isinstance(tc, dict) and ("id" not in tc or not tc["id"]):
+                                        tc["id"] = f"call_{uuid.uuid4().hex[:12]}"
+        except Exception as exc:
+            logger.warning("[LLM] 规范化星火 tool_calls 失败: %s", exc)
+        return super()._create_chat_result(response, generation_info)
+
+
 # ── URL 工具 ──────────────────────────────────────────────────────────────────
 
 
