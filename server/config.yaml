@@ -6,7 +6,7 @@ app:
 
 # 数据库配置
 database:
-  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 10
   max_overflow: 20
@@ -24,14 +24,17 @@ jwt:
 models:
 
   # --- 云端：讯飞 Maas ---
-  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-  api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
-  model_name: "astron-code-latest"
+#  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+#  api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
+#  model_name: "astron-code-latest"
 
+  base_url: "https://spark-api-open.xf-yun.com/v1/chat/completions"
+  api_key: "qKQfPkOoAVxugyXmGteT:XLCDajLSrONSRwixokwr"
+  model_name: "generalv3"
   # 推理参数
   temperature: 0.3
   max_tokens: 4096
-  # 结构化输出策略：auto / json_first / tool_first
+  # 结构化输出策略：auto / prompt_first / tool_first
   structured_output_strategy: "auto"
   # 网络与重试参数
   timeout: 300          # 单次请求超时（秒）

@@ -37,8 +37,7 @@ from app.resource.review import (
     failed_review_result,
     review_result_from_agent,
 )
-from app.resource.agents.ppt_models import MaterialBundle
-from app.resource.agents.ppt_sources import build_resource_material
+from app.resource.agents.ppt import MaterialBundle, build_resource_material
 from app.resource.schemas import (
     AgentResult,
     AgentInstruction,

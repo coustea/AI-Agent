@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 # 从工厂模块导入应用创建函数
-from app.app_factory import create_app
+from app.app import create_app
 
 # 创建 FastAPI 应用实例（供 uvicorn / gunicorn 等 ASGI 服务器加载）
 app = create_app()
