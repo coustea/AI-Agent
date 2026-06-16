@@ -104,3 +104,88 @@ async def test_review_agent_refactored_checks():
     parsed_review = res_format_fail.metadata["parsed_review"]
     assert parsed_review["checks"]["content_completeness"] == "fail"  # format checks map to content_completeness
     assert parsed_review["checks"]["safety"] == "pass"
+
+
+@pytest.mark.asyncio
+async def test_build_pre_audit_envelope_integration():
+    from app.resource.schemas import ResourceGenerationRequest, AgentResult, DownstreamContext, AgentSelection, ResourceAgentId
+    from app.resource.review import build_pre_audit_envelope
+    
+    agent = ReviewAgent()
+    
+    # 构造请求
+    selected_agents = [
+        AgentSelection(agent_id=ResourceAgentId.CONTENT, enabled=True),
+        AgentSelection(agent_id=ResourceAgentId.READING, enabled=True),
+        AgentSelection(agent_id=ResourceAgentId.QUIZ, enabled=True),
+    ]
+    request = ResourceGenerationRequest(
+        learning_need="Python 基础语法",
+        selected_agents=selected_agents,
+    )
+    
+    # 构造生成的资源结果
+    results = {
+        "content": AgentResult(
+            success=True,
+            content="# Python 基础语法教学设计\n\n在本章节中，我们将详细讲解 Python 的核心基础语法。包括变量的声明、基本的数据类型（如整型、浮点型、字符串 and 布尔值）、常用的算术运算符，以及如何编写条件判断语句。通过本章的学习，你将能够掌握 Python 编程的基本逻辑与程序结构，为后续的进阶开发打下坚实的基础。",
+            title="Python 基础语法教学设计",
+            summary="本章讲解 Python 的核心基础语法",
+            downstream_context=DownstreamContext(
+                source_agent="content",
+                title="Python 基础语法教学设计",
+                one_sentence_summary="本章讲解 Python 的核心基础语法",
+                covered_outline_ids=["o1"],
+            )
+        ),
+        "reading": AgentResult(
+            success=True,
+            content="# Python 拓展阅读\n\n这里有一些非常有用的拓展阅读材料，可以帮助你更好地理解 Python 的设计哲学和最佳实践：\n- 《Python 之禅》 (The Zen of Python)\n- 官方教程中的数据结构章节\n- 关于 PEP 8 代码风格指南的详细解读",
+            title="Python 拓展阅读",
+            summary="拓展阅读推荐与 Python 设计哲学",
+            downstream_context=DownstreamContext(
+                source_agent="reading",
+                title="Python 拓展阅读",
+                one_sentence_summary="拓展阅读推荐与 Python 设计哲学",
+                covered_outline_ids=["o2"],
+            )
+        ),
+        "quiz": AgentResult(
+            success=True,
+            content="# 练习题\n1. 什么是 Python 的变量？\n2. 列举三种 Python 的基本数据类型。",
+            title="练习题",
+            summary="Python 基础语法练习题",
+        )
+    }
+    
+    profile = {"profile_markdown": "学习者有 Python 基础，期望能加深理解。"}
+    
+    # 生成 pre_audit 封装包
+    envelope, missing = build_pre_audit_envelope(
+        request=request,
+        results=results,
+        profile=profile,
+        teaching_plan=None,
+    )
+    
+    # 验证缺少资源为空
+    assert not missing
+    
+    # 验证 deep_audit_resources 包含了 audit_content 字段
+    for resource in envelope.get("deep_audit_resources", []):
+        assert "audit_content" in resource
+        assert len(resource["audit_content"]) > 0
+        
+    # 验证 ReviewAgent 能成功通过审核
+    input_data = ResourceInput(
+        learning_need="Python 基础语法",
+        learning_scenario="self_study",
+        agent_name="review",
+        agent_config={"review_envelope": envelope},
+        profile={},
+    )
+    
+    res = await agent.generate_resource(input_data)
+    assert res.success is True
+    assert res.metadata["review_status"] == "pass"
+

@@ -82,6 +82,7 @@ def build_pre_audit_envelope(
                 if results[agent_id].downstream_context else results[agent_id].summary,
             "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
                 if results[agent_id].downstream_context else [],
+            "audit_content": bounded_content(results[agent_id].content),
         }
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))

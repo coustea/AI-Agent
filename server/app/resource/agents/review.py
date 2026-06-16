@@ -90,7 +90,7 @@ class ReviewAgent(BaseResourceAgent):
         """多智能体场景：本地正则安全与违法违纪审核流程。"""
         config = input_data.agent_config or {}
         progress_agent_id = config.get("progress_agent_id") or "review"
-        review_envelope = config.get("review_envelope", {})
+        review_envelope = config.get("review_envelope") or {}
 
         await self.emit_start("正在执行本地规则合规性审核", progress=50)
 
@@ -154,8 +154,10 @@ class ReviewAgent(BaseResourceAgent):
         )
 
     @staticmethod
-    def _extract_audit_content(envelope: dict) -> str:
+    def _extract_audit_content(envelope: dict | None) -> str:
         """从 review_envelope 中提取所有待审核的文本内容。"""
+        if not envelope or not isinstance(envelope, dict):
+            return ""
         parts: list[str] = []
         for resource in envelope.get("deep_audit_resources", []):
             if isinstance(resource, dict) and resource.get("audit_content"):
