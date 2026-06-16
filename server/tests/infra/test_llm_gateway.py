@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import app.infra.llm as llm_module
 from app.infra.utils import ServiceError
 from app.infra.llm import Llm
-from app.resource.schemas import ExecutionPlan
+from pydantic import Field
 
 
 class _Payload(BaseModel):
@@ -223,13 +223,28 @@ async def test_ainvoke_json_selects_matching_tool_call() -> None:
     assert result == _Payload(name="Bob", score=88)
 
 
+class _MockNestedInstruction(BaseModel):
+    agent_id: str
+    focus: str
+    constraints: list[str] = Field(default_factory=list)
+
+class _MockNestedBlueprint(BaseModel):
+    topic: str
+    learner_goal: str
+    core_concepts: list[str] = Field(default_factory=list)
+
+class _MockExecutionPlan(BaseModel):
+    blueprint: _MockNestedBlueprint
+    agent_instructions: list[_MockNestedInstruction]
+    personalization_summary: str
+
 @pytest.mark.asyncio
 async def test_ainvoke_json_parses_nested_stringified_json_fields() -> None:
     llm = Llm()
     fake = _FakeModel(
         tool_calls=[
             {
-                "name": "ExecutionPlan",
+                "name": "_MockExecutionPlan",
                 "args": {
                     "blueprint": '蓝图如下:\n{"topic":"TCP三次握手","learner_goal":"理解连接建立过程","core_concepts":["SYN","ACK"]}',
                     "agent_instructions": [
@@ -247,7 +262,7 @@ async def test_ainvoke_json_parses_nested_stringified_json_fields() -> None:
     llm._text_model = fake
 
 
-    result = await llm.ainvoke_json(ExecutionPlan, "input")
+    result = await llm.ainvoke_json(_MockExecutionPlan, "input")
 
     assert result.blueprint.topic == "TCP三次握手"
     assert result.blueprint.learner_goal == "理解连接建立过程"
