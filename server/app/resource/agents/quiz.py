@@ -10,7 +10,13 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_node_context, build_resource_context, build_basic_handoff
+from app.resource.agents.common import (
+    build_basic_handoff,
+    build_node_context,
+    build_resource_context,
+    first_content_excerpt,
+    outline_ids_from_plan,
+)
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
@@ -67,15 +73,28 @@ class QuizAgent(BaseResourceAgent):
         )
         try:
             quiz_data = json.loads(result.content)
-            q_ids = [str(q.get("id")) for q in quiz_data.get("questions", [])]
+            questions = quiz_data.get("questions", [])
+            q_ids = [str(q.get("id")) for q in questions if q.get("id") is not None]
+            knowledge_points: list[str] = []
+            for question in questions:
+                if isinstance(question, dict):
+                    for point in question.get("knowledge_points", []):
+                        if isinstance(point, str) and point not in knowledge_points:
+                            knowledge_points.append(point)
         except Exception:
             q_ids = []
+            knowledge_points = []
+        outline_ids = outline_ids_from_plan(input_data.teaching_plan)
         handoff = build_basic_handoff(
             source_agent="quiz",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
             material_type="practice",
+            covered_outline_ids=outline_ids,
+            material_outline_id=outline_ids[0] if outline_ids else "",
+            key_points=knowledge_points[:8],
+            evidence=first_content_excerpt(result.content),
             practice_refs=q_ids,
         )
         result.downstream_context = handoff

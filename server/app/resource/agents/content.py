@@ -6,7 +6,13 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_node_context, build_resource_context, build_basic_handoff
+from app.resource.agents.common import (
+    build_basic_handoff,
+    build_node_context,
+    build_resource_context,
+    first_content_excerpt,
+    outline_ids_from_plan,
+)
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
@@ -36,12 +42,20 @@ class ContentAgent(BaseResourceAgent):
             title_prefix=input_data.learning_need[:32],
             config=config,
         )
+        outline_ids = outline_ids_from_plan(input_data.teaching_plan)
+        first_outline = input_data.teaching_plan.outline[0] if input_data.teaching_plan and input_data.teaching_plan.outline else None
         handoff = build_basic_handoff(
             source_agent="content",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
             material_type="explanation",
+            covered_outline_ids=outline_ids,
+            material_outline_id=outline_ids[0] if outline_ids else "",
+            key_points=first_outline.key_points if first_outline else [],
+            evidence=first_content_excerpt(result.content),
+            examples=first_outline.suggested_examples if first_outline else [],
+            visual_ideas=first_outline.suggested_visuals if first_outline else [],
         )
         result.downstream_context = handoff
         await self.emit_finish(result)

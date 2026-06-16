@@ -50,11 +50,72 @@ def first_outline_id(plan: TeachingPlan | None) -> str:
     return ids[0] if ids else ""
 
 
+def _valid_outline_ids(plan: TeachingPlan | None, outline_ids: list[str] | None) -> list[str]:
+    allowed = set(outline_ids_from_plan(plan))
+    if not allowed:
+        return []
+    result: list[str] = []
+    for outline_id in outline_ids or []:
+        if outline_id in allowed and outline_id not in result:
+            result.append(outline_id)
+    return result
+
+
+def select_outline_ids_by_keywords(plan: TeachingPlan | None, keywords: list[str]) -> list[str]:
+    if not plan:
+        return []
+    normalized = [item.strip().lower() for item in keywords if item.strip()]
+    if not normalized:
+        return [first_outline_id(plan)] if first_outline_id(plan) else []
+    matched: list[str] = []
+    for item in plan.outline:
+        haystack = " ".join([
+            item.title,
+            item.goal,
+            " ".join(item.key_points),
+            " ".join(item.suggested_examples),
+            " ".join(item.suggested_visuals),
+        ]).lower()
+        if any(keyword in haystack for keyword in normalized):
+            matched.append(item.id)
+    return matched or ([first_outline_id(plan)] if first_outline_id(plan) else [])
+
+
+def outline_coverage_summary(
+    plan: TeachingPlan | None,
+    handoffs: dict[str, DownstreamContext],
+) -> dict[str, list[str]]:
+    plan_ids = outline_ids_from_plan(plan)
+    allowed = set(plan_ids)
+    covered: list[str] = []
+    for handoff in handoffs.values():
+        for outline_id in handoff.covered_outline_ids:
+            if outline_id in allowed and outline_id not in covered:
+                covered.append(outline_id)
+    return {
+        "teaching_plan_outline_ids": plan_ids,
+        "covered_source_outline_ids": covered,
+        "missing_source_outline_ids": [oid for oid in plan_ids if oid not in covered],
+    }
+
+
 def clip_text(value: str, limit: int) -> str:
     text = " ".join(str(value or "").split())
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "..."
+
+
+def first_content_excerpt(content: str, limit: int = 180) -> str:
+    for line in str(content or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped == "---" or stripped == "***":
+            continue
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            stripped = stripped[2:].strip()
+        if stripped:
+            return clip_text(stripped, limit)
+    return ""
 
 
 def build_basic_handoff(
@@ -64,6 +125,8 @@ def build_basic_handoff(
     summary: str,
     teaching_plan: TeachingPlan | None,
     material_type: str,
+    covered_outline_ids: list[str] | None = None,
+    material_outline_id: str | None = None,
     key_points: list[str] | None = None,
     evidence: str = "",
     examples: list[str] | None = None,
@@ -72,10 +135,18 @@ def build_basic_handoff(
     code_refs: list[str] | None = None,
     cautions: list[str] | None = None,
 ) -> DownstreamContext:
-    outline_ids = outline_ids_from_plan(teaching_plan)
-    material_outline_id = first_outline_id(teaching_plan)
+    filtered_covered_ids = _valid_outline_ids(
+        teaching_plan,
+        covered_outline_ids or ([first_outline_id(teaching_plan)] if first_outline_id(teaching_plan) else []),
+    )
+    valid_material_ids = _valid_outline_ids(teaching_plan, [material_outline_id or ""])
+    resolved_material_outline_id = (
+        valid_material_ids[0]
+        if valid_material_ids
+        else (filtered_covered_ids[0] if filtered_covered_ids else "")
+    )
     material = DownstreamMaterial(
-        outline_id=material_outline_id,
+        outline_id=resolved_material_outline_id,
         type=material_type,
         summary=clip_text(summary, 500),
         key_points=(key_points or [])[:8],
@@ -86,7 +157,7 @@ def build_basic_handoff(
         source_agent=source_agent,
         title=clip_text(title, 120),
         one_sentence_summary=clip_text(summary, 180),
-        covered_outline_ids=outline_ids,
+        covered_outline_ids=filtered_covered_ids,
         materials=[material] if material.summary else [],
         reusable_assets=ReusableAssets(
             examples=(examples or [])[:6],

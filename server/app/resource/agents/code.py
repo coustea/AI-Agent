@@ -6,7 +6,13 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_node_context, build_resource_context, build_basic_handoff
+from app.resource.agents.common import (
+    build_basic_handoff,
+    build_node_context,
+    build_resource_context,
+    first_content_excerpt,
+    select_outline_ids_by_keywords,
+)
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
@@ -36,12 +42,21 @@ class CodeAgent(BaseResourceAgent):
         )
         lang = result.metrics.get("language") or "python"
         case_type = result.metrics.get("case_type") or "basic_demo"
+        difficulty = result.metrics.get("difficulty") or "beginner"
+        code_outline_ids = select_outline_ids_by_keywords(
+            input_data.teaching_plan,
+            [lang, case_type, "代码", "示例", "实践", "编程", "实现", "code"],
+        )
         handoff = build_basic_handoff(
             source_agent="code",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
             material_type="code",
+            covered_outline_ids=code_outline_ids,
+            material_outline_id=code_outline_ids[0] if code_outline_ids else "",
+            key_points=[lang, case_type, difficulty],
+            evidence=first_content_excerpt(result.content),
             code_refs=[lang, case_type],
         )
         result.downstream_context = handoff
