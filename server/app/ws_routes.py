@@ -10,6 +10,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.auth.security import AuthError, _resolve_current_user_from_token
 from app.avatar.bridge.manager import avatar_bridge_manager
+from app.infra.database import session_scope
 
 # 创建路由实例
 router = APIRouter()
@@ -35,8 +36,9 @@ async def avatar_websocket(websocket: WebSocket) -> None:
         return
 
     try:
-        # 验证 Token 并解析用户信息
-        user = await _resolve_current_user_from_token(token)
+        # 验证 Token 并解析用户信息（WebSocket 无法使用 DI，需要手动创建 session）
+        async with session_scope() as session:
+            user = await _resolve_current_user_from_token(token, session)
     except AuthError:
         # Token 无效或已过期
         await websocket.close(code=1008, reason="invalid token")
