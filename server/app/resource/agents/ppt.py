@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import operator
 from datetime import date
-from typing import Any, Annotated, Literal, Union
+from typing import Any, Annotated, Literal, Union, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
@@ -713,24 +716,6 @@ class SlideAgent:
         return result
 
 
-async def write_slides_concurrently(
-    slide_agent: SlideAgent,
-    outline: DeckOutline,
-    digest: MaterialDigest,
-    concurrency: int = 4,
-) -> list[SlideDraft]:
-    """并发生成所有幻灯片内容，保持顺序。"""
-    semaphore = asyncio.Semaphore(concurrency)
-
-    async def _run_with_semaphore(contract: SlideContract) -> SlideDraft:
-        async with semaphore:
-            return await slide_agent.run(contract, digest, outline)
-
-    tasks = [_run_with_semaphore(contract) for contract in outline.slides]
-    drafts = await asyncio.gather(*tasks)
-
-    # Sort by index to preserve order
-    return sorted(drafts, key=lambda d: d.index)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -889,6 +874,36 @@ class PayloadBuilder:
                 raise ValueError(f"Unsupported block type: {rendered.type}")
 
 
+class SlideWriteState(TypedDict):
+    contract: SlideContract
+    digest: MaterialDigest
+    outline: DeckOutline
+
+
+def _add_drafts(left: list[SlideDraft] | None, right: list[SlideDraft] | None) -> list[SlideDraft]:
+    if left is None:
+        left = []
+    if right is None:
+        right = []
+    return left + right
+
+
+class PptGraphState(TypedDict, total=False):
+    # Inputs
+    bundle: MaterialBundle
+    constraints: DeckConstraints
+    title_prefix: str
+
+    # Intermediate artifacts
+    digest: MaterialDigest
+    outline: DeckOutline
+    drafts: Annotated[list[SlideDraft], _add_drafts]
+
+    # Final outputs
+    payload: PptPayload
+    error: str
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PptAgent — 注册到 AGENT_REGISTRY 的入口
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -902,6 +917,7 @@ class PptAgent(BaseResourceAgent):
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
+        self._slide_semaphore = asyncio.Semaphore(4)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         """多智能体场景：从 ResourceInput 构建素材 → 内部流水线。"""
@@ -940,6 +956,59 @@ class PptAgent(BaseResourceAgent):
         await self.emit_finish(result)
         return result
 
+    def _build_graph(self) -> Any:
+        workflow = StateGraph(PptGraphState)
+
+        workflow.add_node("extract_material", self._material_node)
+        workflow.add_node("plan_outline", self._outline_node)
+        workflow.add_node("write_slide", self._write_slide_node)
+        workflow.add_node("build_payload", self._payload_node)
+
+        workflow.add_edge(START, "extract_material")
+        workflow.add_edge("extract_material", "plan_outline")
+        workflow.add_conditional_edges("plan_outline", self._route_slides, ["write_slide"])
+        workflow.add_edge("write_slide", "build_payload")
+        workflow.add_edge("build_payload", END)
+
+        return workflow.compile()
+
+    async def _material_node(self, state: PptGraphState) -> dict[str, Any]:
+        await self.emit_start("正在提取教学素材", progress=20)
+        material_agent = MaterialAgent()
+        digest = await material_agent.run(state["bundle"])
+        return {"digest": digest}
+
+    async def _outline_node(self, state: PptGraphState) -> dict[str, Any]:
+        await self.emit_start("正在规划 PPT 结构", progress=35)
+        outline_agent = OutlineAgent()
+        outline = await outline_agent.run(state["digest"], state["constraints"])
+        return {"outline": outline}
+
+    def _route_slides(self, state: PptGraphState) -> list[Send]:
+        outline: DeckOutline = state["outline"]
+        digest: MaterialDigest = state["digest"]
+        return [
+            Send("write_slide", {
+                "contract": slide,
+                "digest": digest,
+                "outline": outline,
+            })
+            for slide in outline.slides
+        ]
+
+    async def _write_slide_node(self, state: SlideWriteState) -> dict[str, Any]:
+        async with self._slide_semaphore:
+            slide_agent = SlideAgent()
+            draft = await slide_agent.run(state["contract"], state["digest"], state["outline"])
+            return {"drafts": [draft]}
+
+    async def _payload_node(self, state: PptGraphState) -> dict[str, Any]:
+        await self.emit_start("正在构建最终载荷", progress=85)
+        payload_builder = PayloadBuilder()
+        sorted_drafts = sorted(state.get("drafts") or [], key=lambda d: d.index)
+        payload = payload_builder.build(state["outline"], sorted_drafts)
+        return {"payload": payload}
+
     async def _run_pipeline(
         self,
         *,
@@ -971,25 +1040,17 @@ class PptAgent(BaseResourceAgent):
         )
 
         try:
-            # Phase 1: Material extraction
-            await self.emit_start("正在提取教学素材", progress=20)
-            material_agent = MaterialAgent()
-            digest = await material_agent.run(bundle)
-
-            # Phase 2: Outline and template contract planning
-            await self.emit_start("正在规划 PPT 结构", progress=35)
-            outline_agent = OutlineAgent()
-            outline = await outline_agent.run(digest, constraints)
-
-            # Phase 3: Concurrent slide writing
-            await self.emit_start("正在生成幻灯片内容", progress=50)
-            slide_agent = SlideAgent()
-            drafts = await write_slides_concurrently(slide_agent, outline, digest, concurrency=4)
-
-            # Phase 4: Deterministic payload building
-            await self.emit_start("正在构建最终载荷", progress=85)
-            payload_builder = PayloadBuilder()
-            payload = payload_builder.build(outline, drafts)
+            graph = self._build_graph()
+            initial_state = PptGraphState(
+                bundle=bundle,
+                constraints=constraints,
+                title_prefix=title_prefix,
+                drafts=[],
+            )
+            final_state = await graph.ainvoke(initial_state)
+            payload = final_state.get("payload")
+            if not payload:
+                raise ValueError("PPT generation graph failed to build final payload")
 
         except Exception as exc:
             logger.error("PptAgent 生成异常: %s", exc, exc_info=True)
