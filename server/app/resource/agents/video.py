@@ -105,7 +105,11 @@ class SceneDraft(BaseModel):
     visual_prompt: str
     visual_type: VisualType = "card"
     interaction_prompt: str = ""
+    visual: dict[str, Any] = Field(default_factory=dict)
     source_agents: list[str] = Field(default_factory=list)
+    audio_src: str | None = None
+    duration_ms: int = 0
+
 
 
 class VideoAsset(BaseModel):
@@ -128,7 +132,10 @@ class VideoScene(BaseModel):
     on_screen_text: list[str] = Field(default_factory=list)
     visual_prompt: str
     interaction_prompt: str = ""
+    visual: dict[str, Any] = Field(default_factory=dict)
     source_agents: list[str] = Field(default_factory=list)
+    audio_src: str | None = None
+
 
 
 class VideoPayload(BaseModel):
@@ -288,7 +295,9 @@ class VideoPayloadBuilder:
                     on_screen_text=draft.on_screen_text,
                     visual_prompt=draft.visual_prompt,
                     interaction_prompt=draft.interaction_prompt,
+                    visual=draft.visual or {},
                     source_agents=draft.source_agents or contract.required_sources,
+                    audio_src=draft.audio_src,
                 )
             )
             cursor_ms += duration_ms
@@ -425,20 +434,22 @@ class VideoAgent(BaseResourceAgent):
         return result
 
     def _build_graph(self) -> Any:
-        workflow = StateGraph(VideoGraphState)
+        if not hasattr(self, "_cached_graph"):
+            workflow = StateGraph(VideoGraphState)
 
-        workflow.add_node("extract_material", self._material_node)
-        workflow.add_node("plan_outline", self._outline_node)
-        workflow.add_node("write_scene", self._write_scene_node)
-        workflow.add_node("build_payload", self._payload_node)
+            workflow.add_node("extract_material", self._material_node)
+            workflow.add_node("plan_outline", self._outline_node)
+            workflow.add_node("write_scene", self._write_scene_node)
+            workflow.add_node("build_payload", self._payload_node)
 
-        workflow.add_edge(START, "extract_material")
-        workflow.add_edge("extract_material", "plan_outline")
-        workflow.add_conditional_edges("plan_outline", self._route_scenes, ["write_scene"])
-        workflow.add_edge("write_scene", "build_payload")
-        workflow.add_edge("build_payload", END)
+            workflow.add_edge(START, "extract_material")
+            workflow.add_edge("extract_material", "plan_outline")
+            workflow.add_conditional_edges("plan_outline", self._route_scenes, ["write_scene"])
+            workflow.add_edge("write_scene", "build_payload")
+            workflow.add_edge("build_payload", END)
 
-        return workflow.compile()
+            self._cached_graph = workflow.compile()
+        return self._cached_graph
 
     async def _material_node(self, state: VideoGraphState) -> dict[str, Any]:
         await self.emit_start("正在提取视频素材", progress=20)
