@@ -243,3 +243,22 @@ async def get_resource(
     if bundle is None:
         return HttpResponse.error(code=404, message="资源不存在")
     return HttpResponse.success(data=bundle.model_dump(mode="json"))
+
+
+@router.get("/video/audio/{filename:path}")
+async def get_video_audio(filename: str):
+    """Serve generated video audio files."""
+    from app.config import WORKPLACE_DIR
+    from fastapi.responses import FileResponse
+    
+    # Simple directory traversal checks
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return HttpResponse.error(code=400, message="Illegal filename")
+        
+    file_path = WORKPLACE_DIR / "video_audio" / filename
+    if not file_path.exists():
+        return HttpResponse.error(code=404, message="Audio file not found")
+        
+    return FileResponse(path=str(file_path), media_type="audio/mpeg")
+
+
