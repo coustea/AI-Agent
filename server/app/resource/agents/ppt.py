@@ -21,6 +21,7 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import outline_coverage_summary
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
@@ -916,6 +917,11 @@ class PptAgent(BaseResourceAgent):
             config=config,
             title_prefix=input_data.learning_need[:32],
         )
+        if result.success:
+            coverage = outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs)
+            result.metadata["teaching_plan_outline_ids"] = coverage["teaching_plan_outline_ids"]
+            result.metadata["covered_source_outline_ids"] = coverage["covered_source_outline_ids"]
+            result.metadata["missing_source_outline_ids"] = coverage["missing_source_outline_ids"]
         await self.emit_finish(result)
         return result
 

@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import outline_coverage_summary
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
@@ -384,6 +385,7 @@ class VideoAgent(BaseResourceAgent):
 
         content = payload.model_dump_json(indent=2)
         source_handoff_agent_ids = sorted(input_data.upstream_handoffs.keys()) if input_data.upstream_handoffs else sorted({agent for scene in payload.scenes for agent in scene.source_agents})
+        coverage = outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs)
         result = AgentResult(
             success=True,
             content=content,
@@ -404,9 +406,9 @@ class VideoAgent(BaseResourceAgent):
                 "aspect_ratio": payload.aspect_ratio,
                 "style": payload.style,
                 "source_handoff_agent_ids": source_handoff_agent_ids,
-                "teaching_plan_outline_ids": [
-                    item.id for item in input_data.teaching_plan.outline
-                ] if input_data.teaching_plan else [],
+                "teaching_plan_outline_ids": coverage["teaching_plan_outline_ids"],
+                "covered_source_outline_ids": coverage["covered_source_outline_ids"],
+                "missing_source_outline_ids": coverage["missing_source_outline_ids"],
                 "internal_pipeline": "material/outline/scenes/payload",
             },
         )
