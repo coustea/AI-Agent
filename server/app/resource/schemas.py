@@ -24,10 +24,11 @@ AGENT_META: dict[str, dict[str, str]] = {
     "code": {"name": "代码示例", "icon": "Code", "description": "代码实操案例"},
     "reading": {"name": "拓展阅读", "icon": "Reading", "description": "拓展阅读推荐"},
     "ppt": {"name": "PPT文稿", "icon": "DataBoard", "description": "PPT文稿生成"},
+    "video": {"name": "讲解视频", "icon": "Video", "description": "结构化讲解视频脚本与分镜"},
 }
 
 # 默认 Agent 顺序和默认启用列表
-AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt"]
+AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "video"]
 AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "reading", "ppt"]
 
 
@@ -47,6 +48,7 @@ class ResourceAgentId(str, Enum):
     READING = "reading"
     CODE = "code"
     PPT = "ppt"
+    VIDEO = "video"
 
 
 DEFAULT_SELECTED_AGENT_IDS: list[ResourceAgentId] = [
@@ -120,6 +122,18 @@ class PptConfig(BaseModel):
     output_format: Literal["preview"] = "preview"
 
 
+class VideoConfig(BaseModel):
+    """Video Agent 配置。生成结构化预览 JSON，不渲染二进制视频。"""
+
+    duration_seconds: int = Field(default=180, ge=60, le=600)
+    scene_count: int = Field(default=6, ge=3, le=12)
+    style: Literal["explainer", "lecture", "screencast", "case_walkthrough"] = "explainer"
+    voice: Literal["teacher", "coach", "concise"] = "teacher"
+    aspect_ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
+    include_captions: bool = True
+    output_format: Literal["preview"] = "preview"
+
+
 class AgentConfigs(BaseModel):
     """Agent 配置集合。"""
     model_config = ConfigDict(extra="forbid")
@@ -130,6 +144,7 @@ class AgentConfigs(BaseModel):
     code: CodeConfig = Field(default_factory=CodeConfig)
     reading: ReadingConfig = Field(default_factory=ReadingConfig)
     ppt: PptConfig = Field(default_factory=PptConfig)
+    video: VideoConfig = Field(default_factory=VideoConfig)
 
     def get(self, agent_id: str, default: Any = None) -> dict[str, Any]:
         value = getattr(self, agent_id, None)
@@ -217,26 +232,12 @@ class ExecutionPlan(BaseModel):
 
 
 # ======================================================================
-# 内部状态模型
+# Agent 运行时输入/输出模型
 # ======================================================================
 
-class WorkerState(BaseModel):
-    """Agent 运行时需要的所有输入，扁平结构。"""
-    resource_id: int | None = None
-    learning_need: str = ""
-    learning_scenario: str = "self_study"
-    agent_name: str = ""
-    agent_config: dict[str, Any] = Field(default_factory=dict)
-    # Planning Agent 的产出（所有 Agent 共享）
-    blueprint: LearningBlueprint | None = None
-    # Planning Agent 为该 Agent 定制的指令
-    instruction: AgentInstruction | None = None
-    # 用户画像
-    profile: dict[str, Any] = Field(default_factory=dict)
+class AgentResult(BaseModel):
+    """统一 Agent 输出结果，用于 standalone resource 和 path node resource。"""
 
-
-class WorkerResult(BaseModel):
-    """Agent 执行结果。"""
     success: bool = True
     content: str = ""
     file_type: str = "markdown"
@@ -245,6 +246,44 @@ class WorkerResult(BaseModel):
     summary_data: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
     error: str = ""
+
+
+class ResourceInput(BaseModel):
+    """standalone 多智能体资源生成输入。"""
+
+    resource_id: int | None = None
+    learning_need: str
+    learning_scenario: LearningScenario = "self_study"
+    agent_name: str = ""
+    agent_config: dict[str, Any] = Field(default_factory=dict)
+    blueprint: LearningBlueprint | None = None
+    instruction: AgentInstruction | None = None
+    profile: dict[str, Any] = Field(default_factory=dict)
+    previous_results: dict[str, AgentResult] = Field(default_factory=dict)
+
+
+class NodeInput(BaseModel):
+    """路径规划当前节点资源生成输入。"""
+
+    path_id: int
+    node_id: int
+    node_key: str
+    path_title: str
+    path_goal: str
+    stage_id: str | None = None
+    node_title: str
+    difficulty: str | None = None
+    mastery_target: str | None = None
+    prerequisites: list[str] = Field(default_factory=list)
+    knowledge_points: list[str] = Field(default_factory=list)
+    weak_knowledge_points: list[str] = Field(default_factory=list)
+    generation_focus: list[str] = Field(default_factory=list)
+    tutorial_title: str
+    tutorial_summary: str | None = None
+    tutorial_markdown: str
+    profile: dict[str, Any] = Field(default_factory=dict)
+    existing_resources: dict[str, AgentResult] = Field(default_factory=dict)
+    agent_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class GeneratedResourceItem(BaseModel):
@@ -323,9 +362,10 @@ __all__ = [
     "LearningBlueprint",
     "AgentInstruction",
     "ExecutionPlan",
-    # Internal state
-    "WorkerState",
-    "WorkerResult",
+    # Runtime input/output
+    "AgentResult",
+    "ResourceInput",
+    "NodeInput",
     "GeneratedResourceItem",
     "ReviewResult",
     "ResourceBundle",

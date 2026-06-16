@@ -1,0 +1,31 @@
+{
+  "name": "video-render",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "start": "vite",
+    "serve": "vite",
+    "build": "vite build",
+    "render": "motion-canvas render"
+  },
+  "dependencies": {
+    "@lezer/cpp": "^1.1.6",
+    "@lezer/css": "^1.3.3",
+    "@lezer/go": "^1.0.1",
+    "@lezer/html": "^1.3.13",
+    "@lezer/java": "^1.1.3",
+    "@lezer/javascript": "^1.5.4",
+    "@lezer/json": "^1.0.3",
+    "@lezer/python": "^1.1.19",
+    "@lezer/rust": "^1.0.2",
+    "@motion-canvas/2d": "^3.17.2",
+    "@motion-canvas/core": "^3.17.2",
+    "@motion-canvas/ffmpeg": "^1.1.0"
+  },
+  "devDependencies": {
+    "@motion-canvas/ui": "^3.17.2",
+    "@motion-canvas/vite-plugin": "^3.17.2",
+    "typescript": "^5.2.2",
+    "vite": "^4.0.0"
+  }
+}

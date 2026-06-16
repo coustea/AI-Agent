@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -31,7 +31,9 @@ class CreateLearningPathRequest(BaseModel):
 class AuxiliaryResourceRequest(BaseModel):
     """节点辅助资源生成请求。"""
 
-    resource_type: str = Field(description="mindmap / code / ppt")
+    resource_type: Literal["content", "mindmap", "code", "reading", "quiz", "ppt"] = Field(
+        description="资源类型: content / mindmap / code / reading / quiz / ppt"
+    )
 
 
 # ======================================================================
@@ -40,10 +42,10 @@ class AuxiliaryResourceRequest(BaseModel):
 
 ALLOWED_RESOURCE_TYPES: tuple[str, ...] = (
     "content",
-    "quiz",
     "mindmap",
     "code",
     "reading",
+    "quiz",
     "ppt",
 )
 
@@ -146,6 +148,10 @@ class LearningPathResourceDTO(BaseModel):
     content_format: str
     content_text: str | None = None
     content_json: dict[str, Any] | None = None
+    summary: str | None = None
+    status: str = "completed"
+    error_message: str | None = None
+    input_data: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str
 
@@ -159,6 +165,10 @@ class LearningPathResourceDTO(BaseModel):
             content_format=resource.content_format,
             content_text=resource.content_text,
             content_json=resource.content_json,
+            summary=resource.summary,
+            status=resource.status or "completed",
+            error_message=resource.error_message,
+            input_data=resource.input_json,
             metadata=dict(resource.metadata_json or {}),
             created_at=resource.created_at.isoformat() if resource.created_at else "",
         )

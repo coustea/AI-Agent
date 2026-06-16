@@ -67,6 +67,8 @@ export interface PathGeneratedResourceItem extends GeneratedResourceItem {
   node_title: string | null
   resource_type?: string | null
   title?: string | null
+  summary?: string | null
+  error_message?: string | null
 }
 
 export type { PathResourceDetail }

@@ -175,14 +175,11 @@ class PayloadBuilder:
                     steps=steps,
                 )
             case "Terminal":
-                commands = data.get("commands", [])
-                cmd = commands[0] if commands else None
-                output = commands[-1] if len(commands) > 1 else (cmd or "")
                 return BlockTerminal(
                     id=block_id,
                     type="Terminal",
-                    command=cmd,
-                    output=output,
+                    command=str(data.get("command", "")),
+                    output=str(self._required(rendered, "output")),
                 )
             case _:
                 raise ValueError(f"Unsupported block type: {rendered.type}")

@@ -1,0 +1,201 @@
+import json
+import os
+import sys
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+os.environ.setdefault("OPENAI_API_KEY", "test-key")
+os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from app.resource.schemas import AgentResult, ResourceInput
+
+
+def _valid_payload_dict():
+    return {
+        "schema_version": "video/v1",
+        "title": "TCP 三次握手讲解",
+        "topic": "TCP 三次握手",
+        "duration_seconds": 180,
+        "aspect_ratio": "16:9",
+        "style": "explainer",
+        "voice": "teacher",
+        "language": "zh-CN",
+        "scenes": [
+            {
+                "scene_id": "scene-1",
+                "index": 1,
+                "role": "hook",
+                "title": "为什么连接需要三次确认",
+                "start_ms": 0,
+                "duration_ms": 30000,
+                "visual_type": "card",
+                "narration": "如果只握手两次，历史报文可能让服务端误以为连接成立。",
+                "captions": ["两次握手无法排除历史报文"],
+                "on_screen_text": ["问题：为什么不是两次？"],
+                "visual_prompt": "白底信息卡展示客户端和服务端的连接疑问",
+                "interaction_prompt": "暂停 3 秒，让学习者先回答。",
+                "source_agents": ["content"],
+            },
+            {
+                "scene_id": "scene-2",
+                "index": 2,
+                "role": "concept",
+                "title": "SYN、SYN+ACK、ACK",
+                "start_ms": 30000,
+                "duration_ms": 60000,
+                "visual_type": "diagram",
+                "narration": "客户端发送 SYN，服务端回复 SYN 加 ACK，客户端再确认 ACK。",
+                "captions": ["SYN", "SYN+ACK", "ACK"],
+                "on_screen_text": ["三次握手时序"],
+                "visual_prompt": "左右两列分别是客户端和服务端，中间用三条箭头展示报文顺序",
+                "interaction_prompt": "",
+                "source_agents": ["content", "mindmap"],
+            },
+            {
+                "scene_id": "scene-3",
+                "index": 3,
+                "role": "recap",
+                "title": "总结",
+                "start_ms": 90000,
+                "duration_ms": 90000,
+                "visual_type": "card",
+                "narration": "三次握手的本质，是在不可靠网络里确认双方收发能力和初始序号。",
+                "captions": ["确认双方收发能力", "同步初始序号"],
+                "on_screen_text": ["结论：可靠连接从状态同步开始"],
+                "visual_prompt": "总结卡片列出两个关键词：收发能力、序号同步",
+                "interaction_prompt": "请用一句话解释第三次 ACK 的意义。",
+                "source_agents": ["content"],
+            },
+        ],
+        "assets": [],
+        "metadata": {"source_agent_ids": ["content", "mindmap"]},
+    }
+
+
+def test_video_payload_validates_scene_timings():
+    from app.resource.agents.video import VideoPayload
+
+    payload = VideoPayload.model_validate(_valid_payload_dict())
+
+    assert payload.schema_version == "video/v1"
+    assert payload.scenes[0].start_ms == 0
+    assert payload.scenes[-1].start_ms + payload.scenes[-1].duration_ms == 180_000
+
+
+def test_video_payload_rejects_non_contiguous_timings():
+    from app.resource.agents.video import VideoPayload
+
+    payload = _valid_payload_dict()
+    payload["scenes"][1]["start_ms"] = 45000
+
+    with pytest.raises(ValidationError, match="contiguous"):
+        VideoPayload.model_validate(payload)
+
+
+@pytest.mark.asyncio
+async def test_video_agent_generates_json_from_previous_results(monkeypatch):
+    from app.resource.agents import AGENT_REGISTRY
+    from app.resource.agents.video import (
+        SceneDraft,
+        SceneWriterAgent,
+        VideoAgent,
+        VideoMaterialAgent,
+        VideoMaterialDigest,
+        VideoOutline,
+        VideoOutlineAgent,
+        SceneContract,
+    )
+
+    async def fake_material_run(self, input_data, config):
+        return VideoMaterialDigest(
+            topic="TCP 三次握手",
+            audience="计算机网络学习者",
+            learning_goal="理解三次握手的必要性",
+            core_concepts=["SYN", "ACK", "状态同步"],
+            facts=["三次握手同步双方初始序号"],
+            examples=["历史 SYN 报文可能导致误连接"],
+            process_steps=["SYN", "SYN+ACK", "ACK"],
+            misconceptions=["两次握手已经足够"],
+            practice_prompts=["解释第三次 ACK 的意义"],
+            visual_opportunities=["时序图"],
+            source_map={"facts": ["content"]},
+        )
+
+    async def fake_outline_run(self, digest, constraints):
+        return VideoOutline(
+            title="TCP 三次握手讲解",
+            topic=digest.topic,
+            duration_seconds=constraints.duration_seconds,
+            style=constraints.style,
+            aspect_ratio=constraints.aspect_ratio,
+            narrative="从问题到流程再到总结",
+            scenes=[
+                SceneContract(scene_id="scene-1", index=1, role="hook", title="问题", duration_seconds=60, learning_objective="引入问题", visual_type="card", content_hint="为什么不是两次", required_sources=["content"]),
+                SceneContract(scene_id="scene-2", index=2, role="concept", title="流程", duration_seconds=60, learning_objective="解释流程", visual_type="diagram", content_hint="三次报文", required_sources=["content"]),
+                SceneContract(scene_id="scene-3", index=3, role="recap", title="总结", duration_seconds=60, learning_objective="总结", visual_type="card", content_hint="回顾", required_sources=["content"]),
+            ],
+        )
+
+    async def fake_scene_run(self, contract, digest, constraints):
+        return SceneDraft(
+            scene_id=contract.scene_id,
+            index=contract.index,
+            title=contract.title,
+            narration=f"{contract.title} 旁白",
+            captions=[contract.title],
+            on_screen_text=[contract.learning_objective],
+            visual_prompt=contract.content_hint,
+            visual_type=contract.visual_type,
+            interaction_prompt="",
+            source_agents=contract.required_sources,
+        )
+
+    monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
+    monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)
+    monkeypatch.setattr(SceneWriterAgent, "run", fake_scene_run)
+
+    assert "video" in AGENT_REGISTRY
+
+    agent = VideoAgent()
+    result = await agent.generate_resource(
+        ResourceInput(
+            resource_id=1,
+            learning_need="把 TCP 三次握手生成讲解视频",
+            agent_name="video",
+            agent_config={"duration_seconds": 180, "scene_count": 3},
+            previous_results={
+                "content": AgentResult(
+                    success=True,
+                    content="# TCP 三次握手\n三次握手同步双方初始序号。",
+                    file_type="markdown",
+                    title="课程内容",
+                    summary="TCP 内容",
+                    metadata={"agent_id": "content"},
+                )
+            },
+        )
+    )
+
+    assert result.success is True
+    assert result.file_type == "json"
+    assert result.metadata["agent_id"] == "video"
+    assert result.metadata["schema_version"] == "video/v1"
+    parsed = json.loads(result.content)
+    assert parsed["duration_seconds"] == 180
+    assert len(parsed["scenes"]) == 3
+
+
+def test_video_payload_contract_uses_backend_video_v1_fields():
+    payload = _valid_payload_dict()
+
+    first_scene = payload["scenes"][0]
+
+    assert "scene_id" in first_scene
+    assert "duration_ms" in first_scene
+    assert "narration" in first_scene
+    assert "visual_prompt" in first_scene
+    assert "visual_data" not in first_scene
+    assert "imageUrl" not in first_scene

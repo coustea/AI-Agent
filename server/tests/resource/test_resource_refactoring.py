@@ -2,7 +2,7 @@
 
 1. LearningBlueprint replaces KnowledgeGraph as internal coordination structure
 2. Path node resource generation uses correct field names
-3. WorkerState uses blueprint instead of knowledge_graph
+3. ResourceInput uses blueprint instead of knowledge_graph
 4. knowledge_graph is no longer a valid ResourceAgentId
 """
 
@@ -31,7 +31,7 @@ from app.resource.schemas import (
     LearningBlueprint,
     ResourceAgentId,
     ResourceGenerationRequest,
-    WorkerState,
+    ResourceInput,
 )
 
 
@@ -76,9 +76,9 @@ def test_agent_configs_rejects_knowledge_graph_field():
         AgentConfigs(knowledge_graph={"layout_mode": "force"})
 
 
-def test_valid_agent_ids_are_only_six():
-    """The public agent IDs are exactly: content, mindmap, quiz, reading, code, ppt."""
-    expected = {"content", "mindmap", "quiz", "reading", "code", "ppt"}
+def test_valid_agent_ids_are_seven():
+    """The public agent IDs are exactly: content, mindmap, quiz, reading, code, ppt, video."""
+    expected = {"content", "mindmap", "quiz", "reading", "code", "ppt", "video"}
     actual = {e.value for e in ResourceAgentId}
     assert actual == expected
 
@@ -131,34 +131,34 @@ def test_execution_plan_uses_blueprint():
 
 
 # ======================================================================
-# 3. WorkerState uses blueprint, not knowledge_graph
+# 3. ResourceInput uses blueprint, not knowledge_graph
 # ======================================================================
 
 
 def test_worker_state_uses_blueprint_field():
-    """WorkerState must have blueprint field, not knowledge_graph."""
+    """ResourceInput must have blueprint field, not knowledge_graph."""
     bp = LearningBlueprint(topic="test")
-    state = WorkerState(blueprint=bp, learning_need="OS调度")
+    state = ResourceInput(blueprint=bp, learning_need="OS调度")
     assert state.blueprint is bp
     assert not hasattr(state, "knowledge_graph")
 
 
 def test_worker_state_blueprint_can_be_none():
-    """WorkerState.blueprint defaults to None (PlanningAgent may fail)."""
-    state = WorkerState(learning_need="test")
+    """ResourceInput.blueprint defaults to None (PlanningAgent may fail)."""
+    state = ResourceInput(learning_need="test")
     assert state.blueprint is None
 
 
 def test_worker_state_instruction_can_be_none():
-    """WorkerState.instruction defaults to None."""
-    state = WorkerState(learning_need="test")
+    """ResourceInput.instruction defaults to None."""
+    state = ResourceInput(learning_need="test")
     assert state.instruction is None
 
 
 def test_worker_state_instruction_field_exists():
-    """WorkerState must have an instruction field for AgentInstruction."""
+    """ResourceInput must have an instruction field for AgentInstruction."""
     instr = AgentInstruction(agent_id="quiz", focus="scheduling algorithms")
-    state = WorkerState(learning_need="test", instruction=instr)
+    state = ResourceInput(learning_need="test", instruction=instr)
     assert state.instruction is instr
     assert state.instruction.agent_id == "quiz"
 
@@ -254,12 +254,12 @@ def test_agent_instruction_defaults():
 
 
 # ======================================================================
-# 6. Integration: ExecutionPlan -> WorkerState pipeline
+# 6. Integration: ExecutionPlan -> ResourceInput pipeline
 # ======================================================================
 
 
 def test_execution_plan_to_worker_state():
-    """A full ExecutionPlan can populate WorkerState fields."""
+    """A full ExecutionPlan can populate ResourceInput fields."""
     bp = LearningBlueprint(
         topic="OS scheduling",
         learner_goal="understand FCFS, SJF, RR",
@@ -278,7 +278,7 @@ def test_execution_plan_to_worker_state():
         personalization_summary="student is strong on concepts but weak on analysis",
     )
 
-    state = WorkerState(
+    state = ResourceInput(
         learning_need="OS scheduling algorithms",
         blueprint=plan.blueprint,
         instruction=instr,
@@ -295,7 +295,7 @@ def test_execution_plan_fallback_blueprint():
     """When PlanningAgent fails, a minimal LearningBlueprint still works."""
     bp = LearningBlueprint(topic="fallback topic", learner_goal="basic goal")
     plan = ExecutionPlan(blueprint=bp)
-    state = WorkerState(learning_need="test", blueprint=plan.blueprint)
+    state = ResourceInput(learning_need="test", blueprint=plan.blueprint)
     assert state.blueprint.topic == "fallback topic"
 
 

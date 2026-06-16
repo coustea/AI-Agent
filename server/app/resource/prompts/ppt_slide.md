@@ -45,8 +45,8 @@
 - Callout: `{"text": "提示内容", "tone": "info|warning|success|danger"}`
 - Code: `{"language": "python", "code": "代码内容"}`
 - BigNumber: `{"value": "99.9", "label": "可用性"}`
-- Formula: `{"latex": "E=mc^2", "description": "质能方程"}`
+- Formula: `{"latex": "E=mc^2"}`
 - Timeline: `{"items": [{"time": "T1", "title": "步骤1", "description": "描述"}]}`
-- Terminal: `{"commands": ["npm start", "echo done"]}`
+- Terminal: `{"command": "npm start", "output": "success"}`
 
 直接返回 SlideDraft JSON 对象，不要包含任何解释文字。

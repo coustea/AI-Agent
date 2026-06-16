@@ -15,7 +15,7 @@ from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import salvage_json_from_llm
 from app.infra.prompts import prompts
-from app.resource.schemas import WorkerResult, WorkerState
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 
 # ======================================================================
@@ -90,24 +90,21 @@ class ReviewAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(self, state: WorkerState) -> WorkerResult:
-        """两级审核流程：正则通过则直接放行，否则触发 LLM 语义判定。"""
-        # 从配置中获取进度推送的 agent_id 和待审核内容信封
-        progress_agent_id = state.agent_config.get("progress_agent_id") or "review"
-        review_envelope = state.agent_config.get("review_envelope", {})
+    async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """多智能体场景：两级审核流程。"""
+        config = input_data.agent_config or {}
+        progress_agent_id = config.get("progress_agent_id") or "review"
+        review_envelope = config.get("review_envelope", {})
 
-        # ── 第一级：正则审核（快速、无成本） ──
-        if self.emitter:
-            await self.emitter.emit_agent(progress_agent_id, status="running", message="正在执行规则审核", progress=10)
+        # ── 第一级：正则审核 ──
+        await self.emit_start("正在执行规则审核", progress=10)
 
         audit_content = self._extract_audit_content(review_envelope)
         findings = rule_check(audit_content)
 
-        # 正则审核全部通过 → 直接返回通过结果，不触发 LLM
+        # 正则审核全部通过 → 直接返回
         if not findings:
-            if self.emitter:
-                await self.emitter.emit_agent(progress_agent_id, status="finished", message="规则审核通过", progress=100)
-            return WorkerResult(
+            result = AgentResult(
                 success=True,
                 content=json.dumps({"status": "pass", "checks": {}, "violations": [], "revision_targets": []}, ensure_ascii=False),
                 file_type="json",
@@ -115,46 +112,29 @@ class ReviewAgent(BaseResourceAgent):
                 summary="规则审核通过",
                 metadata={"agent_id": "review", "passed": True, "issues": [], "review_status": "pass", "parsed_review": {}},
             )
+            await self.emit_finish(result)
+            return result
 
-        # ── 第二级：LLM 兜底审核（语义级别判定） ──
-        if self.emitter:
-            await self.emitter.emit_agent(
-                progress_agent_id, status="running",
-                message=f"规则审核发现 {len(findings)} 个可疑点，正在调用大模型判定",
-                progress=25,
-            )
+        # ── 第二级：LLM 兜底审核 ──
+        await self.emit_start(f"规则审核发现 {len(findings)} 个可疑点，正在调用大模型判定", progress=25)
 
         prompt = prompts.get("resource").get("review")
         findings_text = json.dumps(findings, ensure_ascii=False, indent=2)
-        input_text = f"{self._build_review_input(state)}\n\n## 规则审核发现的可疑点\n{findings_text}"
+        input_text = f"{self._build_review_input(review_envelope)}\n\n## 规则审核发现的可疑点\n{findings_text}"
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                progress_agent_id, status="running",
-                message="正在构建内容审核提示词",
-                progress=50,
-            )
+        await self.emit_start("正在构建内容审核提示词", progress=50)
 
-        # 调用 LLM 进行语义审核（低温度保证一致性）
         response = await self.llm.ainvoke(
             f"{prompt}\n\n{input_text}",
             temperature=0.2,
         )
         content = response.content if hasattr(response, "content") else str(response)
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                progress_agent_id, status="running",
-                message="审核结果已返回，正在解析违规项",
-                progress=85,
-            )
+        await self.emit_start("审核结果已返回，正在解析违规项", progress=85)
 
-        # 健壮地从 LLM 输出中提取 JSON 审核结果
         parsed = salvage_json_from_llm(content, require_key="status")
         status = str(parsed.get("status", "")).lower() if parsed else ""
-        # 判定是否通过：JSON status=pass 或文本中包含"通过"/"PASS"
         passed = status == "pass" or (not parsed and ("通过" in content or "PASS" in content.upper()))
-        # 提取违规项列表
         issues = self._extract_issues(content)
         if parsed and isinstance(parsed.get("violations"), list):
             issues = [
@@ -162,15 +142,7 @@ class ReviewAgent(BaseResourceAgent):
                 for item in parsed["violations"]
             ]
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                progress_agent_id,
-                status="finished" if passed else "failed",
-                message="审核通过" if passed else "审核未通过，需要修订或阻断",
-                progress=100,
-            )
-
-        return WorkerResult(
+        result = AgentResult(
             success=passed,
             content=content,
             file_type="json" if parsed else "markdown",
@@ -185,15 +157,22 @@ class ReviewAgent(BaseResourceAgent):
                 "rule_findings": findings,
             },
         )
+        await self.emit_finish(result)
+        return result
 
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        """审核 Agent 通过 run() 直接接管流程，不使用通用 _execute。"""
-        raise NotImplementedError
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        """路径节点场景不支持 ReviewAgent。"""
+        return AgentResult(
+            success=False,
+            error="review agent 不用于路径节点资源生成",
+            title="",
+            summary="not supported",
+            metadata={"agent_id": "review"},
+        )
 
-    def _build_review_input(self, state: WorkerState) -> str:
-        """从 state 中提取待审核内容，构建 LLM 输入。"""
+    def _build_review_input(self, review_envelope: dict) -> str:
+        """从 review_envelope 中提取待审核内容，构建 LLM 输入。"""
         parts = ["## 待审核内容"]
-        review_envelope = state.agent_config.get("review_envelope", {})
         if review_envelope:
             parts.append(json.dumps(review_envelope, ensure_ascii=False, indent=2))
         return "\n\n".join(parts)
@@ -202,14 +181,13 @@ class ReviewAgent(BaseResourceAgent):
     def _extract_audit_content(envelope: dict) -> str:
         """从 review_envelope 中提取所有待审核的文本内容。"""
         parts: list[str] = []
-        # 提取深度审核资源的文本
         for resource in envelope.get("deep_audit_resources", []):
             if isinstance(resource, dict) and resource.get("audit_content"):
                 parts.append(resource["audit_content"])
-        # 提取 PPT 资源的文本
-        ppt_resource = envelope.get("ppt_resource")
-        if isinstance(ppt_resource, dict) and ppt_resource.get("audit_content"):
-            parts.append(ppt_resource["audit_content"])
+        for key in ("ppt_resource", "video_resource"):
+            resource = envelope.get(key)
+            if isinstance(resource, dict) and resource.get("audit_content"):
+                parts.append(resource["audit_content"])
         return "\n\n".join(parts)
 
     @staticmethod
@@ -218,7 +196,6 @@ class ReviewAgent(BaseResourceAgent):
         issues = []
         for line in content.splitlines():
             stripped = line.strip()
-            # 匹配 checkbox 格式 "- [ ] xxx" 或编号列表 "1. xxx"
             if stripped.startswith(("- [ ]", "* [ ]")) or (stripped and stripped[0].isdigit() and "." in stripped[:4]):
                 issues.append(stripped.lstrip("-*0123456789. ").strip())
         return issues

@@ -10,6 +10,7 @@ from app.resource.agents.mindmap import MindmapAgent
 from app.resource.agents.code import CodeAgent
 from app.resource.agents.reading import ReadingAgent
 from app.resource.agents.ppt import PptAgent
+from app.resource.agents.video import VideoAgent
 from app.resource.agents.review import ReviewAgent
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "CodeAgent",
     "ReadingAgent",
     "PptAgent",
+    "VideoAgent",
     "ReviewAgent",
 ]

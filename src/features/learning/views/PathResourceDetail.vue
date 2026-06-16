@@ -25,24 +25,37 @@
         <span class="meta-time">{{ formatTime(resource.created_at) }}</span>
       </header>
 
-      <section class="detail-card">
-        <MindmapView
-          v-if="resource.resource_type === 'mindmap'"
-          :result-data="resourceContent"
-        />
-        <CodeView
-          v-else-if="resource.resource_type === 'code'"
-          :result-data="resourceContent"
-        />
-        <PptView
-          v-else-if="resource.resource_type === 'ppt'"
-          :result-data="resourceContent"
-        />
-        <MarkdownView
-          v-else
-          :result-data="resourceContent"
-        />
-      </section>
+      <section v-if="resource.status === 'failed'" class="detail-card failure-card">
+          <strong>生成失败</strong>
+          <p>{{ resource.error_message || '未知错误' }}</p>
+        </section>
+
+        <section v-else class="detail-card">
+          <MindmapView
+            v-if="resource.resource_type === 'mindmap'"
+            :result-data="resourceContent"
+          />
+          <CodeView
+            v-else-if="resource.resource_type === 'code'"
+            :result-data="resourceContent"
+          />
+          <PptView
+            v-else-if="resource.resource_type === 'ppt'"
+            :result-data="resourceContent"
+          />
+          <ReadingView
+            v-else-if="resource.resource_type === 'reading'"
+            :result-data="resourceContent"
+          />
+          <QuizView
+            v-else-if="resource.resource_type === 'quiz'"
+            :result-data="resourceContent"
+          />
+          <MarkdownView
+            v-else
+            :result-data="resourceContent"
+          />
+        </section>
     </template>
   </main>
 </template>
@@ -56,6 +69,8 @@ import CodeView from '@/features/resource/components/CodeView.vue'
 import MarkdownView from '@/features/resource/components/MarkdownView.vue'
 import MindmapView from '@/features/resource/components/MindmapView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
+import QuizView from '@/features/resource/components/QuizView.vue'
+import ReadingView from '@/features/resource/components/ReadingView.vue'
 import { getPathGeneratedResourceDetail } from '@/features/learning/api/path-resource'
 import type { PathResourceDetail } from '@/features/learning/model/path'
 import { getErrorMessage } from '@/shared/api/http'
@@ -152,6 +167,22 @@ onMounted(loadDetail)
 
 .detail-card {
   padding: 20px;
+}
+
+.failure-card {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.failure-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #991b1b;
+}
+
+.failure-card p {
+  margin: 0;
+  color: #7f1d1d;
 }
 
 .state-card {

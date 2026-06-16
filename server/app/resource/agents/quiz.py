@@ -10,8 +10,9 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_node_context, build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import WorkerResult, WorkerState
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -52,10 +53,37 @@ class QuizAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        """核心生成逻辑：拼接习题配置 → LLM 结构化输出 → 解析统计。"""
-        config = state.agent_config
-        # 拼接习题配置（数量、难度、考试风格等）
+    async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        parts = build_resource_context(input_data)
+        input_text = "\n\n".join(parts)
+        result = await self._generate_quiz(
+            input_text=input_text,
+            title_prefix=input_data.learning_need[:32],
+            config=input_data.agent_config,
+        )
+        await self.emit_finish(result)
+        return result
+
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        parts = build_node_context(input_data)
+        input_text = "\n\n".join(parts)
+        result = await self._generate_quiz(
+            input_text=input_text,
+            title_prefix=input_data.node_title,
+            config=input_data.agent_config,
+        )
+        result.metadata["path_id"] = input_data.path_id
+        result.metadata["node_id"] = input_data.node_id
+        await self.emit_finish(result)
+        return result
+
+    async def _generate_quiz(
+        self,
+        *,
+        input_text: str,
+        title_prefix: str,
+        config: dict,
+    ) -> AgentResult:
         if config:
             cfg = ["## 习题配置"]
             cfg.append(f"- 题目数量: {config.get('question_count', 5)}")
@@ -67,15 +95,9 @@ class QuizAgent(BaseResourceAgent):
         prompt = prompts.get("resource").get("quiz")
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="正在构建习题集提示词",
-                progress=25,
-            )
+        await self.emit_start("正在构建习题集提示词", progress=25)
 
         logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
-        # LLM 结构化输出 → QuizPayload（含 title、questions）
         result = await self.llm.ainvoke_json(
             QuizPayload,
             full_prompt,
@@ -84,17 +106,9 @@ class QuizAgent(BaseResourceAgent):
             function_description="生成习题集",
         )
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="习题已生成，正在解析题目结构",
-                progress=85,
-            )
-
         quiz_data = result.model_dump(mode="json")
         content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
 
-        # 统计题目难度分布
         questions = quiz_data.get("questions", [])
         logger.info("Agent[quiz] 步骤: 习题解析完成, questions=%d", len(questions))
         difficulty_dist: dict[str, int] = {}
@@ -102,11 +116,11 @@ class QuizAgent(BaseResourceAgent):
             d = q.get("difficulty", "medium")
             difficulty_dist[d] = difficulty_dist.get(d, 0) + 1
 
-        return WorkerResult(
+        return AgentResult(
             success=True,
             content=content,
             file_type="json",
-            title=f"{state.learning_need[:32]} - 习题集",
+            title=f"{title_prefix} - 习题集",
             summary=f"生成 {len(questions)} 道习题",
             summary_data={
                 "total_count": len(questions),

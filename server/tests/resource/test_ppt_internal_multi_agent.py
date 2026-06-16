@@ -444,9 +444,9 @@ class TestGetBlockRequiredFields:
             ("Callout", ["text", "tone"]),
             ("Code", ["language", "code"]),
             ("BigNumber", ["value", "label"]),
-            ("Formula", ["latex", "description"]),
+            ("Formula", ["latex"]),
             ("Timeline", ["items"]),
-            ("Terminal", ["commands"]),
+            ("Terminal", ["command", "output"]),
         ],
     )
     def test_returns_correct_fields(self, block_type, expected):

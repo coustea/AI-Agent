@@ -72,32 +72,47 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
+import { ElMessage } from 'element-plus'
 
-// --- 1. 定义多智能体下发的“剧本”增强结构 ---
-interface AgentScene {
-  id: string
-  imageUrl: string
-  duration: number
-  title: string
-  desc: string
-  // 智能体指定的运镜特效指令
-  animation?: 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | 'pan-down' | 'static'
-  // 智能体指定的电影滤镜指令
-  filter?: 'none' | 'grayscale' | 'blur' | 'sepia' | 'contrast'
-}
+const props = defineProps<{ resultData?: any }>()
 
-interface AgentVideoResource {
-  title?: string
-  style?: 'standard' | 'cyberpunk' | 'academic' // 全局视频主题风格
-  data?: { scenes?: AgentScene[] }
-}
+// 新增归一化逻辑，兼容资源详情页 envelope
+const videoPayload = computed(() => {
+  const raw = props.resultData
+  if (!raw) return null
+  if (raw.content_json?.content) return raw.content_json.content
+  if (raw.content_json) return raw.content_json
+  if (raw.content) {
+    try {
+      return typeof raw.content === 'string' ? JSON.parse(raw.content) : raw.content
+    } catch {
+      return null
+    }
+  }
+  return raw
+})
 
-const props = defineProps<{ resource?: AgentVideoResource }>()
+const activeScenes = computed(() => {
+  const scenes = videoPayload.value?.scenes
+  return Array.isArray(scenes)
+    ? scenes.map((scene: any) => ({
+        id: scene.scene_id || `scene-${scene.index}`,
+        duration: scene.duration_ms || 4000,
+        title: scene.title || `分镜 ${scene.index || ''}`.trim(),
+        desc: scene.narration || scene.visual_prompt || '',
+        visualPrompt: scene.visual_prompt || '',
+        visualType: scene.visual_type || 'card',
+        captions: Array.isArray(scene.captions) ? scene.captions : [],
+        imageUrl: scene.imageUrl || '',
+        animation: scene.animation || 'zoom-in',
+        filter: scene.filter || 'none'
+      }))
+    : []
+})
 
-// --- 2. 响应式计算属性 ---
-const activeScenes = computed(() => props.resource?.data?.scenes || [])
 const hasScenes = computed(() => activeScenes.value.length > 0)
-const resourceTitle = computed(() => props.resource?.title || 'LibAgent Presentation Engine')
+const resourceTitle = computed(() => videoPayload.value?.title || '讲解视频')
+const isWebCodecsSupported = typeof VideoEncoder !== 'undefined'
 
 const totalDuration = computed(() => activeScenes.value.reduce((acc, cur) => acc + (cur.duration || 4000), 0))
 const sceneTimepoints = computed(() => {
@@ -125,19 +140,21 @@ let lastTimestamp = 0
 // --- 3. 图片资源预加载防跨域污染 ---
 const preloadImages = async () => {
   imageCache.clear()
-  const promises = activeScenes.value.map(scene => {
-    return new Promise<void>((resolve) => {
-      const img = new Image()
-      img.crossOrigin = "anonymous" // 极其重要：防止 Canvas Tainted 导致无法导出
-      img.onload = () => { imageCache.set(scene.id, img); resolve() }
-      img.onerror = () => { resolve() }
-      img.src = scene.imageUrl
+  const promises = activeScenes.value
+    .filter(scene => scene.imageUrl)
+    .map(scene => {
+      return new Promise<void>((resolve) => {
+        const img = new Image()
+        img.crossOrigin = "anonymous" // 极其重要：防止 Canvas Tainted 导致无法导出
+        img.onload = () => { imageCache.set(scene.id, img); resolve() }
+        img.onerror = () => { resolve() }
+        img.src = scene.imageUrl
+      })
     })
-  })
   await Promise.all(promises)
 }
 
-watch(() => props.resource, async () => {
+watch(activeScenes, async () => {
   if (hasScenes.value) {
     isPlaying.value = false
     await preloadImages()
@@ -215,6 +232,68 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
 
     ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH)
     ctx.restore() // 恢复矩阵和滤镜，防止污染后续的字幕渲染
+  } else {
+    // 渲染无图片时的 Canvas 场景卡片 (Storyboard card)
+    ctx.save()
+    // 绘制暗色渐变背景
+    const grad = ctx.createLinearGradient(0, 0, width, height)
+    grad.addColorStop(0, '#1e1b4b') // 深蓝/紫
+    grad.addColorStop(1, '#0f172a') // 深灰蓝
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, width, height)
+
+    // 绘制卡片框线或装饰
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+    ctx.lineWidth = 4
+    ctx.strokeRect(40, 40, width - 80, height - 80)
+
+    // 绘制视觉类型徽章 (Visual Type Badge)
+    const badgeText = (scene.visualType || 'CARD').toUpperCase()
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'
+    ctx.font = 'bold 28px monospace'
+    const badgeW = ctx.measureText(badgeText).width + 30
+    ctx.fillRect(80, 80, badgeW, 48)
+    ctx.fillStyle = '#38bdf8'
+    ctx.fillText(badgeText, 95, 114)
+
+    // 绘制画面提示 (Visual Prompt) 在屏幕中央
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    ctx.font = 'italic 38px system-ui, -apple-system, sans-serif'
+    ctx.textAlign = 'center'
+    
+    // 自动折行绘制 visual_prompt
+    const promptText = scene.visualPrompt || '无画面提示'
+    const words = promptText.split('')
+    let line = ''
+    const lines: string[] = []
+    const maxWidth = width - 300
+    ctx.font = 'italic 38px system-ui, -apple-system, sans-serif'
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n]
+      const metrics = ctx.measureText(testLine)
+      if (metrics.width > maxWidth && n > 0) {
+        lines.push(line)
+        line = words[n]
+      } else {
+        line = testLine
+      }
+    }
+    lines.push(line)
+    
+    let startY = height / 2 - (lines.length - 1) * 25
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i] || '', width / 2, startY + i * 50)
+    }
+
+    // 绘制字幕 (Captions) 列表，如果存在
+    if (Array.isArray(scene.captions) && scene.captions.length > 0) {
+      ctx.fillStyle = '#facc15' // 明黄色
+      ctx.font = 'bold 32px system-ui, -apple-system, sans-serif'
+      ctx.fillText(`字幕: ${scene.captions.join(' | ')}`, width / 2, height / 2 + 150 + (lines.length * 25))
+    }
+
+    ctx.restore()
   }
 
   // 4.3 渲染后期层 (暗角 Vignette，让文字清晰)
@@ -240,7 +319,7 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
   const yOffset = 25 * (1 - easeOut) // 浮现动效
 
   // 智能体全局主题皮肤解析
-  const styleTheme = props.resource?.style || 'standard'
+  const styleTheme = videoPayload.value?.style || 'standard'
   const titleColor = styleTheme === 'cyberpunk' ? '#facc15' : '#ffffff' // 赛博朋克用明黄
   const descColor = styleTheme === 'cyberpunk' ? '#2dd4bf' : '#38bdf8'  // 赛博朋克用青绿，标准用亮蓝
 
@@ -282,6 +361,18 @@ const renderLoop = (timestamp: number) => {
 
 // --- 6. 核心：WebCodecs API 离屏超速渲染导出 ---
 const startExportMP4 = async () => {
+  if (!isWebCodecsSupported) {
+    ElMessage.warning('当前浏览器不支持 WebCodecs 导出视频，已降级为导出 JSON 脚本。')
+    const blob = new Blob([JSON.stringify(videoPayload.value, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${resourceTitle.value.replace(/\s+/g, '_')}_script.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    return
+  }
+
   if (!hasScenes.value || isExporting.value) return
   isExporting.value = true
   isPlaying.value = false
@@ -298,9 +389,9 @@ const startExportMP4 = async () => {
       fastStart: 'in-memory',
     })
 
-    const encoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta as any),
-      error: (e) => console.error('H264 Encode Error:', e)
+    const encoder = new (window as any).VideoEncoder({
+      output: (chunk: any, meta: any) => muxer.addVideoChunk(chunk, meta),
+      error: (e: any) => console.error('H264 Encode Error:', e)
     })
 
     encoder.configure({
@@ -325,7 +416,7 @@ const startExportMP4 = async () => {
       drawFrameAtTime(ctx, timeMs, width, height)
 
       const timestampMicroseconds = frameIndex * (1_000_000 / fps)
-      const frame = new VideoFrame(offscreenCanvas, { timestamp: timestampMicroseconds })
+      const frame = new (window as any).VideoFrame(offscreenCanvas, { timestamp: timestampMicroseconds })
 
       encoder.encode(frame, { keyFrame: frameIndex % fps === 0 })
       frame.close()
@@ -349,7 +440,7 @@ const startExportMP4 = async () => {
 
   } catch (error) {
     console.error("MP4 Export failed:", error)
-    alert("导出失败，请检查浏览器是否支持 WebCodecs API (建议使用 Chrome/Edge)")
+    ElMessage.error("导出失败，请检查浏览器是否支持 WebCodecs API")
   } finally {
     isExporting.value = false
     lastTimestamp = performance.now()

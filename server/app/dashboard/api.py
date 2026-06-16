@@ -149,14 +149,12 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
 
 
 async def _get_profile_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
-    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id)
-    profile = await session.merge(profile)
+    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id, db=session)
     return profile.profile_json or {}
 
 
 async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
-    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id)
-    profile = await session.merge(profile)
+    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id, db=session)
     return profile.profile_score_json or {}
 
 
@@ -302,8 +300,7 @@ async def get_profile_radar(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    profile = await get_profile_service().get_or_create_global_profile(user_id=current_user.id)
-    profile = await session.merge(profile)
+    profile = await get_profile_service().get_or_create_global_profile(user_id=current_user.id, db=session)
     score_json = profile.profile_score_json or {}
 
     scores = score_json.get("dimension_scores") or {}

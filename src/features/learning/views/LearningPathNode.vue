@@ -51,9 +51,16 @@
               </div>
             </div>
             <div class="resource-actions">
-              <button class="ghost-btn" :disabled="resourceLoading === 'mindmap'" @click="createResource('mindmap')">生成思维导图</button>
-              <button class="ghost-btn" :disabled="resourceLoading === 'code'" @click="createResource('code')">生成代码示例</button>
-              <button class="ghost-btn" :disabled="resourceLoading === 'ppt'" @click="createResource('ppt')">生成 PPT</button>
+              <button
+                v-for="action in resourceActions"
+                :key="action.type"
+                class="ghost-btn resource-action-btn"
+                :disabled="resourceLoading === action.type"
+                @click="createResource(action.type)"
+              >
+                <span>{{ action.label }}</span>
+                <small>{{ action.required ? '推荐' : '可选' }}</small>
+              </button>
             </div>
             <div class="saved-resource-list" v-if="workspace.resources.length">
               <button
@@ -131,14 +138,14 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import MarkdownView from '@/features/resource/components/MarkdownView.vue'
 import { generateAuxiliaryResource, generateNodeQuestions, getLearningNodeWorkspace, submitNodeQuiz } from '@/features/learning/api/path'
 import { recordPathLearningEvent } from '@/features/learning/api/evaluation'
-import type { AuxiliaryResourceRequest, LearningPathWorkspace, PathQuizRound, PathQuizSubmitResponse } from '@/features/learning/model/path'
+import type { AuxiliaryResourceRequest, LearningPathWorkspace, PathQuizRound, PathQuizSubmitResponse, PathResourceType } from '@/features/learning/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 import { startTracking, stopTracking } from '@/features/learning/model/useLearningTracker'
 
@@ -155,6 +162,42 @@ const quizRound = ref<PathQuizRound | null>(null)
 const quizResult = ref<PathQuizSubmitResponse | null>(null)
 const answers = ref<Record<number, string>>({})
 const hasStartedTracking = ref(false)
+
+const supportedPathResourceTypes: PathResourceType[] = ['content', 'mindmap', 'code', 'reading', 'quiz', 'ppt']
+
+const resourceActions = computed(() => {
+  const policy = workspace.value?.node?.resource_policy
+  const fallback: PathResourceType[] = ['mindmap', 'code', 'ppt']
+  const orderedTypes = policy
+    ? [...policy.required_resource_types, ...policy.optional_resource_types]
+    : fallback
+  const seen = new Set<string>()
+
+  return (orderedTypes.length ? orderedTypes : fallback)
+    .filter((type): type is PathResourceType => supportedPathResourceTypes.includes(type as PathResourceType))
+    .filter((type) => {
+      if (seen.has(type)) return false
+      seen.add(type)
+      return true
+    })
+    .map((type) => ({
+      type,
+      label: resourceTypeLabel(type),
+      required: Boolean(policy?.required_resource_types?.includes(type)),
+    }))
+})
+
+const resourceTypeLabel = (rt: string) => {
+  const labels: Record<string, string> = {
+    content: '生成节点讲义',
+    mindmap: '生成思维导图',
+    code: '生成代码示例',
+    reading: '生成拓展阅读',
+    quiz: '生成练习题',
+    ppt: '生成 PPT',
+  }
+  return labels[rt] || `生成 ${rt}`
+}
 
 const nodeId = Number(route.params.nodeId || 0)
 
@@ -444,6 +487,17 @@ onBeforeUnmount(() => {
 .resource-actions {
   display: grid;
   gap: 10px;
+}
+
+.resource-action-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.resource-action-btn small {
+  font-size: 11px;
+  color: #94a3b8;
 }
 
 .saved-resource-list {

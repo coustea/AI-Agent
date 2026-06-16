@@ -30,7 +30,6 @@ from app.resource.schemas import ResourceGenerationRequest, SingleResourceReques
 from app.resource.service import (
     ResourceService,
     run_multi_agent_generation,
-    run_single_agent_generation,
 )
 from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
@@ -82,7 +81,7 @@ async def create_single_resource_task(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """启动单智能体资源生成后台任务（路径规划 / 即调即用）。"""
+    """启动单智能体资源生成后台任务（即调即用）。"""
     logger.info(
         "[ResourceAPI] 收到单智能体生成请求: user_id=%s agent_id=%s",
         current_user.id,
@@ -104,13 +103,16 @@ async def create_single_resource_task(
     )
     resource_id = result["resource_id"]
 
+    # Single agent mode: run via multi-agent pipeline with only one agent selected
     background_tasks.add_task(
-        run_single_agent_generation,
+        run_multi_agent_generation,
         user_id=current_user.id,
-        resource_id=resource_id,
-        agent_id=req.agent_id.value,
-        learning_need=req.learning_need,
+        request=ResourceGenerationRequest(
+            learning_need=req.learning_need,
+            selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
+        ),
         profile=profile_dict,
+        resource_id=resource_id,
     )
 
     return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
@@ -140,11 +142,7 @@ async def stream_resource_events(
     resource_id: int,
     token: str = Query(default="", description="JWT token for SSE auth"),
 ):
-    """SSE 端点：订阅资源生成事件，实时推送 agent 状态变更。
-
-    EventSource (GET) 无法设置 Authorization header，
-    因此通过 query parameter 传递 JWT 进行鉴权。
-    """
+    """SSE 端点：订阅资源生成事件，实时推送 agent 状态变更。"""
     if not token:
         return HttpResponse.error(code=401, message="缺少认证 token")
 

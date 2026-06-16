@@ -588,6 +588,8 @@ class GeneratedResourceItem(SQLModel, table=True):
     content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     content_text: str | None = Field(default=None, sa_column=Column(Text))
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    status: str = Field(default="pending", max_length=50)
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
 
     # Agent 协作与路径规划检索字段
     depends_on_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
@@ -894,6 +896,10 @@ class PathNodeResource(SQLModel, table=True):
     content_text: str | None = Field(default=None, sa_column=Column(Text))
     content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    summary: str | None = Field(default=None, sa_column=Column(Text))
+    status: str = Field(default="completed", max_length=32)
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+    input_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

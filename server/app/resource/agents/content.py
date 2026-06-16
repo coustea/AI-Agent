@@ -6,8 +6,9 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_node_context, build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import WorkerResult, WorkerState
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -23,10 +24,37 @@ class ContentAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        """核心生成逻辑：拼接配置 → 调用 LLM → 清洗 Markdown 格式。"""
-        config = state.agent_config
-        # 将用户配置（结构、深度、关注模式等）拼接到 prompt 中
+    async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        parts = build_resource_context(input_data)
+        input_text = "\n\n".join(parts)
+        result = await self._generate_content(
+            input_text=input_text,
+            title_prefix=input_data.learning_need[:32],
+            config=input_data.agent_config,
+        )
+        await self.emit_finish(result)
+        return result
+
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        parts = build_node_context(input_data)
+        input_text = "\n\n".join(parts)
+        result = await self._generate_content(
+            input_text=input_text,
+            title_prefix=input_data.node_title,
+            config=input_data.agent_config,
+        )
+        result.metadata["path_id"] = input_data.path_id
+        result.metadata["node_id"] = input_data.node_id
+        await self.emit_finish(result)
+        return result
+
+    async def _generate_content(
+        self,
+        *,
+        input_text: str,
+        title_prefix: str,
+        config: dict,
+    ) -> AgentResult:
         if config:
             cfg = ["## 内容配置"]
             cfg.append(f"- 结构: {config.get('structure', 'progressive')}")
@@ -37,34 +65,17 @@ class ContentAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += "\n\n请生成专业课程讲解文档，只输出 Markdown 内容。"
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="正在构建课程讲解提示词",
-                progress=25,
-            )
-
-        logger.info("Agent[content] 步骤: 调用 LLM 生成课程内容, input_len=%d", len(input_text))
+        await self.emit_start("正在构建课程讲解提示词", progress=25)
         prompt = prompts.get("resource").get("content")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
-
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="大模型已返回，正在清洗格式",
-                progress=85,
-            )
-
         content = response.content if hasattr(response, "content") else str(response)
-        # 清理 LLM 输出中多余的 markdown fence 标记
         content = _clean_markdown_fences(content)
-        logger.info("Agent[content] 步骤: 内容清洗完成, output_len=%d", len(content))
 
-        return WorkerResult(
+        return AgentResult(
             success=True,
             content=content,
             file_type="markdown",
-            title=f"{state.learning_need[:32]} - 课程内容",
+            title=f"{title_prefix} - 课程内容",
             summary="生成专业课程讲解文档",
             summary_data={"char_count": len(content)},
             metadata={"agent_id": "content"},

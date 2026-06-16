@@ -70,6 +70,7 @@
         <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
         <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
         <PptView v-else-if="previewData.agentId === 'ppt'" :result-data="previewData.resultData" />
+        <VideoView v-else-if="previewData.agentId === 'video'" :result-data="previewData.resultData" />
         <MarkdownView v-else :result-data="previewData.resultData" />
       </div>
     </el-dialog>
@@ -94,6 +95,7 @@ import QuizView from '@/features/resource/components/QuizView.vue'
 import CodeView from '@/features/resource/components/CodeView.vue'
 import ReadingView from '@/features/resource/components/ReadingView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
+import VideoView from '@/features/resource/components/VideoView.vue'
 
 import {
   startResourceGeneration,

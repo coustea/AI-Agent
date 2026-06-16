@@ -209,7 +209,9 @@ async def list_path_resources(
             {
                 "id": row.id,
                 "learning_need": row.title,
-                "status": "completed",
+                "status": row.status or "completed",
+                "error_message": row.error_message,
+                "summary": row.summary,
                 "resource_types": [row.resource_type],
                 "resource_type": row.resource_type,
                 "title": row.title,

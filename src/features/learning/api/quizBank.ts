@@ -35,6 +35,32 @@ export async function fetchQuizBankQuestions(params?: {
 }
 
 export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizReviewResult> {
-  const response = await http.post('/ai/quiz-review', request)
+  const response = await http.post('/ai/quiz-bank/review-subjective', request)
   return response.data as QuizReviewResult
+}
+
+export interface ObjectiveQuestionResult {
+  question_id: string
+  user_answer: string
+  is_correct: boolean
+  subject?: string
+  question_type?: string
+  content?: string
+  options?: Record<string, string> | null
+  answer?: string
+  analysis?: string
+}
+
+export interface ObjectiveSubmitRequest {
+  results: ObjectiveQuestionResult[]
+}
+
+export interface ObjectiveSubmitResponse {
+  processed_count: number
+  wrong_saved_count: number
+}
+
+export async function submitObjectiveResults(request: ObjectiveSubmitRequest): Promise<ObjectiveSubmitResponse> {
+  const response = await http.post('/ai/quiz-bank/submit-objective', request)
+  return response.data.data as ObjectiveSubmitResponse
 }
