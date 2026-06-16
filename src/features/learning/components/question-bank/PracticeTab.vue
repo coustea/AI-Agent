@@ -2,20 +2,20 @@
   <div class="practice-tab">
     <header class="dashboard-header">
       <div class="header-content">
-        <h1>AI Practice Center</h1>
-        <p class="subtitle">Focus on your daily goals, recommended tasks, and comprehensive review.</p>
+        <h1>智能练习</h1>
+        <p class="subtitle">专注你的每日目标、推荐任务和综合复习。</p>
       </div>
       <div class="metrics-grid">
         <div class="metric-card">
-          <span class="metric-label">Total Attempted</span>
+          <span class="metric-label">已做题数</span>
           <strong class="metric-value">{{ stats.totalAttempted }}</strong>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Accuracy</span>
+          <span class="metric-label">正确率</span>
           <strong class="metric-value">{{ accuracyText }}</strong>
         </div>
         <div class="metric-card warning">
-          <span class="metric-label">To Review</span>
+          <span class="metric-label">待复习</span>
           <strong class="metric-value">{{ wrongTotal }}</strong>
         </div>
       </div>
@@ -24,39 +24,39 @@
     <div class="main-grid">
       <!-- Left Column: Tasks -->
       <div class="tasks-column">
-        <h2 class="section-title">Today's Tasks</h2>
-        
+        <h2 class="section-title">今日任务</h2>
+
         <div class="task-card primary-task">
           <div class="task-info">
-            <h3>Recommended Practice</h3>
-            <p>A curated set of {{ recommendedCount }} questions based on your current courses and weak points.</p>
+            <h3>推荐练习</h3>
+            <p>根据你的当前课程和薄弱点，为你精选了 {{ recommendedCount }} 道题目。</p>
             <div class="tags">
               <span class="tag">{{ recommendedSubject }}</span>
-              <span class="tag">{{ recommendedCount }} questions</span>
+              <span class="tag">{{ recommendedCount }} 道</span>
             </div>
           </div>
           <button class="btn-primary" :disabled="practiceLoading" @click="$emit('start-recommended')">
-            {{ practiceLoading ? 'Loading...' : 'Start Practice' }}
+            {{ practiceLoading ? '加载中...' : '开始练习' }}
           </button>
         </div>
 
         <div class="task-card danger-task">
           <div class="task-info">
-            <h3>Wrong Questions Review</h3>
-            <p>You have {{ wrongTotal }} questions that need your attention. Prioritize these to improve your accuracy.</p>
+            <h3>错题复习</h3>
+            <p>你有 {{ wrongTotal }} 道题目需要重点复习，优先攻克它们可以快速提升正确率。</p>
           </div>
           <button class="btn-danger" @click="$emit('switch-tab', 'wrong')">
-            Review Now
+            立即复习
           </button>
         </div>
 
         <div class="task-card">
           <div class="task-info">
-            <h3>Mock Exam Builder</h3>
-            <p>Ready for a test? Configure a custom paper based on subjects, difficulty, and question types.</p>
+            <h3>模拟组卷</h3>
+            <p>准备好测试了吗？根据学科、难度和题型配置一份专属试卷。</p>
           </div>
           <button class="btn-secondary" @click="$emit('switch-tab', 'paper')">
-            Build Exam
+            开始组卷
           </button>
         </div>
       </div>
@@ -66,8 +66,8 @@
         <!-- Daily Pick -->
         <div class="panel">
           <div class="panel-header">
-            <h3>Daily Pick</h3>
-            <button class="btn-icon" @click="$emit('refresh-daily')" title="Refresh Daily Question">
+            <h3>每日一题</h3>
+            <button class="btn-icon" @click="$emit('refresh-daily')" title="换一题">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             </button>
           </div>
@@ -77,44 +77,44 @@
               <span class="tag outline">{{ dailyQuestion.type }}</span>
             </div>
             <div class="question-content" v-html="renderInline(dailyQuestion.content)"></div>
-            <button class="btn-primary full-width" @click="$emit('start-daily')">Solve</button>
+            <button class="btn-primary full-width" @click="$emit('start-daily')">开始答题</button>
           </div>
           <div v-else class="empty-state">
-            No daily question available.
+            暂无每日一题。
           </div>
         </div>
 
         <!-- Custom Practice Form -->
         <div class="panel">
-          <h3>Custom Practice</h3>
+          <h3>自定义练习</h3>
           <form @submit.prevent="handleCustomStart" class="custom-form">
             <div class="form-group">
-              <label>Subject</label>
+              <label>学科</label>
               <select v-model="form.subject" class="select-input">
-                <option value="">All Subjects</option>
+                <option value="">全部学科</option>
                 <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Difficulty</label>
+              <label>难度</label>
               <select v-model="form.difficulty" class="select-input">
-                <option value="">Any Difficulty</option>
+                <option value="">不限难度</option>
                 <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Type</label>
+              <label>题型</label>
               <select v-model="form.type" class="select-input">
-                <option value="">All Types</option>
+                <option value="">全部题型</option>
                 <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Count</label>
+              <label>题数</label>
               <input type="number" v-model="form.count" min="1" max="30" class="text-input" />
             </div>
             <button type="submit" class="btn-primary full-width" :disabled="practiceLoading">
-              {{ practiceLoading ? 'Loading...' : 'Generate Practice' }}
+              {{ practiceLoading ? '加载中...' : '生成练习' }}
             </button>
           </form>
         </div>
