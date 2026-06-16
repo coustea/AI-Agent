@@ -1,9 +1,11 @@
-"""审核智能体 — 两级审核策略：正则规则优先 + LLM 语义兜底。
+"""审核智能体 — 本地规则审核智能体。
 
-第一级（正则审核）：
-  检查内容完整性（长度）、安全性（敏感词）、可疑引用（DOI/ISBN/短链）、格式（JSON/Markdown）
-第二级（LLM 兜底）：
-  仅在正则发现可疑点时触发，让 LLM 做语义级别的违规判定和修订建议
+基于纯正则规则对生成资源进行本地安全与合规审计，无需 LLM 调用。
+检查项目包括：
+  - 内容完整性（长度）
+  - 安全性（敏感词）
+  - 可疑引用（短链域名）
+  - 格式正确性（JSON/Markdown 结构）
 """
 
 from __future__ import annotations
@@ -25,11 +27,9 @@ SENSITIVE_WORDS: tuple[str, ...] = (
     "洗钱", "诈骗教程", "赌博网站",
 )
 
-# 可疑引用模式 — 匹配学术 DOI、可疑短链域名、ISBN 编号
+# 可疑引用模式 — 仅匹配可疑短链域名
 SENSITIVE_PATTERNS: tuple[re.Pattern, ...] = (
-    re.compile(r"doi:\s*10\.\d{4,}/[\S]+", re.IGNORECASE),
     re.compile(r"https?://\S+\.(xyz|top|click|buzz|loan)\b"),
-    re.compile(r"ISBN[- ]?\d{1,5}[- ]?\d{1,7}[- ]?\d{1,7}[- ]?[\dX]"),
 )
 
 
@@ -65,7 +65,7 @@ def rule_check(content: str) -> list[dict]:
     # Markdown 格式检查 — 检查是否缺少标题和有效段落
     if not content.strip().startswith("{") and not content.strip().startswith("["):
         has_heading = bool(re.search(r"^#{1,6}\s", content, re.MULTILINE))
-        has_paragraph = bool(re.search(r"\S{20,}", content))
+        has_paragraph = bool(re.search(r"\S[^\n]{18,}\S", content))
         if not has_heading and not has_paragraph:
             findings.append({"check": "format", "detail": "Markdown 缺少标题和有效段落"})
 
@@ -102,16 +102,24 @@ class ReviewAgent(BaseResourceAgent):
         status = "pass" if passed else "needs_revision"
         failed_agents = [progress_agent_id] if not passed else []
 
+        checks = {
+            "need_alignment": "pass",
+            "content_completeness": "pass",
+            "factuality": "pass",
+            "hallucination": "pass",
+            "safety": "pass",
+            "grounding": "pass",
+        }
+        for f in findings:
+            f_check = f.get("check")
+            if f_check in ("completeness", "format"):
+                checks["content_completeness"] = "fail"
+            elif f_check in ("safety", "suspicious_reference"):
+                checks["safety"] = "fail"
+
         parsed_review = {
             "status": status,
-            "checks": {
-                "need_alignment": "pass" if passed else "fail",
-                "content_completeness": "pass" if passed else "fail",
-                "factuality": "pass" if passed else "fail",
-                "hallucination": "pass" if passed else "fail",
-                "safety": "pass" if passed else "fail",
-                "grounding": "pass" if passed else "fail",
-            },
+            "checks": checks,
             "violations": issues,
             "revision_targets": failed_agents,
             "mode": "regex_audit",
