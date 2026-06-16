@@ -1,28 +1,28 @@
 <template>
   <div class="exam-tab">
     <div class="header-section">
-      <h2>Mock Exam Builder</h2>
-      <p class="subtitle">Configure parameters to generate a custom mock exam.</p>
+      <h2>模拟组卷</h2>
+      <p class="subtitle">配置参数，生成专属模拟试卷。</p>
     </div>
 
     <div class="builder-grid">
       <!-- Left: Form -->
       <div class="config-panel">
         <div class="panel-header">
-          <h3>Exam Configuration</h3>
-          <button class="btn-text" @click="$emit('reset-form')">Reset</button>
+          <h3>试卷配置</h3>
+          <button class="btn-text" @click="$emit('reset-form')">重置</button>
         </div>
 
         <form class="config-form" @submit.prevent>
           <div class="form-row">
             <div class="form-group">
-              <label>Exam Title</label>
-              <input type="text" v-model="form.title" class="text-input" placeholder="e.g. Data Structure Midterm" />
+              <label>试卷标题</label>
+              <input type="text" v-model="form.title" class="text-input" placeholder="如：数据结构期末模拟" />
             </div>
             <div class="form-group">
-              <label>Subject</label>
+              <label>学科</label>
               <select v-model="form.subject" class="select-input">
-                <option value="">All Subjects</option>
+                <option value="">全部学科</option>
                 <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
@@ -30,20 +30,20 @@
 
           <div class="form-row">
             <div class="form-group">
-              <label>Difficulty</label>
+              <label>难度</label>
               <select v-model="form.difficulty" class="select-input">
-                <option value="混合">Mixed / Random</option>
+                <option value="混合">混合（随机）</option>
                 <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Duration (Minutes)</label>
+              <label>时长（分钟）</label>
               <input type="number" v-model="form.duration" min="5" max="180" class="text-input" />
             </div>
           </div>
 
           <div class="type-counts">
-            <label class="section-label">Question Types & Distribution</label>
+            <label class="section-label">题型分布</label>
             <div class="count-grid">
               <div v-for="item in typeCounts" :key="item.type" class="count-box">
                 <span class="type-label">{{ item.label }}</span>
@@ -53,19 +53,19 @@
           </div>
 
           <div class="form-actions">
-            <button 
-              class="btn-secondary" 
+            <button
+              class="btn-secondary"
               :disabled="loading"
               @click="$emit('generate-preview')"
             >
-              {{ loading ? 'Generating...' : 'Generate Preview' }}
+              {{ loading ? '生成中...' : '生成预览' }}
             </button>
-            <button 
-              class="btn-primary" 
+            <button
+              class="btn-primary"
               :disabled="preview.length === 0"
               @click="$emit('start-exam')"
             >
-              Start Exam
+              开始考试
             </button>
           </div>
         </form>
@@ -74,8 +74,8 @@
       <!-- Right: Preview -->
       <div class="preview-panel">
         <div class="panel-header">
-          <h3>Paper Preview</h3>
-          <span v-if="preview.length > 0" class="badge">{{ preview.length }} Questions</span>
+          <h3>试卷预览</h3>
+          <span v-if="preview.length > 0" class="badge">{{ preview.length }} 题</span>
         </div>
 
         <div v-if="preview.length > 0" class="preview-list">
@@ -87,7 +87,7 @@
                 <span class="meta-dot">·</span>
                 <span>{{ question.subject }}</span>
                 <span class="meta-dot">·</span>
-                <span :class="['diff', difficultyClass(question.difficulty)]">{{ question.difficulty || 'Unrated' }}</span>
+                <span :class="['diff', difficultyClass(question.difficulty)]">{{ question.difficulty || '未评级' }}</span>
               </div>
               <div class="item-text" v-html="renderInline(question.content)"></div>
             </div>
@@ -95,7 +95,7 @@
         </div>
 
         <div v-else class="empty-preview">
-          Configure the exam parameters and click "Generate Preview" to see the questions here.
+          配置试卷参数后，点击「生成预览」查看题目。
         </div>
       </div>
     </div>
