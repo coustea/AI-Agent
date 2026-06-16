@@ -1,739 +1,366 @@
-"""LLM 管理器。
-
-职责：
-- 从 config.yaml 加载模型配置
-- 提供统一的文本生成、流式生成、工具调用、结构化 JSON 输出和图片理解接口
-- 重试：使用 ChatOpenAI 自带 max_retries
-
-使用方式：
-    llm = get_llm()
-
-    # 文本生成
-    response = await llm.ainvoke(messages)
-
-    # 使用 LangChain 原生工具绑定
-    tool_model = llm.model.bind_tools(tools)
-    response = await llm.ainvoke(messages, model=tool_model)
-
-    # 或使用封装后的工具调用
-    response = await llm.ainvoke_tools(messages, tools)
-
-    # 结构化 JSON 输出（prompt 规范输出 → 正则解析，tool_calling 保底）
-    result = await llm.ainvoke_json(MySchema, messages)
-
-    # 流式输出
-    async for chunk in llm.astream(messages):
-        ...
-
-    # 图片理解
-    response = await llm.vision(messages)
-"""
+"""OpenAI-compatible LLM gateway."""
 
 from __future__ import annotations
 
 import copy
 import json
 import time
+import uuid
 from functools import lru_cache
 from typing import Any, AsyncIterator
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
 from app.config import INFERENCE_TEMPERATURE, VISION_TEMPERATURE, get
 from app.infra.logging import get_logger
-from app.infra.utils import (
-    ServiceError,
-    parse_first_json_object,
-    parse_first_json_value,
-    strip_markdown_code_fences,
-)
+from app.infra.utils import ServiceError, parse_first_json_object, parse_first_json_value, strip_markdown_code_fences
 
 logger = get_logger(__name__)
 
 
-import uuid
+class ChatModelConfig(BaseModel):
+    base_url: str
+    api_key: str
+    model_name: str
+    temperature: float = INFERENCE_TEMPERATURE
+    max_tokens: int | None = None
+    timeout: float = 300
+    max_retries: int = 2
+    model_kwargs: dict[str, Any] = Field(default_factory=dict)
+    extra_body: dict[str, Any] = Field(default_factory=dict)
+    default_headers: dict[str, str] = Field(default_factory=dict)
 
-class SparkCompatibleChatOpenAI(ChatOpenAI):
-    """讯飞星火 OpenAI 兼容接口定制客户端。
-    
-    拦截并规范化不符合规范的 tool_calls 格式（如字典格式、缺失 id 等）。
-    """
+
+class ChatModel(ChatOpenAI):
+    """ChatOpenAI with defensive tool_calls normalization."""
+
     def _create_chat_result(self, response: Any, generation_info: Any | None = None) -> Any:
         try:
-            if hasattr(response, "choices") and response.choices:
-                for choice in response.choices:
-                    if hasattr(choice, "message") and choice.message:
-                        msg = choice.message
-                        if hasattr(msg, "tool_calls") and msg.tool_calls is not None:
-                            tool_calls = msg.tool_calls
-                            if isinstance(tool_calls, dict):
-                                if "id" not in tool_calls or not tool_calls["id"]:
-                                    tool_calls["id"] = f"call_{uuid.uuid4().hex[:12]}"
-                                object.__setattr__(msg, "tool_calls", [tool_calls])
-                            elif isinstance(tool_calls, list):
-                                for tc in tool_calls:
-                                    if isinstance(tc, dict) and ("id" not in tc or not tc["id"]):
-                                        tc["id"] = f"call_{uuid.uuid4().hex[:12]}"
+            for choice in getattr(response, "choices", None) or []:
+                message = getattr(choice, "message", None)
+                if message is None or not hasattr(message, "tool_calls"):
+                    continue
+                tool_calls = getattr(message, "tool_calls")
+                if tool_calls is None:
+                    continue
+                normalized = (
+                    [_fix_tool_call(tool_calls)] if isinstance(tool_calls, dict)
+                    else [_fix_tool_call(tc) for tc in tool_calls]
+                )
+                object.__setattr__(message, "tool_calls", normalized)
         except Exception as exc:
-            logger.warning("[LLM] 规范化星火 tool_calls 失败: %s", exc)
+            logger.warning("[LLM] tool_calls normalization failed: %s", exc)
         return super()._create_chat_result(response, generation_info)
 
 
-# ── URL 工具 ──────────────────────────────────────────────────────────────────
+def _fix_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
+    if not tc.get("id"):
+        tc = {**tc, "id": f"call_{uuid.uuid4().hex[:12]}"}
+    fn = tc.get("function")
+    if isinstance(fn, dict) and isinstance(fn.get("arguments"), (dict, list)):
+        fn = {**fn, "arguments": json.dumps(fn["arguments"], ensure_ascii=False)}
+        tc = {**tc, "function": fn}
+    return tc
 
 
-def _normalize_base_url(url: str) -> str:
-    """规范化 OpenAI 兼容接口 base_url。
-
-    不能用 rstrip("/chat/completions")，rstrip 按字符集合删除会误删正常字符。
-    """
-    normalized = (url or "").strip().rstrip("/")
-    if normalized.endswith("/chat/completions"):
-        normalized = normalized.removesuffix("/chat/completions")
-    return normalized.rstrip("/")
+def _normalize_base_url(base_url: str) -> str:
+    url = (base_url or "").strip().rstrip("/")
+    if url.endswith("/chat/completions"):
+        url = url[: -len("/chat/completions")]
+    return url.rstrip("/")
 
 
-# ── JSON Schema 兼容处理 ──────────────────────────────────────────────────────
+def _load_config(path: str) -> ChatModelConfig | None:
+    raw = get(path, {}) or {}
+    if not isinstance(raw, dict) or not raw.get("model_name"):
+        return None
+    data = {k: v for k, v in raw.items() if k != "vision"}
+    if not data.get("base_url") or not data.get("api_key"):
+        raise ServiceError(f"{path} 模型配置缺少 base_url 或 api_key")
+    return ChatModelConfig(
+        base_url=_normalize_base_url(str(data["base_url"])),
+        api_key=str(data["api_key"]),
+        model_name=str(data["model_name"]),
+        temperature=float(data.get("temperature", INFERENCE_TEMPERATURE)),
+        max_tokens=data.get("max_tokens"),
+        timeout=float(data.get("timeout", 300)),
+        max_retries=int(data.get("max_retries", 2)),
+        model_kwargs=dict(data.get("model_kwargs") or {}),
+        extra_body=dict(data.get("extra_body") or {}),
+        default_headers=dict(data.get("default_headers") or {}),
+    )
 
 
-def _simplify_anyof_refs(schema: dict[str, Any]) -> dict[str, Any]:
-    """将 anyOf: [{"$ref": "..."}, {"type": "null"}] 简化为直接 $ref。
-
-    Pydantic v2 对 Optional[X] 生成 anyOf + $ref，星火/GLM 等模型
-    的 function calling 不兼容这种结构。简化后用 default 值兜底 null。
-    """
-    result = copy.deepcopy(schema)
-
-    def _walk(obj: Any) -> None:
-        if isinstance(obj, dict):
-            if "anyOf" in obj and isinstance(obj["anyOf"], list) and len(obj["anyOf"]) == 2:
-                items = obj["anyOf"]
-                ref_item = next((it for it in items if isinstance(it, dict) and "$ref" in it), None)
-                null_item = next(
-                    (it for it in items if isinstance(it, dict) and it.get("type") == "null"),
-                    None,
-                )
-                if ref_item and null_item:
-                    new_obj = {k: v for k, v in obj.items() if k != "anyOf"}
-                    new_obj.update(ref_item)
-                    obj.clear()
-                    obj.update(new_obj)
-
-            for value in list(obj.values()):
-                _walk(value)
-
-        elif isinstance(obj, list):
-            for item in obj:
-                _walk(item)
-
-    _walk(result)
-    return result
+def _create_model(cfg: ChatModelConfig, *, streaming: bool = False) -> ChatModel:
+    kw: dict[str, Any] = {
+        "model": cfg.model_name,
+        "api_key": cfg.api_key,
+        "base_url": cfg.base_url,
+        "temperature": cfg.temperature,
+        "streaming": streaming,
+        "timeout": cfg.timeout,
+        "max_retries": cfg.max_retries,
+        "model_kwargs": cfg.model_kwargs,
+    }
+    if cfg.max_tokens is not None:
+        kw["max_tokens"] = cfg.max_tokens
+    if cfg.extra_body:
+        kw["extra_body"] = cfg.extra_body
+    if cfg.default_headers:
+        kw["default_headers"] = cfg.default_headers
+    return ChatModel(**kw)
 
 
-# ── JSON 提取 ─────────────────────────────────────────────────────────────────
+def _bind(model: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> Any:
+    kw: dict[str, Any] = {}
+    if temperature is not None:
+        kw["temperature"] = temperature
+    if max_tokens is not None:
+        kw["max_tokens"] = max_tokens
+    return model.bind(**kw) if kw else model
 
 
-def _deduplicate_json_objects(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """按 JSON 序列化结果去重，避免同一个对象被重复验证。"""
-    unique: list[dict[str, Any]] = []
-    seen: set[str] = set()
+def _parse_json(text: str, schema: type[BaseModel]) -> BaseModel:
+    raw = parse_first_json_object(text)
+    data = _lift_nested_config(raw, schema)
+    try:
+        return schema.model_validate(data)
+    except Exception:
+        return _find_matching_json(text, schema)
 
-    for item in items:
+
+def _find_matching_json(text: str, schema: type[BaseModel]) -> BaseModel:
+    """Scan all JSON objects in text, return the one matching schema's required fields."""
+    required = _required_fields(schema)
+    candidates = _extract_json_objects(text)
+    if required:
+        candidates = [c for c in candidates if required.issubset(c.keys())]
+    for candidate in candidates:
+        data = _lift_nested_config(candidate, schema)
         try:
-            key = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str)
-        except TypeError:
-            key = str(item)
-        if key not in seen:
-            seen.add(key)
-            unique.append(item)
+            return schema.model_validate(data)
+        except Exception:
+            pass
+        try:
+            return _lenient_validate(data, schema)
+        except Exception:
+            continue
+    raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象")
 
-    return unique
+
+def _lenient_validate(data: dict[str, Any], schema: type[BaseModel]) -> BaseModel:
+    """Validate with lenient mode: strict on root scalars, coerce nested objects."""
+    try:
+        return schema.model_validate(data, strict=False)
+    except Exception:
+        return schema.model_construct(**data)
+
+
+def _required_fields(schema: type[BaseModel]) -> set[str]:
+    try:
+        return set(schema.model_json_schema().get("required", []) or [])
+    except Exception:
+        return set()
 
 
 def _extract_json_objects(text: str) -> list[dict[str, Any]]:
-    """从混杂文本中提取所有顶层 JSON 对象。
-
-    从每个 ``{`` 或 ``[`` 位置尝试 raw_decode，
-    顶层对象或数组内的对象均加入候选集。
-    """
     decoder = json.JSONDecoder()
-    s = strip_markdown_code_fences(text or "").strip()
-    candidates: list[dict[str, Any]] = []
-
-    def collect(value: Any) -> None:
-        if isinstance(value, dict):
-            candidates.append(value)
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict):
-                    candidates.append(item)
-
-    for i, char in enumerate(s):
-        if char not in "[{":
+    content = strip_markdown_code_fences(text or "").strip()
+    seen: set[str] = set()
+    results: list[dict[str, Any]] = []
+    for i, ch in enumerate(content):
+        if ch not in "{[":
             continue
         try:
-            value, _ = decoder.raw_decode(s[i:])
-            collect(value)
+            value, _ = decoder.raw_decode(content[i:])
         except json.JSONDecodeError:
-            pass
-
-    return _deduplicate_json_objects(candidates)
-
-
-def _extract_root_candidates(text: str, schema: type) -> list[dict[str, Any]]:
-    """提取与 schema 根对象结构匹配的 JSON 候选。
-
-    模型经常在 JSON 前后附加说明文字，或嵌套输出子对象。
-    此方法递归扫描所有可解析 JSON，只保留包含 schema 必填字段的候选，
-    避免把内部子对象误判为根对象。
-    """
-    decoder = json.JSONDecoder()
-    s = strip_markdown_code_fences(text or "").strip()
-    required = _schema_required_keys(schema)
-    candidates: list[dict[str, Any]] = []
-
-    def collect(value: Any) -> None:
-        if isinstance(value, dict):
-            if required and required.issubset(value.keys()):
-                candidates.append(value)
-            for child in value.values():
-                collect(child)
-        elif isinstance(value, list):
-            for item in value:
-                collect(item)
-
-    for i, char in enumerate(s):
-        if char not in "[{":
             continue
-        try:
-            value, _ = decoder.raw_decode(s[i:])
-            collect(value)
-        except json.JSONDecodeError:
-            pass
-
-    return _deduplicate_json_objects(candidates)
-
-
-# ── JSON 修复 ─────────────────────────────────────────────────────────────────
+        for obj in ([value] if isinstance(value, dict) else [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []):
+            key = json.dumps(obj, ensure_ascii=False, sort_keys=True, default=str)
+            if key not in seen:
+                seen.add(key)
+                results.append(obj)
+    return results
 
 
-def _flatten_nested_config(data: dict[str, Any], schema: type) -> dict[str, Any]:
-    """如果 LLM 输出了嵌套的 config 对象但 schema 期望扁平字段，自动提升到顶层。
-
-    典型场景：PptPayload schema 已扁平化（template_id/topic 是顶层字段），
-    但 LLM 仍输出 {"config": {"template_id": ...}, "slides": [...]}。
-    """
-    if not isinstance(data, dict) or "config" not in data:
-        return data
-
+def _lift_nested_config(data: dict[str, Any], schema: type[BaseModel]) -> dict[str, Any]:
     config = data.get("config")
     if not isinstance(config, dict):
         return data
-
-    schema_fields = set(getattr(schema, "model_fields", {}).keys())
-    keys_to_lift = [k for k in config if k in schema_fields and k not in data]
-
-    if not keys_to_lift:
-        return data
-
-    flattened = dict(data)
-    for k in keys_to_lift:
-        flattened[k] = config[k]
-    del flattened["config"]
-
-    logger.info("[LLM] 自动扁平化嵌套 config: 提升字段 %s 到顶层", keys_to_lift)
-    return flattened
-
-
-def _clean_nested_json(data: Any) -> Any:
-    """递归清理嵌套的 JSON 字符串。
-
-    部分模型在 Tool Calling 时把复杂嵌套对象输出成格式化字符串。
-    """
-    if isinstance(data, dict):
-        return {k: _clean_nested_json(v) for k, v in data.items()}
-    if isinstance(data, list):
-        return [_clean_nested_json(item) for item in data]
-    if isinstance(data, str):
-        s = data.strip()
-        if "{" in s or "[" in s:
-            try:
-                parsed = parse_first_json_value(s)
-                if isinstance(parsed, (dict, list)):
-                    return _clean_nested_json(parsed)
-            except (json.JSONDecodeError, TypeError):
-                pass
-    return data
-
-
-# ── Schema 辅助 ───────────────────────────────────────────────────────────────
-
-
-def _schema_required_keys(schema: type) -> set[str]:
-    """获取 schema 顶层必填字段。Pydantic Schema 缺失 required 时退回 model_fields。"""
-    try:
-        required = set(schema.model_json_schema().get("required", []) or [])
-    except Exception:
-        required = set()
-    return required or set(getattr(schema, "model_fields", {}).keys())
-
-
-def _score_json_candidate(candidate: dict[str, Any], schema: type) -> int:
-    """根据 schema 字段对 JSON 候选打分，分数越高越像根对象。"""
-    required = _schema_required_keys(schema)
     fields = set(getattr(schema, "model_fields", {}).keys())
-    keys = set(candidate.keys())
-    return len(required & keys) * 10 + len(fields & keys)
+    lifted = dict(data)
+    changed = False
+    for k, v in config.items():
+        if k in fields and k not in lifted:
+            lifted[k] = v
+            changed = True
+    if changed:
+        lifted.pop("config", None)
+    return lifted
 
 
-# ── LLM 管理器 ────────────────────────────────────────────────────────────────
+def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
+    """Build a concise schema description for prompt with enum values and nested field hints."""
+    full_schema = schema.model_json_schema()
+    defs = full_schema.get("$defs", {})
+    required = set(full_schema.get("required") or [])
+    props = full_schema.get("properties", {})
+    lines: list[str] = []
+    for name, prop in props.items():
+        marker = " (required)" if name in required else ""
+        desc = prop.get("description", "")
+        type_hint = _describe_property(prop, defs)
+        line = f"  {name}: {type_hint}{marker}"
+        if desc:
+            line += f" — {desc}"
+        lines.append(line)
+    return schema.__name__ + " {\n" + "\n".join(lines) + "\n}"
+
+
+def _describe_property(prop: dict[str, Any], defs: dict[str, Any], depth: int = 0) -> str:
+    """Describe a JSON schema property in human-readable form."""
+    if depth > 2:
+        return "..."
+    if "enum" in prop:
+        return "enum(" + ", ".join(str(v) for v in prop["enum"]) + ")"
+    if "const" in prop:
+        return f"const({prop['const']})"
+    t = prop.get("type", "")
+    if t == "string" and "maxLength" in prop:
+        return f"str (max {prop['maxLength']} chars)"
+    if t == "string":
+        return "str"
+    if t == "integer":
+        return "int"
+    if t == "number":
+        return "float"
+    if t == "boolean":
+        return "bool"
+    if t == "array":
+        items = prop.get("items", {})
+        item_desc = _describe_property(items, defs, depth + 1)
+        return f"list[{item_desc}]"
+    if t == "object" and "properties" in prop:
+        inner = prop["properties"]
+        fields = ", ".join(inner.keys())
+        return f"object({fields})"
+    if "$ref" in prop:
+        ref_name = prop["$ref"].split("/")[-1]
+        ref_def = defs.get(ref_name, {})
+        ref_props = ref_def.get("properties", {})
+        if ref_props:
+            fields = ", ".join(ref_props.keys())
+            return f"{ref_name}({fields})"
+        return ref_name
+    if "anyOf" in prop:
+        parts = [_describe_property(p, defs, depth + 1) for p in prop["anyOf"] if isinstance(p, dict)]
+        return " | ".join(parts) if parts else "Any"
+    return t or "Any"
+
+
+def _inject_json_instruction(input_data: Any, schema: type[BaseModel]) -> list[BaseMessage]:
+    if isinstance(input_data, str):
+        msgs: list[BaseMessage] = [HumanMessage(content=input_data)]
+    elif isinstance(input_data, BaseMessage):
+        msgs = [input_data]
+    elif isinstance(input_data, list):
+        msgs = list(input_data)
+    else:
+        raise ValueError(f"Unsupported input_data type: {type(input_data)}")
+
+    schema_desc = _simplify_schema_for_prompt(schema)
+    required = schema.model_json_schema().get("required", []) or []
+    instruction = (
+        "\n\n[FORMAT INSTRUCTION]\n"
+        "Return exactly one valid JSON object. Do not include markdown fences or explanatory text.\n"
+        f"The root object must contain these required fields: {', '.join(required)}.\n"
+        f"Schema:\n{schema_desc}\n"
+    )
+    for i in range(len(msgs) - 1, -1, -1):
+        m = msgs[i]
+        if isinstance(m, (HumanMessage, SystemMessage)):
+            c = copy.copy(m)
+            c.content = str(m.content or "") + instruction
+            msgs[i] = c
+            return msgs
+    msgs.insert(0, SystemMessage(content=instruction.strip()))
+    return msgs
 
 
 class Llm:
-    """统一 LLM 管理器。
+    """Unified async LLM gateway.
 
-    提供五种核心方法：
-    - ainvoke(): 异步文本生成
-    - astream(): 异步流式输出
-    - ainvoke_tools(): 异步工具调用
-    - ainvoke_json(): 异步结构化 JSON 输出（prompt 规范输出 → 正则解析，tool_calling 保底）
-    - vision(): 图片理解
+    Structured output: json_mode (retry once) → prompt fallback.
     """
 
     def __init__(self) -> None:
-        self._text_model: ChatOpenAI | None = None
-        self._vision_model: ChatOpenAI | None = None
-        self._text_base_url: str = ""
-        self._text_model_name: str = ""
-        self._init()
+        self.text_config = _load_config("models")
+        self.vision_config = _load_config("models.vision")
+        self._text_model = _create_model(self.text_config) if self.text_config else None
+        self._vision_model = _create_model(self.vision_config) if self.vision_config else None
 
     @property
     def model(self) -> Any:
-        """默认文本模型，供调用方使用 LangChain 原生 bind/bind_tools。"""
-        if not self._text_model:
+        if self._text_model is None:
             raise ServiceError("文本模型配置缺失")
         return self._text_model
 
-    # ── 初始化 ────────────────────────────────────────────────────────────────
+    async def ainvoke(self, input_data: Any, *, model: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> Any:
+        return await _bind(model or self.model, temperature=temperature, max_tokens=max_tokens).ainvoke(input_data)
 
-    def _init(self) -> None:
-        self._init_text_model()
-        self._init_vision_model()
-
-    def _init_text_model(self) -> None:
-        text_cfg = get("models", {})
-        text_cfg = {k: v for k, v in text_cfg.items() if k != "vision"}
-
-        if not text_cfg or "model_name" not in text_cfg:
-            return
-
-        self._text_base_url = _normalize_base_url(text_cfg["base_url"])
-        self._text_model_name = text_cfg["model_name"]
-
-        client_cls = SparkCompatibleChatOpenAI
-        if ChatOpenAI is not SparkCompatibleChatOpenAI.__base__:
-            client_cls = ChatOpenAI
-
-        self._text_model = client_cls(
-            model=text_cfg["model_name"],
-            api_key=text_cfg["api_key"],
-            base_url=self._text_base_url,
-            temperature=INFERENCE_TEMPERATURE,
-            streaming=False,
-            max_retries=text_cfg.get("max_retries", 2),
-            timeout=text_cfg.get("timeout", 300),
-            max_tokens=text_cfg.get("max_tokens"),
-        )
-
-
-        logger.info(
-            "[LLM] 文本模型初始化: model=%s base_url=%s",
-            text_cfg["model_name"],
-            self._text_base_url,
-        )
-
-    def _init_vision_model(self) -> None:
-        vision_cfg = get("models.vision", {})
-        if not vision_cfg or "model_name" not in vision_cfg:
-            return
-
-        self._vision_model = ChatOpenAI(
-            model=vision_cfg["model_name"],
-            api_key=vision_cfg["api_key"],
-            base_url=_normalize_base_url(vision_cfg["base_url"]),
-            temperature=vision_cfg.get("temperature", VISION_TEMPERATURE),
-            streaming=False,
-            max_retries=vision_cfg.get("max_retries", 2),
-            timeout=vision_cfg.get("timeout", 300),
-        )
-
-        logger.info("[LLM] 视觉模型初始化: model=%s", vision_cfg["model_name"])
-
-    # ── 模型绑定 ──────────────────────────────────────────────────────────────
-
-    def _bind_text_model(
-        self,
-        *,
-        model: Any | None = None,
-        temperature: float = INFERENCE_TEMPERATURE,
-        max_tokens: int | None = None,
-    ) -> Any:
-        """按调用参数绑定文本模型。"""
-        runnable = model or self.model
-        bind_kwargs: dict[str, Any] = {}
-        if temperature != INFERENCE_TEMPERATURE:
-            bind_kwargs["temperature"] = temperature
-        if max_tokens is not None:
-            bind_kwargs["max_tokens"] = max_tokens
-        return runnable.bind(**bind_kwargs) if bind_kwargs else runnable
-
-    # ── 普通文本 / 流式 / 工具调用 ────────────────────────────────────────────
-
-    async def ainvoke(
-        self,
-        input_data: Any,
-        *,
-        model: Any | None = None,
-        temperature: float = INFERENCE_TEMPERATURE,
-        max_tokens: int | None = None,
-    ) -> Any:
-        """异步文本生成。"""
-        runnable = self._bind_text_model(model=model, temperature=temperature, max_tokens=max_tokens)
-        return await runnable.ainvoke(input_data)
-
-    async def astream(
-        self,
-        input_data: Any,
-        *,
-        model: Any | None = None,
-        temperature: float = INFERENCE_TEMPERATURE,
-        max_tokens: int | None = None,
-    ) -> AsyncIterator[Any]:
-        """异步流式生成。"""
-        runnable = self._bind_text_model(model=model, temperature=temperature, max_tokens=max_tokens)
-        async for chunk in runnable.astream(input_data, stream=True):
+    async def astream(self, input_data: Any, *, model: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> AsyncIterator[Any]:
+        async for chunk in _bind(model or self.model, temperature=temperature, max_tokens=max_tokens).astream(input_data):
             yield chunk
 
-    async def ainvoke_tools(
-        self,
-        input_data: Any,
-        tools: list[Any],
-        *,
-        tool_choice: Any | None = None,
-        temperature: float = INFERENCE_TEMPERATURE,
-        max_tokens: int | None = None,
-    ) -> Any:
-        """异步工具调用（LangChain bind_tools 的轻量封装）。"""
-        model = self._bind_text_model(temperature=temperature, max_tokens=max_tokens)
-        runnable = model.bind_tools(tools) if tool_choice is None else model.bind_tools(tools, tool_choice=tool_choice)
+    async def ainvoke_tools(self, input_data: Any, tools: list[Any], *, tool_choice: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> Any:
+        m = _bind(self.model, temperature=temperature, max_tokens=max_tokens)
+        runnable = m.bind_tools(tools, tool_choice=tool_choice) if tool_choice else m.bind_tools(tools)
         return await runnable.ainvoke(input_data)
 
-    # ── JSON 输出：消息准备 ───────────────────────────────────────────────────
-
-    def _inject_format_instruction(self, input_data: Any, schema: type) -> list[BaseMessage]:
-        """将输入转换为 BaseMessage 列表，并在最后一条消息中注入 JSON 格式指令。
-
-        直接字符串拼接会破坏多轮对话历史，此方法只在最后一条
-        HumanMessage / SystemMessage 末尾追加指令。
-        """
-        if isinstance(input_data, str):
-            messages: list[BaseMessage] = [HumanMessage(content=input_data)]
-        elif isinstance(input_data, BaseMessage):
-            messages = [input_data]
-        elif isinstance(input_data, list):
-            messages = list(input_data)
-        else:
-            raise ValueError(f"Unsupported input_data type: {type(input_data)}")
-
-        instruction = self._build_format_instruction(schema)
-
-        for i in range(len(messages) - 1, -1, -1):
-            msg = messages[i]
-            if isinstance(msg, (HumanMessage, SystemMessage)):
-                new_msg = copy.copy(msg)
-                new_msg.content = str(msg.content or "") + instruction
-                messages[i] = new_msg
-                return messages
-
-        messages.insert(0, SystemMessage(content=instruction.strip()))
-        return messages
-
-    @staticmethod
-    def _build_format_instruction(schema: type) -> str:
-        """构建注入到消息末尾的 JSON 格式指令。"""
-        json_schema = schema.model_json_schema()
-        schema_hint = json.dumps(json_schema, ensure_ascii=False, indent=2)
-
-        parts = [
-            "\n\n[FORMAT INSTRUCTION]",
-            "You must return the response as a valid JSON object matching the JSON Schema below.",
-            "Do not include any explanation, markdown code fence blocks (like ```json), "
-            "or extra text outside the JSON object.",
-        ]
-
-        required_fields = json_schema.get("required", [])
-        if required_fields:
-            parts.append(
-                f"CRITICAL: The root JSON object MUST contain these required fields: "
-                f"{', '.join(required_fields)}. "
-                "Do NOT return a nested sub-object — return the complete root object."
-            )
-
-        min_length_hints: list[str] = []
-        for field_name, field_info in schema.model_fields.items():
-            min_len = getattr(field_info, "min_length", None)
-            if min_len and min_len > 0:
-                min_length_hints.append(f"  - {field_name}: at least {min_len} items")
-
-        if min_length_hints:
-            parts.append(
-                "CRITICAL: The following list fields MUST NOT be empty or shorter than their minimum:\n"
-                + "\n".join(min_length_hints)
-            )
-
-        parts.append(f"JSON Schema:\n{schema_hint}")
-        return "\n".join(parts) + "\n"
-
-    # ── JSON 输出：从文本解析 ─────────────────────────────────────────────────
-
-    def _parse_json_from_text(self, content: str, schema: type) -> Any:
-        """从模型文本输出中提取并验证 JSON 对象。
-
-        提取策略：
-        1. 优先提取包含 schema 必填字段的根对象候选
-        2. 回退到通用提取器
-        3. 最终尝试 parse_first_json_object
-
-        每个候选按 schema 字段匹配度评分，从高到低尝试 Pydantic 校验。
-        """
-        # 精确提取：只保留包含所有必填字段的候选
-        candidates = _extract_root_candidates(content, schema)
-        # 回退：通用提取
-        if not candidates:
-            candidates = _extract_json_objects(content)
-
-        logger.info("[LLM] JSON 候选对象数量=%d", len(candidates))
-
-        # 无候选时直接暴力解析
-        if not candidates:
-            parsed = parse_first_json_object(content)
-            parsed = _flatten_nested_config(parsed, schema)
-            return schema.model_validate(parsed)
-
-        # 按字段匹配度评分，从高到低验证
-        scored = sorted(candidates, key=lambda c: _score_json_candidate(c, schema), reverse=True)
-
-        last_error: Exception | None = None
-        for i, candidate in enumerate(scored):
-            score = _score_json_candidate(candidate, schema)
-            logger.debug(
-                "[LLM] 验证候选[%d/%d]: score=%d keys=%s",
-                i + 1, len(scored), score, sorted(candidate.keys())[:10],
-            )
-            try:
-                candidate = _flatten_nested_config(candidate, schema)
-                return schema.model_validate(candidate)
-            except Exception as exc:
-                last_error = exc
-                logger.debug("[LLM] 候选[%d/%d] 验证失败: %s", i + 1, len(scored), exc)
-
-        raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象") from last_error
-
-    # ── JSON 输出：Tool Calling 解析 ──────────────────────────────────────────
-
-    def _parse_tool_call_args(self, tool_call: Any, function_name: str, schema: type) -> Any | None:
-        """解析单个 tool_call 的 args，尝试 Pydantic 校验。不匹配则返回 None。"""
-        call_name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
-
-        if call_name and call_name != function_name:
-            return None
-
-        args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
-
-        if not args:
-            logger.warning("[LLM] tool_call args 为空, call_name=%s", call_name)
-            return None
-
-        if isinstance(args, str):
-            try:
-                args = json.loads(args)
-            except json.JSONDecodeError as exc:
-                logger.warning("[LLM] tool_call args JSON 解析失败: %s", exc)
-                return None
-
-        cleaned = _clean_nested_json(args)
-        cleaned = _flatten_nested_config(cleaned, schema)
-
-        try:
-            return schema.model_validate(cleaned)
-        except Exception as exc:
-            logger.warning("[LLM] tool_call Pydantic 验证失败: %s", exc)
-            return None
-
-    # ── JSON 输出：两层 Fallback ──────────────────────────────────────────────
-
-    async def _invoke_via_prompt(self, model: Any, messages: list[BaseMessage], schema: type) -> Any:
-        """第一层：prompt 规范输出 + 正则解析。"""
-        t0 = time.perf_counter()
-
-        logger.info("[LLM] prompt 解析层开始: schema=%s", schema.__name__)
-
-        resp = await model.ainvoke(messages)
-        content = getattr(resp, "content", "") or ""
-
-        logger.info(
-            "[LLM] prompt 解析层响应: content_len=%d preview='%s'",
-            len(content), content[:200],
-        )
-
-        if not content.strip():
-            raise ValueError("模型返回空内容")
-
-        result = self._parse_json_from_text(content, schema)
-
-        logger.info(
-            "[LLM] prompt 解析层成功: schema=%s duration_ms=%d",
-            schema.__name__, _elapsed_ms(t0),
-        )
-        return result
-
-    async def _invoke_via_tool_calling(
-        self,
-        model: Any,
-        messages: list[BaseMessage],
-        schema: type,
-        function_name: str,
-        function_description: str,
-    ) -> Any:
-        """第二层：Tool Calling 保底。"""
-        t0 = time.perf_counter()
-
-        logger.info("[LLM] tool_calling 层开始: schema=%s tool_name=%s", schema.__name__, function_name)
-
-        raw_schema = schema.model_json_schema()
-        simplified_schema = _simplify_anyof_refs(raw_schema)
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": function_name,
-                    "description": function_description,
-                    "parameters": simplified_schema,
-                },
-            }
-        ]
-
-        runnable = model.bind_tools(
-            tools,
-            tool_choice={"type": "function", "function": {"name": function_name}},
-        )
-        resp = await runnable.ainvoke(messages)
-
-        tool_calls = getattr(resp, "tool_calls", []) or []
-        logger.info("[LLM] tool_calling 层响应: tool_calls=%d", len(tool_calls))
-
-        # 尝试从 tool_calls 中解析
-        for i, tc in enumerate(tool_calls):
-            result = self._parse_tool_call_args(tc, function_name, schema)
-            if result is not None:
-                logger.info(
-                    "[LLM] tool_calling 层成功: schema=%s duration_ms=%d",
-                    schema.__name__, _elapsed_ms(t0),
-                )
-                return result
-
-        # tool_calls 为空时，尝试从 content 解析 JSON（部分模型不返回 tool_calls 而是输出在 content）
-        content = getattr(resp, "content", "") or ""
-        if content.strip():
-            logger.info("[LLM] tool_calling 层无 tool_calls，尝试从 content 解析: content_len=%d", len(content))
-            result = self._parse_json_from_text(content, schema)
-            logger.info(
-                "[LLM] tool_calling 层(content 回退)成功: schema=%s duration_ms=%d",
-                schema.__name__, _elapsed_ms(t0),
-            )
-            return result
-
-        raise ValueError("模型未返回可用 tool_calls 或 JSON content")
-
-    # ── JSON 输出：调度入口 ───────────────────────────────────────────────────
-
-    async def ainvoke_json(
-        self,
-        schema: type,
-        input_data: Any,
-        *,
-        temperature: float = INFERENCE_TEMPERATURE,
-        max_tokens: int | None = None,
-        function_name: str | None = None,
-        function_description: str | None = None,
-    ) -> Any:
-        """异步结构化 JSON 输出。
-
-        两层 fallback：
-        1. prompt 规范输出 + 正则解析（快、稳定、适配所有模型）
-        2. tool_calling 保底（当 prompt 层解析失败时兜底）
-        """
-        model = self._bind_text_model(temperature=temperature, max_tokens=max_tokens)
-        fn_name = function_name or schema.__name__
-        fn_desc = function_description or f"Return {schema.__name__}"
-        messages = self._inject_format_instruction(input_data, schema)
-
-        logger.info(
-            "[LLM] ainvoke_json 开始: schema=%s messages=%d preview='%s'",
-            schema.__name__, len(messages), _messages_preview(messages),
-        )
-
+    async def ainvoke_json(self, schema: type[BaseModel], input_data: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> BaseModel:
+        messages = _inject_json_instruction(input_data, schema)
+        model = _bind(self.model, temperature=temperature, max_tokens=max_tokens)
         errors: list[str] = []
 
-        # 第一层：prompt 规范输出 + 正则解析
+        # Tier 1: json_mode, retry once on failure
+        for attempt in range(2):
+            t0 = time.perf_counter()
+            try:
+                resp = await model.bind(response_format={"type": "json_object"}).ainvoke(messages)
+                content = getattr(resp, "content", "") or ""
+                if not content.strip():
+                    raise ValueError("empty response")
+                result = _parse_json(content, schema)
+                logger.info("[LLM] ainvoke_json ok schema=%s tier=json_mode attempt=%d %dms", schema.__name__, attempt + 1, round((time.perf_counter() - t0) * 1000))
+                return result
+            except Exception as exc:
+                errors.append(f"json_mode(attempt={attempt + 1})={type(exc).__name__}: {exc}")
+                logger.warning("[LLM] ainvoke_json fail schema=%s tier=json_mode attempt=%d error=%s", schema.__name__, attempt + 1, exc)
+
+        # Tier 2: prompt fallback
+        t0 = time.perf_counter()
         try:
-            return await self._invoke_via_prompt(model, messages, schema)
+            resp = await model.ainvoke(messages)
+            content = getattr(resp, "content", "") or ""
+            if not content.strip():
+                raise ValueError("empty response")
+            result = _parse_json(content, schema)
+            logger.info("[LLM] ainvoke_json ok schema=%s tier=prompt %dms", schema.__name__, round((time.perf_counter() - t0) * 1000))
+            return result
         except Exception as exc:
             errors.append(f"prompt={type(exc).__name__}: {exc}")
-            logger.warning("[LLM] prompt 层失败: schema=%s error=%s", schema.__name__, exc)
-
-        # 第二层：tool_calling 保底
-        try:
-            return await self._invoke_via_tool_calling(model, messages, schema, fn_name, fn_desc)
-        except Exception as exc:
-            errors.append(f"tool_calling={type(exc).__name__}: {exc}")
-            logger.warning("[LLM] tool_calling 层失败: schema=%s error=%s", schema.__name__, exc)
+            logger.warning("[LLM] ainvoke_json fail schema=%s tier=prompt error=%s", schema.__name__, exc)
 
         raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 
-    # ── 图片理解 ───────────────────────────────────────────────────────────────
-
-    async def vision(self, input_data: Any, *, temperature: float = INFERENCE_TEMPERATURE) -> Any:
-        """图片理解生成。"""
-        if not self._vision_model:
+    async def vision(self, input_data: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> Any:
+        if self._vision_model is None:
             raise ServiceError("图片理解模型配置缺失")
-
-        model = self._vision_model
-        if temperature != INFERENCE_TEMPERATURE:
-            model = model.bind(temperature=temperature)
-        return await model.ainvoke(input_data)
-
-
-# ── 辅助函数 ──────────────────────────────────────────────────────────────────
-
-
-def _elapsed_ms(start: float) -> int:
-    return round((time.perf_counter() - start) * 1000)
-
-
-def _messages_preview(messages: list[BaseMessage], limit: int = 120) -> str:
-    for msg in messages:
-        content = getattr(msg, "content", "")
-        if isinstance(content, str) and content:
-            return content[:limit].replace("\n", " ")
-    return ""
-
-
-# ── 单例 ──────────────────────────────────────────────────────────────────────
+        return await _bind(self._vision_model, temperature=temperature, max_tokens=max_tokens).ainvoke(input_data)
 
 
 @lru_cache(maxsize=1)
 def get_llm() -> Llm:
-    """获取 LLM 单例。"""
     return Llm()

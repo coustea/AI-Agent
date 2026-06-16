@@ -34,8 +34,8 @@ models:
   # 推理参数
   temperature: 0.3
   max_tokens: 4096
-  # 结构化输出策略：auto / prompt_first / tool_first
-  structured_output_strategy: "auto"
+  # 结构化输出策略：json_mode_first / prompt_first / tool_first / auto
+  structured_output_strategy: "json_mode_first"
   # 网络与重试参数
   timeout: 300          # 单次请求超时（秒）
   max_retries: 2        # 失败重试次数

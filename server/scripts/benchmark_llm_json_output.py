@@ -13,10 +13,11 @@ from langchain_core.messages import HumanMessage
 
 from app.infra.llm import (
     Llm,
-    _collect_schema_root_candidates,
+    _extract_json_objects,
+    _extract_root_candidates,
     _flatten_nested_config,
-    _iter_json_objects,
     _simplify_anyof_refs,
+    _bind_runtime_options,
 )
 from app.infra.utils import parse_first_json_object, parse_first_json_value
 from app.path.schemas import AgentLearningPathPlan
@@ -212,9 +213,9 @@ def _validate_content(schema: type, content: str) -> Any:
     try:
         data = parse_first_json_object(content)
     except Exception:
-        candidates = _collect_schema_root_candidates(content, schema)
+        candidates = _extract_root_candidates(content, schema)
         if not candidates:
-            candidates = _iter_json_objects(content)
+            candidates = _extract_json_objects(content)
         if not candidates:
             raise
         data = candidates[0]
@@ -240,7 +241,7 @@ def _clean_tool_args(args: Any) -> Any:
 
 
 async def run_tool_calling_enhanced(llm: Llm, prompt: BenchmarkPrompt) -> tuple[Any, int]:
-    model = llm._bind_text_model(max_tokens=prompt.max_tokens)
+    model = _bind_runtime_options(llm.model, max_tokens=prompt.max_tokens)
     name = prompt.schema.__name__
     tools = [
         {
@@ -266,21 +267,21 @@ async def run_tool_calling_enhanced(llm: Llm, prompt: BenchmarkPrompt) -> tuple[
 
 
 async def run_json_object_schema_prompt(llm: Llm, prompt: BenchmarkPrompt) -> tuple[Any, int]:
-    model = llm._bind_text_model(max_tokens=prompt.max_tokens).bind(response_format={"type": "json_object"})
+    model = _bind_runtime_options(llm.model, max_tokens=prompt.max_tokens).bind(response_format={"type": "json_object"})
     response = await model.ainvoke(_full_schema_messages(prompt))
     content = getattr(response, "content", "") or ""
     return _validate_content(prompt.schema, content), len(content)
 
 
 async def run_plain_schema_prompt(llm: Llm, prompt: BenchmarkPrompt) -> tuple[Any, int]:
-    model = llm._bind_text_model(max_tokens=prompt.max_tokens)
+    model = _bind_runtime_options(llm.model, max_tokens=prompt.max_tokens)
     response = await model.ainvoke(_full_schema_messages(prompt))
     content = getattr(response, "content", "") or ""
     return _validate_content(prompt.schema, content), len(content)
 
 
 async def run_json_schema_response_format(llm: Llm, prompt: BenchmarkPrompt) -> tuple[Any, int]:
-    model = llm._bind_text_model(max_tokens=prompt.max_tokens).bind(
+    model = _bind_runtime_options(llm.model, max_tokens=prompt.max_tokens).bind(
         response_format={
             "type": "json_schema",
             "json_schema": {
@@ -296,7 +297,7 @@ async def run_json_schema_response_format(llm: Llm, prompt: BenchmarkPrompt) -> 
 
 
 async def run_json_object_compact_prompt(llm: Llm, prompt: BenchmarkPrompt) -> tuple[Any, int]:
-    model = llm._bind_text_model(max_tokens=prompt.max_tokens).bind(response_format={"type": "json_object"})
+    model = _bind_runtime_options(llm.model, max_tokens=prompt.max_tokens).bind(response_format={"type": "json_object"})
     response = await model.ainvoke(_compact_messages(prompt))
     content = getattr(response, "content", "") or ""
     return _validate_content(prompt.schema, content), len(content)

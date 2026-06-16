@@ -159,9 +159,11 @@ class ReviewAgent(BaseResourceAgent):
         if not envelope or not isinstance(envelope, dict):
             return ""
         parts: list[str] = []
-        for resource in envelope.get("deep_audit_resources", []):
-            if isinstance(resource, dict) and resource.get("audit_content"):
-                parts.append(resource["audit_content"])
+        resources = envelope.get("deep_audit_resources")
+        if isinstance(resources, list):
+            for resource in resources:
+                if isinstance(resource, dict) and resource.get("audit_content"):
+                    parts.append(resource["audit_content"])
         for key in ("ppt_resource", "video_resource"):
             resource = envelope.get(key)
             if isinstance(resource, dict) and resource.get("audit_content"):
