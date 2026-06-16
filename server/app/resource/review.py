@@ -76,9 +76,12 @@ def build_pre_audit_envelope(
     deep_audit_resources = [
         {
             "agent_id": agent_id,
-            "title": results[agent_id].title,
-            "summary": results[agent_id].summary,
-            "audit_content": bounded_content(results[agent_id].content),
+            "title": results[agent_id].downstream_context.title
+                if results[agent_id].downstream_context else results[agent_id].title,
+            "summary": results[agent_id].downstream_context.one_sentence_summary
+                if results[agent_id].downstream_context else results[agent_id].summary,
+            "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
+                if results[agent_id].downstream_context else [],
         }
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
@@ -126,9 +129,12 @@ def build_ppt_audit_envelope(
     approved_sources = [
         {
             "agent_id": agent_id,
-            "title": results[agent_id].title,
-            "summary": results[agent_id].summary,
-            "source_content": bounded_content(results[agent_id].content),
+            "title": results[agent_id].downstream_context.title
+                if results[agent_id].downstream_context else results[agent_id].title,
+            "summary": results[agent_id].downstream_context.one_sentence_summary
+                if results[agent_id].downstream_context else results[agent_id].summary,
+            "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
+                if results[agent_id].downstream_context else [],
         }
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
@@ -176,9 +182,12 @@ def build_video_audit_envelope(
     approved_sources = [
         {
             "agent_id": agent_id,
-            "title": results[agent_id].title,
-            "summary": results[agent_id].summary,
-            "source_content": bounded_content(results[agent_id].content),
+            "title": results[agent_id].downstream_context.title
+                if results[agent_id].downstream_context else results[agent_id].title,
+            "summary": results[agent_id].downstream_context.one_sentence_summary
+                if results[agent_id].downstream_context else results[agent_id].summary,
+            "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
+                if results[agent_id].downstream_context else [],
         }
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
