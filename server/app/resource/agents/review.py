@@ -162,8 +162,17 @@ class ReviewAgent(BaseResourceAgent):
         resources = envelope.get("deep_audit_resources")
         if isinstance(resources, list):
             for resource in resources:
-                if isinstance(resource, dict) and resource.get("audit_content"):
+                if not isinstance(resource, dict):
+                    continue
+                if resource.get("audit_content"):
                     parts.append(resource["audit_content"])
+                elif resource.get("materials"):
+                    for mat in resource["materials"]:
+                        if isinstance(mat, dict):
+                            for field in ("summary", "evidence_excerpt"):
+                                val = mat.get(field, "")
+                                if isinstance(val, str) and val.strip():
+                                    parts.append(val)
         for key in ("ppt_resource", "video_resource"):
             resource = envelope.get(key)
             if isinstance(resource, dict) and resource.get("audit_content"):

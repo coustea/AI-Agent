@@ -1,8 +1,4 @@
-"""Resource review context builders.
-
-This module keeps review/audit payload construction out of the persistence
-service so workflow orchestration can depend on a small, testable interface.
-"""
+"""Review/audit envelope construction for the resource LangGraph workflow."""
 
 from __future__ import annotations
 
@@ -77,12 +73,15 @@ def build_pre_audit_envelope(
         {
             "agent_id": agent_id,
             "title": results[agent_id].downstream_context.title
-                if results[agent_id].downstream_context else results[agent_id].title,
+            if results[agent_id].downstream_context else results[agent_id].title,
             "summary": results[agent_id].downstream_context.one_sentence_summary
-                if results[agent_id].downstream_context else results[agent_id].summary,
+            if results[agent_id].downstream_context else results[agent_id].summary,
             "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
-                if results[agent_id].downstream_context else [],
-            "audit_content": bounded_content(results[agent_id].content),
+            if results[agent_id].downstream_context else [],
+            "materials": [
+                m.model_dump(mode="json")
+                for m in (results[agent_id].downstream_context.materials or [])
+            ],
         }
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
@@ -131,11 +130,11 @@ def build_ppt_audit_envelope(
         {
             "agent_id": agent_id,
             "title": results[agent_id].downstream_context.title
-                if results[agent_id].downstream_context else results[agent_id].title,
+            if results[agent_id].downstream_context else results[agent_id].title,
             "summary": results[agent_id].downstream_context.one_sentence_summary
-                if results[agent_id].downstream_context else results[agent_id].summary,
+            if results[agent_id].downstream_context else results[agent_id].summary,
             "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
-                if results[agent_id].downstream_context else [],
+            if results[agent_id].downstream_context else [],
         }
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
@@ -184,11 +183,11 @@ def build_video_audit_envelope(
         {
             "agent_id": agent_id,
             "title": results[agent_id].downstream_context.title
-                if results[agent_id].downstream_context else results[agent_id].title,
+            if results[agent_id].downstream_context else results[agent_id].title,
             "summary": results[agent_id].downstream_context.one_sentence_summary
-                if results[agent_id].downstream_context else results[agent_id].summary,
+            if results[agent_id].downstream_context else results[agent_id].summary,
             "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
-                if results[agent_id].downstream_context else [],
+            if results[agent_id].downstream_context else [],
         }
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
@@ -254,7 +253,6 @@ def failed_review_result(
 
 
 def review_result_from_agent(result: AgentResult) -> ReviewResult:
-    """从 AgentResult 构造 ReviewResult。"""
     parsed = result.metadata.get("parsed_review")
     status = result.metadata.get("review_status") or ("pass" if result.success else "blocked")
     issues: list[str] = []

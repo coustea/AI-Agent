@@ -186,6 +186,8 @@ MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
 # ============ 记忆压缩与长期记忆 ============
 # 保留最近多少条原始消息（不压缩）
 RECENT_RAW_MESSAGES = get("memory.recent_raw_messages", 8)
+# 压缩后保留的最近原始消息条数
+COMPRESS_KEEP_RECENT_MESSAGES = get("memory.compress_keep_recent_messages", 4)
 # 触发压缩的最少消息数
 COMPRESS_MIN_MESSAGES = get("memory.compress_min_messages", 14)
 # 触发压缩的最少 Token 数

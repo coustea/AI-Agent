@@ -957,20 +957,22 @@ class PptAgent(BaseResourceAgent):
         return result
 
     def _build_graph(self) -> Any:
-        workflow = StateGraph(PptGraphState)
+        if not hasattr(self, "_cached_graph"):
+            workflow = StateGraph(PptGraphState)
 
-        workflow.add_node("extract_material", self._material_node)
-        workflow.add_node("plan_outline", self._outline_node)
-        workflow.add_node("write_slide", self._write_slide_node)
-        workflow.add_node("build_payload", self._payload_node)
+            workflow.add_node("extract_material", self._material_node)
+            workflow.add_node("plan_outline", self._outline_node)
+            workflow.add_node("write_slide", self._write_slide_node)
+            workflow.add_node("build_payload", self._payload_node)
 
-        workflow.add_edge(START, "extract_material")
-        workflow.add_edge("extract_material", "plan_outline")
-        workflow.add_conditional_edges("plan_outline", self._route_slides, ["write_slide"])
-        workflow.add_edge("write_slide", "build_payload")
-        workflow.add_edge("build_payload", END)
+            workflow.add_edge(START, "extract_material")
+            workflow.add_edge("extract_material", "plan_outline")
+            workflow.add_conditional_edges("plan_outline", self._route_slides, ["write_slide"])
+            workflow.add_edge("write_slide", "build_payload")
+            workflow.add_edge("build_payload", END)
 
-        return workflow.compile()
+            self._cached_graph = workflow.compile()
+        return self._cached_graph
 
     async def _material_node(self, state: PptGraphState) -> dict[str, Any]:
         await self.emit_start("正在提取教学素材", progress=20)

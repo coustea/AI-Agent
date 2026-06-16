@@ -93,6 +93,7 @@ logging:
 # Memory 压缩与长期记忆
 memory:
   recent_raw_messages: 8
+  compress_keep_recent_messages: 4
   compress_min_messages: 14
   compress_min_tokens: 3500
   summary_context_blocks: 3

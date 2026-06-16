@@ -234,6 +234,8 @@ class ReusableAssets(BaseModel):
 
 
 class DownstreamMaterial(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     outline_id: str = ""
     type: Literal["explanation", "structure", "practice", "code", "reading", "example", "visual"] = "explanation"
     summary: str = Field(default="", max_length=500)
@@ -244,6 +246,7 @@ class DownstreamMaterial(BaseModel):
 
 class DownstreamContext(BaseModel):
     """基础 agent 给 PPT/Video/Review 的短交接摘要。"""
+    model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["resource_handoff/v1"] = "resource_handoff/v1"
     source_agent: str
@@ -261,6 +264,7 @@ class DownstreamContext(BaseModel):
 
 class AgentResult(BaseModel):
     """统一 Agent 输出结果，用于 standalone resource 和 path node resource。"""
+    model_config = ConfigDict(extra="forbid")
 
     success: bool = True
     content: str = ""
@@ -276,6 +280,7 @@ class AgentResult(BaseModel):
 
 class ResourceInput(BaseModel):
     """standalone 多智能体资源生成输入。"""
+    model_config = ConfigDict(extra="forbid")
 
     resource_id: int | None = None
     learning_need: str
@@ -291,6 +296,7 @@ class ResourceInput(BaseModel):
 
 class NodeInput(BaseModel):
     """路径规划当前节点资源生成输入。"""
+    model_config = ConfigDict(extra="forbid")
 
     path_id: int
     node_id: int
