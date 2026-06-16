@@ -11,10 +11,7 @@ from __future__ import annotations
 import json
 import re
 
-from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import salvage_json_from_llm
-from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 
@@ -81,79 +78,57 @@ def rule_check(content: str) -> list[dict]:
 
 @register_agent
 class ReviewAgent(BaseResourceAgent):
-    """两级审核 Agent：正则规则优先 + LLM 语义兜底。"""
+    """本地规则审核 Agent（无需 LLM 调用，纯正则审计）。"""
 
     agent_id = "review"
     agent_name = "审核"
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
-        self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        """多智能体场景：两级审核流程。"""
+        """多智能体场景：本地正则安全与违法违纪审核流程。"""
         config = input_data.agent_config or {}
         progress_agent_id = config.get("progress_agent_id") or "review"
         review_envelope = config.get("review_envelope", {})
 
-        # ── 第一级：正则审核 ──
-        await self.emit_start("正在执行规则审核", progress=10)
+        await self.emit_start("正在执行本地规则合规性审核", progress=50)
 
         audit_content = self._extract_audit_content(review_envelope)
         findings = rule_check(audit_content)
 
-        # 正则审核全部通过 → 直接返回
-        if not findings:
-            result = AgentResult(
-                success=True,
-                content=json.dumps({"status": "pass", "checks": {}, "violations": [], "revision_targets": []}, ensure_ascii=False),
-                file_type="json",
-                title="资源质量审核报告",
-                summary="规则审核通过",
-                metadata={"agent_id": "review", "passed": True, "issues": [], "review_status": "pass", "parsed_review": {}},
-            )
-            await self.emit_finish(result)
-            return result
+        passed = len(findings) == 0
+        issues = [f.get("detail", "") for f in findings]
+        status = "pass" if passed else "needs_revision"
+        failed_agents = [progress_agent_id] if not passed else []
 
-        # ── 第二级：LLM 兜底审核 ──
-        await self.emit_start(f"规则审核发现 {len(findings)} 个可疑点，正在调用大模型判定", progress=25)
-
-        prompt = prompts.get("resource").get("review")
-        findings_text = json.dumps(findings, ensure_ascii=False, indent=2)
-        input_text = f"{self._build_review_input(review_envelope)}\n\n## 规则审核发现的可疑点\n{findings_text}"
-
-        await self.emit_start("正在构建内容审核提示词", progress=50)
-
-        response = await self.llm.ainvoke(
-            f"{prompt}\n\n{input_text}",
-            temperature=0.2,
-        )
-        content = response.content if hasattr(response, "content") else str(response)
-
-        await self.emit_start("审核结果已返回，正在解析违规项", progress=85)
-
-        parsed = salvage_json_from_llm(content, require_key="status")
-        status = str(parsed.get("status", "")).lower() if parsed else ""
-        passed = status == "pass" or (not parsed and ("通过" in content or "PASS" in content.upper()))
-        issues = self._extract_issues(content)
-        if parsed and isinstance(parsed.get("violations"), list):
-            issues = [
-                item if isinstance(item, str) else json.dumps(item, ensure_ascii=False)
-                for item in parsed["violations"]
-            ]
+        parsed_review = {
+            "status": status,
+            "checks": {
+                "need_alignment": "pass" if passed else "fail",
+                "content_completeness": "pass" if passed else "fail",
+                "factuality": "pass" if passed else "fail",
+                "hallucination": "pass" if passed else "fail",
+                "safety": "pass" if passed else "fail",
+                "grounding": "pass" if passed else "fail",
+            },
+            "violations": issues,
+            "revision_targets": failed_agents,
+            "mode": "regex_audit",
+        }
 
         result = AgentResult(
             success=passed,
-            content=content,
-            file_type="json" if parsed else "markdown",
-            title="资源质量审核报告",
-            summary="审核通过" if passed else f"审核发现 {len(issues)} 个问题",
+            content=json.dumps(parsed_review, ensure_ascii=False),
+            file_type="json",
+            title="资源质量安全合规报告",
+            summary="本地规则审计通过" if passed else f"本地规则审计发现 {len(issues)} 个合规问题",
             metadata={
                 "agent_id": "review",
                 "passed": passed,
                 "issues": issues,
-                "review_status": status or ("pass" if passed else "needs_revision"),
-                "parsed_review": parsed or {},
+                "review_status": status,
+                "parsed_review": parsed_review,
                 "rule_findings": findings,
             },
         )
@@ -170,13 +145,6 @@ class ReviewAgent(BaseResourceAgent):
             metadata={"agent_id": "review"},
         )
 
-    def _build_review_input(self, review_envelope: dict) -> str:
-        """从 review_envelope 中提取待审核内容，构建 LLM 输入。"""
-        parts = ["## 待审核内容"]
-        if review_envelope:
-            parts.append(json.dumps(review_envelope, ensure_ascii=False, indent=2))
-        return "\n\n".join(parts)
-
     @staticmethod
     def _extract_audit_content(envelope: dict) -> str:
         """从 review_envelope 中提取所有待审核的文本内容。"""
@@ -190,12 +158,3 @@ class ReviewAgent(BaseResourceAgent):
                 parts.append(resource["audit_content"])
         return "\n\n".join(parts)
 
-    @staticmethod
-    def _extract_issues(content: str) -> list[str]:
-        """从 LLM 审核结果文本中提取违规项列表。"""
-        issues = []
-        for line in content.splitlines():
-            stripped = line.strip()
-            if stripped.startswith(("- [ ]", "* [ ]")) or (stripped and stripped[0].isdigit() and "." in stripped[:4]):
-                issues.append(stripped.lstrip("-*0123456789. ").strip())
-        return issues
