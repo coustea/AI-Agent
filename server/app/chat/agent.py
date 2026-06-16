@@ -805,7 +805,9 @@ class TutorAgent:
         if attachment_context:
             human_content = f"{question}\n\n[附件分析结果]\n{attachment_context}"
 
-        messages = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
+        # Spark-compatible chat completions reject multiple system messages.
+        history_without_system = [msg for msg in history if not isinstance(msg, SystemMessage)]
+        messages = [SystemMessage(content=system_prompt), *history_without_system, HumanMessage(content=human_content)]
 
         events = list(state.get("stream_events", []))
         full_answer = ""
