@@ -537,7 +537,10 @@ class GeneratedResource(SQLModel, table=True):
     learning_need: str | None = Field(default=None, sa_column=Column(Text))
 
     # 配置信息
-    personalization: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    teaching_plan: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    review_result: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    failed_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    workflow_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     selected_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     agent_configs: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     source: str | None = Field(default=None, max_length=255, index=True)
@@ -562,6 +565,8 @@ class GeneratedResourceItem(SQLModel, table=True):
     __table_args__ = (
         Index("ix_generated_resource_items_content_json", "content_json", postgresql_using="gin"),
         Index("ix_generated_resource_items_metadata_json", "metadata_json", postgresql_using="gin"),
+        Index("ix_generated_resource_items_metrics", "metrics", postgresql_using="gin"),
+        Index("ix_generated_resource_items_downstream_context", "downstream_context", postgresql_using="gin"),
         Index("ix_generated_resource_items_covered_knowledge_points", "covered_knowledge_points", postgresql_using="gin"),
         Index("ix_generated_resource_items_weak_points_covered", "weak_points_covered", postgresql_using="gin"),
         Index("ix_generated_resource_items_resource_agent", "resource_id", "agent_type"),
@@ -588,6 +593,8 @@ class GeneratedResourceItem(SQLModel, table=True):
     content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     content_text: str | None = Field(default=None, sa_column=Column(Text))
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    metrics: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    downstream_context: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     status: str = Field(default="pending", max_length=50)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
 
@@ -600,10 +607,6 @@ class GeneratedResourceItem(SQLModel, table=True):
 
     # Agent 执行报告
     execution_report: str | None = Field(default=None, sa_column=Column(Text))
-
-    # 状态
-    status: str = Field(default="pending", max_length=50)
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

@@ -455,7 +455,10 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
     learning_need       TEXT,
-    personalization     JSONB,
+    teaching_plan       JSONB,
+    review_result       JSONB,
+    failed_agents       JSONB,
+    workflow_metadata   JSONB,
     selected_agents     JSONB,
     agent_configs       JSONB,
     source              VARCHAR(255),
@@ -486,6 +489,8 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
     content_json                    JSONB,
     content_text                    TEXT,
     metadata_json                   JSONB,
+    metrics                         JSONB,
+    downstream_context              JSONB,
     depends_on_agents               JSONB,
     source_resource_item_ids        JSONB,
     covered_knowledge_points        JSONB,
@@ -518,6 +523,10 @@ CREATE INDEX IF NOT EXISTS ix_generated_resource_items_content_json
     ON generated_resource_items USING GIN (content_json);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_metadata_json
     ON generated_resource_items USING GIN (metadata_json);
+CREATE INDEX IF NOT EXISTS ix_generated_resource_items_metrics
+    ON generated_resource_items USING GIN (metrics);
+CREATE INDEX IF NOT EXISTS ix_generated_resource_items_downstream_context
+    ON generated_resource_items USING GIN (downstream_context);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_covered_knowledge_points
     ON generated_resource_items USING GIN (covered_knowledge_points);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_weak_points_covered
